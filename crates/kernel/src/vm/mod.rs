@@ -27,7 +27,7 @@ use moor_compiler::{Name, Offset, Program};
 use moor_values::model::VerbInfo;
 use moor_values::var::{Objid, Var};
 pub use vm_call::VerbExecutionRequest;
-pub use vm_unwind::{FinallyReason, UncaughtException};
+pub use vm_unwind::FinallyReason;
 
 // Exports to the rest of the kernel
 use crate::builtins::BuiltinRegistry;

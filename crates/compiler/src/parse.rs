@@ -39,7 +39,7 @@ use crate::ast::{
 use crate::labels::Names;
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
-use crate::CompileError;
+use moor_values::model::CompileError;
 
 pub mod moo {
     #[derive(Parser)]
@@ -857,7 +857,7 @@ mod tests {
     };
     use crate::labels::Names;
     use crate::parse::{parse_program, unquote_str};
-    use crate::CompileError;
+    use moor_values::model::CompileError;
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()

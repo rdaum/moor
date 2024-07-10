@@ -39,19 +39,19 @@ struct Args {
 
     #[arg(
         long,
-        value_name = "rpc-server",
+        value_name = "rpc-address",
         help = "RPC server address",
         default_value = "ipc:///tmp/moor_rpc.sock"
     )]
-    rpc_server: String,
+    rpc_address: String,
 
     #[arg(
         long,
-        value_name = "narrative-server",
-        help = "Narrative server address",
-        default_value = "ipc:///tmp/moor_narrative.sock"
+        value_name = "events-address",
+        help = "Events server address",
+        default_value = "ipc:///tmp/moor_events.sock"
     )]
-    narrative_server: String,
+    events_address: String,
 }
 
 fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
@@ -93,7 +93,7 @@ async fn main() -> Result<(), eyre::Error> {
     tracing::subscriber::set_global_default(main_subscriber)
         .expect("Unable to set configure logging");
 
-    let ws_host = WebHost::new(args.rpc_server, args.narrative_server);
+    let ws_host = WebHost::new(args.rpc_address, args.events_address);
 
     let main_router = mk_routes(ws_host).expect("Unable to create main router");
 

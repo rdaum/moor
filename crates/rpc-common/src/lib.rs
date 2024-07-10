@@ -13,7 +13,7 @@
 //
 
 use bincode::{Decode, Encode};
-use moor_values::model::{CommandError, NarrativeEvent, VerbProgramError, WorldStateError};
+use moor_values::model::{NarrativeEvent, SchedulerError};
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use std::time::SystemTime;
@@ -115,22 +115,18 @@ pub enum RpcRequestError {
     ErrorCouldNotRetrieveSysProp(String),
     #[error("Could not login")]
     LoginTaskFailed,
-    #[error("Could not create narrative session")]
+    #[error("Could not create session")]
     CreateSessionFailed,
-    #[error("Could not parse or execute command")]
-    CommandError(CommandError),
-    #[error("Could not start transaction due to database error: {0}")]
-    DatabaseError(WorldStateError),
     #[error("Permission denied")]
     PermissionDenied,
+    #[error("Error scheduling task")]
+    TaskError(SchedulerError),
     #[error("Internal error: {0}")]
     InternalError(String),
-    #[error("Attempt to program failed: {0:?}")]
-    VerbProgramFailed(VerbProgramError),
 }
 
 /// Events which occur over the pubsub channel, per client.
-#[derive(Debug, Eq, PartialEq, Clone, Decode, Encode)]
+#[derive(Debug, PartialEq, Clone, Decode, Encode)]
 pub enum ConnectionEvent {
     /// An event has occurred in the narrative that the connections for the given object are
     /// expected to see.
@@ -143,6 +139,10 @@ pub enum ConnectionEvent {
     SystemMessage(Objid, String),
     /// The system wants to disconnect the given object from all its current active connections.
     Disconnect(),
+    /// Task errors that should be sent to the client.
+    TaskError(SchedulerError),
+    /// Task return values on success that the client can get.
+    TaskSuccess(Var),
 }
 
 /// Events which occur over the pubsub channel, but are for all hosts.

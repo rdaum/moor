@@ -31,7 +31,7 @@ use crate::opcode::Op::Jump;
 use crate::opcode::{Op, ScatterArgs, ScatterLabel};
 use crate::parse::parse_program;
 use crate::program::Program;
-use crate::CompileError;
+use moor_values::model::CompileError;
 
 pub struct Loop {
     loop_name: Option<Name>,

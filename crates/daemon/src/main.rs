@@ -107,11 +107,11 @@ struct Args {
 
     #[arg(
         long,
-        value_name = "narrative-listen",
-        help = "Narrative server address",
-        default_value = "ipc:///tmp/moor_narrative.sock"
+        value_name = "events-listen",
+        help = "Events publisher listen address",
+        default_value = "ipc:///tmp/moor_events.sock"
     )]
-    narrative_listen: String,
+    events_listen: String,
 
     #[arg(
         long,
@@ -313,7 +313,7 @@ fn main() -> Result<(), Report> {
         keypair,
         args.connections_file,
         zmq_ctx.clone(),
-        args.narrative_listen.as_str(),
+        args.events_listen.as_str(),
         args.db_flavour,
     ));
 
@@ -358,7 +358,7 @@ fn main() -> Result<(), Report> {
     signal_hook::flag::register(signal_hook::consts::SIGINT, kill_switch.clone())?;
     info!(
         rpc_endpoint = args.rpc_listen,
-        narrative_endpoint = args.narrative_listen,
+        events_endpoint = args.events_listen,
         "Daemon started. Listening for RPC events."
     );
     rpc_loop_thread.join().expect("RPC thread panicked");

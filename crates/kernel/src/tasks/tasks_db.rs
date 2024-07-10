@@ -13,7 +13,7 @@
 //
 
 use crate::tasks::suspension::SuspendedTask;
-use crate::tasks::TaskId;
+use moor_values::model::TaskId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TasksDbError {

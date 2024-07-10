@@ -15,7 +15,6 @@
 use bincode::{Decode, Encode};
 use std::fmt::Debug;
 use std::time::SystemTime;
-use strum::Display;
 
 pub use crate::model::defset::{Defs, DefsIter, HasUuid, Named};
 pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
@@ -29,11 +28,8 @@ pub use crate::model::verbdef::{VerbDef, VerbDefs};
 pub use crate::model::verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid};
 pub use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::AsByteBuffer;
-use thiserror::Error;
 
-use crate::var::Error;
 use crate::var::Objid;
-use crate::var::Symbol;
 
 mod defset;
 mod r#match;
@@ -42,10 +38,18 @@ mod objset;
 mod permissions;
 mod propdef;
 mod props;
+mod tasks;
 mod verb_info;
 mod verbdef;
 mod verbs;
 mod world_state;
+
+pub use tasks::{
+    AbortLimitReason, CommandError, CompileError, SchedulerError, TaskId, TaskResult,
+    UncaughtException, VerbProgramError,
+};
+
+pub use world_state::WorldStateError;
 
 /// The result code from a commit/complete operation on the world's state.
 #[derive(Debug, Eq, PartialEq)]
@@ -54,101 +58,12 @@ pub enum CommitResult {
     ConflictRetry, // Value was not committed due to conflict, caller should abort and retry tx
 }
 
-/// Errors related to the world state and operations on it.
-#[derive(Error, Debug, Eq, PartialEq, Clone, Decode, Encode)]
-pub enum WorldStateError {
-    #[error("Object not found: {0}")]
-    ObjectNotFound(Objid),
-    #[error("Object already exists: {0}")]
-    ObjectAlreadyExists(Objid),
-    #[error("Could not set/get object attribute; {0} on {1}")]
-    ObjectAttributeError(ObjAttr, Objid),
-    #[error("Recursive move detected: {0} -> {1}")]
-    RecursiveMove(Objid, Objid),
-
-    #[error("Object permission denied")]
-    ObjectPermissionDenied,
-
-    #[error("Property not found: {0}.{1}")]
-    PropertyNotFound(Objid, String),
-    #[error("Property permission denied")]
-    PropertyPermissionDenied,
-    #[error("Property definition not found: {0}.{1}")]
-    PropertyDefinitionNotFound(Objid, String),
-    #[error("Duplicate property definition: {0}.{1}")]
-    DuplicatePropertyDefinition(Objid, String),
-    #[error("Property type mismatch")]
-    PropertyTypeMismatch,
-
-    #[error("Verb not found: {0}:{1}")]
-    VerbNotFound(Objid, String),
-    #[error("Verb definition not {0:?}")]
-    InvalidVerb(Vid),
-
-    #[error("Invalid verb, decode error: {0}:{1}")]
-    VerbDecodeError(Objid, Symbol),
-    #[error("Verb permission denied")]
-    VerbPermissionDenied,
-    #[error("Verb already exists: {0}:{1}")]
-    DuplicateVerb(Objid, Symbol),
-
-    #[error("Failed object match: {0}")]
-    FailedMatch(String),
-    #[error("Ambiguous object match: {0}")]
-    AmbiguousMatch(String),
-
-    // Catch-alls for system level object DB errors.
-    #[error("DB communications/internal error: {0}")]
-    DatabaseError(String),
-
-    /// A rollback was requested, and the caller should retry the operation.
-    #[error("Rollback requested, retry operation")]
-    RollbackRetry,
-}
-
-/// Translations from WorldStateError to MOO error codes.
-impl WorldStateError {
-    pub fn to_error_code(&self) -> Error {
-        match self {
-            Self::ObjectNotFound(_) => Error::E_INVIND,
-            Self::ObjectPermissionDenied => Error::E_PERM,
-            Self::RecursiveMove(_, _) => Error::E_RECMOVE,
-            Self::VerbNotFound(_, _) => Error::E_VERBNF,
-            Self::VerbPermissionDenied => Error::E_PERM,
-            Self::InvalidVerb(_) => Error::E_VERBNF,
-            Self::DuplicateVerb(_, _) => Error::E_INVARG,
-            Self::PropertyNotFound(_, _) => Error::E_PROPNF,
-            Self::PropertyPermissionDenied => Error::E_PERM,
-            Self::PropertyDefinitionNotFound(_, _) => Error::E_PROPNF,
-            Self::DuplicatePropertyDefinition(_, _) => Error::E_INVARG,
-            Self::PropertyTypeMismatch => Error::E_TYPE,
-            _ => {
-                panic!("Unhandled error code: {:?}", self);
-            }
-        }
-    }
-
-    pub fn database_error_msg(&self) -> Option<&str> {
-        if let Self::DatabaseError(msg) = self {
-            Some(msg)
-        } else {
-            None
-        }
-    }
-}
-
 pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
     fn empty() -> Self;
     fn from_items(items: &[V]) -> Self;
     fn iter(&self) -> impl Iterator<Item = V>;
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
-}
-
-impl From<WorldStateError> for Error {
-    fn from(val: WorldStateError) -> Self {
-        val.to_error_code()
-    }
 }
 
 /// A narrative event is a record of something that happened in the world, and is what `bf_notify`
@@ -195,26 +110,4 @@ impl NarrativeEvent {
     pub fn event(&self) -> Event {
         self.event.clone()
     }
-}
-
-/// Errors related to command matching.
-#[derive(Debug, Error, Clone, Decode, Encode, Eq, PartialEq)]
-pub enum CommandError {
-    #[error("Could not parse command")]
-    CouldNotParseCommand,
-    #[error("Could not find object match for command")]
-    NoObjectMatch,
-    #[error("Could not find verb match for command")]
-    NoCommandMatch,
-    #[error("Could not start transaction due to database error")]
-    DatabaseError(#[source] WorldStateError),
-    #[error("Permission denied")]
-    PermissionDenied,
-}
-
-#[derive(Debug, Clone, Error, Decode, Encode, PartialEq, Display)]
-pub enum VerbProgramError {
-    NoVerbToProgram,
-    CompilationError(Vec<String>),
-    DatabaseError,
 }

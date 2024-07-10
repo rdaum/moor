@@ -34,19 +34,19 @@ struct Args {
 
     #[arg(
         long,
-        value_name = "rpc-server",
-        help = "RPC server address",
+        value_name = "rpc-address",
+        help = "RPC socket address",
         default_value = "ipc:///tmp/moor_rpc.sock"
     )]
-    rpc_server: String,
+    rpc_address: String,
 
     #[arg(
         long,
-        value_name = "narrative-server",
-        help = "Narrative server address",
-        default_value = "ipc:///tmp/moor_narrative.sock"
+        value_name = "events-address",
+        help = "Events socket address",
+        default_value = "ipc:///tmp/moor_events.sock"
     )]
-    narrative_server: String,
+    events_address: String,
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
@@ -80,8 +80,8 @@ async fn main() -> Result<(), eyre::Error> {
     let telnet_sockaddr = args.telnet_address.parse::<SocketAddr>().unwrap();
     let listen_loop = telnet::telnet_listen_loop(
         telnet_sockaddr,
-        args.rpc_server.as_str(),
-        args.narrative_server.as_str(),
+        args.rpc_address.as_str(),
+        args.events_address.as_str(),
     );
 
     info!("Host started, listening @ {}...", args.telnet_address);

@@ -14,6 +14,7 @@
 
 //! The core of the server logic for the RPC daemon
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -32,11 +33,11 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 use zmq::{Socket, SocketType};
 
-use moor_kernel::tasks::scheduler::SchedulerError::CommandExecutionError;
-use moor_kernel::tasks::scheduler::{SchedulerError, TaskResult};
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
-use moor_values::model::{CommandError, NarrativeEvent};
+use moor_kernel::tasks::TaskHandle;
+use moor_values::model::SchedulerError::CommandExecutionError;
+use moor_values::model::{CommandError, NarrativeEvent, TaskId, TaskResult};
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
 use moor_values::var::Symbol;
@@ -60,8 +61,9 @@ use crate::connections_rb::ConnectionsRb;
 pub struct RpcServer {
     zmq_context: zmq::Context,
     keypair: Key<64>,
-    publish: Arc<Mutex<Socket>>,
+    events_publish: Arc<Mutex<Socket>>,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
+    task_handles: Mutex<HashMap<TaskId, (Uuid, TaskHandle)>>,
 }
 
 pub(crate) fn make_response(result: Result<RpcResponse, RpcRequestError>) -> Vec<u8> {
@@ -105,8 +107,9 @@ impl RpcServer {
         Self {
             keypair,
             connections,
-            publish: Arc::new(Mutex::new(publish)),
+            events_publish: Arc::new(Mutex::new(publish)),
             zmq_context,
+            task_handles: Default::default(),
         }
     }
 
@@ -142,6 +145,9 @@ impl RpcServer {
                 info!("Kill switch activated, exiting");
                 return Ok(());
             }
+            // Check any task handles for completion.
+            self.clone().process_task_completions();
+
             let poll_result = rpc_socket
                 .poll(zmq::POLLIN, 100)
                 .with_context(|| "Error polling ZMQ socket. Bailing out.")?;
@@ -545,7 +551,7 @@ impl RpcServer {
         warn!("Disconnecting player: {}", player);
         let all_client_ids = self.connections.client_ids_for(player)?;
 
-        let publish = self.publish.lock().unwrap();
+        let publish = self.events_publish.lock().unwrap();
         let event = ConnectionEvent::Disconnect();
         let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
             .expect("Unable to serialize disconnection event");
@@ -752,18 +758,13 @@ impl RpcServer {
         let parse_command_task_handle =
             match scheduler_client.submit_command_task(connection, command.as_str(), session) {
                 Ok(t) => t,
-                Err(SchedulerError::CommandExecutionError(e)) => {
-                    return Err(RpcRequestError::CommandError(e));
-                }
-                Err(e) => {
-                    error!(error = ?e, "Error submitting command task");
-                    return Err(RpcRequestError::InternalError(e.to_string()));
-                }
+                Err(e) => return Err(RpcRequestError::TaskError(e)),
             };
 
-        Ok(RpcResponse::CommandSubmitted(
-            parse_command_task_handle.task_id(),
-        ))
+        let task_id = parse_command_task_handle.task_id();
+        let mut th_q = self.task_handles.lock().unwrap();
+        th_q.insert(task_id, (client_id, parse_command_task_handle));
+        Ok(RpcResponse::CommandSubmitted(task_id))
     }
 
     fn respond_input(
@@ -846,14 +847,7 @@ impl RpcServer {
             };
         match task_handle.into_receiver().recv() {
             Ok(TaskResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
-            Ok(TaskResult::Error(SchedulerError::CommandExecutionError(e))) => {
-                Err(RpcRequestError::CommandError(e))
-            }
-            Ok(TaskResult::Error(e)) => {
-                error!(error = ?e, "Error processing increment");
-
-                Err(RpcRequestError::InternalError(e.to_string()))
-            }
+            Ok(TaskResult::Error(e)) => Err(RpcRequestError::TaskError(e)),
             Err(e) => {
                 error!(error = ?e, "Error processing eval");
 
@@ -878,11 +872,43 @@ impl RpcServer {
         let verb = Symbol::mk_case_insensitive(verb.as_str());
         match scheduler_client.submit_verb_program(connection, connection, object, verb, code) {
             Ok((obj, verb)) => Ok(RpcResponse::ProgramSuccess(obj, verb.to_string())),
-            Err(SchedulerError::VerbProgramFailed(e)) => Err(RpcRequestError::VerbProgramFailed(e)),
-            Err(e) => {
-                error!(error = ?e, "Error processing increment");
+            Err(e) => Err(RpcRequestError::TaskError(e)),
+        }
+    }
 
-                Err(RpcRequestError::InternalError(e.to_string()))
+    fn process_task_completions(self: Arc<Self>) {
+        let mut th_q = self.task_handles.lock().unwrap();
+
+        let mut completed = vec![];
+        let mut gone = vec![];
+
+        for (task_id, (client_id, task_handle)) in th_q.iter() {
+            match task_handle.receiver().try_recv() {
+                Ok(result) => completed.push((*task_id, *client_id, result)),
+                Err(oneshot::TryRecvError::Disconnected) => gone.push(*task_id),
+                Err(oneshot::TryRecvError::Empty) => {
+                    continue;
+                }
+            }
+        }
+        for task_id in gone {
+            th_q.remove(&task_id);
+        }
+        if !completed.is_empty() {
+            let publish = self.events_publish.lock().unwrap();
+            for (task_id, client_id, result) in completed {
+                let result = match result {
+                    TaskResult::Success(v) => ConnectionEvent::TaskSuccess(v),
+                    TaskResult::Error(e) => ConnectionEvent::TaskError(e),
+                };
+                debug!(?client_id, ?task_id, ?result, "Task completed");
+                let payload = bincode::encode_to_vec(&result, bincode::config::standard())
+                    .expect("Unable to serialize task result");
+                let payload = vec![client_id.as_bytes().to_vec(), payload];
+                if let Err(e) = publish.send_multipart(payload, 0) {
+                    error!(error = ?e, "Unable to send task result");
+                }
+                th_q.remove(&task_id);
             }
         }
     }
@@ -891,7 +917,7 @@ impl RpcServer {
         &self,
         events: &[(Objid, NarrativeEvent)],
     ) -> Result<(), Error> {
-        let publish = self.publish.lock().unwrap();
+        let publish = self.events_publish.lock().unwrap();
         for (player, event) in events {
             let client_ids = self.connections.client_ids_for(*player)?;
             let event = ConnectionEvent::Narrative(*player, event.clone());
@@ -918,7 +944,7 @@ impl RpcServer {
             .expect("Unable to serialize system message");
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
         {
-            let publish = self.publish.lock().unwrap();
+            let publish = self.events_publish.lock().unwrap();
             publish.send_multipart(payload, 0).map_err(|e| {
                 error!(error = ?e, "Unable to send system message");
                 DeliveryError
@@ -952,7 +978,7 @@ impl RpcServer {
             .expect("Unable to serialize input request");
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
         {
-            let publish = self.publish.lock().unwrap();
+            let publish = self.events_publish.lock().unwrap();
             publish.send_multipart(payload, 0).map_err(|e| {
                 error!(error = ?e, "Unable to send input request");
                 DeliveryError
@@ -968,7 +994,7 @@ impl RpcServer {
         // We want responses from all clients, so send on this broadcast "topic"
         let payload = vec![BROADCAST_TOPIC.to_vec(), event_bytes];
         {
-            let publish = self.publish.lock().unwrap();
+            let publish = self.events_publish.lock().unwrap();
             publish.send_multipart(payload, 0).map_err(|e| {
                 error!(error = ?e, "Unable to send PingPong to client");
                 DeliveryError

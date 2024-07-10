@@ -23,10 +23,10 @@ use moor_compiler::{compile, Program};
 use moor_values::var::Symbol;
 use moor_values::var::{Objid, Var};
 
-use crate::tasks::scheduler::SchedulerError;
-use crate::tasks::scheduler::SchedulerError::CompilationError;
 use crate::tasks::sessions::Session;
 use crate::tasks::TaskHandle;
+use moor_values::model::SchedulerError;
+use moor_values::model::SchedulerError::CompilationError;
 
 /// A handle for talking to the scheduler from the outside world.
 /// This is not meant to be used by running tasks, but by the rpc daemon, tests, etc.

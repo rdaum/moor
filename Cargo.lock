@@ -1700,6 +1700,7 @@ dependencies = [
  "moor-db-wiredtiger",
  "moor-kernel",
  "moor-values",
+ "oneshot",
  "pem",
  "rand",
  "relbox",

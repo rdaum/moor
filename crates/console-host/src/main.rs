@@ -31,25 +31,25 @@ use rpc_common::{
     BROADCAST_TOPIC,
 };
 use rpc_sync_client::RpcSendClient;
-use rpc_sync_client::{broadcast_recv, narrative_recv};
+use rpc_sync_client::{broadcast_recv, events_recv};
 
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(
         long,
-        value_name = "rpc-server",
+        value_name = "rpc-address",
         help = "RPC server address",
         default_value = "ipc:///tmp/moor_rpc.sock"
     )]
-    rpc_server: String,
+    rpc_address: String,
 
     #[arg(
         long,
-        value_name = "narrative-server",
+        value_name = "events-address",
         help = "Narrative server address",
-        default_value = "ipc:///tmp/moor_narrative.sock"
+        default_value = "ipc:///tmp/moor_events.sock"
     )]
-    narrative_server: String,
+    events_address: String,
 
     #[arg(
         long,
@@ -241,7 +241,7 @@ fn console_loop(
     std::thread::Builder::new()
         .name("output-loop".to_string())
         .spawn(move || loop {
-            match narrative_recv(client_id, &narr_sub_socket) {
+            match events_recv(client_id, &narr_sub_socket) {
                 Ok(ConnectionEvent::Narrative(_, msg)) => {
                     printer
                         .print(
@@ -262,6 +262,12 @@ fn console_loop(
                         .print("Received disconnect event; Session ending.".to_string())
                         .unwrap();
                     return;
+                }
+                Ok(ConnectionEvent::TaskError(e)) => {
+                    printer.print(format!("Error: {:?}", e)).unwrap();
+                }
+                Ok(ConnectionEvent::TaskSuccess(result)) => {
+                    printer.print(format!("=> {:?}", result)).unwrap();
                 }
                 Err(error) => {
                     printer
@@ -372,8 +378,8 @@ fn main() -> Result<(), Error> {
         .expect("Unable to set configure logging");
 
     console_loop(
-        &args.rpc_server,
-        args.narrative_server.as_str(),
+        &args.rpc_address,
+        args.events_address.as_str(),
         &args.username,
         &args.password,
     )

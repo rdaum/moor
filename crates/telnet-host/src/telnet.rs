@@ -25,13 +25,13 @@ use tmq::{request, subscribe};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
 use tokio_util::codec::{Framed, LinesCodec};
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-use moor_values::model::{CommandError, VerbProgramError};
+use moor_values::model::{AbortLimitReason, CommandError, SchedulerError, VerbProgramError};
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
-use rpc_async_client::pubsub_client::{broadcast_recv, narrative_recv};
+use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::ConnectionEstablish;
 use rpc_common::{
@@ -65,7 +65,7 @@ enum LineMode {
 impl TelnetConnection {
     async fn run(
         &mut self,
-        narrative_sub: &mut Subscribe,
+        events_sub: &mut Subscribe,
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
     ) -> Result<(), eyre::Error> {
@@ -80,7 +80,7 @@ impl TelnetConnection {
             .expect("Unable to send login request to RPC server");
 
         let Ok((auth_token, player, connect_type)) = self
-            .authorization_phase(narrative_sub, broadcast_sub, rpc_client)
+            .authorization_phase(events_sub, broadcast_sub, rpc_client)
             .await
         else {
             bail!("Unable to authorize connection");
@@ -95,7 +95,7 @@ impl TelnetConnection {
 
         debug!(?player, client_id = ?self.client_id, "Entering command dispatch loop");
         if self
-            .command_loop(auth_token.clone(), narrative_sub, broadcast_sub, rpc_client)
+            .command_loop(auth_token.clone(), events_sub, broadcast_sub, rpc_client)
             .await
             .is_err()
         {
@@ -131,7 +131,7 @@ impl TelnetConnection {
                         }
                     }
                 }
-                Ok(event) = narrative_recv(self.client_id, narrative_sub) => {
+                Ok(event) = events_recv(self.client_id, narrative_sub) => {
                     trace!(?event, "narrative_event");
                     match event {
                         ConnectionEvent::SystemMessage(_author, msg) => {
@@ -148,6 +148,13 @@ impl TelnetConnection {
                         ConnectionEvent::Disconnect() => {
                             self.write.close().await?;
                             bail!("Disconnect before login");
+                        }
+                        ConnectionEvent::TaskError(te) => {
+                            self.handle_task_error(te).await?;
+                        }
+                        ConnectionEvent::TaskSuccess(result) => {
+                            trace!(?result, "TaskSuccess")
+                            // We don't need to do anything with successes.
                         }
                     }
                 }
@@ -172,7 +179,7 @@ impl TelnetConnection {
     async fn command_loop(
         &mut self,
         auth_token: AuthToken,
-        narrative_sub: &mut Subscribe,
+        events_sub: &mut Subscribe,
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
     ) -> Result<(), eyre::Error> {
@@ -261,26 +268,8 @@ impl TelnetConnection {
                         RpcResult::Success(RpcResponse::InputThanks) => {
                             // Nothing to do
                         }
-                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::CouldNotParseCommand)) => {
-                            self.write.send("I don't understand that.".to_string()).await?;
-                        }
-                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoObjectMatch)) => {
-                            self.write.send("I don't see that here.".to_string()).await?;
-                        }
-                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoCommandMatch)) => {
-                            self.write.send("I don't understand that.".to_string()).await?;
-                        }
-                        RpcResult::Failure(RpcRequestError::CommandError(CommandError::PermissionDenied)) => {
-                            self.write.send("You can't do that.".to_string()).await?;
-                        }
-                        RpcResult::Failure(RpcRequestError::VerbProgramFailed(VerbProgramError::CompilationError(lines))) => {
-                            for line in lines {
-                                self.write.send(line).await?;
-                            }
-                            self.write.send("Verb not programmed.".to_string()).await?;
-                        }
-                        RpcResult::Failure(RpcRequestError::VerbProgramFailed(_)) => {
-                            self.write.send("That object does not have that verb definition.".to_string()).await?;
+                        RpcResult::Failure(RpcRequestError::TaskError(te)) => {
+                            self.handle_task_error(te).await?;
                         }
                         RpcResult::Failure(e) => {
                             error!("Unhandled RPC error: {:?}", e);
@@ -305,7 +294,7 @@ impl TelnetConnection {
                         }
                     }
                 }
-                Ok(event) = narrative_recv(self.client_id, narrative_sub) => {
+                Ok(event) = events_recv(self.client_id, events_sub) => {
                     match event {
                         ConnectionEvent::SystemMessage(_author, msg) => {
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
@@ -324,17 +313,81 @@ impl TelnetConnection {
                             self.write.close().await.expect("Unable to close connection");
                             return Ok(())
                         }
+                        ConnectionEvent::TaskError(te) => {
+                            self.handle_task_error(te).await?;
+                        }
+                        ConnectionEvent::TaskSuccess(result) => {
+                            trace!(?result, "TaskSuccess")
+                            // We don't need to do anything with successes.
+
+                        }
                     }
                 }
             }
         }
+    }
+
+    async fn handle_task_error(&mut self, task_error: SchedulerError) -> Result<(), eyre::Error> {
+        match task_error {
+            SchedulerError::CommandExecutionError(CommandError::CouldNotParseCommand) => {
+                self.write
+                    .send("I don't understand that.".to_string())
+                    .await?;
+            }
+            SchedulerError::CommandExecutionError(CommandError::NoObjectMatch) => {
+                self.write
+                    .send("I don't see that here.".to_string())
+                    .await?;
+            }
+            SchedulerError::CommandExecutionError(CommandError::NoCommandMatch) => {
+                self.write
+                    .send("I don't understand that.".to_string())
+                    .await?;
+            }
+            SchedulerError::CommandExecutionError(CommandError::PermissionDenied) => {
+                self.write.send("You can't do that.".to_string()).await?;
+            }
+            SchedulerError::VerbProgramFailed(VerbProgramError::CompilationError(lines)) => {
+                for line in lines {
+                    self.write.send(line).await?;
+                }
+                self.write.send("Verb not programmed.".to_string()).await?;
+            }
+            SchedulerError::VerbProgramFailed(VerbProgramError::NoVerbToProgram) => {
+                self.write
+                    .send("That object does not have that verb definition.".to_string())
+                    .await?;
+            }
+            SchedulerError::TaskAbortedLimit(AbortLimitReason::Ticks(_)) => {
+                self.write.send("Task ran out of ticks".to_string()).await?;
+            }
+            SchedulerError::TaskAbortedLimit(AbortLimitReason::Time(_)) => {
+                self.write
+                    .send("Task ran out of seconds".to_string())
+                    .await?;
+            }
+            SchedulerError::TaskAbortedError => {
+                self.write.send("Task aborted".to_string()).await?;
+            }
+            SchedulerError::TaskAbortedException(e) => {
+                // This should not really be happening here... but?
+                self.write.send(format!("Task exception: {}", e)).await?;
+            }
+            SchedulerError::TaskAbortedCancelled => {
+                self.write.send("Task cancelled".to_string()).await?;
+            }
+            _ => {
+                warn!(?task_error, "Unhandled unexpected task error");
+            }
+        }
+        Ok(())
     }
 }
 
 pub async fn telnet_listen_loop(
     telnet_sockaddr: SocketAddr,
     rpc_address: &str,
-    narrative_address: &str,
+    events_address: &str,
 ) -> Result<(), eyre::Error> {
     let listener = TcpListener::bind(telnet_sockaddr).await?;
     let zmq_ctx = tmq::Context::new();
@@ -345,7 +398,7 @@ pub async fn telnet_listen_loop(
     loop {
         let (stream, peer_addr) = listener.accept().await?;
         let zmq_ctx = zmq_ctx.clone();
-        let pubsub_address = narrative_address.to_string();
+        let pubsub_address = events_address.to_string();
         let rpc_address = rpc_address.to_string();
         tokio::spawn(async move {
             let client_id = Uuid::new_v4();
@@ -384,12 +437,12 @@ pub async fn telnet_listen_loop(
             };
             debug!(client_id = ?client_id, connection = ?connection_oid, "Connection established");
 
-            // Before attempting login, we subscribe to the narrative channel, using our client
+            // Before attempting login, we subscribe to the events socket, using our client
             // id. The daemon should be sending events here.
-            let narrative_sub = subscribe(&zmq_ctx)
+            let events_sub = subscribe(&zmq_ctx)
                 .connect(pubsub_address.as_str())
                 .expect("Unable to connect narrative subscriber ");
-            let mut narrative_sub = narrative_sub
+            let mut events_sub = events_sub
                 .subscribe(&client_id.as_bytes()[..])
                 .expect("Unable to subscribe to narrative messages for client connection");
 
@@ -417,7 +470,7 @@ pub async fn telnet_listen_loop(
             };
 
             tcp_connection
-                .run(&mut narrative_sub, &mut broadcast_sub, &mut rpc_client)
+                .run(&mut events_sub, &mut broadcast_sub, &mut rpc_client)
                 .await?;
             Ok(())
         });

@@ -18,8 +18,8 @@ use std::time::Duration;
 use tracing::debug;
 
 use moor_compiler::{Op, ScatterLabel};
-use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
+use moor_values::model::{UncaughtException, WorldState};
 use moor_values::var::v_float;
 use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::var::Symbol;
@@ -30,7 +30,7 @@ use moor_values::var::{v_listv, Error};
 use crate::tasks::sessions::Session;
 use crate::vm::activation::Frame;
 use crate::vm::moo_frame::HandlerType;
-use crate::vm::vm_unwind::{FinallyReason, UncaughtException};
+use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VMExecState, VmExecParams};
 
 macro_rules! binary_bool_op {

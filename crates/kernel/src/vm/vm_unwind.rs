@@ -12,15 +12,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::fmt::Display;
-
 use bincode::{Decode, Encode};
 use tracing::trace;
 
 use moor_compiler::BUILTIN_DESCRIPTORS;
 use moor_compiler::{Label, Offset};
-use moor_values::model::Named;
 use moor_values::model::VerbFlag;
+use moor_values::model::{Named, UncaughtException};
 use moor_values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 use moor_values::var::{v_listv, Variant};
 use moor_values::var::{Error, ErrorPack};
@@ -29,23 +27,6 @@ use moor_values::NOTHING;
 use crate::vm::activation::{Activation, Frame};
 use crate::vm::moo_frame::HandlerType;
 use crate::vm::{ExecutionResult, VMExecState};
-
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
-pub struct UncaughtException {
-    pub code: Error,
-    pub msg: String,
-    pub value: Var,
-    pub stack: Vec<Var>,
-    pub backtrace: Vec<Var>,
-}
-
-impl Display for UncaughtException {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Uncaught exception: {} ({})", self.msg, self.code)
-    }
-}
-
-impl std::error::Error for UncaughtException {}
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum FinallyReason {
