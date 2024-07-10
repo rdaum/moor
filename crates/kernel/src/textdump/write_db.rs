@@ -178,16 +178,21 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
                 .get_verb_binary(*db_objid, verb.uuid())
                 .expect("Failed to get verb binary");
 
-            let program = Program::from_bytes(binary).expect("Failed to parse verb binary");
-            let program = if !program.main_vector.is_empty() {
-                let ast = moor_compiler::program_to_tree(&program)
-                    .expect("Failed to decompile verb binary");
-                let program =
-                    moor_compiler::unparse(&ast).expect("Failed to decompile verb binary");
-                Some(program.join("\n"))
+            let program = if !(binary.is_empty()) {
+                let program = Program::from_bytes(binary).expect("Failed to parse verb binary");
+                if !program.main_vector.is_empty() {
+                    let ast = moor_compiler::program_to_tree(&program)
+                        .expect("Failed to decompile verb binary");
+                    let program =
+                        moor_compiler::unparse(&ast).expect("Failed to decompile verb binary");
+                    Some(program.join("\n"))
+                } else {
+                    None
+                }
             } else {
                 None
             };
+
             let objid = *db_objid;
             verbs.insert(
                 (objid, verbnum),
