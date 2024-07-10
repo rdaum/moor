@@ -21,9 +21,9 @@ use moor_compiler::Program;
 use moor_values::var::Symbol;
 use moor_values::var::{List, Objid};
 
-use crate::tasks::scheduler::TaskResult;
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
 use crate::vm::Fork;
+use moor_values::model::{TaskId, TaskResult};
 
 pub mod command_parse;
 pub mod scheduler;
@@ -35,8 +35,6 @@ pub(crate) mod task;
 pub mod task_scheduler_client;
 mod tasks_db;
 pub mod vm_host;
-
-pub type TaskId = usize;
 
 pub const DEFAULT_FG_TICKS: usize = 60_000;
 pub const DEFAULT_BG_TICKS: usize = 30_000;
@@ -63,6 +61,10 @@ impl TaskHandle {
     /// Dissolve the handle into a receiver for the result.
     pub fn into_receiver(self) -> oneshot::Receiver<TaskResult> {
         self.1
+    }
+
+    pub fn receiver(&self) -> &oneshot::Receiver<TaskResult> {
+        &self.1
     }
 }
 
@@ -130,7 +132,7 @@ pub mod vm_test_utils {
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
-    use crate::vm::UncaughtException;
+    use moor_values::model::UncaughtException;
 
     pub type ExecResult = Result<Var, UncaughtException>;
 
@@ -237,17 +239,14 @@ pub mod scheduler_test_utils {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use moor_values::model::CommandError;
+    use moor_values::model::{CommandError, SchedulerError, TaskResult};
     use moor_values::var::{Error::E_VERBNF, Objid, Var};
 
     use crate::tasks::scheduler_client::SchedulerClient;
-    use crate::tasks::scheduler_test_utils::SchedulerError::{
-        CommandExecutionError, TaskAbortedException,
-    };
     use crate::tasks::sessions::Session;
-    use crate::vm::UncaughtException;
+    use moor_values::model::SchedulerError::{CommandExecutionError, TaskAbortedException};
+    use moor_values::model::UncaughtException;
 
-    use super::scheduler::{SchedulerError, TaskResult};
     use super::TaskHandle;
 
     pub type ExecResult = Result<Var, UncaughtException>;

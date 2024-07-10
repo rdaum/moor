@@ -20,7 +20,7 @@ use zmq::Socket;
 use rpc_common::{BroadcastEvent, ConnectionEvent, RpcError};
 
 /// Blocking receive on the narrative channel, returning a `ConnectionEvent`.
-pub fn narrative_recv(client_id: Uuid, subscribe: &Socket) -> Result<ConnectionEvent, RpcError> {
+pub fn events_recv(client_id: Uuid, subscribe: &Socket) -> Result<ConnectionEvent, RpcError> {
     let Ok(inbound) = subscribe.recv_multipart(0) else {
         return Err(RpcError::CouldNotReceive(
             "Unable to receive narrative message".to_string(),

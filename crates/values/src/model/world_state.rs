@@ -12,6 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use bincode::{Decode, Encode};
+use thiserror::Error;
 use uuid::Uuid;
 
 use crate::model::objects::ObjFlag;
@@ -22,12 +24,101 @@ use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::verb_info::VerbInfo;
 use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
-use crate::model::WorldStateError;
 use crate::model::{CommitResult, PropPerms};
+use crate::model::{ObjAttr, Vid};
 use crate::util::BitEnum;
-use crate::var::Objid;
 use crate::var::Symbol;
 use crate::var::Var;
+use crate::var::{Error, Objid};
+
+/// Errors related to the world state and operations on it.
+#[derive(Error, Debug, Eq, PartialEq, Clone, Decode, Encode)]
+pub enum WorldStateError {
+    #[error("Object not found: {0}")]
+    ObjectNotFound(Objid),
+    #[error("Object already exists: {0}")]
+    ObjectAlreadyExists(Objid),
+    #[error("Could not set/get object attribute; {0} on {1}")]
+    ObjectAttributeError(ObjAttr, Objid),
+    #[error("Recursive move detected: {0} -> {1}")]
+    RecursiveMove(Objid, Objid),
+
+    #[error("Object permission denied")]
+    ObjectPermissionDenied,
+
+    #[error("Property not found: {0}.{1}")]
+    PropertyNotFound(Objid, String),
+    #[error("Property permission denied")]
+    PropertyPermissionDenied,
+    #[error("Property definition not found: {0}.{1}")]
+    PropertyDefinitionNotFound(Objid, String),
+    #[error("Duplicate property definition: {0}.{1}")]
+    DuplicatePropertyDefinition(Objid, String),
+    #[error("Property type mismatch")]
+    PropertyTypeMismatch,
+
+    #[error("Verb not found: {0}:{1}")]
+    VerbNotFound(Objid, String),
+    #[error("Verb definition not {0:?}")]
+    InvalidVerb(Vid),
+
+    #[error("Invalid verb, decode error: {0}:{1}")]
+    VerbDecodeError(Objid, Symbol),
+    #[error("Verb permission denied")]
+    VerbPermissionDenied,
+    #[error("Verb already exists: {0}:{1}")]
+    DuplicateVerb(Objid, Symbol),
+
+    #[error("Failed object match: {0}")]
+    FailedMatch(String),
+    #[error("Ambiguous object match: {0}")]
+    AmbiguousMatch(String),
+
+    // Catch-alls for system level object DB errors.
+    #[error("DB communications/internal error: {0}")]
+    DatabaseError(String),
+
+    /// A rollback was requested, and the caller should retry the operation.
+    #[error("Rollback requested, retry operation")]
+    RollbackRetry,
+}
+
+/// Translations from WorldStateError to MOO error codes.
+impl WorldStateError {
+    pub fn to_error_code(&self) -> Error {
+        match self {
+            Self::ObjectNotFound(_) => Error::E_INVIND,
+            Self::ObjectPermissionDenied => Error::E_PERM,
+            Self::RecursiveMove(_, _) => Error::E_RECMOVE,
+            Self::VerbNotFound(_, _) => Error::E_VERBNF,
+            Self::VerbPermissionDenied => Error::E_PERM,
+            Self::InvalidVerb(_) => Error::E_VERBNF,
+            Self::DuplicateVerb(_, _) => Error::E_INVARG,
+            Self::PropertyNotFound(_, _) => Error::E_PROPNF,
+            Self::PropertyPermissionDenied => Error::E_PERM,
+            Self::PropertyDefinitionNotFound(_, _) => Error::E_PROPNF,
+            Self::DuplicatePropertyDefinition(_, _) => Error::E_INVARG,
+            Self::PropertyTypeMismatch => Error::E_TYPE,
+            _ => {
+                panic!("Unhandled error code: {:?}", self);
+            }
+        }
+    }
+
+    pub fn database_error_msg(&self) -> Option<&str> {
+        if let Self::DatabaseError(msg) = self {
+            Some(msg)
+        } else {
+            None
+        }
+    }
+}
+
+impl From<WorldStateError> for Error {
+    fn from(val: WorldStateError) -> Self {
+        val.to_error_code()
+    }
+}
 
 /// A "world state" is anything which represents the shared, mutable, state of the user's
 /// environment during verb execution. This includes the location of objects, their contents,

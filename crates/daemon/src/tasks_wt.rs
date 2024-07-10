@@ -18,8 +18,9 @@ use moor_db_wiredtiger::{
     Connection, CreateConfig, CursorConfig, DataSource, Datum, Error, Isolation, LogConfig,
     OpenConfig, SessionConfig, SyncMethod, TransactionSync,
 };
-use moor_kernel::tasks::{TaskId, TasksDb, TasksDbError};
+use moor_kernel::tasks::{TasksDb, TasksDbError};
 use moor_kernel::SuspendedTask;
+use moor_values::model::TaskId;
 use moor_values::BINCODE_CONFIG;
 use std::path::Path;
 use std::sync::Arc;

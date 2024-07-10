@@ -20,13 +20,13 @@ use uuid::Uuid;
 
 use rpc_common::{BroadcastEvent, ConnectionEvent, RpcError};
 
-pub async fn narrative_recv(
+pub async fn events_recv(
     client_id: Uuid,
     subscribe: &mut Subscribe,
 ) -> Result<ConnectionEvent, RpcError> {
     let Some(Ok(mut inbound)) = subscribe.next().await else {
         return Err(RpcError::CouldNotReceive(
-            "Unable to receive narrative message".to_string(),
+            "Unable to receive published event".to_string(),
         ));
     };
 
@@ -55,7 +55,7 @@ pub async fn narrative_recv(
 
     let decode_result = bincode::decode_from_slice(event.as_ref(), bincode::config::standard());
     let (msg, _msg_size): (ConnectionEvent, usize) = decode_result.map_err(|e| {
-        RpcError::CouldNotDecode(format!("Unable to decode narrative message: {}", e))
+        RpcError::CouldNotDecode(format!("Unable to decode published event: {}", e))
     })?;
 
     Ok(msg)

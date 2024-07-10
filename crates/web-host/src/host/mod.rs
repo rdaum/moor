@@ -17,7 +17,8 @@ mod ws_connection;
 
 use moor_values::var::Var;
 use moor_values::var::Variant;
-use serde_derive::{Deserialize, Serialize};
+use serde::Serialize;
+use serde_derive::Deserialize;
 use serde_json::{json, Number};
 
 pub use web_host::WebHost;
@@ -26,12 +27,12 @@ pub use web_host::{
     ws_connect_attach_handler, ws_create_attach_handler,
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(serde_derive::Serialize, Deserialize)]
 struct Oid {
     oid: i64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(serde_derive::Serialize, Deserialize)]
 struct Error {
     error_code: u8,
     error_name: String,
@@ -58,4 +59,12 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             serde_json::Value::Array(v)
         }
     }
+}
+
+pub fn serialize_var<S>(v: &Var, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let j = var_as_json(v);
+    j.serialize(s)
 }

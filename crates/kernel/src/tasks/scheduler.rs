@@ -19,18 +19,22 @@ use std::sync::Arc;
 use std::thread::yield_now;
 use std::time::{Duration, Instant};
 
-use bincode::{Decode, Encode};
 use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use lazy_static::lazy_static;
-use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 use moor_compiler::compile;
-use moor_compiler::CompileError;
 use moor_db::Database;
-use moor_values::model::{BinaryType, CommandError, HasUuid, VerbAttrs};
+use moor_values::model::SchedulerError::{
+    CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
+    TaskAbortedException, TaskAbortedLimit,
+};
+use moor_values::model::{
+    AbortLimitReason, BinaryType, CommandError, HasUuid, SchedulerError, TaskId, TaskResult,
+    VerbAttrs,
+};
 use moor_values::model::{CommitResult, Perms};
 use moor_values::model::{VerbProgramError, WorldState};
 use moor_values::var::Error::{E_INVARG, E_PERM};
@@ -38,17 +42,12 @@ use moor_values::var::Symbol;
 use moor_values::var::{v_err, v_int, v_none, v_string, List, Var};
 use moor_values::var::{Objid, Variant};
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
-use SchedulerError::{
-    CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
-    TaskAbortedException, TaskAbortedLimit,
-};
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
 use crate::matching::match_env::MatchEnvironmentParseMatcher;
 use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::ParseMatcher;
-use crate::tasks::scheduler::SchedulerError::VerbProgramFailed;
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::sessions::{Session, SessionFactory};
 use crate::tasks::suspension::{SuspensionQ, WakeCondition};
@@ -56,12 +55,12 @@ use crate::tasks::task::Task;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::{
-    ServerOptions, TaskHandle, TaskId, TaskStart, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS,
-    DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
+    ServerOptions, TaskHandle, TaskStart, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS,
+    DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
 };
 use crate::textdump::{make_textdump, TextdumpWriter};
 use crate::vm::Fork;
-use crate::vm::UncaughtException;
+use moor_values::model::SchedulerError::VerbProgramFailed;
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 
@@ -129,49 +128,6 @@ struct TaskQ {
     ///     Suspended foreground tasks that are either indefinitely suspended or will execute someday
     ///     Suspended tasks waiting for input from the player
     suspended: SuspensionQ,
-}
-
-/// Reasons a task might be aborted for a 'limit'
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Decode, Encode)]
-pub enum AbortLimitReason {
-    /// This task hit its allotted tick limit.
-    Ticks(usize),
-    /// This task hit its allotted time limit.
-    Time(Duration),
-}
-
-/// Possible results returned to waiters on tasks to which they've subscribed.
-#[derive(Clone, Debug)]
-pub enum TaskResult {
-    Success(Var),
-    Error(SchedulerError),
-}
-
-#[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]
-pub enum SchedulerError {
-    #[error("Scheduler not responding")]
-    SchedulerNotResponding,
-    #[error("Task not found: {0:?}")]
-    TaskNotFound(TaskId),
-    #[error("Input request not found: {0:?}")]
-    // Using u128 here because Uuid is not bincode-able, but this is just a v4 uuid.
-    InputRequestNotFound(u128),
-    #[error("Could not start task (internal error)")]
-    CouldNotStartTask,
-    #[error("Compilation error")]
-    CompilationError(#[source] CompileError),
-    #[error("Could not start command")]
-    CommandExecutionError(#[source] CommandError),
-    #[error("Task aborted due to limit: {0:?}")]
-    TaskAbortedLimit(AbortLimitReason),
-    #[error("Task aborted due to error.")]
-    TaskAbortedError,
-    #[error("Task aborted due to exception")]
-    TaskAbortedException(#[source] UncaughtException),
-    #[error("Task aborted due to cancellation.")]
-    TaskAbortedCancelled,
-    #[error("Unable to program verb {0}")]
-    VerbProgramFailed(VerbProgramError),
 }
 
 fn load_int_sysprop(server_options_obj: Objid, name: Symbol, tx: &dyn WorldState) -> Option<u64> {

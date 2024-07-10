@@ -33,8 +33,8 @@ use moor_values::var::{v_listv, Error};
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
-use crate::tasks::TaskId;
 use crate::vm::ExecutionResult;
+use moor_values::model::TaskId;
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(

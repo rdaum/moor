@@ -55,7 +55,7 @@ fn start_daemon(workdir: &Path, uuid: Uuid) -> ManagedChild {
             .arg("--textdump")
             .arg(test_db_path())
             .arg("--generate-keypair")
-            .arg("--narrative-listen")
+            .arg("--events-listen")
             .arg(format!("{}{}", NARRATIVE_PATH_ROOT, uuid))
             .arg("--rpc-listen")
             .arg(format!("{}{}", RPC_PATH_ROOT, uuid))
@@ -88,9 +88,9 @@ fn start_telnet_host(uuid: Uuid, port: u16) -> ManagedChild {
     ManagedChild::new(
         "telnet-host",
         Command::new(telnet_host_bin())
-            .arg("--narrative-server")
+            .arg("--events-address")
             .arg(format!("{}{}", NARRATIVE_PATH_ROOT, uuid))
-            .arg("--rpc-server")
+            .arg("--rpc-address")
             .arg(format!("{}{}", RPC_PATH_ROOT, uuid))
             .arg("--telnet-address")
             .arg(format!("0.0.0.0:{}", port))

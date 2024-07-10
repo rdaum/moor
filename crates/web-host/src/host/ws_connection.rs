@@ -12,13 +12,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::host::serialize_var;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use moor_values::model::CommandError;
-use moor_values::var::Objid;
+use moor_values::model::{AbortLimitReason, CommandError, SchedulerError, VerbProgramError};
+use moor_values::var::{Objid, Var};
 use rpc_async_client::pubsub_client::broadcast_recv;
-use rpc_async_client::pubsub_client::narrative_recv;
+use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::BroadcastEvent;
 use rpc_common::ConnectionEvent;
@@ -29,8 +30,9 @@ use std::net::SocketAddr;
 use std::time::SystemTime;
 use tmq::subscribe::Subscribe;
 use tokio::select;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
+
 pub struct WebSocketConnection {
     pub(crate) player: Objid,
     pub(crate) peer_addr: SocketAddr,
@@ -53,6 +55,16 @@ pub struct NarrativeOutput {
     server_time: SystemTime,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ErrorOutput {
+    message: String,
+    description: Option<Vec<String>>,
+    server_time: SystemTime,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
+pub struct ValueResult(#[serde(serialize_with = "serialize_var")] Var);
+
 impl WebSocketConnection {
     pub async fn handle(&mut self, connect_type: ConnectType, stream: WebSocket) {
         info!("New connection from {}, {}", self.peer_addr, self.player);
@@ -63,7 +75,7 @@ impl WebSocketConnection {
             ConnectType::Reconnected => "*** Reconnected ***",
             ConnectType::Created => "*** Created ***",
         };
-        Self::emit_event(
+        Self::emit_narrative(
             &mut ws_sender,
             NarrativeOutput {
                 origin_player: self.player.0,
@@ -95,11 +107,11 @@ impl WebSocketConnection {
                         }
                     }
                 }
-                Ok(event) = narrative_recv(self.client_id, &mut self.narrative_sub) => {
+                Ok(event) = events_recv(self.client_id, &mut self.narrative_sub) => {
                     trace!(?event, "narrative_event");
                     match event {
                         ConnectionEvent::SystemMessage(author, msg) => {
-                            Self::emit_event(&mut ws_sender, NarrativeOutput {
+                            Self::emit_narrative(&mut ws_sender, NarrativeOutput {
                                 origin_player: author.0,
                                 system_message: Some(msg),
                                 message: None,
@@ -108,7 +120,7 @@ impl WebSocketConnection {
                         }
                         ConnectionEvent::Narrative(author, event) => {
                             let msg = event.event();
-                            Self::emit_event(&mut ws_sender, NarrativeOutput {
+                            Self::emit_narrative(&mut ws_sender, NarrativeOutput {
                                 origin_player: author.0,
                                 system_message: None,
                                 message: Some(match msg {
@@ -121,7 +133,7 @@ impl WebSocketConnection {
                             expecting_input = Some(request_id);
                         }
                         ConnectionEvent::Disconnect() => {
-                            Self::emit_event(&mut ws_sender, NarrativeOutput {
+                            Self::emit_narrative(&mut ws_sender, NarrativeOutput {
                                 origin_player: self.player.0,
                                 system_message: Some("** Disconnected **".to_string()),
                                 message: None,
@@ -129,6 +141,12 @@ impl WebSocketConnection {
                             }).await;
                             ws_sender.close().await.expect("Unable to close connection");
                             return ;
+                        }
+                        ConnectionEvent::TaskError(te) => {
+                            self.handle_task_error(&mut ws_sender, te).await.expect("Unable to handle task error");
+                        }
+                        ConnectionEvent::TaskSuccess(s) => {
+                            Self::emit_value(&mut ws_sender, ValueResult(s)).await;
                         }
                     }
                 }
@@ -174,55 +192,10 @@ impl WebSocketConnection {
             | RpcResult::Success(RpcResponse::InputThanks) => {
                 // Nothing to do
             }
-            RpcResult::Failure(RpcRequestError::CommandError(
-                CommandError::CouldNotParseCommand,
-            )) => {
-                Self::emit_event(
-                    ws_sender,
-                    NarrativeOutput {
-                        origin_player: self.player.0,
-                        system_message: Some("I don't understand that.".to_string()),
-                        message: None,
-                        server_time: SystemTime::now(),
-                    },
-                )
-                .await;
-            }
-            RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoObjectMatch)) => {
-                Self::emit_event(
-                    ws_sender,
-                    NarrativeOutput {
-                        origin_player: self.player.0,
-                        system_message: Some("I don't know what you're talking about.".to_string()),
-                        message: None,
-                        server_time: SystemTime::now(),
-                    },
-                )
-                .await;
-            }
-            RpcResult::Failure(RpcRequestError::CommandError(CommandError::NoCommandMatch)) => {
-                Self::emit_event(
-                    ws_sender,
-                    NarrativeOutput {
-                        origin_player: self.player.0,
-                        system_message: Some("I don't know how to do that.".to_string()),
-                        message: None,
-                        server_time: SystemTime::now(),
-                    },
-                )
-                .await;
-            }
-            RpcResult::Failure(RpcRequestError::CommandError(CommandError::PermissionDenied)) => {
-                Self::emit_event(
-                    ws_sender,
-                    NarrativeOutput {
-                        origin_player: self.player.0,
-                        system_message: Some("You can't do that.".to_string()),
-                        message: None,
-                        server_time: SystemTime::now(),
-                    },
-                )
-                .await;
+            RpcResult::Failure(RpcRequestError::TaskError(e)) => {
+                self.handle_task_error(ws_sender, e)
+                    .await
+                    .expect("Unable to handle task error");
             }
             RpcResult::Failure(e) => {
                 error!("Unhandled RPC error: {:?}", e);
@@ -233,7 +206,161 @@ impl WebSocketConnection {
         }
     }
 
-    async fn emit_event(ws_sender: &mut SplitSink<WebSocket, Message>, msg: NarrativeOutput) {
+    async fn handle_task_error(
+        &mut self,
+        ws_sender: &mut SplitSink<WebSocket, Message>,
+        task_error: SchedulerError,
+    ) -> Result<(), eyre::Error> {
+        match task_error {
+            SchedulerError::CommandExecutionError(CommandError::CouldNotParseCommand) => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "I don't understand that.".to_string(),
+                        description: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await;
+            }
+            SchedulerError::CommandExecutionError(CommandError::NoObjectMatch) => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "I don't see that here.".to_string(),
+                        description: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            SchedulerError::CommandExecutionError(CommandError::NoCommandMatch) => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "I don't know how to do that.".to_string(),
+                        description: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            SchedulerError::CommandExecutionError(CommandError::PermissionDenied) => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "You can't do that.".to_string(),
+                        description: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            SchedulerError::VerbProgramFailed(VerbProgramError::CompilationError(lines)) => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "Verb not programmed.".to_string(),
+                        description: Some(lines),
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            SchedulerError::VerbProgramFailed(VerbProgramError::NoVerbToProgram) => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "Verb not programmed.".to_string(),
+                        description: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            SchedulerError::TaskAbortedLimit(AbortLimitReason::Ticks(_)) => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "Task ran out of ticks".to_string(),
+                        description: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            SchedulerError::TaskAbortedLimit(AbortLimitReason::Time(_)) => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "Task ran out of seconds".to_string(),
+                        description: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            SchedulerError::TaskAbortedError => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "Task aborted".to_string(),
+                        description: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            SchedulerError::TaskAbortedException(e) => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "Task exception".to_string(),
+                        description: Some(vec![format!("{}", e)]),
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            SchedulerError::TaskAbortedCancelled => {
+                Self::emit_error(
+                    ws_sender,
+                    ErrorOutput {
+                        message: "Task cancelled".to_string(),
+                        description: None,
+                        server_time: SystemTime::now(),
+                    },
+                )
+                .await
+            }
+            _ => {
+                warn!(?task_error, "Unhandled unexpected task error");
+            }
+        }
+        Ok(())
+    }
+
+    async fn emit_narrative(ws_sender: &mut SplitSink<WebSocket, Message>, msg: NarrativeOutput) {
+        // Serialize to JSON.
+        let msg = serde_json::to_string(&msg).unwrap();
+        let msg = Message::Text(msg);
+        ws_sender
+            .send(msg)
+            .await
+            .expect("Unable to send message to client");
+    }
+
+    async fn emit_error(ws_sender: &mut SplitSink<WebSocket, Message>, msg: ErrorOutput) {
+        // Serialize to JSON.
+        let msg = serde_json::to_string(&msg).unwrap();
+        let msg = Message::Text(msg);
+        ws_sender
+            .send(msg)
+            .await
+            .expect("Unable to send message to client");
+    }
+
+    async fn emit_value(ws_sender: &mut SplitSink<WebSocket, Message>, msg: ValueResult) {
         // Serialize to JSON.
         let msg = serde_json::to_string(&msg).unwrap();
         let msg = Message::Text(msg);
