@@ -14,7 +14,7 @@
 
 use bincode::{Decode, Encode};
 use std::fmt::Debug;
-use std::time::SystemTime;
+use thiserror::Error;
 
 pub use crate::model::defset::{Defs, DefsIter, HasUuid, Named};
 pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
@@ -29,8 +29,6 @@ pub use crate::model::verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid};
 pub use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::AsByteBuffer;
 
-use crate::var::Objid;
-
 mod defset;
 mod r#match;
 mod objects;
@@ -38,16 +36,10 @@ mod objset;
 mod permissions;
 mod propdef;
 mod props;
-mod tasks;
 mod verb_info;
 mod verbdef;
 mod verbs;
 mod world_state;
-
-pub use tasks::{
-    AbortLimitReason, CommandError, CompileError, SchedulerError, TaskId, TaskResult,
-    UncaughtException, VerbProgramError,
-};
 
 pub use world_state::WorldStateError;
 
@@ -66,48 +58,14 @@ pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
     fn is_empty(&self) -> bool;
 }
 
-/// A narrative event is a record of something that happened in the world, and is what `bf_notify`
-/// or similar ultimately create.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-pub struct NarrativeEvent {
-    /// When the event happened, in the server's system time.
-    timestamp: SystemTime,
-    /// The object that authored or caused the event.
-    author: Objid,
-    /// The event itself.
-    pub event: Event,
-}
-
-/// Types of events we can send to the session.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-pub enum Event {
-    /// The typical "something happened" descriptive event.
-    TextNotify(String),
-    // TODO: Other Event types on Session stream
-    //   other events that might happen here would be things like (local) "object moved" or "object
-    //   created."
-}
-
-impl NarrativeEvent {
-    #[must_use]
-    pub fn notify_text(author: Objid, event: String) -> Self {
-        Self {
-            timestamp: SystemTime::now(),
-            author,
-            event: Event::TextNotify(event),
-        }
-    }
-
-    #[must_use]
-    pub fn timestamp(&self) -> SystemTime {
-        self.timestamp
-    }
-    #[must_use]
-    pub fn author(&self) -> Objid {
-        self.author
-    }
-    #[must_use]
-    pub fn event(&self) -> Event {
-        self.event.clone()
-    }
+#[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]
+pub enum CompileError {
+    #[error("Failure to parse string: {0}")]
+    StringLexError(String),
+    #[error("Failure to parse program: {0}")]
+    ParseError(String),
+    #[error("Unknown built-in function: {0}")]
+    UnknownBuiltinFunction(String),
+    #[error("Could not find loop with id: {0}")]
+    UnknownLoopLabel(String),
 }

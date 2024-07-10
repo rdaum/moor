@@ -26,9 +26,10 @@ use tracing::{debug, error, trace, warn};
 
 use moor_compiler::Program;
 use moor_compiler::{compile, Name};
+use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::{BinaryType, ObjFlag};
-use moor_values::model::{TaskId, UncaughtException, VerbInfo};
+use moor_values::tasks::{AbortLimitReason, TaskId, UncaughtException};
 use moor_values::var::Error::E_MAXREC;
 use moor_values::var::Var;
 use moor_values::var::{v_none, Symbol};
@@ -47,7 +48,6 @@ use crate::vm::vm_call::VerbProgram;
 use crate::vm::VmExecParams;
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest};
 use crate::vm::{FinallyReason, VMExecState};
-use moor_values::model::AbortLimitReason;
 
 /// Return values from exec_interpreter back to the Task scheduler loop
 pub enum VMHostResponse {

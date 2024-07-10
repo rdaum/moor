@@ -16,7 +16,7 @@ use crate::host::serialize_var;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use moor_values::model::{AbortLimitReason, CommandError, SchedulerError, VerbProgramError};
+use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_values::var::{Objid, Var};
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::events_recv;
@@ -124,7 +124,7 @@ impl WebSocketConnection {
                                 origin_player: author.0,
                                 system_message: None,
                                 message: Some(match msg {
-                                    moor_values::model::Event::TextNotify(msg) => msg,
+                                    Event::TextNotify(msg) => msg,
                                 }),
                                 server_time: event.timestamp(),
                             }).await;

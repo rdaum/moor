@@ -28,7 +28,7 @@ use tokio_util::codec::{Framed, LinesCodec};
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-use moor_values::model::{AbortLimitReason, CommandError, SchedulerError, VerbProgramError};
+use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
@@ -139,7 +139,7 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            let moor_values::model::Event::TextNotify(msg_text) = msg;
+                            let Event::TextNotify(msg_text) = msg;
                             self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::RequestInput(_request_id) => {
@@ -301,7 +301,7 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            let moor_values::model::Event::TextNotify(msg_text) = msg;
+                            let Event::TextNotify(msg_text) = msg;
                             self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::RequestInput(request_id) => {

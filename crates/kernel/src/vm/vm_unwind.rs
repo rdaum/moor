@@ -17,8 +17,9 @@ use tracing::trace;
 
 use moor_compiler::BUILTIN_DESCRIPTORS;
 use moor_compiler::{Label, Offset};
+use moor_values::model::Named;
 use moor_values::model::VerbFlag;
-use moor_values::model::{Named, UncaughtException};
+use moor_values::tasks::UncaughtException;
 use moor_values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
 use moor_values::var::{v_listv, Variant};
 use moor_values::var::{Error, ErrorPack};

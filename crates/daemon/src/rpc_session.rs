@@ -19,7 +19,7 @@ use tracing::trace;
 use uuid::Uuid;
 
 use moor_kernel::tasks::sessions::{Session, SessionError};
-use moor_values::model::NarrativeEvent;
+use moor_values::tasks::NarrativeEvent;
 use moor_values::var::Objid;
 
 use crate::rpc_server::RpcServer;

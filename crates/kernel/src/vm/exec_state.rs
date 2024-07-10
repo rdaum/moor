@@ -22,7 +22,7 @@ use moor_values::var::{Objid, Symbol};
 use moor_values::NOTHING;
 
 use crate::vm::activation::{Activation, Frame};
-use moor_values::model::TaskId;
+use moor_values::tasks::TaskId;
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]

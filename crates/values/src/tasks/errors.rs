@@ -12,7 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::model::WorldStateError;
+use crate::model::{CompileError, WorldStateError};
+use crate::tasks::TaskId;
 use crate::var::{Error, Var};
 use bincode::{Decode, Encode};
 use std::fmt::Display;
@@ -68,20 +69,6 @@ pub enum SchedulerError {
     TaskAbortedCancelled,
     #[error("Unable to program verb {0}")]
     VerbProgramFailed(VerbProgramError),
-}
-
-pub type TaskId = usize;
-
-#[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]
-pub enum CompileError {
-    #[error("Failure to parse string: {0}")]
-    StringLexError(String),
-    #[error("Failure to parse program: {0}")]
-    ParseError(String),
-    #[error("Unknown built-in function: {0}")]
-    UnknownBuiltinFunction(String),
-    #[error("Could not find loop with id: {0}")]
-    UnknownLoopLabel(String),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]

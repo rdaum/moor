@@ -18,8 +18,9 @@ use std::time::Duration;
 use tracing::debug;
 
 use moor_compiler::{Op, ScatterLabel};
+use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::model::{UncaughtException, WorldState};
+use moor_values::tasks::UncaughtException;
 use moor_values::var::v_float;
 use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::var::Symbol;

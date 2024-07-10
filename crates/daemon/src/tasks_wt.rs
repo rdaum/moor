@@ -20,7 +20,7 @@ use moor_db_wiredtiger::{
 };
 use moor_kernel::tasks::{TasksDb, TasksDbError};
 use moor_kernel::SuspendedTask;
-use moor_values::model::TaskId;
+use moor_values::tasks::TaskId;
 use moor_values::BINCODE_CONFIG;
 use std::path::Path;
 use std::sync::Arc;
