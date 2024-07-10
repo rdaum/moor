@@ -27,16 +27,13 @@ use uuid::Uuid;
 
 use moor_compiler::compile;
 use moor_db::Database;
-use moor_values::model::SchedulerError::{
-    CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
-    TaskAbortedException, TaskAbortedLimit,
-};
-use moor_values::model::{
-    AbortLimitReason, BinaryType, CommandError, HasUuid, SchedulerError, TaskId, TaskResult,
-    VerbAttrs,
-};
+use moor_values::model::WorldState;
+use moor_values::model::{BinaryType, HasUuid, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
-use moor_values::model::{VerbProgramError, WorldState};
+
+use moor_values::tasks::{
+    AbortLimitReason, CommandError, SchedulerError, TaskId, TaskResult, VerbProgramError,
+};
 use moor_values::var::Error::{E_INVARG, E_PERM};
 use moor_values::var::Symbol;
 use moor_values::var::{v_err, v_int, v_none, v_string, List, Var};
@@ -60,7 +57,10 @@ use crate::tasks::{
 };
 use crate::textdump::{make_textdump, TextdumpWriter};
 use crate::vm::Fork;
-use moor_values::model::SchedulerError::VerbProgramFailed;
+use moor_values::tasks::SchedulerError::{
+    CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
+    TaskAbortedException, TaskAbortedLimit, VerbProgramFailed,
+};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 

@@ -23,6 +23,7 @@ use crate::var::Objid;
 
 mod encode;
 pub mod model;
+pub mod tasks;
 pub mod util;
 pub mod var;
 

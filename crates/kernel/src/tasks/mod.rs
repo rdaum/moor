@@ -23,7 +23,7 @@ use moor_values::var::{List, Objid};
 
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
 use crate::vm::Fork;
-use moor_values::model::{TaskId, TaskResult};
+use moor_values::tasks::{TaskId, TaskResult};
 
 pub mod command_parse;
 pub mod scheduler;
@@ -132,7 +132,7 @@ pub mod vm_test_utils {
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
-    use moor_values::model::UncaughtException;
+    use moor_values::tasks::UncaughtException;
 
     pub type ExecResult = Result<Var, UncaughtException>;
 
@@ -239,13 +239,13 @@ pub mod scheduler_test_utils {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use moor_values::model::{CommandError, SchedulerError, TaskResult};
+    use moor_values::tasks::{CommandError, SchedulerError, TaskResult};
     use moor_values::var::{Error::E_VERBNF, Objid, Var};
 
     use crate::tasks::scheduler_client::SchedulerClient;
     use crate::tasks::sessions::Session;
-    use moor_values::model::SchedulerError::{CommandExecutionError, TaskAbortedException};
-    use moor_values::model::UncaughtException;
+    use moor_values::tasks::SchedulerError::{CommandExecutionError, TaskAbortedException};
+    use moor_values::tasks::UncaughtException;
 
     use super::TaskHandle;
 

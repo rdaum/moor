@@ -22,8 +22,8 @@ use tracing::{debug, error, info, warn};
 
 use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
-use moor_values::model::ObjFlag;
-use moor_values::model::{NarrativeEvent, WorldStateError};
+use moor_values::model::{ObjFlag, WorldStateError};
+use moor_values::tasks::NarrativeEvent;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_values::var::Symbol;
 use moor_values::var::Variant;
@@ -34,7 +34,7 @@ use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::ExecutionResult;
-use moor_values::model::TaskId;
+use moor_values::tasks::TaskId;
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(

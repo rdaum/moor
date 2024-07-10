@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 use uuid::Uuid;
 
-use moor_values::model::NarrativeEvent;
+use moor_values::tasks::NarrativeEvent;
 use moor_values::var::Objid;
 
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to

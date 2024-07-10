@@ -13,7 +13,7 @@
 //
 
 use bincode::{Decode, Encode};
-use moor_values::model::{NarrativeEvent, SchedulerError};
+use moor_values::tasks::{NarrativeEvent, SchedulerError};
 use moor_values::var::Objid;
 use moor_values::var::Var;
 use std::time::SystemTime;
