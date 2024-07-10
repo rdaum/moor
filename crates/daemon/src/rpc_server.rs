@@ -36,14 +36,12 @@ use moor_kernel::tasks::scheduler::SchedulerError::CommandExecutionError;
 use moor_kernel::tasks::scheduler::{SchedulerError, TaskResult};
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
-use moor_kernel::tasks::TaskHandle;
 use moor_values::model::{CommandError, NarrativeEvent};
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
 use moor_values::var::Symbol;
-use moor_values::var::Var;
 use moor_values::var::Variant;
-use moor_values::var::{v_bool, v_objid, v_str, v_string};
+use moor_values::var::{v_objid, v_string};
 use moor_values::SYSTEM_OBJECT;
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
 use rpc_common::{
@@ -745,30 +743,6 @@ impl RpcServer {
             warn!("Unable to update client connection activity: {}", e);
         };
 
-        // Try to submit to do_command as a verb call first and only parse_command after that fails.
-        // TODO: fold this functionality into Task.
-
-        let arguments = parse_into_words(command.as_str());
-
-        if let Ok(do_command_task_handle) = scheduler_client.submit_verb_task(
-            connection,
-            SYSTEM_OBJECT,
-            "do_command".to_string(),
-            arguments.iter().map(|s| v_str(s)).collect(),
-            command.clone(),
-            SYSTEM_OBJECT,
-            session.clone(),
-        ) {
-            let task_id = do_command_task_handle.task_id();
-            if let Ok(value) = self.clone().watch_command_task(do_command_task_handle) {
-                if value != v_bool(false) {
-                    return Ok(RpcResponse::CommandSubmitted(task_id));
-                }
-            }
-        }
-
-        // That having failed, we do the classic internal parse command cycle instead...
-
         debug!(
             command,
             ?client_id,
@@ -816,24 +790,6 @@ impl RpcServer {
 
         // TODO: do we need a new response for this? Maybe just a "Thanks"?
         Ok(RpcResponse::InputThanks)
-    }
-
-    fn watch_command_task(
-        self: Arc<Self>,
-        task_handle: TaskHandle,
-    ) -> Result<Var, RpcRequestError> {
-        debug!(
-            task_id = task_handle.task_id(),
-            "Subscribed to command task results"
-        );
-        match task_handle.into_receiver().recv() {
-            Ok(TaskResult::Success(value)) => Ok(value),
-            Ok(TaskResult::Error(SchedulerError::CommandExecutionError(e))) => {
-                Err(RpcRequestError::CommandError(e))
-            }
-            Ok(TaskResult::Error(e)) => Err(RpcRequestError::InternalError(e.to_string())),
-            Err(e) => Err(RpcRequestError::InternalError(e.to_string())),
-        }
     }
 
     /// Call $do_out_of_band(command)
