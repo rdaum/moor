@@ -1029,6 +1029,39 @@ mod tests {
         };
     }
 
+    /// Install a simple verb that will match and execute, without $do_command.
+    #[test]
+    fn test_command_match() {
+        let look_this = TestVerb {
+            name: Symbol::mk("look"),
+            program: compile("return 1;").unwrap(),
+            argspec: VerbArgsSpec {
+                dobj: ArgSpec::This,
+                prep: PrepSpec::None,
+                iobj: ArgSpec::None,
+            },
+        };
+        let (_kill_switch, task, _db, tx, task_scheduler_client, control_receiver) =
+            setup_test_env_command("look #0", &[look_this]);
+
+        let session = Arc::new(NoopClientSession::new());
+        Task::run_task_loop(
+            task,
+            &task_scheduler_client,
+            session,
+            tx,
+            Arc::new(BuiltinRegistry::new()),
+        );
+
+        // This should be a success, it got handled
+        let (task_id, msg) = control_receiver.recv().unwrap();
+        assert_eq!(task_id, 1);
+        let TaskControlMsg::TaskSuccess(result) = msg else {
+            panic!("Expected TaskSuccess, got {:?}", msg);
+        };
+        assert_eq!(result, v_int(1));
+    }
+
     /// Install "do_command" that returns true, meaning the command was handled, and that's success.
     #[test]
     fn test_command_do_command() {
