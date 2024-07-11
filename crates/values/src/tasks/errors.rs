@@ -21,13 +21,6 @@ use std::time::Duration;
 use strum::Display;
 use thiserror::Error;
 
-/// Possible results returned to waiters on tasks to which they've subscribed.
-#[derive(Clone, Debug)]
-pub enum TaskResult {
-    Success(Var),
-    Error(SchedulerError),
-}
-
 #[derive(Debug, Clone, Error, Decode, Encode, PartialEq, Display)]
 pub enum VerbProgramError {
     NoVerbToProgram,

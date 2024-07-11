@@ -16,7 +16,7 @@ mod errors;
 mod events;
 
 pub use errors::{
-    AbortLimitReason, CommandError, SchedulerError, TaskResult, UncaughtException, VerbProgramError,
+    AbortLimitReason, CommandError, SchedulerError, UncaughtException, VerbProgramError,
 };
 
 pub use events::{Event, NarrativeEvent};

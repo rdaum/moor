@@ -23,12 +23,12 @@ use bincode::{BorrowDecode, Decode, Encode};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use moor_values::var::Objid;
+use moor_values::var::{Objid, Var};
 
 use crate::tasks::sessions::{NoopClientSession, Session, SessionFactory};
 use crate::tasks::task::Task;
 use crate::tasks::{TaskDescription, TasksDb};
-use moor_values::tasks::{TaskId, TaskResult};
+use moor_values::tasks::{SchedulerError, TaskId};
 
 /// State a suspended task sits in inside the `suspended` side of the task queue.
 /// When tasks are not running they are moved into these.
@@ -36,7 +36,7 @@ pub struct SuspendedTask {
     pub wake_condition: WakeCondition,
     pub task: Task,
     pub session: Arc<dyn Session>,
-    pub result_sender: Option<oneshot::Sender<TaskResult>>,
+    pub result_sender: Option<oneshot::Sender<Result<Var, SchedulerError>>>,
 }
 
 /// Possible conditions in which a suspended task can wake from suspension.
@@ -118,7 +118,7 @@ impl SuspensionQ {
         wake_condition: WakeCondition,
         task: Task,
         session: Arc<dyn Session>,
-        result_sender: Option<oneshot::Sender<TaskResult>>,
+        result_sender: Option<oneshot::Sender<Result<Var, SchedulerError>>>,
     ) {
         let task_id = task.task_id;
         let sr = SuspendedTask {

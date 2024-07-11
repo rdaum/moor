@@ -37,7 +37,7 @@ use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
 use moor_kernel::tasks::TaskHandle;
 use moor_values::tasks::SchedulerError::CommandExecutionError;
-use moor_values::tasks::{CommandError, NarrativeEvent, TaskId, TaskResult};
+use moor_values::tasks::{CommandError, NarrativeEvent, TaskId};
 use moor_values::util::parse_into_words;
 use moor_values::var::Objid;
 use moor_values::var::Symbol;
@@ -641,7 +641,7 @@ impl RpcServer {
         };
         let receiver = task_handle.into_receiver();
         let player = match receiver.recv() {
-            Ok(TaskResult::Success(v)) => {
+            Ok(Ok(v)) => {
                 // If v is an objid, we have a successful login and we need to rewrite this
                 // client id to use the player objid and then return a result to the client.
                 // with its new player objid and login result.
@@ -653,7 +653,7 @@ impl RpcServer {
                     }
                 }
             }
-            Ok(TaskResult::Error(e)) => {
+            Ok(Err(e)) => {
                 error!(error = ?e, "Error waiting for login results");
 
                 return Err(RpcRequestError::LoginTaskFailed);
@@ -846,8 +846,8 @@ impl RpcServer {
                 }
             };
         match task_handle.into_receiver().recv() {
-            Ok(TaskResult::Success(v)) => Ok(RpcResponse::EvalResult(v)),
-            Ok(TaskResult::Error(e)) => Err(RpcRequestError::TaskError(e)),
+            Ok(Ok(v)) => Ok(RpcResponse::EvalResult(v)),
+            Ok(Err(e)) => Err(RpcRequestError::TaskError(e)),
             Err(e) => {
                 error!(error = ?e, "Error processing eval");
 
@@ -898,8 +898,8 @@ impl RpcServer {
             let publish = self.events_publish.lock().unwrap();
             for (task_id, client_id, result) in completed {
                 let result = match result {
-                    TaskResult::Success(v) => ConnectionEvent::TaskSuccess(v),
-                    TaskResult::Error(e) => ConnectionEvent::TaskError(e),
+                    Ok(v) => ConnectionEvent::TaskSuccess(v),
+                    Err(e) => ConnectionEvent::TaskError(e),
                 };
                 debug!(?client_id, ?task_id, ?result, "Task completed");
                 let payload = bincode::encode_to_vec(&result, bincode::config::standard())
