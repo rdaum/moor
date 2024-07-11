@@ -13,6 +13,8 @@
 //
 
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use clap::Parser;
 use clap_derive::Parser;
@@ -77,11 +79,13 @@ async fn main() -> Result<(), eyre::Error> {
     let mut stop_signal =
         signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
 
+    let kill_switch = Arc::new(AtomicBool::new(false));
     let telnet_sockaddr = args.telnet_address.parse::<SocketAddr>().unwrap();
     let listen_loop = telnet::telnet_listen_loop(
         telnet_sockaddr,
         args.rpc_address.as_str(),
         args.events_address.as_str(),
+        kill_switch.clone(),
     );
 
     info!("Host started, listening @ {}...", args.telnet_address);
@@ -92,9 +96,11 @@ async fn main() -> Result<(), eyre::Error> {
         }
         _ = hup_signal.recv() => {
             info!("HUP received, stopping...");
+            kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
         },
         _ = stop_signal.recv() => {
             info!("STOP received, stopping...");
+            kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
         }
     }
     info!("Done.");
