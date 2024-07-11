@@ -507,7 +507,6 @@ pub fn moo_frame_execute(
                         return ExecutionResult::RollbackRestart;
                     }
                     Err(e) => {
-                        debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
                         return state.push_error(e.to_error_code());
                     }
                 };

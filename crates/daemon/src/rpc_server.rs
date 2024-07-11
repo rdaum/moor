@@ -463,7 +463,7 @@ impl RpcServer {
                     return make_response(Err(RpcRequestError::PermissionDenied));
                 };
 
-                info!("Detaching client: {}", client_id);
+                debug!(?client_id, "Detaching client");
 
                 // Detach this client id from the player/connection object.
                 let Ok(_) = self.connections.remove_client_connection(client_id) else {
