@@ -669,7 +669,7 @@ impl Scheduler {
                 task_q.send_task_result(task_id, Err(TaskAbortedLimit(limit_reason)));
             }
             TaskControlMsg::TaskException(exception) => {
-                warn!(?task_id, finally_reason = ?exception, "Task threw exception");
+                debug!(?task_id, finally_reason = ?exception, "Task threw exception");
 
                 let Some(task) = task_q.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
@@ -862,21 +862,20 @@ impl Scheduler {
                     return;
                 };
 
-                info!("Creating textdump...");
+                trace!("Creating textdump...");
                 let textdump = make_textdump(
                     loader_client.as_ref(),
                     // just to be compatible with LambdaMOO import for now, hopefully.
                     Some("** LambdaMOO Database, Format Version 4 **"),
                 );
 
-                info!("Writing textdump to {}", textdump_path.display());
-
+                debug!(?textdump_path, "Writing textdump..");
                 let mut writer = TextdumpWriter::new(&mut output);
                 if let Err(e) = writer.write_textdump(&textdump) {
                     error!(?e, "Could not write textdump");
                     return;
                 }
-                info!("Textdump written to {}", textdump_path.display());
+                trace!(?textdump_path, "Textdump written.");
             });
         if let Err(e) = tr {
             error!(?e, "Could not start textdump thread");
