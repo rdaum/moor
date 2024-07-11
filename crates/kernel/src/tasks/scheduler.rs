@@ -32,7 +32,7 @@ use moor_values::model::{BinaryType, HasUuid, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
 
 use moor_values::tasks::{
-    AbortLimitReason, CommandError, SchedulerError, TaskId, TaskResult, VerbProgramError,
+    AbortLimitReason, CommandError, SchedulerError, TaskId, VerbProgramError,
 };
 use moor_values::var::Error::{E_INVARG, E_PERM};
 use moor_values::var::Symbol;
@@ -115,7 +115,7 @@ struct RunningTaskControl {
     /// The connection-session for this task.
     session: Arc<dyn Session>,
     /// A mailbox to deliver the result of the task to a waiting party with a subscription, if any.
-    result_sender: Option<oneshot::Sender<TaskResult>>,
+    result_sender: Option<oneshot::Sender<Result<Var, SchedulerError>>>,
 }
 
 /// The internal state of the task queue.
@@ -592,10 +592,10 @@ impl Scheduler {
                 };
                 let Ok(()) = task.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedError));
+                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
                 trace!(?task_id, result = ?value, "Task succeeded");
-                return task_q.send_task_result(task_id, TaskResult::Success(value));
+                return task_q.send_task_result(task_id, Ok(value));
             }
             TaskControlMsg::TaskConflictRetry(task) => {
                 trace!(?task_id, "Task retrying due to conflict");
@@ -614,15 +614,12 @@ impl Scheduler {
                 // I'd make this 'warn' but `do_command` gets invoked for every command and
                 // many cores don't have it at all. So it would just be way too spammy.
                 trace!(this = ?this, ?verb, ?task_id, "Verb not found, task cancelled");
-                task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedError));
+                task_q.send_task_result(task_id, Err(TaskAbortedError));
             }
             TaskControlMsg::TaskCommandError(parse_command_error) => {
                 // This is a common occurrence, so we don't want to log it at warn level.
                 trace!(?task_id, error = ?parse_command_error, "command parse error");
-                task_q.send_task_result(
-                    task_id,
-                    TaskResult::Error(CommandExecutionError(parse_command_error)),
-                );
+                task_q.send_task_result(task_id, Err(CommandExecutionError(parse_command_error)));
             }
             TaskControlMsg::TaskAbortCancelled => {
                 warn!(?task_id, "Task cancelled");
@@ -641,9 +638,9 @@ impl Scheduler {
 
                 let Ok(()) = task.session.rollback() else {
                     warn!("Could not rollback session; aborting task");
-                    return task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedError));
+                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
-                task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedCancelled));
+                task_q.send_task_result(task_id, Err(TaskAbortedCancelled));
             }
             TaskControlMsg::TaskAbortLimitsReached(limit_reason) => {
                 let abort_reason_text = match limit_reason {
@@ -669,7 +666,7 @@ impl Scheduler {
 
                 let _ = task.session.commit();
 
-                task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedLimit(limit_reason)));
+                task_q.send_task_result(task_id, Err(TaskAbortedLimit(limit_reason)));
             }
             TaskControlMsg::TaskException(exception) => {
                 warn!(?task_id, finally_reason = ?exception, "Task threw exception");
@@ -696,8 +693,7 @@ impl Scheduler {
 
                 let _ = task.session.commit();
 
-                task_q
-                    .send_task_result(task_id, TaskResult::Error(TaskAbortedException(exception)));
+                task_q.send_task_result(task_id, Err(TaskAbortedException(exception)));
             }
             TaskControlMsg::TaskRequestFork(fork_request, reply) => {
                 trace!(?task_id,  delay=?fork_request.delay, "Task requesting fork");
@@ -728,7 +724,7 @@ impl Scheduler {
                 // Commit the session.
                 let Ok(()) = tc.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedError));
+                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
 
                 // And insert into the suspended list.
@@ -757,12 +753,12 @@ impl Scheduler {
                 // flushed up to the prompt point.
                 let Ok(()) = tc.session.commit() else {
                     warn!("Could not commit session; aborting task");
-                    return task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedError));
+                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
 
                 let Ok(()) = tc.session.request_input(tc.player, input_request_id) else {
                     warn!("Could not request input from session; aborting task");
-                    return task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedError));
+                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
                 task_q.suspended.add_task(
                     WakeCondition::Input(input_request_id),
@@ -823,7 +819,7 @@ impl Scheduler {
                 };
                 let Ok(()) = task.session.send_event(player, event) else {
                     warn!("Could not notify player; aborting task");
-                    return task_q.send_task_result(task_id, TaskResult::Error(TaskAbortedError));
+                    return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
             }
             TaskControlMsg::Shutdown(msg) => {
@@ -1096,7 +1092,7 @@ impl TaskQ {
         mut task: Task,
         resume_val: Var,
         session: Arc<dyn Session>,
-        result_sender: Option<oneshot::Sender<TaskResult>>,
+        result_sender: Option<oneshot::Sender<Result<Var, SchedulerError>>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         builtin_registry: Arc<BuiltinRegistry>,
@@ -1148,7 +1144,7 @@ impl TaskQ {
         Ok(())
     }
 
-    fn send_task_result(&mut self, task_id: TaskId, result: TaskResult) {
+    fn send_task_result(&mut self, task_id: TaskId, result: Result<Var, SchedulerError>) {
         let Some(mut task_control) = self.tasks.remove(&task_id) else {
             // Missing task, must have ended already or gone into suspension?
             // This is odd though? So we'll warn.

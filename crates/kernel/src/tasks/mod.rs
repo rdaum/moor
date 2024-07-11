@@ -18,12 +18,12 @@ use std::time::SystemTime;
 use bincode::{Decode, Encode};
 
 use moor_compiler::Program;
-use moor_values::var::Symbol;
 use moor_values::var::{List, Objid};
+use moor_values::var::{Symbol, Var};
 
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
 use crate::vm::Fork;
-use moor_values::tasks::{TaskId, TaskResult};
+use moor_values::tasks::{SchedulerError, TaskId};
 
 pub mod command_parse;
 pub mod scheduler;
@@ -43,7 +43,7 @@ pub const DEFAULT_BG_SECONDS: u64 = 3;
 pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 
 /// Just a handle to a task, with a receiver for the result.
-pub struct TaskHandle(TaskId, oneshot::Receiver<TaskResult>);
+pub struct TaskHandle(TaskId, oneshot::Receiver<Result<Var, SchedulerError>>);
 
 impl Debug for TaskHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -59,11 +59,11 @@ impl TaskHandle {
     }
 
     /// Dissolve the handle into a receiver for the result.
-    pub fn into_receiver(self) -> oneshot::Receiver<TaskResult> {
+    pub fn into_receiver(self) -> oneshot::Receiver<Result<Var, SchedulerError>> {
         self.1
     }
 
-    pub fn receiver(&self) -> &oneshot::Receiver<TaskResult> {
+    pub fn receiver(&self) -> &oneshot::Receiver<Result<Var, SchedulerError>> {
         &self.1
     }
 }
@@ -239,7 +239,7 @@ pub mod scheduler_test_utils {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use moor_values::tasks::{CommandError, SchedulerError, TaskResult};
+    use moor_values::tasks::{CommandError, SchedulerError};
     use moor_values::var::{Error::E_VERBNF, Objid, Var};
 
     use crate::tasks::scheduler_client::SchedulerClient;
@@ -269,14 +269,10 @@ pub mod scheduler_test_utils {
         {
             // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
             // `moot` tests can match against them.
-            TaskResult::Error(TaskAbortedException(UncaughtException { code, .. })) => {
-                Ok(code.into())
-            }
-            TaskResult::Error(CommandExecutionError(CommandError::NoCommandMatch)) => {
-                Ok(E_VERBNF.into())
-            }
-            TaskResult::Error(err) => Err(err),
-            TaskResult::Success(var) => Ok(var),
+            Err(TaskAbortedException(UncaughtException { code, .. })) => Ok(code.into()),
+            Err(CommandExecutionError(CommandError::NoCommandMatch)) => Ok(E_VERBNF.into()),
+            Err(err) => Err(err),
+            Ok(var) => Ok(var),
         }
     }
 
