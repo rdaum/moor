@@ -13,6 +13,8 @@
 //
 
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use eyre::bail;
@@ -49,6 +51,7 @@ pub(crate) struct TelnetConnection {
     client_token: ClientToken,
     write: SplitSink<Framed<TcpStream, LinesCodec>, String>,
     read: SplitStream<Framed<TcpStream, LinesCodec>>,
+    kill_switch: Arc<AtomicBool>,
 }
 
 /// The input modes the telnet session can be in.
@@ -186,6 +189,9 @@ impl TelnetConnection {
         let mut line_mode = LineMode::Input;
         let mut program_input = vec![];
         loop {
+            if self.kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                return Ok(());
+            }
             select! {
                 line = self.read.next() => {
                     let Some(line) = line else {
@@ -388,6 +394,7 @@ pub async fn telnet_listen_loop(
     telnet_sockaddr: SocketAddr,
     rpc_address: &str,
     events_address: &str,
+    kill_switch: Arc<AtomicBool>,
 ) -> Result<(), eyre::Error> {
     let listener = TcpListener::bind(telnet_sockaddr).await?;
     let zmq_ctx = tmq::Context::new();
@@ -396,10 +403,15 @@ pub async fn telnet_listen_loop(
         .expect("Unable to set ZMQ IO threads");
 
     loop {
+        if kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+            info!("Kill switch activated, stopping...");
+            return Ok(());
+        }
         let (stream, peer_addr) = listener.accept().await?;
         let zmq_ctx = zmq_ctx.clone();
         let pubsub_address = events_address.to_string();
         let rpc_address = rpc_address.to_string();
+        let connection_kill_switch = kill_switch.clone();
         tokio::spawn(async move {
             let client_id = Uuid::new_v4();
             info!(peer_addr = ?peer_addr, client_id = ?client_id,
@@ -467,6 +479,7 @@ pub async fn telnet_listen_loop(
                 client_id,
                 write,
                 read,
+                kill_switch: connection_kill_switch,
             };
 
             tcp_connection

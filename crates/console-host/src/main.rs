@@ -13,6 +13,7 @@
 //
 
 use eyre::Error;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -198,6 +199,7 @@ fn console_loop(
     narrative_server: &str,
     username: &str,
     password: &str,
+    kill_switch: Arc<AtomicBool>,
 ) -> Result<(), Error> {
     let zmq_ctx = zmq::Context::new();
 
@@ -238,9 +240,13 @@ fn console_loop(
     let mut rl = DefaultEditor::new().unwrap();
     let mut printer = rl.create_external_printer().unwrap();
 
+    let output_kill_switch = kill_switch.clone();
     std::thread::Builder::new()
         .name("output-loop".to_string())
         .spawn(move || loop {
+            if output_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                return;
+            }
             match events_recv(client_id, &narr_sub_socket) {
                 Ok(ConnectionEvent::Narrative(_, msg)) => {
                     printer
@@ -294,7 +300,11 @@ fn console_loop(
     let mut broadcast_rpc_client = RpcSendClient::new(broadcast_rpc_socket);
 
     let broadcast_client_token = client_token.clone();
+    let broadcast_kill_switch = kill_switch.clone();
     std::thread::spawn(move || loop {
+        if broadcast_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
         match broadcast_recv(&mut broadcast_subscriber) {
             Ok(BroadcastEvent::PingPong(_)) => {
                 if let Err(e) = broadcast_rpc_client.make_rpc_call(
@@ -318,6 +328,9 @@ fn console_loop(
     rl.set_color_mode(ColorMode::Enabled);
 
     loop {
+        if kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
         // TODO: unprovoked output from the narrative stream screws up the prompt midstream,
         //   but we have no real way to signal to this loop that it should newline for
         //   cleanliness. Need to figure out something for this.
@@ -377,10 +390,15 @@ fn main() -> Result<(), Error> {
     tracing::subscriber::set_global_default(main_subscriber)
         .expect("Unable to set configure logging");
 
+    let kill_switch = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, kill_switch.clone())?;
+    signal_hook::flag::register(signal_hook::consts::SIGINT, kill_switch.clone())?;
+
     console_loop(
         &args.rpc_address,
         args.events_address.as_str(),
         &args.username,
         &args.password,
+        kill_switch.clone(),
     )
 }
