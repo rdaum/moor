@@ -1,0 +1,25 @@
+// test_that_hashing_works
+@programmer
+
+; return string_hash("abc");
+"900150983CD24FB0D6963F7D28E17F72"
+
+; return string_hash("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
+"8215EF0796A20BCAAAE116D3876C664A"
+
+// TODO: binary_hash is not implemented
+// ; return binary_hash("~00~00~00~00~00");
+// "8855508AADE16EC573D21E6A485DFD0A7624085C1A14B5ECDD6485DE0C6839A4"
+
+// TODO: binary_hash is not implemented
+// ; return binary_hash("~A7~CE~44~8E~D2~4C~16~61~F6~F2~01~55~5A~32~BC~B0~29~EC~02~86~76~CD~9B~05~E6~36~F3~2E~76~78~3C~F0~D1~45~40~C7~DA~F3~C7~C0~AA~43~1E~D2~D0~03~5D~21~F7~0C~C9~19~F0~82~67~76~E4~19~3A~02~F0~7E~F8~BE~CC~6A~27~46~C2~C3~B8~1C~91~1F~7E~F7~F5~50~D9~0E~D8~D6~89~DA~86~B5~95~E0~66~0C~4A~92~01~2B~8A~AE~2E~7F~3B~88"); // "A088FB0606E595E8A248393A296BE79C5A0FE7417FE267334E2113D6613B8D70"
+
+; return value_hash({});
+"99914B932BD37A50B983C5E7C90AE93B"
+
+; $tmp = {1, 2, 3, {"fee", "fi", "fo", "fum"}};
+; return value_hash($tmp);
+"4DF7F9A6A00994056746D3DA490249EA"
+
+; return string_hash(toliteral($tmp));
+"4DF7F9A6A00994056746D3DA490249EA"

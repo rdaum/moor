@@ -278,7 +278,13 @@ impl<R: MootRunner> MootState<R> {
             runner.none()
         };
 
-        assert_eq!(actual, expected, "Line {line_no}");
+        // Send the values through the debug formatter, because MOO string comparison
+        // is case-insensitive, but we want case-sensitive comparison in tests.
+        assert_eq!(
+            format!("{actual:?}"),
+            format!("{expected:?}"),
+            "Line {line_no}"
+        );
         Ok(())
     }
 
