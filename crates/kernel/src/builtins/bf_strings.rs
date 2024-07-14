@@ -205,7 +205,9 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match bf_args.args[0].variant() {
         Variant::Str(s) => {
             let hash_digest = md5::Md5::digest(s.as_str().as_bytes());
-            Ok(Ret(v_str(format!("{:x}", hash_digest).as_str())))
+            Ok(Ret(v_str(
+                format!("{:x}", hash_digest).to_uppercase().as_str(),
+            )))
         }
         _ => Err(BfErr::Code(E_INVARG)),
     }

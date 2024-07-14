@@ -12,9 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-
+use md5::Digest;
 use moor_compiler::offset_for_builtin;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
@@ -149,9 +147,11 @@ fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let mut s = DefaultHasher::new();
-    bf_args.args[0].hash(&mut s);
-    Ok(Ret(v_int(s.finish() as i64)))
+    let s = bf_args.args[0].to_literal();
+    let hash_digest = md5::Md5::digest(s.as_bytes());
+    Ok(Ret(v_str(
+        format!("{:x}", hash_digest).to_uppercase().as_str(),
+    )))
 }
 bf_declare!(value_hash, bf_value_hash);
 
