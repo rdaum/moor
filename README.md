@@ -237,6 +237,6 @@ The roadmap for **future** _features_ after the initial 1.0 release include:
 ### Join us!
 
 If you're interested in helping out, or just want to chat, please join us on
-our [Discord server](https://discord.gg/NTHB2ZQE).
+our [Discord server](https://discord.gg/f5NnYJBfcG).
 
 Note: When the time is right the Discord will be replaced by a running instance of `moor` itself.
