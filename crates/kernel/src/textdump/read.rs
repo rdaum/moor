@@ -13,7 +13,7 @@
 //
 
 use std::collections::BTreeMap;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufReader, Read};
 
 use text_io::scan;
 use tracing::info;
@@ -30,20 +30,24 @@ use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
 pub const TYPE_CLEAR: i64 = 5;
 
 pub struct TextdumpReader<R: Read> {
+    line_num: usize,
     reader: BufReader<R>,
 }
 
 impl<R: Read> TextdumpReader<R> {
     pub fn new(reader: BufReader<R>) -> Self {
-        Self { reader }
+        Self {
+            reader,
+            line_num: 0,
+        }
     }
 }
 #[derive(Debug, thiserror::Error)]
 pub enum TextdumpReaderError {
     #[error("could not open file: {0}")]
     CouldNotOpenFile(String),
-    #[error("io error: {0}")]
-    IoError(std::io::Error),
+    #[error("io error: {0} @ line {1}")]
+    IoError(std::io::Error, usize),
     #[error("parse error: {0}")]
     ParseError(String),
     #[error("db error while {0}: {1}")]
@@ -54,11 +58,21 @@ pub enum TextdumpReaderError {
 
 impl<R: Read> TextdumpReader<R> {
     fn read_next_line(&mut self) -> Result<String, TextdumpReaderError> {
-        let mut buf = String::new();
-        if let Err(e) = self.reader.read_line(&mut buf) {
-            return Err(TextdumpReaderError::IoError(e));
+        // Textdump lines are actually iso-8859-1 encoded, so we need to decode them as such.
+        // Read char by char until LF, appending each char to the string.
+        let mut line = String::new();
+        loop {
+            let mut buf = [0u8; 1];
+            if let Err(e) = self.reader.read_exact(&mut buf) {
+                return Err(TextdumpReaderError::IoError(e, self.line_num));
+            }
+            if buf[0] == b'\n' {
+                break;
+            }
+            line.push(buf[0] as char);
         }
-        Ok(buf)
+        self.line_num += 1;
+        Ok(line)
     }
 
     fn read_num(&mut self) -> Result<i64, TextdumpReaderError> {

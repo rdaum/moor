@@ -97,13 +97,13 @@ pub fn textdump_load(ldr: &dyn LoaderInterface, path: PathBuf) -> Result<(), Tex
 
     let br = BufReader::new(corefile);
 
-    read_textdump(ldr, br)?
+    read_textdump(ldr, br)
 }
 
 pub fn read_textdump<T: io::Read>(
     loader: &dyn LoaderInterface,
     reader: BufReader<T>,
-) -> Result<Result<(), TextdumpReaderError>, TextdumpReaderError> {
+) -> Result<(), TextdumpReaderError> {
     let mut tdr = TextdumpReader::new(reader);
     let td = tdr.read_textdump()?;
 
@@ -242,5 +242,5 @@ pub fn read_textdump<T: io::Read>(
 
     info!("Import complete.");
 
-    Ok(Ok(()))
+    Ok(())
 }
