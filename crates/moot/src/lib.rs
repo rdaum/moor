@@ -516,7 +516,7 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
         let line_no = line_no + 1;
         state = state
             .process_line(line_no, &line)
-            .unwrap_or_else(|_| panic!("{}:{line_no}", path.display()))
+            .unwrap_or_else(|e| panic!("{}:{line_no}: {e:?}", path.display()))
         //eprintln!("[{line_no}] {line}");
     }
     state.finalize().expect("EOF");

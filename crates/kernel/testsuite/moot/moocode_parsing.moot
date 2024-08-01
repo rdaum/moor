@@ -1,0 +1,48 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/a4158f5835f1beb9d754c92fd5b3a137e459aabf/test/test_moocode_parsing.rb
+
+@programmer
+// test_that_expression_exception_syntax_works
+@programmer
+; return `args ! ANY => 0';
+{}
+
+// test_that_greater_than_syntax_works
+@programmer
+; return 3 > 2;
+1
+
+// test_that_greater_than_or_equal_to_syntax_works
+@programmer
+; return 3 >= 2;
+1
+
+// test_that_less_than_syntax_works
+@programmer
+; return 2 < 3;
+1
+
+// test_that_less_than_or_equal_to_syntax_works
+@programmer
+; return 2 <= 3;
+1
+
+// test_that_and_syntax_works
+@programmer
+; return 2 && 3;
+3
+
+// test_that_or_syntax_works
+@programmer
+; return 2 || 3;
+2
+
+// test_that_dollar_sign_collection_syntax_works
+@programmer
+; return {1, 2, 3}[$];
+3
+
+; return {1, 2, 3}[-1 + $ .. $];
+{2, 3}
+
+; return {1, 2, 3}[-1 + $..$];
+{2, 3}
