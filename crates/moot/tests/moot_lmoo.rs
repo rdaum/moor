@@ -78,6 +78,6 @@ fn test_moo(path: &Path) {
 fn test_single() {
     test_moo(
         &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../telnet-host/tests/moot/suspend_read_notify.moot"),
+            .join("../kernel/testsuite/moot/moocode_parsing.moot"),
     );
 }
