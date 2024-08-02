@@ -283,7 +283,7 @@ fn parse_expr(
                 let except = inner
                     .next()
                     .map(|e| Box::new(parse_expr(names.clone(), e.into_inner()).unwrap()));
-                Ok(Expr::Catch {
+                Ok(Expr::TryCatch {
                     trye: Box::new(try_expr),
                     codes: catch_codes,
                     except,
@@ -1895,7 +1895,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Return(Some(Expr::List(vec![Normal(
-                Expr::Catch {
+                Expr::TryCatch {
                     trye: Box::new(Id(parse.names.find_name("x").unwrap())),
                     codes: CatchCodes::Codes(vec![varnf]),
                     except: Some(Box::new(Value(v_int(666)))),
@@ -1912,7 +1912,7 @@ mod tests {
 
         assert_eq!(
             stripped_stmts(&parse.stmts),
-            vec![StmtNode::Expr(Expr::Catch {
+            vec![StmtNode::Expr(Expr::TryCatch {
                 trye: Box::new(Call {
                     function: Symbol::mk("raise"),
                     args: vec![invarg]
@@ -1930,7 +1930,7 @@ mod tests {
 
         assert_eq!(
             stripped_stmts(&parse.stmts),
-            vec![StmtNode::Expr(Expr::Catch {
+            vec![StmtNode::Expr(Expr::TryCatch {
                 trye: Box::new(Verb {
                     location: Box::new(Prop {
                         location: Box::new(Value(v_obj(0))),

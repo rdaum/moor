@@ -29,7 +29,7 @@ use moor_compiler::{compile, Name};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::{BinaryType, ObjFlag};
-use moor_values::tasks::{AbortLimitReason, TaskId, UncaughtException};
+use moor_values::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_values::var::Error::E_MAXREC;
 use moor_values::var::Var;
 use moor_values::var::{v_none, Symbol};
@@ -66,7 +66,7 @@ pub enum VMHostResponse {
     /// The VM aborted. (FinallyReason::Abort in MOO VM)
     CompleteAbort,
     /// The VM threw an exception. (FinallyReason::Uncaught in MOO VM)
-    CompleteException(UncaughtException),
+    CompleteException(Exception),
     /// A rollback-retry was requested.
     RollbackRetry,
 }
@@ -327,7 +327,7 @@ impl VmHost {
 
                     return match &fr {
                         FinallyReason::Abort => VMHostResponse::CompleteAbort,
-                        FinallyReason::Uncaught(exception) => {
+                        FinallyReason::Raise(exception) => {
                             VMHostResponse::CompleteException(exception.clone())
                         }
                         _ => {

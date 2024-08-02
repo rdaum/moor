@@ -18,6 +18,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use daumtils::{BitArray, Bitset16};
 
+use crate::vm::FinallyReason;
 use moor_compiler::{GlobalName, Label, Name, Op, Program};
 use moor_values::var::Error::E_VARNF;
 use moor_values::var::{v_none, Error, Var};
@@ -51,15 +52,28 @@ pub(crate) struct MooStackFrame {
     pub(crate) scope_stack: Vec<Scope>,
     /// Scratch space for PushTemp and PutTemp opcodes.
     pub(crate) temp: Var,
+    /// Scratch space for constructing the catch handlers for a forthcoming try scope.
+    pub(crate) catch_stack: Vec<(CatchType, Label)>,
+    /// Scratch space for holding finally-reasons to be popped off the stack when a finally block
+    /// is ended.
+    pub(crate) finally_stack: Vec<FinallyReason>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+pub enum CatchType {
+    Any,
+    Errors(Vec<Error>),
 }
 
 /// The kinds of block scopes that can be entered and exited, which far now are just catch and
 /// finally blocks.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub(crate) enum ScopeType {
-    Catch(usize),
-    CatchLabel(Label),
-    Finally(Label),
+    /// A scope that attempts to execute a block of code, and then executes the block of code at
+    /// "Label" regardless of whether the block of code succeeded or failed.
+    /// Note that `return` and `exit` are not considered failures.
+    TryFinally(Label),
+    TryCatch(Vec<(CatchType, Label)>),
 }
 
 /// A scope is a record of the current size of the valstack when it was created, and are
@@ -87,7 +101,9 @@ impl Encode for MooStackFrame {
         env.encode(encoder)?;
         self.valstack.encode(encoder)?;
         self.scope_stack.encode(encoder)?;
-        self.temp.encode(encoder)
+        self.temp.encode(encoder)?;
+        self.catch_stack.encode(encoder)?;
+        self.finally_stack.encode(encoder)
     }
 }
 
@@ -105,16 +121,19 @@ impl Decode for MooStackFrame {
         }
 
         let valstack = Vec::decode(decoder)?;
-        let handler_stack = Vec::decode(decoder)?;
+        let scope_stack = Vec::decode(decoder)?;
         let temp = Var::decode(decoder)?;
-
+        let catch_stack = Vec::decode(decoder)?;
+        let finally_stack = Vec::decode(decoder)?;
         Ok(Self {
             program,
             pc,
             environment,
             valstack,
-            scope_stack: handler_stack,
+            scope_stack,
             temp,
+            catch_stack,
+            finally_stack,
         })
     }
 }
@@ -133,16 +152,19 @@ impl<'de> BorrowDecode<'de> for MooStackFrame {
         }
 
         let valstack = Vec::borrow_decode(decoder)?;
-        let handler_stack = Vec::borrow_decode(decoder)?;
+        let scope_stack = Vec::borrow_decode(decoder)?;
         let temp = Var::borrow_decode(decoder)?;
-
+        let catch_stack = Vec::borrow_decode(decoder)?;
+        let finally_stack = Vec::borrow_decode(decoder)?;
         Ok(Self {
             program,
             pc,
             environment,
             valstack,
-            scope_stack: handler_stack,
+            scope_stack,
             temp,
+            catch_stack,
+            finally_stack,
         })
     }
 }
@@ -158,6 +180,8 @@ impl MooStackFrame {
             scope_stack: vec![],
             pc: 0,
             temp: v_none(),
+            catch_stack: vec![],
+            finally_stack: vec![],
         }
     }
     pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
@@ -275,7 +299,7 @@ impl MooStackFrame {
             return None;
         };
 
-        self.valstack.truncate(scope.valstack_pos + 1);
+        self.valstack.truncate(scope.valstack_pos);
         Some(scope)
     }
 }

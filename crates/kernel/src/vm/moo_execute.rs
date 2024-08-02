@@ -20,7 +20,6 @@ use tracing::debug;
 use moor_compiler::{Op, ScatterLabel};
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::tasks::UncaughtException;
 use moor_values::var::v_float;
 use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::var::Symbol;
@@ -30,7 +29,7 @@ use moor_values::var::{v_listv, Error};
 
 use crate::tasks::sessions::Session;
 use crate::vm::activation::Frame;
-use crate::vm::moo_frame::ScopeType;
+use crate::vm::moo_frame::{CatchType, ScopeType};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VMExecState, VmExecParams};
 
@@ -630,65 +629,73 @@ pub fn moo_frame_execute(
                     session,
                 );
             }
-            Op::PushLabel(label) => {
-                f.enter_scope(ScopeType::CatchLabel(*label));
+            Op::PushCatchLabel(label) => {
+                // Get the error codes, which is either a list of error codes or Any.
+                let error_codes = f.pop().clone();
+
+                // The scope above us has to be a TryCatch, and we need to push into that scope
+                // the code list that we're going to execute.
+                match error_codes.variant() {
+                    Variant::List(error_codes) => {
+                        let error_codes = error_codes.iter().map(|v| {
+                            let Variant::Err(e) = v.variant() else {
+                                panic!("Error codes list contains non-error code");
+                            };
+                            e.clone()
+                        });
+                        f.catch_stack
+                            .push((CatchType::Errors(error_codes.collect()), *label));
+                    }
+                    Variant::Int(i) if *i == 0 => {
+                        f.catch_stack.push((CatchType::Any, *label));
+                    }
+                    _ => {
+                        panic!("Invalid error codes list");
+                    }
+                }
             }
-            Op::TryFinally(label) => {
-                f.enter_scope(ScopeType::Finally(*label));
+            Op::TryFinally { end_label: label } => {
+                f.enter_scope(ScopeType::TryFinally(*label));
             }
-            Op::Catch(_) => {
-                f.enter_scope(ScopeType::Catch(1));
+            Op::TryCatch { handler_label: _ } => {
+                let catches = std::mem::take(&mut f.catch_stack);
+                f.enter_scope(ScopeType::TryCatch(catches));
             }
-            Op::TryExcept { num_excepts } => {
-                f.enter_scope(ScopeType::Catch(*num_excepts));
+            Op::TryExcept { num_excepts: _ } => {
+                let catches = std::mem::take(&mut f.catch_stack);
+                f.enter_scope(ScopeType::TryCatch(catches));
             }
             Op::EndCatch(label) | Op::EndExcept(label) => {
                 let is_catch = matches!(op, Op::EndCatch(_));
                 let v = if is_catch { f.pop() } else { v_none() };
 
                 let handler = f.pop_scope().expect("Missing handler for try/catch/except");
-                let ScopeType::Catch(num_excepts) = handler.scope_type else {
+                let ScopeType::TryCatch(..) = handler.scope_type else {
                     panic!("Handler is not a catch handler");
                 };
 
-                for _i in 0..num_excepts {
-                    f.pop(); /* code list */
-                    f.pop_scope();
-                }
                 if is_catch {
                     f.push(v);
                 }
                 f.jump(label);
             }
             Op::EndFinally => {
-                let Some(finally_handler) = f.pop_scope() else {
-                    panic!("Missing handler for try/finally")
-                };
-                let ScopeType::Finally(_) = finally_handler.scope_type else {
-                    panic!("Handler is not a finally handler")
-                };
-                f.push(v_int(0) /* fallthrough */);
-                f.push(v_int(0));
+                // Execution of the block completed successfully, so we can just continue with
+                // fall-through into the FinallyContinue block
+                f.finally_stack.push(FinallyReason::Fallthrough);
             }
-            Op::Continue => {
-                let why = f.pop();
-                let Variant::Int(why) = why.variant() else {
-                    panic!("'why' is not an integer representing a FinallyReason");
-                };
-                let why = FinallyReason::from_code(*why as usize);
+            //
+            Op::FinallyContinue => {
+                let why = f.finally_stack.pop().expect("Missing finally reason");
                 match why {
-                    FinallyReason::Fallthrough => {
-                        // Do nothing, normal case.
-                        continue;
+                    FinallyReason::Fallthrough => continue,
+                    FinallyReason::Abort => {
+                        panic!("Unexpected FINALLY_ABORT in FinallyContinue")
                     }
-                    FinallyReason::Raise { .. }
-                    | FinallyReason::Uncaught(UncaughtException { .. })
+                    FinallyReason::Raise(_)
                     | FinallyReason::Return(_)
                     | FinallyReason::Exit { .. } => {
                         return state.unwind_stack(why);
-                    }
-                    FinallyReason::Abort => {
-                        panic!("Unexpected FINALLY_ABORT in Continue")
                     }
                 }
             }

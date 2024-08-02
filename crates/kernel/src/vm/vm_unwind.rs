@@ -13,111 +13,36 @@
 //
 
 use bincode::{Decode, Encode};
-use tracing::trace;
-
 use moor_compiler::BUILTIN_DESCRIPTORS;
 use moor_compiler::{Label, Offset};
 use moor_values::model::Named;
 use moor_values::model::VerbFlag;
-use moor_values::tasks::UncaughtException;
+use moor_values::tasks::Exception;
+use moor_values::var::v_listv;
 use moor_values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
-use moor_values::var::{v_listv, Variant};
 use moor_values::var::{Error, ErrorPack};
 use moor_values::NOTHING;
+use tracing::trace;
 
 use crate::vm::activation::{Activation, Frame};
-use crate::vm::moo_frame::ScopeType;
+use crate::vm::moo_frame::{CatchType, ScopeType};
 use crate::vm::{ExecutionResult, VMExecState};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum FinallyReason {
     Fallthrough,
-    Raise {
-        code: Error,
-        msg: String,
-        stack: Vec<Var>,
-    },
-    Uncaught(UncaughtException),
+    Raise(Exception),
     Return(Var),
     Abort,
-    Exit {
-        stack: Offset,
-        label: Label,
-    },
-}
-const FINALLY_REASON_RAISE: usize = 0x00;
-const FINALLY_REASON_UNCAUGHT: usize = 0x01;
-const FINALLY_REASON_RETURN: usize = 0x02;
-const FINALLY_REASON_ABORT: usize = 0x03;
-const FINALLY_REASON_EXIT: usize = 0x04;
-const FINALLY_REASON_FALLTHROUGH: usize = 0x05;
-
-impl FinallyReason {
-    pub fn code(&self) -> usize {
-        match *self {
-            FinallyReason::Fallthrough => FINALLY_REASON_RAISE,
-            FinallyReason::Raise { .. } => FINALLY_REASON_RAISE,
-            FinallyReason::Uncaught(UncaughtException { .. }) => FINALLY_REASON_UNCAUGHT,
-            FinallyReason::Return(_) => FINALLY_REASON_RETURN,
-            FinallyReason::Abort => FINALLY_REASON_ABORT,
-            FinallyReason::Exit { .. } => FINALLY_REASON_EXIT,
-        }
-    }
-    pub fn from_code(code: usize) -> FinallyReason {
-        match code {
-            FINALLY_REASON_RAISE => FinallyReason::Fallthrough,
-            FINALLY_REASON_UNCAUGHT => FinallyReason::Fallthrough,
-            FINALLY_REASON_RETURN => FinallyReason::Fallthrough,
-            FINALLY_REASON_ABORT => FinallyReason::Fallthrough,
-            FINALLY_REASON_EXIT => FinallyReason::Fallthrough,
-            FINALLY_REASON_FALLTHROUGH => FinallyReason::Fallthrough,
-            _ => panic!("Invalid FinallyReason code"),
-        }
-    }
+    Exit { stack: Offset, label: Label },
 }
 
 impl VMExecState {
-    /// Find the currently active catch handler for a given error code, if any.
-    /// Then return the stack offset (from now) of the activation frame containing the handler.
-    fn find_scope_for_error(&mut self, raise_code: Error) -> Option<usize> {
-        // Scan activation frames and their stacks, looking for the first catch handler that matches
-        // the error code.
-        // Iterate backwards.
-        for (a, activation) in self.stack.iter().rev().enumerate() {
-            // Skip non-MOO frames, they can't have catch handlers.
-            let Frame::Moo(ref frame) = activation.frame else {
-                continue;
-            };
-            for scope in &frame.scope_stack {
-                let ScopeType::Catch(cnt) = scope.scope_type else {
-                    continue;
-                };
-                // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
-                // non-list value, or a list containing the error code.
-                // TODO check for 'cnt' being too large. not sure how to handle, tho
-                // TODO this actually i think is wrong, it needs to pull two values off the stack
-                let i = scope.valstack_pos;
-                for j in (i - cnt)..i {
-                    if let Variant::List(codes) = &frame.valstack[j].variant() {
-                        if !codes.contains(&v_err(raise_code)) {
-                            continue;
-                        }
-                    }
-                    return Some(a);
-                }
-            }
-        }
-        None
-    }
-
     /// Compose a list of the current stack frames, starting from `start_frame_num` and working
     /// upwards.
-    fn make_stack_list(&self, activations: &[Activation], start_frame_num: usize) -> Vec<Var> {
+    fn make_stack_list(activations: &[Activation]) -> Vec<Var> {
         let mut stack_list = vec![];
-        for (i, a) in activations.iter().rev().enumerate() {
-            if i < start_frame_num {
-                continue;
-            }
+        for a in activations.iter().rev() {
             // Produce traceback line for each activation frame and append to stack_list
             // Should include line numbers (if possible), the name of the currently running verb,
             // its definer, its location, and the current player, and 'this'.
@@ -155,11 +80,11 @@ impl VMExecState {
     }
 
     /// Compose a backtrace list of strings for an error, starting from the current stack frame.
-    fn error_backtrace_list(&mut self, raise_msg: &str) -> Vec<Var> {
+    fn make_backtrace(activations: &[Activation], raise_msg: &str) -> Vec<Var> {
         // Walk live activation frames and produce a written representation of a traceback for each
         // frame.
         let mut backtrace_list = vec![];
-        for (i, a) in self.stack.iter().rev().enumerate() {
+        for (i, a) in activations.iter().rev().enumerate() {
             let mut pieces = vec![];
             if i != 0 {
                 pieces.push("... called from ".to_string());
@@ -198,25 +123,16 @@ impl VMExecState {
     fn raise_error_pack(&mut self, p: ErrorPack) -> ExecutionResult {
         trace!(error = ?p, "raising error");
 
-        // Look for first active catch handler's activation frame and its (reverse) offset in the activation stack.
-        let handler_scope = self.find_scope_for_error(p.code);
-
-        let why = match handler_scope {
-            Some(handler_active_num) => FinallyReason::Raise {
-                code: p.code,
-                msg: p.msg,
-                stack: self.make_stack_list(&self.stack, handler_active_num),
-            },
-            None => FinallyReason::Uncaught(UncaughtException {
-                code: p.code,
-                msg: p.msg.clone(),
-                value: p.value,
-                stack: self.make_stack_list(&self.stack, 0),
-                backtrace: self.error_backtrace_list(p.msg.as_str()),
-            }),
+        let stack = Self::make_stack_list(&self.stack);
+        let backtrace = Self::make_backtrace(&self.stack, &p.msg);
+        let exception = Exception {
+            code: p.code,
+            msg: p.msg,
+            value: p.value,
+            stack,
+            backtrace,
         };
-
-        self.unwind_stack(why)
+        self.unwind_stack(FinallyReason::Raise(exception))
     }
 
     /// Push an error to the stack and raise it.
@@ -316,65 +232,46 @@ impl VMExecState {
     pub(crate) fn unwind_stack(&mut self, why: FinallyReason) -> ExecutionResult {
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
+            // If this is an error or exit attempt to find a handler for it.
             match &mut a.frame {
                 Frame::Moo(frame) => {
-                    while frame.valstack.pop().is_some() {
-                        // Check the scope stack to see if we've hit a finally or catch handler that
-                        // was registered for this position in the value stack.
-                        let Some(scope) = frame.pop_scope() else {
-                            continue;
-                        };
-
-                        match scope.scope_type {
-                            ScopeType::Finally(label) => {
-                                let why_code = why.code();
-                                if why_code == FinallyReason::Abort.code() {
-                                    continue;
-                                }
-                                // Jump to the label pointed to by the finally label and then continue on
-                                // executing.
-                                frame.jump(&label);
-                                frame.push(v_int(why_code as i64));
-                                trace!(jump = ?label, ?why, "matched finally handler");
-                                return ExecutionResult::More;
-                            }
-                            ScopeType::Catch(_) => {
-                                let FinallyReason::Raise { code, .. } = &why else {
-                                    continue;
-                                };
-
-                                let Some(handler) = frame.pop_scope() else {
-                                    continue;
-                                };
-                                let ScopeType::CatchLabel(pushed_label) = &handler.scope_type
-                                else {
-                                    panic!("Expected CatchLabel");
-                                };
-
-                                // The value at the top of the stack could be the error codes list.
-                                let v = frame.pop();
-                                let found = match v.variant() {
-                                    Variant::List(error_codes) => {
-                                        error_codes.contains(&v_err(*code))
-                                    }
-                                    _ => true,
-                                };
-                                if found {
-                                    frame.jump(pushed_label);
-                                    frame.push(v_list(&[v_err(*code)]));
-                                    return ExecutionResult::More;
-                                }
-                            }
-                            ScopeType::CatchLabel(_) => {
-                                unreachable!("CatchLabel where we didn't expect it...")
-                            }
-                        }
-                    }
-
                     // Exit with a jump.. let's go...
                     if let FinallyReason::Exit { label, .. } = why {
                         frame.jump(&label);
                         return ExecutionResult::More;
+                    }
+
+                    loop {
+                        // Check the scope stack to see if we've hit a finally or catch handler that
+                        // was registered for this position in the value stack.
+                        let Some(scope) = frame.pop_scope() else {
+                            break;
+                        };
+
+                        match scope.scope_type {
+                            ScopeType::TryFinally(finally_label) => {
+                                // Jump to the label pointed to by the finally label and then continue on
+                                // executing.
+                                frame.jump(&finally_label);
+                                frame.finally_stack.push(why.clone());
+                                return ExecutionResult::More;
+                            }
+                            ScopeType::TryCatch(catches) => {
+                                if let FinallyReason::Raise(Exception { code, .. }) = &why {
+                                    for catch in catches {
+                                        let found = match catch.0 {
+                                            CatchType::Any => true,
+                                            CatchType::Errors(e) => e.contains(code),
+                                        };
+                                        if found {
+                                            frame.jump(&catch.1);
+                                            frame.push(v_list(&[v_err(*code)]));
+                                            return ExecutionResult::More;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 Frame::Bf(_) => {
