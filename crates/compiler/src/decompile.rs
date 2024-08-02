@@ -631,7 +631,7 @@ impl Decompile {
                 let e = self.pop_expr()?;
                 self.push_expr(Expr::Scatter(scatter_items, Box::new(e)));
             }
-            Op::PushLabel(_) => {
+            Op::PushCatchLabel(_) => {
                 // ignore and consume, we don't need it.
             }
             Op::TryExcept { num_excepts } => {
@@ -707,16 +707,18 @@ impl Decompile {
                     line_num,
                 ));
             }
-            Op::TryFinally(_label) => {
+            Op::TryFinally { end_label: _label } => {
                 // decompile body up until the EndFinally
                 let (body, _) =
                     self.decompile_statements_until_match(|_, op| matches!(op, Op::EndFinally))?;
-                let (handler, _) =
-                    self.decompile_statements_until_match(|_, op| matches!(op, Op::Continue))?;
+                let (handler, _) = self
+                    .decompile_statements_until_match(|_, op| matches!(op, Op::FinallyContinue))?;
                 self.statements
                     .push(Stmt::new(StmtNode::TryFinally { body, handler }, line_num));
             }
-            Op::Catch(label) => {
+            Op::TryCatch {
+                handler_label: label,
+            } => {
                 let codes_expr = self.pop_expr()?;
                 let catch_codes = match codes_expr {
                     Expr::Value(_) => CatchCodes::Any,
@@ -761,7 +763,7 @@ impl Decompile {
                         ));
                     }
                 };
-                self.push_expr(Expr::Catch {
+                self.push_expr(Expr::TryCatch {
                     trye: Box::new(try_expr),
                     codes: catch_codes,
                     except,
@@ -810,7 +812,7 @@ impl Decompile {
             Op::Jump { .. } | Op::PushTemp => {
                 unreachable!("should have been handled other decompilation branches")
             }
-            Op::EndCatch(_) | Op::Continue | Op::EndExcept(_) | Op::EndFinally => {
+            Op::EndCatch(_) | Op::FinallyContinue | Op::EndExcept(_) | Op::EndFinally => {
                 // Early exit; main logic is in TRY_FINALLY or CATCH etc case, above
                 // TODO: MOO has "return ptr - 2;"  -- doing something with the iteration, that
                 //   I may not be able to do with the current structure. See if I need to

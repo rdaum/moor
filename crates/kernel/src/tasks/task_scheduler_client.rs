@@ -17,9 +17,7 @@ use std::time::Instant;
 use crossbeam_channel::Sender;
 
 use moor_values::model::Perms;
-use moor_values::tasks::{
-    AbortLimitReason, CommandError, NarrativeEvent, TaskId, UncaughtException,
-};
+use moor_values::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
 use moor_values::var::Objid;
 use moor_values::var::Symbol;
 use moor_values::var::Var;
@@ -74,7 +72,7 @@ impl TaskSchedulerClient {
     }
 
     /// Send a message to the scheduler that an exception was thrown while executing the verb.
-    pub fn exception(&self, exception: UncaughtException) {
+    pub fn exception(&self, exception: Exception) {
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::TaskException(exception)))
             .expect("Could not deliver client message -- scheduler shut down?");
@@ -222,7 +220,7 @@ pub enum TaskControlMsg {
     /// The verb to be executed was not found.
     TaskVerbNotFound(Objid, Symbol),
     /// An exception was thrown while executing the verb.
-    TaskException(UncaughtException),
+    TaskException(Exception),
     /// The task is requesting that it be forked.
     TaskRequestFork(Fork, oneshot::Sender<TaskId>),
     /// The task is letting us know it was cancelled.

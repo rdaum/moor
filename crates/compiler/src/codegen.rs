@@ -294,17 +294,18 @@ impl CodegenState {
         Ok(())
     }
 
-    fn generate_codes(&mut self, codes: &CatchCodes) -> Result<(), CompileError> {
+    fn generate_codes(&mut self, codes: &CatchCodes) -> Result<usize, CompileError> {
         match codes {
             CatchCodes::Codes(codes) => {
                 self.generate_arg_list(codes)?;
+                Ok(codes.len())
             }
             CatchCodes::Any => {
                 self.emit(Op::ImmInt(0));
                 self.push_stack(1);
+                Ok(1)
             }
         }
-        Ok(())
     }
 
     fn generate_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
@@ -450,19 +451,19 @@ impl CodegenState {
                 self.generate_expr(alternative.as_ref())?;
                 self.commit_jump_label(end_label);
             }
-            Expr::Catch {
+            Expr::TryCatch {
                 codes,
                 except,
                 trye,
             } => {
-                self.generate_codes(codes)?;
                 let handler_label = self.make_jump_label(None);
-                self.emit(Op::PushLabel(handler_label));
-                self.emit(Op::Catch(handler_label));
+                self.generate_codes(codes)?;
+                self.emit(Op::PushCatchLabel(handler_label));
+                self.pop_stack(1)   /* codes, catch */;
+                self.emit(Op::TryCatch { handler_label });
                 self.generate_expr(trye.as_ref())?;
                 let end_label = self.make_jump_label(None);
                 self.emit(Op::EndCatch(end_label));
-                self.pop_stack(1)   /* codes, catch */;
                 self.commit_jump_label(handler_label);
 
                 /* After this label, we still have a value on the stack, but now,
@@ -631,20 +632,20 @@ impl CodegenState {
             }
             StmtNode::TryExcept { body, excepts } => {
                 let mut labels = vec![];
+                let num_excepts = excepts.len();
                 for ex in excepts {
                     self.generate_codes(&ex.codes)?;
                     let push_label = self.make_jump_label(None);
-                    self.emit(Op::PushLabel(push_label));
+                    self.emit(Op::PushCatchLabel(push_label));
                     labels.push(push_label);
                 }
-                let num_excepts = excepts.len();
+                self.pop_stack(num_excepts);
                 self.emit(Op::TryExcept { num_excepts });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
                 let end_label = self.make_jump_label(None);
                 self.emit(Op::EndExcept(end_label));
-                self.pop_stack(num_excepts);
                 for (i, ex) in excepts.iter().enumerate() {
                     self.commit_jump_label(labels[i]);
                     self.push_stack(1);
@@ -664,7 +665,9 @@ impl CodegenState {
             }
             StmtNode::TryFinally { body, handler } => {
                 let handler_label = self.make_jump_label(None);
-                self.emit(Op::TryFinally(handler_label));
+                self.emit(Op::TryFinally {
+                    end_label: handler_label,
+                });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
@@ -674,7 +677,7 @@ impl CodegenState {
                 for stmt in handler {
                     self.generate_stmt(stmt)?;
                 }
-                self.emit(Op::Continue);
+                self.emit(Op::FinallyContinue);
                 self.pop_stack(2);
             }
             StmtNode::Break { exit: None } => {

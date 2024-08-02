@@ -57,7 +57,7 @@ pub enum SchedulerError {
     #[error("Task aborted due to error.")]
     TaskAbortedError,
     #[error("Task aborted due to exception")]
-    TaskAbortedException(#[source] UncaughtException),
+    TaskAbortedException(#[source] Exception),
     #[error("Task aborted due to cancellation.")]
     TaskAbortedCancelled,
     #[error("Unable to program verb {0}")]
@@ -65,7 +65,7 @@ pub enum SchedulerError {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
-pub struct UncaughtException {
+pub struct Exception {
     pub code: Error,
     pub msg: String,
     pub value: Var,
@@ -73,13 +73,13 @@ pub struct UncaughtException {
     pub backtrace: Vec<Var>,
 }
 
-impl Display for UncaughtException {
+impl Display for Exception {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Uncaught exception: {} ({})", self.msg, self.code)
     }
 }
 
-impl std::error::Error for UncaughtException {}
+impl std::error::Error for Exception {}
 
 /// Errors related to command matching.
 #[derive(Debug, Error, Clone, Decode, Encode, Eq, PartialEq)]

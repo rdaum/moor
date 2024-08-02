@@ -132,9 +132,9 @@ pub mod vm_test_utils {
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
-    use moor_values::tasks::UncaughtException;
+    use moor_values::tasks::Exception;
 
-    pub type ExecResult = Result<Var, UncaughtException>;
+    pub type ExecResult = Result<Var, Exception>;
 
     fn execute<F>(
         world_state: &mut dyn WorldState,
@@ -244,12 +244,12 @@ pub mod scheduler_test_utils {
 
     use crate::tasks::scheduler_client::SchedulerClient;
     use crate::tasks::sessions::Session;
+    use moor_values::tasks::Exception;
     use moor_values::tasks::SchedulerError::{CommandExecutionError, TaskAbortedException};
-    use moor_values::tasks::UncaughtException;
 
     use super::TaskHandle;
 
-    pub type ExecResult = Result<Var, UncaughtException>;
+    pub type ExecResult = Result<Var, Exception>;
 
     fn execute<F>(fun: F) -> Result<Var, SchedulerError>
     where
@@ -269,7 +269,7 @@ pub mod scheduler_test_utils {
         {
             // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
             // `moot` tests can match against them.
-            Err(TaskAbortedException(UncaughtException { code, .. })) => Ok(code.into()),
+            Err(TaskAbortedException(Exception { code, .. })) => Ok(code.into()),
             Err(CommandExecutionError(CommandError::NoCommandMatch)) => Ok(E_VERBNF.into()),
             Err(err) => Err(err),
             Ok(var) => Ok(var),

@@ -158,7 +158,7 @@ pub enum Expr {
         consequence: Box<Expr>,
         alternative: Box<Expr>,
     },
-    Catch {
+    TryCatch {
         trye: Box<Expr>,
         codes: CatchCodes,
         except: Option<Box<Expr>>,

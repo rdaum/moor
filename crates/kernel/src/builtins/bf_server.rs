@@ -204,7 +204,7 @@ fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
     let Ok(connected_seconds) = bf_args.session.connected_seconds(*who) else {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::Code(E_INVARG));
     };
 
     Ok(Ret(v_int(connected_seconds as i64)))

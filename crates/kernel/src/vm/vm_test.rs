@@ -638,6 +638,43 @@ mod tests {
         assert_eq!(result, Ok(v_int(5)));
     }
 
+    #[test]
+    // "Finally" should not get invoked on exit conditions like return/abort, etc.
+    fn test_try_finally_regression_1() {
+        let program =
+            r#"a = 1; try return "hello world"[2..$]; a = 3; finally a = 2; endtry return a;"#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_str("ello world")));
+    }
+
+    #[test]
+    // A 0 value was hanging around on the stack making the comparison fail.
+    fn test_try_expr_regression() {
+        let program = r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_int(666)));
+    }
+
     /// A VM body that is empty should return v_none() and not panic.
     #[test]
     fn test_regression_zero_body_function() {
@@ -697,6 +734,44 @@ mod tests {
             vec![],
         );
         assert_eq!(result, Ok(v_str("should reach here")));
+    }
+
+    #[test]
+    fn test_try_except_str() {
+        let program = r#"        try
+          return "hello world"[2..$];
+        except (E_RANGE)
+        endtry"#;
+        let compiled = compile(program).unwrap();
+        eprintln!("{}", compiled);
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_str("ello world")));
+    }
+
+    #[test]
+    fn test_try_finally_returns() {
+        let program = r#"try return 666; finally return 333; endtry"#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_int(333)));
     }
 
     #[test_case("return 1;", v_int(1); "simple return")]

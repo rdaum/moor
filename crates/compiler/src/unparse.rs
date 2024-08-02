@@ -73,7 +73,7 @@ impl Expr {
             Expr::Pass { .. } => 1,
             Expr::Call { .. } => 1,
             Expr::Length => 1,
-            Expr::Catch { .. } => 1,
+            Expr::TryCatch { .. } => 1,
         };
         15 - cpp_ref_prep
     }
@@ -237,7 +237,7 @@ impl Unparse {
                 self.unparse_expr(consequence)?,
                 brace_if_lower_eq(alternative)
             )),
-            Expr::Catch {
+            Expr::TryCatch {
                 trye,
                 codes,
                 except,

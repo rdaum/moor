@@ -774,7 +774,9 @@ mod tests {
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
-                TryFinally(0.into()),
+                TryFinally {
+                    end_label: 0.into()
+                },
                 ImmInt(1),
                 Put(a),
                 Pop,
@@ -782,7 +784,7 @@ mod tests {
                 ImmInt(2),
                 Put(a),
                 Pop,
-                Continue,
+                FinallyContinue,
                 Done
             ]
         );
@@ -826,10 +828,10 @@ mod tests {
             vec![
                 ImmErr(E_INVARG),
                 MakeSingletonList,
-                PushLabel(0.into()),
+                PushCatchLabel(0.into()),
                 ImmErr(E_PROPNF),
                 MakeSingletonList,
-                PushLabel(1.into()),
+                PushCatchLabel(1.into()),
                 TryExcept { num_excepts: 2 },
                 ImmInt(1),
                 Put(a),
@@ -881,8 +883,10 @@ mod tests {
                 MakeSingletonList,
                 ImmErr(E_PERM),
                 ListAddTail,
-                PushLabel(0.into()),
-                Catch(0.into()),
+                PushCatchLabel(0.into()),
+                TryCatch {
+                    handler_label: 0.into(),
+                },
                 Push(x),
                 ImmInt(1),
                 Add,
@@ -921,8 +925,10 @@ mod tests {
             *binary.main_vector.as_ref(),
             vec![
                 ImmInt(0),
-                PushLabel(0.into()),
-                Catch(0.into()),
+                PushCatchLabel(0.into()),
+                TryCatch {
+                    handler_label: 0.into(),
+                },
                 ImmErr(E_INVARG),
                 MakeSingletonList,
                 FuncCall {
@@ -1445,12 +1451,12 @@ mod tests {
             vec![
                 ImmErr(E_RANGE),
                 MakeSingletonList,
-                PushLabel(Label(0)),
+                PushCatchLabel(Label(0)),
                 TryExcept { num_excepts: 1 },
                 Imm(Label(0)),
                 ImmInt(2),
                 // Our offset is different because we don't count PushLabel in the stack.
-                Length(Offset(1)),
+                Length(Offset(0)),
                 RangeRef,
                 Return,
                 EndExcept(Label(1)),
@@ -1484,8 +1490,10 @@ mod tests {
             vec![
                 ImmErr(E_INVIND),
                 MakeSingletonList,
-                PushLabel(0.into()),
-                Catch(0.into()),
+                PushCatchLabel(0.into()),
+                TryCatch {
+                    handler_label: 0.into(),
+                },
                 Push(this),
                 EndCatch(1.into()),
                 ImmInt(1),
