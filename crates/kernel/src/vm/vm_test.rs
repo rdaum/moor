@@ -439,6 +439,11 @@ mod tests {
         db.new_world_state().unwrap()
     }
 
+    fn world_with_test_programs(programs: &[(&str, &Program)]) -> Box<dyn WorldState> {
+        let db = test_db_with_verbs(programs);
+        db.new_world_state().unwrap()
+    }
+
     #[test]
     fn test_assignment_from_range() {
         let program = "x = 1; y = {1,2,3}; x = x + y[2]; return x;";
@@ -658,6 +663,40 @@ mod tests {
             vec![],
         );
         assert_eq!(result, Ok(v_none()));
+    }
+
+    #[test]
+    fn test_catch_any_regression() {
+        let top_of_stack = r#"
+            try
+                try
+                   #1.location:cause_error();
+                   return "should not reach here";
+                except error (ANY)
+                   this:raise_error();
+                   return "should not reach here";
+                endtry
+            except id (ANY)
+                return "should reach here";
+            endtry
+            return "should not reach here";
+            "#;
+        let bottom_of_stack = r#"raise(E_ARGS);"#;
+
+        let mut state = world_with_test_programs(&[
+            ("raise_error", &compile(bottom_of_stack).unwrap()),
+            ("test", &compile(top_of_stack).unwrap()),
+        ]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_str("should reach here")));
     }
 
     #[test_case("return 1;", v_int(1); "simple return")]
