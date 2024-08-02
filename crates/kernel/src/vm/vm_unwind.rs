@@ -26,7 +26,7 @@ use moor_values::var::{Error, ErrorPack};
 use moor_values::NOTHING;
 
 use crate::vm::activation::{Activation, Frame};
-use crate::vm::moo_frame::HandlerType;
+use crate::vm::moo_frame::ScopeType;
 use crate::vm::{ExecutionResult, VMExecState};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
@@ -79,7 +79,7 @@ impl FinallyReason {
 impl VMExecState {
     /// Find the currently active catch handler for a given error code, if any.
     /// Then return the stack offset (from now) of the activation frame containing the handler.
-    fn find_handler_active(&mut self, raise_code: Error) -> Option<usize> {
+    fn find_scope_for_error(&mut self, raise_code: Error) -> Option<usize> {
         // Scan activation frames and their stacks, looking for the first catch handler that matches
         // the error code.
         // Iterate backwards.
@@ -88,15 +88,15 @@ impl VMExecState {
             let Frame::Moo(ref frame) = activation.frame else {
                 continue;
             };
-            for handler in &frame.handler_stack {
-                let HandlerType::Catch(cnt) = handler.handler_type else {
+            for scope in &frame.scope_stack {
+                let ScopeType::Catch(cnt) = scope.scope_type else {
                     continue;
                 };
                 // Found one, now scan forwards from 'cnt' backwards in the valstack looking for either the first
                 // non-list value, or a list containing the error code.
                 // TODO check for 'cnt' being too large. not sure how to handle, tho
                 // TODO this actually i think is wrong, it needs to pull two values off the stack
-                let i = handler.valstack_pos;
+                let i = scope.valstack_pos;
                 for j in (i - cnt)..i {
                     if let Variant::List(codes) = &frame.valstack[j].variant() {
                         if !codes.contains(&v_err(raise_code)) {
@@ -199,22 +199,21 @@ impl VMExecState {
         trace!(error = ?p, "raising error");
 
         // Look for first active catch handler's activation frame and its (reverse) offset in the activation stack.
-        let handler_activ = self.find_handler_active(p.code);
+        let handler_scope = self.find_scope_for_error(p.code);
 
-        let why = if let Some(handler_active_num) = handler_activ {
-            FinallyReason::Raise {
+        let why = match handler_scope {
+            Some(handler_active_num) => FinallyReason::Raise {
                 code: p.code,
                 msg: p.msg,
                 stack: self.make_stack_list(&self.stack, handler_active_num),
-            }
-        } else {
-            FinallyReason::Uncaught(UncaughtException {
+            },
+            None => FinallyReason::Uncaught(UncaughtException {
                 code: p.code,
                 msg: p.msg.clone(),
                 value: p.value,
                 stack: self.make_stack_list(&self.stack, 0),
                 backtrace: self.error_backtrace_list(p.msg.as_str()),
-            })
+            }),
         };
 
         self.unwind_stack(why)
@@ -320,14 +319,14 @@ impl VMExecState {
             match &mut a.frame {
                 Frame::Moo(frame) => {
                     while frame.valstack.pop().is_some() {
-                        // Check the handler stack to see if we've hit a finally or catch handler that
+                        // Check the scope stack to see if we've hit a finally or catch handler that
                         // was registered for this position in the value stack.
-                        let Some(handler) = frame.pop_applicable_handler() else {
+                        let Some(scope) = frame.pop_scope() else {
                             continue;
                         };
 
-                        match handler.handler_type {
-                            HandlerType::Finally(label) => {
+                        match scope.scope_type {
+                            ScopeType::Finally(label) => {
                                 let why_code = why.code();
                                 if why_code == FinallyReason::Abort.code() {
                                     continue;
@@ -339,15 +338,15 @@ impl VMExecState {
                                 trace!(jump = ?label, ?why, "matched finally handler");
                                 return ExecutionResult::More;
                             }
-                            HandlerType::Catch(_) => {
+                            ScopeType::Catch(_) => {
                                 let FinallyReason::Raise { code, .. } = &why else {
                                     continue;
                                 };
 
-                                let Some(handler) = frame.pop_applicable_handler() else {
+                                let Some(handler) = frame.pop_scope() else {
                                     continue;
                                 };
-                                let HandlerType::CatchLabel(pushed_label) = &handler.handler_type
+                                let ScopeType::CatchLabel(pushed_label) = &handler.scope_type
                                 else {
                                     panic!("Expected CatchLabel");
                                 };
@@ -366,7 +365,7 @@ impl VMExecState {
                                     return ExecutionResult::More;
                                 }
                             }
-                            HandlerType::CatchLabel(_) => {
+                            ScopeType::CatchLabel(_) => {
                                 unreachable!("CatchLabel where we didn't expect it...")
                             }
                         }

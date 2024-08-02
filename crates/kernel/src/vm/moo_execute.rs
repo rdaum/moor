@@ -30,7 +30,7 @@ use moor_values::var::{v_listv, Error};
 
 use crate::tasks::sessions::Session;
 use crate::vm::activation::Frame;
-use crate::vm::moo_frame::HandlerType;
+use crate::vm::moo_frame::ScopeType;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VMExecState, VmExecParams};
 
@@ -631,31 +631,29 @@ pub fn moo_frame_execute(
                 );
             }
             Op::PushLabel(label) => {
-                f.push_handler_label(HandlerType::CatchLabel(*label));
+                f.enter_scope(ScopeType::CatchLabel(*label));
             }
             Op::TryFinally(label) => {
-                f.push_handler_label(HandlerType::Finally(*label));
+                f.enter_scope(ScopeType::Finally(*label));
             }
             Op::Catch(_) => {
-                f.push_handler_label(HandlerType::Catch(1));
+                f.enter_scope(ScopeType::Catch(1));
             }
             Op::TryExcept { num_excepts } => {
-                f.push_handler_label(HandlerType::Catch(*num_excepts));
+                f.enter_scope(ScopeType::Catch(*num_excepts));
             }
             Op::EndCatch(label) | Op::EndExcept(label) => {
                 let is_catch = matches!(op, Op::EndCatch(_));
                 let v = if is_catch { f.pop() } else { v_none() };
 
-                let handler = f
-                    .pop_applicable_handler()
-                    .expect("Missing handler for try/catch/except");
-                let HandlerType::Catch(num_excepts) = handler.handler_type else {
+                let handler = f.pop_scope().expect("Missing handler for try/catch/except");
+                let ScopeType::Catch(num_excepts) = handler.scope_type else {
                     panic!("Handler is not a catch handler");
                 };
 
                 for _i in 0..num_excepts {
                     f.pop(); /* code list */
-                    f.handler_stack.pop();
+                    f.pop_scope();
                 }
                 if is_catch {
                     f.push(v);
@@ -663,10 +661,10 @@ pub fn moo_frame_execute(
                 f.jump(label);
             }
             Op::EndFinally => {
-                let Some(finally_handler) = f.pop_applicable_handler() else {
+                let Some(finally_handler) = f.pop_scope() else {
                     panic!("Missing handler for try/finally")
                 };
-                let HandlerType::Finally(_) = finally_handler.handler_type else {
+                let ScopeType::Finally(_) = finally_handler.scope_type else {
                     panic!("Handler is not a finally handler")
                 };
                 f.push(v_int(0) /* fallthrough */);

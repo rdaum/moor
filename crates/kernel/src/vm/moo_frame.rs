@@ -46,26 +46,29 @@ pub(crate) struct MooStackFrame {
     pub(crate) environment: BitArray<Var, 256, Bitset16<16>>,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
-    /// A stack of active error handlers, each relative to a position in the valstack.
-    pub(crate) handler_stack: Vec<HandlerLabel>,
+    /// A stack of active scopes. Used for catch and finally blocks and in the future for lexical
+    /// scoping as well.
+    pub(crate) scope_stack: Vec<Scope>,
     /// Scratch space for PushTemp and PutTemp opcodes.
     pub(crate) temp: Var,
 }
 
-// A Label that exists in a separate stack but is *relevant* only for the `valstack_pos`
-// That is:
-//   when created, the stack's current size is stored in `valstack_pos`
-//   when popped off in unwind, the valstack's size is eaten back to pos.
+/// The kinds of block scopes that can be entered and exited, which far now are just catch and
+/// finally blocks.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-pub(crate) enum HandlerType {
+pub(crate) enum ScopeType {
     Catch(usize),
     CatchLabel(Label),
     Finally(Label),
 }
 
+/// A scope is a record of the current size of the valstack when it was created, and are
+/// enter and exit scopes.
+/// On entry, the current size of the valstack is stored in `valstack_pos`.
+/// On exit, the valstack is eaten back to that size.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-pub(crate) struct HandlerLabel {
-    pub(crate) handler_type: HandlerType,
+pub(crate) struct Scope {
+    pub(crate) scope_type: ScopeType,
     pub(crate) valstack_pos: usize,
 }
 
@@ -83,7 +86,7 @@ impl Encode for MooStackFrame {
         }
         env.encode(encoder)?;
         self.valstack.encode(encoder)?;
-        self.handler_stack.encode(encoder)?;
+        self.scope_stack.encode(encoder)?;
         self.temp.encode(encoder)
     }
 }
@@ -110,7 +113,7 @@ impl Decode for MooStackFrame {
             pc,
             environment,
             valstack,
-            handler_stack,
+            scope_stack: handler_stack,
             temp,
         })
     }
@@ -138,7 +141,7 @@ impl<'de> BorrowDecode<'de> for MooStackFrame {
             pc,
             environment,
             valstack,
-            handler_stack,
+            scope_stack: handler_stack,
             temp,
         })
     }
@@ -152,7 +155,7 @@ impl MooStackFrame {
             program,
             environment,
             valstack: vec![],
-            handler_stack: vec![],
+            scope_stack: vec![],
             pc: 0,
             temp: v_none(),
         }
@@ -260,20 +263,19 @@ impl MooStackFrame {
         self.pc = label.position.0 as usize;
     }
 
-    pub fn push_handler_label(&mut self, handler_type: HandlerType) {
-        self.handler_stack.push(HandlerLabel {
-            handler_type,
+    pub fn enter_scope(&mut self, scope: ScopeType) {
+        self.scope_stack.push(Scope {
+            scope_type: scope,
             valstack_pos: self.valstack.len(),
         });
     }
 
-    pub fn pop_applicable_handler(&mut self) -> Option<HandlerLabel> {
-        if self.handler_stack.is_empty() {
+    pub fn pop_scope(&mut self) -> Option<Scope> {
+        let Some(scope) = self.scope_stack.pop() else {
             return None;
-        }
-        if self.handler_stack[self.handler_stack.len() - 1].valstack_pos != self.valstack.len() {
-            return None;
-        }
-        self.handler_stack.pop()
+        };
+
+        self.valstack.truncate(scope.valstack_pos + 1);
+        Some(scope)
     }
 }
