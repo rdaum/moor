@@ -274,7 +274,7 @@ mod test {
         let db2 = Arc::new(db2);
         let buffered_string_reader = std::io::BufReader::new(textdump.as_bytes());
         let mut lc = db2.clone().loader_client().unwrap();
-        let _ = read_textdump(lc.as_mut(), buffered_string_reader, EncodingMode::UTF8).unwrap();
+        read_textdump(lc.as_mut(), buffered_string_reader, EncodingMode::UTF8).unwrap();
         assert_eq!(lc.commit().unwrap(), CommitResult::Success);
 
         // Now go through the properties and verbs of all the objects on db1, and verify that

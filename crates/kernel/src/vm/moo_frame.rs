@@ -296,10 +296,7 @@ impl MooStackFrame {
     }
 
     pub fn pop_scope(&mut self) -> Option<Scope> {
-        let Some(scope) = self.scope_stack.pop() else {
-            return None;
-        };
-
+        let scope = self.scope_stack.pop()?;
         self.valstack.truncate(scope.valstack_pos);
         Some(scope)
     }

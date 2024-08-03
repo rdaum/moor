@@ -63,7 +63,8 @@ impl<W: io::Write> TextdumpWriter<W> {
                         let encoding = encoding_rs::WINDOWS_1252;
                         let s = s.as_str();
                         let s = encoding.encode(s);
-                        self.writer.write(&s.0).unwrap();
+                        let written = self.writer.write(&s.0).unwrap();
+                        assert_eq!(written, s.0.len());
                     }
                     EncodingMode::UTF8 => {
                         writeln!(self.writer, "{}\n{}", VarType::TYPE_STR as i64, s)?;

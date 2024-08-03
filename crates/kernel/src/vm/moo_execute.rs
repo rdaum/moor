@@ -641,7 +641,7 @@ pub fn moo_frame_execute(
                             let Variant::Err(e) = v.variant() else {
                                 panic!("Error codes list contains non-error code");
                             };
-                            e.clone()
+                            *e
                         });
                         f.catch_stack
                             .push((CatchType::Errors(error_codes.collect()), *label));
