@@ -19,15 +19,19 @@ use moor_values::var::Objid;
 use moor_values::var::{Var, VarType, Variant};
 
 use crate::textdump::read::TYPE_CLEAR;
-use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
+use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 
 pub struct TextdumpWriter<W: io::Write> {
     writer: W,
+    encoding_mode: EncodingMode,
 }
 
 impl<W: io::Write> TextdumpWriter<W> {
-    pub fn new(writer: W) -> Self {
-        Self { writer }
+    pub fn new(writer: W, encoding_mode: EncodingMode) -> Self {
+        Self {
+            writer,
+            encoding_mode,
+        }
     }
 }
 
@@ -53,6 +57,18 @@ impl<W: io::Write> TextdumpWriter<W> {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_OBJ as i64, o.0)?;
             }
             Variant::Str(s) => {
+                match self.encoding_mode {
+                    EncodingMode::ISO8859_1 => {
+                        //
+                        let encoding = encoding_rs::WINDOWS_1252;
+                        let s = s.as_str();
+                        let s = encoding.encode(s);
+                        self.writer.write(&s.0).unwrap();
+                    }
+                    EncodingMode::UTF8 => {
+                        writeln!(self.writer, "{}\n{}", VarType::TYPE_STR as i64, s)?;
+                    }
+                }
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_STR as i64, s)?;
             }
             Variant::Err(e) => {

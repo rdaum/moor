@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use pretty_assertions::assert_eq;
 use uuid::Uuid;
+use EncodingMode::UTF8;
 
 use moor_compiler::compile;
 use moor_compiler::Program;
@@ -29,7 +30,7 @@ use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
 use moor_kernel::tasks::vm_test_utils;
 use moor_kernel::tasks::vm_test_utils::ExecResult;
-use moor_kernel::textdump::textdump_load;
+use moor_kernel::textdump::{textdump_load, EncodingMode};
 use moor_moot::test_db_path;
 use moor_values::model::CommitResult;
 use moor_values::model::Named;
@@ -50,7 +51,7 @@ pub fn testsuite_dir() -> PathBuf {
 #[allow(dead_code)]
 pub fn load_textdump(db: &dyn Database) {
     let mut tx = db.loader_client().unwrap();
-    textdump_load(tx.as_ref(), test_db_path()).expect("Could not load textdump");
+    textdump_load(tx.as_ref(), test_db_path(), UTF8).expect("Could not load textdump");
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 

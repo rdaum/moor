@@ -13,7 +13,7 @@
 //
 
 use std::collections::BTreeMap;
-use std::io::{BufReader, Read};
+use std::io::{BufRead, BufReader, Read};
 
 use text_io::scan;
 use tracing::info;
@@ -25,20 +25,22 @@ use moor_values::var::Objid;
 use moor_values::var::{v_err, v_float, v_int, v_none, v_objid, v_str, Var, VarType};
 use moor_values::var::{v_listv, Error};
 
-use crate::textdump::{Object, Propval, Textdump, Verb, Verbdef};
+use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 
 pub const TYPE_CLEAR: i64 = 5;
 
 pub struct TextdumpReader<R: Read> {
     line_num: usize,
     reader: BufReader<R>,
+    encoding_mode: EncodingMode,
 }
 
 impl<R: Read> TextdumpReader<R> {
-    pub fn new(reader: BufReader<R>) -> Self {
+    pub fn new(reader: BufReader<R>, encoding_mode: EncodingMode) -> Self {
         Self {
             reader,
             line_num: 0,
+            encoding_mode,
         }
     }
 }
@@ -58,19 +60,29 @@ pub enum TextdumpReaderError {
 
 impl<R: Read> TextdumpReader<R> {
     fn read_next_line(&mut self) -> Result<String, TextdumpReaderError> {
-        // Textdump lines are actually iso-8859-1 encoded, so we need to decode them as such.
-        // Read char by char until LF, appending each char to the string.
-        let mut line = String::new();
-        loop {
-            let mut buf = [0u8; 1];
-            if let Err(e) = self.reader.read_exact(&mut buf) {
-                return Err(TextdumpReaderError::IoError(e, self.line_num));
+        let line = match &self.encoding_mode {
+            EncodingMode::ISO8859_1 => {
+                let mut line = String::new();
+                loop {
+                    let mut buf = [0u8; 1];
+                    if let Err(e) = self.reader.read_exact(&mut buf) {
+                        return Err(TextdumpReaderError::IoError(e, self.line_num));
+                    }
+                    if buf[0] == b'\n' {
+                        break;
+                    }
+                    line.push(buf[0] as char);
+                }
+                line
             }
-            if buf[0] == b'\n' {
-                break;
+            EncodingMode::UTF8 => {
+                let mut line = String::new();
+                if let Err(e) = self.reader.read_line(&mut line) {
+                    return Err(TextdumpReaderError::IoError(e, self.line_num));
+                }
+                line
             }
-            line.push(buf[0] as char);
-        }
+        };
         self.line_num += 1;
         Ok(line)
     }

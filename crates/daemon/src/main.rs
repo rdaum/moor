@@ -30,7 +30,7 @@ use tracing::{info, warn};
 use moor_db_wiredtiger::WiredTigerDatabaseBuilder;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::scheduler::Scheduler;
-use moor_kernel::textdump::textdump_load;
+use moor_kernel::textdump::{textdump_load, EncodingMode};
 
 use crate::rpc_server::RpcServer;
 
@@ -76,6 +76,18 @@ struct Args {
         help = "Path to textdump file to write on `dump_database()`, if any"
     )]
     textdump_out: Option<PathBuf>,
+
+    #[arg(
+        long,
+        value_name = "textdump-encoding",
+        help = "Encoding to use for reading textdump files. utf8 or iso8859-1. \
+          LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so for full compatibility, \
+          choose iso8859-1.
+          If you know your textdump contains no such strings, or if your textdump is from moor choose utf8,
+          which is faster to read.",
+        default_value = "utf8"
+    )]
+    textdump_encoding: EncodingMode,
 
     #[arg(
         short,
@@ -271,7 +283,7 @@ fn main() -> Result<(), Report> {
             let mut loader_interface = database
                 .loader_client()
                 .expect("Unable to get loader interface from database");
-            textdump_load(loader_interface.as_ref(), textdump).unwrap();
+            textdump_load(loader_interface.as_ref(), textdump, args.textdump_encoding).unwrap();
             let duration = start.elapsed();
             info!("Loaded textdump in {:?}", duration);
             loader_interface

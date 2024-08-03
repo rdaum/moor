@@ -36,8 +36,9 @@ use moor_values::{AsByteBuffer, NOTHING};
 
 use crate::textdump::read::TextdumpReaderError;
 use crate::textdump::{
-    Object, TextdumpReader, PREP_ANY, PREP_NONE, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS,
-    VF_DEBUG, VF_DOBJSHIFT, VF_EXEC, VF_IOBJSHIFT, VF_OBJMASK, VF_PERMMASK, VF_READ, VF_WRITE,
+    EncodingMode, Object, TextdumpReader, PREP_ANY, PREP_NONE, VF_ASPEC_ANY, VF_ASPEC_NONE,
+    VF_ASPEC_THIS, VF_DEBUG, VF_DOBJSHIFT, VF_EXEC, VF_IOBJSHIFT, VF_OBJMASK, VF_PERMMASK, VF_READ,
+    VF_WRITE,
 };
 
 struct RProp {
@@ -88,7 +89,11 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 }
 
 #[tracing::instrument(skip(ldr))]
-pub fn textdump_load(ldr: &dyn LoaderInterface, path: PathBuf) -> Result<(), TextdumpReaderError> {
+pub fn textdump_load(
+    ldr: &dyn LoaderInterface,
+    path: PathBuf,
+    encoding_mode: EncodingMode,
+) -> Result<(), TextdumpReaderError> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
 
@@ -97,14 +102,15 @@ pub fn textdump_load(ldr: &dyn LoaderInterface, path: PathBuf) -> Result<(), Tex
 
     let br = BufReader::new(corefile);
 
-    read_textdump(ldr, br)
+    read_textdump(ldr, br, encoding_mode)
 }
 
 pub fn read_textdump<T: io::Read>(
     loader: &dyn LoaderInterface,
     reader: BufReader<T>,
+    encoding_mode: EncodingMode,
 ) -> Result<(), TextdumpReaderError> {
-    let mut tdr = TextdumpReader::new(reader);
+    let mut tdr = TextdumpReader::new(reader, encoding_mode);
     let td = tdr.read_textdump()?;
 
     info!("Instantiating objects");

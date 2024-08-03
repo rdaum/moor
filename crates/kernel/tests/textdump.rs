@@ -26,7 +26,9 @@ mod test {
     use moor_db::loader::LoaderInterface;
     use moor_db::Database;
     use moor_db_wiredtiger::WiredTigerDB;
-    use moor_kernel::textdump::{make_textdump, read_textdump, textdump_load, TextdumpReader};
+    use moor_kernel::textdump::{
+        make_textdump, read_textdump, textdump_load, EncodingMode, TextdumpReader,
+    };
     use moor_values::model::VerbArgsSpec;
     use moor_values::model::VerbFlag;
     use moor_values::model::WorldStateSource;
@@ -43,7 +45,8 @@ mod test {
     }
 
     fn load_textdump_file(tx: &mut dyn LoaderInterface, path: &str) {
-        textdump_load(tx, PathBuf::from(path)).expect("Could not load textdump");
+        textdump_load(tx, PathBuf::from(path), EncodingMode::UTF8)
+            .expect("Could not load textdump");
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     }
 
@@ -52,7 +55,8 @@ mod test {
         let mut output = Vec::new();
         let textdump = make_textdump(tx.as_ref(), Some(version));
 
-        let mut writer = moor_kernel::textdump::TextdumpWriter::new(&mut output);
+        let mut writer =
+            moor_kernel::textdump::TextdumpWriter::new(&mut output, EncodingMode::UTF8);
         writer
             .write_textdump(&textdump)
             .expect("Failed to write textdump");
@@ -67,7 +71,7 @@ mod test {
         let corefile = get_minimal_db();
 
         let br = BufReader::new(corefile);
-        let mut tdr = TextdumpReader::new(br);
+        let mut tdr = TextdumpReader::new(br, EncodingMode::UTF8);
         let td = tdr.read_textdump().expect("Failed to read textdump");
 
         // Version spec
@@ -149,11 +153,12 @@ mod test {
         let minimal_db = manifest_dir.join("tests/Minimal.db");
         let corefile = File::open(minimal_db.clone()).unwrap();
         let br = BufReader::new(corefile);
-        let mut tdr = TextdumpReader::new(br);
+        let mut tdr = TextdumpReader::new(br, EncodingMode::UTF8);
         let td = tdr.read_textdump().expect("Failed to read textdump");
 
         let mut output = Vec::new();
-        let mut writer = moor_kernel::textdump::TextdumpWriter::new(&mut output);
+        let mut writer =
+            moor_kernel::textdump::TextdumpWriter::new(&mut output, EncodingMode::UTF8);
         writer
             .write_textdump(&td)
             .expect("Failed to write textdump");
@@ -178,7 +183,7 @@ mod test {
         let (db, _) = WiredTigerDB::open(None);
         let db = Arc::new(db);
         let mut tx = db.clone().loader_client().unwrap();
-        textdump_load(tx.as_mut(), minimal_db).unwrap();
+        textdump_load(tx.as_mut(), minimal_db, EncodingMode::UTF8).unwrap();
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 
         // Check a few things in a new transaction.
@@ -269,7 +274,7 @@ mod test {
         let db2 = Arc::new(db2);
         let buffered_string_reader = std::io::BufReader::new(textdump.as_bytes());
         let mut lc = db2.clone().loader_client().unwrap();
-        let _ = read_textdump(lc.as_mut(), buffered_string_reader).unwrap();
+        let _ = read_textdump(lc.as_mut(), buffered_string_reader, EncodingMode::UTF8).unwrap();
         assert_eq!(lc.commit().unwrap(), CommitResult::Success);
 
         // Now go through the properties and verbs of all the objects on db1, and verify that

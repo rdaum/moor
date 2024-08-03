@@ -17,6 +17,7 @@
 use std::collections::BTreeMap;
 
 pub use load_db::{read_textdump, textdump_load};
+
 use moor_values::var::Objid;
 use moor_values::var::Var;
 pub use read::TextdumpReader;
@@ -40,6 +41,30 @@ const VF_OBJMASK: u16 = 0x3;
 const VF_ASPEC_NONE: u16 = 0;
 const VF_ASPEC_ANY: u16 = 1;
 const VF_ASPEC_THIS: u16 = 2;
+
+/// What mode to use for strings that contain non-ASCII characters.
+///
+/// Note that LambdaMOO imports are always in ISO-8859-1, but exports can be in UTF-8.
+/// To make things backwards compatible to LambdaMOO servers, choose ISO-8859-1.
+/// The default is UTF-8.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EncodingMode {
+    // windows-1252 / ISO-8859-1
+    ISO8859_1,
+    UTF8,
+}
+
+impl From<&str> for EncodingMode {
+    fn from(s: &str) -> Self {
+        match s {
+            "ISO-8859-1" | "iso-8859-1" | "iso8859-1" => EncodingMode::ISO8859_1,
+            "UTF-8" | "utf8" | "utf-8" => EncodingMode::UTF8,
+            _ => {
+                panic!("Invalid encoding mode: {}", s);
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Verbdef {
