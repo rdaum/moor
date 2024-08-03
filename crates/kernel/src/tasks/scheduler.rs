@@ -682,7 +682,7 @@ impl Scheduler {
                     let Variant::Str(s) = frame.variant() else {
                         continue;
                     };
-                    traceback.push(format!("{:}\n", s));
+                    traceback.push(format!("{:}", s));
                 }
 
                 for l in traceback.iter() {
