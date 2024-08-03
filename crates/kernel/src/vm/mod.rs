@@ -23,7 +23,8 @@ use std::time::Duration;
 use bincode::{Decode, Encode};
 
 pub use exec_state::VMExecState;
-use moor_compiler::{Name, Offset, Program};
+use moor_compiler::Name;
+use moor_compiler::{Offset, Program};
 use moor_values::model::VerbInfo;
 use moor_values::var::{Objid, Var};
 pub use vm_call::VerbExecutionRequest;

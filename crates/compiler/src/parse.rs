@@ -36,7 +36,7 @@ use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
     UnaryOp,
 };
-use crate::labels::Names;
+use crate::names::Names;
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
 use moor_values::model::CompileError;
@@ -855,7 +855,7 @@ mod tests {
         BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
         UnaryOp,
     };
-    use crate::labels::Names;
+    use crate::names::Names;
     use crate::parse::{parse_program, unquote_str};
     use moor_values::model::CompileError;
 

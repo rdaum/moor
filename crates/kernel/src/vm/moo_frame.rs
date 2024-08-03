@@ -19,7 +19,8 @@ use bincode::{BorrowDecode, Decode, Encode};
 use daumtils::{BitArray, Bitset16};
 
 use crate::vm::FinallyReason;
-use moor_compiler::{GlobalName, Label, Name, Op, Program};
+use moor_compiler::Name;
+use moor_compiler::{GlobalName, Label, Op, Program};
 use moor_values::var::Error::E_VARNF;
 use moor_values::var::{v_none, Error, Var};
 

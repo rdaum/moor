@@ -18,7 +18,7 @@ use std::fmt::Display;
 use moor_values::var::Var;
 
 /// The abstract syntax tree produced by the parser and converted by codegen into opcodes.
-use crate::labels::Name;
+use crate::names::Name;
 use crate::opcode::Op;
 
 #[derive(Debug, Eq, PartialEq, Clone)]

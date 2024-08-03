@@ -16,7 +16,8 @@
 mod tests {
     use crate::builtins::BUILTIN_DESCRIPTORS;
     use crate::codegen::compile;
-    use crate::labels::{Label, Name, Offset};
+    use crate::labels::{Label, Offset};
+    use crate::names::Name;
     use moor_values::model::CompileError;
     use moor_values::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
     use moor_values::var::Objid;

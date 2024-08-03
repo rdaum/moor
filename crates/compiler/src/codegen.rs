@@ -26,7 +26,8 @@ use crate::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
 use crate::builtins::make_builtin_labels;
-use crate::labels::{JumpLabel, Label, Name, Names, Offset};
+use crate::labels::{JumpLabel, Label, Offset};
+use crate::names::{Name, Names};
 use crate::opcode::Op::Jump;
 use crate::opcode::{Op, ScatterArgs, ScatterLabel};
 use crate::parse::parse_program;
@@ -115,7 +116,7 @@ impl CodegenState {
                 false
             }
         }) else {
-            let loop_name = self.var_names.names[loop_label.0 as usize];
+            let loop_name = self.var_names.name_of(loop_label).unwrap();
             return Err(CompileError::UnknownLoopLabel(loop_name.to_string()));
         };
         Ok(l)

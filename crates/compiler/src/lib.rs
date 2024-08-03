@@ -12,6 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+pub use names::Names;
+
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 
 mod ast;
@@ -23,13 +25,15 @@ mod parse;
 mod unparse;
 
 mod codegen_tests;
+mod names;
 mod opcode;
 mod program;
 
 pub use crate::builtins::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
 pub use crate::codegen::compile;
 pub use crate::decompile::program_to_tree;
-pub use crate::labels::{JumpLabel, Label, Name, Names, Offset};
+pub use crate::labels::{JumpLabel, Label, Offset};
+pub use crate::names::Name;
 pub use crate::opcode::{Op, ScatterLabel};
 pub use crate::program::{Program, EMPTY_PROGRAM};
 pub use crate::unparse::unparse;

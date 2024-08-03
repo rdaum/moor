@@ -24,8 +24,9 @@ use bytes::Bytes;
 use daumtils::PhantomUnsync;
 use tracing::{debug, error, trace, warn};
 
+use moor_compiler::compile;
+use moor_compiler::Name;
 use moor_compiler::Program;
-use moor_compiler::{compile, Name};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::{BinaryType, ObjFlag};

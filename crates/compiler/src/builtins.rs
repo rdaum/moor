@@ -21,7 +21,7 @@ use ArgCount::{Q, U};
 use ArgType::{Any, AnyNum, Typed};
 use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 
-use crate::labels::Name;
+use crate::names::Name;
 
 lazy_static! {
     pub static ref BUILTIN_DESCRIPTORS: Vec<Builtin> = mk_builtin_table();

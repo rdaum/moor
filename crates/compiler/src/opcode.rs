@@ -16,7 +16,8 @@ use bincode::{Decode, Encode};
 use moor_values::var::Error;
 use moor_values::var::Objid;
 
-use crate::labels::{Label, Name, Offset};
+use crate::labels::{Label, Offset};
+use crate::names::Name;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
 pub enum Op {
@@ -106,7 +107,8 @@ pub struct ScatterArgs {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Label, Name, Offset};
+    use crate::names::Name;
+    use crate::{Label, Offset};
 
     /// Verify we don't go over our 16 byte budget for opcodes.
     // TODO: This is still rather bloated.

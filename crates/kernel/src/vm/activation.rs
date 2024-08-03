@@ -17,8 +17,9 @@ use bytes::Bytes;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
+use moor_compiler::GlobalName;
+use moor_compiler::Name;
 use moor_compiler::Program;
-use moor_compiler::{GlobalName, Name};
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDef;
 use moor_values::model::VerbInfo;

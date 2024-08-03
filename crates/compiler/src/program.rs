@@ -12,7 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::labels::{JumpLabel, Label, Name, Names};
+use crate::labels::{JumpLabel, Label};
+use crate::names::{Name, Names};
 use crate::opcode::Op;
 use bincode::{Decode, Encode};
 use bytes::Bytes;
@@ -96,7 +97,7 @@ impl Display for Program {
         }
 
         // Write variable names indexed by their offset
-        for (i, v) in self.var_names.names.iter().enumerate() {
+        for (i, v) in self.var_names.names().iter().enumerate() {
             writeln!(f, "V{}: {}", i, v)?;
         }
 

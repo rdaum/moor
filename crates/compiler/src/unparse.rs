@@ -20,7 +20,7 @@ use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
 
-use super::labels::Names;
+use crate::names::Names;
 
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]

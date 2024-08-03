@@ -676,7 +676,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Write variable names indexed by their offset
     disassembly.push(v_str("VARIABLES:"));
-    for (i, v) in program.var_names.names.iter().enumerate() {
+    for (i, v) in program.var_names.names().iter().enumerate() {
         disassembly.push(v_string(format!("{: >3}: {}", i, v)));
     }
 
