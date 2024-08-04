@@ -24,6 +24,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use moor_compiler::compile;
 use moor_db_wiredtiger::WiredTigerDB;
 use moor_kernel::builtins::BuiltinRegistry;
+use moor_kernel::config::Config;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_kernel::tasks::task_scheduler_client::TaskSchedulerClient;
 use moor_kernel::tasks::vm_host::{VMHostResponse, VmHost};
@@ -109,6 +110,8 @@ fn execute(
     vm_host.reset_ticks();
     vm_host.reset_time();
 
+    let config = Arc::new(Config::default());
+
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {
         match vm_host.exec_interpreter(
@@ -117,6 +120,7 @@ fn execute(
             task_scheduler_client.clone(),
             session.clone(),
             Arc::new(BuiltinRegistry::new()),
+            config.clone(),
         ) {
             VMHostResponse::ContinueOk => {
                 continue;
