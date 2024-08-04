@@ -190,6 +190,13 @@ struct Args {
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
+
+    #[arg(
+        long,
+        help = "Enable strict mode, which constraints behaviours to original LambdaMOO",
+        default_value = "false"
+    )]
+    strict_mode: bool,
 }
 
 fn main() -> Result<(), Report> {
@@ -295,6 +302,7 @@ fn main() -> Result<(), Report> {
     let config = Config {
         textdump_output: args.textdump_out,
         textdump_encoding: args.textdump_encoding,
+        strict_mode: args.strict_mode,
     };
 
     let tasks_db: Box<dyn TasksDb> = match args.db_flavour {

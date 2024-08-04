@@ -20,6 +20,11 @@ use std::path::PathBuf;
 
 #[derive(Debug, Default)]
 pub struct Config {
+    /// Whether to run in a strict mode which ties the server to the original LambdaMOO behaviour,
+    /// or to allow for more modern features.
+    pub strict_mode: bool,
+    /// Where to write periodic textdumps of the database.
     pub textdump_output: Option<PathBuf>,
+    /// What encoding to use for textdumps (ISO-8859-1 or UTF-8).
     pub textdump_encoding: EncodingMode,
 }
