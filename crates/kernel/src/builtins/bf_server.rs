@@ -35,6 +35,7 @@ use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::ExecutionResult;
 use moor_values::tasks::TaskId;
+use moor_values::var::VarType::TYPE_STR;
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(
@@ -57,10 +58,12 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(player) = player else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let msg = bf_args.args[1].variant();
-    let Variant::Str(msg) = msg else {
+
+    // If in "strict" mode `notify` can only send text.
+    // Otherwise, it can send any value, and it's up to the host/client to interpret it.
+    if bf_args.config.strict_mode && bf_args.args[1].type_id() != TYPE_STR {
         return Err(BfErr::Code(E_TYPE));
-    };
+    }
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
     bf_args
@@ -69,7 +72,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_obj_owner_perms(*player)
         .map_err(world_state_bf_err)?;
 
-    let event = NarrativeEvent::notify_text(bf_args.exec_state.caller(), msg.to_string());
+    let event = NarrativeEvent::notify(bf_args.exec_state.caller(), bf_args.args[1].clone());
     bf_args.task_scheduler_client.notify(*player, event);
 
     // MOO docs say this should return none, but in reality it returns 1?

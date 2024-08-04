@@ -252,7 +252,7 @@ fn console_loop(
                     printer
                         .print(
                             (match msg.event() {
-                                moor_values::tasks::Event::TextNotify(s) => s,
+                                moor_values::tasks::Event::Notify(s) => s,
                             })
                             .to_string(),
                         )
