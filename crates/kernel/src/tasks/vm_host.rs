@@ -38,6 +38,7 @@ use moor_values::var::{List, Objid};
 use moor_values::AsByteBuffer;
 
 use crate::builtins::BuiltinRegistry;
+use crate::config::Config;
 use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
@@ -223,6 +224,7 @@ impl VmHost {
         task_scheduler_client: TaskSchedulerClient,
         session: Arc<dyn Session>,
         builtin_registry: Arc<BuiltinRegistry>,
+        config: Arc<Config>,
     ) -> VMHostResponse {
         self.vm_exec_state.task_id = task_id;
 
@@ -230,6 +232,7 @@ impl VmHost {
             task_scheduler_client: task_scheduler_client.clone(),
             builtin_registry,
             max_stack_depth: self.max_stack_depth,
+            config,
         };
 
         // Check existing ticks and seconds, and abort the task if we've exceeded the limits.

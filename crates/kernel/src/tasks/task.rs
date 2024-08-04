@@ -46,6 +46,7 @@ use moor_values::var::{List, Objid};
 use moor_values::{NOTHING, SYSTEM_OBJECT};
 
 use crate::builtins::BuiltinRegistry;
+use crate::config::Config;
 use crate::matching::match_env::MatchEnvironmentParseMatcher;
 use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::{parse_command, ParseCommandError, ParsedCommand};
@@ -114,6 +115,7 @@ impl Task {
         session: Arc<dyn Session>,
         mut world_state: Box<dyn WorldState>,
         builtin_registry: Arc<BuiltinRegistry>,
+        config: Arc<Config>,
     ) {
         while task.vm_host.is_running() {
             // Check kill switch.
@@ -127,6 +129,7 @@ impl Task {
                 session.clone(),
                 world_state.as_mut(),
                 builtin_registry.clone(),
+                config.clone(),
             ) {
                 task = continuation_task;
             } else {
@@ -149,6 +152,7 @@ impl Task {
         session: Arc<dyn Session>,
         world_state: &mut dyn WorldState,
         builtin_registry: Arc<BuiltinRegistry>,
+        config: Arc<Config>,
     ) -> Option<Self> {
         // Call the VM
         let vm_exec_result = self.vm_host.exec_interpreter(
@@ -157,6 +161,7 @@ impl Task {
             task_scheduler_client.clone(),
             session,
             builtin_registry,
+            config,
         );
 
         // Having done that, what should we now do?
@@ -654,6 +659,7 @@ mod tests {
     use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
     use crate::builtins::BuiltinRegistry;
+    use crate::config::Config;
     use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::task::Task;
     use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
@@ -790,6 +796,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // Scheduler should have received a TaskSuccess message.
@@ -814,6 +821,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // Scheduler should have received a TaskException message.
@@ -838,6 +846,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // Scheduler should have received a TaskException message.
@@ -872,6 +881,7 @@ mod tests {
             session.clone(),
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // Scheduler should have received a TaskSuspend message.
@@ -893,6 +903,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
@@ -915,6 +926,7 @@ mod tests {
             session.clone(),
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // Scheduler should have received a TaskRequestInput message, and it should contain the task.
@@ -936,6 +948,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // Scheduler should have received a TaskSuccess message.
@@ -971,6 +984,7 @@ mod tests {
                 session,
                 tx,
                 Arc::new(BuiltinRegistry::new()),
+                Arc::new(Config::default()),
             );
         });
 
@@ -1019,6 +1033,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // Scheduler should have received a NoCommandMatch
@@ -1051,6 +1066,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // This should be a success, it got handled
@@ -1081,6 +1097,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // This should be a success, it got handled
@@ -1112,6 +1129,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // This should be a success, it got handled
@@ -1151,6 +1169,7 @@ mod tests {
             session,
             tx,
             Arc::new(BuiltinRegistry::new()),
+            Arc::new(Config::default()),
         );
 
         // This should be a success, it got handled

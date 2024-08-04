@@ -129,6 +129,7 @@ pub mod vm_test_utils {
     use moor_values::SYSTEM_OBJECT;
 
     use crate::builtins::BuiltinRegistry;
+    use crate::config::Config;
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
@@ -152,6 +153,8 @@ pub mod vm_test_utils {
 
         fun(world_state, &mut vm_host);
 
+        let config = Arc::new(Config::default());
+
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
             match vm_host.exec_interpreter(
@@ -160,6 +163,7 @@ pub mod vm_test_utils {
                 task_scheduler_client.clone(),
                 session.clone(),
                 builtins.clone(),
+                config.clone(),
             ) {
                 VMHostResponse::ContinueOk => {
                     continue;

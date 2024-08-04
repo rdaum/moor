@@ -18,7 +18,7 @@
 use crate::textdump::EncodingMode;
 use std::path::PathBuf;
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Config {
     /// Whether to run in a strict mode which ties the server to the original LambdaMOO behaviour,
     /// or to allow for more modern features.

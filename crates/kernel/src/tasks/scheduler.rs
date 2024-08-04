@@ -85,7 +85,7 @@ pub struct Scheduler {
     scheduler_sender: Sender<SchedulerClientMsg>,
     scheduler_receiver: Receiver<SchedulerClientMsg>,
 
-    config: Config,
+    config: Arc<Config>,
 
     running: bool,
     database: Box<dyn Database>,
@@ -169,7 +169,7 @@ impl Scheduler {
             database,
             next_task_id: Default::default(),
             task_q,
-            config,
+            config: Arc::new(config),
             task_control_sender,
             task_control_receiver,
             scheduler_sender,
@@ -202,6 +202,7 @@ impl Scheduler {
                     &self.task_control_sender,
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
+                    self.config.clone(),
                 ) {
                     error!(?task_id, ?e, "Error resuming task");
                 }
@@ -370,6 +371,7 @@ impl Scheduler {
                     &self.task_control_sender,
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
+                    self.config.clone(),
                 );
                 reply
                     .send(result)
@@ -405,6 +407,7 @@ impl Scheduler {
                     &self.task_control_sender,
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
+                    self.config.clone(),
                 );
                 reply
                     .send(result)
@@ -441,6 +444,7 @@ impl Scheduler {
                     &self.task_control_sender,
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
+                    self.config.clone(),
                 );
                 reply.send(response).expect("Could not send input reply");
             }
@@ -472,6 +476,7 @@ impl Scheduler {
                     &self.task_control_sender,
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
+                    self.config.clone(),
                 );
                 reply
                     .send(result)
@@ -498,6 +503,7 @@ impl Scheduler {
                     &self.task_control_sender,
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
+                    self.config.clone(),
                 );
                 reply
                     .send(result)
@@ -608,6 +614,7 @@ impl Scheduler {
                     self.database.as_ref(),
                     &self.server_options,
                     self.builtin_registry.clone(),
+                    self.config.clone(),
                 );
             }
             TaskControlMsg::TaskVerbNotFound(this, verb) => {
@@ -802,6 +809,7 @@ impl Scheduler {
                     &self.task_control_sender,
                     self.database.as_ref(),
                     self.builtin_registry.clone(),
+                    self.config.clone(),
                 );
                 if let Err(e) = result_sender.send(rr) {
                     error!(?e, "Could not send resume task result to requester");
@@ -919,6 +927,7 @@ impl Scheduler {
             &self.task_control_sender,
             self.database.as_ref(),
             self.builtin_registry.clone(),
+            self.config.clone(),
         ) {
             Ok(th) => th,
             Err(e) => {
@@ -981,6 +990,7 @@ impl TaskQ {
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         builtin_registry: Arc<BuiltinRegistry>,
+        config: Arc<Config>,
     ) -> Result<TaskHandle, SchedulerError> {
         let (sender, receiver) = oneshot::channel();
 
@@ -1071,6 +1081,7 @@ impl TaskQ {
                     session,
                     world_state,
                     builtin_registry,
+                    config,
                 );
                 trace!(?task_id, "Completed task");
             })
@@ -1097,6 +1108,7 @@ impl TaskQ {
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         builtin_registry: Arc<BuiltinRegistry>,
+        config: Arc<Config>,
     ) -> Result<(), SchedulerError> {
         // Take a task out of a suspended state and start running it again.
         // Means:
@@ -1137,6 +1149,7 @@ impl TaskQ {
                     session,
                     world_state,
                     builtin_registry,
+                    config,
                 );
                 trace!(?task_id, "Completed task");
             })
@@ -1174,6 +1187,7 @@ impl TaskQ {
         database: &dyn Database,
         server_options: &ServerOptions,
         builtin_registry: Arc<BuiltinRegistry>,
+        config: Arc<Config>,
     ) {
         // Make sure the old thread is dead.
         task.kill_switch.store(true, Ordering::SeqCst);
@@ -1200,6 +1214,7 @@ impl TaskQ {
             control_sender,
             database,
             builtin_registry,
+            config,
         ) {
             error!(?e, "Could not restart task");
         }
@@ -1269,6 +1284,7 @@ impl TaskQ {
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         builtin_registry: Arc<BuiltinRegistry>,
+        config: Arc<Config>,
     ) -> Var {
         // Task can't resume itself, it couldn't be queued. Builtin should not have sent this
         // request.
@@ -1305,6 +1321,7 @@ impl TaskQ {
                 control_sender,
                 database,
                 builtin_registry,
+                config,
             )
             .is_err()
         {
