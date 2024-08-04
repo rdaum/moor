@@ -47,10 +47,11 @@ const VF_ASPEC_THIS: u16 = 2;
 /// Note that LambdaMOO imports are always in ISO-8859-1, but exports can be in UTF-8.
 /// To make things backwards compatible to LambdaMOO servers, choose ISO-8859-1.
 /// The default is UTF-8.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum EncodingMode {
     // windows-1252 / ISO-8859-1
     ISO8859_1,
+    #[default]
     UTF8,
 }
 

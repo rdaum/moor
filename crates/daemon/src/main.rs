@@ -80,7 +80,7 @@ struct Args {
     #[arg(
         long,
         value_name = "textdump-encoding",
-        help = "Encoding to use for reading textdump files. utf8 or iso8859-1. \
+        help = "Encoding to use for reading and writing textdump files. utf8 or iso8859-1. \
           LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so for full compatibility, \
           choose iso8859-1.
           If you know your textdump contains no such strings, or if your textdump is from moor choose utf8,
@@ -294,6 +294,7 @@ fn main() -> Result<(), Report> {
 
     let config = Config {
         textdump_output: args.textdump_out,
+        textdump_encoding: args.textdump_encoding,
     };
 
     let tasks_db: Box<dyn TasksDb> = match args.db_flavour {

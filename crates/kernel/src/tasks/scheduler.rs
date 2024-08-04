@@ -55,7 +55,7 @@ use crate::tasks::{
     ServerOptions, TaskHandle, TaskStart, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS,
     DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
 };
-use crate::textdump::{make_textdump, EncodingMode, TextdumpWriter};
+use crate::textdump::{make_textdump, TextdumpWriter};
 use crate::vm::Fork;
 use moor_values::tasks::SchedulerError::{
     CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
@@ -844,6 +844,8 @@ impl Scheduler {
             return Err(SchedulerError::CouldNotStartTask);
         };
 
+        let encoding_mode = self.config.textdump_encoding;
+
         let loader_client = {
             match self.database.loader_client() {
                 Ok(tx) => tx,
@@ -870,7 +872,7 @@ impl Scheduler {
                 );
 
                 debug!(?textdump_path, "Writing textdump..");
-                let mut writer = TextdumpWriter::new(&mut output, EncodingMode::UTF8);
+                let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
                 if let Err(e) = writer.write_textdump(&textdump) {
                     error!(?e, "Could not write textdump");
                     return;
