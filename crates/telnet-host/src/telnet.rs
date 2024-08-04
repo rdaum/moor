@@ -32,7 +32,7 @@ use uuid::Uuid;
 
 use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_values::util::parse_into_words;
-use moor_values::var::Objid;
+use moor_values::var::{Objid, Variant};
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::ConnectionEstablish;
@@ -142,8 +142,15 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            let Event::TextNotify(msg_text) = msg;
-                            self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
+                            let Event::Notify(msg) = msg;
+
+                            // Strings output as text lines to the client, otherwise send the
+                            // literal form (for e.g. lists, objrefs, etc)
+                            if let Variant::Str(msg_text) = msg.variant() {
+                                self.write.send(msg_text.to_string()).await.with_context(|| "Unable to send message to client")?;
+                            } else {
+                                self.write.send(msg.to_literal()).await.with_context(|| "Unable to send message to client")?;
+                            }
                         }
                         ConnectionEvent::RequestInput(_request_id) => {
                             bail!("RequestInput before login");
@@ -307,8 +314,15 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            let Event::TextNotify(msg_text) = msg;
-                            self.write.send(msg_text).await.with_context(|| "Unable to send message to client")?;
+                            let Event::Notify(msg) = msg;
+
+                            // Strings output as text lines to the client, otherwise send the
+                            // literal form (for e.g. lists, objrefs, etc)
+                            if let Variant::Str(msg_text) = msg.variant() {
+                                self.write.send(msg_text.to_string()).await.with_context(|| "Unable to send message to client")?;
+                            } else {
+                                self.write.send(msg.to_literal()).await.with_context(|| "Unable to send message to client")?;
+                            }
                         }
                         ConnectionEvent::RequestInput(request_id) => {
                             // Server is requesting that the next line of input get sent through as a response to this request.

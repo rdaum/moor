@@ -260,6 +260,7 @@ impl VMExecState {
             // TODO: avoid copy here by using List inside BfCallState
             args: args.iter().collect(),
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
+            config: exec_args.config.clone(),
         };
 
         let call_results = match bf.call(&mut bf_args) {
@@ -308,6 +309,7 @@ impl VMExecState {
             // TODO: avoid copy here by using List inside BfCallState
             args: args.iter().collect(),
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
+            config: exec_args.config.clone(),
         };
 
         match bf.call(&mut bf_args) {

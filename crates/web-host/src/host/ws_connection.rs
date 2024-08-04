@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::host::serialize_var;
+use crate::host::{serialize_var, var_as_json};
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
@@ -26,6 +26,7 @@ use rpc_common::ConnectionEvent;
 use rpc_common::{
     AuthToken, ClientToken, ConnectType, RpcRequest, RpcRequestError, RpcResponse, RpcResult,
 };
+use serde_json::Value;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 use tmq::subscribe::Subscribe;
@@ -51,7 +52,7 @@ pub struct NarrativeOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     system_message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
+    message: Option<Value>,
     server_time: SystemTime,
 }
 
@@ -124,7 +125,7 @@ impl WebSocketConnection {
                                 origin_player: author.0,
                                 system_message: None,
                                 message: Some(match msg {
-                                    Event::TextNotify(msg) => msg,
+                                    Event::Notify(msg) => var_as_json(&msg),
                                 }),
                                 server_time: event.timestamp(),
                             }).await;
