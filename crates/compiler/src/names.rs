@@ -23,7 +23,7 @@ pub struct Name(pub u16);
 
 // TODO: create a proper compiler symbol table which tracks the entrance and exit of lexical scopes
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct Names {
     /// The list of names in the program, in order of their appearance, with the offsets into the
     /// vector being the unique identifier for the name.
