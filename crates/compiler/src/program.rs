@@ -97,7 +97,7 @@ impl Display for Program {
         }
 
         // Write variable names indexed by their offset
-        for (i, v) in self.var_names.names().iter().enumerate() {
+        for (i, v) in self.var_names.symbols().iter().enumerate() {
             writeln!(f, "V{}: {}", i, v)?;
         }
 

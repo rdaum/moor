@@ -25,9 +25,9 @@ use moor_values::var::Variant;
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
-use crate::builtins::make_builtin_labels;
+use crate::builtins::make_builtin_offsets;
 use crate::labels::{JumpLabel, Label, Offset};
-use crate::names::{Name, Names};
+use crate::names::{Name, Names, UnboundName};
 use crate::opcode::Op::Jump;
 use crate::opcode::{Op, ScatterArgs, ScatterLabel};
 use crate::parse::parse_program;
@@ -47,21 +47,27 @@ pub struct CodegenState {
     pub(crate) ops: Vec<Op>,
     pub(crate) jumps: Vec<JumpLabel>,
     pub(crate) var_names: Names,
+    pub(crate) binding_mappings: HashMap<UnboundName, Name>,
     pub(crate) literals: Vec<Var>,
     pub(crate) loops: Vec<Loop>,
     pub(crate) saved_stack: Option<Offset>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
-    pub(crate) builtins: HashMap<Symbol, Name>,
+    pub(crate) builtins: HashMap<Symbol, usize>,
     pub(crate) fork_vectors: Vec<Vec<Op>>,
     pub(crate) line_number_spans: Vec<(usize, usize)>,
 }
 
 impl CodegenState {
-    pub fn new(var_names: Names, builtins: HashMap<Symbol, Name>) -> Self {
+    pub fn new(
+        var_names: Names,
+        binding_mappings: HashMap<UnboundName, Name>,
+        builtins: HashMap<Symbol, usize>,
+    ) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
+            binding_mappings,
             var_names,
             literals: vec![],
             loops: vec![],
@@ -186,7 +192,7 @@ impl CodegenState {
                     continue;
                 }
                 Expr::Id(name) => {
-                    self.emit(Op::Put(*name));
+                    self.emit(Op::Put(self.binding_mappings[name]));
                     break;
                 }
                 Expr::Prop {
@@ -220,16 +226,16 @@ impl CodegenState {
             .iter()
             .map(|s| {
                 let kind_label = match s.kind {
-                    ScatterKind::Required => ScatterLabel::Required(s.id),
+                    ScatterKind::Required => ScatterLabel::Required(self.binding_mappings[&s.id]),
                     ScatterKind::Optional => ScatterLabel::Optional(
-                        s.id,
+                        self.binding_mappings[&s.id],
                         if s.expr.is_some() {
                             Some(self.make_jump_label(None))
                         } else {
                             None
                         },
                     ),
-                    ScatterKind::Rest => ScatterLabel::Rest(s.id),
+                    ScatterKind::Rest => ScatterLabel::Rest(self.binding_mappings[&s.id]),
                 };
                 (s, kind_label)
             })
@@ -246,7 +252,7 @@ impl CodegenState {
                 }
                 self.commit_jump_label(label);
                 self.generate_expr(s.expr.as_ref().unwrap())?;
-                self.emit(Op::Put(s.id));
+                self.emit(Op::Put(self.binding_mappings[&s.id]));
                 self.emit(Op::Pop);
                 self.pop_stack(1);
             }
@@ -276,7 +282,7 @@ impl CodegenState {
             }
             Expr::Id(id) => {
                 if indexed_above {
-                    self.emit(Op::Push(*id));
+                    self.emit(Op::Push(self.binding_mappings[id]));
                     self.push_stack(1);
                 }
             }
@@ -335,7 +341,7 @@ impl CodegenState {
                 self.push_stack(1);
             }
             Expr::Id(ident) => {
-                self.emit(Op::Push(*ident));
+                self.emit(Op::Push(self.binding_mappings[ident]));
                 self.push_stack(1);
             }
             Expr::And(left, right) => {
@@ -538,12 +544,15 @@ impl CodegenState {
                 // we use 0 here to make it easier to implement the ForList instruction.
                 self.emit(Op::ImmInt(0)); /* loop list index... */
                 self.push_stack(1);
-                let loop_top = self.make_jump_label(Some(*id));
+                let loop_top = self.make_jump_label(Some(self.binding_mappings[id]));
                 self.commit_jump_label(loop_top);
-                let end_label = self.make_jump_label(Some(*id));
-                self.emit(Op::ForList { id: *id, end_label });
+                let end_label = self.make_jump_label(Some(self.binding_mappings[id]));
+                self.emit(Op::ForList {
+                    id: self.binding_mappings[id],
+                    end_label,
+                });
                 self.loops.push(Loop {
-                    loop_name: Some(*id),
+                    loop_name: Some(self.binding_mappings[id]),
                     top_label: loop_top,
                     top_stack: self.cur_stack.into(),
                     bottom_label: end_label,
@@ -560,12 +569,15 @@ impl CodegenState {
             StmtNode::ForRange { from, to, id, body } => {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
-                let loop_top = self.make_jump_label(Some(*id));
-                let end_label = self.make_jump_label(Some(*id));
+                let loop_top = self.make_jump_label(Some(self.binding_mappings[id]));
+                let end_label = self.make_jump_label(Some(self.binding_mappings[id]));
                 self.commit_jump_label(loop_top);
-                self.emit(Op::ForRange { id: *id, end_label });
+                self.emit(Op::ForRange {
+                    id: self.binding_mappings[id],
+                    end_label,
+                });
                 self.loops.push(Loop {
-                    loop_name: Some(*id),
+                    loop_name: Some(self.binding_mappings[id]),
                     top_label: loop_top,
                     top_stack: self.cur_stack.into(),
                     bottom_label: end_label,
@@ -584,21 +596,23 @@ impl CodegenState {
                 condition,
                 body,
             } => {
-                let loop_start_label = self.make_jump_label(*id);
+                let loop_start_label =
+                    self.make_jump_label(id.as_ref().map(|id| self.binding_mappings[id]));
                 self.commit_jump_label(loop_start_label);
 
-                let loop_end_label = self.make_jump_label(*id);
+                let loop_end_label =
+                    self.make_jump_label(id.as_ref().map(|id| self.binding_mappings[id]));
                 self.generate_expr(condition)?;
                 match id {
                     None => self.emit(Op::While(loop_end_label)),
                     Some(id) => self.emit(Op::WhileId {
-                        id: *id,
+                        id: self.binding_mappings[id],
                         end_label: loop_end_label,
                     }),
                 }
                 self.pop_stack(1);
                 self.loops.push(Loop {
-                    loop_name: *id,
+                    loop_name: id.as_ref().map(|id| self.binding_mappings[id]),
                     top_label: loop_start_label,
                     top_stack: self.cur_stack.into(),
                     bottom_label: loop_end_label,
@@ -626,7 +640,7 @@ impl CodegenState {
                 let fv_id = self.add_fork_vector(forked_ops);
                 self.ops = stashed_ops;
                 self.emit(Op::Fork {
-                    id: *id,
+                    id: id.as_ref().map(|id| self.binding_mappings[id]),
                     fv_offset: fv_id,
                 });
                 self.pop_stack(1);
@@ -651,7 +665,7 @@ impl CodegenState {
                     self.commit_jump_label(labels[i]);
                     self.push_stack(1);
                     if ex.id.is_some() {
-                        self.emit(Op::Put(ex.id.unwrap()));
+                        self.emit(Op::Put(self.binding_mappings[ex.id.as_ref().unwrap()]));
                     }
                     self.emit(Op::Pop);
                     self.pop_stack(1);
@@ -689,7 +703,8 @@ impl CodegenState {
                 })
             }
             StmtNode::Break { exit: Some(l) } => {
-                let l = self.find_loop(l).expect("invalid loop for break/continue");
+                let l = self.binding_mappings[l];
+                let l = self.find_loop(&l).expect("invalid loop for break/continue");
                 self.emit(Op::ExitId(l.bottom_label));
             }
             StmtNode::Continue { exit: None } => {
@@ -700,7 +715,8 @@ impl CodegenState {
                 })
             }
             StmtNode::Continue { exit: Some(l) } => {
-                let l = self.find_loop(l).expect("invalid loop for break/continue");
+                let l = self.binding_mappings[l];
+                let l = self.find_loop(&l).expect("invalid loop for break/continue");
                 self.emit(Op::ExitId(l.top_label));
             }
             StmtNode::Return(Some(expr)) => {
@@ -756,11 +772,11 @@ pub fn compile(program: &str) -> Result<Program, CompileError> {
     let compile_span = tracing::trace_span!("compile");
     let _compile_guard = compile_span.enter();
 
-    let builtins = make_builtin_labels();
+    let builtins = make_builtin_offsets();
     let parse = parse_program(program)?;
 
     // Generate the code into 'cg_state'.
-    let mut cg_state = CodegenState::new(parse.names, builtins);
+    let mut cg_state = CodegenState::new(parse.names, parse.names_mapping, builtins);
     for x in parse.stmts {
         cg_state.generate_stmt(&x)?;
     }

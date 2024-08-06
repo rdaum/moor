@@ -13,19 +13,18 @@
 //
 
 use moor_values::var::Symbol;
-use std::collections::{HashMap, VecDeque};
-
 use moor_values::var::{v_err, v_int, v_none, v_objid, Var};
 use moor_values::var::{v_float, Variant};
+use std::collections::{HashMap, VecDeque};
 
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
     UnaryOp,
 };
-use crate::builtins::make_labels_builtins;
-use crate::decompile::DecompileError::{MalformedProgram, NameNotFound};
+use crate::builtins::make_offsets_builtins;
+use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::labels::{JumpLabel, Label};
-use crate::names::Name;
+use crate::names::{Name, UnboundName, UnboundNames};
 use crate::opcode::{Op, ScatterLabel};
 use crate::parse::Parse;
 use crate::program::Program;
@@ -36,6 +35,8 @@ pub enum DecompileError {
     UnexpectedProgramEnd,
     #[error("name not found: {0:?}")]
     NameNotFound(Name),
+    #[error("builtin function not found: #{0:?}")]
+    BuiltinNotFound(usize),
     #[error("label not found: {0:?}")]
     LabelNotFound(Label),
     #[error("malformed program: {0}")]
@@ -52,8 +53,9 @@ struct Decompile {
     /// The current position in the opcode stream as it is being decompiled.
     position: usize,
     expr_stack: VecDeque<Expr>,
-    builtins: HashMap<Name, Symbol>,
+    builtins: HashMap<usize, Symbol>,
     statements: Vec<Stmt>,
+    names_mapping: HashMap<Name, UnboundName>,
 }
 
 impl Decompile {
@@ -263,6 +265,7 @@ impl Decompile {
                 };
                 let list = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&label)?;
+                let id = self.decompile_name(&id)?;
                 self.statements.push(Stmt::new(
                     StmtNode::ForList {
                         id,
@@ -276,6 +279,7 @@ impl Decompile {
                 let to = self.pop_expr()?;
                 let from = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&end_label)?;
+                let id = self.decompile_name(&id)?;
                 self.statements.push(Stmt::new(
                     StmtNode::ForRange { id, from, to, body },
                     line_num,
@@ -311,6 +315,7 @@ impl Decompile {
                 //      a jump back to the conditional expression
                 let cond = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&loop_end_label)?;
+                let id = self.decompile_name(&id)?;
                 self.statements.push(Stmt::new(
                     StmtNode::While {
                         id: Some(id),
@@ -334,13 +339,15 @@ impl Decompile {
                 let jump_label = self.find_jump(&label)?;
                 // Whether it's a break or a continue depends on whether the jump is forward or
                 // backward from the current position.
+                let jump_label_name =
+                    self.decompile_name(&jump_label.name.expect("jump label must have name"))?;
                 let s = if jump_label.position.0 < self.position as u16 {
                     StmtNode::Continue {
-                        exit: Some(jump_label.name.expect("jump label must have name")),
+                        exit: Some(jump_label_name),
                     }
                 } else {
                     StmtNode::Break {
-                        exit: Some(jump_label.name.expect("jump label must have name")),
+                        exit: Some(jump_label_name),
                     }
                 };
 
@@ -359,11 +366,13 @@ impl Decompile {
                     expr_stack: self.expr_stack.clone(),
                     builtins: self.builtins.clone(),
                     statements: vec![],
+                    names_mapping: self.names_mapping.clone(),
                 };
                 let fv_len = self.program.fork_vectors[fv_offset.0 as usize].len();
                 while fork_decompile.position < fv_len {
                     fork_decompile.decompile()?;
                 }
+                let id = id.map(|x| self.decompile_name(&x).unwrap());
                 self.statements.push(Stmt::new(
                     StmtNode::Fork {
                         id,
@@ -397,10 +406,12 @@ impl Decompile {
                 self.push_expr(Expr::Value(self.find_literal(&literal_label)?));
             }
             Op::Push(varname) => {
+                let varname = self.decompile_name(&varname)?;
                 self.push_expr(Expr::Id(varname));
             }
             Op::Put(varname) => {
                 let expr = self.pop_expr()?;
+                let varname = self.decompile_name(&varname)?;
                 self.push_expr(Expr::Assign {
                     left: Box::new(Expr::Id(varname)),
                     right: Box::new(expr),
@@ -510,7 +521,7 @@ impl Decompile {
             Op::FuncCall { id } => {
                 let args = self.pop_expr()?;
                 let Some(builtin) = self.builtins.get(&id) else {
-                    return Err(NameNotFound(id));
+                    return Err(BuiltinNotFound(id));
                 };
 
                 // Have to reconstruct arg list ...
@@ -581,16 +592,22 @@ impl Decompile {
                 let mut label_pos = 0;
                 for scatter_label in sa.labels.iter() {
                     let scatter_item = match scatter_label {
-                        ScatterLabel::Required(id) => ScatterItem {
-                            kind: ScatterKind::Required,
-                            id: *id,
-                            expr: None,
-                        },
-                        ScatterLabel::Rest(id) => ScatterItem {
-                            kind: ScatterKind::Rest,
-                            id: *id,
-                            expr: None,
-                        },
+                        ScatterLabel::Required(id) => {
+                            let id = self.decompile_name(id)?;
+                            ScatterItem {
+                                kind: ScatterKind::Required,
+                                id,
+                                expr: None,
+                            }
+                        }
+                        ScatterLabel::Rest(id) => {
+                            let id = self.decompile_name(id)?;
+                            ScatterItem {
+                                kind: ScatterKind::Rest,
+                                id,
+                                expr: None,
+                            }
+                        }
                         ScatterLabel::Optional(id, Some(_)) => {
                             // The labels inside each optional scatters are jumps to the _start_ of the
                             // expression inside it, so to know the end of the expression we will look at the
@@ -615,17 +632,21 @@ impl Decompile {
                             // a hanging pop.
                             let _ = self.next()?;
 
+                            let id = self.decompile_name(id)?;
                             ScatterItem {
                                 kind: ScatterKind::Optional,
-                                id: *id,
+                                id,
                                 expr: Some(*right),
                             }
                         }
-                        ScatterLabel::Optional(id, None) => ScatterItem {
-                            kind: ScatterKind::Optional,
-                            id: *id,
-                            expr: None,
-                        },
+                        ScatterLabel::Optional(id, None) => {
+                            let id = self.decompile_name(id)?;
+                            ScatterItem {
+                                kind: ScatterKind::Optional,
+                                id,
+                                expr: None,
+                            }
+                        }
                     };
                     scatter_items.push(scatter_item);
                 }
@@ -674,6 +695,7 @@ impl Decompile {
                 for arm in &mut except_arms {
                     let mut next_opcode = self.next()?;
                     if let Op::Put(varname) = next_opcode {
+                        let varname = self.decompile_name(&varname)?;
                         arm.id = Some(varname);
                         next_opcode = self.next()?;
                     }
@@ -840,11 +862,31 @@ impl Decompile {
         }
         Ok(())
     }
+
+    fn decompile_name(&self, name: &Name) -> Result<UnboundName, DecompileError> {
+        self.names_mapping
+            .get(name)
+            .cloned()
+            .ok_or_else(|| DecompileError::NameNotFound(name.clone()))
+    }
 }
 
 /// Reconstruct a parse tree from opcodes.
 pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
-    let builtins = make_labels_builtins();
+    // Reconstruct a fake "unbound names" from the program's var_names.
+    // TODO: this is broken for scopes, but we don't have a way to represent that yet
+    //  inside bound names.
+    let mut unbound_names = UnboundNames::new();
+    let mut bound_to_unbound = HashMap::new();
+    let mut unbound_to_bound = HashMap::new();
+    for bound_name in program.var_names.names() {
+        let n = program.var_names.name_of(&bound_name).unwrap();
+        let ub = unbound_names.find_or_add_name_global(n.as_str());
+        bound_to_unbound.insert(bound_name, ub);
+        unbound_to_bound.insert(ub, bound_name);
+    }
+
+    let builtins = make_offsets_builtins();
     let mut decompile = Decompile {
         program: program.clone(),
         fork_vector: None,
@@ -852,6 +894,7 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
         expr_stack: Default::default(),
         builtins,
         statements: vec![],
+        names_mapping: bound_to_unbound,
     };
     let opcode_vector_len = decompile.opcode_vector().len();
     while decompile.position < opcode_vector_len {
@@ -861,6 +904,8 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     Ok(Parse {
         stmts: decompile.statements,
         names: program.var_names.clone(),
+        unbound_names,
+        names_mapping: unbound_to_bound,
     })
 }
 

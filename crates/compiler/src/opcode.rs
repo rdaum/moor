@@ -39,7 +39,7 @@ pub enum Op {
     ForList { id: Name, end_label: Label },
     ForRange { id: Name, end_label: Label },
     Fork { fv_offset: Offset, id: Option<Name> },
-    FuncCall { id: Name },
+    FuncCall { id: usize },
     Ge,
     GetProp,
     Gt,

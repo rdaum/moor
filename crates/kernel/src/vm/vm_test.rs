@@ -33,11 +33,11 @@ mod tests {
     use crate::builtins::BuiltinRegistry;
     use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::vm_test_utils::call_verb;
-    use moor_compiler::compile;
     use moor_compiler::Names;
     use moor_compiler::Op;
     use moor_compiler::Op::*;
     use moor_compiler::Program;
+    use moor_compiler::{compile, UnboundNames};
     use moor_db_wiredtiger::WiredTigerDB;
     use moor_values::var::Symbol;
     use test_case::test_case;
@@ -231,8 +231,10 @@ mod tests {
 
     #[test]
     fn test_list_set_range() {
-        let mut var_names = Names::new();
-        let a = var_names.find_or_add_name("a");
+        let mut var_names = UnboundNames::new();
+        let a = var_names.find_or_add_name_global("a");
+        let (var_names, mapping) = var_names.bind();
+        let a = mapping[&a];
         let mut state = test_db_with_verb(
             "test",
             &mk_program(
@@ -313,9 +315,10 @@ mod tests {
 
     #[test]
     fn test_string_set_range() {
-        let mut var_names = Names::new();
-        let a = var_names.find_or_add_name("a");
-
+        let mut var_names = UnboundNames::new();
+        let a = var_names.find_or_add_name_global("a");
+        let (var_names, mapping) = var_names.bind();
+        let a = mapping[&a];
         let mut state = test_db_with_verb(
             "test",
             &mk_program(

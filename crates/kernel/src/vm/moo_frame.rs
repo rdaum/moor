@@ -208,21 +208,26 @@ impl MooStackFrame {
 
     #[inline]
     pub fn set_env(&mut self, id: &Name, v: Var) {
-        self.environment.set(id.0 as usize, v);
+        let env_offset = self
+            .program
+            .var_names
+            .offset_for(id)
+            .expect("variable not found");
+        self.environment.set(env_offset, v);
     }
 
     /// Return the value of a local variable.
     #[inline]
     pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
-        self.environment.get(id.0 as usize)
+        let offset = self.program.var_names.offset_for(id)?;
+        self.environment.get(offset)
     }
 
     #[inline]
-    pub fn set_var_offset(&mut self, offset: &Name, value: Var) -> Result<(), Error> {
-        if offset.0 as usize >= self.environment.len() {
-            return Err(E_VARNF);
-        }
-        self.environment.set(offset.0 as usize, value);
+    pub fn set_variable(&mut self, name: &Name, value: Var) -> Result<(), Error> {
+        let offset = self.program.var_names.offset_for(name).ok_or(E_VARNF)?;
+
+        self.environment.set(offset, value);
         Ok(())
     }
 

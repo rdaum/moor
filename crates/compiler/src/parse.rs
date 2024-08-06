@@ -15,6 +15,7 @@
 /// Kicks off the Pest parser and converts it into our AST.
 /// This is the main entry point for parsing.
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -36,9 +37,10 @@ use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
     UnaryOp,
 };
-use crate::names::Names;
+use crate::names::{Names, UnboundName, UnboundNames};
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
+use crate::Name;
 use moor_values::model::CompileError;
 
 pub mod moo {
@@ -51,16 +53,20 @@ pub mod moo {
 #[derive(Debug)]
 pub struct Parse {
     pub stmts: Vec<Stmt>,
+    pub unbound_names: UnboundNames,
     pub names: Names,
+    pub names_mapping: HashMap<UnboundName, Name>,
 }
 
 fn parse_atom(
-    names: Rc<RefCell<Names>>,
+    names: Rc<RefCell<UnboundNames>>,
     pairs: pest::iterators::Pair<Rule>,
 ) -> Result<Expr, CompileError> {
     match pairs.as_rule() {
         Rule::ident => {
-            let name = names.borrow_mut().find_or_add_name(pairs.as_str().trim());
+            let name = names
+                .borrow_mut()
+                .find_or_add_name_global(pairs.as_str().trim());
             Ok(Expr::Id(name))
         }
         Rule::object => {
@@ -116,7 +122,7 @@ fn parse_atom(
 }
 
 fn parse_exprlist(
-    names: Rc<RefCell<Names>>,
+    names: Rc<RefCell<UnboundNames>>,
     pairs: pest::iterators::Pairs<Rule>,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut args = vec![];
@@ -145,7 +151,7 @@ fn parse_exprlist(
 }
 
 fn parse_arglist(
-    names: Rc<RefCell<Names>>,
+    names: Rc<RefCell<UnboundNames>>,
     pairs: pest::iterators::Pairs<Rule>,
 ) -> Result<Vec<Arg>, CompileError> {
     let Some(first) = pairs.peek() else {
@@ -160,7 +166,7 @@ fn parse_arglist(
 }
 
 fn parse_except_codes(
-    names: Rc<RefCell<Names>>,
+    names: Rc<RefCell<UnboundNames>>,
     pairs: pest::iterators::Pair<Rule>,
 ) -> Result<CatchCodes, CompileError> {
     match pairs.as_rule() {
@@ -176,7 +182,7 @@ fn parse_except_codes(
 }
 
 fn parse_expr(
-    names: Rc<RefCell<Names>>,
+    names: Rc<RefCell<UnboundNames>>,
     pairs: pest::iterators::Pairs<Rule>,
 ) -> Result<Expr, CompileError> {
     let pratt = PrattParser::new()
@@ -384,7 +390,7 @@ fn parse_expr(
                         Rule::scatter_optional => {
                             let mut inner = scatter_item.into_inner();
                             let id = inner.next().unwrap().as_str();
-                            let id = names.borrow_mut().find_or_add_name(id);
+                            let id = names.borrow_mut().find_or_add_name_global(id);
                             let expr = inner
                                 .next()
                                 .map(|e| parse_expr(names.clone(), e.into_inner()).unwrap());
@@ -397,7 +403,7 @@ fn parse_expr(
                         Rule::scatter_target => {
                             let mut inner = scatter_item.into_inner();
                             let id = inner.next().unwrap().as_str();
-                            let id = names.borrow_mut().find_or_add_name(id);
+                            let id = names.borrow_mut().find_or_add_name_global(id);
                             items.push(ScatterItem {
                                 kind: ScatterKind::Required,
                                 id,
@@ -407,7 +413,7 @@ fn parse_expr(
                         Rule::scatter_rest => {
                             let mut inner = scatter_item.into_inner();
                             let id = inner.next().unwrap().as_str();
-                            let id = names.borrow_mut().find_or_add_name(id);
+                            let id = names.borrow_mut().find_or_add_name_global(id);
                             items.push(ScatterItem {
                                 kind: ScatterKind::Rest,
                                 id,
@@ -503,7 +509,7 @@ fn parse_expr(
 }
 
 fn parse_statement(
-    names: Rc<RefCell<Names>>,
+    names: Rc<RefCell<UnboundNames>>,
     pair: pest::iterators::Pair<Rule>,
 ) -> Result<Option<Stmt>, CompileError> {
     let line = pair.line_col().0;
@@ -533,7 +539,7 @@ fn parse_statement(
             let mut parts = pair.into_inner();
             let id = names
                 .borrow_mut()
-                .find_or_add_name(parts.next().unwrap().as_str());
+                .find_or_add_name_global(parts.next().unwrap().as_str());
             let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
             let body = parse_statements(names, parts.next().unwrap().into_inner())?;
             Ok(Some(Stmt::new(
@@ -620,7 +626,7 @@ fn parse_statement(
             let mut parts = pair.into_inner();
             let id = names
                 .borrow_mut()
-                .find_or_add_name(parts.next().unwrap().as_str());
+                .find_or_add_name_global(parts.next().unwrap().as_str());
             let clause = parts.next().unwrap();
             let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
             match clause.as_rule() {
@@ -665,9 +671,9 @@ fn parse_statement(
                         let (id, codes) = match clause.as_rule() {
                             Rule::labelled_except => {
                                 let mut my_parts = clause.into_inner();
-                                let exception = my_parts
-                                    .next()
-                                    .map(|id| names.borrow_mut().find_or_add_name(id.as_str()));
+                                let exception = my_parts.next().map(|id| {
+                                    names.borrow_mut().find_or_add_name_global(id.as_str())
+                                });
 
                                 let codes = parse_except_codes(
                                     names.clone(),
@@ -718,7 +724,7 @@ fn parse_statement(
             let mut parts = pair.into_inner();
             let id = names
                 .borrow_mut()
-                .find_or_add_name(parts.next().unwrap().as_str());
+                .find_or_add_name_global(parts.next().unwrap().as_str());
             let time = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
             let body = parse_statements(names, parts.next().unwrap().into_inner())?;
             Ok(Some(Stmt::new(
@@ -735,7 +741,7 @@ fn parse_statement(
 }
 
 fn parse_statements(
-    names: Rc<RefCell<Names>>,
+    names: Rc<RefCell<UnboundNames>>,
     pairs: pest::iterators::Pairs<Rule>,
 ) -> Result<Vec<Stmt>, CompileError> {
     let mut statements = vec![];
@@ -765,7 +771,9 @@ pub fn parse_program(program_text: &str) -> Result<Parse, CompileError> {
         }
     };
 
-    let names = Rc::new(RefCell::new(Names::new()));
+    // TODO: this is Rc<RefCell because PrattParser has some API restrictions which result in
+    //   borrowing issues, see: https://github.com/pest-parser/pest/discussions/1030
+    let names = Rc::new(RefCell::new(UnboundNames::new()));
     let mut program = Vec::new();
     for pair in pairs {
         match pair.as_rule() {
@@ -789,14 +797,17 @@ pub fn parse_program(program_text: &str) -> Result<Parse, CompileError> {
         }
     }
     let names = names.borrow_mut();
-    let names = names.clone();
 
     // Annotate the "true" line numbers of the AST nodes.
     annotate_line_numbers(1, &mut program);
 
+    let (bound_names, names_mapping) = names.bind();
+
     Ok(Parse {
         stmts: program,
-        names,
+        unbound_names: names.clone(),
+        names: bound_names,
+        names_mapping,
     })
 }
 
@@ -855,7 +866,6 @@ mod tests {
         BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
         UnaryOp,
     };
-    use crate::names::Names;
     use crate::parse::{parse_program, unquote_str};
     use moor_values::model::CompileError;
 
@@ -886,7 +896,6 @@ mod tests {
     #[test]
     fn test_call_verb() {
         let program = r#"#0:test_verb(1,2,3,"test");"#;
-        let _names = Names::new();
         let parsed = parse_program(program).unwrap();
         assert_eq!(parsed.stmts.len(), 1);
         assert_eq!(
@@ -908,7 +917,7 @@ mod tests {
     fn test_parse_simple_var_assignment_precedence() {
         let program = "a = 1 + 2;";
         let parse = parse_program(program).unwrap();
-        let a = parse.names.find_name("a").unwrap();
+        let a = parse.unbound_names.find_name("a").unwrap();
 
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
@@ -1089,7 +1098,7 @@ mod tests {
                                 property: Box::new(Value(v_str("network"))),
                             }),
                             verb: Box::new(Value(v_str("is_connected"))),
-                            args: vec![Normal(Id(parse.names.find_name("this").unwrap())),],
+                            args: vec![Normal(Id(parse.unbound_names.find_name("this").unwrap())),],
                         })
                     ),
                     statements: vec![Stmt {
@@ -1107,8 +1116,8 @@ mod tests {
     fn test_parse_for_loop() {
         let program = "for x in ({1,2,3}) b = x + 5; endfor";
         let parse = parse_program(program).unwrap();
-        let x = parse.names.find_name("x").unwrap();
-        let b = parse.names.find_name("b").unwrap();
+        let x = parse.unbound_names.find_name("x").unwrap();
+        let b = parse.unbound_names.find_name("b").unwrap();
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
             stripped_stmts(&parse.stmts)[0],
@@ -1140,8 +1149,8 @@ mod tests {
         let program = "for x in [1..5] b = x + 5; endfor";
         let parse = parse_program(program).unwrap();
         assert_eq!(parse.stmts.len(), 1);
-        let x = parse.names.find_name("x").unwrap();
-        let b = parse.names.find_name("b").unwrap();
+        let x = parse.unbound_names.find_name("x").unwrap();
+        let b = parse.unbound_names.find_name("b").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts)[0],
             StmtNode::ForRange {
@@ -1169,8 +1178,8 @@ mod tests {
         let program = "a = {1, 2, 3}; b = a[2..$];";
         let parse = parse_program(program).unwrap();
         let (a, b) = (
-            parse.names.find_name("a").unwrap(),
-            parse.names.find_name("b").unwrap(),
+            parse.unbound_names.find_name("a").unwrap(),
+            parse.unbound_names.find_name("b").unwrap(),
         );
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -1199,7 +1208,7 @@ mod tests {
     fn test_parse_while() {
         let program = "while (1) x = x + 1; if (x > 5) break; endif endwhile";
         let parse = parse_program(program).unwrap();
-        let x = parse.names.find_name("x").unwrap();
+        let x = parse.unbound_names.find_name("x").unwrap();
 
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -1247,8 +1256,8 @@ mod tests {
     fn test_parse_labelled_while() {
         let program = "while chuckles (1) x = x + 1; if (x > 5) break chuckles; endif endwhile";
         let parse = parse_program(program).unwrap();
-        let chuckles = parse.names.find_name("chuckles").unwrap();
-        let x = parse.names.find_name("x").unwrap();
+        let chuckles = parse.unbound_names.find_name("chuckles").unwrap();
+        let x = parse.unbound_names.find_name("x").unwrap();
 
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -1298,7 +1307,7 @@ mod tests {
     fn test_sysobjref() {
         let program = "$string_utils:from_list(test_string);";
         let parse = parse_program(program).unwrap();
-        let test_string = parse.names.find_name("test_string").unwrap();
+        let test_string = parse.unbound_names.find_name("test_string").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Verb {
@@ -1316,8 +1325,8 @@ mod tests {
     fn test_scatter_assign() {
         let program = "{connection} = args;";
         let parse = parse_program(program).unwrap();
-        let connection = parse.names.find_name("connection").unwrap();
-        let args = parse.names.find_name("args").unwrap();
+        let connection = parse.unbound_names.find_name("connection").unwrap();
+        let args = parse.unbound_names.find_name("args").unwrap();
 
         let scatter_items = vec![ScatterItem {
             kind: ScatterKind::Required,
@@ -1337,8 +1346,8 @@ mod tests {
         // assignment was incorrect.
         let program = "{connection} = args[1];";
         let parse = parse_program(program).unwrap();
-        let connection = parse.names.find_name("connection").unwrap();
-        let args = parse.names.find_name("args").unwrap();
+        let connection = parse.unbound_names.find_name("connection").unwrap();
+        let args = parse.unbound_names.find_name("args").unwrap();
 
         let scatter_items = vec![ScatterItem {
             kind: ScatterKind::Required,
@@ -1358,9 +1367,9 @@ mod tests {
     fn test_indexed_list() {
         let program = "{a,b,c}[1];";
         let parse = parse_program(program).unwrap();
-        let a = parse.names.find_name("a").unwrap();
-        let b = parse.names.find_name("b").unwrap();
-        let c = parse.names.find_name("c").unwrap();
+        let a = parse.unbound_names.find_name("a").unwrap();
+        let b = parse.unbound_names.find_name("b").unwrap();
+        let c = parse.unbound_names.find_name("c").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Index(
@@ -1378,9 +1387,9 @@ mod tests {
     fn test_assigned_indexed_list() {
         let program = "a = {a,b,c}[1];";
         let parse = parse_program(program).unwrap();
-        let a = parse.names.find_name("a").unwrap();
-        let b = parse.names.find_name("b").unwrap();
-        let c = parse.names.find_name("c").unwrap();
+        let a = parse.unbound_names.find_name("a").unwrap();
+        let b = parse.unbound_names.find_name("b").unwrap();
+        let c = parse.unbound_names.find_name("c").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Assign {
@@ -1401,7 +1410,7 @@ mod tests {
     fn test_indexed_assign() {
         let program = "this.stack[5] = 5;";
         let parse = parse_program(program).unwrap();
-        let this = parse.names.find_name("this").unwrap();
+        let this = parse.unbound_names.find_name("this").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Assign {
@@ -1421,7 +1430,7 @@ mod tests {
     fn test_for_list() {
         let program = "for i in ({1,2,3}) endfor return i;";
         let parse = parse_program(program).unwrap();
-        let i = parse.names.find_name("i").unwrap();
+        let i = parse.unbound_names.find_name("i").unwrap();
         // Verify the structure of the syntax tree for a for-list loop.
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -1450,21 +1459,21 @@ mod tests {
                 vec![
                     ScatterItem {
                         kind: ScatterKind::Required,
-                        id: parse.names.find_name("a").unwrap(),
+                        id: parse.unbound_names.find_name("a").unwrap(),
                         expr: None,
                     },
                     ScatterItem {
                         kind: ScatterKind::Required,
-                        id: parse.names.find_name("b").unwrap(),
+                        id: parse.unbound_names.find_name("b").unwrap(),
                         expr: None,
                     },
                     ScatterItem {
                         kind: ScatterKind::Required,
-                        id: parse.names.find_name("c").unwrap(),
+                        id: parse.unbound_names.find_name("c").unwrap(),
                         expr: None,
                     },
                 ],
-                Box::new(Id(parse.names.find_name("args").unwrap())),
+                Box::new(Id(parse.unbound_names.find_name("args").unwrap())),
             ))]
         );
     }
@@ -1473,8 +1482,8 @@ mod tests {
     fn test_valid_underscore_and_no_underscore_ident() {
         let program = "_house == home;";
         let parse = parse_program(program).unwrap();
-        let house = parse.names.find_name("_house").unwrap();
-        let home = parse.names.find_name("home").unwrap();
+        let house = parse.unbound_names.find_name("_house").unwrap();
+        let home = parse.unbound_names.find_name("home").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Binary(
@@ -1489,8 +1498,8 @@ mod tests {
     fn test_arg_splice() {
         let program = "return {@results, frozzbozz(@args)};";
         let parse = parse_program(program).unwrap();
-        let results = parse.names.find_name("results").unwrap();
-        let args = parse.names.find_name("args").unwrap();
+        let results = parse.unbound_names.find_name("results").unwrap();
+        let args = parse.unbound_names.find_name("args").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Return(Some(Expr::List(vec![
@@ -1537,9 +1546,9 @@ mod tests {
         "#;
 
         let parse = parse_program(program).unwrap();
-        let a = parse.names.find_name("a").unwrap();
-        let info = parse.names.find_name("info").unwrap();
-        let forgotten = parse.names.find_name("forgotten").unwrap();
+        let a = parse.unbound_names.find_name("a").unwrap();
+        let info = parse.unbound_names.find_name("info").unwrap();
+        let forgotten = parse.unbound_names.find_name("forgotten").unwrap();
 
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -1718,7 +1727,7 @@ mod tests {
     fn test_in_range() {
         let program = "a in {1,2,3};";
         let parse = parse_program(program).unwrap();
-        let a = parse.names.find_name("a").unwrap();
+        let a = parse.unbound_names.find_name("a").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Binary(
@@ -1750,7 +1759,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Verb {
-                location: Box::new(Id(parse.names.find_name("this").unwrap())),
+                location: Box::new(Id(parse.unbound_names.find_name("this").unwrap())),
                 verb: Box::new(Value(v_str("verb"))),
                 args: vec![
                     Normal(Value(v_int(1))),
@@ -1768,7 +1777,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Prop {
-                location: Box::new(Id(parse.names.find_name("this").unwrap())),
+                location: Box::new(Id(parse.unbound_names.find_name("this").unwrap())),
                 property: Box::new(Value(v_str("prop"))),
             })]
         );
@@ -1791,8 +1800,8 @@ mod tests {
     fn test_comparison_assign_chain() {
         let program = "(2 <= (len = length(text)));";
         let parse = parse_program(program).unwrap();
-        let len = parse.names.find_name("len").unwrap();
-        let text = parse.names.find_name("text").unwrap();
+        let len = parse.unbound_names.find_name("len").unwrap();
+        let text = parse.unbound_names.find_name("text").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Binary(
@@ -1816,7 +1825,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Assign {
-                left: Box::new(Id(parse.names.find_name("a").unwrap())),
+                left: Box::new(Id(parse.unbound_names.find_name("a").unwrap())),
                 right: Box::new(Expr::Cond {
                     condition: Box::new(Expr::Binary(
                         BinaryOp::Eq,
@@ -1839,10 +1848,10 @@ mod tests {
             vec![StmtNode::Expr(Expr::Binary(
                 BinaryOp::Eq,
                 Box::new(Expr::List(vec![Normal(Id(parse
-                    .names
+                    .unbound_names
                     .find_name("what")
                     .unwrap())),])),
-                Box::new(Id(parse.names.find_name("args").unwrap())),
+                Box::new(Id(parse.unbound_names.find_name("args").unwrap())),
             ))]
         );
     }
@@ -1857,7 +1866,10 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Call {
                 function: Symbol::mk("raise"),
-                args: vec![Normal(Id(parse.names.find_name("E_PERMS").unwrap()))]
+                args: vec![Normal(Id(parse
+                    .unbound_names
+                    .find_name("E_PERMS")
+                    .unwrap()))]
             })]
         );
     }
@@ -1873,7 +1885,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![
                 StmtNode::ForList {
-                    id: parse.names.find_name("line").unwrap(),
+                    id: parse.unbound_names.find_name("line").unwrap(),
                     expr: Expr::List(vec![
                         Normal(Value(v_int(1))),
                         Normal(Value(v_int(2))),
@@ -1896,7 +1908,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Return(Some(Expr::List(vec![Normal(
                 Expr::TryCatch {
-                    trye: Box::new(Id(parse.names.find_name("x").unwrap())),
+                    trye: Box::new(Id(parse.unbound_names.find_name("x").unwrap())),
                     codes: CatchCodes::Codes(vec![varnf]),
                     except: Some(Box::new(Value(v_int(666)))),
                 }
@@ -1938,7 +1950,7 @@ mod tests {
                     }),
                     verb: Box::new(Value(v_str("finish_get"))),
                     args: vec![Normal(Prop {
-                        location: Box::new(Id(parse.names.find_name("this").unwrap())),
+                        location: Box::new(Id(parse.unbound_names.find_name("this").unwrap())),
                         property: Box::new(Value(v_str("connection"))),
                     })],
                 }),
@@ -1991,17 +2003,17 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![
                 StmtNode::Expr(Expr::Assign {
-                    left: Box::new(Id(parse.names.find_name("result").unwrap())),
+                    left: Box::new(Id(parse.unbound_names.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass {
-                        args: vec![Splice(Id(parse.names.find_name("args").unwrap()))],
+                        args: vec![Splice(Id(parse.unbound_names.find_name("args").unwrap()))],
                     }),
                 }),
                 StmtNode::Expr(Expr::Assign {
-                    left: Box::new(Id(parse.names.find_name("result").unwrap())),
+                    left: Box::new(Id(parse.unbound_names.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass { args: vec![] }),
                 }),
                 StmtNode::Expr(Expr::Assign {
-                    left: Box::new(Id(parse.names.find_name("result").unwrap())),
+                    left: Box::new(Id(parse.unbound_names.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass {
                         args: vec![
                             Normal(Value(v_int(1))),
@@ -2012,10 +2024,10 @@ mod tests {
                     }),
                 }),
                 StmtNode::Expr(Expr::Assign {
-                    left: Box::new(Id(parse.names.find_name("pass").unwrap())),
-                    right: Box::new(Id(parse.names.find_name("blop").unwrap())),
+                    left: Box::new(Id(parse.unbound_names.find_name("pass").unwrap())),
+                    right: Box::new(Id(parse.unbound_names.find_name("blop").unwrap())),
                 }),
-                StmtNode::Return(Some(Id(parse.names.find_name("pass").unwrap()))),
+                StmtNode::Return(Some(Id(parse.unbound_names.find_name("pass").unwrap()))),
             ]
         );
     }

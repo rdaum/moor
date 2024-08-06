@@ -17,7 +17,6 @@ mod tests {
     use crate::builtins::BUILTIN_DESCRIPTORS;
     use crate::codegen::compile;
     use crate::labels::{Label, Offset};
-    use crate::names::Name;
     use moor_values::model::CompileError;
     use moor_values::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
     use moor_values::var::Objid;
@@ -434,7 +433,6 @@ mod tests {
     fn test_and_or() {
         let program = "a = (1 && 2 || 3);";
         let binary = compile(program).unwrap();
-
         let a = binary.find_var("a");
 
         /*
@@ -495,7 +493,7 @@ mod tests {
                 MakeSingletonList,
                 Imm(test),
                 ListAddTail,
-                FuncCall { id: Name(0) },
+                FuncCall { id: 0 },
                 Pop,
                 Done
             ]
@@ -932,9 +930,7 @@ mod tests {
                 },
                 ImmErr(E_INVARG),
                 MakeSingletonList,
-                FuncCall {
-                    id: Name(raise_num as u16)
-                },
+                FuncCall { id: raise_num },
                 EndCatch(1.into()),
                 ImmInt(1),
                 Ref,

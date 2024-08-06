@@ -622,7 +622,7 @@ pub fn moo_frame_execute(
                     return state.push_error(E_ARGS);
                 };
                 return state.call_builtin_function(
-                    id.0 as usize,
+                    *id,
                     args.clone(),
                     exec_params,
                     world_state,
