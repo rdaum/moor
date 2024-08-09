@@ -672,6 +672,7 @@ mod tests {
         argspec: VerbArgsSpec,
     }
 
+    #[allow(clippy::type_complexity)]
     fn setup_test_env(
         task_start: Arc<TaskStart>,
         programs: &[TestVerb],
@@ -746,6 +747,7 @@ mod tests {
     }
 
     /// Build a simple test environment with an Eval task (since that is simplest to setup)
+    #[allow(clippy::type_complexity)]
     fn setup_test_env_eval(
         program: &str,
     ) -> (
@@ -764,6 +766,7 @@ mod tests {
         setup_test_env(task_start, &[])
     }
 
+    #[allow(clippy::type_complexity)]
     fn setup_test_env_command(
         command: &str,
         verbs: &[TestVerb],

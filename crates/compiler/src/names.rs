@@ -20,12 +20,18 @@ use strum::IntoEnumIterator;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UnboundNames {
-    unbound_names: Vec<Symbol>,
+    unbound_names: Vec<(Symbol, usize)>,
     scope: Vec<HashMap<Symbol, UnboundName>>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UnboundName(usize);
+
+impl Default for UnboundNames {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl UnboundNames {
     pub fn new() -> Self {
@@ -53,7 +59,7 @@ impl UnboundNames {
 
         // If the name doesn't exist, add it to the global scope, since that's how
         // MOO currently works.
-        let unbound_name = self.new_unbound(name);
+        let unbound_name = self.new_unbound(name, 0);
         self.scope[0].insert(name, unbound_name);
         unbound_name
     }
@@ -64,38 +70,46 @@ impl UnboundNames {
     }
 
     /// Pop the current scope.
-    pub fn pop_scope(&mut self) {
-        self.scope.pop();
+    pub fn pop_scope(&mut self) -> usize {
+        let scope = self.scope.pop().unwrap();
+        scope.len()
     }
 
     /// Declare a name in the current lexical scope.
     pub fn declare_name(&mut self, name: &str) -> UnboundName {
         let name = Symbol::mk_case_insensitive(name);
-        let unbound_name = self.new_unbound(name);
+        let unbound_name = self.new_unbound(name, self.scope.len() - 1);
         self.scope.last_mut().unwrap().insert(name, unbound_name);
         unbound_name
     }
 
-    /// Find the name in the name table, if it exists.
-    pub fn find_name(&self, name: &str) -> Option<UnboundName> {
-        self.find_name_offset(Symbol::mk_case_insensitive(name))
-            .map(|x| UnboundName(x))
+    /// If the same named variable exists in multiple scopes, return them all as a vector.
+    pub fn find_named(&self, name: &str) -> Vec<UnboundName> {
+        let name = Symbol::mk_case_insensitive(name);
+        let mut names = vec![];
+        for (i, n) in self.unbound_names.iter().enumerate() {
+            if n.0 == name {
+                names.push(UnboundName(i));
+            }
+        }
+        names
     }
 
-    /// Return the environment offset of the name, if it exists.
-    pub fn find_name_offset(&self, name: Symbol) -> Option<usize> {
+    /// Find the first scoped name in the name table, if it exists.
+    pub fn find_name(&self, name: &str) -> Option<UnboundName> {
+        let name = Symbol::mk_case_insensitive(name);
         for scope in self.scope.iter().rev() {
             if let Some(n) = scope.get(&name) {
-                return Some(n.0 as usize);
+                return Some(*n);
             }
         }
         None
     }
 
     /// Create a new unbound variable.
-    fn new_unbound(&mut self, name: Symbol) -> UnboundName {
+    fn new_unbound(&mut self, name: Symbol, scope: usize) -> UnboundName {
         let idx = self.unbound_names.len();
-        self.unbound_names.push(name);
+        self.unbound_names.push((name, scope));
         UnboundName(idx)
     }
 
@@ -103,18 +117,27 @@ impl UnboundNames {
     /// Run at the end of compilation to produce valid offsets.
     pub fn bind(&self) -> (Names, HashMap<UnboundName, Name>) {
         let mut mapping = HashMap::new();
-        let mut bound = vec![];
+        let mut bound = Vec::with_capacity(self.unbound_names.len());
         // Walk the scopes, binding all unbound variables.
         // This will produce offsets for all variables in the order they should appear in the
         // environment.
-        for _ in self.scope.iter() {
-            for idx in 0..self.unbound_names.len() {
-                let offset = bound.len();
-                bound.push(self.unbound_names[idx]);
-                mapping.insert(UnboundName(idx), Name(offset as u16));
-            }
+        let mut scope_depth = Vec::with_capacity(self.unbound_names.len());
+        for idx in 0..self.unbound_names.len() {
+            let offset = bound.len();
+            bound.push(self.unbound_names[idx].0);
+            scope_depth.push(self.unbound_names[idx].1 as u16);
+            mapping.insert(UnboundName(idx), Name(offset as u16));
         }
-        (Names { bound }, mapping)
+
+        let global_width = self.scope[0].len();
+        (
+            Names {
+                bound,
+                global_width,
+                scope_depth,
+            },
+            mapping,
+        )
     }
 }
 
@@ -124,18 +147,22 @@ pub struct Name(u16);
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct Names {
+    /// The set of bound variables and their names.
     bound: Vec<Symbol>,
-}
-
-impl Default for Names {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// The size of the global scope, e.g. the size the environment should be when the frame
+    /// is first created.
+    global_width: usize,
+    /// The scope-depth for each variable. E.g. 0 for global and then 1..N for nested scopes.
+    scope_depth: Vec<u16>,
 }
 
 impl Names {
-    pub fn new() -> Self {
-        Self { bound: vec![] }
+    pub fn new(global_width: usize) -> Self {
+        Self {
+            bound: vec![],
+            global_width,
+            scope_depth: vec![],
+        }
     }
 
     /// Find the name in the name table, if it exists.
@@ -148,9 +175,15 @@ impl Names {
         None
     }
 
-    /// Return the width of the name table, to be used as the (total) environment size.
+    /// Return the total width of the name table, to be used as the (total) environment size.
     pub fn width(&self) -> usize {
         self.bound.len()
+    }
+
+    /// The size of the global scope section of the environment, e.g. the "environment_width" of the
+    /// frame's environment when it is first created.
+    pub fn global_width(&self) -> usize {
+        self.global_width
     }
 
     /// Return the symbol value of the given name offset.
@@ -167,6 +200,13 @@ impl Names {
 
     pub fn names(&self) -> Vec<Name> {
         (0..self.bound.len() as u16).map(Name).collect()
+    }
+
+    pub fn depth_of(&self, name: &Name) -> Option<u16> {
+        if name.0 as usize >= self.scope_depth.len() {
+            return None;
+        }
+        Some(self.scope_depth[name.0 as usize])
     }
 
     /// Get the offset for a bound variable.

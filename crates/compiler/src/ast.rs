@@ -173,6 +173,13 @@ pub enum Expr {
 pub struct CondArm {
     pub condition: Expr,
     pub statements: Vec<Stmt>,
+    pub environment_width: usize,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ElseArm {
+    pub statements: Vec<Stmt>,
+    pub environment_width: usize,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -210,23 +217,26 @@ impl Stmt {
 pub enum StmtNode {
     Cond {
         arms: Vec<CondArm>,
-        otherwise: Vec<Stmt>,
+        otherwise: Option<ElseArm>,
     },
     ForList {
         id: UnboundName,
         expr: Expr,
         body: Vec<Stmt>,
+        environment_width: usize,
     },
     ForRange {
         id: UnboundName,
         from: Expr,
         to: Expr,
         body: Vec<Stmt>,
+        environment_width: usize,
     },
     While {
         id: Option<UnboundName>,
         condition: Expr,
         body: Vec<Stmt>,
+        environment_width: usize,
     },
     Fork {
         id: Option<UnboundName>,
@@ -236,10 +246,18 @@ pub enum StmtNode {
     TryExcept {
         body: Vec<Stmt>,
         excepts: Vec<ExceptArm>,
+        environment_width: usize,
     },
     TryFinally {
         body: Vec<Stmt>,
         handler: Vec<Stmt>,
+        environment_width: usize,
+    },
+    Scope {
+        /// The number of non-upfront variables in the scope (e.g. let statements)
+        num_bindings: usize,
+        /// The body of the let scope, which is evaluated with the bindings in place.
+        body: Vec<Stmt>,
     },
     Break {
         exit: Option<UnboundName>,
@@ -276,7 +294,19 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
                     ..
                 },
             ) => {
-                assert_trees_match_recursive(otherwise1, otherwise2);
+                match (otherwise1, otherwise2) {
+                    (
+                        Some(ElseArm { statements, .. }),
+                        Some(ElseArm {
+                            statements: statements2,
+                            ..
+                        }),
+                    ) => {
+                        assert_trees_match_recursive(statements, statements2);
+                    }
+                    (None, None) => {}
+                    _ => panic!("Mismatched otherwise: {:?} vs {:?}", otherwise1, otherwise2),
+                }
                 for arms in arms1.iter().zip(arms2.iter()) {
                     assert_eq!(arms.0.condition, arms.1.condition);
                     assert_trees_match_recursive(&arms.0.statements, &arms.1.statements);
@@ -286,24 +316,34 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
                 StmtNode::TryFinally {
                     body: body1,
                     handler: handler1,
+                    environment_width: ew1,
                 },
                 StmtNode::TryFinally {
                     body: body2,
                     handler: handler2,
+                    environment_width: ew2,
                 },
             ) => {
                 assert_trees_match_recursive(body1, body2);
                 assert_trees_match_recursive(handler1, handler2);
+                assert_eq!(ew1, ew2);
             }
             (StmtNode::TryExcept { body: body1, .. }, StmtNode::TryExcept { body: body2, .. })
             | (StmtNode::ForList { body: body1, .. }, StmtNode::ForList { body: body2, .. })
             | (StmtNode::ForRange { body: body1, .. }, StmtNode::ForRange { body: body2, .. })
             | (StmtNode::Fork { body: body1, .. }, StmtNode::Fork { body: body2, .. })
+            | (StmtNode::Scope { body: body1, .. }, StmtNode::Scope { body: body2, .. })
             | (StmtNode::While { body: body1, .. }, StmtNode::While { body: body2, .. }) => {
                 assert_trees_match_recursive(body1, body2);
             }
             _ => {
-                panic!("Mismatched statements: {:?} vs {:?}", left, right);
+                panic!(
+                    "Mismatched statements:\n\
+                {:?}\n\
+                vs\n\
+                {:?}",
+                    left, right
+                );
             }
         }
     }

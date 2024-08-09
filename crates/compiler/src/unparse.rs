@@ -326,21 +326,27 @@ impl<'a> Unparse<'a> {
                     stmt_lines.push(format!("{}elseif ({})", indent_frag, cond_frag));
                     stmt_lines.append(&mut stmt_frag);
                 }
-                if !otherwise.is_empty() {
-                    let mut stmt_frag = self.unparse_stmts(otherwise, indent + INDENT_LEVEL)?;
+                if let Some(otherwise) = otherwise {
+                    let mut stmt_frag =
+                        self.unparse_stmts(&otherwise.statements, indent + INDENT_LEVEL)?;
                     stmt_lines.push(format!("{}else", indent_frag));
                     stmt_lines.append(&mut stmt_frag);
                 }
                 stmt_lines.push(format!("{}endif", indent_frag));
                 Ok(stmt_lines)
             }
-            StmtNode::ForList { id, expr, body } => {
+            StmtNode::ForList {
+                id,
+                expr,
+                body,
+                environment_width: _,
+            } => {
                 let mut stmt_lines = Vec::with_capacity(body.len() + 3);
 
                 let expr_frag = self.unparse_expr(expr)?;
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
 
-                let name = self.unparse_name(&id);
+                let name = self.unparse_name(id);
 
                 stmt_lines.push(format!(
                     "{}for {} in ({})",
@@ -355,13 +361,19 @@ impl<'a> Unparse<'a> {
                 stmt_lines.push(format!("{}endfor", indent_frag));
                 Ok(stmt_lines)
             }
-            StmtNode::ForRange { id, from, to, body } => {
+            StmtNode::ForRange {
+                id,
+                from,
+                to,
+                body,
+                environment_width: _,
+            } => {
                 let mut stmt_lines = Vec::with_capacity(body.len() + 3);
 
                 let from_frag = self.unparse_expr(from)?;
                 let to_frag = self.unparse_expr(to)?;
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
-                let name = self.unparse_name(&id);
+                let name = self.unparse_name(id);
 
                 stmt_lines.push(format!(
                     "{}for {} in [{}..{}]",
@@ -381,6 +393,7 @@ impl<'a> Unparse<'a> {
                 id,
                 condition,
                 body,
+                environment_width: _,
             } => {
                 let mut stmt_lines = Vec::with_capacity(body.len() + 3);
 
@@ -389,7 +402,7 @@ impl<'a> Unparse<'a> {
 
                 let mut base_str = "while ".to_string();
                 if let Some(id) = id {
-                    let id = self.unparse_name(&id);
+                    let id = self.unparse_name(id);
 
                     base_str.push_str(
                         self.tree
@@ -412,7 +425,7 @@ impl<'a> Unparse<'a> {
                 let mut base_str = format!("{}fork", indent_frag);
                 if let Some(id) = id {
                     base_str.push(' ');
-                    let id = self.unparse_name(&id);
+                    let id = self.unparse_name(id);
 
                     base_str.push_str(
                         self.tree
@@ -427,7 +440,11 @@ impl<'a> Unparse<'a> {
                 stmt_lines.push(format!("{}endfork", indent_frag));
                 Ok(stmt_lines)
             }
-            StmtNode::TryExcept { body, excepts } => {
+            StmtNode::TryExcept {
+                body,
+                excepts,
+                environment_width: _,
+            } => {
                 let mut stmt_lines = Vec::with_capacity(body.len() + 3);
 
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
@@ -438,7 +455,7 @@ impl<'a> Unparse<'a> {
                         self.unparse_stmts(&except.statements, indent + INDENT_LEVEL)?;
                     let mut base_str = "except ".to_string();
                     if let Some(id) = &except.id {
-                        let id = self.unparse_name(&id);
+                        let id = self.unparse_name(id);
 
                         base_str.push_str(
                             self.tree
@@ -457,7 +474,11 @@ impl<'a> Unparse<'a> {
                 stmt_lines.push(format!("{}endtry", indent_frag));
                 Ok(stmt_lines)
             }
-            StmtNode::TryFinally { body, handler } => {
+            StmtNode::TryFinally {
+                body,
+                handler,
+                environment_width: _,
+            } => {
                 let mut stmt_lines = Vec::with_capacity(body.len() + 3);
 
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
@@ -473,7 +494,7 @@ impl<'a> Unparse<'a> {
                 let mut base_str = format!("{}break", indent_frag);
                 if let Some(exit) = &exit {
                     base_str.push(' ');
-                    let exit = self.unparse_name(&exit);
+                    let exit = self.unparse_name(exit);
 
                     base_str.push_str(
                         self.tree
@@ -490,7 +511,7 @@ impl<'a> Unparse<'a> {
                 let mut base_str = format!("{}continue", indent_frag);
                 if let Some(exit) = &exit {
                     base_str.push(' ');
-                    let exit = self.unparse_name(&exit);
+                    let exit = self.unparse_name(exit);
 
                     base_str.push_str(
                         self.tree
@@ -511,11 +532,47 @@ impl<'a> Unparse<'a> {
                     vec![format!("{}return {};", indent_frag, self.unparse_expr(e)?)]
                 }
             }),
+            StmtNode::Expr(Expr::Assign { left, right }) => {
+                let left_frag = match left.as_ref() {
+                    Expr::Id(id) => {
+                        // If this Id is in non-zero scope, we need to prefix with "let"
+                        let bound_name = self.tree.names_mapping[id];
+                        let scope_depth = self.tree.names.depth_of(&bound_name).unwrap();
+                        let prefix = if scope_depth > 0 {
+                            "let "
+                        } else {
+                            // TODO: could have 'global' prefix here when in a certain mode.
+                            //   instead of having it implied.
+                            ""
+                        };
+                        let suffix = self.tree.names.name_of(&self.unparse_name(id)).unwrap();
+                        format!("{}{}", prefix, suffix)
+                    }
+                    _ => self.unparse_expr(left)?,
+                };
+                let right_frag = self.unparse_expr(right)?;
+                Ok(vec![format!(
+                    "{}{} = {};",
+                    indent_frag, left_frag, right_frag
+                )])
+            }
             StmtNode::Expr(expr) => Ok(vec![format!(
                 "{}{};",
                 indent_frag,
                 self.unparse_expr(expr)?
             )]),
+            StmtNode::Scope {
+                num_bindings: _,
+                body,
+            } => {
+                // Begin/End
+                let mut stmt_lines = Vec::with_capacity(body.len() + 3);
+                stmt_lines.push(format!("{}begin", indent_frag));
+                let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
+                stmt_lines.append(&mut stmt_frag);
+                stmt_lines.push(format!("{}end", indent_frag));
+                Ok(stmt_lines)
+            }
         }
     }
 
@@ -532,7 +589,7 @@ impl<'a> Unparse<'a> {
     }
 
     fn unparse_name(&self, name: &UnboundName) -> Name {
-        self.tree.names_mapping.get(name).unwrap().clone()
+        *self.tree.names_mapping.get(name).unwrap()
     }
 }
 
@@ -560,11 +617,11 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
                     // Walk arm.statements ...
                     line_no = annotate_line_numbers(line_no, &mut arm.statements);
                 }
-                if !otherwise.is_empty() {
+                if let Some(otherwise) = otherwise {
                     // ELSE line ...
                     line_no += 1;
                     // Walk otherwise ...
-                    line_no = annotate_line_numbers(line_no, otherwise);
+                    line_no = annotate_line_numbers(line_no, &mut otherwise.statements);
                 }
                 // ENDIF
                 line_no += 1;
@@ -590,6 +647,7 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
             StmtNode::TryExcept {
                 ref mut body,
                 ref mut excepts,
+                environment_width: _,
             } => {
                 // TRY
                 line_no += 1;
@@ -607,6 +665,7 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
             StmtNode::TryFinally {
                 ref mut body,
                 ref mut handler,
+                environment_width: _,
             } => {
                 // TRY
                 line_no += 1;
@@ -617,6 +676,17 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
                 // Walk handler ...
                 line_no = annotate_line_numbers(line_no, handler);
                 // ENDTRY
+                line_no += 1;
+            }
+            StmtNode::Scope {
+                ref mut body,
+                num_bindings: _,
+            } => {
+                // BEGIN
+                line_no += 1;
+                // Walk body ...
+                line_no = annotate_line_numbers(line_no, body);
+                // ENDLET
                 line_no += 1;
             }
         }
@@ -771,6 +841,17 @@ mod tests {
     this:tell_contents(things);
     "#;
         let stripped = unindent(body);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_unparse_lexical_scope_block() {
+        let program = r#"b = 3;
+        begin
+          let a = 5;
+        end"#;
+        let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());
     }

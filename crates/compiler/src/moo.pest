@@ -26,6 +26,9 @@ statement  = {
   | return_statement
   | try_except_statement
   | try_finally_statement
+  | begin_statement
+  | local_assignment
+  | global_assignment
   | expr_statement
 }
 
@@ -52,6 +55,15 @@ try_finally_statement = { ^"try" ~ statements ~ ^"finally" ~ statements ~ ^"endt
 except                = { ^"except" ~ (labelled_except | unlabelled_except) ~ statements }
 labelled_except       = { ident ~ "(" ~ codes ~ ")" }
 unlabelled_except     = { "(" ~ codes ~ ")" }
+
+begin_statement       = { ^"begin" ~ statements ~ ^"end" }
+
+// locally scoped let x = y; or let x;
+// Add a lexically scoped variable to the current scope.
+local_assignment = { ^"let" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
+
+// globally scoped (same as default in MOO) adds explicitly to global scope.
+global_assignment = { ^"global" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
 
 codes   = { anycode | exprlist }
 anycode = { ^"any" }

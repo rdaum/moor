@@ -428,7 +428,7 @@ impl CodegenState {
                 };
                 let builtin = *builtin;
                 self.generate_arg_list(args)?;
-                self.emit(Op::FuncCall { id: builtin });
+                self.emit(Op::FuncCall { id: builtin as u16 });
             }
             Expr::Verb {
                 args,
@@ -515,29 +515,48 @@ impl CodegenState {
                     self.generate_expr(&arm.condition)?;
                     let otherwise_label = self.make_jump_label(None);
                     self.emit(if !is_else {
-                        Op::If(otherwise_label)
+                        Op::If(otherwise_label, arm.environment_width as u16)
                     } else {
-                        Op::Eif(otherwise_label)
+                        Op::Eif(otherwise_label, arm.environment_width as u16)
                     });
                     is_else = true;
                     self.pop_stack(1);
                     for stmt in &arm.statements {
                         self.generate_stmt(stmt)?;
                     }
+                    self.emit(Op::EndScope {
+                        num_bindings: arm.environment_width as u16,
+                    });
                     self.emit(Op::Jump { label: end_label });
 
                     // This is where we jump to if the condition is false; either the end of the
                     // if statement, or the start of the next ('else or elseif') arm.
                     self.commit_jump_label(otherwise_label);
                 }
-                if !otherwise.is_empty() {
-                    for stmt in otherwise {
+                if let Some(otherwise) = otherwise {
+                    let end_label = self.make_jump_label(None);
+                    // Decompilation has to elide this begin/end scope pair, as it's not actually
+                    // present in the source code.
+                    self.emit(Op::BeginScope {
+                        num_bindings: otherwise.environment_width as u16,
+                        end_label,
+                    });
+                    for stmt in &otherwise.statements {
                         self.generate_stmt(stmt)?;
                     }
+                    self.emit(Op::EndScope {
+                        num_bindings: otherwise.environment_width as u16,
+                    });
+                    self.commit_jump_label(end_label);
                 }
                 self.commit_jump_label(end_label);
             }
-            StmtNode::ForList { id, expr, body } => {
+            StmtNode::ForList {
+                id,
+                expr,
+                body,
+                environment_width,
+            } => {
                 self.generate_expr(expr)?;
 
                 // Note that MOO is 1-indexed, so this is counter value is 1 in LambdaMOO;
@@ -550,6 +569,7 @@ impl CodegenState {
                 self.emit(Op::ForList {
                     id: self.binding_mappings[id],
                     end_label,
+                    environment_width: *environment_width as u16,
                 });
                 self.loops.push(Loop {
                     loop_name: Some(self.binding_mappings[id]),
@@ -563,10 +583,19 @@ impl CodegenState {
                 }
                 self.emit(Op::Jump { label: loop_top });
                 self.commit_jump_label(end_label);
+                self.emit(Op::EndScope {
+                    num_bindings: *environment_width as u16,
+                });
                 self.pop_stack(2);
                 self.loops.pop();
             }
-            StmtNode::ForRange { from, to, id, body } => {
+            StmtNode::ForRange {
+                from,
+                to,
+                id,
+                body,
+                environment_width,
+            } => {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
                 let loop_top = self.make_jump_label(Some(self.binding_mappings[id]));
@@ -575,6 +604,7 @@ impl CodegenState {
                 self.emit(Op::ForRange {
                     id: self.binding_mappings[id],
                     end_label,
+                    environment_width: *environment_width as u16,
                 });
                 self.loops.push(Loop {
                     loop_name: Some(self.binding_mappings[id]),
@@ -588,6 +618,9 @@ impl CodegenState {
                 }
                 self.emit(Jump { label: loop_top });
                 self.commit_jump_label(end_label);
+                self.emit(Op::EndScope {
+                    num_bindings: *environment_width as u16,
+                });
                 self.pop_stack(2);
                 self.loops.pop();
             }
@@ -595,6 +628,7 @@ impl CodegenState {
                 id,
                 condition,
                 body,
+                environment_width,
             } => {
                 let loop_start_label =
                     self.make_jump_label(id.as_ref().map(|id| self.binding_mappings[id]));
@@ -604,10 +638,14 @@ impl CodegenState {
                     self.make_jump_label(id.as_ref().map(|id| self.binding_mappings[id]));
                 self.generate_expr(condition)?;
                 match id {
-                    None => self.emit(Op::While(loop_end_label)),
+                    None => self.emit(Op::While {
+                        jump_label: loop_end_label,
+                        environment_width: *environment_width as u16,
+                    }),
                     Some(id) => self.emit(Op::WhileId {
                         id: self.binding_mappings[id],
                         end_label: loop_end_label,
+                        environment_width: *environment_width as u16,
                     }),
                 }
                 self.pop_stack(1);
@@ -625,6 +663,9 @@ impl CodegenState {
                     label: loop_start_label,
                 });
                 self.commit_jump_label(loop_end_label);
+                self.emit(Op::EndScope {
+                    num_bindings: *environment_width as u16,
+                });
                 self.loops.pop();
             }
             StmtNode::Fork { id, body, time } => {
@@ -645,7 +686,11 @@ impl CodegenState {
                 });
                 self.pop_stack(1);
             }
-            StmtNode::TryExcept { body, excepts } => {
+            StmtNode::TryExcept {
+                body,
+                excepts,
+                environment_width,
+            } => {
                 let mut labels = vec![];
                 let num_excepts = excepts.len();
                 for ex in excepts {
@@ -655,7 +700,10 @@ impl CodegenState {
                     labels.push(push_label);
                 }
                 self.pop_stack(num_excepts);
-                self.emit(Op::TryExcept { num_excepts });
+                self.emit(Op::TryExcept {
+                    num_excepts: num_excepts as u16,
+                    environment_width: *environment_width as u16,
+                });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
@@ -676,12 +724,20 @@ impl CodegenState {
                         self.emit(Op::Jump { label: end_label });
                     }
                 }
+                self.emit(Op::EndScope {
+                    num_bindings: *environment_width as u16,
+                });
                 self.commit_jump_label(end_label);
             }
-            StmtNode::TryFinally { body, handler } => {
+            StmtNode::TryFinally {
+                body,
+                handler,
+                environment_width,
+            } => {
                 let handler_label = self.make_jump_label(None);
                 self.emit(Op::TryFinally {
                     end_label: handler_label,
+                    environment_width: *environment_width as u16,
                 });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
@@ -694,6 +750,23 @@ impl CodegenState {
                 }
                 self.emit(Op::FinallyContinue);
                 self.pop_stack(2);
+            }
+            StmtNode::Scope { num_bindings, body } => {
+                let end_label = self.make_jump_label(None);
+                self.emit(Op::BeginScope {
+                    num_bindings: *num_bindings as u16,
+                    end_label,
+                });
+
+                // And then the body within which the bindings are in scope.
+                for stmt in body {
+                    self.generate_stmt(stmt)?;
+                }
+
+                self.emit(Op::EndScope {
+                    num_bindings: *num_bindings as u16,
+                });
+                self.commit_jump_label(end_label);
             }
             StmtNode::Break { exit: None } => {
                 let l = self.loops.last().expect("No loop to break/continue from");

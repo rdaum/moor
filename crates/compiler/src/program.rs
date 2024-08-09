@@ -51,7 +51,7 @@ impl Program {
         Program {
             literals: Vec::new(),
             jump_labels: Vec::new(),
-            var_names: Default::default(),
+            var_names: Names::new(0),
             main_vector: Arc::new(Vec::new()),
             fork_vectors: Vec::new(),
             line_number_spans: Vec::new(),

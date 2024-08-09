@@ -103,7 +103,11 @@ mod tests {
 
     #[test]
     fn test_simple_vm_execute() {
-        let program = mk_program(vec![Imm(0.into()), Pop, Done], vec![1.into()], Names::new());
+        let program = mk_program(
+            vec![Imm(0.into()), Pop, Done],
+            vec![1.into()],
+            Names::new(64),
+        );
         let state_source = test_db_with_verb("test", &program);
         let mut state = state_source.new_world_state().unwrap();
         let session = Arc::new(NoopClientSession::new());
@@ -124,7 +128,7 @@ mod tests {
             &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
                 vec![v_str("hello"), 2.into()],
-                Names::new(),
+                Names::new(64),
             ),
         );
         let mut state = state_source.new_world_state().unwrap();
@@ -154,7 +158,7 @@ mod tests {
                     Done,
                 ],
                 vec![v_str("hello"), 2.into(), 4.into()],
-                Names::new(),
+                Names::new(64),
             ),
         )
         .new_world_state()
@@ -178,7 +182,7 @@ mod tests {
             &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), Ref, Return, Done],
                 vec![v_list(&[111.into(), 222.into(), 333.into()]), 2.into()],
-                Names::new(),
+                Names::new(64),
             ),
         )
         .new_world_state()
@@ -213,7 +217,7 @@ mod tests {
                     2.into(),
                     3.into(),
                 ],
-                Names::new(),
+                Names::new(64),
             ),
         )
         .new_world_state()
@@ -365,7 +369,7 @@ mod tests {
             &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), GetProp, Return, Done],
                 vec![v_obj(0), v_str("test_prop")],
-                Names::new(),
+                Names::new(64),
             ),
         )
         .new_world_state()
@@ -402,7 +406,7 @@ mod tests {
         let return_verb_binary = mk_program(
             vec![Imm(0.into()), Return, Done],
             vec![v_int(666)],
-            Names::new(),
+            Names::new(64),
         );
 
         // The second actually calls the first verb, and returns the result.
@@ -416,7 +420,7 @@ mod tests {
                 Done,
             ],
             vec![v_obj(0), v_str("test_return_verb"), v_empty_list()],
-            Names::new(),
+            Names::new(64),
         );
         let mut state = test_db_with_verbs(&[
             ("test_return_verb", &return_verb_binary),
@@ -681,14 +685,7 @@ mod tests {
     /// A VM body that is empty should return v_none() and not panic.
     #[test]
     fn test_regression_zero_body_function() {
-        let binary = Program {
-            literals: vec![],
-            jump_labels: vec![],
-            var_names: Names::default(),
-            main_vector: Arc::new(vec![]),
-            fork_vectors: vec![],
-            line_number_spans: vec![],
-        };
+        let binary = Program::new();
         let mut state = test_db_with_verb("test", &binary)
             .new_world_state()
             .unwrap();
@@ -775,6 +772,214 @@ mod tests {
             vec![],
         );
         assert_eq!(result, Ok(v_int(333)));
+    }
+
+    #[test]
+    fn test_lexical_scoping() {
+        // Assign a value to a global from a lexically scoped value.
+        let program = r#"
+        x = 52;
+        begin
+            let y = 42;
+            x = y;
+        end
+        return x;
+        "#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_int(42)));
+    }
+
+    #[test]
+    fn test_lexical_scoping_shadowing1() {
+        // Global with inner scope shadowing it, return value should be the value assigned in the
+        // outer (global) scope, since the new lexical scoped value should not be visible.
+        let program = r#"
+        x = 52;
+        begin
+            let x = 42;
+            x = 1;
+        end
+        return x;
+        "#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_int(52)));
+    }
+
+    #[test]
+    fn test_lexical_scoping_shadowing2() {
+        // Global is set, then shadowed in lexical scope, and returned inside the inner scope,
+        // should return the inner scope value.
+        let program = r#"
+        x = 52;
+        begin
+            let x = 42;
+            let y = 66;
+            return {x, y};
+        end
+        "#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_list(&[v_int(42), v_int(66)])));
+    }
+
+    #[test]
+    fn test_lexical_scoping_we_must_go_deeper() {
+        // Global is set, then shadowed in lexical scope, and returned inside the inner scope,
+        // should return the inner scope value.
+        let program = r#"
+        x = 52;
+        begin
+            let x = 42;
+            let y = 66;
+            begin
+                let z = 99;
+                y = 13;
+                return {x, y, z};
+            end
+        end
+        "#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_list(&[v_int(42), v_int(13), v_int(99)])));
+    }
+
+    /// Verify that if statements get their own lexical scope, in this case "y" shadowing the
+    /// global "y" value.
+    #[test]
+    fn test_lexical_scoping_in_if_blocks() {
+        let program = r#"
+        global y = 2;
+        let z = 3;
+        if (1)
+            let y = 5;
+            return {y, z};
+        else
+            return 0;
+        endif"#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_list(&[v_int(5), v_int(3)])));
+    }
+
+    /// Same as above but for `while`
+    #[test]
+    fn test_lexical_scoping_in_while_blocks() {
+        let program = r#"
+        global y = 2;
+        let z = 3;
+        while (1)
+            let y = 5;
+            return {y, z};
+        endwhile"#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_list(&[v_int(5), v_int(3)])));
+    }
+
+    /// And same as above for "for in"
+    #[test]
+    fn test_lexical_scoping_in_for_blocks() {
+        let program = r#"
+        global y = 2;
+        let z = 3;
+        for x in ({1,2,3})
+            let y = 5;
+            return {y, z};
+        endfor"#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_list(&[v_int(5), v_int(3)])));
+    }
+
+    /// And for try/except
+    #[test]
+    fn test_lexical_scoping_in_try_blocks() {
+        let program = r#"
+        global y = 2;
+        let z = 3;
+        try
+            let y = 5;
+            return {y, z};
+        except (E_INVARG)
+            return 0;
+        endtry"#;
+        let compiled = compile(program).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_list(&[v_int(5), v_int(3)])));
     }
 
     #[test_case("return 1;", v_int(1); "simple return")]
