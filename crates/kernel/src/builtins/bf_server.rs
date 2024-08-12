@@ -51,19 +51,25 @@ fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(noop, bf_noop);
 
 fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 2 {
+    // If in "strict" mode `notify` can only send text.
+    // Otherwise, it can send any value, and it's up to the host/client to interpret it.
+    if bf_args.config.strict_mode {
+        if bf_args.args.len() != 2 {
+            return Err(BfErr::Code(E_ARGS));
+        }
+        if bf_args.args[1].type_id() != TYPE_STR {
+            return Err(BfErr::Code(E_TYPE));
+        }
+    }
+
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
     }
+
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
         return Err(BfErr::Code(E_TYPE));
     };
-
-    // If in "strict" mode `notify` can only send text.
-    // Otherwise, it can send any value, and it's up to the host/client to interpret it.
-    if bf_args.config.strict_mode && bf_args.args[1].type_id() != TYPE_STR {
-        return Err(BfErr::Code(E_TYPE));
-    }
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
     bf_args
@@ -72,7 +78,19 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_obj_owner_perms(*player)
         .map_err(world_state_bf_err)?;
 
-    let event = NarrativeEvent::notify(bf_args.exec_state.caller(), bf_args.args[1].clone());
+    let content_type = if !bf_args.config.strict_mode && bf_args.args.len() == 3 {
+        let Variant::Str(content_type) = bf_args.args[2].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        Some(Symbol::mk_case_insensitive(content_type.as_str()))
+    } else {
+        None
+    };
+    let event = NarrativeEvent::notify(
+        bf_args.exec_state.caller(),
+        bf_args.args[1].clone(),
+        content_type,
+    );
     bf_args.task_scheduler_client.notify(*player, event);
 
     // MOO docs say this should return none, but in reality it returns 1?

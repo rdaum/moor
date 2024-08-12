@@ -142,10 +142,11 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            let Event::Notify(msg) = msg;
+                            let Event::Notify(msg, _content_type) = msg;
 
                             // Strings output as text lines to the client, otherwise send the
                             // literal form (for e.g. lists, objrefs, etc)
+                            // TODO: content-type conversions for non-text/plain (e.g. markdown, html)
                             if let Variant::Str(msg_text) = msg.variant() {
                                 self.write.send(msg_text.to_string()).await.with_context(|| "Unable to send message to client")?;
                             } else {
@@ -314,7 +315,7 @@ impl TelnetConnection {
                         }
                         ConnectionEvent::Narrative(_author, event) => {
                             let msg = event.event();
-                            let Event::Notify(msg) = msg;
+                            let Event::Notify(msg, _content_type) = msg;
 
                             // Strings output as text lines to the client, otherwise send the
                             // literal form (for e.g. lists, objrefs, etc)
