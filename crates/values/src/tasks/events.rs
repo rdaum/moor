@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::{Objid, Var};
+use crate::var::{Objid, Symbol, Var};
 use bincode::{Decode, Encode};
 use std::time::SystemTime;
 
@@ -32,7 +32,8 @@ pub struct NarrativeEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub enum Event {
     /// The typical "something happened" descriptive event.
-    Notify(Var),
+    /// Value & Content-Type
+    Notify(Var, Option<Symbol>),
     // TODO: Other Event types on Session stream
     //   other events that might happen here would be things like (local) "object moved" or "object
     //   created."
@@ -40,11 +41,11 @@ pub enum Event {
 
 impl NarrativeEvent {
     #[must_use]
-    pub fn notify(author: Objid, value: Var) -> Self {
+    pub fn notify(author: Objid, value: Var, content_type: Option<Symbol>) -> Self {
         Self {
             timestamp: SystemTime::now(),
             author,
-            event: Event::Notify(value),
+            event: Event::Notify(value, content_type),
         }
     }
 

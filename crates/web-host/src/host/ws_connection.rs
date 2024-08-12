@@ -53,6 +53,8 @@ pub struct NarrativeOutput {
     system_message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_type: Option<String>,
     server_time: SystemTime,
 }
 
@@ -82,6 +84,7 @@ impl WebSocketConnection {
                 origin_player: self.player.0,
                 system_message: Some(connect_message.to_string()),
                 message: None,
+                content_type: Some("text/plain".to_string()),
                 server_time: SystemTime::now(),
             },
         )
@@ -116,17 +119,19 @@ impl WebSocketConnection {
                                 origin_player: author.0,
                                 system_message: Some(msg),
                                 message: None,
+                                content_type: Some("text/plain".to_string()),
                                 server_time: SystemTime::now(),
                             }).await;
                         }
                         ConnectionEvent::Narrative(author, event) => {
                             let msg = event.event();
+                            let Event::Notify(msg, content_type) = msg;
+                            let content_type = content_type.map(|s| s.to_string());
                             Self::emit_narrative(&mut ws_sender, NarrativeOutput {
                                 origin_player: author.0,
                                 system_message: None,
-                                message: Some(match msg {
-                                    Event::Notify(msg) => var_as_json(&msg),
-                                }),
+                                message: Some(var_as_json(&msg)),
+                                content_type,
                                 server_time: event.timestamp(),
                             }).await;
                         }
@@ -138,6 +143,7 @@ impl WebSocketConnection {
                                 origin_player: self.player.0,
                                 system_message: Some("** Disconnected **".to_string()),
                                 message: None,
+                                content_type: Some("text/plain".to_string()),
                                 server_time: SystemTime::now(),
                             }).await;
                             ws_sender.close().await.expect("Unable to close connection");
