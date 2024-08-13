@@ -13,8 +13,7 @@
 //
 
 use bincode::{Decode, Encode};
-use moor_compiler::BUILTIN_DESCRIPTORS;
-use moor_compiler::{Label, Offset};
+use moor_compiler::{Label, Offset, BUILTINS};
 use moor_values::model::Named;
 use moor_values::model::VerbFlag;
 use moor_values::tasks::Exception;
@@ -63,9 +62,10 @@ impl VMExecState {
                     ]
                 }
                 Frame::Bf(bf_frame) => {
+                    let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
                     vec![
                         v_objid(a.this),
-                        v_str(BUILTIN_DESCRIPTORS[bf_frame.bf_index].name.as_str()),
+                        v_str(bf_name.as_str()),
                         v_objid(NOTHING),
                         v_objid(NOTHING),
                         v_objid(a.player),
@@ -95,10 +95,8 @@ impl VMExecState {
                     pieces.push(format!("{}:{}", a.verb_definer(), a.verb_name));
                 }
                 Frame::Bf(bf_frame) => {
-                    pieces.push(format!(
-                        "builtin {}",
-                        BUILTIN_DESCRIPTORS[bf_frame.bf_index].name.as_str()
-                    ));
+                    let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
+                    pieces.push(format!("builtin {bf_name}",));
                 }
             }
             if a.verb_definer() != a.this {

@@ -298,7 +298,7 @@ impl VmHost {
                     return ContinueOk;
                 }
                 ExecutionResult::ContinueBuiltin {
-                    bf_func_num: bf_offset,
+                    builtin: bf_offset,
                     arguments: args,
                 } => {
                     // Ask the VM to execute the builtin function.

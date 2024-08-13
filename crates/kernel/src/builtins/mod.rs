@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use moor_compiler::BUILTIN_DESCRIPTORS;
+use moor_compiler::{BuiltinId, BUILTINS};
 use moor_values::model::Perms;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
@@ -62,9 +62,8 @@ impl Default for BuiltinRegistry {
 
 impl BuiltinRegistry {
     pub fn new() -> Self {
-        let mut builtins: Vec<Box<dyn BuiltinFunction>> =
-            Vec::with_capacity(BUILTIN_DESCRIPTORS.len());
-        for _ in 0..BUILTIN_DESCRIPTORS.len() {
+        let mut builtins: Vec<Box<dyn BuiltinFunction>> = Vec::with_capacity(BUILTINS.len());
+        for _ in 0..BUILTINS.len() {
             builtins.push(Box::new(BfNoop {}))
         }
 
@@ -80,6 +79,10 @@ impl BuiltinRegistry {
         BuiltinRegistry {
             builtins: Arc::new(builtins),
         }
+    }
+
+    pub fn builtin_for(&self, id: &BuiltinId) -> &dyn BuiltinFunction {
+        &*self.builtins[id.0 as usize]
     }
 }
 /// The arguments and other state passed to a built-in function.

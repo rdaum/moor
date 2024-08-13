@@ -23,7 +23,7 @@ use std::time::Duration;
 use bincode::{Decode, Encode};
 
 pub use exec_state::VMExecState;
-use moor_compiler::Name;
+use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
 use moor_values::model::VerbInfo;
 use moor_values::var::{Objid, Var};
@@ -102,7 +102,7 @@ pub enum ExecutionResult {
     DispatchFork(Fork),
     /// Request dispatch of a builtin function with the given arguments.
     ContinueBuiltin {
-        bf_func_num: u16,
+        builtin: BuiltinId,
         arguments: Vec<Var>,
     },
     /// Request that this task be suspended for a duration of time.

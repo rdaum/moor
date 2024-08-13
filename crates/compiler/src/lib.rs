@@ -29,7 +29,7 @@ mod names;
 mod opcode;
 mod program;
 
-pub use crate::builtins::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
+pub use crate::builtins::{offset_for_builtin, ArgCount, ArgType, Builtin, BuiltinId, BUILTINS};
 pub use crate::codegen::compile;
 pub use crate::decompile::program_to_tree;
 pub use crate::labels::{JumpLabel, Label, Offset};

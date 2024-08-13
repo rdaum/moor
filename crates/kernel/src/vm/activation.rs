@@ -17,9 +17,9 @@ use bytes::Bytes;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-use moor_compiler::GlobalName;
 use moor_compiler::Name;
 use moor_compiler::Program;
+use moor_compiler::{BuiltinId, GlobalName};
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDef;
 use moor_values::model::VerbInfo;
@@ -124,7 +124,7 @@ impl Frame {
 #[derive(Clone, Debug, PartialEq, Encode, Decode)]
 pub struct BfFrame {
     /// The index of the built-in function being called.
-    pub(crate) bf_index: usize,
+    pub(crate) bf_id: BuiltinId,
     /// If the activation is a call to a built-in function, the per-bf unique # trampoline passed
     /// in, which can be used by the bf to figure out how to resume where it left off.
     pub(crate) bf_trampoline: Option<usize>,
@@ -269,7 +269,7 @@ impl Activation {
     }
 
     pub fn for_bf_call(
-        bf_index: usize,
+        bf_id: BuiltinId,
         bf_name: Symbol,
         args: List,
         _verb_flags: BitEnum<VerbFlag>,
@@ -290,7 +290,7 @@ impl Activation {
         );
 
         let bf_frame = BfFrame {
-            bf_index,
+            bf_id,
             bf_trampoline: None,
             bf_trampoline_arg: None,
             return_value: None,
