@@ -205,13 +205,20 @@ struct Args {
 
     #[arg(
         long,
-        help = "Enable blockl-level lexical scoping in programs. \
+        help = "Enable block-level lexical scoping in programs. \
                 Adds the `begin`/`end` syntax for creating lexical scopes, and `let` and `global`
                 for declaring variables. \
                 This is a feature that is not present in LambdaMOO, so if you need backwards compatibility, turn this off.",
         default_value = "true"
     )]
     lexical_scopes: bool,
+
+    #[arg(
+        long,
+        help = "Enable the Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt",
+        default_value = "true"
+    )]
+    map_type: bool,
 }
 
 fn main() -> Result<(), Report> {
@@ -300,6 +307,7 @@ fn main() -> Result<(), Report> {
         textdump_encoding: args.textdump_encoding,
         rich_notify: args.rich_notify,
         lexical_scopes: args.lexical_scopes,
+        map_type: args.map_type,
     });
 
     // If the database already existed, do not try to import the textdump...

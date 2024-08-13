@@ -54,8 +54,9 @@ pub mod moo {
 pub struct CompileOptions {
     /// Whether we allow lexical scope blocks. begin/end blocks and 'let' and 'global' statements
     pub lexical_scopes: bool,
+    /// Whether to support a Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt
+    pub map_type: bool,
     // TODO: future options:
-    //      - map types
     //      - symbol types
     //      - disable "#" style object references (obscure_references)
 }
@@ -64,6 +65,7 @@ impl Default for CompileOptions {
     fn default() -> Self {
         Self {
             lexical_scopes: true,
+            map_type: true,
         }
     }
 }
@@ -290,6 +292,10 @@ impl TreeTransformer {
                     }
                 }
                 Rule::map => {
+                    if !self.options.map_type {
+                        return Err(CompileError::DisabledFeature("Maps".to_string()));
+                    }
+
                     let inner = primary.into_inner();
                     // Parse each key, value as a separate expression which we will pair-up later.
                     let mut elements = vec![];
@@ -2564,6 +2570,22 @@ mod tests {
             program,
             CompileOptions {
                 lexical_scopes: false,
+                ..CompileOptions::default()
+            },
+        );
+        assert!(matches!(parse, Err(CompileError::DisabledFeature(_))));
+    }
+
+    #[test]
+    fn test_no_map() {
+        let program = r#"
+        [ 1 -> 2, 3 -> 4 ];
+        "#;
+        let parse = parse_program(
+            program,
+            CompileOptions {
+                map_type: false,
+                ..CompileOptions::default()
             },
         );
         assert!(matches!(parse, Err(CompileError::DisabledFeature(_))));

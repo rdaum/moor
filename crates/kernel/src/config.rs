@@ -32,6 +32,8 @@ pub struct Config {
     /// Whether to support block-level lexical scoping, and the 'begin', 'let' and 'global'
     /// keywords.
     pub lexical_scopes: bool,
+    /// Whether to support a Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt
+    pub map_type: bool,
 }
 
 impl Default for Config {
@@ -41,6 +43,7 @@ impl Default for Config {
             textdump_output: None,
             textdump_encoding: EncodingMode::UTF8,
             lexical_scopes: true,
+            map_type: true,
         }
     }
 }
@@ -49,6 +52,7 @@ impl Config {
     pub fn compile_options(&self) -> CompileOptions {
         CompileOptions {
             lexical_scopes: self.lexical_scopes,
+            map_type: self.map_type,
         }
     }
 }
