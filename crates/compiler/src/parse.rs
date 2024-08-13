@@ -54,6 +54,10 @@ pub mod moo {
 pub struct CompileOptions {
     /// Whether we allow lexical scope blocks. begin/end blocks and 'let' and 'global' statements
     pub lexical_scopes: bool,
+    // TODO: future options:
+    //      - map types
+    //      - symbol types
+    //      - disable "#" style object references (obscure_references)
 }
 
 impl Default for CompileOptions {
@@ -65,7 +69,7 @@ impl Default for CompileOptions {
 }
 
 pub struct TreeTransformer {
-    // TODO: this is Rc<RefCell because PrattParser has some API restrictions which result in
+    // TODO: this is RefCell because PrattParser has some API restrictions which result in
     //   borrowing issues, see: https://github.com/pest-parser/pest/discussions/1030
     names: RefCell<UnboundNames>,
     options: CompileOptions,
@@ -88,7 +92,7 @@ impl TreeTransformer {
                 let name = self
                     .names
                     .borrow_mut()
-                    .find_or_add_name_global(pairs.as_str().trim());
+                    .find_or_add_name_global(pairs.as_str().trim())?;
                 Ok(Expr::Id(name))
             }
             Rule::object => {
@@ -426,7 +430,7 @@ impl TreeTransformer {
                                     .clone()
                                     .names
                                     .borrow_mut()
-                                    .find_or_add_name_global(id);
+                                    .find_or_add_name_global(id)?;
                                 let expr = inner.next().map(|e| {
                                     primary_self.clone().parse_expr(e.into_inner()).unwrap()
                                 });
@@ -443,7 +447,7 @@ impl TreeTransformer {
                                     .clone()
                                     .names
                                     .borrow_mut()
-                                    .find_or_add_name_global(id);
+                                    .find_or_add_name_global(id)?;
                                 items.push(ScatterItem {
                                     kind: ScatterKind::Required,
                                     id,
@@ -457,7 +461,7 @@ impl TreeTransformer {
                                     .clone()
                                     .names
                                     .borrow_mut()
-                                    .find_or_add_name_global(id);
+                                    .find_or_add_name_global(id)?;
                                 items.push(ScatterItem {
                                     kind: ScatterKind::Rest,
                                     id,
@@ -475,95 +479,107 @@ impl TreeTransformer {
                 Rule::neg => Ok(Expr::Unary(UnaryOp::Neg, Box::new(rhs?))),
                 _ => todo!("Unimplemented prefix: {:?}", op.as_rule()),
             })
-            .map_postfix(|lhs, op| match op.as_rule() {
-                Rule::verb_call => {
-                    let mut parts = op.into_inner();
-                    let ident = parts.next().unwrap().as_str();
-                    let args_expr = parts.next().unwrap();
-                    let args = postfix_self.clone().parse_arglist(args_expr.into_inner())?;
-                    Ok(Expr::Verb {
-                        location: Box::new(lhs?),
-                        verb: Box::new(Expr::Value(v_str(ident))),
-                        args,
-                    })
+            .map_postfix(|lhs, op| {
+                match op.as_rule() {
+                    Rule::verb_call => {
+                        let mut parts = op.into_inner();
+                        let ident = parts.next().unwrap().as_str();
+                        let args_expr = parts.next().unwrap();
+                        let args = postfix_self.clone().parse_arglist(args_expr.into_inner())?;
+                        Ok(Expr::Verb {
+                            location: Box::new(lhs?),
+                            verb: Box::new(Expr::Value(v_str(ident))),
+                            args,
+                        })
+                    }
+                    Rule::verb_expr_call => {
+                        let mut parts = op.into_inner();
+                        let expr = postfix_self
+                            .clone()
+                            .parse_expr(parts.next().unwrap().into_inner())?;
+                        let args_expr = parts.next().unwrap();
+                        let args = postfix_self.clone().parse_arglist(args_expr.into_inner())?;
+                        Ok(Expr::Verb {
+                            location: Box::new(lhs?),
+                            verb: Box::new(expr),
+                            args,
+                        })
+                    }
+                    Rule::prop => {
+                        let mut parts = op.into_inner();
+                        let ident = parts.next().unwrap().as_str();
+                        Ok(Expr::Prop {
+                            location: Box::new(lhs?),
+                            property: Box::new(Expr::Value(v_str(ident))),
+                        })
+                    }
+                    Rule::prop_expr => {
+                        let mut parts = op.into_inner();
+                        let expr = postfix_self
+                            .clone()
+                            .parse_expr(parts.next().unwrap().into_inner())?;
+                        Ok(Expr::Prop {
+                            location: Box::new(lhs?),
+                            property: Box::new(expr),
+                        })
+                    }
+                    Rule::assign => {
+                        let mut parts = op.into_inner();
+                        let right = postfix_self
+                            .clone()
+                            .parse_expr(parts.next().unwrap().into_inner())?;
+                        // If the variable referenced in the LHS is const, we can't assign to it.
+                        // TODO this likely needs to recurse down this tree.
+                        let lhs = lhs?;
+                        if let Expr::Id(name) = &lhs {
+                            let names = self.names.borrow();
+                            let decl = names.decl_for(name);
+                            if decl.constant {
+                                return Err(CompileError::AssignToConst(decl.sym));
+                            }
+                        }
+                        Ok(Expr::Assign {
+                            left: Box::new(lhs),
+                            right: Box::new(right),
+                        })
+                    }
+                    Rule::index_single => {
+                        let mut parts = op.into_inner();
+                        let index = postfix_self
+                            .clone()
+                            .parse_expr(parts.next().unwrap().into_inner())?;
+                        Ok(Expr::Index(Box::new(lhs?), Box::new(index)))
+                    }
+                    Rule::index_range => {
+                        let mut parts = op.into_inner();
+                        let start = postfix_self
+                            .clone()
+                            .parse_expr(parts.next().unwrap().into_inner())?;
+                        let end = postfix_self
+                            .clone()
+                            .parse_expr(parts.next().unwrap().into_inner())?;
+                        Ok(Expr::Range {
+                            base: Box::new(lhs?),
+                            from: Box::new(start),
+                            to: Box::new(end),
+                        })
+                    }
+                    Rule::cond_expr => {
+                        let mut parts = op.into_inner();
+                        let true_expr = postfix_self
+                            .clone()
+                            .parse_expr(parts.next().unwrap().into_inner())?;
+                        let false_expr = postfix_self
+                            .clone()
+                            .parse_expr(parts.next().unwrap().into_inner())?;
+                        Ok(Expr::Cond {
+                            condition: Box::new(lhs?),
+                            consequence: Box::new(true_expr),
+                            alternative: Box::new(false_expr),
+                        })
+                    }
+                    _ => todo!("Unimplemented postfix: {:?}", op.as_rule()),
                 }
-                Rule::verb_expr_call => {
-                    let mut parts = op.into_inner();
-                    let expr = postfix_self
-                        .clone()
-                        .parse_expr(parts.next().unwrap().into_inner())?;
-                    let args_expr = parts.next().unwrap();
-                    let args = postfix_self.clone().parse_arglist(args_expr.into_inner())?;
-                    Ok(Expr::Verb {
-                        location: Box::new(lhs?),
-                        verb: Box::new(expr),
-                        args,
-                    })
-                }
-                Rule::prop => {
-                    let mut parts = op.into_inner();
-                    let ident = parts.next().unwrap().as_str();
-                    Ok(Expr::Prop {
-                        location: Box::new(lhs?),
-                        property: Box::new(Expr::Value(v_str(ident))),
-                    })
-                }
-                Rule::prop_expr => {
-                    let mut parts = op.into_inner();
-                    let expr = postfix_self
-                        .clone()
-                        .parse_expr(parts.next().unwrap().into_inner())?;
-                    Ok(Expr::Prop {
-                        location: Box::new(lhs?),
-                        property: Box::new(expr),
-                    })
-                }
-                Rule::assign => {
-                    let mut parts = op.into_inner();
-                    let right = postfix_self
-                        .clone()
-                        .parse_expr(parts.next().unwrap().into_inner())?;
-                    Ok(Expr::Assign {
-                        left: Box::new(lhs?),
-                        right: Box::new(right),
-                    })
-                }
-                Rule::index_single => {
-                    let mut parts = op.into_inner();
-                    let index = postfix_self
-                        .clone()
-                        .parse_expr(parts.next().unwrap().into_inner())?;
-                    Ok(Expr::Index(Box::new(lhs?), Box::new(index)))
-                }
-                Rule::index_range => {
-                    let mut parts = op.into_inner();
-                    let start = postfix_self
-                        .clone()
-                        .parse_expr(parts.next().unwrap().into_inner())?;
-                    let end = postfix_self
-                        .clone()
-                        .parse_expr(parts.next().unwrap().into_inner())?;
-                    Ok(Expr::Range {
-                        base: Box::new(lhs?),
-                        from: Box::new(start),
-                        to: Box::new(end),
-                    })
-                }
-                Rule::cond_expr => {
-                    let mut parts = op.into_inner();
-                    let true_expr = postfix_self
-                        .clone()
-                        .parse_expr(parts.next().unwrap().into_inner())?;
-                    let false_expr = postfix_self
-                        .clone()
-                        .parse_expr(parts.next().unwrap().into_inner())?;
-                    Ok(Expr::Cond {
-                        condition: Box::new(lhs?),
-                        consequence: Box::new(true_expr),
-                        alternative: Box::new(false_expr),
-                    })
-                }
-                _ => todo!("Unimplemented postfix: {:?}", op.as_rule()),
             })
             .parse(pairs);
     }
@@ -609,7 +625,7 @@ impl TreeTransformer {
                     .clone()
                     .names
                     .borrow_mut()
-                    .find_or_add_name_global(parts.next().unwrap().as_str());
+                    .find_or_add_name_global(parts.next().unwrap().as_str())?;
                 let condition = self
                     .clone()
                     .parse_expr(parts.next().unwrap().into_inner())?;
@@ -727,7 +743,7 @@ impl TreeTransformer {
                     .clone()
                     .names
                     .borrow_mut()
-                    .find_or_add_name_global(parts.next().unwrap().as_str());
+                    .find_or_add_name_global(parts.next().unwrap().as_str())?;
                 let clause = parts.next().unwrap();
                 let body = self
                     .clone()
@@ -807,6 +823,12 @@ impl TreeTransformer {
                                         self.names.borrow_mut().find_or_add_name_global(id.as_str())
                                     });
 
+                                    let exception = match exception {
+                                        None => None,
+                                        Some(Err(e)) => return Err(e),
+                                        Some(Ok(id)) => Some(id),
+                                    };
+
                                     let codes = self.clone().parse_except_codes(
                                         my_parts.next().unwrap().into_inner().next().unwrap(),
                                     )?;
@@ -864,7 +886,7 @@ impl TreeTransformer {
                 let id = self
                     .names
                     .borrow_mut()
-                    .find_or_add_name_global(parts.next().unwrap().as_str());
+                    .find_or_add_name_global(parts.next().unwrap().as_str())?;
                 let time = self
                     .clone()
                     .parse_expr(parts.next().unwrap().into_inner())?;
@@ -880,9 +902,7 @@ impl TreeTransformer {
             }
             Rule::begin_statement => {
                 if !self.options.lexical_scopes {
-                    return Err(CompileError::ParseError(
-                        "begin block when lexical scopes not enabled".to_string(),
-                    ));
+                    return Err(CompileError::DisabledFeature("lexical_scopes".to_string()));
                 }
                 let mut parts = pair.into_inner();
 
@@ -900,20 +920,25 @@ impl TreeTransformer {
                     line,
                 )))
             }
-            Rule::local_assignment => {
+            Rule::local_assignment | Rule::const_assignment => {
+                let is_const = pair.as_rule() == Rule::const_assignment;
+
                 if !self.options.lexical_scopes {
-                    return Err(CompileError::ParseError(
-                        "local assignment when lexical scopes not enabled".to_string(),
-                    ));
+                    return Err(CompileError::DisabledFeature("lexical_scopes".to_string()));
                 }
 
                 // An assignment declaration that introduces a locally lexically scoped variable.
                 // May be of form `let x = expr` or just `let x`
                 let mut parts = pair.into_inner();
-                let id = self
-                    .names
-                    .borrow_mut()
-                    .declare_name(parts.next().unwrap().as_str());
+                let id = if is_const {
+                    self.names
+                        .borrow_mut()
+                        .declare_const(parts.next().unwrap().as_str())?
+                } else {
+                    self.names
+                        .borrow_mut()
+                        .declare_name(parts.next().unwrap().as_str())?
+                };
                 let expr = parts
                     .next()
                     .map(|e| self.parse_expr(e.into_inner()).unwrap());
@@ -930,11 +955,10 @@ impl TreeTransformer {
                     line,
                 )))
             }
+
             Rule::global_assignment => {
                 if !self.options.lexical_scopes {
-                    return Err(CompileError::ParseError(
-                        "global assignment when lexical scopes not enabled".to_string(),
-                    ));
+                    return Err(CompileError::DisabledFeature("lexical_scopes".to_string()));
                 }
 
                 // An explicit global-declaration.
@@ -943,7 +967,7 @@ impl TreeTransformer {
                 let id = self
                     .names
                     .borrow_mut()
-                    .find_or_add_name_global(parts.next().unwrap().as_str());
+                    .find_or_add_name_global(parts.next().unwrap().as_str())?;
                 let expr = parts
                     .next()
                     .map(|e| self.parse_expr(e.into_inner()).unwrap());
@@ -2453,5 +2477,47 @@ mod tests {
                 StmtNode::Return(Some(Id(global_x)))
             ]
         );
+    }
+
+    /// "Lets = " was getting parsed as "let s ="
+    #[test]
+    fn test_lets_vs_let_s_regreesion() {
+        let program = r#"
+        lets = 5;
+        "#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        parse
+            .unbound_names
+            .find_name("lets")
+            .expect("lets not found");
+    }
+
+    #[test]
+    fn test_const() {
+        let program = r#"
+        const x = 5;
+        x = 6;
+        "#;
+        let parse = parse_program(program, CompileOptions::default());
+        assert!(matches!(parse, Err(CompileError::AssignToConst(_))));
+    }
+
+    #[test]
+    fn test_no_lexical_scopes() {
+        let program = r#"
+        begin
+            let x = 5;
+            begin
+                let x = 6;
+            end
+        end
+        "#;
+        let parse = parse_program(
+            program,
+            CompileOptions {
+                lexical_scopes: false,
+            },
+        );
+        assert!(matches!(parse, Err(CompileError::DisabledFeature(_))));
     }
 }

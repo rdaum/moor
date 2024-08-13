@@ -41,6 +41,7 @@ mod verbdef;
 mod verbs;
 mod world_state;
 
+use crate::var::Symbol;
 pub use world_state::WorldStateError;
 
 /// The result code from a commit/complete operation on the world's state.
@@ -68,4 +69,10 @@ pub enum CompileError {
     UnknownBuiltinFunction(String),
     #[error("Could not find loop with id: {0}")]
     UnknownLoopLabel(String),
+    #[error("Duplicate variable in scope: {0}")]
+    DuplicateVariable(Symbol),
+    #[error("Cannot assign to const: {0}")]
+    AssignToConst(Symbol),
+    #[error("Disabled feature: {0}")]
+    DisabledFeature(String),
 }

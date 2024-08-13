@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn test_list_set_range() {
         let mut var_names = UnboundNames::new();
-        let a = var_names.find_or_add_name_global("a");
+        let a = var_names.find_or_add_name_global("a").unwrap();
         let (var_names, mapping) = var_names.bind();
         let a = mapping[&a];
         let mut state = test_db_with_verb(
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn test_string_set_range() {
         let mut var_names = UnboundNames::new();
-        let a = var_names.find_or_add_name_global("a");
+        let a = var_names.find_or_add_name_global("a").unwrap();
         let (var_names, mapping) = var_names.bind();
         let a = mapping[&a];
         let mut state = test_db_with_verb(
@@ -989,6 +989,26 @@ mod tests {
             vec![],
         );
         assert_eq!(result, Ok(v_list(&[v_int(5), v_int(3)])));
+    }
+
+    #[test]
+    fn test_const_assign() {
+        let program = r#"
+        const x = 42;
+        return x;
+        "#;
+        let compiled = compile(program, CompileOptions::default()).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_int(42)));
     }
 
     #[test_case("return 1;", v_int(1); "simple return")]

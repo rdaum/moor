@@ -14,23 +14,42 @@
 
 use crate::GlobalName;
 use bincode::{Decode, Encode};
+use moor_values::model::CompileError;
 use moor_values::var::Symbol;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UnboundNames {
-    unbound_names: Vec<(Symbol, usize)>,
+    unbound_names: Vec<Decl>,
     scope: Vec<HashMap<Symbol, UnboundName>>,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Decl {
+    pub sym: Symbol,
+    pub depth: usize,
+    pub constant: bool,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct UnboundName(usize);
+pub struct UnboundName {
+    offset: usize,
+}
 
 impl Default for UnboundNames {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Policy for binding a variable when new_bound is called.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum BindMode {
+    /// If the variable is already bound, use it.
+    Reuse,
+    /// If the variable exists, return an error.
+    New,
 }
 
 impl UnboundNames {
@@ -41,27 +60,31 @@ impl UnboundNames {
             scope: vec![HashMap::new()],
         };
         for global in GlobalName::iter() {
-            names.find_or_add_name_global(global.to_string().as_str());
+            names
+                .find_or_add_name_global(global.to_string().as_str())
+                .unwrap();
         }
         names
     }
 
     /// Find a variable name, or declare in global scope.
-    pub fn find_or_add_name_global(&mut self, name: &str) -> UnboundName {
+    pub fn find_or_add_name_global(&mut self, name: &str) -> Result<UnboundName, CompileError> {
         let name = Symbol::mk_case_insensitive(name);
 
         // Check the scopes, starting at the back (innermost scope)
         for scope in self.scope.iter().rev() {
             if let Some(n) = scope.get(&name) {
-                return *n;
+                return Ok(*n);
             }
         }
 
         // If the name doesn't exist, add it to the global scope, since that's how
         // MOO currently works.
-        let unbound_name = self.new_unbound(name, 0);
+        // These types of variables are always mutable, and always re-use a variable name, to
+        // maintain existing MOO language semantics.
+        let unbound_name = self.new_unbound(name, 0, false, BindMode::Reuse)?;
         self.scope[0].insert(name, unbound_name);
-        unbound_name
+        Ok(unbound_name)
     }
 
     /// Start a new lexical scope.
@@ -75,21 +98,29 @@ impl UnboundNames {
         scope.len()
     }
 
-    /// Declare a name in the current lexical scope.
-    pub fn declare_name(&mut self, name: &str) -> UnboundName {
+    /// Declare a (mutable) name in the current lexical scope.
+    pub fn declare_name(&mut self, name: &str) -> Result<UnboundName, CompileError> {
         let name = Symbol::mk_case_insensitive(name);
-        let unbound_name = self.new_unbound(name, self.scope.len() - 1);
+        let unbound_name = self.new_unbound(name, self.scope.len() - 1, false, BindMode::New)?;
         self.scope.last_mut().unwrap().insert(name, unbound_name);
-        unbound_name
+        Ok(unbound_name)
+    }
+
+    /// Declare a (mutable) name in the current lexical scope.
+    pub fn declare_const(&mut self, name: &str) -> Result<UnboundName, CompileError> {
+        let name = Symbol::mk_case_insensitive(name);
+        let unbound_name = self.new_unbound(name, self.scope.len() - 1, true, BindMode::New)?;
+        self.scope.last_mut().unwrap().insert(name, unbound_name);
+        Ok(unbound_name)
     }
 
     /// If the same named variable exists in multiple scopes, return them all as a vector.
     pub fn find_named(&self, name: &str) -> Vec<UnboundName> {
         let name = Symbol::mk_case_insensitive(name);
         let mut names = vec![];
-        for (i, n) in self.unbound_names.iter().enumerate() {
-            if n.0 == name {
-                names.push(UnboundName(i));
+        for (i, Decl { sym, .. }) in self.unbound_names.iter().enumerate() {
+            if *sym == name {
+                names.push(UnboundName { offset: i });
             }
         }
         names
@@ -107,10 +138,28 @@ impl UnboundNames {
     }
 
     /// Create a new unbound variable.
-    fn new_unbound(&mut self, name: Symbol, scope: usize) -> UnboundName {
+    fn new_unbound(
+        &mut self,
+        name: Symbol,
+        scope: usize,
+        constant: bool,
+        bind_mode: BindMode,
+    ) -> Result<UnboundName, CompileError> {
+        // If the variable already exists in this scope, return an error.
+        if bind_mode == BindMode::New && self.scope[scope].contains_key(&name) {
+            return Err(CompileError::DuplicateVariable(name));
+        }
         let idx = self.unbound_names.len();
-        self.unbound_names.push((name, scope));
-        UnboundName(idx)
+        self.unbound_names.push(Decl {
+            sym: name,
+            depth: scope,
+            constant,
+        });
+        Ok(UnboundName { offset: idx })
+    }
+
+    pub fn decl_for(&self, name: &UnboundName) -> &Decl {
+        &self.unbound_names[name.offset]
     }
 
     /// Turn all unbound variables into bound variables.
@@ -122,11 +171,11 @@ impl UnboundNames {
         // This will produce offsets for all variables in the order they should appear in the
         // environment.
         let mut scope_depth = Vec::with_capacity(self.unbound_names.len());
-        for idx in 0..self.unbound_names.len() {
+        for (idx, _) in self.unbound_names.iter().enumerate() {
             let offset = bound.len();
-            bound.push(self.unbound_names[idx].0);
-            scope_depth.push(self.unbound_names[idx].1 as u16);
-            mapping.insert(UnboundName(idx), Name(offset as u16));
+            bound.push(self.unbound_names[idx].sym);
+            scope_depth.push(self.unbound_names[idx].depth as u16);
+            mapping.insert(UnboundName { offset: idx }, Name(offset as u16));
         }
 
         let global_width = self.scope[0].len();

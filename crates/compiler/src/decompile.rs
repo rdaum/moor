@@ -951,7 +951,9 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     let mut unbound_to_bound = HashMap::new();
     for bound_name in program.var_names.names() {
         let n = program.var_names.name_of(&bound_name).unwrap();
-        let ub = unbound_names.find_or_add_name_global(n.as_str());
+        let ub = unbound_names
+            .find_or_add_name_global(n.as_str())
+            .map_err(|_| DecompileError::NameNotFound(bound_name))?;
         bound_to_unbound.insert(bound_name, ub);
         unbound_to_bound.insert(ub, bound_name);
     }
