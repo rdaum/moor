@@ -15,17 +15,17 @@
 use moor_values::util::quote_str;
 use moor_values::var::Variant;
 
-use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
+use crate::{ast, Name};
 
-use crate::names::Names;
+use crate::names::UnboundName;
 
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]
-struct Unparse {
-    names: Names,
+struct Unparse<'a> {
+    tree: &'a Parse,
 }
 
 impl Expr {
@@ -81,9 +81,9 @@ impl Expr {
 
 const INDENT_LEVEL: usize = 2;
 
-impl Unparse {
-    fn new(names: Names) -> Self {
-        Self { names }
+impl<'a> Unparse<'a> {
+    fn new(tree: &'a Parse) -> Self {
+        Self { tree }
     }
 
     fn unparse_arg(&self, arg: &ast::Arg) -> Result<String, DecompileError> {
@@ -164,7 +164,12 @@ impl Unparse {
                 Ok(buffer)
             }
             Expr::Value(var) => Ok(self.unparse_var(var, false)),
-            Expr::Id(id) => Ok(self.names.name_of(id).unwrap().to_string()),
+            Expr::Id(id) => Ok(self
+                .tree
+                .names
+                .name_of(&self.unparse_name(id))
+                .unwrap()
+                .to_string()),
             Expr::Binary(op, left_expr, right_expr) => Ok(format!(
                 "{} {} {}",
                 brace_if_lower(left_expr),
@@ -279,10 +284,12 @@ impl Unparse {
                             buffer.push('@');
                         }
                     }
+                    let name = self.unparse_name(&var.id);
                     buffer.push_str(
-                        self.names
-                            .name_of(&var.id)
-                            .ok_or(DecompileError::NameNotFound(var.id))?
+                        self.tree
+                            .names
+                            .name_of(&name)
+                            .ok_or(DecompileError::NameNotFound(name))?
                             .as_str(),
                     );
                     if let Some(expr) = &var.expr {
@@ -332,12 +339,16 @@ impl Unparse {
 
                 let expr_frag = self.unparse_expr(expr)?;
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
+
+                let name = self.unparse_name(&id);
+
                 stmt_lines.push(format!(
                     "{}for {} in ({})",
                     indent_frag,
-                    self.names
-                        .name_of(id)
-                        .ok_or(DecompileError::NameNotFound(*id))?,
+                    self.tree
+                        .names
+                        .name_of(&name)
+                        .ok_or(DecompileError::NameNotFound(name))?,
                     expr_frag
                 ));
                 stmt_lines.append(&mut stmt_frag);
@@ -350,13 +361,15 @@ impl Unparse {
                 let from_frag = self.unparse_expr(from)?;
                 let to_frag = self.unparse_expr(to)?;
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
+                let name = self.unparse_name(&id);
 
                 stmt_lines.push(format!(
                     "{}for {} in [{}..{}]",
                     indent_frag,
-                    self.names
-                        .name_of(id)
-                        .ok_or(DecompileError::NameNotFound(*id))?,
+                    self.tree
+                        .names
+                        .name_of(&name)
+                        .ok_or(DecompileError::NameNotFound(name))?,
                     from_frag,
                     to_frag
                 ));
@@ -376,10 +389,13 @@ impl Unparse {
 
                 let mut base_str = "while ".to_string();
                 if let Some(id) = id {
+                    let id = self.unparse_name(&id);
+
                     base_str.push_str(
-                        self.names
-                            .name_of(id)
-                            .ok_or(DecompileError::NameNotFound(*id))?
+                        self.tree
+                            .names
+                            .name_of(&id)
+                            .ok_or(DecompileError::NameNotFound(id))?
                             .as_str(),
                     );
                 }
@@ -396,10 +412,13 @@ impl Unparse {
                 let mut base_str = format!("{}fork", indent_frag);
                 if let Some(id) = id {
                     base_str.push(' ');
+                    let id = self.unparse_name(&id);
+
                     base_str.push_str(
-                        self.names
-                            .name_of(id)
-                            .ok_or(DecompileError::NameNotFound(*id))?
+                        self.tree
+                            .names
+                            .name_of(&id)
+                            .ok_or(DecompileError::NameNotFound(id))?
                             .as_str(),
                     );
                 }
@@ -419,10 +438,13 @@ impl Unparse {
                         self.unparse_stmts(&except.statements, indent + INDENT_LEVEL)?;
                     let mut base_str = "except ".to_string();
                     if let Some(id) = &except.id {
+                        let id = self.unparse_name(&id);
+
                         base_str.push_str(
-                            self.names
-                                .name_of(id)
-                                .ok_or(DecompileError::NameNotFound(*id))?
+                            self.tree
+                                .names
+                                .name_of(&id)
+                                .ok_or(DecompileError::NameNotFound(id))?
                                 .as_str(),
                         );
                         base_str.push(' ');
@@ -451,10 +473,13 @@ impl Unparse {
                 let mut base_str = format!("{}break", indent_frag);
                 if let Some(exit) = &exit {
                     base_str.push(' ');
+                    let exit = self.unparse_name(&exit);
+
                     base_str.push_str(
-                        self.names
-                            .name_of(exit)
-                            .ok_or(DecompileError::NameNotFound(*exit))?
+                        self.tree
+                            .names
+                            .name_of(&exit)
+                            .ok_or(DecompileError::NameNotFound(exit))?
                             .as_str(),
                     );
                 }
@@ -465,10 +490,13 @@ impl Unparse {
                 let mut base_str = format!("{}continue", indent_frag);
                 if let Some(exit) = &exit {
                     base_str.push(' ');
+                    let exit = self.unparse_name(&exit);
+
                     base_str.push_str(
-                        self.names
-                            .name_of(exit)
-                            .ok_or(DecompileError::NameNotFound(*exit))?
+                        self.tree
+                            .names
+                            .name_of(&exit)
+                            .ok_or(DecompileError::NameNotFound(exit))?
                             .as_str(),
                     );
                 }
@@ -502,10 +530,14 @@ impl Unparse {
         }
         Ok(results)
     }
+
+    fn unparse_name(&self, name: &UnboundName) -> Name {
+        self.tree.names_mapping.get(name).unwrap().clone()
+    }
 }
 
 pub fn unparse(tree: &Parse) -> Result<Vec<String>, DecompileError> {
-    let unparse = Unparse::new(tree.names.clone());
+    let unparse = Unparse::new(tree);
     unparse.unparse_stmts(&tree.stmts, 0)
 }
 

@@ -15,19 +15,116 @@
 use crate::GlobalName;
 use bincode::{Decode, Encode};
 use moor_values::var::Symbol;
+use std::collections::HashMap;
 use strum::IntoEnumIterator;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct UnboundNames {
+    unbound_names: Vec<Symbol>,
+    scope: Vec<HashMap<Symbol, UnboundName>>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct UnboundName(usize);
+
+impl UnboundNames {
+    pub fn new() -> Self {
+        let mut names = Self {
+            unbound_names: vec![],
+            // Start with a global scope.
+            scope: vec![HashMap::new()],
+        };
+        for global in GlobalName::iter() {
+            names.find_or_add_name_global(global.to_string().as_str());
+        }
+        names
+    }
+
+    /// Find a variable name, or declare in global scope.
+    pub fn find_or_add_name_global(&mut self, name: &str) -> UnboundName {
+        let name = Symbol::mk_case_insensitive(name);
+
+        // Check the scopes, starting at the back (innermost scope)
+        for scope in self.scope.iter().rev() {
+            if let Some(n) = scope.get(&name) {
+                return *n;
+            }
+        }
+
+        // If the name doesn't exist, add it to the global scope, since that's how
+        // MOO currently works.
+        let unbound_name = self.new_unbound(name);
+        self.scope[0].insert(name, unbound_name);
+        unbound_name
+    }
+
+    /// Start a new lexical scope.
+    pub fn push_scope(&mut self) {
+        self.scope.push(HashMap::new());
+    }
+
+    /// Pop the current scope.
+    pub fn pop_scope(&mut self) {
+        self.scope.pop();
+    }
+
+    /// Declare a name in the current lexical scope.
+    pub fn declare_name(&mut self, name: &str) -> UnboundName {
+        let name = Symbol::mk_case_insensitive(name);
+        let unbound_name = self.new_unbound(name);
+        self.scope.last_mut().unwrap().insert(name, unbound_name);
+        unbound_name
+    }
+
+    /// Find the name in the name table, if it exists.
+    pub fn find_name(&self, name: &str) -> Option<UnboundName> {
+        self.find_name_offset(Symbol::mk_case_insensitive(name))
+            .map(|x| UnboundName(x))
+    }
+
+    /// Return the environment offset of the name, if it exists.
+    pub fn find_name_offset(&self, name: Symbol) -> Option<usize> {
+        for scope in self.scope.iter().rev() {
+            if let Some(n) = scope.get(&name) {
+                return Some(n.0 as usize);
+            }
+        }
+        None
+    }
+
+    /// Create a new unbound variable.
+    fn new_unbound(&mut self, name: Symbol) -> UnboundName {
+        let idx = self.unbound_names.len();
+        self.unbound_names.push(name);
+        UnboundName(idx)
+    }
+
+    /// Turn all unbound variables into bound variables.
+    /// Run at the end of compilation to produce valid offsets.
+    pub fn bind(&self) -> (Names, HashMap<UnboundName, Name>) {
+        let mut mapping = HashMap::new();
+        let mut bound = vec![];
+        // Walk the scopes, binding all unbound variables.
+        // This will produce offsets for all variables in the order they should appear in the
+        // environment.
+        for _ in self.scope.iter() {
+            for idx in 0..self.unbound_names.len() {
+                let offset = bound.len();
+                bound.push(self.unbound_names[idx]);
+                mapping.insert(UnboundName(idx), Name(offset as u16));
+            }
+        }
+        (Names { bound }, mapping)
+    }
+}
 
 /// A Name is a unique identifier for a variable in the program's environment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Hash)]
-pub struct Name(pub u16);
+pub struct Name(u16);
 
-// TODO: create a proper compiler symbol table which tracks the entrance and exit of lexical scopes
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct Names {
-    /// The list of names in the program, in order of their appearance, with the offsets into the
-    /// vector being the unique identifier for the name.
-    names: Vec<Symbol>,
+    bound: Vec<Symbol>,
 }
 
 impl Default for Names {
@@ -38,52 +135,45 @@ impl Default for Names {
 
 impl Names {
     pub fn new() -> Self {
-        let mut names = Self { names: vec![] };
-        for global in GlobalName::iter() {
-            names.find_or_add_name(global.to_string().as_str());
-        }
-        names
-    }
-
-    /// Add a name to the name table, if it doesn't already exist.
-    /// If it does exist, return the existing name.
-    pub fn find_or_add_name(&mut self, name: &str) -> Name {
-        let name = Symbol::mk_case_insensitive(name);
-        match self.names.iter().position(|n| *n == name) {
-            None => {
-                let pos = self.names.len();
-                self.names.push(name);
-                Name(pos as u16)
-            }
-            Some(n) => Name(n as u16),
-        }
+        Self { bound: vec![] }
     }
 
     /// Find the name in the name table, if it exists.
     pub fn find_name(&self, name: &str) -> Option<Name> {
-        self.find_name_offset(name).map(|x| Name(x as u16))
-    }
-
-    /// Return the environment offset of the name, if it exists.
-    pub fn find_name_offset(&self, name: &str) -> Option<usize> {
-        let name = Symbol::mk_case_insensitive(name);
-        self.names.iter().position(|x| *x == name)
+        for (idx, n) in self.bound.iter().enumerate() {
+            if n.as_str() == name {
+                return Some(Name(idx as u16));
+            }
+        }
+        None
     }
 
     /// Return the width of the name table, to be used as the (total) environment size.
     pub fn width(&self) -> usize {
-        self.names.len()
+        self.bound.len()
     }
 
     /// Return the symbol value of the given name offset.
     pub fn name_of(&self, name: &Name) -> Option<Symbol> {
-        if name.0 as usize >= self.names.len() {
+        if name.0 as usize >= self.bound.len() {
             return None;
         }
-        Some(self.names[name.0 as usize])
+        Some(self.bound[name.0 as usize])
     }
 
-    pub fn names(&self) -> &Vec<Symbol> {
-        &self.names
+    pub fn symbols(&self) -> &Vec<Symbol> {
+        &self.bound
+    }
+
+    pub fn names(&self) -> Vec<Name> {
+        (0..self.bound.len() as u16).map(Name).collect()
+    }
+
+    /// Get the offset for a bound variable.
+    pub fn offset_for(&self, name: &Name) -> Option<usize> {
+        if name.0 as usize >= self.bound.len() {
+            return None;
+        }
+        Some(name.0 as usize)
     }
 }

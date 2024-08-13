@@ -21,8 +21,6 @@ use ArgCount::{Q, U};
 use ArgType::{Any, AnyNum, Typed};
 use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 
-use crate::names::Name;
-
 lazy_static! {
     pub static ref BUILTIN_DESCRIPTORS: Vec<Builtin> = mk_builtin_table();
 }
@@ -951,18 +949,18 @@ fn mk_builtin_table() -> Vec<Builtin> {
     ]
 }
 
-pub fn make_builtin_labels() -> HashMap<Symbol, Name> {
+pub fn make_builtin_offsets() -> HashMap<Symbol, usize> {
     let mut b = HashMap::new();
-    for (i, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
-        b.insert(builtin.name, Name(i as u16));
+    for (offset, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
+        b.insert(builtin.name, offset);
     }
 
     b
 }
-pub fn make_labels_builtins() -> HashMap<Name, Symbol> {
+pub fn make_offsets_builtins() -> HashMap<usize, Symbol> {
     let mut b = HashMap::new();
-    for (i, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
-        b.insert(Name(i as u16), builtin.name);
+    for (offset, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
+        b.insert(offset, builtin.name);
     }
 
     b
