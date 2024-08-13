@@ -109,19 +109,26 @@ mod tests {
                 ImmInt(1),
                 ImmInt(2),
                 Eq,
-                If(1.into()),
+                If(1.into(), 0),
                 ImmInt(5),
                 Return,
+                EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
                 ImmInt(2),
                 ImmInt(3),
                 Eq,
-                Eif(2.into()),
+                Eif(2.into(), 0),
                 ImmInt(3),
                 Return,
+                EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
+                BeginScope {
+                    num_bindings: 0,
+                    end_label: 3.into()
+                },
                 ImmInt(6),
                 Return,
+                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -148,13 +155,17 @@ mod tests {
             *binary.main_vector.as_ref(),
             vec![
                 ImmInt(1),
-                While(1.into()),
+                While {
+                    jump_label: 1.into(),
+                    environment_width: 0,
+                },
                 Push(x),
                 ImmInt(1),
                 Add,
                 Put(x),
                 Pop,
                 Jump { label: 0.into() },
+                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -192,7 +203,8 @@ mod tests {
                 ImmInt(1),
                 WhileId {
                     id: chuckles,
-                    end_label: 1.into()
+                    end_label: 1.into(),
+                    environment_width: 0,
                 },
                 Push(x),
                 ImmInt(1),
@@ -202,15 +214,17 @@ mod tests {
                 Push(x),
                 ImmInt(5),
                 Gt,
-                If(3.into()),
+                If(3.into(), 0),
                 ExitId(1.into()),
+                EndScope { num_bindings: 0 },
                 Jump { label: 2.into() },
                 Jump { label: 0.into() },
+                EndScope { num_bindings: 0 },
                 Done,
             ]
         );
         assert_eq!(binary.jump_labels[0].position.0, 0);
-        assert_eq!(binary.jump_labels[1].position.0, 14);
+        assert_eq!(binary.jump_labels[1].position.0, 15);
     }
     #[test]
     fn test_while_break_continue_stmt() {
@@ -240,7 +254,10 @@ mod tests {
             *binary.main_vector.as_ref(),
             vec![
                 ImmInt(1),
-                While(1.into()),
+                While {
+                    jump_label: 1.into(),
+                    environment_width: 0,
+                },
                 Push(x),
                 ImmInt(1),
                 Add,
@@ -249,22 +266,29 @@ mod tests {
                 Push(x),
                 ImmInt(5),
                 Eq,
-                If(3.into()),
+                If(3.into(), 0),
                 Exit {
                     stack: 0.into(),
                     label: 1.into()
                 },
+                EndScope { num_bindings: 0 },
                 Jump { label: 2.into() },
+                BeginScope {
+                    num_bindings: 0,
+                    end_label: 4.into()
+                },
                 Exit {
                     stack: 0.into(),
                     label: 0.into()
                 },
+                EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
+                EndScope { num_bindings: 0 },
                 Done
             ]
         );
         assert_eq!(binary.jump_labels[0].position.0, 0);
-        assert_eq!(binary.jump_labels[1].position.0, 15);
+        assert_eq!(binary.jump_labels[1].position.0, 18);
     }
     #[test]
     fn test_for_in_list_stmt() {
@@ -303,7 +327,8 @@ mod tests {
                 ImmInt(0),
                 ForList {
                     id: x,
-                    end_label: 1.into()
+                    end_label: 1.into(),
+                    environment_width: 0,
                 },
                 Push(x),
                 ImmInt(5),
@@ -311,6 +336,7 @@ mod tests {
                 Put(b),
                 Pop,
                 Jump { label: 0.into() },
+                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -347,7 +373,8 @@ mod tests {
                 ImmInt(5),
                 ForRange {
                     id: n,
-                    end_label: 1.into()
+                    end_label: 1.into(),
+                    environment_width: 0,
                 },
                 Push(player),
                 Imm(tell),
@@ -356,6 +383,7 @@ mod tests {
                 CallVerb,
                 Pop,
                 Jump { label: 0.into() },
+                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -774,7 +802,8 @@ mod tests {
             *binary.main_vector.as_ref(),
             vec![
                 TryFinally {
-                    end_label: 0.into()
+                    end_label: 0.into(),
+                    environment_width: 0,
                 },
                 ImmInt(1),
                 Put(a),
@@ -831,7 +860,10 @@ mod tests {
                 ImmErr(E_PROPNF),
                 MakeSingletonList,
                 PushCatchLabel(1.into()),
-                TryExcept { num_excepts: 2 },
+                TryExcept {
+                    num_excepts: 2,
+                    environment_width: 0
+                },
                 ImmInt(1),
                 Put(a),
                 Pop,
@@ -847,6 +879,7 @@ mod tests {
                 ImmInt(3),
                 Put(a),
                 Pop,
+                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -930,7 +963,9 @@ mod tests {
                 },
                 ImmErr(E_INVARG),
                 MakeSingletonList,
-                FuncCall { id: raise_num },
+                FuncCall {
+                    id: raise_num as u16
+                },
                 EndCatch(1.into()),
                 ImmInt(1),
                 Ref,
@@ -1449,7 +1484,10 @@ mod tests {
                 ImmErr(E_RANGE),
                 MakeSingletonList,
                 PushCatchLabel(Label(0)),
-                TryExcept { num_excepts: 1 },
+                TryExcept {
+                    num_excepts: 1,
+                    environment_width: 0
+                },
                 Imm(Label(0)),
                 ImmInt(2),
                 // Our offset is different because we don't count PushLabel in the stack.
@@ -1458,6 +1496,7 @@ mod tests {
                 Return,
                 EndExcept(Label(1)),
                 Pop,
+                EndScope { num_bindings: 0 },
                 Done
             ]
         );

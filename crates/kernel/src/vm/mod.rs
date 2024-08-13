@@ -102,7 +102,7 @@ pub enum ExecutionResult {
     DispatchFork(Fork),
     /// Request dispatch of a builtin function with the given arguments.
     ContinueBuiltin {
-        bf_func_num: usize,
+        bf_func_num: u16,
         arguments: Vec<Var>,
     },
     /// Request that this task be suspended for a duration of time.

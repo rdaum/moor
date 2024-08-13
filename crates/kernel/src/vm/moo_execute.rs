@@ -121,7 +121,24 @@ pub fn moo_frame_execute(
         f.pc += 1;
 
         match op {
-            Op::If(label) | Op::Eif(label) | Op::IfQues(label) | Op::While(label) => {
+            Op::If(label, environment_width)
+            | Op::Eif(label, environment_width)
+            | Op::While {
+                jump_label: label,
+                environment_width,
+            } => {
+                let scope_type = match op {
+                    Op::If(..) | Op::Eif(..) => ScopeType::If,
+                    Op::While { .. } => ScopeType::While,
+                    _ => unreachable!(),
+                };
+                f.push_scope(scope_type, *environment_width);
+                let cond = f.pop();
+                if !cond.is_true() {
+                    f.jump(label);
+                }
+            }
+            Op::IfQues(label) => {
                 let cond = f.pop();
                 if !cond.is_true() {
                     f.jump(label);
@@ -130,7 +147,12 @@ pub fn moo_frame_execute(
             Op::Jump { label } => {
                 f.jump(label);
             }
-            Op::WhileId { id, end_label } => {
+            Op::WhileId {
+                id,
+                end_label,
+                environment_width,
+            } => {
+                f.push_scope(ScopeType::While, *environment_width);
                 let v = f.pop();
                 let is_true = v.is_true();
                 f.set_env(id, v);
@@ -138,7 +160,13 @@ pub fn moo_frame_execute(
                     f.jump(end_label);
                 }
             }
-            Op::ForList { end_label, id } => {
+            Op::ForList {
+                end_label,
+                id,
+                environment_width,
+            } => {
+                f.push_scope(ScopeType::For, *environment_width);
+
                 // Pop the count and list off the stack. We push back later when we re-enter.
 
                 let (count, list) = f.peek2();
@@ -176,7 +204,13 @@ pub fn moo_frame_execute(
                 f.set_env(id, l.get(count).unwrap().clone());
                 f.poke(0, v_int((count + 1) as i64));
             }
-            Op::ForRange { end_label, id } => {
+            Op::ForRange {
+                end_label,
+                id,
+                environment_width,
+            } => {
+                f.push_scope(ScopeType::For, *environment_width);
+
                 // Pull the range ends off the stack.
                 let (from, next_val) = {
                     let (to, from) = f.peek2();
@@ -654,16 +688,23 @@ pub fn moo_frame_execute(
                     }
                 }
             }
-            Op::TryFinally { end_label: label } => {
-                f.enter_scope(ScopeType::TryFinally(*label));
+            Op::TryFinally {
+                end_label: label,
+                environment_width,
+            } => {
+                // Next opcode must be BeginScope, to define the variable scoping.
+                f.push_scope(ScopeType::TryFinally(*label), *environment_width);
             }
             Op::TryCatch { handler_label: _ } => {
                 let catches = std::mem::take(&mut f.catch_stack);
-                f.enter_scope(ScopeType::TryCatch(catches));
+                f.push_scope(ScopeType::TryCatch(catches), 0);
             }
-            Op::TryExcept { num_excepts: _ } => {
+            Op::TryExcept {
+                num_excepts: _,
+                environment_width,
+            } => {
                 let catches = std::mem::take(&mut f.catch_stack);
-                f.enter_scope(ScopeType::TryCatch(catches));
+                f.push_scope(ScopeType::TryCatch(catches), *environment_width);
             }
             Op::EndCatch(label) | Op::EndExcept(label) => {
                 let is_catch = matches!(op, Op::EndCatch(_));
@@ -698,6 +739,12 @@ pub fn moo_frame_execute(
                         return state.unwind_stack(why);
                     }
                 }
+            }
+            Op::BeginScope { num_bindings, .. } => {
+                f.push_scope(ScopeType::Block, *num_bindings);
+            }
+            Op::EndScope { num_bindings: _ } => {
+                f.pop_scope().expect("Missing scope");
             }
             Op::ExitId(label) => {
                 f.jump(label);

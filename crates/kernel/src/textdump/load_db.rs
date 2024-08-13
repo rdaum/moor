@@ -17,7 +17,6 @@ use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use tracing::{info, span, trace};
 
@@ -219,14 +218,7 @@ pub fn read_textdump<T: io::Read>(
                 }
                 // If the verb program is missing, then it's an empty program, and we'll put in
                 // an empty binary.
-                _ => Program {
-                    literals: vec![],
-                    jump_labels: vec![],
-                    var_names: Default::default(),
-                    main_vector: Arc::new(vec![]),
-                    fork_vectors: vec![],
-                    line_number_spans: vec![],
-                },
+                _ => Program::new(),
             };
 
             let binary =

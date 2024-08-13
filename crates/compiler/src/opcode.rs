@@ -28,18 +28,33 @@ pub enum Op {
     FinallyContinue,
     Div,
     Done,
-    Eif(Label),
     EndCatch(Label),
     EndExcept(Label),
     EndFinally,
     Eq,
-    Exit { stack: Offset, label: Label },
+    Exit {
+        stack: Offset,
+        label: Label,
+    },
     ExitId(Label),
     Exp,
-    ForList { id: Name, end_label: Label },
-    ForRange { id: Name, end_label: Label },
-    Fork { fv_offset: Offset, id: Option<Name> },
-    FuncCall { id: usize },
+    ForList {
+        id: Name,
+        end_label: Label,
+        environment_width: u16,
+    },
+    ForRange {
+        id: Name,
+        end_label: Label,
+        environment_width: u16,
+    },
+    Fork {
+        fv_offset: Offset,
+        id: Option<Name>,
+    },
+    FuncCall {
+        id: u16,
+    },
     Ge,
     GetProp,
     Gt,
@@ -54,7 +69,9 @@ pub enum Op {
     ImmObjid(Objid),
     In,
     IndexSet,
-    Jump { label: Label },
+    Jump {
+        label: Label,
+    },
     Le,
     Length(Offset),
     ListAddTail,
@@ -83,13 +100,38 @@ pub enum Op {
     Scatter(Box<ScatterArgs>),
     Sub,
     PushCatchLabel(Label),
-    TryCatch { handler_label: Label },
-    TryExcept { num_excepts: usize },
-    TryFinally { end_label: Label },
+    TryCatch {
+        handler_label: Label,
+    },
+    TryExcept {
+        num_excepts: u16,
+        environment_width: u16,
+    },
+    TryFinally {
+        end_label: Label,
+        environment_width: u16,
+    },
+    /// Begin a lexical scope, expanding the Environment by `num_bindings`
+    BeginScope {
+        num_bindings: u16,
+        end_label: Label,
+    },
+    /// End a lexical scope, contracting the Environment by `num_bindings`
+    EndScope {
+        num_bindings: u16,
+    },
     UnaryMinus,
-    While(Label),
-    WhileId { id: Name, end_label: Label },
-    If(Label),
+    While {
+        jump_label: Label,
+        environment_width: u16,
+    },
+    WhileId {
+        id: Name,
+        end_label: Label,
+        environment_width: u16,
+    },
+    If(Label, u16),
+    Eif(Label, u16),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]

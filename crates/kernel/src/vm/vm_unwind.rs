@@ -271,6 +271,10 @@ impl VMExecState {
                                     }
                                 }
                             }
+                            _ => {
+                                // This is a lexical scope, so we just let it pop off the stack and
+                                // continue on.
+                            }
                         }
                     }
                 }

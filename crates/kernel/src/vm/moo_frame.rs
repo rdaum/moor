@@ -32,20 +32,10 @@ pub(crate) struct MooStackFrame {
     pub(crate) program: Program,
     /// The program counter.
     pub(crate) pc: usize,
-    // TODO: Language enhancement: Introduce lexical scopes to the MOO language:
-    //      add a 'with' keyword to the language which introduces a new scope, similar to ML's "let":
-    //              with x = 1 in
-    //                     ...
-    //              endlet
-    //      Multiple variables can be introduced at once:
-    //              with x = 1, y = 2 in ...
-    //      Variables not declared with 'with' are verb-scoped as they are now
-    //      'with' variables that shadow already-known verb-scoped variables override the verb-scope
-    //      Add LetBegin and LetEnd opcodes to the language.
-    //      Make the environment have a width, and expand and contract as scopes are entered and exited.
-    //      Likewise, Names in Program should be scope delimited somehow
     /// The values of the variables currently in scope, by their offset.
     pub(crate) environment: BitArray<Var, 256, Bitset16<16>>,
+    /// The current used scope size, used when entering and exiting local scopes.
+    pub(crate) environment_width: usize,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
     /// A stack of active scopes. Used for catch and finally blocks and in the future for lexical
@@ -75,6 +65,10 @@ pub(crate) enum ScopeType {
     /// Note that `return` and `exit` are not considered failures.
     TryFinally(Label),
     TryCatch(Vec<(CatchType, Label)>),
+    If,
+    While,
+    For,
+    Block,
 }
 
 /// A scope is a record of the current size of the valstack when it was created, and are
@@ -85,6 +79,7 @@ pub(crate) enum ScopeType {
 pub(crate) struct Scope {
     pub(crate) scope_type: ScopeType,
     pub(crate) valstack_pos: usize,
+    pub(crate) environment_width: usize,
 }
 
 impl Encode for MooStackFrame {
@@ -100,6 +95,7 @@ impl Encode for MooStackFrame {
             env[i] = Some(v.clone())
         }
         env.encode(encoder)?;
+        self.environment_width.encode(encoder)?;
         self.valstack.encode(encoder)?;
         self.scope_stack.encode(encoder)?;
         self.temp.encode(encoder)?;
@@ -120,7 +116,7 @@ impl Decode for MooStackFrame {
                 environment.set(i, v.clone());
             }
         }
-
+        let environment_width = usize::decode(decoder)?;
         let valstack = Vec::decode(decoder)?;
         let scope_stack = Vec::decode(decoder)?;
         let temp = Var::decode(decoder)?;
@@ -130,6 +126,7 @@ impl Decode for MooStackFrame {
             program,
             pc,
             environment,
+            environment_width,
             valstack,
             scope_stack,
             temp,
@@ -151,7 +148,7 @@ impl<'de> BorrowDecode<'de> for MooStackFrame {
                 environment.set(i, v.clone());
             }
         }
-
+        let environment_width = usize::borrow_decode(decoder)?;
         let valstack = Vec::borrow_decode(decoder)?;
         let scope_stack = Vec::borrow_decode(decoder)?;
         let temp = Var::borrow_decode(decoder)?;
@@ -161,6 +158,7 @@ impl<'de> BorrowDecode<'de> for MooStackFrame {
             program,
             pc,
             environment,
+            environment_width,
             valstack,
             scope_stack,
             temp,
@@ -173,10 +171,11 @@ impl<'de> BorrowDecode<'de> for MooStackFrame {
 impl MooStackFrame {
     pub(crate) fn new(program: Program) -> Self {
         let environment = BitArray::new();
-
+        let environment_width = program.var_names.global_width();
         Self {
             program,
             environment,
+            environment_width,
             valstack: vec![],
             scope_stack: vec![],
             pc: 0,
@@ -185,6 +184,7 @@ impl MooStackFrame {
             finally_stack: vec![],
         }
     }
+
     pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
         if self.program.line_number_spans.is_empty() {
             return None;
@@ -293,16 +293,32 @@ impl MooStackFrame {
         self.pc = label.position.0 as usize;
     }
 
-    pub fn enter_scope(&mut self, scope: ScopeType) {
+    /// Enter a new lexical scope and/or try/catch handling block.
+    pub fn push_scope(&mut self, scope: ScopeType, environment_width: u16) {
+        // If this is a lexical scope, expand the environment to accommodate the new variables.
+        // (This is just updating environment_width)
+        let environment_width = environment_width as usize;
+        assert!(environment_width <= self.environment.len());
+        self.environment_width += environment_width;
+
         self.scope_stack.push(Scope {
             scope_type: scope,
             valstack_pos: self.valstack.len(),
+            environment_width,
         });
     }
 
     pub fn pop_scope(&mut self) -> Option<Scope> {
         let scope = self.scope_stack.pop()?;
         self.valstack.truncate(scope.valstack_pos);
+
+        // Clear out the environment for the scope that is being exited.
+        // Everything in environment after old width - new-width should be set to v_none
+        let old_width = self.environment_width;
+        for i in old_width - scope.environment_width..self.environment_width {
+            self.environment.set(i, v_none());
+        }
+        self.environment_width -= scope.environment_width;
         Some(scope)
     }
 }
