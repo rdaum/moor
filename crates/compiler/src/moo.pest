@@ -29,6 +29,7 @@ statement  = {
   | begin_statement
   | expr_statement
   | local_assignment
+  | const_assignment
   | global_assignment
   }
 
@@ -59,6 +60,7 @@ unlabelled_except     = { "(" ~ codes ~ ")" }
 begin_statement       = { ^"begin" ~ statements ~ ^"end" }
 
 local_assignment = { ^"let" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
+const_assignment = { ^"const" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
 
 // globally scoped (same as default in MOO) adds explicitly to global scope.
 global_assignment = { ^"global" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
