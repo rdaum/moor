@@ -431,7 +431,7 @@ impl Decompile {
                 self.statements
                     .push(Stmt::new(StmtNode::Return(Some(expr)), line_num));
             }
-            Op::Return0 => {
+            Op::ReturnFalse => {
                 self.statements
                     .push(Stmt::new(StmtNode::Return(None), line_num));
             }

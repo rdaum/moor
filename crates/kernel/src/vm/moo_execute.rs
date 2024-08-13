@@ -23,7 +23,9 @@ use moor_values::model::WorldStateError;
 use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::var::Symbol;
 use moor_values::var::Variant;
-use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
+use moor_values::var::{
+    v_bool, v_empty_list, v_err, v_false, v_int, v_list, v_none, v_obj, v_objid, v_true, Var,
+};
 use moor_values::var::{v_empty_map, v_float};
 use moor_values::var::{v_listv, Error};
 
@@ -37,8 +39,8 @@ macro_rules! binary_bool_op {
     ( $f:ident, $op:tt ) => {
         let rhs = $f.pop();
         let lhs = $f.peek_top();
-        let result = if lhs $op &rhs { 1 } else { 0 };
-        $f.poke(0, v_int(result))
+        let result = if lhs $op &rhs { v_true() } else { v_false() };
+        $f.poke(0, result)
     };
 }
 
@@ -708,8 +710,8 @@ pub fn moo_frame_execute(
                 let ret_val = f.pop();
                 return state.unwind_stack(FinallyReason::Return(ret_val));
             }
-            Op::Return0 => {
-                return state.unwind_stack(FinallyReason::Return(v_int(0)));
+            Op::ReturnFalse => {
+                return state.unwind_stack(FinallyReason::Return(v_false()));
             }
             Op::Done => {
                 return state.unwind_stack(FinallyReason::Return(v_none()));

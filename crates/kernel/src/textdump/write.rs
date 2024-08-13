@@ -91,6 +91,9 @@ impl<W: io::Write> TextdumpWriter<W> {
             Variant::None => {
                 writeln!(self.writer, "{}", VarType::TYPE_NONE as i64)?;
             }
+            Variant::Bool(b) => {
+                writeln!(self.writer, "{}\n{}", VarType::TYPE_BOOL as i64, *b as i64)?;
+            }
             Variant::Float(f) => {
                 // For MOO compat we need to do the same as:
                 // 	sprintf(buffer, "%%.%dg\n", DBL_DIG + 4);

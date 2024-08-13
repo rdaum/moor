@@ -32,6 +32,7 @@ pub enum Variant {
     Err(Error),
     List(List),
     Map(Map),
+    Bool(bool),
 }
 
 impl Display for Variant {
@@ -45,6 +46,7 @@ impl Display for Variant {
             Self::Err(e) => write!(f, "{e}"),
             Self::List(l) => write!(f, "{l}"),
             Self::Map(m) => write!(f, "{m}"),
+            Self::Bool(b) => write!(f, "{b}"),
         }
     }
 }

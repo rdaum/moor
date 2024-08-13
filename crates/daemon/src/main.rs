@@ -219,6 +219,13 @@ struct Args {
         default_value = "true"
     )]
     map_type: bool,
+
+    #[arg(
+        long,
+        help = "Enable the Bool datatype, not available in LambdaMOO 1.8",
+        default_value = "true"
+    )]
+    bool_type: bool,
 }
 
 fn main() -> Result<(), Report> {

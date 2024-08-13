@@ -41,6 +41,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::List(_) => result.push_str("{list}"),
             Variant::Map(_) => result.push_str("{map}"),
             Variant::Err(e) => result.push_str(e.name()),
+            Variant::Bool(b) => result.push_str(if *b { "true" } else { "false" }),
         }
     }
     Ok(Ret(v_str(result.as_str())))

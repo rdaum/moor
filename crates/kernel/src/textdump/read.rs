@@ -162,6 +162,7 @@ impl<R: Read> TextdumpReader<R> {
                 v_map_pairs(&pairs)
             }
             VarType::TYPE_NONE => v_none(),
+            VarType::TYPE_BOOL => v_int(self.read_num()?),
             VarType::TYPE_FLOAT => v_float(self.read_float()?),
             VarType::TYPE_LABEL => {
                 let l_num = self.read_num()?;

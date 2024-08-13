@@ -1395,7 +1395,7 @@ mod tests {
     fn test_0_arg_return() {
         let program = r#"return;"#;
         let binary = compile(program, CompileOptions::default()).unwrap();
-        assert_eq!(*binary.main_vector.as_ref(), vec![Return0, Done])
+        assert_eq!(*binary.main_vector.as_ref(), vec![ReturnFalse, Done])
     }
 
     #[test]

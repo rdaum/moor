@@ -47,6 +47,7 @@ impl Var {
             Variant::Int(i) => *i != 0,
             Variant::Float(f) => !f.is_zero(),
             Variant::List(l) => !l.is_empty(),
+            Variant::Bool(b) => *b,
             _ => false,
         }
     }

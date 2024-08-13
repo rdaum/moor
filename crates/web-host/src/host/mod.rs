@@ -65,6 +65,7 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             }
             serde_json::Value::Object(v)
         }
+        Variant::Bool(b) => serde_json::Value::Bool(*b),
     }
 }
 

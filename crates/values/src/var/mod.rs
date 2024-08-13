@@ -82,6 +82,7 @@ pub enum VarType {
     TYPE_LABEL = 7, // present only in textdump */
     TYPE_FLOAT = 9,
     TYPE_MAP = 10,
+    TYPE_BOOL = 11,
 }
 
 /// Var is our variant type / tagged union used to represent MOO's dynamically typed values.
@@ -138,6 +139,7 @@ fn encoded_size(v: &Var) -> usize {
         Variant::Err(_) => 2,
         Variant::List(l) => 1 + l.as_bytes().unwrap().len(),
         Variant::Map(m) => 1 + m.as_bytes().unwrap().len(),
+        Variant::Bool(_) => 1,
     }
 }
 
@@ -169,6 +171,9 @@ fn encode(v: &Var) -> Bytes {
         }
         Variant::Map(m) => {
             buffer.extend_from_slice(m.as_bytes().unwrap().as_ref());
+        }
+        Variant::Bool(b) => {
+            buffer.extend_from_slice(&(*b as u8).to_le_bytes());
         }
     }
     Bytes::from(buffer)
@@ -251,7 +256,17 @@ impl AsByteBuffer for Var {
 
 #[must_use]
 pub fn v_bool(b: bool) -> Var {
-    Var::new(Variant::Int(i64::from(b)))
+    Var::new(Variant::Bool(b))
+}
+
+#[must_use]
+pub fn v_true() -> Var {
+    v_bool(true)
+}
+
+#[must_use]
+pub fn v_false() -> Var {
+    v_bool(false)
 }
 
 #[must_use]
@@ -356,6 +371,7 @@ impl Var {
             Variant::Err(_) => VarType::TYPE_ERR,
             Variant::List(_) => VarType::TYPE_LIST,
             Variant::Map(_) => VarType::TYPE_MAP,
+            Variant::Bool(_) => VarType::TYPE_BOOL,
         }
     }
 
@@ -402,6 +418,7 @@ impl Var {
                 result
             }
             Variant::Err(e) => e.name().to_string(),
+            Variant::Bool(b) => b.to_string(),
         }
     }
 }
@@ -429,6 +446,22 @@ impl PartialEq<Self> for Var {
             (Variant::Err(l), Variant::Err(r)) => l == r,
             (Variant::List(l), Variant::List(r)) => l == r,
             (Variant::Map(l), Variant::Map(r)) => l == r,
+            (Variant::Bool(l), Variant::Bool(r)) => l == r,
+            // Bools can be compared to int 1 or 0
+            (Variant::Bool(l), Variant::Int(r)) => {
+                if *l {
+                    *r == 1
+                } else {
+                    *r == 0
+                }
+            }
+            (Variant::Int(l), Variant::Bool(r)) => {
+                if *r {
+                    *l == 1
+                } else {
+                    *l == 0
+                }
+            }
             (Variant::None, _) => false,
             (Variant::Str(_), _) => false,
             (Variant::Obj(_), _) => false,
@@ -437,6 +470,7 @@ impl PartialEq<Self> for Var {
             (Variant::Err(_), _) => false,
             (Variant::List(_), _) => false,
             (Variant::Map(_), _) => false,
+            (Variant::Bool(_), _) => false,
         }
     }
 }
@@ -458,6 +492,7 @@ impl Ord for Var {
             (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
             (Variant::List(l), Variant::List(r)) => l.cmp(r),
             (Variant::Map(l), Variant::Map(r)) => l.cmp(r),
+            (Variant::Bool(l), Variant::Bool(r)) => l.cmp(r),
             (Variant::None, _) => Ordering::Less,
             (Variant::Str(_), _) => Ordering::Less,
             (Variant::Obj(_), _) => Ordering::Less,
@@ -466,6 +501,7 @@ impl Ord for Var {
             (Variant::Err(_), _) => Ordering::Less,
             (Variant::List(_), _) => Ordering::Less,
             (Variant::Map(_), _) => Ordering::Less,
+            (Variant::Bool(_), _) => Ordering::Less,
         }
     }
 }
@@ -483,6 +519,7 @@ impl Hash for Var {
             Variant::Err(e) => e.hash(state),
             Variant::List(l) => l.hash(state),
             Variant::Map(m) => m.hash(state),
+            Variant::Bool(b) => b.hash(state),
         }
     }
 }

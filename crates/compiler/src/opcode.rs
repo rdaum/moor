@@ -98,7 +98,7 @@ pub enum Op {
     RangeSet,
     Ref,
     Return,
-    Return0,
+    ReturnFalse,
     Scatter(Box<ScatterArgs>),
     Sub,
     PushCatchLabel(Label),

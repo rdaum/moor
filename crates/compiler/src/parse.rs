@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use moor_values::var::{v_none, Symbol};
+use moor_values::var::{v_bool, v_none, Symbol};
 use moor_values::SYSTEM_OBJECT;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
@@ -118,6 +118,10 @@ impl TreeTransformer {
                 let string = pairs.as_str();
                 let parsed = unquote_str(string)?;
                 Ok(Expr::Value(v_str(&parsed)))
+            }
+            Rule::bool => {
+                let b = pairs.as_str();
+                Ok(Expr::Value(v_bool(b == "true")))
             }
             Rule::err => {
                 let e = pairs.as_str();
@@ -701,9 +705,13 @@ impl TreeTransformer {
             }
             Rule::return_statement => {
                 let mut parts = pair.into_inner();
-                let expr = parts
-                    .next()
-                    .map(|expr| self.parse_expr(expr.into_inner()).unwrap());
+                let expr = parts.next().map(|expr| self.parse_expr(expr.into_inner()));
+                // Expr is Option<Result and we need to propagate the err if it's there
+                let expr = match expr {
+                    None => Ok(None),
+                    Some(Err(e)) => Err(e),
+                    Some(Ok(expr)) => Ok(Some(expr)),
+                }?;
                 Ok(Some(Stmt::new(StmtNode::Return(expr), line)))
             }
             Rule::for_statement => {
@@ -1190,7 +1198,7 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
 #[cfg(test)]
 mod tests {
     use moor_values::var::Error::{E_INVARG, E_PROPNF, E_VARNF};
-    use moor_values::var::{v_err, v_float, v_int, v_obj, v_str};
+    use moor_values::var::{v_err, v_false, v_float, v_int, v_obj, v_str, v_true};
     use moor_values::var::{v_none, Symbol};
 
     use crate::ast::Arg::{Normal, Splice};
@@ -2690,6 +2698,19 @@ mod tests {
                 (Value(v_int(1)), Value(v_int(2))),
                 (Value(v_int(3)), Value(v_int(4))),
             ]))]
+        );
+    }
+
+    #[test]
+    fn test_bool() {
+        let program = r#"return {true, false};"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Return(Some(Expr::List(vec![
+                Normal(Value(v_true())),
+                Normal(Value(v_false())),
+            ])))]
         );
     }
 }

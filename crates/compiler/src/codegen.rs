@@ -806,7 +806,7 @@ impl CodegenState {
                 self.emit(Op::Return);
                 self.pop_stack(1);
             }
-            StmtNode::Return(None) => self.emit(Op::Return0),
+            StmtNode::Return(None) => self.emit(Op::ReturnFalse),
             StmtNode::Expr(e) => {
                 self.generate_expr(e)?;
                 self.emit(Op::Pop);

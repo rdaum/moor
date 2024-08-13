@@ -154,7 +154,7 @@ builtin_call = { (ident ~ !(keyword)) ~ arglist }
 sysprop      = { "$" ~ ident }
 sysprop_call = { sysprop ~ arglist }
 
-atom     = { integer | float | string | object | err | ident }
+atom     = { integer | float | string | object | err | bool | ident }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
 exprlist = { argument ~ ("," ~ argument)* }
@@ -186,6 +186,8 @@ ERR = @{
 }
 
 err = @{ ERR ~ !ident_continue+ }
+
+bool = @{ ^"true" | ^"false" }
 
 object  = @{ "#" ~ integer }
 keyword = @{
