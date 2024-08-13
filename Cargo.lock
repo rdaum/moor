@@ -1959,6 +1959,7 @@ dependencies = [
  "daumtils",
  "decorum",
  "enum-primitive-derive",
+ "im",
  "itertools 0.13.0",
  "lazy_static",
  "num-traits",

@@ -289,6 +289,23 @@ impl TreeTransformer {
                         Ok(Expr::List(vec![]))
                     }
                 }
+                Rule::map => {
+                    let inner = primary.into_inner();
+                    // Parse each key, value as a separate expression which we will pair-up later.
+                    let mut elements = vec![];
+                    for r in inner {
+                        elements.push(primary_self.clone().parse_expr(r.into_inner()).unwrap());
+                    }
+                    let pairs = elements
+                        .chunks(2)
+                        .map(|pair| {
+                            let key = pair[0].clone();
+                            let value = pair[1].clone();
+                            (key, value)
+                        })
+                        .collect();
+                    Ok(Expr::Map(pairs))
+                }
                 Rule::builtin_call => {
                     let mut inner = primary.into_inner();
                     let bf = inner.next().unwrap().as_str();
@@ -419,7 +436,7 @@ impl TreeTransformer {
             .map_prefix(|op, rhs| match op.as_rule() {
                 Rule::scatter_assign => {
                     let rhs = rhs?;
-                    
+
                     self.clone().parse_scatter_assign(op, rhs, false, false)
                 }
                 Rule::not => Ok(Expr::Unary(UnaryOp::Not, Box::new(rhs?))),
@@ -2550,6 +2567,21 @@ mod tests {
             },
         );
         assert!(matches!(parse, Err(CompileError::DisabledFeature(_))));
+    }
+
+    #[test]
+    fn test_map() {
+        let program = r#"
+        [ 1 -> 2, 3 -> 4 ];
+        "#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Map(vec![
+                (Value(v_int(1)), Value(v_int(2))),
+                (Value(v_int(3)), Value(v_int(4))),
+            ]))]
+        );
     }
 
     #[test]

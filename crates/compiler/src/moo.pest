@@ -141,6 +141,7 @@ primary    = _{
   | sysprop_call
   | sysprop
   | try_expr
+  | map
   | list
   | atom
   | range_end
@@ -158,6 +159,7 @@ arglist  = { "(" ~ exprlist ~ ")" | "()" }
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
 exprlist = { argument ~ ("," ~ argument)* }
 argument = { expr | "@" ~ expr }
+map      = { ("[" ~ (expr ~ "->" ~ expr) ~ ("," ~ expr ~ "->" ~ expr)* ~ "]") | "[]" }
 
 range_end = { "$" }
 

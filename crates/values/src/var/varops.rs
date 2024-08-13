@@ -198,7 +198,8 @@ impl Var {
         }
     }
 
-    pub fn rangeset(&self, value: Self, from: i64, to: i64) -> Result<Self, Error> {
+    // TODO: consolidate Map logic into here.
+    pub fn range_set(&self, value: Self, from: i64, to: i64) -> Result<Self, Error> {
         let (base_len, val_len) = match (self.variant(), value.variant()) {
             (Variant::Str(base_str), Variant::Str(val_str)) => {
                 (base_str.len() as i64, val_str.len() as i64)

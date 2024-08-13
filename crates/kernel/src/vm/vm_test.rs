@@ -22,10 +22,10 @@ mod tests {
     use moor_values::model::{WorldState, WorldStateSource};
     use moor_values::util::BitEnum;
     use moor_values::var::Error::E_DIV;
-    use moor_values::var::Objid;
     use moor_values::var::{
         v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, v_str, Var,
     };
+    use moor_values::var::{v_map_pairs, Objid};
 
     use moor_values::NOTHING;
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
@@ -1124,6 +1124,15 @@ mod tests {
     #[test_case(r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#, 
         v_int(666); "verb_info invalid object error")]
     #[test_case("return -9223372036854775808;", v_int(i64::MIN); "minint")]
+    #[test_case("return [ 1 -> 2][1];", v_int(2); "map index")]
+    #[test_case("return [ 0 -> 1, 1 -> 2, 2 -> 3, 3 -> 4][1..3];",
+        v_map_pairs(&[(v_int(1),v_int(2)), (v_int(2),v_int(3))]); "map range")]
+    #[test_case("return [ 0 -> 1, 1 -> 2, 2 -> 3, 3 -> 4][1..$];",
+        v_map_pairs(&[(v_int(1),v_int(2)), (v_int(2),v_int(3),), (v_int(3),v_int(4))]); "map range to end")]
+    #[test_case(r#"m = [ 1 -> "one", 2 -> "two", 3 -> "three" ]; m[1..2] = ["abc" -> #1]; return m;"#,
+        v_map_pairs(&[(v_int(3),v_str("three")), (v_str("abc"),v_obj(1))]); "map range assignment")]
+    #[test_case("l = {1,2,3}; l[2..3] = {6, 7, 8, 9}; return l;",
+         v_list(&[v_int(1), v_int(6), v_int(7), v_int(8), v_int(9)]); "list assignment to range")]
     fn test_run(program: &str, expected_result: Var) {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
