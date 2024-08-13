@@ -16,7 +16,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use moor_values::var::Symbol;
 use tracing::error;
 
 use moor_values::var::Var;
@@ -25,7 +24,7 @@ use moor_values::var::Variant;
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
-use crate::builtins::make_builtin_offsets;
+use crate::builtins::BUILTINS;
 use crate::labels::{JumpLabel, Label, Offset};
 use crate::names::{Name, Names, UnboundName};
 use crate::opcode::Op::Jump;
@@ -53,17 +52,12 @@ pub struct CodegenState {
     pub(crate) saved_stack: Option<Offset>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
-    pub(crate) builtins: HashMap<Symbol, usize>,
     pub(crate) fork_vectors: Vec<Vec<Op>>,
     pub(crate) line_number_spans: Vec<(usize, usize)>,
 }
 
 impl CodegenState {
-    pub fn new(
-        var_names: Names,
-        binding_mappings: HashMap<UnboundName, Name>,
-        builtins: HashMap<Symbol, usize>,
-    ) -> Self {
+    pub fn new(var_names: Names, binding_mappings: HashMap<UnboundName, Name>) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
@@ -74,7 +68,6 @@ impl CodegenState {
             saved_stack: None,
             cur_stack: 0,
             max_stack: 0,
-            builtins,
             fork_vectors: vec![],
             line_number_spans: vec![],
         }
@@ -422,13 +415,12 @@ impl CodegenState {
             }
             Expr::Call { function, args } => {
                 // Lookup builtin.
-                let Some(builtin) = self.builtins.get(function) else {
+                let Some(id) = BUILTINS.find_builtin(*function) else {
                     error!("Unknown builtin function: {}({:?}", function, args);
                     return Err(CompileError::UnknownBuiltinFunction(function.to_string()));
                 };
-                let builtin = *builtin;
                 self.generate_arg_list(args)?;
-                self.emit(Op::FuncCall { id: builtin as u16 });
+                self.emit(Op::FuncCall { id });
             }
             Expr::Verb {
                 args,
@@ -845,11 +837,10 @@ pub fn compile(program: &str, options: CompileOptions) -> Result<Program, Compil
     let compile_span = tracing::trace_span!("compile");
     let _compile_guard = compile_span.enter();
 
-    let builtins = make_builtin_offsets();
     let parse = parse_program(program, options)?;
 
     // Generate the code into 'cg_state'.
-    let mut cg_state = CodegenState::new(parse.names, parse.names_mapping, builtins);
+    let mut cg_state = CodegenState::new(parse.names, parse.names_mapping);
     for x in parse.stmts {
         cg_state.generate_stmt(&x)?;
     }

@@ -16,13 +16,12 @@ use std::sync::Arc;
 
 use tracing::trace;
 
-use moor_compiler::Program;
-use moor_compiler::BUILTIN_DESCRIPTORS;
+use moor_compiler::{BuiltinId, Program, BUILTINS};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 use moor_values::var::v_int;
-use moor_values::var::Error::{E_INVIND, E_PERM, E_VARNF, E_VERBNF};
+use moor_values::var::Error::{E_INVIND, E_PERM, E_VERBNF};
 use moor_values::var::Symbol;
 use moor_values::var::{List, Objid};
 
@@ -223,21 +222,18 @@ impl VMExecState {
     /// Call into a builtin function.
     pub(crate) fn call_builtin_function(
         &mut self,
-        bf_func_num: u16,
+        bf_id: BuiltinId,
         args: List,
         exec_args: &VmExecParams,
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
-        let bf_func_num = bf_func_num as usize;
-        if bf_func_num >= exec_args.builtin_registry.builtins.len() {
-            return self.raise_error(E_VARNF);
-        }
-        let bf = exec_args.builtin_registry.builtins[bf_func_num].as_ref();
-
+        let bf = exec_args.builtin_registry.builtin_for(&bf_id);
+        let bf_desc = BUILTINS.description_for(bf_id).expect("Builtin not found");
+        let bf_name = bf_desc.name;
         trace!(
             "Calling builtin: {}({}) caller_perms: {}",
-            BUILTIN_DESCRIPTORS[bf_func_num].name,
+            bf_name,
             args_literal(&args),
             self.top().permissions
         );
@@ -245,8 +241,8 @@ impl VMExecState {
         // Push an activation frame for the builtin function.
         let flags = self.top().verb_info.verbdef().flags();
         self.stack.push(Activation::for_bf_call(
-            bf_func_num,
-            BUILTIN_DESCRIPTORS[bf_func_num].name,
+            bf_id,
+            bf_name,
             args.clone(),
             // We copy the flags from the calling verb, that will determine error handling 'd'
             // behaviour below.
@@ -255,7 +251,7 @@ impl VMExecState {
         ));
         let mut bf_args = BfCallState {
             exec_state: self,
-            name: BUILTIN_DESCRIPTORS[bf_func_num].name,
+            name: bf_name,
             world_state,
             session: session.clone(),
             // TODO: avoid copy here by using List inside BfCallState
@@ -288,7 +284,7 @@ impl VMExecState {
             _ => panic!("Expected a BF frame at the top of the stack"),
         };
 
-        trace!(bf_index = bf_frame.bf_index, "Reentering builtin function");
+        trace!(bf_index = ?bf_frame.bf_id, "Reentering builtin function");
         // Functions that did not set a trampoline are assumed to be complete, so we just unwind.
         // Note: If there was an error that required unwinding, we'll have already done that, so
         // we can assume a *value* here not, an error.
@@ -298,7 +294,7 @@ impl VMExecState {
             return self.unwind_stack(FinallyReason::Return(return_value));
         };
 
-        let bf = exec_args.builtin_registry.builtins[bf_frame.bf_index].as_ref();
+        let bf = exec_args.builtin_registry.builtin_for(&bf_frame.bf_id);
         let verb_name = self.top().verb_name;
         let sessions = session.clone();
         let args = self.top().args.clone();

@@ -21,7 +21,7 @@ use iana_time_zone::get_timezone;
 use tracing::{debug, error, info, warn};
 
 use moor_compiler::compile;
-use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTIN_DESCRIPTORS};
+use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTINS};
 use moor_values::model::{ObjFlag, WorldStateError};
 use moor_values::tasks::NarrativeEvent;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
@@ -618,16 +618,13 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Find the function id for the given function name.
     let func_name = Symbol::mk_case_insensitive(func_name.as_str());
-    let Some(func_offset) = BUILTIN_DESCRIPTORS
-        .iter()
-        .position(|bf| bf.name == func_name)
-    else {
-        return Err(BfErr::Code(E_ARGS));
-    };
+    let builtin = BUILTINS
+        .find_builtin(func_name)
+        .ok_or(BfErr::Code(E_ARGS))?;
 
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
     Ok(VmInstr(ExecutionResult::ContinueBuiltin {
-        bf_func_num: func_offset as u16,
+        builtin,
         arguments: args[..].to_vec(),
     }))
 }
@@ -721,18 +718,18 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             return Err(BfErr::Code(E_TYPE));
         };
         let func_name = Symbol::mk_case_insensitive(func_name.as_str());
-        let bf = BUILTIN_DESCRIPTORS
-            .iter()
-            .find(|bf| bf.name == func_name)
-            .map(bf_function_info_to_list);
-        let Some(desc) = bf else {
+        let bf = BUILTINS
+            .find_builtin(func_name)
+            .ok_or(BfErr::Code(E_ARGS))?;
+        let Some(desc) = BUILTINS.description_for(bf) else {
             return Err(BfErr::Code(E_ARGS));
         };
+        let desc = bf_function_info_to_list(desc);
         return Ok(Ret(desc));
     }
 
-    let bf_list: Vec<_> = BUILTIN_DESCRIPTORS
-        .iter()
+    let bf_list: Vec<_> = BUILTINS
+        .descriptions()
         .filter(|&bf| bf.implemented)
         .map(bf_function_info_to_list)
         .collect();

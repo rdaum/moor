@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::var::Symbol;
 use moor_values::var::{v_err, v_int, v_none, v_objid, Var};
 use moor_values::var::{v_float, Variant};
 use std::collections::{HashMap, VecDeque};
@@ -21,13 +20,14 @@ use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
     StmtNode, UnaryOp,
 };
-use crate::builtins::make_offsets_builtins;
+use crate::builtins::BuiltinId;
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::labels::{JumpLabel, Label};
 use crate::names::{Name, UnboundName, UnboundNames};
 use crate::opcode::{Op, ScatterLabel};
 use crate::parse::Parse;
 use crate::program::Program;
+use crate::BUILTINS;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {
@@ -36,7 +36,7 @@ pub enum DecompileError {
     #[error("name not found: {0:?}")]
     NameNotFound(Name),
     #[error("builtin function not found: #{0:?}")]
-    BuiltinNotFound(usize),
+    BuiltinNotFound(BuiltinId),
     #[error("label not found: {0:?}")]
     LabelNotFound(Label),
     #[error("malformed program: {0}")]
@@ -53,7 +53,6 @@ struct Decompile {
     /// The current position in the opcode stream as it is being decompiled.
     position: usize,
     expr_stack: VecDeque<Expr>,
-    builtins: HashMap<usize, Symbol>,
     statements: Vec<Stmt>,
     names_mapping: HashMap<Name, UnboundName>,
 }
@@ -405,7 +404,6 @@ impl Decompile {
                     fork_vector: Some(fv_offset.0 as _),
                     position: 0,
                     expr_stack: self.expr_stack.clone(),
-                    builtins: self.builtins.clone(),
                     statements: vec![],
                     names_mapping: self.names_mapping.clone(),
                 };
@@ -561,8 +559,8 @@ impl Decompile {
             }
             Op::FuncCall { id } => {
                 let args = self.pop_expr()?;
-                let Some(builtin) = self.builtins.get(&(id as usize)) else {
-                    return Err(BuiltinNotFound(id as usize));
+                let Some(function) = BUILTINS.name_of(id) else {
+                    return Err(BuiltinNotFound(id));
                 };
 
                 // Have to reconstruct arg list ...
@@ -571,10 +569,7 @@ impl Decompile {
                         format!("expected list of args, got {:?} instead", args).to_string(),
                     ));
                 };
-                self.push_expr(Expr::Call {
-                    function: *builtin,
-                    args,
-                })
+                self.push_expr(Expr::Call { function, args })
             }
             Op::CallVerb => {
                 let args = self.pop_expr()?;
@@ -958,13 +953,11 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
         unbound_to_bound.insert(ub, bound_name);
     }
 
-    let builtins = make_offsets_builtins();
     let mut decompile = Decompile {
         program: program.clone(),
         fork_vector: None,
         position: 0,
         expr_stack: Default::default(),
-        builtins,
         statements: vec![],
         names_mapping: bound_to_unbound,
     };

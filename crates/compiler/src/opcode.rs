@@ -12,12 +12,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::builtins::BuiltinId;
+use crate::labels::{Label, Offset};
+use crate::names::Name;
 use bincode::{Decode, Encode};
 use moor_values::var::Error;
 use moor_values::var::Objid;
-
-use crate::labels::{Label, Offset};
-use crate::names::Name;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
 pub enum Op {
@@ -53,7 +53,7 @@ pub enum Op {
         id: Option<Name>,
     },
     FuncCall {
-        id: u16,
+        id: BuiltinId,
     },
     Ge,
     GetProp,

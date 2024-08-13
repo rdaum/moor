@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_values::var::Symbol;
 use moor_values::var::VarType;
@@ -22,7 +23,8 @@ use ArgType::{Any, AnyNum, Typed};
 use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 
 lazy_static! {
-    pub static ref BUILTIN_DESCRIPTORS: Vec<Builtin> = mk_builtin_table();
+    static ref BUILTIN_DESCRIPTORS: Vec<Builtin> = mk_builtin_table();
+    pub static ref BUILTINS: Builtins = Builtins::new();
 }
 pub enum ArgCount {
     Q(usize),
@@ -949,18 +951,61 @@ fn mk_builtin_table() -> Vec<Builtin> {
     ]
 }
 
-pub fn make_builtin_offsets() -> HashMap<Symbol, usize> {
+#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Hash, Encode, Decode)]
+pub struct BuiltinId(pub u16);
+
+/// The dictionary of all builtins indexed by their name, and by their unique ID.
+pub struct Builtins {
+    pub offsets: HashMap<Symbol, BuiltinId>,
+    pub names: HashMap<BuiltinId, Symbol>,
+}
+
+impl Default for Builtins {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Builtins {
+    pub fn new() -> Self {
+        let offsets = make_builtin_offsets();
+        let names = make_offsets_builtins();
+        Self { offsets, names }
+    }
+
+    pub fn find_builtin(&self, bf_name: Symbol) -> Option<BuiltinId> {
+        self.offsets.get(&bf_name).cloned()
+    }
+
+    pub fn name_of(&self, offset: BuiltinId) -> Option<Symbol> {
+        self.names.get(&offset).cloned()
+    }
+
+    pub fn len(&self) -> usize {
+        self.offsets.len()
+    }
+
+    pub fn description_for(&self, offset: BuiltinId) -> Option<&Builtin> {
+        BUILTIN_DESCRIPTORS.get(offset.0 as usize)
+    }
+
+    pub fn descriptions(&self) -> impl Iterator<Item = &Builtin> {
+        BUILTIN_DESCRIPTORS.iter()
+    }
+}
+
+fn make_builtin_offsets() -> HashMap<Symbol, BuiltinId> {
     let mut b = HashMap::new();
     for (offset, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
-        b.insert(builtin.name, offset);
+        b.insert(builtin.name, BuiltinId(offset as u16));
     }
 
     b
 }
-pub fn make_offsets_builtins() -> HashMap<usize, Symbol> {
+pub fn make_offsets_builtins() -> HashMap<BuiltinId, Symbol> {
     let mut b = HashMap::new();
     for (offset, builtin) in BUILTIN_DESCRIPTORS.iter().enumerate() {
-        b.insert(offset, builtin.name);
+        b.insert(BuiltinId(offset as u16), builtin.name);
     }
 
     b
@@ -968,8 +1013,8 @@ pub fn make_offsets_builtins() -> HashMap<usize, Symbol> {
 
 pub fn offset_for_builtin(bf_name: &str) -> usize {
     let bf_name = Symbol::mk(bf_name);
-    BUILTIN_DESCRIPTORS
-        .iter()
-        .position(|b| b.name == bf_name)
-        .unwrap()
+    let builtin = BUILTINS
+        .find_builtin(bf_name)
+        .unwrap_or_else(|| panic!("Unknown builtin: {}", bf_name));
+    builtin.0 as usize
 }

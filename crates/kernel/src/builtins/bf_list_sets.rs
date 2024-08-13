@@ -14,13 +14,12 @@
 
 use std::ops::BitOr;
 
-use onig::{Region, SearchOptions, SyntaxOperator};
-
 use moor_compiler::offset_for_builtin;
 use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::var::Variant;
 use moor_values::var::{v_empty_list, v_int, v_list, v_string};
 use moor_values::var::{v_listv, Error};
+use onig::{Region, SearchOptions, SyntaxOperator};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;

@@ -14,7 +14,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::builtins::BUILTIN_DESCRIPTORS;
+    use crate::builtins::BUILTINS;
     use crate::codegen::compile;
     use crate::labels::{Label, Offset};
     use crate::opcode::Op::*;
@@ -514,6 +514,7 @@ mod tests {
          5: 012 000             * CALL_FUNC disassemble
          7: 111                   POP
         */
+        let disassemble = BUILTINS.find_builtin(Symbol::mk("disassemble")).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
@@ -521,7 +522,7 @@ mod tests {
                 MakeSingletonList,
                 Imm(test),
                 ListAddTail,
-                FuncCall { id: 0 },
+                FuncCall { id: disassemble },
                 Pop,
                 Done
             ]
@@ -949,10 +950,7 @@ mod tests {
          15: 014                 * INDEX
          16: 108                   RETURN
         */
-        let raise_num = BUILTIN_DESCRIPTORS
-            .iter()
-            .position(|b| b.name == Symbol::mk("raise"))
-            .unwrap();
+        let raise = BUILTINS.find_builtin(Symbol::mk("raise")).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
@@ -963,9 +961,7 @@ mod tests {
                 },
                 ImmErr(E_INVARG),
                 MakeSingletonList,
-                FuncCall {
-                    id: raise_num as u16
-                },
+                FuncCall { id: raise },
                 EndCatch(1.into()),
                 ImmInt(1),
                 Ref,
