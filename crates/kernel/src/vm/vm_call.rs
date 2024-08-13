@@ -211,7 +211,7 @@ impl VMExecState {
         frame.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
             frame
-                .set_var_offset(&task_id_name, v_int(self.task_id as i64))
+                .set_variable(&task_id_name, v_int(self.task_id as i64))
                 .expect("Unable to set task_id in activation frame");
         }
 

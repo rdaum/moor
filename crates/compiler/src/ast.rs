@@ -18,7 +18,7 @@ use std::fmt::Display;
 use moor_values::var::Var;
 
 /// The abstract syntax tree produced by the parser and converted by codegen into opcodes.
-use crate::names::Name;
+use crate::names::UnboundName;
 use crate::opcode::Op;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -37,7 +37,7 @@ pub enum ScatterKind {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ScatterItem {
     pub kind: ScatterKind,
-    pub id: Name,
+    pub id: UnboundName,
     pub expr: Option<Expr>,
 }
 
@@ -130,7 +130,7 @@ pub enum Expr {
         args: Vec<Arg>,
     },
     Value(Var),
-    Id(Name),
+    Id(UnboundName),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),
     Or(Box<Expr>, Box<Expr>),
@@ -177,7 +177,7 @@ pub struct CondArm {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ExceptArm {
-    pub id: Option<Name>,
+    pub id: Option<UnboundName>,
     pub codes: CatchCodes,
     pub statements: Vec<Stmt>,
 }
@@ -213,23 +213,23 @@ pub enum StmtNode {
         otherwise: Vec<Stmt>,
     },
     ForList {
-        id: Name,
+        id: UnboundName,
         expr: Expr,
         body: Vec<Stmt>,
     },
     ForRange {
-        id: Name,
+        id: UnboundName,
         from: Expr,
         to: Expr,
         body: Vec<Stmt>,
     },
     While {
-        id: Option<Name>,
+        id: Option<UnboundName>,
         condition: Expr,
         body: Vec<Stmt>,
     },
     Fork {
-        id: Option<Name>,
+        id: Option<UnboundName>,
         time: Expr,
         body: Vec<Stmt>,
     },
@@ -242,10 +242,10 @@ pub enum StmtNode {
         handler: Vec<Stmt>,
     },
     Break {
-        exit: Option<Name>,
+        exit: Option<UnboundName>,
     },
     Continue {
-        exit: Option<Name>,
+        exit: Option<UnboundName>,
     },
     Return(Option<Expr>),
     Expr(Expr),

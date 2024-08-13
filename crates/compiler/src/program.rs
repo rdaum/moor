@@ -28,7 +28,7 @@ lazy_static! {
 }
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
-#[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Encode, Decode)]
 pub struct Program {
     /// All the literals referenced in this program.
     pub literals: Vec<Var>,
@@ -97,7 +97,7 @@ impl Display for Program {
         }
 
         // Write variable names indexed by their offset
-        for (i, v) in self.var_names.names().iter().enumerate() {
+        for (i, v) in self.var_names.symbols().iter().enumerate() {
             writeln!(f, "V{}: {}", i, v)?;
         }
 

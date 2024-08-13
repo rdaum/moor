@@ -378,7 +378,7 @@ mod test {
                     moor_compiler::program_to_tree(&Program::from_bytes(binary2).unwrap()).unwrap();
 
                 assert_eq!(
-                    program1.names, program2.names,
+                    program1.unbound_names, program2.unbound_names,
                     "{}:{}, variable names mismatch",
                     o, v1_name
                 );
