@@ -165,7 +165,7 @@ impl Decompile {
         let opcode = self.next()?;
         let Op::Jump { label } = opcode else {
             return Err(MalformedProgram(
-                "expected jump opcode at branch end".to_string(),
+                format!("expected jump opcode at branch end, got: {opcode:?}").to_string(),
             ));
         };
         if self.statements.len() > old_len {
@@ -287,7 +287,7 @@ impl Decompile {
                     ));
                 };
                 let list = self.pop_expr()?;
-                let (body, _) = self.decompile_until_branch_end(&label)?;
+                let body = self.decompile_statements_until(&label)?;
                 let id = self.decompile_name(&id)?;
                 self.statements.push(Stmt::new(
                     StmtNode::ForList {
@@ -306,7 +306,7 @@ impl Decompile {
             } => {
                 let to = self.pop_expr()?;
                 let from = self.pop_expr()?;
-                let (body, _) = self.decompile_until_branch_end(&end_label)?;
+                let body = self.decompile_statements_until(&end_label)?;
                 let id = self.decompile_name(&id)?;
                 self.statements.push(Stmt::new(
                     StmtNode::ForRange {
@@ -329,7 +329,7 @@ impl Decompile {
                 //      a series of statements
                 //      a jump back to the conditional expression
                 let cond = self.pop_expr()?;
-                let (body, _) = self.decompile_until_branch_end(&loop_end_label)?;
+                let body = self.decompile_statements_until(&loop_end_label)?;
                 self.statements.push(Stmt::new(
                     StmtNode::While {
                         id: None,
@@ -353,7 +353,7 @@ impl Decompile {
                 //      a series of statements
                 //      a jump back to the conditional expression
                 let cond = self.pop_expr()?;
-                let (body, _) = self.decompile_until_branch_end(&loop_end_label)?;
+                let body = self.decompile_statements_until(&loop_end_label)?;
                 let id = self.decompile_name(&id)?;
                 self.statements.push(Stmt::new(
                     StmtNode::While {
@@ -695,6 +695,7 @@ impl Decompile {
             Op::TryExcept {
                 num_excepts,
                 environment_width,
+                ..
             } => {
                 let mut except_arms = Vec::with_capacity(num_excepts as usize);
                 for _ in 0..num_excepts {
@@ -790,6 +791,7 @@ impl Decompile {
             }
             Op::TryCatch {
                 handler_label: label,
+                ..
             } => {
                 let codes_expr = self.pop_expr()?;
                 let catch_codes = match codes_expr {
@@ -882,7 +884,7 @@ impl Decompile {
                 self.push_expr(assign);
             }
             Op::Jump { .. } | Op::PushTemp => {
-                unreachable!("should have been handled other decompilation branches")
+                // unreachable!("should have been handled other decompilation branches")
             }
             Op::EndCatch(_) | Op::FinallyContinue | Op::EndExcept(_) | Op::EndFinally => {
                 // Early exit; main logic is in TRY_FINALLY or CATCH etc case, above

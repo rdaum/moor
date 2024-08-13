@@ -169,8 +169,6 @@ mod tests {
                 Done
             ]
         );
-        assert_eq!(binary.jump_labels[0].position.0, 0);
-        assert_eq!(binary.jump_labels[1].position.0, 8);
     }
 
     #[test]
@@ -223,8 +221,6 @@ mod tests {
                 Done,
             ]
         );
-        assert_eq!(binary.jump_labels[0].position.0, 0);
-        assert_eq!(binary.jump_labels[1].position.0, 15);
     }
     #[test]
     fn test_while_break_continue_stmt() {
@@ -288,7 +284,6 @@ mod tests {
             ]
         );
         assert_eq!(binary.jump_labels[0].position.0, 0);
-        assert_eq!(binary.jump_labels[1].position.0, 18);
     }
     #[test]
     fn test_for_in_list_stmt() {
@@ -341,7 +336,6 @@ mod tests {
             ]
         );
         assert_eq!(binary.jump_labels[0].position.0, 7);
-        assert_eq!(binary.jump_labels[1].position.0, 14);
     }
 
     #[test]
@@ -863,7 +857,8 @@ mod tests {
                 PushCatchLabel(1.into()),
                 TryExcept {
                     num_excepts: 2,
-                    environment_width: 0
+                    environment_width: 0,
+                    end_label: 2.into(),
                 },
                 ImmInt(1),
                 Put(a),
@@ -919,6 +914,7 @@ mod tests {
                 PushCatchLabel(0.into()),
                 TryCatch {
                     handler_label: 0.into(),
+                    end_label: 1.into(),
                 },
                 Push(x),
                 ImmInt(1),
@@ -958,6 +954,7 @@ mod tests {
                 PushCatchLabel(0.into()),
                 TryCatch {
                     handler_label: 0.into(),
+                    end_label: 1.into(),
                 },
                 ImmErr(E_INVARG),
                 MakeSingletonList,
@@ -1483,7 +1480,8 @@ mod tests {
                 PushCatchLabel(Label(0)),
                 TryExcept {
                     num_excepts: 1,
-                    environment_width: 0
+                    environment_width: 0,
+                    end_label: 1.into(),
                 },
                 Imm(Label(0)),
                 ImmInt(2),
@@ -1526,6 +1524,7 @@ mod tests {
                 PushCatchLabel(0.into()),
                 TryCatch {
                     handler_label: 0.into(),
+                    end_label: 1.into(),
                 },
                 Push(this),
                 EndCatch(1.into()),

@@ -132,7 +132,7 @@ pub fn moo_frame_execute(
                     Op::While { .. } => ScopeType::While,
                     _ => unreachable!(),
                 };
-                f.push_scope(scope_type, *environment_width);
+                f.push_scope(scope_type, *environment_width, label);
                 let cond = f.pop();
                 if !cond.is_true() {
                     f.jump(label);
@@ -152,7 +152,7 @@ pub fn moo_frame_execute(
                 end_label,
                 environment_width,
             } => {
-                f.push_scope(ScopeType::While, *environment_width);
+                f.push_scope(ScopeType::While, *environment_width, end_label);
                 let v = f.pop();
                 let is_true = v.is_true();
                 f.set_env(id, v);
@@ -165,7 +165,7 @@ pub fn moo_frame_execute(
                 id,
                 environment_width,
             } => {
-                f.push_scope(ScopeType::For, *environment_width);
+                f.push_scope(ScopeType::For, *environment_width, end_label);
 
                 // Pop the count and list off the stack. We push back later when we re-enter.
 
@@ -209,7 +209,7 @@ pub fn moo_frame_execute(
                 id,
                 environment_width,
             } => {
-                f.push_scope(ScopeType::For, *environment_width);
+                f.push_scope(ScopeType::For, *environment_width, end_label);
 
                 // Pull the range ends off the stack.
                 let (from, next_val) = {
@@ -689,22 +689,27 @@ pub fn moo_frame_execute(
                 }
             }
             Op::TryFinally {
-                end_label: label,
+                end_label,
                 environment_width,
             } => {
                 // Next opcode must be BeginScope, to define the variable scoping.
-                f.push_scope(ScopeType::TryFinally(*label), *environment_width);
+                f.push_scope(
+                    ScopeType::TryFinally(*end_label),
+                    *environment_width,
+                    end_label,
+                );
             }
-            Op::TryCatch { handler_label: _ } => {
+            Op::TryCatch { end_label, .. } => {
                 let catches = std::mem::take(&mut f.catch_stack);
-                f.push_scope(ScopeType::TryCatch(catches), 0);
+                f.push_scope(ScopeType::TryCatch(catches), 0, end_label);
             }
             Op::TryExcept {
-                num_excepts: _,
                 environment_width,
+                end_label,
+                ..
             } => {
                 let catches = std::mem::take(&mut f.catch_stack);
-                f.push_scope(ScopeType::TryCatch(catches), *environment_width);
+                f.push_scope(ScopeType::TryCatch(catches), *environment_width, end_label);
             }
             Op::EndCatch(label) | Op::EndExcept(label) => {
                 let is_catch = matches!(op, Op::EndCatch(_));
@@ -712,7 +717,12 @@ pub fn moo_frame_execute(
 
                 let handler = f.pop_scope().expect("Missing handler for try/catch/except");
                 let ScopeType::TryCatch(..) = handler.scope_type else {
-                    panic!("Handler is not a catch handler");
+                    panic!(
+                        "Handler is not a catch handler; {}:{} line {}",
+                        a.this,
+                        a.verb_name,
+                        f.find_line_no(f.pc - 1).unwrap()
+                    );
                 };
 
                 if is_catch {
@@ -740,8 +750,11 @@ pub fn moo_frame_execute(
                     }
                 }
             }
-            Op::BeginScope { num_bindings, .. } => {
-                f.push_scope(ScopeType::Block, *num_bindings);
+            Op::BeginScope {
+                num_bindings,
+                end_label,
+            } => {
+                f.push_scope(ScopeType::Block, *num_bindings, end_label);
             }
             Op::EndScope { num_bindings: _ } => {
                 f.pop_scope().expect("Missing scope");

@@ -102,10 +102,12 @@ pub enum Op {
     PushCatchLabel(Label),
     TryCatch {
         handler_label: Label,
+        end_label: Label,
     },
     TryExcept {
         num_excepts: u16,
         environment_width: u16,
+        end_label: Label,
     },
     TryFinally {
         end_label: Label,

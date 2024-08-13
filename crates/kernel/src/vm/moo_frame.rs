@@ -79,6 +79,7 @@ pub(crate) enum ScopeType {
 pub(crate) struct Scope {
     pub(crate) scope_type: ScopeType,
     pub(crate) valstack_pos: usize,
+    pub(crate) end_pos: usize,
     pub(crate) environment_width: usize,
 }
 
@@ -291,20 +292,30 @@ impl MooStackFrame {
     pub fn jump(&mut self, label_id: &Label) {
         let label = &self.program.jump_labels[label_id.0 as usize];
         self.pc = label.position.0 as usize;
+
+        // Pop all scopes until we find one whose end_pos is > our jump point
+        while let Some(scope) = self.scope_stack.last() {
+            if scope.end_pos > self.pc {
+                break;
+            }
+            self.pop_scope();
+        }
     }
 
     /// Enter a new lexical scope and/or try/catch handling block.
-    pub fn push_scope(&mut self, scope: ScopeType, environment_width: u16) {
+    pub fn push_scope(&mut self, scope: ScopeType, environment_width: u16, end_label: &Label) {
         // If this is a lexical scope, expand the environment to accommodate the new variables.
         // (This is just updating environment_width)
         let environment_width = environment_width as usize;
         assert!(environment_width <= self.environment.len());
         self.environment_width += environment_width;
 
+        let end_pos = self.program.jump_labels[end_label.0 as usize].position.0 as usize;
         self.scope_stack.push(Scope {
             scope_type: scope,
             valstack_pos: self.valstack.len(),
             environment_width,
+            end_pos,
         });
     }
 
