@@ -20,11 +20,11 @@ use tracing::debug;
 use moor_compiler::{Op, ScatterLabel};
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::var::v_float;
 use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::var::Symbol;
 use moor_values::var::Variant;
 use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
+use moor_values::var::{v_empty_map, v_float};
 use moor_values::var::{v_listv, Error};
 
 use crate::tasks::sessions::Session;
@@ -349,6 +349,18 @@ pub fn moo_frame_execute(
                 let v = f.peek_top();
                 f.poke(0, v_list(&[v.clone()]));
             }
+            Op::MakeMap => {
+                f.push(v_empty_map());
+            }
+            Op::MapInsert => {
+                let (value, key, map) = (f.pop(), f.pop(), f.peek_top_mut());
+                let Variant::Map(map) = map.variant_mut() else {
+                    f.pop();
+                    return state.push_error(E_TYPE);
+                };
+                let result = map.insert(key, value);
+                f.poke(0, result);
+            }
             Op::PutTemp => {
                 f.temp = f.peek_top().clone();
             }
@@ -454,52 +466,54 @@ pub fn moo_frame_execute(
                 f.set_env(ident, v.clone());
             }
             Op::PushRef => {
-                let (index, list) = f.peek2();
-                let index = match one_to_zero_index(index) {
-                    Ok(i) => i,
-                    Err(e) => return state.push_error(e),
-                };
-                match list.index(index) {
-                    Err(e) => return state.push_error(e),
-                    Ok(v) => f.push(v),
+                let (index, value) = f.peek2();
+
+                match value.variant() {
+                    Variant::Map(m) => match m.get(index) {
+                        Some(v) => {
+                            f.push(v.clone());
+                        }
+                        None => {
+                            f.pop();
+                            return state.push_error(E_RANGE);
+                        }
+                    },
+                    _ => {
+                        let index = match one_to_zero_index(index) {
+                            Ok(i) => i,
+                            Err(e) => return state.push_error(e),
+                        };
+                        match value.index(index) {
+                            Err(e) => return state.push_error(e),
+                            Ok(v) => f.push(v),
+                        }
+                    }
                 }
             }
             Op::Ref => {
-                let (index, l) = (f.pop(), f.peek_top());
-                let index = match one_to_zero_index(&index) {
-                    Ok(i) => i,
-                    Err(e) => {
-                        f.pop();
-                        return state.push_error(e);
-                    }
-                };
+                let (index, value) = (f.pop(), f.peek_top());
 
-                match l.index(index) {
-                    Err(e) => {
-                        f.pop();
-                        return state.push_error(e);
+                match value.variant() {
+                    Variant::Map(m) => {
+                        let v = match m.get(&index) {
+                            Some(v) => v.clone(),
+                            None => {
+                                f.pop();
+                                return state.push_error(E_RANGE);
+                            }
+                        };
+                        f.poke(0, v);
                     }
-                    Ok(v) => f.poke(0, v),
-                }
-            }
-            Op::RangeRef => {
-                let (to, from, base) = (f.pop(), f.pop(), f.peek_top());
-                match (to.variant(), from.variant()) {
-                    (Variant::Int(to), Variant::Int(from)) => match base.range(*from, *to) {
-                        Err(e) => {
-                            f.pop();
-                            return state.push_error(e);
-                        }
-                        Ok(v) => f.poke(0, v),
-                    },
-                    (_, _) => return state.push_error(E_TYPE),
-                };
-            }
-            Op::RangeSet => {
-                let (value, to, from, base) = (f.pop(), f.pop(), f.pop(), f.peek_top());
-                match (to.variant(), from.variant()) {
-                    (Variant::Int(to), Variant::Int(from)) => {
-                        match base.rangeset(value, *from, *to) {
+                    _ => {
+                        let index = match one_to_zero_index(&index) {
+                            Ok(i) => i,
+                            Err(e) => {
+                                f.pop();
+                                return state.push_error(e);
+                            }
+                        };
+
+                        match value.index(index) {
                             Err(e) => {
                                 f.pop();
                                 return state.push_error(e);
@@ -507,10 +521,61 @@ pub fn moo_frame_execute(
                             Ok(v) => f.poke(0, v),
                         }
                     }
-                    _ => {
-                        f.pop();
-                        return state.push_error(E_TYPE);
+                }
+            }
+            Op::RangeRef => {
+                let (to, from, base) = (f.pop(), f.pop(), f.peek_top());
+                match base.variant() {
+                    Variant::Map(m) => {
+                        let r = m.range(from, to);
+                        f.poke(0, r);
                     }
+                    _ => {
+                        match (to.variant(), from.variant()) {
+                            (Variant::Int(to), Variant::Int(from)) => {
+                                match base.range(*from, *to) {
+                                    Err(e) => {
+                                        f.pop();
+                                        return state.push_error(e);
+                                    }
+                                    Ok(v) => f.poke(0, v),
+                                }
+                            }
+                            (_, _) => return state.push_error(E_TYPE),
+                        };
+                    }
+                }
+            }
+            Op::RangeSet => {
+                let (value, to, from, base) = (f.pop(), f.pop(), f.pop(), f.peek_top());
+
+                match base.variant() {
+                    Variant::Map(m) => {
+                        let Variant::Map(repl) = value.variant() else {
+                            f.pop();
+                            f.pop();
+                            f.pop();
+                            return state.push_error(E_TYPE);
+                        };
+
+                        let r = m.range_set(from, to, repl);
+                        f.poke(0, r);
+                    }
+                    _ => match (to.variant(), from.variant()) {
+                        (Variant::Int(to), Variant::Int(from)) => {
+                            match base.range_set(value, *from, *to) {
+                                Err(e) => {
+                                    f.pop();
+                                    return state.push_error(e);
+                                }
+                                Ok(v) => f.poke(0, v),
+                            }
+                        }
+                        _ => {
+                            f.pop();
+                            return state.push_error(E_TYPE);
+                        }
+                    },
                 }
             }
             Op::Length(offset) => {

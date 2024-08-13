@@ -78,6 +78,8 @@ pub enum Op {
     ListAppend,
     Lt,
     MakeSingletonList,
+    MakeMap,
+    MapInsert,
     Mod,
     Mul,
     Ne,

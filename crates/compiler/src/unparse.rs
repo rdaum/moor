@@ -70,6 +70,7 @@ impl Expr {
             Expr::Value(_) => 1,
             Expr::Id(_) => 1,
             Expr::List(_) => 1,
+            Expr::Map(_) => 1,
             Expr::Pass { .. } => 1,
             Expr::Call { .. } => 1,
             Expr::Length => 1,
@@ -269,6 +270,20 @@ impl<'a> Unparse<'a> {
                 buffer.push('{');
                 buffer.push_str(self.unparse_args(list)?.as_str());
                 buffer.push('}');
+                Ok(buffer)
+            }
+            Expr::Map(pairs) => {
+                let mut buffer = String::new();
+                buffer.push('[');
+                for (key, value) in pairs {
+                    buffer.push_str(self.unparse_expr(key)?.as_str());
+                    buffer.push_str(" -> ");
+                    buffer.push_str(self.unparse_expr(value)?.as_str());
+                    buffer.push_str(", ");
+                }
+                buffer.pop();
+                buffer.pop();
+                buffer.push(']');
                 Ok(buffer)
             }
             Expr::Scatter(vars, expr) => {

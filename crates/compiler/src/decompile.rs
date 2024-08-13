@@ -591,6 +591,18 @@ impl Decompile {
                 let expr = self.pop_expr()?;
                 self.push_expr(Expr::List(vec![Arg::Normal(expr)]));
             }
+            Op::MakeMap => {
+                self.push_expr(Expr::Map(vec![]));
+            }
+            Op::MapInsert => {
+                let (k, v) = (self.pop_expr()?, self.pop_expr()?);
+                let map = self.pop_expr()?;
+                let Expr::Map(mut map) = map else {
+                    return Err(MalformedProgram("expected map".to_string()));
+                };
+                map.push((k, v));
+                self.push_expr(Expr::Map(map));
+            }
             Op::ListAddTail | Op::ListAppend => {
                 let e = self.pop_expr()?;
                 let list = self.pop_expr()?;
@@ -1059,6 +1071,7 @@ mod tests {
     #[test_case(r#"{?package = $nothing} = args;"#; "scatter optional assignment from property")]
     #[test_case(r#"5; fork (5) 1; endfork 2;"#; "unlabelled fork decompile")]
     #[test_case(r#"5; fork tst (5) 1; endfork 2;"#; "labelled fork decompile")]
+    #[test_case(r#"[ 1 -> 2, 3 -> 4 ];"#; "map")]
     fn test_case_decompile_matches(prg: &str) {
         let (parse, decompiled) = parse_decompile(prg);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);

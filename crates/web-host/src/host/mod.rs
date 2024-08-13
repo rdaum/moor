@@ -58,6 +58,13 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             }
             serde_json::Value::Array(v)
         }
+        Variant::Map(m) => {
+            let mut v = serde_json::Map::new();
+            for (k, e) in m.iter() {
+                v.insert(k.to_string(), var_as_json(e));
+            }
+            serde_json::Value::Object(v)
+        }
     }
 }
 

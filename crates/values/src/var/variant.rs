@@ -16,6 +16,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use crate::var::error::Error;
 use crate::var::list::List;
+use crate::var::map::Map;
 use crate::var::objid::Objid;
 use crate::var::string::Str;
 
@@ -30,6 +31,7 @@ pub enum Variant {
     Float(f64),
     Err(Error),
     List(List),
+    Map(Map),
 }
 
 impl Display for Variant {
@@ -42,6 +44,7 @@ impl Display for Variant {
             Self::Float(fl) => write!(f, "{fl}"),
             Self::Err(e) => write!(f, "{e}"),
             Self::List(l) => write!(f, "{l}"),
+            Self::Map(m) => write!(f, "{m}"),
         }
     }
 }

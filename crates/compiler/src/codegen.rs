@@ -488,6 +488,17 @@ impl CodegenState {
             Expr::List(l) => {
                 self.generate_arg_list(l)?;
             }
+            Expr::Map(m) => {
+                self.emit(Op::MakeMap);
+                for (k, v) in m {
+                    self.generate_expr(k)?;
+                    self.pop_stack(1);
+                    self.generate_expr(v)?;
+                    self.pop_stack(1);
+                    self.emit(Op::MapInsert);
+                }
+                self.push_stack(1);
+            }
             Expr::Scatter(scatter, right) => self.generate_scatter_assign(scatter, right)?,
             Expr::Assign { left, right } => self.generate_assign(left, right)?,
         }
