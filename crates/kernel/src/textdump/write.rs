@@ -81,6 +81,13 @@ impl<W: io::Write> TextdumpWriter<W> {
                     self.write_var(&v, false)?;
                 }
             }
+            Variant::Map(m) => {
+                writeln!(self.writer, "{}\n{}", VarType::TYPE_MAP as i64, m.len())?;
+                for (k, v) in m.iter() {
+                    self.write_var(k, false)?;
+                    self.write_var(v, false)?;
+                }
+            }
             Variant::None => {
                 writeln!(self.writer, "{}", VarType::TYPE_NONE as i64)?;
             }

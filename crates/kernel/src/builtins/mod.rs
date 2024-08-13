@@ -66,7 +66,6 @@ impl BuiltinRegistry {
         for _ in 0..BUILTINS.len() {
             builtins.push(Box::new(BfNoop {}))
         }
-
         register_bf_server(&mut builtins);
         register_bf_num(&mut builtins);
         register_bf_values(&mut builtins);

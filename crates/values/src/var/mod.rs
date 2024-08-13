@@ -32,6 +32,7 @@ use crate::encode::BINCODE_CONFIG;
 use crate::util::quote_str;
 pub use crate::var::error::{Error, ErrorPack};
 pub use crate::var::list::List;
+use crate::var::map::Map;
 pub use crate::var::objid::Objid;
 pub use crate::var::string::Str;
 pub use crate::var::symbol::Symbol;
@@ -44,6 +45,7 @@ mod list;
 mod list_impl_buffer;
 #[allow(dead_code)]
 mod list_impl_vector;
+mod map;
 mod objid;
 mod string;
 mod symbol;
@@ -79,6 +81,7 @@ pub enum VarType {
     TYPE_NONE = 6,  // in uninitialized MOO variables */
     TYPE_LABEL = 7, // present only in textdump */
     TYPE_FLOAT = 9,
+    TYPE_MAP = 10,
 }
 
 /// Var is our variant type / tagged union used to represent MOO's dynamically typed values.
@@ -134,6 +137,7 @@ fn encoded_size(v: &Var) -> usize {
         Variant::Float(_) => 9,
         Variant::Err(_) => 2,
         Variant::List(l) => 1 + l.as_bytes().unwrap().len(),
+        Variant::Map(m) => 1 + m.as_bytes().unwrap().len(),
     }
 }
 
@@ -162,6 +166,9 @@ fn encode(v: &Var) -> Bytes {
         }
         Variant::List(l) => {
             buffer.extend_from_slice(l.as_bytes().unwrap().as_ref());
+        }
+        Variant::Map(m) => {
+            buffer.extend_from_slice(m.as_bytes().unwrap().as_ref());
         }
     }
     Bytes::from(buffer)
@@ -307,6 +314,16 @@ pub fn v_none() -> Var {
     VAR_NONE.clone()
 }
 
+#[must_use]
+pub fn v_empty_map() -> Var {
+    Var::new(Variant::Map(Map::new()))
+}
+
+#[must_use]
+pub fn v_map_pairs(pairs: &[(Var, Var)]) -> Var {
+    Var::new(Variant::Map(Map::from_pairs(pairs)))
+}
+
 impl Var {
     /// Return a reference to the inner variant that this Var is wrapping.
     #[must_use]
@@ -338,6 +355,7 @@ impl Var {
             Variant::Float(_) => VarType::TYPE_FLOAT,
             Variant::Err(_) => VarType::TYPE_ERR,
             Variant::List(_) => VarType::TYPE_LIST,
+            Variant::Map(_) => VarType::TYPE_MAP,
         }
     }
 
@@ -364,6 +382,20 @@ impl Var {
                     if i > 0 {
                         result.push_str(", ");
                     }
+                    result.push_str(&v.to_literal());
+                }
+                result.push('}');
+                result
+            }
+            Variant::Map(m) => {
+                let mut result = String::new();
+                result.push('{');
+                for (i, (k, v)) in m.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(&k.to_literal());
+                    result.push_str(" -> ");
                     result.push_str(&v.to_literal());
                 }
                 result.push('}');
@@ -396,6 +428,7 @@ impl PartialEq<Self> for Var {
             (Variant::Float(l), Variant::Float(r)) => l == r,
             (Variant::Err(l), Variant::Err(r)) => l == r,
             (Variant::List(l), Variant::List(r)) => l == r,
+            (Variant::Map(l), Variant::Map(r)) => l == r,
             (Variant::None, _) => false,
             (Variant::Str(_), _) => false,
             (Variant::Obj(_), _) => false,
@@ -403,6 +436,7 @@ impl PartialEq<Self> for Var {
             (Variant::Float(_), _) => false,
             (Variant::Err(_), _) => false,
             (Variant::List(_), _) => false,
+            (Variant::Map(_), _) => false,
         }
     }
 }
@@ -423,6 +457,7 @@ impl Ord for Var {
             (Variant::Float(l), Variant::Float(r)) => R64::from(*l).cmp(&R64::from(*r)),
             (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
             (Variant::List(l), Variant::List(r)) => l.cmp(r),
+            (Variant::Map(l), Variant::Map(r)) => l.cmp(r),
             (Variant::None, _) => Ordering::Less,
             (Variant::Str(_), _) => Ordering::Less,
             (Variant::Obj(_), _) => Ordering::Less,
@@ -430,6 +465,7 @@ impl Ord for Var {
             (Variant::Float(_), _) => Ordering::Less,
             (Variant::Err(_), _) => Ordering::Less,
             (Variant::List(_), _) => Ordering::Less,
+            (Variant::Map(_), _) => Ordering::Less,
         }
     }
 }
@@ -446,6 +482,7 @@ impl Hash for Var {
             Variant::Float(f) => R64::from(*f).hash(state),
             Variant::Err(e) => e.hash(state),
             Variant::List(l) => l.hash(state),
+            Variant::Map(m) => m.hash(state),
         }
     }
 }
@@ -838,22 +875,22 @@ mod tests {
         // {1,2,3,4}[1..2] = {"a", "b", "c"} => {1, "a", "b", "c", 4}
         let value = v_list(&[v_str("a"), v_str("b"), v_str("c")]);
         let expected = v_list(&[v_int(1), v_str("a"), v_str("b"), v_str("c"), v_int(4)]);
-        assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
+        assert_eq!(base.range_set(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {"a"} => {1, "a", 4}
         let value = v_list(&[v_str("a")]);
         let expected = v_list(&[v_int(1), v_str("a"), v_int(4)]);
-        assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
+        assert_eq!(base.range_set(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {} => {1,4}
         let value = v_empty_list();
         let expected = v_list(&[v_int(1), v_int(4)]);
-        assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
+        assert_eq!(base.range_set(value, 2, 3).unwrap(), expected);
 
         // {1,2,3,4}[1..2] = {"a", "b"} => {1, "a", "b", 4}
         let value = v_list(&[v_str("a"), v_str("b")]);
         let expected = v_list(&[v_int(1), v_str("a"), v_str("b"), v_int(4)]);
-        assert_eq!(base.rangeset(value, 2, 3).unwrap(), expected);
+        assert_eq!(base.range_set(value, 2, 3).unwrap(), expected);
     }
 
     #[test]
@@ -862,28 +899,28 @@ mod tests {
         let base = v_str("12345");
         let value = v_str("abc");
         let expected = v_str("1abc45");
-        let result = base.rangeset(value, 2, 3);
+        let result = base.range_set(value, 2, 3);
         assert_eq!(result, Ok(expected));
 
         // Test interior replacement
         let base = v_str("12345");
         let value = v_str("ab");
         let expected = v_str("1ab45");
-        let result = base.rangeset(value, 2, 3);
+        let result = base.range_set(value, 2, 3);
         assert_eq!(result, Ok(expected));
 
         // Test interior deletion
         let base = v_str("12345");
         let value = v_str("");
         let expected = v_str("145");
-        let result = base.rangeset(value, 2, 3);
+        let result = base.range_set(value, 2, 3);
         assert_eq!(result, Ok(expected));
 
         // Test interior subtraction
         let base = v_str("12345");
         let value = v_str("z");
         let expected = v_str("1z45");
-        let result = base.rangeset(value, 2, 3);
+        let result = base.range_set(value, 2, 3);
         assert_eq!(result, Ok(expected));
     }
 
