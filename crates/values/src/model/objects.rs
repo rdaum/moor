@@ -28,9 +28,9 @@ use crate::var::{Objid, Symbol};
 ///
 /// Can be encoded to/from CURIEs (compact URIs) for ease of use in external interfaces.
 ///
-///     oid:1234 -> #1234 ObjectRef::OId(1234)
-///     sysobj:ident[.subident] -> $ident[.subident] ObjectRef::SysObj(["ident", "subident"])
-///     match("phrase") -> env match onn "phrase" ObjectRef::Match("phrase")
+///    oid:1234 -> #1234 ObjectRef::OId(1234)
+///    sysobj:ident[.subident] -> $ident[.subident] ObjectRef::SysObj(["ident", "subident"])
+///    match("phrase") -> env match onn "phrase" ObjectRef::Match("phrase")
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum ObjectRef {
