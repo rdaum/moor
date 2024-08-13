@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use moor_values::var::Symbol;
+use moor_values::var::{v_none, Symbol};
 use moor_values::SYSTEM_OBJECT;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
@@ -33,9 +33,10 @@ use moor_values::var::Objid;
 use moor_values::var::{v_err, v_float, v_int, v_objid, v_str, v_string};
 
 use crate::ast::Arg::{Normal, Splice};
+use crate::ast::StmtNode::Scope;
 use crate::ast::{
-    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
-    UnaryOp,
+    Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
+    StmtNode, UnaryOp,
 };
 use crate::names::{Names, UnboundName, UnboundNames};
 use crate::parse::moo::{MooParser, Rule};
@@ -523,43 +524,52 @@ fn parse_statement(
             Ok(None)
         }
         Rule::while_statement => {
+            names.borrow_mut().push_scope();
             let mut parts = pair.into_inner();
             let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
-            let body = parse_statements(names, parts.next().unwrap().into_inner())?;
+            let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
+            let environment_width = names.borrow_mut().pop_scope();
             Ok(Some(Stmt::new(
                 StmtNode::While {
                     id: None,
                     condition,
                     body,
+                    environment_width,
                 },
                 line,
             )))
         }
         Rule::labelled_while_statement => {
+            names.borrow_mut().push_scope();
             let mut parts = pair.into_inner();
             let id = names
                 .borrow_mut()
                 .find_or_add_name_global(parts.next().unwrap().as_str());
             let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
-            let body = parse_statements(names, parts.next().unwrap().into_inner())?;
+            let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
+            let environment_width = names.borrow_mut().pop_scope();
             Ok(Some(Stmt::new(
                 StmtNode::While {
                     id: Some(id),
                     condition,
                     body,
+                    environment_width,
                 },
                 line,
             )))
         }
         Rule::if_statement => {
+            names.borrow_mut().push_scope();
             let mut parts = pair.into_inner();
             let mut arms = vec![];
-            let mut otherwise = vec![];
+            let mut otherwise = None;
             let condition = parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
             let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
+            let environment_width = names.borrow_mut().pop_scope();
             arms.push(CondArm {
                 condition,
                 statements: body,
+                environment_width,
             });
             for remainder in parts {
                 match remainder.as_rule() {
@@ -567,20 +577,30 @@ fn parse_statement(
                         continue;
                     }
                     Rule::elseif_clause => {
+                        names.borrow_mut().push_scope();
                         let mut parts = remainder.into_inner();
                         let condition =
                             parse_expr(names.clone(), parts.next().unwrap().into_inner())?;
                         let body =
                             parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
+                        let environment_width = names.borrow_mut().pop_scope();
                         arms.push(CondArm {
                             condition,
                             statements: body,
+                            environment_width,
                         });
                     }
                     Rule::else_clause => {
+                        names.borrow_mut().push_scope();
                         let mut parts = remainder.into_inner();
-                        otherwise =
+                        let otherwise_statements =
                             parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
+                        let otherwise_environment_width = names.borrow_mut().pop_scope();
+                        let otherwise_arm = ElseArm {
+                            statements: otherwise_statements,
+                            environment_width: otherwise_environment_width,
+                        };
+                        otherwise = Some(otherwise_arm);
                     }
                     _ => panic!("Unimplemented if clause: {:?}", remainder),
                 }
@@ -623,6 +643,7 @@ fn parse_statement(
             Ok(Some(Stmt::new(StmtNode::Return(expr), line)))
         }
         Rule::for_statement => {
+            names.borrow_mut().push_scope();
             let mut parts = pair.into_inner();
             let id = names
                 .borrow_mut()
@@ -635,31 +656,54 @@ fn parse_statement(
                     let from_rule = clause_inner.next().unwrap();
                     let to_rule = clause_inner.next().unwrap();
                     let from = parse_expr(names.clone(), from_rule.into_inner())?;
-                    let to = parse_expr(names, to_rule.into_inner())?;
+                    let to = parse_expr(names.clone(), to_rule.into_inner())?;
+                    let environment_width = names.borrow_mut().pop_scope();
                     Ok(Some(Stmt::new(
-                        StmtNode::ForRange { id, from, to, body },
+                        StmtNode::ForRange {
+                            id,
+                            from,
+                            to,
+                            body,
+                            environment_width,
+                        },
                         line,
                     )))
                 }
                 Rule::for_in_clause => {
                     let mut clause_inner = clause.into_inner();
                     let in_rule = clause_inner.next().unwrap();
-                    let expr = parse_expr(names, in_rule.into_inner())?;
-                    Ok(Some(Stmt::new(StmtNode::ForList { id, expr, body }, line)))
+                    let expr = parse_expr(names.clone(), in_rule.into_inner())?;
+                    let environment_width = names.borrow_mut().pop_scope();
+                    Ok(Some(Stmt::new(
+                        StmtNode::ForList {
+                            id,
+                            expr,
+                            body,
+                            environment_width,
+                        },
+                        line,
+                    )))
                 }
                 _ => panic!("Unimplemented for clause: {:?}", clause),
             }
         }
         Rule::try_finally_statement => {
+            names.borrow_mut().push_scope();
             let mut parts = pair.into_inner();
             let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
-            let handler = parse_statements(names, parts.next().unwrap().into_inner())?;
+            let handler = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
+            let environment_width = names.borrow_mut().pop_scope();
             Ok(Some(Stmt::new(
-                StmtNode::TryFinally { body, handler },
+                StmtNode::TryFinally {
+                    body,
+                    handler,
+                    environment_width,
+                },
                 line,
             )))
         }
         Rule::try_except_statement => {
+            names.borrow_mut().push_scope();
             let mut parts = pair.into_inner();
             let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
             let mut excepts = vec![];
@@ -705,7 +749,15 @@ fn parse_statement(
                     _ => panic!("Unimplemented except clause: {:?}", except),
                 }
             }
-            Ok(Some(Stmt::new(StmtNode::TryExcept { body, excepts }, line)))
+            let environment_width = names.borrow_mut().pop_scope();
+            Ok(Some(Stmt::new(
+                StmtNode::TryExcept {
+                    body,
+                    excepts,
+                    environment_width,
+                },
+                line,
+            )))
         }
         Rule::fork_statement => {
             let mut parts = pair.into_inner();
@@ -733,6 +785,70 @@ fn parse_statement(
                     time,
                     body,
                 },
+                line,
+            )))
+        }
+        Rule::begin_statement => {
+            let mut parts = pair.into_inner();
+
+            names.borrow_mut().push_scope();
+
+            let body = parse_statements(names.clone(), parts.next().unwrap().into_inner())?;
+            let num_total_bindings = names.borrow_mut().pop_scope();
+            Ok(Some(Stmt::new(
+                Scope {
+                    num_bindings: num_total_bindings,
+                    body,
+                },
+                line,
+            )))
+        }
+        Rule::local_assignment => {
+            // An assignment declaration that introduces a locally lexically scoped variable.
+            // May be of form `let x = expr` or just `let x`
+            let mut parts = pair.into_inner();
+            let id = names
+                .borrow_mut()
+                .declare_name(parts.next().unwrap().as_str());
+            let expr = parts
+                .next()
+                .map(|e| parse_expr(names.clone(), e.into_inner()).unwrap());
+
+            // Just becomes an assignment expression.
+            // But that means the decompiler will need to know what to do with it.
+            // Which is: if assignment is on its own in statement, and variable assigned to is
+            //   restricted to the scope of the block, then it's a let.
+            Ok(Some(Stmt::new(
+                StmtNode::Expr(Expr::Assign {
+                    left: Box::new(Expr::Id(id)),
+                    right: Box::new(expr.unwrap_or(Expr::Value(v_none()))),
+                }),
+                line,
+            )))
+        }
+        Rule::global_assignment => {
+            // An explicit global-declaration.
+            // global x, or global x = y
+            let mut parts = pair.into_inner();
+            let id = names
+                .borrow_mut()
+                .find_or_add_name_global(parts.next().unwrap().as_str());
+            let expr = parts
+                .next()
+                .map(|e| parse_expr(names.clone(), e.into_inner()).unwrap());
+
+            // Produces an assignment expression as usual, but
+            // the decompiler will need to look and see that
+            //      a) the statement is just an assignment on its own
+            //      b) the variable being assigned to is in scope 0 (global)
+            // and then it's a global declaration.
+            // Note that this well have the effect of turning most existing MOO decompilations
+            // into global declarations, which is fine, if that feature is turned on.
+            Ok(Some(Stmt::new(
+                StmtNode::Expr(Expr::Assign {
+                    left: Box::new(Expr::Id(id)),
+                    right: Box::new(expr.unwrap_or(Expr::Value(v_none()))),
+                }),
                 line,
             )))
         }
@@ -857,14 +973,14 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
 #[cfg(test)]
 mod tests {
     use moor_values::var::Error::{E_INVARG, E_PROPNF, E_VARNF};
-    use moor_values::var::Symbol;
     use moor_values::var::{v_err, v_float, v_int, v_obj, v_str};
+    use moor_values::var::{v_none, Symbol};
 
     use crate::ast::Arg::{Normal, Splice};
     use crate::ast::Expr::{Call, Id, Prop, Value, Verb};
     use crate::ast::{
-        BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
-        UnaryOp,
+        BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
+        StmtNode, UnaryOp,
     };
     use crate::parse::{parse_program, unquote_str};
     use moor_values::model::CompileError;
@@ -968,8 +1084,10 @@ mod tests {
                             parser_line_no: 1,
                             tree_line_no: 2,
                         }],
+                        environment_width: 0,
                     },
                     CondArm {
+                        environment_width: 0,
                         condition: Expr::Binary(
                             BinaryOp::Eq,
                             Box::new(Value(v_int(2))),
@@ -983,11 +1101,14 @@ mod tests {
                     },
                 ],
 
-                otherwise: vec![Stmt {
-                    node: StmtNode::Return(Some(Value(v_int(6)))),
-                    parser_line_no: 1,
-                    tree_line_no: 6,
-                }],
+                otherwise: Some(ElseArm {
+                    statements: vec![Stmt {
+                        node: StmtNode::Return(Some(Value(v_int(6)))),
+                        parser_line_no: 1,
+                        tree_line_no: 6,
+                    }],
+                    environment_width: 0,
+                }),
             }
         );
     }
@@ -1012,6 +1133,7 @@ mod tests {
             StmtNode::Cond {
                 arms: vec![
                     CondArm {
+                        environment_width: 0,
                         condition: Expr::Binary(
                             BinaryOp::Eq,
                             Box::new(Value(v_int(1))),
@@ -1024,6 +1146,7 @@ mod tests {
                         }],
                     },
                     CondArm {
+                        environment_width: 0,
                         condition: Expr::Binary(
                             BinaryOp::Eq,
                             Box::new(Value(v_int(2))),
@@ -1036,6 +1159,7 @@ mod tests {
                         }],
                     },
                     CondArm {
+                        environment_width: 0,
                         condition: Expr::Binary(
                             BinaryOp::Eq,
                             Box::new(Value(v_int(3))),
@@ -1049,11 +1173,14 @@ mod tests {
                     },
                 ],
 
-                otherwise: vec![Stmt {
-                    node: StmtNode::Return(Some(Value(v_int(6)))),
-                    parser_line_no: 9,
-                    tree_line_no: 8,
-                }],
+                otherwise: Some(ElseArm {
+                    statements: vec![Stmt {
+                        node: StmtNode::Return(Some(Value(v_int(6)))),
+                        parser_line_no: 9,
+                        tree_line_no: 8,
+                    }],
+                    environment_width: 0,
+                }),
             }
         );
     }
@@ -1090,6 +1217,7 @@ mod tests {
             stripped_stmts(&parse.stmts)[0],
             StmtNode::Cond {
                 arms: vec![CondArm {
+                    environment_width: 0,
                     condition: Expr::Unary(
                         UnaryOp::Not,
                         Box::new(Verb {
@@ -1107,7 +1235,7 @@ mod tests {
                         tree_line_no: 2,
                     }],
                 }],
-                otherwise: vec![],
+                otherwise: None,
             }
         );
     }
@@ -1122,6 +1250,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts)[0],
             StmtNode::ForList {
+                environment_width: 0,
                 id: x,
                 expr: Expr::List(vec![
                     Normal(Value(v_int(1))),
@@ -1154,6 +1283,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts)[0],
             StmtNode::ForRange {
+                environment_width: 0,
                 id: x,
                 from: Value(v_int(1)),
                 to: Value(v_int(5)),
@@ -1213,6 +1343,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::While {
+                environment_width: 0,
                 id: None,
                 condition: Value(v_int(1)),
                 body: vec![
@@ -1231,6 +1362,7 @@ mod tests {
                     Stmt {
                         node: StmtNode::Cond {
                             arms: vec![CondArm {
+                                environment_width: 0,
                                 condition: Expr::Binary(
                                     BinaryOp::Gt,
                                     Box::new(Id(x)),
@@ -1242,7 +1374,7 @@ mod tests {
                                     tree_line_no: 4,
                                 }],
                             }],
-                            otherwise: vec![],
+                            otherwise: None,
                         },
                         parser_line_no: 1,
                         tree_line_no: 3,
@@ -1262,6 +1394,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::While {
+                environment_width: 0,
                 id: Some(chuckles),
                 condition: Value(v_int(1)),
                 body: vec![
@@ -1280,6 +1413,7 @@ mod tests {
                     Stmt {
                         node: StmtNode::Cond {
                             arms: vec![CondArm {
+                                environment_width: 0,
                                 condition: Expr::Binary(
                                     BinaryOp::Gt,
                                     Box::new(Id(x)),
@@ -1293,7 +1427,7 @@ mod tests {
                                     tree_line_no: 4,
                                 }],
                             }],
-                            otherwise: vec![],
+                            otherwise: None,
                         },
                         parser_line_no: 1,
                         tree_line_no: 3,
@@ -1436,6 +1570,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![
                 StmtNode::ForList {
+                    environment_width: 0,
                     id: i,
                     expr: Expr::List(vec![
                         Normal(Value(v_int(1))),
@@ -1554,6 +1689,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![
                 StmtNode::ForList {
+                    environment_width: 0,
                     id: a,
                     expr: Expr::List(vec![
                         Normal(Value(v_int(1))),
@@ -1587,6 +1723,7 @@ mod tests {
             vec![Stmt {
                 node: StmtNode::Cond {
                     arms: vec![CondArm {
+                        environment_width: 0,
                         condition: Expr::Binary(
                             BinaryOp::Eq,
                             Box::new(Value(v_int(5))),
@@ -1598,11 +1735,14 @@ mod tests {
                             tree_line_no: 2,
                         }],
                     }],
-                    otherwise: vec![Stmt {
-                        node: StmtNode::Return(Some(Value(v_int(3)))),
-                        parser_line_no: 4,
-                        tree_line_no: 4,
-                    }],
+                    otherwise: Some(ElseArm {
+                        statements: vec![Stmt {
+                            node: StmtNode::Return(Some(Value(v_int(3)))),
+                            parser_line_no: 4,
+                            tree_line_no: 4,
+                        }],
+                        environment_width: 0,
+                    }),
                 },
                 parser_line_no: 1,
                 tree_line_no: 1,
@@ -1625,6 +1765,7 @@ mod tests {
             vec![StmtNode::Cond {
                 arms: vec![
                     CondArm {
+                        environment_width: 0,
                         condition: Expr::Binary(
                             BinaryOp::Eq,
                             Box::new(Value(v_int(5))),
@@ -1637,6 +1778,7 @@ mod tests {
                         }],
                     },
                     CondArm {
+                        environment_width: 0,
                         condition: Expr::Binary(
                             BinaryOp::Eq,
                             Box::new(Value(v_int(2))),
@@ -1649,11 +1791,14 @@ mod tests {
                         }],
                     },
                 ],
-                otherwise: vec![Stmt {
-                    node: StmtNode::Return(Some(Value(v_int(3)))),
-                    parser_line_no: 6,
-                    tree_line_no: 6,
-                }],
+                otherwise: Some(ElseArm {
+                    statements: vec![Stmt {
+                        node: StmtNode::Return(Some(Value(v_int(3)))),
+                        parser_line_no: 6,
+                        tree_line_no: 6,
+                    }],
+                    environment_width: 0,
+                }),
             }]
         );
     }
@@ -1667,6 +1812,8 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Cond {
                 arms: vec![CondArm {
+                    environment_width: 0,
+
                     condition: Expr::Binary(
                         BinaryOp::In,
                         Box::new(Value(v_int(5))),
@@ -1678,7 +1825,7 @@ mod tests {
                     ),
                     statements: vec![],
                 }],
-                otherwise: vec![],
+                otherwise: None,
             }]
         );
     }
@@ -1695,6 +1842,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::TryExcept {
+                environment_width: 0,
                 body: vec![Stmt {
                     node: StmtNode::Expr(Value(v_int(5))),
                     parser_line_no: 2,
@@ -1885,6 +2033,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![
                 StmtNode::ForList {
+                    environment_width: 0,
                     id: parse.unbound_names.find_name("line").unwrap(),
                     expr: Expr::List(vec![
                         Normal(Value(v_int(1))),
@@ -2048,5 +2197,121 @@ mod tests {
             endwhile"#;
         let parse = parse_program(program);
         assert!(matches!(parse, Err(CompileError::UnknownLoopLabel(_))));
+    }
+
+    #[test]
+    fn test_begin_end() {
+        let program = r#"begin
+                return 5;
+            end
+        "#;
+        let parse = parse_program(program).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Scope {
+                num_bindings: 0,
+                body: vec![Stmt {
+                    node: StmtNode::Return(Some(Value(v_int(5)))),
+                    parser_line_no: 2,
+                    tree_line_no: 2,
+                }],
+            }]
+        );
+    }
+
+    /// Test that lexical block scopes parse and that the inner scope variables can shadow outer scope
+    #[test]
+    fn test_parse_scoped_variables() {
+        let program = r#"begin
+                                 let x = 5;
+                                 let y = 6;
+                                 x = x + 6;
+                                 let z = 7;
+                                 let o;
+                                 global a = 1;
+                               end
+                               return x;"#;
+        let parse = parse_program(program).unwrap();
+        let x_names = parse.unbound_names.find_named("x");
+        let y_names = parse.unbound_names.find_named("y");
+        let z_names = parse.unbound_names.find_named("z");
+        let o_names = parse.unbound_names.find_named("o");
+        let inner_y = y_names[0];
+        let inner_z = z_names[0];
+        let inner_o = o_names[0];
+        let global_a = parse.unbound_names.find_named("a")[0];
+        assert_eq!(x_names.len(), 2);
+        let global_x = x_names[1];
+        // Declared first, so appears in unbound names first, though in the bound names it will
+        // appear second.
+        let inner_x = x_names[0];
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![
+                StmtNode::Scope {
+                    num_bindings: 4,
+                    body: vec![
+                        // Declaration of X
+                        Stmt {
+                            node: StmtNode::Expr(Expr::Assign {
+                                left: Box::new(Id(inner_x)),
+                                right: Box::new(Value(v_int(5))),
+                            }),
+                            parser_line_no: 2,
+                            tree_line_no: 2,
+                        },
+                        // Declaration of y
+                        Stmt {
+                            node: StmtNode::Expr(Expr::Assign {
+                                left: Box::new(Id(inner_y)),
+                                right: Box::new(Value(v_int(6))),
+                            }),
+                            parser_line_no: 3,
+                            tree_line_no: 3,
+                        },
+                        Stmt {
+                            node: StmtNode::Expr(Expr::Assign {
+                                left: Box::new(Id(inner_x)),
+                                right: Box::new(Expr::Binary(
+                                    BinaryOp::Add,
+                                    Box::new(Id(inner_x)),
+                                    Box::new(Value(v_int(6))),
+                                )),
+                            }),
+                            parser_line_no: 4,
+                            tree_line_no: 4,
+                        },
+                        // Asssignment to z.
+                        Stmt {
+                            node: StmtNode::Expr(Expr::Assign {
+                                left: Box::new(Id(inner_z)),
+                                right: Box::new(Value(v_int(7))),
+                            }),
+                            parser_line_no: 5,
+                            tree_line_no: 5,
+                        },
+                        // Declaration of o (o = v_none)
+                        Stmt {
+                            node: StmtNode::Expr(Expr::Assign {
+                                left: Box::new(Id(inner_o)),
+                                right: Box::new(Value(v_none())),
+                            }),
+                            parser_line_no: 6,
+                            tree_line_no: 6,
+                        },
+                        // Assignment to global a
+                        Stmt {
+                            node: StmtNode::Expr(Expr::Assign {
+                                left: Box::new(Id(global_a)),
+                                right: Box::new(Value(v_int(1))),
+                            }),
+                            parser_line_no: 7,
+                            tree_line_no: 7,
+                        },
+                    ],
+                },
+                StmtNode::Return(Some(Id(global_x)))
+            ]
+        );
     }
 }

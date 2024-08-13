@@ -18,8 +18,8 @@ use moor_values::var::{v_float, Variant};
 use std::collections::{HashMap, VecDeque};
 
 use crate::ast::{
-    Arg, BinaryOp, CatchCodes, CondArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt, StmtNode,
-    UnaryOp,
+    Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
+    StmtNode, UnaryOp,
 };
 use crate::builtins::make_offsets_builtins;
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
@@ -192,7 +192,7 @@ impl Decompile {
 
         let line_num = self.line_num_for_position();
         match opcode {
-            Op::If(otherwise_label) => {
+            Op::If(otherwise_label, environment_width) => {
                 let cond = self.pop_expr()?;
 
                 // decompile statements until the position marked in `label`, which is the
@@ -204,18 +204,40 @@ impl Decompile {
                 let cond_arm = CondArm {
                     condition: cond,
                     statements: arm,
+                    environment_width: environment_width as usize,
                 };
                 self.statements.push(Stmt::new(
                     StmtNode::Cond {
                         arms: vec![cond_arm],
-                        otherwise: vec![],
+                        otherwise: None,
                     },
                     line_num,
                 ));
 
                 // Decompile to the 'end_of_otherwise' label to get the statements for the
                 // otherwise branch.
-                let otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
+                let mut otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
+
+                // Resulting thing should be a Scope, or empty.
+                let else_arm = if otherwise_stmts.is_empty() {
+                    None
+                } else {
+                    let Some(Stmt {
+                        node: StmtNode::Scope { num_bindings, body },
+                        ..
+                    }) = otherwise_stmts.pop()
+                    else {
+                        return Err(MalformedProgram(
+                            "expected Scope as otherwise branch".to_string(),
+                        ));
+                    };
+
+                    Some(ElseArm {
+                        statements: body,
+                        environment_width: num_bindings,
+                    })
+                };
+
                 let Some(Stmt {
                     node: StmtNode::Cond { arms: _, otherwise },
                     ..
@@ -225,9 +247,9 @@ impl Decompile {
                         "expected Cond as working tree".to_string(),
                     ));
                 };
-                *otherwise = otherwise_stmts;
+                *otherwise = else_arm;
             }
-            Op::Eif(end_label) => {
+            Op::Eif(end_label, environment_width) => {
                 let cond = self.pop_expr()?;
                 // decompile statements until the position marked in `label`, which is the
                 // end of the branch statement
@@ -235,6 +257,7 @@ impl Decompile {
                 let cond_arm = CondArm {
                     condition: cond,
                     statements: cond_statements,
+                    environment_width: environment_width as usize,
                 };
                 // Add the arm
                 let Some(Stmt {
@@ -251,6 +274,7 @@ impl Decompile {
             Op::ForList {
                 id,
                 end_label: label,
+                environment_width,
             } => {
                 let one = self.pop_expr()?;
                 let Expr::Value(v) = one else {
@@ -271,21 +295,35 @@ impl Decompile {
                         id,
                         expr: list,
                         body,
+                        environment_width: environment_width as usize,
                     },
                     line_num,
                 ));
             }
-            Op::ForRange { id, end_label } => {
+            Op::ForRange {
+                id,
+                end_label,
+                environment_width,
+            } => {
                 let to = self.pop_expr()?;
                 let from = self.pop_expr()?;
                 let (body, _) = self.decompile_until_branch_end(&end_label)?;
                 let id = self.decompile_name(&id)?;
                 self.statements.push(Stmt::new(
-                    StmtNode::ForRange { id, from, to, body },
+                    StmtNode::ForRange {
+                        id,
+                        from,
+                        to,
+                        body,
+                        environment_width: environment_width as usize,
+                    },
                     line_num,
                 ));
             }
-            Op::While(loop_end_label) => {
+            Op::While {
+                jump_label: loop_end_label,
+                environment_width,
+            } => {
                 // A "while" is actually a:
                 //      a conditional expression
                 //      this While opcode (with end label)
@@ -298,6 +336,7 @@ impl Decompile {
                         id: None,
                         condition: cond,
                         body,
+                        environment_width: environment_width as usize,
                     },
                     line_num,
                 ));
@@ -307,6 +346,7 @@ impl Decompile {
             Op::WhileId {
                 id,
                 end_label: loop_end_label,
+                environment_width,
             } => {
                 // A "while" is actually a:
                 //      a conditional expression
@@ -321,6 +361,7 @@ impl Decompile {
                         id: Some(id),
                         condition: cond,
                         body,
+                        environment_width: environment_width as usize,
                     },
                     line_num,
                 ));
@@ -520,8 +561,8 @@ impl Decompile {
             }
             Op::FuncCall { id } => {
                 let args = self.pop_expr()?;
-                let Some(builtin) = self.builtins.get(&id) else {
-                    return Err(BuiltinNotFound(id));
+                let Some(builtin) = self.builtins.get(&(id as usize)) else {
+                    return Err(BuiltinNotFound(id as usize));
                 };
 
                 // Have to reconstruct arg list ...
@@ -656,8 +697,11 @@ impl Decompile {
             Op::PushCatchLabel(_) => {
                 // ignore and consume, we don't need it.
             }
-            Op::TryExcept { num_excepts } => {
-                let mut except_arms = Vec::with_capacity(num_excepts);
+            Op::TryExcept {
+                num_excepts,
+                environment_width,
+            } => {
+                let mut except_arms = Vec::with_capacity(num_excepts as usize);
                 for _ in 0..num_excepts {
                     let codes_expr = self.pop_expr()?;
                     let catch_codes = match codes_expr {
@@ -726,18 +770,28 @@ impl Decompile {
                     StmtNode::TryExcept {
                         body,
                         excepts: except_arms,
+                        environment_width: environment_width as usize,
                     },
                     line_num,
                 ));
             }
-            Op::TryFinally { end_label: _label } => {
+            Op::TryFinally {
+                end_label: _label,
+                environment_width,
+            } => {
                 // decompile body up until the EndFinally
                 let (body, _) =
                     self.decompile_statements_until_match(|_, op| matches!(op, Op::EndFinally))?;
                 let (handler, _) = self
                     .decompile_statements_until_match(|_, op| matches!(op, Op::FinallyContinue))?;
-                self.statements
-                    .push(Stmt::new(StmtNode::TryFinally { body, handler }, line_num));
+                self.statements.push(Stmt::new(
+                    StmtNode::TryFinally {
+                        body,
+                        handler,
+                        environment_width: environment_width as usize,
+                    },
+                    line_num,
+                ));
             }
             Op::TryCatch {
                 handler_label: label,
@@ -859,6 +913,22 @@ impl Decompile {
             Op::ImmObjid(oid) => {
                 self.push_expr(Expr::Value(v_objid(oid)));
             }
+            Op::BeginScope {
+                num_bindings,
+                end_label,
+            } => {
+                let block_statements = self.decompile_statements_until(&end_label)?;
+                self.statements.push(Stmt::new(
+                    StmtNode::Scope {
+                        num_bindings: num_bindings as usize,
+                        body: block_statements,
+                    },
+                    line_num,
+                ));
+            }
+            Op::EndScope { .. } => {
+                // Noop.
+            }
         }
         Ok(())
     }
@@ -867,7 +937,7 @@ impl Decompile {
         self.names_mapping
             .get(name)
             .cloned()
-            .ok_or_else(|| DecompileError::NameNotFound(name.clone()))
+            .ok_or(DecompileError::NameNotFound(*name))
     }
 }
 
@@ -993,6 +1063,15 @@ mod tests {
     #[test_case(r#"5; fork tst (5) 1; endfork 2;"#; "labelled fork decompile")]
     fn test_case_decompile_matches(prg: &str) {
         let (parse, decompiled) = parse_decompile(prg);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn test_decompile_lexical_scope_block() {
+        let program = r#"begin
+            let a = 5;
+        end"#;
+        let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }
 

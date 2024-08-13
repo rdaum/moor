@@ -223,12 +223,13 @@ impl VMExecState {
     /// Call into a builtin function.
     pub(crate) fn call_builtin_function(
         &mut self,
-        bf_func_num: usize,
+        bf_func_num: u16,
         args: List,
         exec_args: &VmExecParams,
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
+        let bf_func_num = bf_func_num as usize;
         if bf_func_num >= exec_args.builtin_registry.builtins.len() {
             return self.raise_error(E_VARNF);
         }

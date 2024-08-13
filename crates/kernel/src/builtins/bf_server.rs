@@ -627,7 +627,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
     Ok(VmInstr(ExecutionResult::ContinueBuiltin {
-        bf_func_num: func_offset,
+        bf_func_num: func_offset as u16,
         arguments: args[..].to_vec(),
     }))
 }

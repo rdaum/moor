@@ -26,8 +26,11 @@ statement  = {
   | return_statement
   | try_except_statement
   | try_finally_statement
+  | begin_statement
   | expr_statement
-}
+  | local_assignment
+  | global_assignment
+  }
 
 if_statement  = { ^"if" ~ "(" ~ expr ~ ")" ~ statements ~ (elseif_clause)* ~ (else_clause)? ~ endif_clause }
 elseif_clause = { ^"elseif" ~ "(" ~ expr ~ ")" ~ statements }
@@ -52,6 +55,13 @@ try_finally_statement = { ^"try" ~ statements ~ ^"finally" ~ statements ~ ^"endt
 except                = { ^"except" ~ (labelled_except | unlabelled_except) ~ statements }
 labelled_except       = { ident ~ "(" ~ codes ~ ")" }
 unlabelled_except     = { "(" ~ codes ~ ")" }
+
+begin_statement       = { ^"begin" ~ statements ~ ^"end" }
+
+local_assignment = { ^"let" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
+
+// globally scoped (same as default in MOO) adds explicitly to global scope.
+global_assignment = { ^"global" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
 
 codes   = { anycode | exprlist }
 anycode = { ^"any" }
@@ -188,6 +198,7 @@ keyword = @{
   | ^"endtry"
   | ^"finally"
   | ^"in"
+  | ^"let"
   | err
 }
 
