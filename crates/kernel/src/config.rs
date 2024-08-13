@@ -20,9 +20,10 @@ use std::path::PathBuf;
 
 #[derive(Clone, Debug, Default)]
 pub struct Config {
-    /// Whether to run in a strict mode which ties the server to the original LambdaMOO behaviour,
-    /// or to allow for more modern features.
-    pub strict_mode: bool,
+    /// Whether to allow notify() to send arbitrary MOO values to players. The interpretation of
+    /// the values varies depending on host/client.
+    /// If this is false, only strings are allowed, as in LambdaMOO.
+    pub rich_notify: bool,
     /// Where to write periodic textdumps of the database.
     pub textdump_output: Option<PathBuf>,
     /// What encoding to use for textdumps (ISO-8859-1 or UTF-8).

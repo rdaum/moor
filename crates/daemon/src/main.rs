@@ -191,12 +191,17 @@ struct Args {
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
 
+    /// Whether to allow notify() to send arbitrary MOO values to players. The interpretation of
+    /// the values varies depending on host/client.
+    /// If this is false, only strings are allowed, as in LambdaMOO.
     #[arg(
         long,
-        help = "Enable strict mode, which constraints behaviours to original LambdaMOO",
-        default_value = "false"
+        help = "Enable rich_notify, allowing notify() to send arbitrary MOO values to players. \
+                The interpretation of the values varies depending on host/client. \
+                If this is false, only strings are allowed, as in LambdaMOO.",
+        default_value = "true"
     )]
-    strict_mode: bool,
+    rich_notify: bool,
 }
 
 fn main() -> Result<(), Report> {
@@ -302,7 +307,7 @@ fn main() -> Result<(), Report> {
     let config = Config {
         textdump_output: args.textdump_out,
         textdump_encoding: args.textdump_encoding,
-        strict_mode: args.strict_mode,
+        rich_notify: args.rich_notify,
     };
 
     let tasks_db: Box<dyn TasksDb> = match args.db_flavour {
