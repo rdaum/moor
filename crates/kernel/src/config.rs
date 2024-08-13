@@ -16,9 +16,10 @@
 //! available to all components. Used to hold things typically configured by CLI flags, etc.
 
 use crate::textdump::EncodingMode;
+use moor_compiler::CompileOptions;
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Config {
     /// Whether to allow notify() to send arbitrary MOO values to players. The interpretation of
     /// the values varies depending on host/client.
@@ -28,4 +29,26 @@ pub struct Config {
     pub textdump_output: Option<PathBuf>,
     /// What encoding to use for textdumps (ISO-8859-1 or UTF-8).
     pub textdump_encoding: EncodingMode,
+    /// Whether to support block-level lexical scoping, and the 'begin', 'let' and 'global'
+    /// keywords.
+    pub lexical_scopes: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            rich_notify: true,
+            textdump_output: None,
+            textdump_encoding: EncodingMode::UTF8,
+            lexical_scopes: true,
+        }
+    }
+}
+
+impl Config {
+    pub fn compile_options(&self) -> CompileOptions {
+        CompileOptions {
+            lexical_scopes: self.lexical_scopes,
+        }
+    }
 }

@@ -246,12 +246,12 @@ pub mod scheduler_test_utils {
     use moor_values::tasks::{CommandError, SchedulerError};
     use moor_values::var::{Error::E_VERBNF, Objid, Var};
 
+    use super::TaskHandle;
+    use crate::config::Config;
     use crate::tasks::scheduler_client::SchedulerClient;
     use crate::tasks::sessions::Session;
     use moor_values::tasks::Exception;
     use moor_values::tasks::SchedulerError::{CommandExecutionError, TaskAbortedException};
-
-    use super::TaskHandle;
 
     pub type ExecResult = Result<Var, Exception>;
 
@@ -295,7 +295,9 @@ pub mod scheduler_test_utils {
         player: Objid,
         code: String,
     ) -> Result<Var, SchedulerError> {
-        execute(|| scheduler.submit_eval_task(player, player, code, session))
+        execute(|| {
+            scheduler.submit_eval_task(player, player, code, session, Arc::new(Config::default()))
+        })
     }
 }
 

@@ -780,7 +780,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match tramp {
         BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE => {
             let program_code = program_code.as_str();
-            let program = match compile(program_code) {
+            let program = match compile(program_code, bf_args.config.compile_options()) {
                 Ok(program) => program,
                 Err(e) => return Ok(Ret(v_listv(vec![v_int(0), v_string(e.to_string())]))),
             };

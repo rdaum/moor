@@ -23,19 +23,11 @@ use std::time::SystemTime;
 use eyre::{Context, Error};
 
 use moor_db::DatabaseFlavour;
-use moor_kernel::SchedulerClient;
-use rusty_paseto::core::{
-    Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
-};
-use rusty_paseto::prelude::Key;
-use serde_json::json;
-use tracing::{debug, error, info, trace, warn};
-use uuid::Uuid;
-use zmq::{Socket, SocketType};
-
+use moor_kernel::config::Config;
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
 use moor_kernel::tasks::TaskHandle;
+use moor_kernel::SchedulerClient;
 use moor_values::tasks::SchedulerError::CommandExecutionError;
 use moor_values::tasks::{CommandError, NarrativeEvent, TaskId};
 use moor_values::util::parse_into_words;
@@ -50,6 +42,14 @@ use rpc_common::{
     RpcRequestError, RpcResponse, RpcResult, BROADCAST_TOPIC, MOOR_AUTH_TOKEN_FOOTER,
     MOOR_SESSION_TOKEN_FOOTER,
 };
+use rusty_paseto::core::{
+    Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
+};
+use rusty_paseto::prelude::Key;
+use serde_json::json;
+use tracing::{debug, error, info, trace, warn};
+use uuid::Uuid;
+use zmq::{Socket, SocketType};
 
 use crate::connections::ConnectionsDB;
 use crate::connections_wt::ConnectionsWT;
@@ -64,6 +64,7 @@ pub struct RpcServer {
     events_publish: Arc<Mutex<Socket>>,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
     task_handles: Mutex<HashMap<TaskId, (Uuid, TaskHandle)>>,
+    config: Arc<Config>,
 }
 
 pub(crate) fn make_response(result: Result<RpcResponse, RpcRequestError>) -> Vec<u8> {
@@ -82,6 +83,7 @@ impl RpcServer {
         narrative_endpoint: &str,
         // For determining the flavor for the connections database.
         db_flavor: DatabaseFlavour,
+        config: Arc<Config>,
     ) -> Self {
         info!(
             "Creating new RPC server; with {} ZMQ IO threads...",
@@ -110,6 +112,7 @@ impl RpcServer {
             events_publish: Arc::new(Mutex::new(publish)),
             zmq_context,
             task_handles: Default::default(),
+            config,
         }
     }
 
@@ -837,14 +840,19 @@ impl RpcServer {
             return Err(RpcRequestError::CreateSessionFailed);
         };
 
-        let task_handle =
-            match scheduler_client.submit_eval_task(connection, connection, expression, session) {
-                Ok(t) => t,
-                Err(e) => {
-                    error!(error = ?e, "Error submitting eval task");
-                    return Err(RpcRequestError::InternalError(e.to_string()));
-                }
-            };
+        let task_handle = match scheduler_client.submit_eval_task(
+            connection,
+            connection,
+            expression,
+            session,
+            self.config.clone(),
+        ) {
+            Ok(t) => t,
+            Err(e) => {
+                error!(error = ?e, "Error submitting eval task");
+                return Err(RpcRequestError::InternalError(e.to_string()));
+            }
+        };
         match task_handle.into_receiver().recv() {
             Ok(Ok(v)) => Ok(RpcResponse::EvalResult(v)),
             Ok(Err(e)) => Err(RpcRequestError::TaskError(e)),

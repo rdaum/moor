@@ -19,8 +19,8 @@ use pretty_assertions::assert_eq;
 use uuid::Uuid;
 use EncodingMode::UTF8;
 
-use moor_compiler::compile;
 use moor_compiler::Program;
+use moor_compiler::{compile, CompileOptions};
 use moor_db::Database;
 #[cfg(feature = "relbox")]
 use moor_db_relbox::RelBoxWorldState;
@@ -51,7 +51,8 @@ pub fn testsuite_dir() -> PathBuf {
 #[allow(dead_code)]
 pub fn load_textdump(db: &dyn Database) {
     let mut tx = db.loader_client().unwrap();
-    textdump_load(tx.as_ref(), test_db_path(), UTF8).expect("Could not load textdump");
+    textdump_load(tx.as_ref(), test_db_path(), UTF8, CompileOptions::default())
+        .expect("Could not load textdump");
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
@@ -106,7 +107,7 @@ pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
 
 #[allow(dead_code)]
 pub fn run_as_verb(db: &dyn Database, expression: &str) -> ExecResult {
-    let binary = compile(expression).unwrap();
+    let binary = compile(expression, CompileOptions::default()).unwrap();
     let verb_uuid = Uuid::new_v4().to_string();
     compile_verbs(db, &[(&verb_uuid, &binary)]);
     let mut state = db.new_world_state().unwrap();
@@ -129,7 +130,7 @@ pub fn eval(
     expression: &str,
     session: Arc<dyn Session>,
 ) -> eyre::Result<ExecResult> {
-    let binary = compile(expression)?;
+    let binary = compile(expression, CompileOptions::default())?;
     let mut state = db.new_world_state()?;
     let builtin_registry = Arc::new(BuiltinRegistry::new());
     let result =

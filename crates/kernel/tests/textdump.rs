@@ -22,7 +22,7 @@ mod test {
 
     use text_diff::assert_diff;
 
-    use moor_compiler::Program;
+    use moor_compiler::{CompileOptions, Program};
     use moor_db::loader::LoaderInterface;
     use moor_db::Database;
     use moor_db_wiredtiger::WiredTigerDB;
@@ -45,8 +45,13 @@ mod test {
     }
 
     fn load_textdump_file(tx: &mut dyn LoaderInterface, path: &str) {
-        textdump_load(tx, PathBuf::from(path), EncodingMode::UTF8)
-            .expect("Could not load textdump");
+        textdump_load(
+            tx,
+            PathBuf::from(path),
+            EncodingMode::UTF8,
+            CompileOptions::default(),
+        )
+        .expect("Could not load textdump");
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     }
 
@@ -183,7 +188,13 @@ mod test {
         let (db, _) = WiredTigerDB::open(None);
         let db = Arc::new(db);
         let mut tx = db.clone().loader_client().unwrap();
-        textdump_load(tx.as_mut(), minimal_db, EncodingMode::UTF8).unwrap();
+        textdump_load(
+            tx.as_mut(),
+            minimal_db,
+            EncodingMode::UTF8,
+            CompileOptions::default(),
+        )
+        .unwrap();
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 
         // Check a few things in a new transaction.
@@ -274,7 +285,13 @@ mod test {
         let db2 = Arc::new(db2);
         let buffered_string_reader = std::io::BufReader::new(textdump.as_bytes());
         let mut lc = db2.clone().loader_client().unwrap();
-        read_textdump(lc.as_mut(), buffered_string_reader, EncodingMode::UTF8).unwrap();
+        read_textdump(
+            lc.as_mut(),
+            buffered_string_reader,
+            EncodingMode::UTF8,
+            CompileOptions::default(),
+        )
+        .unwrap();
         assert_eq!(lc.commit().unwrap(), CommitResult::Success);
 
         // Now go through the properties and verbs of all the objects on db1, and verify that

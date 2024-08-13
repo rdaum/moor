@@ -20,8 +20,8 @@ use std::path::PathBuf;
 
 use tracing::{info, span, trace};
 
-use moor_compiler::compile;
 use moor_compiler::Program;
+use moor_compiler::{compile, CompileOptions};
 use moor_db::loader::LoaderInterface;
 use moor_values::model::Preposition;
 use moor_values::model::PropFlag;
@@ -92,6 +92,7 @@ pub fn textdump_load(
     ldr: &dyn LoaderInterface,
     path: PathBuf,
     encoding_mode: EncodingMode,
+    compile_options: CompileOptions,
 ) -> Result<(), TextdumpReaderError> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
@@ -101,13 +102,14 @@ pub fn textdump_load(
 
     let br = BufReader::new(corefile);
 
-    read_textdump(ldr, br, encoding_mode)
+    read_textdump(ldr, br, encoding_mode, compile_options)
 }
 
 pub fn read_textdump<T: io::Read>(
     loader: &dyn LoaderInterface,
     reader: BufReader<T>,
     encoding_mode: EncodingMode,
+    compile_options: CompileOptions,
 ) -> Result<(), TextdumpReaderError> {
     let mut tdr = TextdumpReader::new(reader, encoding_mode);
     let td = tdr.read_textdump()?;
@@ -208,14 +210,16 @@ pub fn read_textdump<T: io::Read>(
             let names: Vec<&str> = v.name.split(' ').collect();
 
             let program = match td.verbs.get(&(*objid, vn)) {
-                Some(verb) if verb.program.is_some() => {
-                    compile(verb.program.clone().unwrap().as_str()).map_err(|e| {
-                        TextdumpReaderError::VerbCompileError(
-                            format!("compiling verb #{}/{} ({:?})", objid.0, vn, names),
-                            e.clone(),
-                        )
-                    })?
-                }
+                Some(verb) if verb.program.is_some() => compile(
+                    verb.program.clone().unwrap().as_str(),
+                    compile_options.clone(),
+                )
+                .map_err(|e| {
+                    TextdumpReaderError::VerbCompileError(
+                        format!("compiling verb #{}/{} ({:?})", objid.0, vn, names),
+                        e.clone(),
+                    )
+                })?,
                 // If the verb program is missing, then it's an empty program, and we'll put in
                 // an empty binary.
                 _ => Program::new(),

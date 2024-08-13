@@ -137,7 +137,7 @@ fn test(db: Box<dyn Database>, path: &Path) {
         return;
     }
     let tasks_db = Box::new(NoopTasksDb {});
-    let scheduler = Scheduler::new(db, tasks_db, Config::default());
+    let scheduler = Scheduler::new(db, tasks_db, Arc::new(Config::default()));
     let scheduler_client = scheduler.client().unwrap();
     let session_factory = Arc::new(NoopSessionFactory {});
     let scheduler_loop_jh = std::thread::Builder::new()
