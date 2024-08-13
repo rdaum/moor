@@ -459,9 +459,12 @@ impl CodegenState {
                 self.generate_codes(codes)?;
                 self.emit(Op::PushCatchLabel(handler_label));
                 self.pop_stack(1)   /* codes, catch */;
-                self.emit(Op::TryCatch { handler_label });
-                self.generate_expr(trye.as_ref())?;
                 let end_label = self.make_jump_label(None);
+                self.emit(Op::TryCatch {
+                    handler_label,
+                    end_label,
+                });
+                self.generate_expr(trye.as_ref())?;
                 self.emit(Op::EndCatch(end_label));
                 self.commit_jump_label(handler_label);
 
@@ -574,10 +577,11 @@ impl CodegenState {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Op::Jump { label: loop_top });
-                self.commit_jump_label(end_label);
+                // This opcode should never get hit.
                 self.emit(Op::EndScope {
                     num_bindings: *environment_width as u16,
                 });
+                self.commit_jump_label(end_label);
                 self.pop_stack(2);
                 self.loops.pop();
             }
@@ -609,10 +613,10 @@ impl CodegenState {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Jump { label: loop_top });
-                self.commit_jump_label(end_label);
                 self.emit(Op::EndScope {
                     num_bindings: *environment_width as u16,
                 });
+                self.commit_jump_label(end_label);
                 self.pop_stack(2);
                 self.loops.pop();
             }
@@ -654,10 +658,10 @@ impl CodegenState {
                 self.emit(Op::Jump {
                     label: loop_start_label,
                 });
-                self.commit_jump_label(loop_end_label);
                 self.emit(Op::EndScope {
                     num_bindings: *environment_width as u16,
                 });
+                self.commit_jump_label(loop_end_label);
                 self.loops.pop();
             }
             StmtNode::Fork { id, body, time } => {
@@ -692,14 +696,16 @@ impl CodegenState {
                     labels.push(push_label);
                 }
                 self.pop_stack(num_excepts);
+                let end_label = self.make_jump_label(None);
+
                 self.emit(Op::TryExcept {
                     num_excepts: num_excepts as u16,
                     environment_width: *environment_width as u16,
+                    end_label,
                 });
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
-                let end_label = self.make_jump_label(None);
                 self.emit(Op::EndExcept(end_label));
                 for (i, ex) in excepts.iter().enumerate() {
                     self.commit_jump_label(labels[i]);
