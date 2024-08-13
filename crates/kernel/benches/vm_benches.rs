@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use moor_compiler::compile;
+use moor_compiler::{compile, CompileOptions};
 use moor_db_wiredtiger::WiredTigerDB;
 use moor_kernel::builtins::BuiltinRegistry;
 use moor_kernel::config::Config;
@@ -82,7 +82,7 @@ fn prepare_vm_execution(
     program: &str,
     max_ticks: usize,
 ) -> VmHost {
-    let binary = compile(program).unwrap();
+    let binary = compile(program, CompileOptions::default()).unwrap();
     let mut tx = ws_source.new_world_state().unwrap();
     tx.add_verb(
         SYSTEM_OBJECT,

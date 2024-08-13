@@ -23,6 +23,7 @@ use moor_compiler::{compile, Program};
 use moor_values::var::Symbol;
 use moor_values::var::{Objid, Var};
 
+use crate::config::Config;
 use crate::tasks::sessions::Session;
 use crate::tasks::TaskHandle;
 use moor_values::tasks::SchedulerError;
@@ -159,9 +160,10 @@ impl SchedulerClient {
         perms: Objid,
         code: String,
         sessions: Arc<dyn Session>,
+        config: Arc<Config>,
     ) -> Result<TaskHandle, SchedulerError> {
         // Compile the text into a verb.
-        let program = match compile(code.as_str()) {
+        let program = match compile(code.as_str(), config.compile_options()) {
             Ok(b) => b,
             Err(e) => return Err(CompilationError(e)),
         };

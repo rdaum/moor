@@ -17,19 +17,19 @@ mod tests {
     use crate::builtins::BUILTIN_DESCRIPTORS;
     use crate::codegen::compile;
     use crate::labels::{Label, Offset};
+    use crate::opcode::Op::*;
+    use crate::opcode::{ScatterArgs, ScatterLabel};
+    use crate::CompileOptions;
     use moor_values::model::CompileError;
     use moor_values::var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
     use moor_values::var::Objid;
     use moor_values::var::Symbol;
     use moor_values::SYSTEM_OBJECT;
 
-    use crate::opcode::Op::*;
-    use crate::opcode::{ScatterArgs, ScatterLabel};
-
     #[test]
     fn test_simple_add_expr() {
         let program = "1 + 2;";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![ImmInt(1), ImmInt(2), Add, Pop, Done]
@@ -39,7 +39,7 @@ mod tests {
     #[test]
     fn test_var_assign_expr() {
         let program = "a = 1 + 2;";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let a = binary.find_var("a");
         /*
@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn test_var_assign_retr_expr() {
         let program = "a = 1 + 2; return a;";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let a = binary.find_var("a");
 
@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn test_if_stmt() {
         let program = "if (1 == 2) return 5; elseif (2 == 3) return 3; else return 6; endif";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         /*
          0: 124                   NUM 1
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn test_while_stmt() {
         let program = "while (1) x = x + 1; endwhile";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let x = binary.find_var("x");
 
@@ -176,7 +176,7 @@ mod tests {
     #[test]
     fn test_while_label_stmt() {
         let program = "while chuckles (1) x = x + 1; if (x > 5) break chuckles; endif endwhile";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let x = binary.find_var("x");
         let chuckles = binary.find_var("chuckles");
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn test_while_break_continue_stmt() {
         let program = "while (1) x = x + 1; if (x == 5) break; else continue; endif endwhile";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let x = binary.find_var("x");
 
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn test_for_in_list_stmt() {
         let program = "for x in ({1,2,3}) b = x + 5; endfor";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let b = binary.find_var("b");
         let x = binary.find_var("x");
@@ -347,7 +347,7 @@ mod tests {
     #[test]
     fn test_for_range() {
         let program = "for n in [1..5] player:tell(a); endfor";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let player = binary.find_var("player");
         let a = binary.find_var("a");
@@ -392,7 +392,7 @@ mod tests {
     #[test]
     fn test_fork() {
         let program = "fork (5) player:tell(\"a\"); endfork";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let player = binary.find_var("player");
         let a = binary.find_literal("a".into());
@@ -426,7 +426,7 @@ mod tests {
     #[test]
     fn test_fork_id() {
         let program = "fork fid (5) player:tell(fid); endfork";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let player = binary.find_var("player");
         let fid = binary.find_var("fid");
@@ -460,7 +460,7 @@ mod tests {
     #[test]
     fn test_and_or() {
         let program = "a = (1 && 2 || 3);";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let a = binary.find_var("a");
 
         /*
@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn test_unknown_builtin_call() {
         let program = "bad_builtin(1, 2, 3);";
-        let parse = compile(program);
+        let parse = compile(program, CompileOptions::default());
         assert!(matches!(
             parse,
             Err(CompileError::UnknownBuiltinFunction(_))
@@ -502,7 +502,7 @@ mod tests {
     #[test]
     fn test_known_builtin() {
         let program = "disassemble(player, \"test\");";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let player = binary.find_var("player");
         let test = binary.find_literal("test".into());
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn test_cond_expr() {
         let program = "a = (1 == 2 ? 3 | 4);";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let a = binary.find_var("a");
 
@@ -566,7 +566,7 @@ mod tests {
     #[test]
     fn test_verb_call() {
         let program = "player:tell(\"test\");";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let player = binary.find_var("player");
         let tell = binary.find_literal("tell".into());
@@ -597,7 +597,7 @@ mod tests {
     #[test]
     fn test_string_get() {
         let program = "return \"test\"[1];";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![Imm(0.into()), ImmInt(1), Ref, Return, Done]
@@ -607,7 +607,7 @@ mod tests {
     #[test]
     fn test_string_get_range() {
         let program = "return \"test\"[1..2];";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![Imm(0.into()), ImmInt(1), ImmInt(2), RangeRef, Return, Done]
@@ -617,7 +617,7 @@ mod tests {
     #[test]
     fn test_index_set() {
         let program = "a[2] = \"3\";";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let a = binary.find_var("a");
 
         assert_eq!(
@@ -640,7 +640,7 @@ mod tests {
     #[test]
     fn test_range_set() {
         let program = "a[2..4] = \"345\";";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let a = binary.find_var("a");
 
         assert_eq!(
@@ -664,7 +664,7 @@ mod tests {
     #[test]
     fn test_list_get() {
         let program = "return {1,2,3}[1];";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
@@ -685,7 +685,7 @@ mod tests {
     #[test]
     fn test_list_get_range() {
         let program = "return {1,2,3}[1..2];";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
@@ -707,7 +707,7 @@ mod tests {
     #[test]
     fn test_range_length() {
         let program = "a = {1, 2, 3}; b = a[2..$];";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let a = binary.find_var("a");
         let b = binary.find_var("b");
@@ -755,7 +755,7 @@ mod tests {
     #[test]
     fn test_list_splice() {
         let program = "return {@args[1..2]};";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         /*
           0: 076                   PUSH args
@@ -784,7 +784,7 @@ mod tests {
     #[test]
     fn test_try_finally() {
         let program = "try a=1; finally a=2; endtry";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let a = binary.find_var("a");
         /*
@@ -821,7 +821,7 @@ mod tests {
     #[test]
     fn test_try_excepts() {
         let program = "try a=1; except a (E_INVARG) a=2; except b (E_PROPNF) a=3; endtry";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let a = binary.find_var("a");
         let b = binary.find_var("b");
@@ -888,7 +888,7 @@ mod tests {
     #[test]
     fn test_catch_expr() {
         let program = "x = `x + 1 ! e_propnf, E_PERM => 17';";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         /*
          0: 100 000               PUSH_LITERAL E_PROPNF
          2: 016                 * MAKE_SINGLETON_LIST
@@ -935,7 +935,7 @@ mod tests {
     #[test]
     fn test_catch_any_expr() {
         let program = "return `raise(E_INVARG) ! ANY';";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         /*
           0: 123                   NUM 0
@@ -978,7 +978,7 @@ mod tests {
     #[test]
     fn test_sysobjref() {
         let program = "$string_utils:from_list(test_string);";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let string_utils = binary.find_literal("string_utils".into());
         let from_list = binary.find_literal("from_list".into());
@@ -1011,7 +1011,7 @@ mod tests {
     #[test]
     fn test_sysverbcall() {
         let program = "$verb_metadata(#1, 1);";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let verb_metadata = binary.find_literal("verb_metadata".into());
         assert_eq!(
             *binary.main_vector.as_ref(),
@@ -1031,7 +1031,7 @@ mod tests {
     #[test]
     fn test_basic_scatter_assign() {
         let program = "{a, b, c} = args;";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let (a, b, c) = (
             binary.find_var("a"),
             binary.find_var("b"),
@@ -1065,7 +1065,7 @@ mod tests {
     #[test]
     fn test_more_scatter_assign() {
         let program = "{first, second, ?third = 0} = args;";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let (first, second, third) = (
             binary.find_var("first"),
             binary.find_var("second"),
@@ -1104,7 +1104,7 @@ mod tests {
     #[test]
     fn test_some_more_scatter_assign() {
         let program = "{a, b, ?c = 8, @d} = args;";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         /*
          0: 076                   PUSH args
          1: 112 013 004 002 004
@@ -1147,7 +1147,7 @@ mod tests {
     #[test]
     fn test_even_more_scatter_assign() {
         let program = "{a, ?b, ?c = 8, @d, ?e = 9, f} = args;";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let (a, b, c, d, e, f) = (
             binary.find_var("a"),
             binary.find_var("b"),
@@ -1200,7 +1200,7 @@ mod tests {
     #[test]
     fn test_scatter_precedence() {
         let program = "{a,b,?c, @d} = {{1,2,player:kill(b)}}[1]; return {a,b,c};";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let (a, b, c, d) = (
             binary.find_var("a"),
             binary.find_var("b"),
@@ -1275,7 +1275,7 @@ mod tests {
     #[test]
     fn test_indexed_assignment() {
         let program = r#"this.stack[5] = 5;"#;
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         /*
                   0: 073                   PUSH this
@@ -1311,7 +1311,7 @@ mod tests {
     #[test]
     fn test_assignment_from_range() {
         let program = r#"x = 1; y = {1,2,3}; x = x + y[2];"#;
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         let x = binary.find_var("x");
         let y = binary.find_var("y");
@@ -1367,7 +1367,7 @@ mod tests {
     #[test]
     fn test_get_property() {
         let program = r#"return this.stack;"#;
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
 
         assert_eq!(
             *binary.main_vector.as_ref(),
@@ -1384,7 +1384,7 @@ mod tests {
     #[test]
     fn test_call_verb() {
         let program = r#"#0:test_verb();"#;
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
@@ -1401,7 +1401,7 @@ mod tests {
     #[test]
     fn test_0_arg_return() {
         let program = r#"return;"#;
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(*binary.main_vector.as_ref(), vec![Return0, Done])
     }
 
@@ -1414,7 +1414,7 @@ mod tests {
             pass = blop;
             return pass;
         "#;
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let result = binary.find_var("result");
         let pass = binary.find_var("pass");
         let args = binary.find_var("args");
@@ -1461,6 +1461,7 @@ mod tests {
         except (E_RANGE)
         endtry
         "#,
+            CompileOptions::default(),
         )
         .unwrap();
 
@@ -1505,7 +1506,7 @@ mod tests {
     #[test]
     fn test_catch_handler_regression() {
         let prg = "`this ! E_INVIND';";
-        let binary = compile(prg).unwrap();
+        let binary = compile(prg, CompileOptions::default()).unwrap();
         let this = binary.find_var("this");
 
         /*

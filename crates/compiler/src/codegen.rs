@@ -30,7 +30,7 @@ use crate::labels::{JumpLabel, Label, Offset};
 use crate::names::{Name, Names, UnboundName};
 use crate::opcode::Op::Jump;
 use crate::opcode::{Op, ScatterArgs, ScatterLabel};
-use crate::parse::parse_program;
+use crate::parse::{parse_program, CompileOptions};
 use crate::program::Program;
 use moor_values::model::CompileError;
 
@@ -841,12 +841,12 @@ impl CodegenState {
     }
 }
 
-pub fn compile(program: &str) -> Result<Program, CompileError> {
+pub fn compile(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
     let compile_span = tracing::trace_span!("compile");
     let _compile_guard = compile_span.enter();
 
     let builtins = make_builtin_offsets();
-    let parse = parse_program(program)?;
+    let parse = parse_program(program, options)?;
 
     // Generate the code into 'cg_state'.
     let mut cg_state = CodegenState::new(parse.names, parse.names_mapping, builtins);

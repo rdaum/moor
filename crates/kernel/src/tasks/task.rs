@@ -646,7 +646,7 @@ mod tests {
 
     use crossbeam_channel::{unbounded, Receiver};
 
-    use moor_compiler::{compile, Program};
+    use moor_compiler::{compile, CompileOptions, Program};
     use moor_db_wiredtiger::WiredTigerDB;
     use moor_values::model::{
         ArgSpec, BinaryType, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
@@ -758,7 +758,7 @@ mod tests {
         TaskSchedulerClient,
         Receiver<(TaskId, TaskControlMsg)>,
     ) {
-        let program = compile(program).unwrap();
+        let program = compile(program, CompileOptions::default()).unwrap();
         let task_start = Arc::new(TaskStart::StartEval {
             player: SYSTEM_OBJECT,
             program,
@@ -1052,7 +1052,7 @@ mod tests {
     fn test_command_match() {
         let look_this = TestVerb {
             name: Symbol::mk("look"),
-            program: compile("return 1;").unwrap(),
+            program: compile("return 1;", CompileOptions::default()).unwrap(),
             argspec: VerbArgsSpec {
                 dobj: ArgSpec::This,
                 prep: PrepSpec::None,
@@ -1086,7 +1086,7 @@ mod tests {
     fn test_command_do_command() {
         let do_command_verb = TestVerb {
             name: Symbol::mk("do_command"),
-            program: compile("return 1;").unwrap(),
+            program: compile("return 1;", CompileOptions::default()).unwrap(),
             argspec: VerbArgsSpec::this_none_this(),
         };
 
@@ -1118,7 +1118,7 @@ mod tests {
     fn test_command_do_command_false_no_match() {
         let do_command_verb = TestVerb {
             name: Symbol::mk("do_command"),
-            program: compile("return 0;").unwrap(),
+            program: compile("return 0;", CompileOptions::default()).unwrap(),
             argspec: VerbArgsSpec::this_none_this(),
         };
 
@@ -1149,13 +1149,13 @@ mod tests {
     fn test_command_do_command_false_match() {
         let do_command_verb = TestVerb {
             name: Symbol::mk("do_command"),
-            program: compile("return 0;").unwrap(),
+            program: compile("return 0;", CompileOptions::default()).unwrap(),
             argspec: VerbArgsSpec::this_none_this(),
         };
 
         let look_this = TestVerb {
             name: Symbol::mk("look"),
-            program: compile("return 1;").unwrap(),
+            program: compile("return 1;", CompileOptions::default()).unwrap(),
             argspec: VerbArgsSpec {
                 dobj: ArgSpec::This,
                 prep: PrepSpec::None,

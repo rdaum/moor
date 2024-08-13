@@ -33,11 +33,11 @@ mod tests {
     use crate::builtins::BuiltinRegistry;
     use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::vm_test_utils::call_verb;
-    use moor_compiler::Names;
     use moor_compiler::Op;
     use moor_compiler::Op::*;
     use moor_compiler::Program;
     use moor_compiler::{compile, UnboundNames};
+    use moor_compiler::{CompileOptions, Names};
     use moor_db_wiredtiger::WiredTigerDB;
     use moor_values::var::Symbol;
     use test_case::test_case;
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn test_list_splice() {
         let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let mut state = test_db_with_verb("test", &binary)
             .new_world_state()
             .unwrap();
@@ -303,9 +303,12 @@ mod tests {
     #[test]
     fn test_if_or_expr() {
         let program = "if (1 || 0) return 1; else return 2; endif";
-        let mut state = test_db_with_verb("test", &compile(program).unwrap())
-            .new_world_state()
-            .unwrap();
+        let mut state = test_db_with_verb(
+            "test",
+            &compile(program, CompileOptions::default()).unwrap(),
+        )
+        .new_world_state()
+        .unwrap();
         let session = Arc::new(NoopClientSession::new());
         let result = call_verb(
             state.as_mut(),
@@ -441,7 +444,7 @@ mod tests {
     }
 
     fn world_with_test_program(program: &str) -> Box<dyn WorldState> {
-        let binary = compile(program).unwrap();
+        let binary = compile(program, CompileOptions::default()).unwrap();
         let db = test_db_with_verb("test", &binary);
         db.new_world_state().unwrap()
     }
@@ -650,7 +653,7 @@ mod tests {
     fn test_try_finally_regression_1() {
         let program =
             r#"a = 1; try return "hello world"[2..$]; a = 3; finally a = 2; endtry return a;"#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -668,7 +671,7 @@ mod tests {
     // A 0 value was hanging around on the stack making the comparison fail.
     fn test_try_expr_regression() {
         let program = r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -721,8 +724,14 @@ mod tests {
         let bottom_of_stack = r#"raise(E_ARGS);"#;
 
         let mut state = world_with_test_programs(&[
-            ("raise_error", &compile(bottom_of_stack).unwrap()),
-            ("test", &compile(top_of_stack).unwrap()),
+            (
+                "raise_error",
+                &compile(bottom_of_stack, CompileOptions::default()).unwrap(),
+            ),
+            (
+                "test",
+                &compile(top_of_stack, CompileOptions::default()).unwrap(),
+            ),
         ]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -742,7 +751,7 @@ mod tests {
           return "hello world"[2..$];
         except (E_RANGE)
         endtry"#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         eprintln!("{}", compiled);
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
@@ -760,7 +769,7 @@ mod tests {
     #[test]
     fn test_try_finally_returns() {
         let program = r#"try return 666; finally return 333; endtry"#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -785,7 +794,7 @@ mod tests {
         end
         return x;
         "#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -811,7 +820,7 @@ mod tests {
         end
         return x;
         "#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -837,7 +846,7 @@ mod tests {
             return {x, y};
         end
         "#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -867,7 +876,7 @@ mod tests {
             end
         end
         "#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -894,7 +903,7 @@ mod tests {
         else
             return 0;
         endif"#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -918,7 +927,7 @@ mod tests {
             let y = 5;
             return {y, z};
         endwhile"#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -942,7 +951,7 @@ mod tests {
             let y = 5;
             return {y, z};
         endfor"#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -968,7 +977,7 @@ mod tests {
         except (E_INVARG)
             return 0;
         endtry"#;
-        let compiled = compile(program).unwrap();
+        let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());

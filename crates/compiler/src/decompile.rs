@@ -987,11 +987,12 @@ mod tests {
     use crate::parse::parse_program;
     use crate::parse::Parse;
     use crate::unparse::annotate_line_numbers;
+    use crate::CompileOptions;
     use test_case::test_case;
 
     fn parse_decompile(program_text: &str) -> (Parse, Parse) {
-        let parse_1 = parse_program(program_text).unwrap();
-        let binary = compile(program_text).unwrap();
+        let parse_1 = parse_program(program_text, CompileOptions::default()).unwrap();
+        let binary = compile(program_text, CompileOptions::default()).unwrap();
         let mut parse_2 = program_to_tree(&binary).unwrap();
         annotate_line_numbers(1, &mut parse_2.stmts);
         (parse_1, parse_2)

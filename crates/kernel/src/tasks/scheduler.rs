@@ -147,7 +147,7 @@ impl Scheduler {
     pub fn new(
         database: Box<dyn Database>,
         tasks_database: Box<dyn TasksDb>,
-        config: Config,
+        config: Arc<Config>,
     ) -> Self {
         let (task_control_sender, task_control_receiver) = crossbeam_channel::unbounded();
         let (scheduler_sender, scheduler_receiver) = crossbeam_channel::unbounded();
@@ -169,7 +169,7 @@ impl Scheduler {
             database,
             next_task_id: Default::default(),
             task_q,
-            config: Arc::new(config),
+            config,
             task_control_sender,
             task_control_receiver,
             scheduler_sender,
@@ -311,9 +311,10 @@ impl Scheduler {
                 return Err(VerbProgramFailed(VerbProgramError::NoVerbToProgram));
             }
 
-            let program = compile(code.join("\n").as_str()).map_err(|e| {
-                VerbProgramFailed(VerbProgramError::CompilationError(vec![format!("{:?}", e)]))
-            })?;
+            let program = compile(code.join("\n").as_str(), self.config.compile_options())
+                .map_err(|e| {
+                    VerbProgramFailed(VerbProgramError::CompilationError(vec![format!("{:?}", e)]))
+                })?;
 
             // Now we have a program, we need to encode it.
             let binary = program

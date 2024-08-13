@@ -202,6 +202,16 @@ struct Args {
         default_value = "true"
     )]
     rich_notify: bool,
+
+    #[arg(
+        long,
+        help = "Enable blockl-level lexical scoping in programs. \
+                Adds the `begin`/`end` syntax for creating lexical scopes, and `let` and `global`
+                for declaring variables. \
+                This is a feature that is not present in LambdaMOO, so if you need backwards compatibility, turn this off.",
+        default_value = "true"
+    )]
+    lexical_scopes: bool,
 }
 
 fn main() -> Result<(), Report> {
@@ -285,6 +295,13 @@ fn main() -> Result<(), Report> {
     };
     info!(path = ?args.db, "Opened database");
 
+    let config = Arc::new(Config {
+        textdump_output: args.textdump_out,
+        textdump_encoding: args.textdump_encoding,
+        rich_notify: args.rich_notify,
+        lexical_scopes: args.lexical_scopes,
+    });
+
     // If the database already existed, do not try to import the textdump...
     if let Some(textdump) = args.textdump {
         if !freshly_made {
@@ -295,7 +312,13 @@ fn main() -> Result<(), Report> {
             let mut loader_interface = database
                 .loader_client()
                 .expect("Unable to get loader interface from database");
-            textdump_load(loader_interface.as_ref(), textdump, args.textdump_encoding).unwrap();
+            textdump_load(
+                loader_interface.as_ref(),
+                textdump,
+                args.textdump_encoding,
+                config.compile_options(),
+            )
+            .unwrap();
             let duration = start.elapsed();
             info!("Loaded textdump in {:?}", duration);
             loader_interface
@@ -303,12 +326,6 @@ fn main() -> Result<(), Report> {
                 .expect("Failure to commit loaded database...");
         }
     }
-
-    let config = Config {
-        textdump_output: args.textdump_out,
-        textdump_encoding: args.textdump_encoding,
-        rich_notify: args.rich_notify,
-    };
 
     let tasks_db: Box<dyn TasksDb> = match args.db_flavour {
         DatabaseFlavour::WiredTiger => {
@@ -325,7 +342,7 @@ fn main() -> Result<(), Report> {
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let scheduler = Scheduler::new(database, tasks_db, config);
+    let scheduler = Scheduler::new(database, tasks_db, config.clone());
     let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
     // We have to create the RpcServer before starting the scheduler because we need to pass it in
@@ -341,6 +358,7 @@ fn main() -> Result<(), Report> {
         zmq_ctx.clone(),
         args.events_listen.as_str(),
         args.db_flavour,
+        config,
     ));
 
     // The scheduler thread:

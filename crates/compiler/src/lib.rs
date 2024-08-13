@@ -35,6 +35,7 @@ pub use crate::decompile::program_to_tree;
 pub use crate::labels::{JumpLabel, Label, Offset};
 pub use crate::names::{Name, UnboundNames};
 pub use crate::opcode::{Op, ScatterLabel};
+pub use crate::parse::CompileOptions;
 pub use crate::program::{Program, EMPTY_PROGRAM};
 pub use crate::unparse::unparse;
 

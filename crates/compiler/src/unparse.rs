@@ -696,12 +696,12 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::ast::assert_trees_match_recursive;
+    use crate::CompileOptions;
     use pretty_assertions::assert_eq;
     use test_case::test_case;
     use unindent::unindent;
-
-    use super::*;
 
     #[test_case("a = 1;\n"; "assignment")]
     #[test_case("a = 1 + 2;\n"; "assignment with expr")]
@@ -790,8 +790,10 @@ mod tests {
 
         // Now parse both again, and verify that the complete ASTs match, ignoring the parser line
         // numbers, but validating everything else.
-        let parsed_original = crate::parse::parse_program(&stripped).unwrap();
-        let parsed_decompiled = crate::parse::parse_program(&result).unwrap();
+        let parsed_original =
+            crate::parse::parse_program(&stripped, CompileOptions::default()).unwrap();
+        let parsed_decompiled =
+            crate::parse::parse_program(&result, CompileOptions::default()).unwrap();
         assert_trees_match_recursive(&parsed_original.stmts, &parsed_decompiled.stmts)
     }
 
@@ -865,7 +867,7 @@ mod tests {
     }
 
     pub fn parse_and_unparse(original: &str) -> Result<String, DecompileError> {
-        let tree = crate::parse::parse_program(original).unwrap();
+        let tree = crate::parse::parse_program(original, CompileOptions::default()).unwrap();
         Ok(unparse(&tree)?.join("\n"))
     }
 }
