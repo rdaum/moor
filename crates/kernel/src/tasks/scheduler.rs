@@ -274,55 +274,6 @@ impl Scheduler {
         Ok(SchedulerClient::new(self.scheduler_sender.clone()))
     }
 
-    fn match_object_ref(
-        &self,
-        player: Objid,
-        perms: Objid,
-        obj_ref: ObjectRef,
-        tx: &mut dyn WorldState,
-    ) -> Result<Objid, WorldStateError> {
-        match &obj_ref {
-            ObjectRef::Id(obj) => {
-                if !tx.valid(*obj)? {
-                    return Err(WorldStateError::ObjectNotFound(obj_ref));
-                }
-                Ok(*obj)
-            }
-            ObjectRef::SysObj(names) => {
-                // Follow the chain of properties from #0 to the actual object.
-                // The final value has to be an object, or this is an error.
-                let mut obj = SYSTEM_OBJECT;
-                for name in names {
-                    let Ok(value) = tx.retrieve_property(perms, obj, *name) else {
-                        return Err(WorldStateError::ObjectNotFound(obj_ref));
-                    };
-                    let Variant::Obj(o) = value.variant() else {
-                        return Err(WorldStateError::ObjectNotFound(obj_ref));
-                    };
-                    obj = o;
-                }
-                if !tx.valid(obj)? {
-                    return Err(WorldStateError::ObjectNotFound(obj_ref));
-                }
-                Ok(obj)
-            }
-            ObjectRef::Match(object_name) => {
-                let match_env = WsMatchEnv { ws: tx, perms };
-                let matcher = MatchEnvironmentParseMatcher {
-                    env: match_env,
-                    player,
-                };
-                let Ok(Some(o)) = matcher.match_object(object_name) else {
-                    let _ = tx.rollback();
-                    return Err(WorldStateError::ObjectNotFound(obj_ref));
-                };
-                if !tx.valid(o)? {
-                    return Err(WorldStateError::ObjectNotFound(obj_ref));
-                }
-                Ok(o)
-            }
-        }
-    }
     /// Start a transaction, match the object name and verb name, and if it exists and the
     /// permissions are correct, program the verb with the given code.
     // TODO: this probably doesn't belong on scheduler
@@ -340,7 +291,7 @@ impl Scheduler {
         for _ in 0..NUM_VERB_PROGRAM_ATTEMPTS {
             let mut tx = self.database.new_world_state().unwrap();
 
-            let Ok(o) = self.match_object_ref(player, perms, obj.clone(), tx.as_mut()) else {
+            let Ok(o) = match_object_ref(player, perms, obj.clone(), tx.as_mut()) else {
                 return Err(CommandExecutionError(CommandError::NoObjectMatch));
             };
 
@@ -430,6 +381,31 @@ impl Scheduler {
                 session,
                 reply,
             } => {
+                // We need to translate Vloc and any of of the arguments into valid references
+                // before we can start the task.
+                // If they're all just plain object references, we can just use them as-is, without
+                // starting a transaction. Otherwise, we need to start a transaction to resolve them.
+                let need_tx_oref = match vloc {
+                    ObjectRef::Id(_) => false,
+                    _ => true,
+                };
+                let vloc = if need_tx_oref {
+                    let mut tx = self.database.new_world_state().unwrap();
+                    let Ok(vloc) = match_object_ref(player, perms, vloc, tx.as_mut()) else {
+                        reply
+                            .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
+                            .expect("Could not send task handle reply");
+                        return;
+                    };
+                    vloc
+                } else {
+                    let vloc = match vloc {
+                        ObjectRef::Id(id) => id,
+                        _ => panic!("Unexpected object reference in vloc"),
+                    };
+                    vloc
+                };
+
                 let task_start = Arc::new(TaskStart::StartVerb {
                     player,
                     vloc,
@@ -590,7 +566,7 @@ impl Scheduler {
                 };
 
                 let Ok(object) =
-                    self.match_object_ref(SYSTEM_OBJECT, SYSTEM_OBJECT, obj, world_state.as_mut())
+                    match_object_ref(SYSTEM_OBJECT, SYSTEM_OBJECT, obj, world_state.as_mut())
                 else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
@@ -632,8 +608,7 @@ impl Scheduler {
                     }
                 };
 
-                let Ok(object) = self.match_object_ref(player, perms, obj, world_state.as_mut())
-                else {
+                let Ok(object) = match_object_ref(player, perms, obj, world_state.as_mut()) else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                         .expect("Could not send properties reply");
@@ -693,8 +668,7 @@ impl Scheduler {
 
                 // TODO: User must be a programmer...
 
-                let Ok(object) = self.match_object_ref(player, perms, obj, world_state.as_mut())
-                else {
+                let Ok(object) = match_object_ref(player, perms, obj, world_state.as_mut()) else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                         .expect("Could not send property reply");
@@ -745,8 +719,7 @@ impl Scheduler {
                     }
                 };
 
-                let Ok(object) = self.match_object_ref(perms, perms, obj, world_state.as_mut())
-                else {
+                let Ok(object) = match_object_ref(perms, perms, obj, world_state.as_mut()) else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                         .expect("Could not send verbs reply");
@@ -785,8 +758,7 @@ impl Scheduler {
                 };
 
                 // TODO: User must be a programmer...
-                let Ok(object) = self.match_object_ref(perms, perms, obj, world_state.as_mut())
-                else {
+                let Ok(object) = match_object_ref(perms, perms, obj, world_state.as_mut()) else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                         .expect("Could not send verb code reply");
@@ -1656,5 +1628,54 @@ impl TaskQ {
         }
         // Prune out non-background tasks for the player.
         self.suspended.prune_foreground_tasks(player);
+    }
+}
+
+fn match_object_ref(
+    player: Objid,
+    perms: Objid,
+    obj_ref: ObjectRef,
+    tx: &mut dyn WorldState,
+) -> Result<Objid, WorldStateError> {
+    match &obj_ref {
+        ObjectRef::Id(obj) => {
+            if !tx.valid(*obj)? {
+                return Err(WorldStateError::ObjectNotFound(obj_ref));
+            }
+            Ok(*obj)
+        }
+        ObjectRef::SysObj(names) => {
+            // Follow the chain of properties from #0 to the actual object.
+            // The final value has to be an object, or this is an error.
+            let mut obj = SYSTEM_OBJECT;
+            for name in names {
+                let Ok(value) = tx.retrieve_property(perms, obj, *name) else {
+                    return Err(WorldStateError::ObjectNotFound(obj_ref));
+                };
+                let Variant::Obj(o) = value.variant() else {
+                    return Err(WorldStateError::ObjectNotFound(obj_ref));
+                };
+                obj = o;
+            }
+            if !tx.valid(obj)? {
+                return Err(WorldStateError::ObjectNotFound(obj_ref));
+            }
+            Ok(obj)
+        }
+        ObjectRef::Match(object_name) => {
+            let match_env = WsMatchEnv { ws: tx, perms };
+            let matcher = MatchEnvironmentParseMatcher {
+                env: match_env,
+                player,
+            };
+            let Ok(Some(o)) = matcher.match_object(object_name) else {
+                let _ = tx.rollback();
+                return Err(WorldStateError::ObjectNotFound(obj_ref));
+            };
+            if !tx.valid(o)? {
+                return Err(WorldStateError::ObjectNotFound(obj_ref));
+            }
+            Ok(o)
+        }
     }
 }
