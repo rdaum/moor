@@ -26,6 +26,7 @@ use moor_values::var::Symbol;
 use moor_values::var::Var;
 
 use crate::builtins::bf_list_sets::register_bf_list_sets;
+use crate::builtins::bf_maps::register_bf_maps;
 use crate::builtins::bf_num::register_bf_num;
 use crate::builtins::bf_objects::register_bf_objects;
 use crate::builtins::bf_properties::register_bf_properties;
@@ -40,6 +41,7 @@ use crate::vm::activation::{BfFrame, Frame};
 use crate::vm::{ExecutionResult, VMExecState};
 
 mod bf_list_sets;
+mod bf_maps;
 mod bf_num;
 mod bf_objects;
 mod bf_properties;
@@ -71,6 +73,7 @@ impl BuiltinRegistry {
         register_bf_values(&mut builtins);
         register_bf_strings(&mut builtins);
         register_bf_list_sets(&mut builtins);
+        register_bf_maps(&mut builtins);
         register_bf_objects(&mut builtins);
         register_bf_verbs(&mut builtins);
         register_bf_properties(&mut builtins);

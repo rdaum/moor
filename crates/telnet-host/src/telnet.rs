@@ -22,7 +22,7 @@ use eyre::Context;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::SinkExt;
 use futures_util::StreamExt;
-use termimad::{crossterm, CompoundStyle, FmtText, MadSkin};
+use termimad::MadSkin;
 use tmq::subscribe::Subscribe;
 use tmq::{request, subscribe};
 use tokio::net::{TcpListener, TcpStream};
@@ -523,7 +523,7 @@ pub async fn telnet_listen_loop(
     }
 }
 fn markdown_to_ansi(markdown: &str) -> String {
-    let mut skin = MadSkin::default_dark();
+    let skin = MadSkin::default_dark();
     // TODO: permit different text stylings here. e.g. user themes for colours, styling, etc.
     //   will require custom host-side commands to set these.
     skin.inline(markdown).to_string()

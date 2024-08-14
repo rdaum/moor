@@ -389,7 +389,7 @@ impl Var {
             }
             Variant::Map(m) => {
                 let mut result = String::new();
-                result.push('{');
+                result.push('[');
                 for (i, (k, v)) in m.iter().enumerate() {
                     if i > 0 {
                         result.push_str(", ");
@@ -398,7 +398,7 @@ impl Var {
                     result.push_str(" -> ");
                     result.push_str(&v.to_literal());
                 }
-                result.push('}');
+                result.push(']');
                 result
             }
             Variant::Err(e) => e.name().to_string(),
