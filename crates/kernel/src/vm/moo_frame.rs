@@ -90,7 +90,7 @@ impl Encode for MooStackFrame {
 
         // Environment is custom, is not bincodable, so we need to encode it manually, but we just
         // do it as an array of Option<Var>
-        let mut env = vec![None; self.environment.len()];
+        let mut env = vec![None; 256];
         let env_iter = self.environment.iter();
         for (i, v) in env_iter {
             env[i] = Some(v.clone())
