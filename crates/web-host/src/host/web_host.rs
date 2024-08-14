@@ -388,7 +388,7 @@ pub async fn welcome_message_handler(
             Symbol::mk("welcome_message"),
         ),
     )
-    .await
+        .await
     {
         Ok(RpcResponse::SysPropValue(Some(value))) => Json(var_as_json(&value)).into_response(),
         Ok(RpcResponse::SysPropValue(None)) => StatusCode::NOT_FOUND.into_response(),
@@ -427,7 +427,7 @@ pub async fn eval_handler(
         &mut rpc_client,
         RpcRequest::Eval(client_token.clone(), auth_token.clone(), expression),
     )
-    .await
+        .await
     {
         Ok(RpcResponse::EvalResult(value)) => {
             debug!("Eval result: {:?}", value);
@@ -479,30 +479,30 @@ pub async fn verb_program_handler(
         &mut rpc_client,
         RpcRequest::Program(client_token.clone(), auth_token.clone(), object, name, code),
     )
-    .await
+        .await
     {
         Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Success(objid, verb_name))) => {
             Json(json!({
                 "location": objid.0,
                 "name": verb_name,
             }))
-            .into_response()
+                .into_response()
         }
         Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Failure(
-            VerbProgramError::NoVerbToProgram,
-        ))) => {
+                                            VerbProgramError::NoVerbToProgram,
+                                        ))) => {
             // 404
             StatusCode::NOT_FOUND.into_response()
         }
         Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Failure(
-            VerbProgramError::DatabaseError,
-        ))) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                                            VerbProgramError::DatabaseError,
+                                        ))) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Failure(
-            VerbProgramError::CompilationError(errors),
-        ))) => Json(json!({
+                                            VerbProgramError::CompilationError(errors),
+                                        ))) => Json(json!({
             "errors": errors.iter().map(|e| e.to_string()).collect::<Vec<String>>()
         }))
-        .into_response(),
+            .into_response(),
         Ok(r) => {
             error!("Unexpected response from RPC server: {:?}", r);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -548,21 +548,21 @@ pub async fn verb_retrieval_handler(
             name,
         ),
     )
-    .await
+        .await
     {
         Ok(RpcResponse::VerbValue(
-            VerbInfo {
-                location,
-                owner,
-                names,
-                r,
-                w,
-                x,
-                d,
-                arg_spec,
-            },
-            code,
-        )) => Json(json!({
+               VerbInfo {
+                   location,
+                   owner,
+                   names,
+                   r,
+                   w,
+                   x,
+                   d,
+                   arg_spec,
+               },
+               code,
+           )) => Json(json!({
             "location": location.0,
             "owner": owner.0,
             "names": names.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
@@ -573,7 +573,7 @@ pub async fn verb_retrieval_handler(
             "d": d,
             "arg_spec": arg_spec.iter().map(|s| s.to_string()).collect::<Vec<String>>()
         }))
-        .into_response(),
+            .into_response(),
         Ok(r) => {
             error!("Unexpected response from RPC server: {:?}", r);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -611,7 +611,7 @@ pub async fn verbs_handler(
         &mut rpc_client,
         RpcRequest::Verbs(client_token.clone(), auth_token.clone(), object),
     )
-    .await
+        .await
     {
         Ok(RpcResponse::Verbs(verbs)) => Json(
             verbs
@@ -630,7 +630,7 @@ pub async fn verbs_handler(
                 })
                 .collect::<Vec<serde_json::Value>>(),
         )
-        .into_response(),
+            .into_response(),
         Ok(r) => {
             error!("Unexpected response from RPC server: {:?}", r);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -667,7 +667,7 @@ pub async fn properties_handler(
         &mut rpc_client,
         RpcRequest::Properties(client_token.clone(), auth_token.clone(), object),
     )
-    .await
+        .await
     {
         Ok(RpcResponse::Properties(properties)) => Json(
             properties
@@ -685,7 +685,7 @@ pub async fn properties_handler(
                 })
                 .collect::<Vec<serde_json::Value>>(),
         )
-        .into_response(),
+            .into_response(),
         Ok(r) => {
             error!("Unexpected response from RPC server: {:?}", r);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -731,20 +731,20 @@ pub async fn property_retrieval_handler(
             prop_name,
         ),
     )
-    .await
+        .await
     {
         Ok(RpcResponse::PropertyValue(
-            PropInfo {
-                definer,
-                location,
-                name,
-                owner,
-                r,
-                w,
-                chown,
-            },
-            value,
-        )) => {
+               PropInfo {
+                   definer,
+                   location,
+                   name,
+                   owner,
+                   r,
+                   w,
+                   chown,
+               },
+               value,
+           )) => {
             debug!("Property value: {:?}", value);
             Json(json!({
                 "definer": definer.0,
@@ -756,7 +756,7 @@ pub async fn property_retrieval_handler(
                 "chown": chown,
                 "value": var_as_json(&value)
             }))
-            .into_response()
+                .into_response()
         }
         Ok(r) => {
             error!("Unexpected response from RPC server: {:?}", r);

@@ -61,6 +61,8 @@ pub enum RpcRequest {
     Command(ClientToken, AuthToken, String),
     /// Return the (visible) verbs on the given object.
     Verbs(ClientToken, AuthToken, ObjectRef),
+    /// Invoke the given verb on the given object.
+    InvokeVerb(ClientToken, AuthToken, ObjectRef, Symbol, Vec<Var>),
     /// Return the (visible) properties on the given object.
     Properties(ClientToken, AuthToken, ObjectRef),
     /// Retrieve the given verb code or property.
@@ -128,7 +130,7 @@ pub struct PropInfo {
     pub chown: bool,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub enum RpcResponse {
     NewConnection(ClientToken, Objid),
     SysPropValue(Option<Var>),
@@ -144,6 +146,7 @@ pub enum RpcResponse {
     ProgramResponse(VerbProgramResponse),
     PropertyValue(PropInfo, Var),
     VerbValue(VerbInfo, Vec<String>),
+    InvokeResult(Result<Var, SchedulerError>),
 }
 
 /// Errors at the call/request level.

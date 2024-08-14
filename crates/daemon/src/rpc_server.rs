@@ -38,11 +38,11 @@ use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag};
 use moor_values::tasks::SchedulerError::CommandExecutionError;
 use moor_values::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
 use moor_values::util::parse_into_words;
-use moor_values::Objid;
 use moor_values::Symbol;
 use moor_values::Variant;
 use moor_values::SYSTEM_OBJECT;
 use moor_values::{v_objid, v_string};
+use moor_values::{Objid, Var};
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
 use rpc_common::{
     AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, EntityType, PropInfo,
@@ -329,6 +329,20 @@ impl RpcServer {
                     .eval(scheduler_client, client_id, connection, evalstr)
             }
 
+            RpcRequest::InvokeVerb(token, auth_token, object, verb, args) => {
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
+
+                self.clone().invoke_verb(
+                    scheduler_client,
+                    client_id,
+                    connection,
+                    object,
+                    verb,
+                    args,
+                )
+            }
+
             RpcRequest::Retrieve(token, auth_token, who, retr_type, what) => {
                 let connection = self.client_auth(token, client_id)?;
                 self.validate_auth_token(auth_token, Some(connection))?;
@@ -588,8 +602,8 @@ impl RpcServer {
         };
         let task_handle = match scheduler_client.submit_verb_task(
             connection,
-            SYSTEM_OBJECT,
-            "do_login_command".to_string(),
+            ObjectRef::Id(SYSTEM_OBJECT),
+            Symbol::mk("do_login_command"),
             args.iter().map(|s| v_string(s.clone())).collect(),
             args.join(" "),
             SYSTEM_OBJECT,
@@ -676,14 +690,14 @@ impl RpcServer {
             .with_context(|| "could not create 'connected' task session for player")?;
 
         let connected_verb = match initiation_type {
-            ConnectType::Connected => "user_connected".to_string(),
-            ConnectType::Reconnected => "user_reconnected".to_string(),
-            ConnectType::Created => "user_created".to_string(),
+            ConnectType::Connected => Symbol::mk("user_connected"),
+            ConnectType::Reconnected => Symbol::mk("user_reconnected"),
+            ConnectType::Created => Symbol::mk("user_created"),
         };
         scheduler_client
             .submit_verb_task(
                 player,
-                SYSTEM_OBJECT,
+                ObjectRef::Id(SYSTEM_OBJECT),
                 connected_verb,
                 vec![v_objid(player)],
                 "".to_string(),
@@ -822,6 +836,41 @@ impl RpcServer {
                 Err(RpcRequestError::InternalError(e.to_string()))
             }
         }
+    }
+
+    fn invoke_verb(
+        self: Arc<Self>,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        connection: Objid,
+        object: ObjectRef,
+        verb: Symbol,
+        args: Vec<Var>,
+    ) -> Result<RpcResponse, RpcRequestError> {
+        let Ok(session) = self.clone().new_session(client_id, connection) else {
+            return Err(RpcRequestError::CreateSessionFailed);
+        };
+
+        let task_handle = match scheduler_client.submit_verb_task(
+            connection,
+            object,
+            verb,
+            args,
+            "".to_string(),
+            SYSTEM_OBJECT,
+            session,
+        ) {
+            Ok(t) => t,
+            Err(e) => {
+                error!(error = ?e, "Error submitting verb task");
+                return Err(RpcRequestError::InternalError(e.to_string()));
+            }
+        };
+
+        let task_id = task_handle.task_id();
+        let mut th_q = self.task_handles.lock().unwrap();
+        th_q.insert(task_id, (client_id, task_handle));
+        Ok(RpcResponse::CommandSubmitted(task_id))
     }
 
     fn program_verb(

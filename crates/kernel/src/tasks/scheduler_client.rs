@@ -12,10 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crossbeam_channel::Sender;
 use std::sync::Arc;
 use std::time::Duration;
-
-use crossbeam_channel::Sender;
 use tracing::{instrument, trace};
 use uuid::Uuid;
 
@@ -75,8 +74,8 @@ impl SchedulerClient {
     pub fn submit_verb_task(
         &self,
         player: Objid,
-        vloc: Objid,
-        verb: String,
+        vloc: ObjectRef,
+        verb: Symbol,
         args: Vec<Var>,
         argstr: String,
         perms: Objid,
@@ -353,7 +352,7 @@ pub enum SchedulerClientMsg {
     /// Submit a top-level verb (method) invocation to be executed on behalf of the player.
     SubmitVerbTask {
         player: Objid,
-        vloc: Objid,
+        vloc: ObjectRef,
         verb: Symbol,
         args: Vec<Var>,
         argstr: String,
