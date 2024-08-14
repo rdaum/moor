@@ -1011,6 +1011,28 @@ mod tests {
         assert_eq!(result, Ok(v_int(42)));
     }
 
+    #[test]
+    fn test_local_scatter_assign() {
+        let program = r#"a = 1;
+        begin
+            let {a, b} = {2, 3};
+            return {a, b};
+        end
+        "#;
+        let compiled = compile(program, CompileOptions::default()).unwrap();
+        let mut state = world_with_test_programs(&[("test", &compiled)]);
+        let session = Arc::new(NoopClientSession::new());
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let result = call_verb(
+            state.as_mut(),
+            session.clone(),
+            builtin_registry,
+            "test",
+            vec![],
+        );
+        assert_eq!(result, Ok(v_list(&[v_int(2), v_int(3)])));
+    }
+
     #[test_case("return 1;", v_int(1); "simple return")]
     #[test_case(
         r#"rest = "me:words"; rest[1..0] = ""; return rest;"#,

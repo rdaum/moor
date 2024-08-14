@@ -114,6 +114,21 @@ impl UnboundNames {
         Ok(unbound_name)
     }
 
+    pub fn declare(
+        &mut self,
+        name: &str,
+        constant: bool,
+        global: bool,
+    ) -> Result<UnboundName, CompileError> {
+        if global {
+            return self.find_or_add_name_global(name);
+        }
+        if constant {
+            return self.declare_const(name);
+        }
+        self.declare_name(name)
+    }
+
     /// If the same named variable exists in multiple scopes, return them all as a vector.
     pub fn find_named(&self, name: &str) -> Vec<UnboundName> {
         let name = Symbol::mk_case_insensitive(name);

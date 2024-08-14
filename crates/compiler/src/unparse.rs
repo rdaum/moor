@@ -273,6 +273,24 @@ impl<'a> Unparse<'a> {
             }
             Expr::Scatter(vars, expr) => {
                 let mut buffer = String::new();
+                // If the vars are non-global scope depth, prefix with 'let' or 'const' as appropriate.
+                // Note the expectation is always that the vars exist at the same scope depth,
+                //   as the let scatter syntax does not have granularity per-var.
+                let is_local = vars.iter().any(|var| {
+                    let bound_name = self.tree.names_mapping[&var.id];
+                    let scope_depth = self.tree.names.depth_of(&bound_name).unwrap();
+                    scope_depth > 0
+                });
+                let is_const = vars
+                    .iter()
+                    .any(|var| self.tree.unbound_names.decl_for(&var.id).constant);
+                if is_local {
+                    if is_const {
+                        buffer.push_str("const ");
+                    } else {
+                        buffer.push_str("let ");
+                    }
+                }
                 buffer.push('{');
                 for var in vars {
                     match var.kind {
@@ -861,6 +879,26 @@ mod tests {
     #[test]
     fn regress_test() {
         let program = r#"n + 10 in a;"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_local_scatter() {
+        let program = r#"begin
+          let {things, ?nothingstr = "nothing", ?andstr = " and ", ?commastr = ", ", ?finalcommastr = ","} = args;
+        end"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_local_const() {
+        let program = r#"begin
+          const {things, ?nothingstr = "nothing", ?andstr = " and ", ?commastr = ", ", ?finalcommastr = ","} = args;
+        end"#;
         let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());
