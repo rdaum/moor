@@ -25,11 +25,11 @@ use lazy_static::lazy_static;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use moor_compiler::compile;
+use moor_compiler::{compile, program_to_tree, unparse, Program};
 use moor_db::Database;
-use moor_values::model::WorldState;
-use moor_values::model::{BinaryType, HasUuid, VerbAttrs};
+use moor_values::model::{BinaryType, HasUuid, ValSet, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
+use moor_values::model::{WorldState, WorldStateError};
 
 use moor_values::tasks::{
     AbortLimitReason, CommandError, SchedulerError, TaskId, VerbProgramError,
@@ -286,6 +286,8 @@ impl Scheduler {
         verb_name: Symbol,
         code: Vec<String>,
     ) -> Result<(Objid, Symbol), SchedulerError> {
+        // TODO: User must be a programmer...
+
         for _ in 0..NUM_VERB_PROGRAM_ATTEMPTS {
             let mut tx = self.database.new_world_state().unwrap();
 
@@ -581,6 +583,236 @@ impl Scheduler {
             SchedulerClientMsg::Checkpoint(reply) => {
                 let result = self.checkpoint();
                 reply.send(result).expect("Could not send checkpoint reply");
+            }
+            SchedulerClientMsg::RequestProperties {
+                player: _,
+                perms,
+                object,
+                reply,
+            } => {
+                // TODO: check programmer perms here
+                let mut world_state = match self.database.new_world_state() {
+                    Ok(ws) => ws,
+                    Err(e) => {
+                        reply
+                            .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
+                            .expect("Could not send properties reply");
+                        return;
+                    }
+                };
+
+                let properties = match world_state.properties(perms, object) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        reply
+                            .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
+                            .expect("Could not send properties reply");
+                        return;
+                    }
+                };
+
+                let mut props = Vec::new();
+                for prop in properties.iter() {
+                    let (info, perms) =
+                        match world_state.get_property_info(perms, object, Symbol::mk(prop.name()))
+                        {
+                            Ok(v) => v,
+                            Err(e) => {
+                                reply
+                                    .send(Err(CommandExecutionError(CommandError::DatabaseError(
+                                        e,
+                                    ))))
+                                    .expect("Could not send properties reply");
+                                return;
+                            }
+                        };
+                    props.push((info, perms));
+                }
+
+                reply
+                    .send(Ok(props))
+                    .expect("Could not send properties reply");
+
+                world_state.commit().expect("Could not commit transaction");
+            }
+            SchedulerClientMsg::RequestProperty {
+                player,
+                perms,
+                object,
+                property,
+                reply,
+            } => {
+                let mut world_state = match self.database.new_world_state() {
+                    Ok(ws) => ws,
+                    Err(e) => {
+                        reply
+                            .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
+                            .expect("Could not send property reply");
+                        return;
+                    }
+                };
+
+                // TODO: User must be a programmer...
+
+                let property_value = match world_state.retrieve_property(player, object, property) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::PropertyRetrievalFailed(e)))
+                            .expect("Could not send property reply");
+                        return;
+                    }
+                };
+
+                let (property_info, property_perms) =
+                    match world_state.get_property_info(perms, object, property) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            reply
+                                .send(Err(SchedulerError::PropertyRetrievalFailed(e)))
+                                .expect("Could not send property reply");
+                            return;
+                        }
+                    };
+
+                world_state.commit().expect("Could not commit transaction");
+                reply
+                    .send(Ok((property_info, property_perms, property_value)))
+                    .expect("Could not send property reply");
+            }
+            SchedulerClientMsg::RequestVerbs {
+                player: _,
+                perms,
+                object,
+                reply,
+            } => {
+                // TODO: User must be a programmer...
+
+                let world_state = match self.database.new_world_state() {
+                    Ok(ws) => ws,
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
+                            .expect("Could not send verbs reply");
+                        return;
+                    }
+                };
+
+                let verbdefs = match world_state.verbs(perms, object) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
+                            .expect("Could not send verbs reply");
+                        return;
+                    }
+                };
+
+                reply
+                    .send(Ok(verbdefs))
+                    .expect("Could not send verbs reply");
+            }
+            SchedulerClientMsg::RequestVerbCode {
+                player: _,
+                perms,
+                object,
+                verb,
+                reply,
+            } => {
+                let world_state = match self.database.new_world_state() {
+                    Ok(ws) => ws,
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
+                            .expect("Could not send verb code reply");
+                        return;
+                    }
+                };
+
+                // TODO: User must be a programmer...
+
+                let verb_info = match world_state.find_method_verb_on(perms, object, verb) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
+                            .expect("Could not send verb code reply");
+                        return;
+                    }
+                };
+
+                let verbdef = verb_info.verbdef();
+                if verbdef.binary_type() != BinaryType::LambdaMoo18X {
+                    reply
+                        .send(Err(SchedulerError::VerbRetrievalFailed(
+                            WorldStateError::DatabaseError("Unsupported binary type".to_string()),
+                        )))
+                        .expect("Could not send verb code reply");
+                    return;
+                }
+
+                let verb_info = match world_state.retrieve_verb(perms, object, verbdef.uuid()) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
+                            .expect("Could not send verb code reply");
+                        return;
+                    }
+                };
+
+                // If the binary is empty, just return empty rather than try to decode it.
+                if verb_info.binary().is_empty() {
+                    reply
+                        .send(Ok((verbdef, Vec::new())))
+                        .expect("Could not send verb code reply");
+                    return;
+                }
+
+                // Decode.
+                let Ok(program) = Program::from_bytes(verb_info.binary()) else {
+                    reply
+                        .send(Err(SchedulerError::VerbRetrievalFailed(
+                            WorldStateError::DatabaseError(
+                                "Could not decode verb binary".to_string(),
+                            ),
+                        )))
+                        .expect("Could not send verb code reply");
+                    return;
+                };
+                let decompiled = match program_to_tree(&program) {
+                    Ok(decompiled) => decompiled,
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::VerbRetrievalFailed(
+                                WorldStateError::DatabaseError(format!(
+                                    "Could not decompile verb binary: {:?}",
+                                    e
+                                )),
+                            )))
+                            .expect("Could not send verb code reply");
+                        return;
+                    }
+                };
+
+                let unparsed = match unparse(&decompiled) {
+                    Ok(unparsed) => unparsed,
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::VerbRetrievalFailed(
+                                WorldStateError::DatabaseError(format!(
+                                    "Could not unparse decompiled verb: {:?}",
+                                    e
+                                )),
+                            )))
+                            .expect("Could not send verb code reply");
+                        return;
+                    }
+                };
+
+                reply
+                    .send(Ok((verbdef, unparsed)))
+                    .expect("Could not send verb code reply");
             }
         }
     }

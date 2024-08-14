@@ -21,13 +21,15 @@ use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
 use eyre::eyre;
 
-use moor_values::Objid;
+use moor_values::tasks::VerbProgramError;
+use moor_values::{Objid, Symbol};
 use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_common::AuthToken;
 use rpc_common::RpcRequest::{Attach, ConnectionEstablish};
+use rpc_common::{AuthToken, EntityType, PropInfo, VerbInfo, VerbProgramResponse};
 use rpc_common::{ClientToken, RpcRequestError};
 use rpc_common::{ConnectType, RpcRequest, RpcResponse, RpcResult, BROADCAST_TOPIC};
 use serde_derive::Deserialize;
+use serde_json::json;
 use std::net::SocketAddr;
 use tmq::{request, subscribe};
 use tracing::warn;
@@ -244,10 +246,12 @@ async fn auth_handler(
     player: String,
     password: String,
 ) -> impl IntoResponse {
+    debug!("Authenticating player: {}", player);
     let (client_id, mut rpc_client, client_token) =
         match host.establish_client_connection(addr).await {
             Ok((client_id, rpc_client, client_token)) => (client_id, rpc_client, client_token),
             Err(WsHostError::AuthenticationFailed) => {
+                warn!("Authentication failed for {}", player);
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
                     .body("".to_string())
@@ -308,6 +312,57 @@ async fn auth_handler(
         .unwrap()
 }
 
+async fn auth_auth(
+    host: WebHost,
+    addr: SocketAddr,
+    header_map: HeaderMap,
+) -> Result<(AuthToken, Uuid, ClientToken, RpcSendClient), StatusCode> {
+    let auth_token = match header_map.get("X-Moor-Auth-Token") {
+        Some(auth_token) => match auth_token.to_str() {
+            Ok(auth_token) => AuthToken(auth_token.to_string()),
+            Err(e) => {
+                error!("Unable to parse auth token: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        },
+        None => {
+            error!("No auth token provided");
+            return Err(StatusCode::FORBIDDEN);
+        }
+    };
+
+    let (_player, client_id, client_token, rpc_client) = host
+        .attach_authenticated(auth_token.clone(), None, addr)
+        .await
+        .map_err(|e| match e {
+            WsHostError::AuthenticationFailed => StatusCode::UNAUTHORIZED,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
+
+    Ok((auth_token, client_id, client_token, rpc_client))
+}
+
+async fn rpc_call(
+    client_id: Uuid,
+    rpc_client: &mut RpcSendClient,
+    request: RpcRequest,
+) -> Result<RpcResponse, StatusCode> {
+    match rpc_client.make_rpc_call(client_id, request).await {
+        Ok(rpc_response) => match rpc_response {
+            RpcResult::Success(r) => Ok(r),
+
+            RpcResult::Failure(RpcRequestError::PermissionDenied) => {
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+            RpcResult::Failure(f) => {
+                error!("RPC failure in welcome message retrieval: {:?}", f);
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        },
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
 /// Stand-alone HTTP GET handler for getting the welcome message for the system.
 pub async fn welcome_message_handler(
     State(host): State<WebHost>,
@@ -323,40 +378,24 @@ pub async fn welcome_message_handler(
             }
         };
 
-    let response = match rpc_client
-        .make_rpc_call(
-            client_id,
-            RpcRequest::RequestSysProp(
-                client_token.clone(),
-                "login".to_string(),
-                "welcome_message".to_string(),
-            ),
-        )
-        .await
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        RpcRequest::RequestSysProp(
+            client_token.clone(),
+            Symbol::mk("login"),
+            Symbol::mk("welcome_message"),
+        ),
+    )
+    .await
     {
-        Ok(rpc_response) => match rpc_response {
-            RpcResult::Success(RpcResponse::SysPropValue(Some(value))) => {
-                Json(var_as_json(&value)).into_response()
-            }
-            RpcResult::Success(RpcResponse::SysPropValue(None)) => {
-                StatusCode::NOT_FOUND.into_response()
-            }
-            RpcResult::Success(r) => {
-                error!("Unexpected response from RPC server: {:?}", r);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-            RpcResult::Failure(RpcRequestError::PermissionDenied) => {
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-            RpcResult::Failure(f) => {
-                error!("RPC failure in welcome message retrieval: {:?}", f);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        },
-        Err(e) => {
-            error!("RPC failure in welcome message retrieval: {:?}", e);
+        Ok(RpcResponse::SysPropValue(Some(value))) => Json(var_as_json(&value)).into_response(),
+        Ok(RpcResponse::SysPropValue(None)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.
@@ -375,70 +414,348 @@ pub async fn eval_handler(
     header_map: HeaderMap,
     expression: Bytes,
 ) -> Response {
-    let auth_token = match header_map.get("X-Moor-Auth-Token") {
-        Some(auth_token) => match auth_token.to_str() {
-            Ok(auth_token) => AuthToken(auth_token.to_string()),
-            Err(e) => {
-                error!("Unable to parse auth token: {}", e);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        },
-        None => {
-            error!("No auth token provided");
-            return StatusCode::FORBIDDEN.into_response();
-        }
-    };
-
-    let (_player, client_id, client_token, mut rpc_client) = match host
-        .attach_authenticated(auth_token.clone(), None, addr)
-        .await
-    {
-        Ok(connection_details) => connection_details,
-        Err(WsHostError::AuthenticationFailed) => {
-            return Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body(Body::empty())
-                .unwrap();
-        }
-        Err(e) => {
-            error!("Unable to validate auth token: {}", e);
-            return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Body::empty())
-                .unwrap();
-        }
-    };
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
     let expression = String::from_utf8_lossy(&expression).to_string();
 
-    debug!("Evaluating expression: {}", expression);
-    let response = match rpc_client
-        .make_rpc_call(
-            client_id,
-            RpcRequest::Eval(client_token.clone(), auth_token, expression),
-        )
-        .await
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        RpcRequest::Eval(client_token.clone(), auth_token.clone(), expression),
+    )
+    .await
     {
-        Ok(rpc_response) => match rpc_response {
-            RpcResult::Success(RpcResponse::EvalResult(value)) => {
-                debug!("Eval result: {:?}", value);
-                Json(var_as_json(&value)).into_response()
-            }
-            RpcResult::Success(r) => {
-                error!("Unexpected response from RPC server: {:?}", r);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-            RpcResult::Failure(RpcRequestError::PermissionDenied) => {
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-            RpcResult::Failure(f) => {
-                error!("RPC failure in welcome message retrieval: {:?}", f);
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        },
-        Err(e) => {
-            error!("RPC failure in welcome message retrieval: {:?}", e);
+        Ok(RpcResponse::EvalResult(value)) => {
+            debug!("Eval result: {:?}", value);
+            Json(var_as_json(&value)).into_response()
+        }
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+        Err(status) => status.into_response(),
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response
+}
+
+pub async fn verb_program_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Path((object, name)): Path<(String, String)>,
+    expression: Bytes,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let object = format!("#{}", object);
+
+    let expression = String::from_utf8_lossy(&expression).to_string();
+
+    let code = expression
+        .split('\n')
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>();
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        RpcRequest::Program(client_token.clone(), auth_token.clone(), object, name, code),
+    )
+    .await
+    {
+        Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Success(objid, verb_name))) => {
+            Json(json!({
+                "location": objid.0,
+                "name": verb_name,
+            }))
+            .into_response()
+        }
+        Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Failure(
+            VerbProgramError::NoVerbToProgram,
+        ))) => {
+            // 404
+            StatusCode::NOT_FOUND.into_response()
+        }
+        Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Failure(
+            VerbProgramError::DatabaseError,
+        ))) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Failure(
+            VerbProgramError::CompilationError(errors),
+        ))) => Json(json!({
+            "errors": errors.iter().map(|e| e.to_string()).collect::<Vec<String>>()
+        }))
+        .into_response(),
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(status) => status.into_response(),
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response
+}
+
+pub async fn verb_retrieval_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Path((object, name)): Path<(String, String)>,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let Ok(onum) = object.parse() else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let object = Objid(onum);
+
+    let name = Symbol::mk(&name);
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        RpcRequest::Retrieve(
+            client_token.clone(),
+            auth_token.clone(),
+            object,
+            EntityType::Verb,
+            name,
+        ),
+    )
+    .await
+    {
+        Ok(RpcResponse::VerbValue(
+            VerbInfo {
+                location,
+                owner,
+                names,
+                r,
+                w,
+                x,
+                d,
+                arg_spec,
+            },
+            code,
+        )) => Json(json!({
+            "location": location.0,
+            "owner": owner.0,
+            "names": names.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
+            "code": code,
+            "r": r,
+            "w": w,
+            "x": x,
+            "d": d,
+            "arg_spec": arg_spec.iter().map(|s| s.to_string()).collect::<Vec<String>>()
+        }))
+        .into_response(),
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(status) => status.into_response(),
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response
+}
+
+pub async fn verbs_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Path(object): Path<String>,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let object = Objid(object.parse().unwrap());
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        RpcRequest::Verbs(client_token.clone(), auth_token.clone(), object),
+    )
+    .await
+    {
+        Ok(RpcResponse::Verbs(verbs)) => Json(
+            verbs
+                .iter()
+                .map(|verb| {
+                    json!({
+                        "location": verb.location.0,
+                        "owner": verb.owner.0,
+                        "names": verb.names.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
+                        "r": verb.r,
+                        "w": verb.w,
+                        "x": verb.x,
+                        "d": verb.d,
+                        "arg_spec": verb.arg_spec.iter().map(|s| s.to_string()).collect::<Vec<String>>()
+                    })
+                })
+                .collect::<Vec<serde_json::Value>>(),
+        )
+        .into_response(),
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(status) => status.into_response(),
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response
+}
+pub async fn properties_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Path(object): Path<String>,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let object = Objid(object.parse().unwrap());
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        RpcRequest::Properties(client_token.clone(), auth_token.clone(), object),
+    )
+    .await
+    {
+        Ok(RpcResponse::Properties(properties)) => Json(
+            properties
+                .iter()
+                .map(|prop| {
+                    json!({
+                        "definer": prop.definer.0,
+                        "location": prop.location.0,
+                        "name": prop.name.to_string(),
+                        "owner": prop.owner.0,
+                        "r": prop.r,
+                        "w": prop.w,
+                        "chown": prop.chown,
+                    })
+                })
+                .collect::<Vec<serde_json::Value>>(),
+        )
+        .into_response(),
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(status) => status.into_response(),
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response
+}
+
+pub async fn property_retrieval_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Path((object, prop_name)): Path<(String, String)>,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let Ok(onum) = object.parse() else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let object = Objid(onum);
+
+    let prop_name = Symbol::mk(&prop_name);
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        RpcRequest::Retrieve(
+            client_token.clone(),
+            auth_token.clone(),
+            object,
+            EntityType::Property,
+            prop_name,
+        ),
+    )
+    .await
+    {
+        Ok(RpcResponse::PropertyValue(
+            PropInfo {
+                definer,
+                location,
+                name,
+                owner,
+                r,
+                w,
+                chown,
+            },
+            value,
+        )) => {
+            debug!("Property value: {:?}", value);
+            Json(json!({
+                "definer": definer.0,
+                "name": name.to_string(),
+                "location": location.0,
+                "owner": owner.0,
+                "r": r,
+                "w": w,
+                "chown": chown,
+                "value": var_as_json(&value)
+            }))
+            .into_response()
+        }
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(status) => status.into_response(),
     };
 
     // We're done with this RPC connection, so we detach it.

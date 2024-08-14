@@ -60,18 +60,27 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
             "/ws/attach/connect/:token",
             get(host::ws_connect_attach_handler),
         )
-        .route("/", get(root_handler))
-        .route("/browser.html", get(client::browser_handler))
-        .route("/moor.js", get(js_handler))
-        .route("/editor.js", get(editor_handler))
         .route(
             "/ws/attach/create/:token",
             get(host::ws_create_attach_handler),
         )
+        .route("/", get(root_handler))
+        .route("/moor.js", get(js_handler))
+        .route("/rpc.js", get(client::rpc_handler))
+        .route("/editor.js", get(editor_handler))
+        .route("/moor.css", get(client::css_handler))
         .route("/auth/connect", post(host::connect_auth_handler))
         .route("/auth/create", post(host::create_auth_handler))
         .route("/welcome", get(host::welcome_message_handler))
         .route("/eval", post(host::eval_handler))
+        .route("/verbs", get(host::verbs_handler))
+        .route("/verbs/:object/:name", get(host::verb_retrieval_handler))
+        .route("/verbs/:object/:name", post(host::verb_program_handler))
+        .route("/properties", get(host::properties_handler))
+        .route(
+            "/properties/:object/:name",
+            get(host::property_retrieval_handler),
+        )
         .with_state(web_host);
 
     Ok(Router::new().nest("/", webhost_router))

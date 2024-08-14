@@ -20,8 +20,8 @@ use tracing::{instrument, trace};
 use uuid::Uuid;
 
 use moor_compiler::{compile, Program};
-use moor_values::Symbol;
-use moor_values::{Objid, Var};
+use moor_values::model::{PropDef, PropPerms, VerbDef, VerbDefs};
+use moor_values::{Objid, Var, Symbol};
 
 use crate::config::Config;
 use crate::tasks::sessions::Session;
@@ -252,6 +252,94 @@ impl SchedulerClient {
             .recv_timeout(Duration::from_secs(5))
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
+
+    pub fn request_verbs(
+        &self,
+        player: Objid,
+        perms: Objid,
+        object: Objid,
+    ) -> Result<VerbDefs, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::RequestVerbs {
+                player,
+                perms,
+                object,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
+    pub fn request_verb(
+        &self,
+        player: Objid,
+        perms: Objid,
+        object: Objid,
+        verb: Symbol,
+    ) -> Result<(VerbDef, Vec<String>), SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::RequestVerbCode {
+                player,
+                perms,
+                object,
+                verb,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
+    pub fn request_properties(
+        &self,
+        player: Objid,
+        perms: Objid,
+        object: Objid,
+    ) -> Result<Vec<(PropDef, PropPerms)>, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::RequestProperties {
+                player,
+                perms,
+                object,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
+    pub fn request_property(
+        &self,
+        player: Objid,
+        perms: Objid,
+        object: Objid,
+        property: Symbol,
+    ) -> Result<(PropDef, PropPerms, Var), SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::RequestProperty {
+                player,
+                perms,
+                object,
+                property,
+                reply,
+            })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
 }
 
 pub enum SchedulerClientMsg {
@@ -306,12 +394,42 @@ pub enum SchedulerClientMsg {
         reply: oneshot::Sender<Result<(Objid, Symbol), SchedulerError>>,
     },
     /// Request the value of a $property.
-    /// (Used by the login process)
+    /// (Used by the login process, unauthenticated)
     RequestSystemProperty {
         player: Objid,
         object: Symbol,
         property: Symbol,
         reply: oneshot::Sender<Result<Var, SchedulerError>>,
+    },
+    /// Request the list of visible verbs on an object.
+    RequestVerbs {
+        player: Objid,
+        perms: Objid,
+        object: Objid,
+        reply: oneshot::Sender<Result<VerbDefs, SchedulerError>>,
+    },
+    /// Request the decompiled code of a verb along with its definition.
+    RequestVerbCode {
+        player: Objid,
+        perms: Objid,
+        object: Objid,
+        verb: Symbol,
+        reply: oneshot::Sender<Result<(VerbDef, Vec<String>), SchedulerError>>,
+    },
+    /// Request the list of visible properties on an object.
+    RequestProperties {
+        player: Objid,
+        perms: Objid,
+        object: Objid,
+        reply: oneshot::Sender<Result<Vec<(PropDef, PropPerms)>, SchedulerError>>,
+    },
+    /// Request the description and contents of a property.
+    RequestProperty {
+        player: Objid,
+        perms: Objid,
+        object: Objid,
+        property: Symbol,
+        reply: oneshot::Sender<Result<(PropDef, PropPerms, Var), SchedulerError>>,
     },
     /// Submit a request to checkpoint the database.
     Checkpoint(oneshot::Sender<Result<(), SchedulerError>>),

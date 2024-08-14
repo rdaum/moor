@@ -31,7 +31,7 @@ use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::ConnectionEstablish;
 use rpc_common::{
     AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, RpcRequestError,
-    RpcResult, BROADCAST_TOPIC,
+    RpcResult, VerbProgramResponse, BROADCAST_TOPIC,
 };
 use rpc_common::{RpcRequest, RpcResponse};
 use termimad::MadSkin;
@@ -46,6 +46,7 @@ use uuid::Uuid;
 /// Out of band messages are prefixed with this string, e.g. for MCP clients.
 const OUT_OF_BAND_PREFIX: &str = "#$#";
 
+// TODO: switch to djot
 const CONTENT_TYPE_MARKDOWN: &str = "text/markdown";
 
 pub(crate) struct TelnetConnection {
@@ -316,8 +317,21 @@ impl TelnetConnection {
                             error!("Unhandled RPC error: {:?}", e);
                             continue;
                         }
-                        RpcResult::Success(RpcResponse::ProgramSuccess(o, verb)) => {
-                            self.write.send(format!("0 error(s).\nVerb {} programmed on object {}", verb, o)).await?;
+                        RpcResult::Success(RpcResponse::ProgramResponse(resp)) => {
+                            match resp {
+                                VerbProgramResponse::Success(o,verb) => {
+                                    self.write.send(format!("0 error(s).\nVerb {} programmed on object {}", verb, o)).await?;
+                                }
+                                VerbProgramResponse::Failure(VerbProgramError::CompilationError(e)) => {
+                                    self.write.send(format!("{} error(s).\n{}", e.len(), e.join("\n"))).await?;
+                                }
+                                VerbProgramResponse::Failure(VerbProgramError::NoVerbToProgram) => {
+                                    self.write.send("That object does not have that verb.".to_string()).await?;
+                                }
+                                VerbProgramResponse::Failure(e) => {
+                                    error!("Unhandled verb program error: {:?}", e);
+                                }
+                            }
                             continue;
                         }
                         RpcResult::Success(s) => {

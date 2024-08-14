@@ -72,9 +72,8 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
-    bf_args
-        .task_perms()
-        .map_err(world_state_bf_err)?
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    task_perms
         .check_obj_owner_perms(player)
         .map_err(world_state_bf_err)?;
 
@@ -89,7 +88,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         None
     };
     let event = NarrativeEvent::notify(
-        bf_args.exec_state.caller(),
+        bf_args.exec_state.this(),
         bf_args.args[1].clone(),
         content_type,
     );

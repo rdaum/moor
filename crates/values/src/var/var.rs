@@ -21,7 +21,6 @@ use crate::var::{map, IndexMode, Sequence, TypeClass};
 use crate::var::{Error, Objid, VarType};
 use bytes::Bytes;
 use flexbuffers::{BuilderOptions, Reader};
-use num_traits::ToPrimitive;
 use std::cmp::{min, Ordering};
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;

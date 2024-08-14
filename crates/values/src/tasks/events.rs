@@ -21,9 +21,9 @@ use std::time::SystemTime;
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct NarrativeEvent {
     /// When the event happened, in the server's system time.
-    timestamp: SystemTime,
+    pub timestamp: SystemTime,
     /// The object that authored or caused the event.
-    author: Objid,
+    pub author: Objid,
     /// The event itself.
     pub event: Event,
 }

@@ -21,7 +21,7 @@ use std::time::Duration;
 use strum::Display;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Error, Decode, Encode, PartialEq, Display)]
+#[derive(Debug, Clone, Error, Decode, Encode, PartialEq, Eq, Display)]
 pub enum VerbProgramError {
     NoVerbToProgram,
     CompilationError(Vec<String>),
@@ -62,6 +62,10 @@ pub enum SchedulerError {
     TaskAbortedCancelled,
     #[error("Unable to program verb {0}")]
     VerbProgramFailed(VerbProgramError),
+    #[error("Unable to retrieve property {0}")]
+    PropertyRetrievalFailed(WorldStateError),
+    #[error("Unable to retrieve verb {0}")]
+    VerbRetrievalFailed(WorldStateError),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
