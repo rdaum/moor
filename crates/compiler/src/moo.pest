@@ -59,8 +59,13 @@ unlabelled_except     = { "(" ~ codes ~ ")" }
 
 begin_statement       = { ^"begin" ~ statements ~ ^"end" }
 
-local_assignment = { ^"let" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
-const_assignment = { ^"const" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
+local_assignment = { ^"let" ~ (local_assign_scatter | local_assign_single) ~ ";" }
+local_assign_single = { ident ~ (ASSIGN ~ expr)? }
+local_assign_scatter = { scatter_assign ~ expr }
+
+const_assignment = { ^"const" ~ (const_assign_scatter | const_assign_single) ~ ";" }
+const_assign_single = { ident ~ (ASSIGN ~ expr)? }
+const_assign_scatter = { scatter_assign ~ expr }
 
 // globally scoped (same as default in MOO) adds explicitly to global scope.
 global_assignment = { ^"global" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }

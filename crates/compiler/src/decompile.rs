@@ -1179,4 +1179,13 @@ return 0 && "Automatically Added Return";
         let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }
+
+    #[test]
+    fn test_local_scatter() {
+        let program = r#"begin
+            let {things, ?nothingstr = "nothing", ?andstr = " and ", ?commastr = ", ", ?finalcommastr = ","} = args;
+        end"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
 }

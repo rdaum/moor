@@ -251,7 +251,6 @@ impl TreeTransformer {
                 | Op::postfix(Rule::prop_expr));
 
         let primary_self = self.clone();
-        let prefix_self = self.clone();
         let postfix_self = self.clone();
 
         return pratt
@@ -419,61 +418,9 @@ impl TreeTransformer {
             })
             .map_prefix(|op, rhs| match op.as_rule() {
                 Rule::scatter_assign => {
-                    let inner = op.into_inner();
-                    let mut items = vec![];
-                    for scatter_item in inner {
-                        match scatter_item.as_rule() {
-                            Rule::scatter_optional => {
-                                let mut inner = scatter_item.into_inner();
-                                let id = inner.next().unwrap().as_str();
-                                let id = primary_self
-                                    .clone()
-                                    .names
-                                    .borrow_mut()
-                                    .find_or_add_name_global(id)?;
-                                let expr = inner.next().map(|e| {
-                                    primary_self.clone().parse_expr(e.into_inner()).unwrap()
-                                });
-                                items.push(ScatterItem {
-                                    kind: ScatterKind::Optional,
-                                    id,
-                                    expr,
-                                });
-                            }
-                            Rule::scatter_target => {
-                                let mut inner = scatter_item.into_inner();
-                                let id = inner.next().unwrap().as_str();
-                                let id = primary_self
-                                    .clone()
-                                    .names
-                                    .borrow_mut()
-                                    .find_or_add_name_global(id)?;
-                                items.push(ScatterItem {
-                                    kind: ScatterKind::Required,
-                                    id,
-                                    expr: None,
-                                });
-                            }
-                            Rule::scatter_rest => {
-                                let mut inner = scatter_item.into_inner();
-                                let id = inner.next().unwrap().as_str();
-                                let id = prefix_self
-                                    .clone()
-                                    .names
-                                    .borrow_mut()
-                                    .find_or_add_name_global(id)?;
-                                items.push(ScatterItem {
-                                    kind: ScatterKind::Rest,
-                                    id,
-                                    expr: None,
-                                });
-                            }
-                            _ => {
-                                panic!("Unimplemented scatter_item: {:?}", scatter_item);
-                            }
-                        }
-                    }
-                    Ok(Expr::Scatter(items, Box::new(rhs?)))
+                    let rhs = rhs?;
+                    
+                    self.clone().parse_scatter_assign(op, rhs, false, false)
                 }
                 Rule::not => Ok(Expr::Unary(UnaryOp::Not, Box::new(rhs?))),
                 Rule::neg => Ok(Expr::Unary(UnaryOp::Neg, Box::new(rhs?))),
@@ -921,39 +868,30 @@ impl TreeTransformer {
                 )))
             }
             Rule::local_assignment | Rule::const_assignment => {
-                let is_const = pair.as_rule() == Rule::const_assignment;
-
                 if !self.options.lexical_scopes {
                     return Err(CompileError::DisabledFeature("lexical_scopes".to_string()));
                 }
 
-                // An assignment declaration that introduces a locally lexically scoped variable.
-                // May be of form `let x = expr` or just `let x`
-                let mut parts = pair.into_inner();
-                let id = if is_const {
-                    self.names
-                        .borrow_mut()
-                        .declare_const(parts.next().unwrap().as_str())?
-                } else {
-                    self.names
-                        .borrow_mut()
-                        .declare_name(parts.next().unwrap().as_str())?
-                };
-                let expr = parts
-                    .next()
-                    .map(|e| self.parse_expr(e.into_inner()).unwrap());
-
-                // Just becomes an assignment expression.
-                // But that means the decompiler will need to know what to do with it.
-                // Which is: if assignment is on its own in statement, and variable assigned to is
-                //   restricted to the scope of the block, then it's a let.
-                Ok(Some(Stmt::new(
-                    StmtNode::Expr(Expr::Assign {
-                        left: Box::new(Expr::Id(id)),
-                        right: Box::new(expr.unwrap_or(Expr::Value(v_none()))),
-                    }),
-                    line,
-                )))
+                // Scatter, or local, we'll then go match on that...
+                let parts = pair.into_inner().next().unwrap();
+                match parts.as_rule() {
+                    Rule::local_assign_single | Rule::const_assign_single => Ok(Some(Stmt::new(
+                        self.clone().parse_decl_assign(parts)?,
+                        line,
+                    ))),
+                    Rule::local_assign_scatter | Rule::const_assign_scatter => {
+                        let is_const = parts.as_rule() == Rule::const_assign_scatter;
+                        let mut parts = parts.into_inner();
+                        let op = parts.next().unwrap();
+                        let rhs = parts.next().unwrap();
+                        let rhs = self.clone().parse_expr(rhs.into_inner())?;
+                        let expr = self.parse_scatter_assign(op, rhs, true, is_const)?;
+                        Ok(Some(Stmt::new(StmtNode::Expr(expr), line)))
+                    }
+                    _ => {
+                        unimplemented!("Unimplemented assignment: {:?}", parts.as_rule())
+                    }
+                }
             }
 
             Rule::global_assignment => {
@@ -1012,6 +950,99 @@ impl TreeTransformer {
             }
         }
         Ok(statements)
+    }
+
+    fn parse_decl_assign(
+        self: Rc<Self>,
+        pair: pest::iterators::Pair<Rule>,
+    ) -> Result<StmtNode, CompileError> {
+        let is_const = pair.as_rule() == Rule::const_assign_single;
+
+        // An assignment declaration that introduces a locally lexically scoped variable.
+        // May be of form `let x = expr` or just `let x`
+        let mut parts = pair.into_inner();
+
+        let id =
+            self.names
+                .borrow_mut()
+                .declare(parts.next().unwrap().as_str(), is_const, false)?;
+        let expr = parts
+            .next()
+            .map(|e| self.parse_expr(e.into_inner()).unwrap());
+
+        // Just becomes an assignment expression.
+        // But that means the decompiler will need to know what to do with it.
+        // Which is: if assignment is on its own in statement, and variable assigned to is
+        //   restricted to the scope of the block, then it's a let.
+        Ok(StmtNode::Expr(Expr::Assign {
+            left: Box::new(Expr::Id(id)),
+            right: Box::new(expr.unwrap_or(Expr::Value(v_none()))),
+        }))
+    }
+
+    fn parse_scatter_assign(
+        self: Rc<Self>,
+        op: pest::iterators::Pair<Rule>,
+        rhs: Expr,
+        local_scope: bool,
+        is_const: bool,
+    ) -> Result<Expr, CompileError> {
+        let inner = op.into_inner();
+        let mut items = vec![];
+        for scatter_item in inner {
+            match scatter_item.as_rule() {
+                Rule::scatter_optional => {
+                    let mut inner = scatter_item.into_inner();
+                    let id = inner.next().unwrap().as_str();
+                    let id = self
+                        .clone()
+                        .names
+                        .borrow_mut()
+                        .declare(id, is_const, !local_scope)?;
+
+                    let expr = inner
+                        .next()
+                        .map(|e| self.clone().parse_expr(e.into_inner()).unwrap());
+                    items.push(ScatterItem {
+                        kind: ScatterKind::Optional,
+                        id,
+                        expr,
+                    });
+                }
+                Rule::scatter_target => {
+                    let mut inner = scatter_item.into_inner();
+                    let id = inner.next().unwrap().as_str();
+                    let id = self
+                        .clone()
+                        .names
+                        .borrow_mut()
+                        .declare(id, is_const, !local_scope)?;
+                    items.push(ScatterItem {
+                        kind: ScatterKind::Required,
+                        id,
+                        expr: None,
+                    });
+                }
+                Rule::scatter_rest => {
+                    let mut inner = scatter_item.into_inner();
+                    let id = inner.next().unwrap().as_str();
+                    let id = self
+                        .clone()
+                        .names
+                        .borrow_mut()
+                        .declare(id, is_const, !local_scope)?;
+                    items.push(ScatterItem {
+                        kind: ScatterKind::Rest,
+                        id,
+                        expr: None,
+                    });
+                }
+                _ => {
+                    panic!("Unimplemented scatter_item: {:?}", scatter_item);
+                }
+            }
+        }
+        Ok(Expr::Scatter(items, Box::new(rhs)))
     }
 
     fn compile(self: Rc<Self>, pairs: pest::iterators::Pairs<Rule>) -> Result<Parse, CompileError> {
@@ -2519,5 +2550,92 @@ mod tests {
             },
         );
         assert!(matches!(parse, Err(CompileError::DisabledFeature(_))));
+    }
+
+    #[test]
+    fn test_local_scatter_assign() {
+        let program = r#"begin
+            let a = 3;
+            begin
+                let {a, b} = {1, 2};
+            end
+        end
+        "#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        let a_outer = parse.unbound_names.find_named("a")[0];
+        let a_inner = parse.unbound_names.find_named("a")[1];
+        let b = parse.unbound_names.find_named("b")[0];
+        assert_eq!(parse.unbound_names.decl_for(&a_inner).depth, 2);
+        assert_eq!(parse.unbound_names.decl_for(&b).depth, 2);
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Scope {
+                num_bindings: 1,
+                body: vec![
+                    Stmt {
+                        node: StmtNode::Expr(Expr::Assign {
+                            left: Box::new(Id(a_outer)),
+                            right: Box::new(Value(v_int(3))),
+                        }),
+                        parser_line_no: 2,
+                        tree_line_no: 2,
+                    },
+                    Stmt {
+                        node: StmtNode::Scope {
+                            num_bindings: 2,
+                            body: vec![Stmt {
+                                node: StmtNode::Expr(Expr::Scatter(
+                                    vec![
+                                        ScatterItem {
+                                            kind: ScatterKind::Required,
+                                            id: a_inner,
+                                            expr: None,
+                                        },
+                                        ScatterItem {
+                                            kind: ScatterKind::Required,
+                                            id: b,
+                                            expr: None,
+                                        },
+                                    ],
+                                    Box::new(Expr::List(vec![
+                                        Normal(Value(v_int(1))),
+                                        Normal(Value(v_int(2))),
+                                    ])),
+                                )),
+                                parser_line_no: 4,
+                                tree_line_no: 4,
+                            }],
+                        },
+                        parser_line_no: 3,
+                        tree_line_no: 3,
+                    },
+                ],
+            },]
+        );
+    }
+
+    /// Test that a const scatter assign can not be followed up with an additional assignment.
+    #[test]
+    fn test_const_scatter_assign() {
+        let program = r#"begin
+            const {a, b} = {1, 2};
+            a = 3;
+        end
+        "#;
+        let parse = parse_program(program, CompileOptions::default());
+        assert!(matches!(parse, Err(CompileError::AssignToConst(_))));
+    }
+
+    /// And same for if two scatter assigns are done, though in this case the error takes the form of
+    /// a duplicate variable error.
+    #[test]
+    fn test_const_scatter_assign_twice() {
+        let program = r#"begin
+            const {a, b} = {1, 2};
+            const {a, b} = {2, 3};
+        end
+        "#;
+        let parse = parse_program(program, CompileOptions::default());
+        assert!(matches!(parse, Err(CompileError::DuplicateVariable(_))));
     }
 }
