@@ -1127,6 +1127,8 @@ mod tests {
     #[test_case("return [ 1 -> 2][1];", v_int(2); "map index")]
     #[test_case("return [ 0 -> 1, 1 -> 2, 2 -> 3, 3 -> 4][1..3];",
         v_map_pairs(&[(v_int(1),v_int(2)), (v_int(2),v_int(3))]); "map range")]
+    #[test_case(r#"m = [ 1 -> "one", 2 -> "two", 3 -> "three" ]; m[1] = "abc"; return m;"#,
+        v_map_pairs(&[(v_int(1),v_str("abc")), (v_int(2),v_str("two")), (v_int(3),v_str("three"))]); "map assignment")]
     #[test_case("return [ 0 -> 1, 1 -> 2, 2 -> 3, 3 -> 4][1..$];",
         v_map_pairs(&[(v_int(1),v_int(2)), (v_int(2),v_int(3),), (v_int(3),v_int(4))]); "map range to end")]
     #[test_case(r#"m = [ 1 -> "one", 2 -> "two", 3 -> "three" ]; m[1..2] = ["abc" -> #1]; return m;"#,
