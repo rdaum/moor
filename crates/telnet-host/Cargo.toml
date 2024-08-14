@@ -38,6 +38,9 @@ tracing-subscriber.workspace = true
 tmq.workspace = true
 uuid.workspace = true
 
+## Rich content
+termimad.workspace = true
+
 # Testing
 [dev-dependencies]
 escargot.workspace = true

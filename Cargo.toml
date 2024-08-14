@@ -154,3 +154,6 @@ ed25519-dalek = { version = "2.1", features = ["zeroize", "pkcs8", "rand_core"] 
 pem = "3.0"
 rusty_paseto = { version = "0.7" }
 signal-hook = "0.3"
+
+# For the telnet host
+termimad = "0.30"

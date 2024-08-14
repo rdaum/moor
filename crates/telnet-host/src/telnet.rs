@@ -22,6 +22,7 @@ use eyre::Context;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::SinkExt;
 use futures_util::StreamExt;
+use termimad::{crossterm, CompoundStyle, FmtText, MadSkin};
 use tmq::subscribe::Subscribe;
 use tmq::{request, subscribe};
 use tokio::net::{TcpListener, TcpStream};
@@ -32,7 +33,7 @@ use uuid::Uuid;
 
 use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_values::util::parse_into_words;
-use moor_values::var::{Objid, Variant};
+use moor_values::var::{Objid, Symbol, Variant};
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::ConnectionEstablish;
@@ -44,6 +45,8 @@ use rpc_common::{RpcRequest, RpcResponse};
 
 /// Out of band messages are prefixed with this string, e.g. for MCP clients.
 const OUT_OF_BAND_PREFIX: &str = "#$#";
+
+const CONTENT_TYPE_MARKDOWN: &str = "text/markdown";
 
 pub(crate) struct TelnetConnection {
     client_id: Uuid,
@@ -116,6 +119,40 @@ impl TelnetConnection {
         Ok(())
     }
 
+    async fn output(&mut self, Event::Notify(msg, content_type): Event) -> Result<(), eyre::Error> {
+        // Strings output as text lines to the client, otherwise send the
+        // literal form (for e.g. lists, objrefs, etc)
+        match msg.variant() {
+            Variant::Str(msg_text) => {
+                let formatted = output_format(msg_text.as_str(), content_type);
+                self.write
+                    .send(formatted)
+                    .await
+                    .with_context(|| "Unable to send message to client")?;
+            }
+            Variant::List(lines) => {
+                for line in lines.iter() {
+                    let Variant::Str(line) = line.variant() else {
+                        trace!("Non-string in list output");
+                        continue;
+                    };
+                    let formatted = output_format(line.as_str(), content_type);
+                    self.write
+                        .send(formatted)
+                        .await
+                        .with_context(|| "Unable to send message to client")?;
+                }
+            }
+            _ => {
+                self.write
+                    .send(msg.to_literal())
+                    .await
+                    .with_context(|| "Unable to send message to client")?;
+            }
+        }
+        Ok(())
+    }
+
     async fn authorization_phase(
         &mut self,
         narrative_sub: &mut Subscribe,
@@ -141,17 +178,7 @@ impl TelnetConnection {
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::Narrative(_author, event) => {
-                            let msg = event.event();
-                            let Event::Notify(msg, _content_type) = msg;
-
-                            // Strings output as text lines to the client, otherwise send the
-                            // literal form (for e.g. lists, objrefs, etc)
-                            // TODO: content-type conversions for non-text/plain (e.g. markdown, html)
-                            if let Variant::Str(msg_text) = msg.variant() {
-                                self.write.send(msg_text.to_string()).await.with_context(|| "Unable to send message to client")?;
-                            } else {
-                                self.write.send(msg.to_literal()).await.with_context(|| "Unable to send message to client")?;
-                            }
+                            self.output(event.event()).await?;
                         }
                         ConnectionEvent::RequestInput(_request_id) => {
                             bail!("RequestInput before login");
@@ -314,16 +341,7 @@ impl TelnetConnection {
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
                         }
                         ConnectionEvent::Narrative(_author, event) => {
-                            let msg = event.event();
-                            let Event::Notify(msg, _content_type) = msg;
-
-                            // Strings output as text lines to the client, otherwise send the
-                            // literal form (for e.g. lists, objrefs, etc)
-                            if let Variant::Str(msg_text) = msg.variant() {
-                                self.write.send(msg_text.to_string()).await.with_context(|| "Unable to send message to client")?;
-                            } else {
-                                self.write.send(msg.to_literal()).await.with_context(|| "Unable to send message to client")?;
-                            }
+                            self.output(event.event()).await?;
                         }
                         ConnectionEvent::RequestInput(request_id) => {
                             // Server is requesting that the next line of input get sent through as a response to this request.
@@ -502,5 +520,24 @@ pub async fn telnet_listen_loop(
                 .await?;
             Ok(())
         });
+    }
+}
+fn markdown_to_ansi(markdown: &str) -> String {
+    let mut skin = MadSkin::default_dark();
+    // TODO: permit different text stylings here. e.g. user themes for colours, styling, etc.
+    //   will require custom host-side commands to set these.
+    skin.inline(markdown).to_string()
+}
+
+/// Produce the right kind of "telnet" compatible output for the given content.
+fn output_format(content: &str, content_type: Option<Symbol>) -> String {
+    let Some(content_type) = content_type else {
+        return content.to_string();
+    };
+    let content_type = content_type.as_str();
+    match content_type {
+        CONTENT_TYPE_MARKDOWN => markdown_to_ansi(content),
+        // text/plain, None, or unknown
+        _ => content.to_string(),
     }
 }
