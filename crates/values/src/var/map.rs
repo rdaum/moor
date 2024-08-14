@@ -86,8 +86,13 @@ impl Map {
         Var::new(Variant::Map(Map::from_map(new_map)))
     }
 
-    pub fn remove(&mut self, key: &Var) -> Option<Var> {
-        self.0.remove(key)
+    /// Return a map with `key` removed, if it exists. If it does not exist, return the original map.
+    /// The removed value is returned as the second element of the tuple.
+    pub fn remove(&self, key: &Var) -> (Var, Option<Var>) {
+        let mut removed = self.0.clone();
+        let removed_value = removed.remove(key);
+        let nm = Var::new(Variant::Map(Map::from_map(removed)));
+        (nm, removed_value)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&Var, &Var)> {
