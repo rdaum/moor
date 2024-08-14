@@ -328,20 +328,28 @@ pub fn moo_frame_execute(
             }
             Op::IndexSet => {
                 let (rhs, index, lhs) = (f.pop(), f.pop(), f.peek_top_mut());
-                let i = match one_to_zero_index(&index) {
-                    Ok(i) => i,
-                    Err(e) => {
-                        f.pop();
-                        return state.push_error(e);
+                match lhs.variant() {
+                    Variant::Map(m) => {
+                        let nmap = m.insert(index, rhs.clone());
+                        f.poke(0, nmap);
                     }
-                };
-                match lhs.index_set(i, rhs) {
-                    Ok(v) => {
-                        f.poke(0, v);
-                    }
-                    Err(e) => {
-                        f.pop();
-                        return state.push_error(e);
+                    _ => {
+                        let i = match one_to_zero_index(&index) {
+                            Ok(i) => i,
+                            Err(e) => {
+                                f.pop();
+                                return state.push_error(e);
+                            }
+                        };
+                        match lhs.index_set(i, rhs) {
+                            Ok(v) => {
+                                f.poke(0, v);
+                            }
+                            Err(e) => {
+                                f.pop();
+                                return state.push_error(e);
+                            }
+                        }
                     }
                 }
             }
