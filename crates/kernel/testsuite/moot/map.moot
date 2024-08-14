@@ -1,0 +1,116 @@
+// Initially ported from https://github.com/toddsundsted/stunt/blob/a4158f5835f1beb9d754c92fd5b3a137e459aabf/test/test_map.rb
+
+// wrap many cases with `toliteral` because otherwise we just verify that running the same
+// code twice gives the same result
+
+// test_that_literal_hash_notation_works
+@programmer
+; return [];
+[]
+; return toliteral([1 -> 2]);
+"[1 -> 2]"
+; return toliteral([#1 -> #2, 3 -> 4]);
+"[#1 -> #2, 3 -> 4]"
+; return toliteral([#1 -> ["a" -> {}, "b" -> {}], #2 -> ["b" -> [E_ARGS -> [1.0 -> []]]], #3 -> []]);
+"[#1 -> [\"a\" -> {}, \"b\" -> {}], #2 -> [\"b\" -> [E_ARGS -> [1.0 -> []]]], #3 -> []]"
+
+// sanity check for assignment
+; $tmp = [1 -> 1]; $tmp[2] = 2;
+; return toliteral($tmp);
+"[1 -> 1, 2 -> 2]"
+
+// test_that_a_map_is_sorted_no_matter_the_order_the_values_are_inserted, case 1
+// this currently fails: "a" and 6 aren't added
+; $tmp = [3 -> 3, 1 -> 1, 4 -> 4, 5 -> 5, 9 -> 9, 2 -> 2]; $tmp["a"] = "a"; $tmp[6] = 6; return toliteral($tmp);
+"[1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4, 5 -> 5, 6 -> 6, 9 -> 9, \"a\" -> \"a\"]"
+; return mapkeys($tmp);
+{1, 2, 3, 4, 5, 6, 9, "a"}
+; return mapvalues($tmp);
+{1, 2, 3, 4, 5, 6, 9, "a"}
+
+// test_that_a_map_is_sorted_no_matter_the_order_the_values_are_inserted, case 2
+; $tmp = [2 -> 2, 9 -> 9, 5 -> 5, 4 -> 4, 1 -> 1, 3 -> 3]; $tmp["a"] = "a"; $tmp[6] = 6; return toliteral($tmp);
+"[1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4, 5 -> 5, 6 -> 6, 9 -> 9, \"a\" -> \"a\"]"
+; return mapkeys($tmp);
+{1, 2, 3, 4, 5, 6, 9, "a"}
+; return mapvalues($tmp);
+{1, 2, 3, 4, 5, 6, 9, "a"}
+
+// test_that_a_map_is_sorted_no_matter_the_order_the_values_are_inserted, case 3
+; $tmp = [1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4, 5 -> 5, 9 -> 9]; $tmp["a"] = "a"; $tmp[6] = 6; return toliteral($tmp);
+"[1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4, 5 -> 5, 6 -> 6, 9 -> 9, \"a\" -> \"a\"]"
+; return mapkeys($tmp);
+{1, 2, 3, 4, 5, 6, 9, "a"}
+; return mapvalues($tmp);
+{1, 2, 3, 4, 5, 6, 9, "a"}
+
+// test_that_mapdelete_deletes_an_entry
+; $tmp = [E_NONE -> "No error", E_TYPE -> "Type mismatch", E_DIV -> "Division by zero", E_PERM -> "Permission denied"];
+; return $tmp = mapdelete($tmp, E_TYPE);
+[E_NONE -> "No error", E_DIV -> "Division by zero", E_PERM -> "Permission denied"]
+; return $tmp = mapdelete($tmp, E_NONE);
+[E_DIV -> "Division by zero", E_PERM -> "Permission denied"]
+; return $tmp = mapdelete($tmp, E_DIV);
+[E_PERM -> "Permission denied"]
+; return $tmp = mapdelete($tmp, E_PERM);
+[]
+
+// test_that_length_returns_the_number_of_entries_in_a_map
+; return length(["3" -> "3", "1" -> "1", "4" -> "4", "5" -> "5", "9" -> "9", "2" -> "2"]);
+6
+; x = ["3" -> "3", "1" -> "1", "4" -> "4", "5" -> "5", "9" -> "9", "2" -> "2"]; x = mapdelete(x, "3"); return length(x);
+5
+
+// test_that_is_member_and_in_return_true_if_value_is_in_a_map
+; $tmp = ["3" -> "3", "1" -> "1", "4" -> "4", "5" -> "5", "9" -> "9", "2" -> "2"];
+; return is_member("5", $tmp);
+5
+; return is_member(5, $tmp);
+0
+; return "2" in $tmp;
+2
+; return 2 in $tmp;
+0
+; $tmp = ["FOO" -> "BAR"];
+; return is_member("bar", $tmp);
+0
+; return "bar" in $tmp;
+1
+; return "foo" in $tmp;
+0
+; return "FOO" in $tmp;
+0
+; return is_member("foo", $tmp);
+0
+; return is_member("FOO", $tmp);
+0
+
+// test_that_tests_for_equality_work
+; return equal([], []) && "yes" || "no";
+"yes"
+; return equal([1 -> 2], []) && "yes" || "no";
+"no"
+; return equal([1 -> 2], [1 -> 2]) && "yes" || "no";
+"yes"
+; return equal([1 -> 2, 3 -> 4], [3 -> 4, 1 -> 2]) && "yes" || "no";
+"yes"
+; return equal([1 -> [2 -> 3]], [1 -> [2 -> 3]]) && "yes" || "no";
+"yes"
+; return equal([1 -> [2 -> 3]], [1 -> [2 -> 4]]) && "yes" || "no";
+"no"
+; return [] == [] && "yes" || "no";
+"yes"
+; return [1 -> 2] == [] && "yes" || "no";
+"no"
+; return [1 -> 2] == [1 -> 2] && "yes" || "no";
+"yes"
+; return [1 -> 2, 3 -> 4] == [3 -> 4, 1 -> 2] && "yes" || "no";
+"yes"
+; return [1 -> [2 -> 3]] == [1 -> [2 -> 3]] && "yes" || "no";
+"yes"
+; return [1 -> [2 -> 3]] == [1 -> [2 -> 4]] && "yes" || "no";
+"no"
+; return equal(["foo" -> "bar"], ["FOO" -> "BAR"]) && "yes" || "no";
+"no"
+; return ["foo" -> "bar"] == ["FOO" -> "BAR"] && "yes" || "no";
+"yes"

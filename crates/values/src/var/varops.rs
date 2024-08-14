@@ -88,14 +88,15 @@ impl Var {
     //   Examples: index_in, range, rangeset
     #[must_use]
     pub fn index_in(&self, v: &Self) -> Self {
-        let Variant::List(l) = self.variant() else {
-            return v_err(E_TYPE);
+        let position = match self.variant() {
+            Variant::List(l) => l.iter().position(|x| x == *v),
+            Variant::Map(m) => m.iter().position(|(_k, x)| x == v),
+            _ => {
+                return v_err(E_TYPE);
+            }
         };
 
-        match l.iter().position(|x| x == *v) {
-            None => v_int(0),
-            Some(i) => v_int(i as i64 + 1),
-        }
+        v_int(position.map(|pos| pos + 1).unwrap_or(0) as i64)
     }
 
     binary_numeric_coercion_op!(mul);
