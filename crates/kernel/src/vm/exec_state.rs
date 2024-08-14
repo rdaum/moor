@@ -153,6 +153,11 @@ impl VMExecState {
         stack_top.map(|a| a.permissions).unwrap_or(NOTHING)
     }
 
+    pub(crate) fn this(&self) -> Objid {
+        let stack_top = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
+        stack_top.map(|a| a.this).unwrap_or(NOTHING)
+    }
+
     /// Update the permissions of the current task, as called by the `set_task_perms`
     /// built-in.
     pub(crate) fn set_task_perms(&mut self, perms: Objid) {

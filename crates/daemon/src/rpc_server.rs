@@ -22,14 +22,21 @@ use std::time::SystemTime;
 
 use eyre::{Context, Error};
 
+use crate::connections::ConnectionsDB;
+#[cfg(feature = "relbox")]
+use crate::connections_rb::ConnectionsRb;
+use crate::connections_wt::ConnectionsWT;
+use crate::rpc_session::RpcSession;
 use moor_db::DatabaseFlavour;
 use moor_kernel::config::Config;
+use moor_kernel::tasks::command_parse::preposition_to_string;
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
 use moor_kernel::tasks::TaskHandle;
 use moor_kernel::SchedulerClient;
+use moor_values::model::{Named, PropFlag, ValSet, VerbFlag};
 use moor_values::tasks::SchedulerError::CommandExecutionError;
-use moor_values::tasks::{CommandError, NarrativeEvent, TaskId};
+use moor_values::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
 use moor_values::util::parse_into_words;
 use moor_values::Objid;
 use moor_values::Symbol;
@@ -38,9 +45,9 @@ use moor_values::SYSTEM_OBJECT;
 use moor_values::{v_objid, v_string};
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
 use rpc_common::{
-    AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, RpcRequest,
-    RpcRequestError, RpcResponse, RpcResult, BROADCAST_TOPIC, MOOR_AUTH_TOKEN_FOOTER,
-    MOOR_SESSION_TOKEN_FOOTER,
+    AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, EntityType, PropInfo,
+    RpcRequest, RpcRequestError, RpcResponse, RpcResult, VerbInfo, VerbProgramResponse,
+    BROADCAST_TOPIC, MOOR_AUTH_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER,
 };
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
@@ -51,13 +58,6 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 use zmq::{Socket, SocketType};
 
-use crate::connections::ConnectionsDB;
-use crate::connections_wt::ConnectionsWT;
-use crate::rpc_session::RpcSession;
-
-#[cfg(feature = "relbox")]
-use crate::connections_rb::ConnectionsRb;
-
 pub struct RpcServer {
     zmq_context: zmq::Context,
     keypair: Key<64>,
@@ -67,7 +67,7 @@ pub struct RpcServer {
     config: Arc<Config>,
 }
 
-pub(crate) fn make_response(result: Result<RpcResponse, RpcRequestError>) -> Vec<u8> {
+pub(crate) fn pack_response(result: Result<RpcResponse, RpcRequestError>) -> Vec<u8> {
     let rpc_result = match result {
         Ok(r) => RpcResult::Success(r),
         Err(e) => RpcResult::Failure(e),
@@ -170,7 +170,7 @@ impl RpcServer {
                         error!("Invalid request received, ignoring");
 
                         rpc_socket.send_multipart(
-                            vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                            vec![pack_response(Err(RpcRequestError::InvalidRequest))],
                             0,
                         )?;
                         continue;
@@ -178,7 +178,7 @@ impl RpcServer {
 
                     if request.len() != 2 {
                         rpc_socket.send_multipart(
-                            vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                            vec![pack_response(Err(RpcRequestError::InvalidRequest))],
                             0,
                         )?;
                         continue;
@@ -188,7 +188,7 @@ impl RpcServer {
 
                     let Ok(client_id) = Uuid::from_slice(client_id) else {
                         rpc_socket.send_multipart(
-                            vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                            vec![pack_response(Err(RpcRequestError::InvalidRequest))],
                             0,
                         )?;
                         continue;
@@ -201,7 +201,7 @@ impl RpcServer {
                             Ok((request, _)) => request,
                             Err(_) => {
                                 rpc_socket.send_multipart(
-                                    vec![make_response(Err(RpcRequestError::InvalidRequest))],
+                                    vec![pack_response(Err(RpcRequestError::InvalidRequest))],
                                     0,
                                 )?;
 
@@ -214,10 +214,20 @@ impl RpcServer {
                     let response =
                         this.clone()
                             .process_request(scheduler_client.clone(), client_id, request);
+                    let response = pack_response(response);
                     rpc_socket.send_multipart(vec![response], 0)?;
                 }
             }
         }
+    }
+
+    fn client_auth(&self, token: ClientToken, client_id: Uuid) -> Result<Objid, RpcRequestError> {
+        let Some(connection) = self.connections.connection_object_for_client(client_id) else {
+            return Err(RpcRequestError::NoConnection);
+        };
+
+        self.validate_client_token(token, client_id)?;
+        Ok(connection)
     }
 
     /// Process a request (originally ZMQ REQ) and produce a reply (becomes ZMQ REP)
@@ -226,31 +236,20 @@ impl RpcServer {
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         request: RpcRequest,
-    ) -> Vec<u8> {
+    ) -> Result<RpcResponse, RpcRequestError> {
         match request {
             RpcRequest::ConnectionEstablish(hostname) => {
-                match self.connections.new_connection(client_id, hostname, None) {
-                    Ok(oid) => {
-                        let token = self.make_client_token(client_id);
-                        make_response(Ok(NewConnection(token, oid)))
-                    }
-                    Err(e) => make_response(Err(e)),
-                }
+                let oid = self.connections.new_connection(client_id, hostname, None)?;
+                let token = self.make_client_token(client_id);
+                Ok(NewConnection(token, oid))
             }
             RpcRequest::Attach(auth_token, connect_type, hostname) => {
                 // Validate the auth token, and get the player.
-                let Ok(player) = self.validate_auth_token(auth_token, None) else {
-                    warn!("Invalid auth token for attach request");
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
-                let client_token =
-                    match self
-                        .connections
-                        .new_connection(client_id, hostname, Some(player))
-                    {
-                        Ok(_) => self.make_client_token(client_id),
-                        Err(e) => return make_response(Err(e)),
-                    };
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                self.connections
+                    .new_connection(client_id, hostname, Some(player))?;
+                let client_token = self.make_client_token(client_id);
 
                 if let Some(connect_type) = connect_type {
                     trace!(?player, "Submitting user_connected task");
@@ -266,29 +265,16 @@ impl RpcServer {
                         // but we do log the error.
                     }
                 }
-                make_response(Ok(RpcResponse::AttachResult(Some((client_token, player)))))
+                Ok(RpcResponse::AttachResult(Some((client_token, player))))
             }
             // Bodacious Totally Awesome Hey Dudes Have Mr Pong's Chinese Food
             RpcRequest::Pong(token, _client_sys_time) => {
                 // Always respond with a ThanksPong, even if it's somebody we don't know.
                 // Can easily be a connection that was in the middle of negotiation at the time the
                 // ping was sent out, or dangling in some other way.
-                let response = make_response(Ok(RpcResponse::ThanksPong(SystemTime::now())));
+                let response = Ok(RpcResponse::ThanksPong(SystemTime::now()));
 
-                let Some(connection) = self.connections.connection_object_for_client(client_id)
-                else {
-                    warn!("Received Pong from invalid client: {}", client_id);
-                    return response;
-                };
-                let Ok(_) = self.validate_client_token(token, client_id) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Client token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
-
+                let connection = self.client_auth(token, client_id)?;
                 // Let 'connections' know that the connection is still alive.
                 let Ok(_) = self.connections.notify_is_alive(client_id, connection) else {
                     warn!("Unable to notify connection is alive: {}", client_id);
@@ -297,218 +283,195 @@ impl RpcServer {
                 response
             }
             RpcRequest::RequestSysProp(token, object, property) => {
-                let Some(connection) = self.connections.connection_object_for_client(client_id)
-                else {
-                    return make_response(Err(RpcRequestError::NoConnection));
-                };
-                let Ok(_) = self.validate_client_token(token, client_id) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Client token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
+                let connection = self.client_auth(token, client_id)?;
 
-                make_response(self.clone().request_sys_prop(
-                    scheduler_client,
-                    connection,
-                    object,
-                    property,
-                ))
+                self.clone()
+                    .request_sys_prop(scheduler_client, connection, object, property)
             }
             RpcRequest::LoginCommand(token, args, attach) => {
-                let Some(connection) = self.connections.connection_object_for_client(client_id)
-                else {
-                    return make_response(Err(RpcRequestError::NoConnection));
-                };
-                let Ok(_) = self.validate_client_token(token, client_id) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Client token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
+                let connection = self.client_auth(token, client_id)?;
 
-                make_response(self.clone().perform_login(
-                    scheduler_client,
-                    client_id,
-                    connection,
-                    args,
-                    attach,
-                ))
+                self.clone()
+                    .perform_login(scheduler_client, client_id, connection, args, attach)
             }
             RpcRequest::Command(token, auth_token, command) => {
-                let Some(connection) = self.connections.connection_object_for_client(client_id)
-                else {
-                    return make_response(Err(RpcRequestError::NoConnection));
-                };
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
 
-                let Ok(_) = self.validate_client_token(token, client_id) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Client token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
-
-                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Auth token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
-                make_response(self.clone().perform_command(
-                    scheduler_client,
-                    client_id,
-                    connection,
-                    command,
-                ))
+                self.clone()
+                    .perform_command(scheduler_client, client_id, connection, command)
             }
             RpcRequest::RequestedInput(token, auth_token, request_id, input) => {
-                let Some(connection) = self.connections.connection_object_for_client(client_id)
-                else {
-                    return make_response(Err(RpcRequestError::NoConnection));
-                };
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
 
-                let Ok(_) = self.validate_client_token(token, client_id) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Client token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
-
-                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Auth token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
                 let request_id = Uuid::from_u128(request_id);
-                make_response(self.clone().respond_input(
+                self.clone().respond_input(
                     scheduler_client,
                     client_id,
                     connection,
                     request_id,
                     input,
-                ))
+                )
             }
             RpcRequest::OutOfBand(token, auth_token, command) => {
-                let Some(connection) = self.connections.connection_object_for_client(client_id)
-                else {
-                    return make_response(Err(RpcRequestError::NoConnection));
-                };
-                let Ok(_) = self.validate_client_token(token, client_id) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Client token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
 
-                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Auth token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
-
-                make_response(self.clone().perform_out_of_band(
-                    scheduler_client,
-                    client_id,
-                    connection,
-                    command,
-                ))
+                self.clone()
+                    .perform_out_of_band(scheduler_client, client_id, connection, command)
             }
 
             RpcRequest::Eval(token, auth_token, evalstr) => {
-                let Some(connection) = self.connections.connection_object_for_client(client_id)
-                else {
-                    return make_response(Err(RpcRequestError::NoConnection));
-                };
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
+                self.clone()
+                    .eval(scheduler_client, client_id, connection, evalstr)
+            }
 
-                let Ok(_) = self.validate_client_token(token, client_id) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Client token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
+            RpcRequest::Retrieve(token, auth_token, who, retr_type, what) => {
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
 
-                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Auth token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
-                make_response(
-                    self.clone()
-                        .eval(scheduler_client, client_id, connection, evalstr),
-                )
+                match retr_type {
+                    EntityType::Property => {
+                        let (propdef, propperms, value) = scheduler_client
+                            .request_property(connection, connection, who, what)
+                            .map_err(|e| {
+                                error!(error = ?e, "Error requesting property");
+                                RpcRequestError::EntityRetrievalError(
+                                    "error requesting property".to_string(),
+                                )
+                            })?;
+                        Ok(RpcResponse::PropertyValue(
+                            PropInfo {
+                                definer: propdef.definer(),
+                                location: propdef.location(),
+                                name: Symbol::mk(propdef.name()),
+                                owner: propperms.owner(),
+                                r: propperms.flags().contains(PropFlag::Read),
+                                w: propperms.flags().contains(PropFlag::Write),
+                                chown: propperms.flags().contains(PropFlag::Chown),
+                            },
+                            value,
+                        ))
+                    }
+                    EntityType::Verb => {
+                        let (verbdef, code) = scheduler_client
+                            .request_verb(connection, connection, who, what)
+                            .map_err(|e| {
+                                error!(error = ?e, "Error requesting verb");
+                                RpcRequestError::EntityRetrievalError(
+                                    "error requesting verb".to_string(),
+                                )
+                            })?;
+                        let argspec = verbdef.args();
+                        let arg_spec = vec![
+                            Symbol::mk(argspec.dobj.to_string()),
+                            Symbol::mk(preposition_to_string(&argspec.prep)),
+                            Symbol::mk(argspec.iobj.to_string()),
+                        ];
+                        Ok(RpcResponse::VerbValue(
+                            VerbInfo {
+                                location: verbdef.location(),
+                                owner: verbdef.owner(),
+                                names: verbdef.names().iter().map(|s| Symbol::mk(s)).collect(),
+                                r: verbdef.flags().contains(VerbFlag::Read),
+                                w: verbdef.flags().contains(VerbFlag::Write),
+                                x: verbdef.flags().contains(VerbFlag::Exec),
+                                d: verbdef.flags().contains(VerbFlag::Debug),
+                                arg_spec,
+                            },
+                            code,
+                        ))
+                    }
+                }
+            }
+            RpcRequest::Properties(token, auth_token, obj) => {
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
+
+                let props = scheduler_client
+                    .request_properties(connection, connection, obj)
+                    .map_err(|e| {
+                        error!(error = ?e, "Error requesting properties");
+                        RpcRequestError::EntityRetrievalError(
+                            "error requesting properties".to_string(),
+                        )
+                    })?;
+
+                let props = props
+                    .iter()
+                    .map(|(propdef, propperms)| PropInfo {
+                        definer: propdef.definer(),
+                        location: propdef.location(),
+                        name: Symbol::mk(propdef.name()),
+                        owner: propperms.owner(),
+                        r: propperms.flags().contains(PropFlag::Read),
+                        w: propperms.flags().contains(PropFlag::Write),
+                        chown: propperms.flags().contains(PropFlag::Chown),
+                    })
+                    .collect();
+
+                Ok(RpcResponse::Properties(props))
+            }
+            RpcRequest::Verbs(token, auth_token, obj) => {
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
+
+                let verbs = scheduler_client
+                    .request_verbs(connection, connection, obj)
+                    .map_err(|e| {
+                        error!(error = ?e, "Error requesting verbs");
+                        RpcRequestError::EntityRetrievalError("error requesting verbs".to_string())
+                    })?;
+
+                let verbs = verbs
+                    .iter()
+                    .map(|v| VerbInfo {
+                        location: v.location(),
+                        owner: v.owner(),
+                        names: v.names().iter().map(|s| Symbol::mk(s)).collect(),
+                        r: v.flags().contains(VerbFlag::Read),
+                        w: v.flags().contains(VerbFlag::Write),
+                        x: v.flags().contains(VerbFlag::Exec),
+                        d: v.flags().contains(VerbFlag::Debug),
+                        arg_spec: vec![
+                            Symbol::mk(v.args().dobj.to_string()),
+                            Symbol::mk(preposition_to_string(&v.args().prep)),
+                            Symbol::mk(v.args().iobj.to_string()),
+                        ],
+                    })
+                    .collect();
+
+                Ok(RpcResponse::Verbs(verbs))
             }
             RpcRequest::Detach(token) => {
-                let Ok(_) = self.validate_client_token(token, client_id) else {
-                    warn!(?client_id, "Client token validation failed for request");
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
+                self.validate_client_token(token, client_id)?;
 
                 debug!(?client_id, "Detaching client");
 
                 // Detach this client id from the player/connection object.
                 let Ok(_) = self.connections.remove_client_connection(client_id) else {
-                    return make_response(Err(RpcRequestError::InternalError(
+                    return Err(RpcRequestError::InternalError(
                         "Unable to remove client connection".to_string(),
-                    )));
+                    ));
                 };
 
-                make_response(Ok(RpcResponse::Disconnected))
+                Ok(RpcResponse::Disconnected)
             }
             RpcRequest::Program(token, auth_token, object, verb, code) => {
-                let Some(connection) = self.connections.connection_object_for_client(client_id)
-                else {
-                    return make_response(Err(RpcRequestError::NoConnection));
-                };
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
 
-                let Ok(_) = self.validate_client_token(token, client_id) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Client token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
-
-                let Ok(_) = self.validate_auth_token(auth_token, Some(connection)) else {
-                    warn!(
-                        ?client_id,
-                        ?connection,
-                        "Auth token validation failed for request"
-                    );
-                    return make_response(Err(RpcRequestError::PermissionDenied));
-                };
-
-                make_response(self.clone().program_verb(
+                self.clone().program_verb(
                     scheduler_client,
                     client_id,
                     connection,
                     object,
                     verb,
                     code,
-                ))
+                )
             }
         }
     }
@@ -581,12 +544,9 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         player: Objid,
-        object: String,
-        property: String,
+        object: Symbol,
+        property: Symbol,
     ) -> Result<RpcResponse, RpcRequestError> {
-        let object = Symbol::mk_case_insensitive(object.as_str());
-        let property = Symbol::mk_case_insensitive(property.as_str());
-
         let pv = match scheduler_client.request_system_property(player, object, property) {
             Ok(pv) => pv,
             Err(CommandExecutionError(CommandError::NoObjectMatch)) => {
@@ -879,7 +839,13 @@ impl RpcServer {
 
         let verb = Symbol::mk_case_insensitive(verb.as_str());
         match scheduler_client.submit_verb_program(connection, connection, object, verb, code) {
-            Ok((obj, verb)) => Ok(RpcResponse::ProgramSuccess(obj, verb.to_string())),
+            Ok((obj, verb)) => Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Success(
+                obj,
+                verb.to_string(),
+            ))),
+            Err(SchedulerError::VerbProgramFailed(f)) => Ok(RpcResponse::ProgramResponse(
+                VerbProgramResponse::Failure(f),
+            )),
             Err(e) => Err(RpcRequestError::TaskError(e)),
         }
     }
@@ -1058,7 +1024,7 @@ impl RpcServer {
         &self,
         token: ClientToken,
         client_id: Uuid,
-    ) -> Result<(), SessionError> {
+    ) -> Result<(), RpcRequestError> {
         let key: Key<32> = Key::from(&self.keypair[32..]);
         let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
         let verified_token = Paseto::<V4, Public>::try_verify(
@@ -1069,27 +1035,27 @@ impl RpcServer {
         )
         .map_err(|e| {
             warn!(error = ?e, "Unable to parse/validate token");
-            SessionError::InvalidToken
+            RpcRequestError::PermissionDenied
         })?;
 
         let verified_token = serde_json::from_str::<serde_json::Value>(verified_token.as_str())
             .map_err(|e| {
                 warn!(error = ?e, "Unable to parse/validate token");
-                SessionError::InvalidToken
+                RpcRequestError::PermissionDenied
             })?;
 
         // Does the token match the client it came from? If not, reject it.
         let Some(token_client_id) = verified_token.get("client_id") else {
             debug!("Token does not contain client_id");
-            return Err(SessionError::InvalidToken);
+            return Err(RpcRequestError::PermissionDenied);
         };
         let Some(token_client_id) = token_client_id.as_str() else {
             debug!("Token client_id is null");
-            return Err(SessionError::InvalidToken);
+            return Err(RpcRequestError::PermissionDenied);
         };
         let Ok(token_client_id) = Uuid::parse_str(token_client_id) else {
             debug!("Token client_id is not a valid UUID");
-            return Err(SessionError::InvalidToken);
+            return Err(RpcRequestError::PermissionDenied);
         };
         if client_id != token_client_id {
             debug!(
@@ -1097,7 +1063,7 @@ impl RpcServer {
                 ?token_client_id,
                 "Token client_id does not match client_id"
             );
-            return Err(SessionError::InvalidToken);
+            return Err(RpcRequestError::PermissionDenied);
         }
 
         Ok(())
@@ -1113,7 +1079,7 @@ impl RpcServer {
         &self,
         token: AuthToken,
         objid: Option<Objid>,
-    ) -> Result<Objid, SessionError> {
+    ) -> Result<Objid, RpcRequestError> {
         let key: Key<32> = Key::from(&self.keypair[32..]);
         let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
         let verified_token = Paseto::<V4, Public>::try_verify(
@@ -1124,30 +1090,30 @@ impl RpcServer {
         )
         .map_err(|e| {
             warn!(error = ?e, "Unable to parse/validate token");
-            SessionError::InvalidToken
+            RpcRequestError::PermissionDenied
         })?;
 
         let verified_token = serde_json::from_str::<serde_json::Value>(verified_token.as_str())
             .map_err(|e| {
                 warn!(error = ?e, "Unable to parse/validate token");
-                SessionError::InvalidToken
+                RpcRequestError::PermissionDenied
             })
             .unwrap();
 
         let Some(token_player) = verified_token.get("player") else {
             debug!("Token does not contain player");
-            return Err(SessionError::InvalidToken);
+            return Err(RpcRequestError::PermissionDenied);
         };
         let Some(token_player) = token_player.as_i64() else {
             debug!("Token player is not valid");
-            return Err(SessionError::InvalidToken);
+            return Err(RpcRequestError::PermissionDenied);
         };
         let token_player = Objid(token_player);
         if let Some(objid) = objid {
             // Does the 'player' match objid? If not, reject it.
             if objid != token_player {
                 debug!(?objid, ?token_player, "Token player does not match objid");
-                return Err(SessionError::InvalidToken);
+                return Err(RpcRequestError::PermissionDenied);
             }
         }
 

@@ -13,9 +13,8 @@
 //
 
 use bincode::{Decode, Encode};
-use moor_values::tasks::{NarrativeEvent, SchedulerError};
-use moor_values::Objid;
-use moor_values::Var;
+use moor_values::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
+use moor_values::{Objid, Var, Symbol};
 use std::time::SystemTime;
 use thiserror::Error;
 
@@ -49,7 +48,7 @@ pub enum RpcRequest {
     /// Establish a new connection, requesting a client token and a connection object
     ConnectionEstablish(String),
     /// Anonymously request a sysprop (e.g. $login.welcome_message)
-    RequestSysProp(ClientToken, String, String),
+    RequestSysProp(ClientToken, Symbol, Symbol),
     /// Login using the words (e.g. "create player bob" or "connect player bob") and return an
     /// auth token and the object id of the player. None if the login failed.
     LoginCommand(ClientToken, Vec<String>, bool /* attach? */),
@@ -59,6 +58,12 @@ pub enum RpcRequest {
     Attach(AuthToken, Option<ConnectType>, String),
     /// Send a command to be executed.
     Command(ClientToken, AuthToken, String),
+    /// Return the (visible) verbs on the given object.
+    Verbs(ClientToken, AuthToken, Objid),
+    /// Return the (visible) properties on the given object.
+    Properties(ClientToken, AuthToken, Objid),
+    /// Retrieve the given verb code or property.
+    Retrieve(ClientToken, AuthToken, Objid, EntityType, Symbol),
     /// Attempt to program the object with the given verb code
     Program(ClientToken, AuthToken, String, String, Vec<String>),
     /// Respond to a request for input.
@@ -75,6 +80,12 @@ pub enum RpcRequest {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Encode, Decode)]
 #[repr(u8)]
+pub enum EntityType {
+    Property,
+    Verb,
+}
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Encode, Decode)]
+#[repr(u8)]
 pub enum ConnectType {
     Connected,
     Reconnected,
@@ -88,6 +99,35 @@ pub enum RpcResult {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub enum VerbProgramResponse {
+    Success(Objid, String),
+    Failure(VerbProgramError),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub struct VerbInfo {
+    pub location: Objid,
+    pub owner: Objid,
+    pub names: Vec<Symbol>,
+    pub r: bool,
+    pub w: bool,
+    pub x: bool,
+    pub d: bool,
+    pub arg_spec: Vec<Symbol>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub struct PropInfo {
+    pub definer: Objid,
+    pub location: Objid,
+    pub name: Symbol,
+    pub owner: Objid,
+    pub r: bool,
+    pub w: bool,
+    pub chown: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum RpcResponse {
     NewConnection(ClientToken, Objid),
     SysPropValue(Option<Var>),
@@ -98,8 +138,11 @@ pub enum RpcResponse {
     EvalResult(Var),
     ThanksPong(SystemTime),
     Disconnected,
-    /// Verb was successfully programmed
-    ProgramSuccess(Objid, String),
+    Verbs(Vec<VerbInfo>),
+    Properties(Vec<PropInfo>),
+    ProgramResponse(VerbProgramResponse),
+    PropertyValue(PropInfo, Var),
+    VerbValue(VerbInfo, Vec<String>),
 }
 
 /// Errors at the call/request level.
@@ -121,6 +164,8 @@ pub enum RpcRequestError {
     PermissionDenied,
     #[error("Error scheduling task")]
     TaskError(SchedulerError),
+    #[error("Error retreiving entity: {0}")]
+    EntityRetrievalError(String),
     #[error("Internal error: {0}")]
     InternalError(String),
 }

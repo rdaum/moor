@@ -88,3 +88,22 @@ impl AsByteBuffer for Objid {
         Ok(Bytes::from(self.make_copy_as_vec()?))
     }
 }
+
+impl TryFrom<&str> for Objid {
+    type Error = DecodingError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value.starts_with('#') {
+            let value = &value[1..];
+            let value = value.parse::<i64>().map_err(|e| {
+                DecodingError::CouldNotDecode(format!("Could not parse Objid: {}", e))
+            })?;
+            Ok(Self(value))
+        } else {
+            Err(DecodingError::CouldNotDecode(format!(
+                "Expected Objid to start with '#', got {}",
+                value
+            )))
+        }
+    }
+}

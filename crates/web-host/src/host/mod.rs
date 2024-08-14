@@ -22,8 +22,9 @@ use serde_json::{json, Number};
 
 pub use web_host::WebHost;
 pub use web_host::{
-    connect_auth_handler, create_auth_handler, eval_handler, welcome_message_handler,
-    ws_connect_attach_handler, ws_create_attach_handler,
+    connect_auth_handler, create_auth_handler, eval_handler, properties_handler,
+    property_retrieval_handler, verb_program_handler, verb_retrieval_handler, verbs_handler,
+    welcome_message_handler, ws_connect_attach_handler, ws_create_attach_handler,
 };
 
 #[derive(serde_derive::Serialize, Deserialize)]
