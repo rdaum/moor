@@ -51,9 +51,9 @@ fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(noop, bf_noop);
 
 fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // If in "strict" mode `notify` can only send text.
+    // If in non rich-mode `notify` can only send text.
     // Otherwise, it can send any value, and it's up to the host/client to interpret it.
-    if bf_args.config.rich_notify {
+    if !bf_args.config.rich_notify {
         if bf_args.args.len() != 2 {
             return Err(BfErr::Code(E_ARGS));
         }
@@ -78,7 +78,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_obj_owner_perms(*player)
         .map_err(world_state_bf_err)?;
 
-    let content_type = if !bf_args.config.rich_notify && bf_args.args.len() == 3 {
+    let content_type = if bf_args.config.rich_notify && bf_args.args.len() == 3 {
         let Variant::Str(content_type) = bf_args.args[2].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
