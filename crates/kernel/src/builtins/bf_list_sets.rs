@@ -30,14 +30,24 @@ fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let (value, list) = (&bf_args.args[0], &bf_args.args[1]);
-    let Variant::List(list) = list.variant() else {
-        return Err(BfErr::Code(E_TYPE));
-    };
-    if list.contains_case_sensitive(value) {
-        Ok(Ret(v_int(1)))
-    } else {
-        Ok(Ret(v_int(0)))
+    let (value, container) = (&bf_args.args[0], &bf_args.args[1]);
+    // `is_member` is overloaded to work on both maps and lists, so `bf_list_sets.rs`
+    // is not *really* a correct place for it, but `bf_list_sets_and_maps_too_i_guess.rs` is a bit silly.
+    match container.variant() {
+        Variant::List(list) => {
+            if list.contains_case_sensitive(value) {
+                Ok(Ret(v_int(1)))
+            } else {
+                Ok(Ret(v_int(0)))
+            }
+        }
+        Variant::Map(map) => Ok(Ret(v_int(
+            map.iter()
+                .position(|(_item_key, item_value)| value.eq_case_sensitive(item_value))
+                .map(|pos| pos + 1)
+                .unwrap_or(0) as i64,
+        ))),
+        _ => Err(BfErr::Code(E_TYPE)),
     }
 }
 bf_declare!(is_member, bf_is_member);

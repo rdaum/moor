@@ -98,6 +98,27 @@ impl Map {
     pub fn iter(&self) -> impl Iterator<Item = (&Var, &Var)> {
         self.0.iter()
     }
+
+    pub fn eq_case_sensitive(&self, other: &Map) -> bool {
+        // TODO: Surely there's a smarter way of doing this with a single well-aimed call to
+        //       some API on self.0.
+        for (k1, v1) in self.iter() {
+            if !other
+                .iter()
+                .any(|(k2, v2)| k1.eq_case_sensitive(k2) && v1.eq_case_sensitive(v2))
+            {
+                return false;
+            }
+        }
+        for (k2, _) in other.iter() {
+            // We already handled value mismatches and (self has, other hasn't)
+            // Just need to handle (self hasn't, other has) here
+            if !self.iter().any(|(k1, _)| k1.eq_case_sensitive(k2)) {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 impl BincodeAsByteBufferExt for Map {}

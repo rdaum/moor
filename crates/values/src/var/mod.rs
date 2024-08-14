@@ -32,7 +32,7 @@ use crate::encode::BINCODE_CONFIG;
 use crate::util::quote_str;
 pub use crate::var::error::{Error, ErrorPack};
 pub use crate::var::list::List;
-use crate::var::map::Map;
+pub use crate::var::map::Map;
 pub use crate::var::objid::Objid;
 pub use crate::var::string::Str;
 pub use crate::var::symbol::Symbol;
@@ -208,6 +208,10 @@ fn decode(s: Bytes) -> Var {
         VarType::TYPE_LIST => {
             let l = List::from_bytes(bytes).unwrap();
             Var::new(Variant::List(l))
+        }
+        VarType::TYPE_MAP => {
+            let m = Map::from_bytes(bytes).unwrap();
+            Var::new(Variant::Map(m))
         }
         _ => panic!("Invalid type id: {:?}", type_id),
     }
