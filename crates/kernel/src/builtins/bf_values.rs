@@ -39,7 +39,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::Str(s) => result.push_str(s.as_str()),
             Variant::Obj(o) => result.push_str(&o.to_string()),
             Variant::List(_) => result.push_str("{list}"),
-            Variant::Map(_) => result.push_str("{map}"),
+            Variant::Map(_) => result.push_str("[map]"),
             Variant::Err(e) => result.push_str(e.name()),
         }
     }
