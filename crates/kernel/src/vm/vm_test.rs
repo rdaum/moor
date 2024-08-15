@@ -1131,8 +1131,6 @@ mod tests {
         v_map_pairs(&[(v_int(1),v_str("abc")), (v_int(2),v_str("two")), (v_int(3),v_str("three"))]); "map assignment")]
     #[test_case("return [ 0 -> 1, 1 -> 2, 2 -> 3, 3 -> 4][1..$];",
         v_map_pairs(&[(v_int(1),v_int(2)), (v_int(2),v_int(3),), (v_int(3),v_int(4))]); "map range to end")]
-    #[test_case(r#"m = [ 1 -> "one", 2 -> "two", 3 -> "three" ]; m[1..2] = ["abc" -> #1]; return m;"#,
-        v_map_pairs(&[(v_int(3),v_str("three")), (v_str("abc"),v_obj(1))]); "map range assignment")]
     #[test_case("l = {1,2,3}; l[2..3] = {6, 7, 8, 9}; return l;",
          v_list(&[v_int(1), v_int(6), v_int(7), v_int(8), v_int(9)]); "list assignment to range")]
     fn test_run(program: &str, expected_result: Var) {

@@ -201,3 +201,23 @@ E_TYPE
 E_TYPE
 ; mapdelete([1 -> 2, 3 -> 4], {1, 2});
 E_TYPE
+
+// Diverge from Stunt: range assignment doesn't work on maps
+; x = [1 -> 1]; x[3..2] = ["a" -> "a", "b" -> "b"]; return x;
+E_TYPE
+; x = [1 -> 1]; x[2..1] = ["a" -> "a", "b" -> "b"]; return x;
+E_TYPE
+; x = [1 -> 1]; x[1..0] = ["a" -> "a", "b" -> "b"]; return x;
+E_TYPE
+; x = [1 -> 1]; x[1..1] = ["a" -> "a", "b" -> "b"]; return x;
+E_TYPE
+; x = [1 -> 1, 2 -> 2]; x[2..1] = ["a" -> "a", "b" -> "b"]; return x;
+E_TYPE
+; x = [1 -> 1, 2 -> 2, "a" -> "foo"]; x[2..1] = ["a" -> "a", "b" -> "b"]; return x;
+E_TYPE
+; x = [1 -> 1, 2 -> 2]; x[1..2] = ["a" -> "a", "b" -> "b"]; return x;
+E_TYPE
+
+// test_that_inverted_ranged_set_does_not_crash_the_server
+; x = []; for i in [1..10]; x[1..0] = [i -> i]; endfor; return length(x);
+E_TYPE
