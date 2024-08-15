@@ -114,3 +114,9 @@
 "no"
 ; return ["foo" -> "bar"] == ["FOO" -> "BAR"] && "yes" || "no";
 "yes"
+
+// test_that_maps_act_as_true_and_false
+; return [] && "yes" || "no";
+"no"
+; return [1 -> 2] && "yes" || "no";
+"yes"
