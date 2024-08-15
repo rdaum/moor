@@ -128,9 +128,7 @@ fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
     let result = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
-        (Variant::Str(s1), Variant::Str(s2)) => {
-            s1.as_str().to_lowercase() == s2.as_str().to_lowercase()
-        }
+        (Variant::Str(s1), Variant::Str(s2)) => s1.as_str() == s2.as_str().to_lowercase(),
         (Variant::Map(m1), Variant::Map(m2)) => m1.eq_case_sensitive(m2),
         _ => bf_args.args[0] == bf_args.args[1],
     };
