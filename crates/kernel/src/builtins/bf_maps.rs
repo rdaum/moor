@@ -28,6 +28,13 @@ fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
+    if matches!(
+        bf_args.args[1].variant(),
+        Variant::Map(_) | Variant::List(_)
+    ) {
+        return Err(BfErr::Code(E_TYPE));
+    }
+
     let (nm, Some(_)) = m.remove(&bf_args.args[1]) else {
         return Err(BfErr::Code(E_RANGE));
     };
@@ -74,6 +81,13 @@ fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Map(m) = &bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
+
+    if matches!(
+        bf_args.args[1].variant(),
+        Variant::Map(_) | Variant::List(_)
+    ) {
+        return Err(BfErr::Code(E_TYPE));
+    }
 
     let v = m.get(&bf_args.args[1]);
 

@@ -175,3 +175,29 @@ E_RANGE
 [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> "bar"]
 ; $object.p = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; $object.p[1.0] = "baz"; return $object.p;
 [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 1.0 -> "baz", 3.14 -> 3.14]
+
+// test_that_lists_and_maps_cannot_be_keys
+; [[] -> 1];
+E_TYPE
+; [{} -> 1];
+E_TYPE
+; [[1 -> 2] -> 1];
+E_TYPE
+; [{1, 2} -> 1];
+E_TYPE
+; x = []; x[[]] = 1;
+E_TYPE
+; x = []; x[{}] = 1;
+E_TYPE
+; x = []; x[[1 -> 2]] = 1;
+E_TYPE
+; x = []; x[{1, 2}] = 1;
+E_TYPE
+; mapdelete([1 -> 2, 3 -> 4], []);
+E_TYPE
+; mapdelete([1 -> 2, 3 -> 4], {});
+E_TYPE
+; mapdelete([1 -> 2, 3 -> 4], [1 -> 2]);
+E_TYPE
+; mapdelete([1 -> 2, 3 -> 4], {1, 2});
+E_TYPE
