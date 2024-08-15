@@ -330,8 +330,13 @@ pub fn moo_frame_execute(
                 let (rhs, index, lhs) = (f.pop(), f.pop(), f.peek_top_mut());
                 match lhs.variant() {
                     Variant::Map(m) => {
-                        let nmap = m.insert(index, rhs.clone());
-                        f.poke(0, nmap);
+                        if matches!(index.variant(), Variant::Map(_) | Variant::List(_)) {
+                            f.pop();
+                            return state.push_error(E_TYPE);
+                        } else {
+                            let nmap = m.insert(index, rhs.clone());
+                            f.poke(0, nmap);
+                        }
                     }
                     _ => {
                         let i = match one_to_zero_index(&index) {
@@ -362,6 +367,10 @@ pub fn moo_frame_execute(
             }
             Op::MapInsert => {
                 let (value, key, map) = (f.pop(), f.pop(), f.peek_top_mut());
+                if matches!(key.variant(), Variant::Map(_) | Variant::List(_)) {
+                    f.pop();
+                    return state.push_error(E_TYPE);
+                }
                 let Variant::Map(map) = map.variant_mut() else {
                     f.pop();
                     return state.push_error(E_TYPE);
