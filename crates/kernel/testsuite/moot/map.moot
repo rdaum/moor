@@ -126,5 +126,52 @@
 ; return tostr($tmp);
 "[map]"
 // Note: item order is different here than in Stunt (but stable). That's *probably* fine.
+// Seems like ordering difference between different key types.
 ; return toliteral($tmp);
 "[#-1 -> #-1, \"1\" -> {}, \"2\" -> [], 5 -> 5, 3.14 -> 3.14]"
+
+// test_that_assignment_copies
+; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; y = x; return x == y && "yes" || "no";
+"yes"
+; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; y = x; x["1"] = "foo"; return x == y && "yes" || "no";
+"no"
+; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; y = x; y[1] = "foo"; return x == y && "yes" || "no";
+"no"
+
+// test_that_maps_support_indexed_access
+; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; return toliteral(x["1"]);
+"{}"
+; x = [$nothing -> $nothing, "2" -> ["3" -> "three"], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; return x["2"]["3"];
+"three"
+; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; return x[3.14];
+3.14
+; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; return x[1.0];
+E_RANGE
+; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; x["1"] = "foo"; return x;
+[$nothing -> $nothing, "2" -> [], "1" -> "foo", 5 -> 5, 3.14 -> 3.14]
+; x = [$nothing -> $nothing, "2" -> ["3" -> "three"], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; x["2"]["3"] = "foo"; return x;
+[$nothing -> $nothing, "2" -> ["3" -> "foo"], "1" -> {}, 5 -> 5, 3.14 -> 3.14]
+; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; x[3.14] = "bar"; return x;
+[$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> "bar"]
+; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; x[1.0] = "baz"; return x;
+[$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 1.0 -> "baz", 3.14 -> 3.14]
+
+// test_that_indexed_access_on_objects_mutates_those_objects
+; $object = create($nothing);
+; add_property($object, "p", {}, {player, ""});
+; $object.p = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; return $object.p["1"];
+{}
+; $object.p = [$nothing -> $nothing, "2" -> ["3" -> "three"], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; return $object.p["2"]["3"];
+"three"
+; $object.p = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; return $object.p[3.14];
+3.14
+; $object.p = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; return $object.p[1.0];
+E_RANGE
+; $object.p = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; $object.p["1"] = "foo"; return $object.p;
+[$nothing -> $nothing, "2" -> [], "1" -> "foo", 5 -> 5, 3.14 -> 3.14]
+; $object.p = [$nothing -> $nothing, "2" -> ["3" -> "three"], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; $object.p["2"]["3"] = "foo"; return $object.p;
+[$nothing -> $nothing, "2" -> ["3" -> "foo"], "1" -> {}, 5 -> 5, 3.14 -> 3.14]
+; $object.p = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; $object.p[3.14] = "bar"; return $object.p;
+[$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> "bar"]
+; $object.p = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; $object.p[1.0] = "baz"; return $object.p;
+[$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 1.0 -> "baz", 3.14 -> 3.14]
