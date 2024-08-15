@@ -197,7 +197,6 @@ pub(crate) fn register_bf_values(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("toliteral")] = Box::new(BfToliteral {});
     builtins[offset_for_builtin("toint")] = Box::new(BfToint {});
     builtins[offset_for_builtin("tonum")] = Box::new(BfToint {});
-    builtins[offset_for_builtin("tonum")] = Box::new(BfToint {});
     builtins[offset_for_builtin("toobj")] = Box::new(BfToobj {});
     builtins[offset_for_builtin("tofloat")] = Box::new(BfTofloat {});
     builtins[offset_for_builtin("equal")] = Box::new(BfEqual {});
