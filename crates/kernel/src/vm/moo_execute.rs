@@ -567,16 +567,9 @@ pub fn moo_frame_execute(
                 let (value, to, from, base) = (f.pop(), f.pop(), f.pop(), f.peek_top());
 
                 match base.variant() {
-                    Variant::Map(m) => {
-                        let Variant::Map(repl) = value.variant() else {
-                            f.pop();
-                            f.pop();
-                            f.pop();
-                            return state.push_error(E_TYPE);
-                        };
-
-                        let r = m.range_set(from, to, repl);
-                        f.poke(0, r);
+                    Variant::Map(_) => {
+                        f.pop();
+                        return state.push_error(E_TYPE);
                     }
                     _ => match (to.variant(), from.variant()) {
                         (Variant::Int(to), Variant::Int(from)) => {
