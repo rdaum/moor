@@ -120,3 +120,11 @@
 "no"
 ; return [1 -> 2] && "yes" || "no";
 "yes"
+
+// test_that_tostr_and_toliteral_work
+; $tmp = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14];
+; return tostr($tmp);
+"[map]"
+// Note: item order is different here than in Stunt (but stable). That's *probably* fine.
+; return toliteral($tmp);
+"[#-1 -> #-1, \"1\" -> {}, \"2\" -> [], 5 -> 5, 3.14 -> 3.14]"
