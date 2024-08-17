@@ -1,0 +1,25 @@
+{
+  "name": "moot-lang",
+  "displayName": "moot-lang",
+  "description": "Syntax highlighting for .moot test files",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "moot",
+      "aliases": ["moot", "moot"],
+      "extensions": [".moot"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "moot",
+      "scopeName": "source.moot",
+      "path": "./syntaxes/moot.tmLanguage.json"
+    }]
+  }
+}

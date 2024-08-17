@@ -35,6 +35,7 @@ comments:
 excludes:
   - \.gitignore
   - \.gitmodules
+  - \.vscodeignore
   - .*lock
   - \.git/.*
   - \.idea/.*
