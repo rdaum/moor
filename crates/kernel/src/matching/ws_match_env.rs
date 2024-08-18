@@ -21,7 +21,7 @@ use crate::matching::match_env::MatchEnvironment;
 
 /// A "match environment" which matches out of the current DB world state.
 pub struct WsMatchEnv<'a> {
-    pub(crate) ws: &'a mut dyn WorldState,
+    pub(crate) ws: &'a dyn WorldState,
     pub(crate) perms: Objid,
 }
 

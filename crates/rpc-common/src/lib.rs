@@ -13,6 +13,7 @@
 //
 
 use bincode::{Decode, Encode};
+use moor_values::model::ObjectRef;
 use moor_values::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
 use moor_values::{Objid, Var, Symbol};
 use std::time::SystemTime;
@@ -48,7 +49,7 @@ pub enum RpcRequest {
     /// Establish a new connection, requesting a client token and a connection object
     ConnectionEstablish(String),
     /// Anonymously request a sysprop (e.g. $login.welcome_message)
-    RequestSysProp(ClientToken, Symbol, Symbol),
+    RequestSysProp(ClientToken, ObjectRef, Symbol),
     /// Login using the words (e.g. "create player bob" or "connect player bob") and return an
     /// auth token and the object id of the player. None if the login failed.
     LoginCommand(ClientToken, Vec<String>, bool /* attach? */),
@@ -59,13 +60,13 @@ pub enum RpcRequest {
     /// Send a command to be executed.
     Command(ClientToken, AuthToken, String),
     /// Return the (visible) verbs on the given object.
-    Verbs(ClientToken, AuthToken, Objid),
+    Verbs(ClientToken, AuthToken, ObjectRef),
     /// Return the (visible) properties on the given object.
-    Properties(ClientToken, AuthToken, Objid),
+    Properties(ClientToken, AuthToken, ObjectRef),
     /// Retrieve the given verb code or property.
-    Retrieve(ClientToken, AuthToken, Objid, EntityType, Symbol),
+    Retrieve(ClientToken, AuthToken, ObjectRef, EntityType, Symbol),
     /// Attempt to program the object with the given verb code
-    Program(ClientToken, AuthToken, String, String, Vec<String>),
+    Program(ClientToken, AuthToken, ObjectRef, Symbol, Vec<String>),
     /// Respond to a request for input.
     RequestedInput(ClientToken, AuthToken, u128, String),
     /// Send an "out of band" command to be executed.

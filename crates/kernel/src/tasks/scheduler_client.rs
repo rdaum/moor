@@ -20,7 +20,7 @@ use tracing::{instrument, trace};
 use uuid::Uuid;
 
 use moor_compiler::{compile, Program};
-use moor_values::model::{PropDef, PropPerms, VerbDef, VerbDefs};
+use moor_values::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_values::{Objid, Var, Symbol};
 
 use crate::config::Config;
@@ -200,7 +200,7 @@ impl SchedulerClient {
         &self,
         player: Objid,
         perms: Objid,
-        object_name: String,
+        obj: ObjectRef,
         verb_name: Symbol,
         code: Vec<String>,
     ) -> Result<(Objid, Symbol), SchedulerError> {
@@ -209,7 +209,7 @@ impl SchedulerClient {
             .send(SchedulerClientMsg::SubmitProgramVerb {
                 player,
                 perms,
-                object_name,
+                obj,
                 verb_name,
                 code,
                 reply,
@@ -224,14 +224,14 @@ impl SchedulerClient {
     pub fn request_system_property(
         &self,
         player: Objid,
-        object: Symbol,
+        obj: ObjectRef,
         property: Symbol,
     ) -> Result<Var, SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestSystemProperty {
                 player,
-                object,
+                obj,
                 property,
                 reply,
             })
@@ -257,14 +257,14 @@ impl SchedulerClient {
         &self,
         player: Objid,
         perms: Objid,
-        object: Objid,
+        obj: ObjectRef,
     ) -> Result<VerbDefs, SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestVerbs {
                 player,
                 perms,
-                object,
+                obj,
                 reply,
             })
             .map_err(|_| SchedulerError::SchedulerNotResponding)?;
@@ -278,7 +278,7 @@ impl SchedulerClient {
         &self,
         player: Objid,
         perms: Objid,
-        object: Objid,
+        obj: ObjectRef,
         verb: Symbol,
     ) -> Result<(VerbDef, Vec<String>), SchedulerError> {
         let (reply, receive) = oneshot::channel();
@@ -286,7 +286,7 @@ impl SchedulerClient {
             .send(SchedulerClientMsg::RequestVerbCode {
                 player,
                 perms,
-                object,
+                obj,
                 verb,
                 reply,
             })
@@ -301,14 +301,14 @@ impl SchedulerClient {
         &self,
         player: Objid,
         perms: Objid,
-        object: Objid,
+        obj: ObjectRef,
     ) -> Result<Vec<(PropDef, PropPerms)>, SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestProperties {
                 player,
                 perms,
-                object,
+                obj,
                 reply,
             })
             .map_err(|_| SchedulerError::SchedulerNotResponding)?;
@@ -322,7 +322,7 @@ impl SchedulerClient {
         &self,
         player: Objid,
         perms: Objid,
-        object: Objid,
+        obj: ObjectRef,
         property: Symbol,
     ) -> Result<(PropDef, PropPerms, Var), SchedulerError> {
         let (reply, receive) = oneshot::channel();
@@ -330,7 +330,7 @@ impl SchedulerClient {
             .send(SchedulerClientMsg::RequestProperty {
                 player,
                 perms,
-                object,
+                obj,
                 property,
                 reply,
             })
@@ -388,7 +388,7 @@ pub enum SchedulerClientMsg {
     SubmitProgramVerb {
         player: Objid,
         perms: Objid,
-        object_name: String,
+        obj: ObjectRef,
         verb_name: Symbol,
         code: Vec<String>,
         reply: oneshot::Sender<Result<(Objid, Symbol), SchedulerError>>,
@@ -397,7 +397,7 @@ pub enum SchedulerClientMsg {
     /// (Used by the login process, unauthenticated)
     RequestSystemProperty {
         player: Objid,
-        object: Symbol,
+        obj: ObjectRef,
         property: Symbol,
         reply: oneshot::Sender<Result<Var, SchedulerError>>,
     },
@@ -405,14 +405,14 @@ pub enum SchedulerClientMsg {
     RequestVerbs {
         player: Objid,
         perms: Objid,
-        object: Objid,
+        obj: ObjectRef,
         reply: oneshot::Sender<Result<VerbDefs, SchedulerError>>,
     },
     /// Request the decompiled code of a verb along with its definition.
     RequestVerbCode {
         player: Objid,
         perms: Objid,
-        object: Objid,
+        obj: ObjectRef,
         verb: Symbol,
         reply: oneshot::Sender<Result<(VerbDef, Vec<String>), SchedulerError>>,
     },
@@ -420,14 +420,14 @@ pub enum SchedulerClientMsg {
     RequestProperties {
         player: Objid,
         perms: Objid,
-        object: Objid,
+        obj: ObjectRef,
         reply: oneshot::Sender<Result<Vec<(PropDef, PropPerms)>, SchedulerError>>,
     },
     /// Request the description and contents of a property.
     RequestProperty {
         player: Objid,
         perms: Objid,
-        object: Objid,
+        obj: ObjectRef,
         property: Symbol,
         reply: oneshot::Sender<Result<(PropDef, PropPerms, Var), SchedulerError>>,
     },

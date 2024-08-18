@@ -16,12 +16,12 @@
 
 use crate::worldstate_transaction::WorldStateTransaction;
 use crate::{RelationalTransaction, RelationalWorldStateTransaction, WorldStateTable};
-use moor_values::model::ObjSet;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbAttrs};
 use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::model::{HasUuid, Named};
 use moor_values::model::{ObjAttrs, PropFlag, ValSet};
+use moor_values::model::{ObjSet, ObjectRef};
 use moor_values::util::BitEnum;
 use moor_values::Objid;
 use moor_values::Symbol;
@@ -1049,7 +1049,10 @@ where
 
     // Verify it's gone.
     let result = tx.get_object_name(tobj);
-    assert_eq!(result.err().unwrap(), WorldStateError::ObjectNotFound(tobj));
+    assert_eq!(
+        result.err().unwrap(),
+        WorldStateError::ObjectNotFound(ObjectRef::Id(tobj))
+    );
 
     // Create two new objects and root the second off the first.
     let a = tx
@@ -1068,7 +1071,10 @@ where
     // Recycle the child, and verify it's gone.
     tx.recycle_object(b).expect("Unable to recycle object");
     let result = tx.get_object_name(b);
-    assert_eq!(result.err().unwrap(), WorldStateError::ObjectNotFound(b));
+    assert_eq!(
+        result.err().unwrap(),
+        WorldStateError::ObjectNotFound(ObjectRef::Id(b))
+    );
 
     // Verify that children list is empty for the parent.
     assert!(tx.get_object_children(a).unwrap().is_empty());
@@ -1098,7 +1104,10 @@ where
 
     tx.recycle_object(c).expect("Unable to recycle object");
     let result = tx.get_object_name(c);
-    assert_eq!(result.err().unwrap(), WorldStateError::ObjectNotFound(c));
+    assert_eq!(
+        result.err().unwrap(),
+        WorldStateError::ObjectNotFound(ObjectRef::Id(c))
+    );
 
     // Verify the property is still there.
     let (prop, v, perms, _) = tx
@@ -1127,7 +1136,10 @@ where
 
     tx.recycle_object(a).expect("Unable to recycle object");
     let result = tx.get_object_name(a);
-    assert_eq!(result.err().unwrap(), WorldStateError::ObjectNotFound(a));
+    assert_eq!(
+        result.err().unwrap(),
+        WorldStateError::ObjectNotFound(ObjectRef::Id(a))
+    );
 
     // Verify the child object is still there despite its parent being destroyed.
     let result = tx.get_object_name(d);

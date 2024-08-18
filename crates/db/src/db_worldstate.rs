@@ -15,7 +15,6 @@
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-use moor_values::model::HasUuid;
 use moor_values::model::ObjSet;
 use moor_values::model::Perms;
 use moor_values::model::VerbInfo;
@@ -24,6 +23,7 @@ use moor_values::model::WorldStateError;
 use moor_values::model::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::model::{CommitResult, PropPerms, ValSet};
+use moor_values::model::{HasUuid, ObjectRef};
 use moor_values::model::{ObjAttrs, ObjFlag};
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::model::{PropDef, PropDefs};
@@ -224,7 +224,7 @@ impl WorldState for DbTxWorldState {
         pname: Symbol,
     ) -> Result<Var, WorldStateError> {
         if obj == NOTHING || !self.valid(obj)? {
-            return Err(WorldStateError::ObjectNotFound(obj));
+            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(obj)));
         }
 
         // Special properties like namnne, location, and contents get treated specially.
@@ -592,7 +592,7 @@ impl WorldState for DbTxWorldState {
         vname: Symbol,
     ) -> Result<VerbDef, WorldStateError> {
         if !self.tx.object_valid(obj)? {
-            return Err(WorldStateError::ObjectNotFound(obj));
+            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(obj)));
         }
 
         let vh = self.tx.get_verb_by_name(obj, vname)?;

@@ -14,8 +14,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use moor_values::model::WorldStateError;
 use moor_values::model::{ObjSet, ValSet};
+use moor_values::model::{ObjectRef, WorldStateError};
 use moor_values::Objid;
 use moor_values::NOTHING;
 
@@ -75,7 +75,7 @@ impl MatchEnvironment for MockMatchEnv {
         self.objects
             .get(&oid)
             .map(|o| o.location)
-            .ok_or(WorldStateError::ObjectNotFound(oid))
+            .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(oid)))
     }
 }
 
