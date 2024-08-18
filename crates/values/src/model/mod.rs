@@ -17,7 +17,7 @@ use std::fmt::Debug;
 use thiserror::Error;
 
 pub use crate::model::defset::{Defs, DefsIter, HasUuid, Named};
-pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag};
+pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, ObjectRef};
 pub use crate::model::objset::{ObjSet, ObjSetIter};
 pub use crate::model::permissions::Perms;
 pub use crate::model::propdef::{PropDef, PropDefs};

@@ -27,7 +27,7 @@ use uuid::Uuid;
 
 use moor_compiler::{compile, program_to_tree, unparse, Program};
 use moor_db::Database;
-use moor_values::model::{BinaryType, HasUuid, ValSet, VerbAttrs};
+use moor_values::model::{BinaryType, HasUuid, ObjectRef, ValSet, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
 use moor_values::model::{WorldState, WorldStateError};
 
@@ -274,6 +274,55 @@ impl Scheduler {
         Ok(SchedulerClient::new(self.scheduler_sender.clone()))
     }
 
+    fn match_object_ref(
+        &self,
+        player: Objid,
+        perms: Objid,
+        obj_ref: ObjectRef,
+        tx: &mut dyn WorldState,
+    ) -> Result<Objid, WorldStateError> {
+        match &obj_ref {
+            ObjectRef::Id(obj) => {
+                if !tx.valid(*obj)? {
+                    return Err(WorldStateError::ObjectNotFound(obj_ref));
+                }
+                Ok(*obj)
+            }
+            ObjectRef::SysObj(names) => {
+                // Follow the chain of properties from #0 to the actual object.
+                // The final value has to be an object, or this is an error.
+                let mut obj = SYSTEM_OBJECT;
+                for name in names {
+                    let Ok(value) = tx.retrieve_property(perms, obj, *name) else {
+                        return Err(WorldStateError::ObjectNotFound(obj_ref));
+                    };
+                    let Variant::Obj(o) = value.variant() else {
+                        return Err(WorldStateError::ObjectNotFound(obj_ref));
+                    };
+                    obj = o;
+                }
+                if !tx.valid(obj)? {
+                    return Err(WorldStateError::ObjectNotFound(obj_ref));
+                }
+                Ok(obj)
+            }
+            ObjectRef::Match(object_name) => {
+                let match_env = WsMatchEnv { ws: tx, perms };
+                let matcher = MatchEnvironmentParseMatcher {
+                    env: match_env,
+                    player,
+                };
+                let Ok(Some(o)) = matcher.match_object(object_name) else {
+                    let _ = tx.rollback();
+                    return Err(WorldStateError::ObjectNotFound(obj_ref));
+                };
+                if !tx.valid(o)? {
+                    return Err(WorldStateError::ObjectNotFound(obj_ref));
+                }
+                Ok(o)
+            }
+        }
+    }
     /// Start a transaction, match the object name and verb name, and if it exists and the
     /// permissions are correct, program the verb with the given code.
     // TODO: this probably doesn't belong on scheduler
@@ -282,7 +331,7 @@ impl Scheduler {
         &self,
         player: Objid,
         perms: Objid,
-        object_name: String,
+        obj: ObjectRef,
         verb_name: Symbol,
         code: Vec<String>,
     ) -> Result<(Objid, Symbol), SchedulerError> {
@@ -291,16 +340,7 @@ impl Scheduler {
         for _ in 0..NUM_VERB_PROGRAM_ATTEMPTS {
             let mut tx = self.database.new_world_state().unwrap();
 
-            let match_env = WsMatchEnv {
-                ws: tx.as_mut(),
-                perms,
-            };
-            let matcher = MatchEnvironmentParseMatcher {
-                env: match_env,
-                player,
-            };
-            let Ok(Some(o)) = matcher.match_object(&object_name) else {
-                let _ = tx.rollback();
+            let Ok(o) = self.match_object_ref(player, perms, obj.clone(), tx.as_mut()) else {
                 return Err(CommandExecutionError(CommandError::NoObjectMatch));
             };
 
@@ -521,25 +561,25 @@ impl Scheduler {
             SchedulerClientMsg::SubmitProgramVerb {
                 player,
                 perms,
-                object_name,
+                obj,
                 verb_name,
                 code,
                 reply,
             } => {
-                let result = self.program_verb(player, perms, object_name, verb_name, code);
+                let result = self.program_verb(player, perms, obj, verb_name, code);
                 reply
                     .send(result)
                     .expect("Could not send program verb reply");
             }
             SchedulerClientMsg::RequestSystemProperty {
                 player: _,
-                object,
+                obj,
                 property,
                 reply,
             } => {
                 // TODO: check perms here
 
-                let world_state = match self.database.new_world_state() {
+                let mut world_state = match self.database.new_world_state() {
                     Ok(ws) => ws,
                     Err(e) => {
                         reply
@@ -549,26 +589,17 @@ impl Scheduler {
                     }
                 };
 
-                let object = Symbol::mk_case_insensitive(object.as_str());
-                let property = Symbol::mk_case_insensitive(property.as_str());
-                let Ok(sysprop) =
-                    world_state.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, object)
+                let Ok(object) =
+                    self.match_object_ref(SYSTEM_OBJECT, SYSTEM_OBJECT, obj, world_state.as_mut())
                 else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                         .expect("Could not send system property reply");
                     return;
                 };
-
-                let Variant::Obj(sysprop) = sysprop.variant() else {
-                    reply
-                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
-                        .expect("Could not send system property reply");
-                    return;
-                };
-
+                let property = Symbol::mk_case_insensitive(property.as_str());
                 let Ok(property_value) =
-                    world_state.retrieve_property(SYSTEM_OBJECT, sysprop, property)
+                    world_state.retrieve_property(SYSTEM_OBJECT, object, property)
                 else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
@@ -585,9 +616,9 @@ impl Scheduler {
                 reply.send(result).expect("Could not send checkpoint reply");
             }
             SchedulerClientMsg::RequestProperties {
-                player: _,
+                player,
                 perms,
-                object,
+                obj,
                 reply,
             } => {
                 // TODO: check programmer perms here
@@ -599,6 +630,14 @@ impl Scheduler {
                             .expect("Could not send properties reply");
                         return;
                     }
+                };
+
+                let Ok(object) = self.match_object_ref(player, perms, obj, world_state.as_mut())
+                else {
+                    reply
+                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
+                        .expect("Could not send properties reply");
+                    return;
                 };
 
                 let properties = match world_state.properties(perms, object) {
@@ -638,7 +677,7 @@ impl Scheduler {
             SchedulerClientMsg::RequestProperty {
                 player,
                 perms,
-                object,
+                obj,
                 property,
                 reply,
             } => {
@@ -653,6 +692,14 @@ impl Scheduler {
                 };
 
                 // TODO: User must be a programmer...
+
+                let Ok(object) = self.match_object_ref(player, perms, obj, world_state.as_mut())
+                else {
+                    reply
+                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
+                        .expect("Could not send property reply");
+                    return;
+                };
 
                 let property_value = match world_state.retrieve_property(player, object, property) {
                     Ok(v) => v,
@@ -683,12 +730,12 @@ impl Scheduler {
             SchedulerClientMsg::RequestVerbs {
                 player: _,
                 perms,
-                object,
+                obj,
                 reply,
             } => {
                 // TODO: User must be a programmer...
 
-                let world_state = match self.database.new_world_state() {
+                let mut world_state = match self.database.new_world_state() {
                     Ok(ws) => ws,
                     Err(e) => {
                         reply
@@ -696,6 +743,14 @@ impl Scheduler {
                             .expect("Could not send verbs reply");
                         return;
                     }
+                };
+
+                let Ok(object) = self.match_object_ref(perms, perms, obj, world_state.as_mut())
+                else {
+                    reply
+                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
+                        .expect("Could not send verbs reply");
+                    return;
                 };
 
                 let verbdefs = match world_state.verbs(perms, object) {
@@ -715,11 +770,11 @@ impl Scheduler {
             SchedulerClientMsg::RequestVerbCode {
                 player: _,
                 perms,
-                object,
+                obj,
                 verb,
                 reply,
             } => {
-                let world_state = match self.database.new_world_state() {
+                let mut world_state = match self.database.new_world_state() {
                     Ok(ws) => ws,
                     Err(e) => {
                         reply
@@ -730,6 +785,13 @@ impl Scheduler {
                 };
 
                 // TODO: User must be a programmer...
+                let Ok(object) = self.match_object_ref(perms, perms, obj, world_state.as_mut())
+                else {
+                    reply
+                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
+                        .expect("Could not send verb code reply");
+                    return;
+                };
 
                 let verb_info = match world_state.find_method_verb_on(perms, object, verb) {
                     Ok(v) => v,

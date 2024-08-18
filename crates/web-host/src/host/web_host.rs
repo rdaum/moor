@@ -21,6 +21,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
 use eyre::eyre;
 
+use moor_values::model::ObjectRef;
 use moor_values::tasks::VerbProgramError;
 use moor_values::{Objid, Symbol};
 use rpc_async_client::rpc_client::RpcSendClient;
@@ -383,7 +384,7 @@ pub async fn welcome_message_handler(
         &mut rpc_client,
         RpcRequest::RequestSysProp(
             client_token.clone(),
-            Symbol::mk("login"),
+            ObjectRef::SysObj(vec![Symbol::mk("login")]),
             Symbol::mk("welcome_message"),
         ),
     )
@@ -461,7 +462,11 @@ pub async fn verb_program_handler(
             Err(status) => return status.into_response(),
         };
 
-    let object = format!("#{}", object);
+    let Some(object) = ObjectRef::parse_curie(&object) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+
+    let name = Symbol::mk(&name);
 
     let expression = String::from_utf8_lossy(&expression).to_string();
 
@@ -526,10 +531,9 @@ pub async fn verb_retrieval_handler(
             Err(status) => return status.into_response(),
         };
 
-    let Ok(onum) = object.parse() else {
+    let Some(object) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    let object = Objid(onum);
 
     let name = Symbol::mk(&name);
 
@@ -598,7 +602,9 @@ pub async fn verbs_handler(
             Err(status) => return status.into_response(),
         };
 
-    let object = Objid(object.parse().unwrap());
+    let Some(object) = ObjectRef::parse_curie(&object) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
 
     let response = match rpc_call(
         client_id,
@@ -652,7 +658,9 @@ pub async fn properties_handler(
             Err(status) => return status.into_response(),
         };
 
-    let object = Objid(object.parse().unwrap());
+    let Some(object) = ObjectRef::parse_curie(&object) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
 
     let response = match rpc_call(
         client_id,
@@ -706,10 +714,9 @@ pub async fn property_retrieval_handler(
             Err(status) => return status.into_response(),
         };
 
-    let Ok(onum) = object.parse() else {
+    let Some(object) = ObjectRef::parse_curie(&object) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    let object = Objid(onum);
 
     let prop_name = Symbol::mk(&prop_name);
 

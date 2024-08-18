@@ -21,7 +21,75 @@ use bytes::Bytes;
 use enum_primitive_derive::Primitive;
 
 use crate::util::BitEnum;
-use crate::Objid;
+use crate::var::{Objid, Symbol};
+
+/// A reference to an object in the system, used in external interface (RPC, etc.) to refer to
+/// objects.
+///
+/// Can be encoded to/from CURIEs (compact URIs) for ease of use in external interfaces.
+///
+///     oid:1234 -> #1234 ObjectRef::OId(1234)
+///     sysobj:ident[.subident] -> $ident[.subident] ObjectRef::SysObj(["ident", "subident"])
+///     match("phrase") -> env match onn "phrase" ObjectRef::Match("phrase")
+
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub enum ObjectRef {
+    /// An absolute numeric object reference (e.g. #1234)
+    Id(Objid),
+    /// A system object reference (e.g. $foo) or $foo.bar.baz
+    SysObj(Vec<Symbol>),
+    /// A string to use with the match facilities to find an object in the player's environment
+    Match(String),
+}
+
+impl ObjectRef {
+    pub fn to_curie(&self) -> String {
+        match self {
+            ObjectRef::Id(oid) => format!("oid:{}", oid.0),
+            ObjectRef::SysObj(symbols) => {
+                let mut s = String::new();
+                for sym in symbols {
+                    s.push_str(sym.as_str());
+                    s.push('.');
+                }
+                format!("sysobj:{}", s)
+            }
+            ObjectRef::Match(s) => format!("match(\"{}\")", s),
+        }
+    }
+
+    pub fn parse_curie(s: &str) -> Option<ObjectRef> {
+        if let Some(s) = s.strip_prefix("oid:") {
+            let id: i64 = s.parse().ok()?;
+            Some(ObjectRef::Id(Objid(id)))
+        } else if let Some(s) = s.strip_prefix("sysobj:") {
+            let symbols = s.split('.').map(Symbol::mk).collect();
+            Some(ObjectRef::SysObj(symbols))
+        } else if let Some(s) = s.strip_prefix("match(\"") {
+            let s = s.strip_suffix("\")")?;
+            Some(ObjectRef::Match(s.to_string()))
+        } else {
+            None
+        }
+    }
+}
+
+impl Display for ObjectRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Id(id) => write!(f, "#{}", id),
+            Self::SysObj(symbols) => {
+                let mut s = String::new();
+                for sym in symbols {
+                    s.push_str(sym.as_str());
+                    s.push('.');
+                }
+                write!(f, "${}", s)
+            }
+            Self::Match(s) => write!(f, "{}", s),
+        }
+    }
+}
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
 pub enum ObjFlag {

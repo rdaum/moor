@@ -24,7 +24,7 @@ use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::verb_info::VerbInfo;
 use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
-use crate::model::{CommitResult, PropPerms};
+use crate::model::{CommitResult, ObjectRef, PropPerms};
 use crate::model::{ObjAttr, Vid};
 use crate::util::BitEnum;
 use crate::Symbol;
@@ -35,7 +35,7 @@ use crate::{Error, Objid};
 #[derive(Error, Debug, Eq, PartialEq, Clone, Decode, Encode)]
 pub enum WorldStateError {
     #[error("Object not found: {0}")]
-    ObjectNotFound(Objid),
+    ObjectNotFound(ObjectRef),
     #[error("Object already exists: {0}")]
     ObjectAlreadyExists(Objid),
     #[error("Could not set/get object attribute; {0} on {1}")]

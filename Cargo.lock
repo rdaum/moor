@@ -1998,6 +1998,7 @@ dependencies = [
  "lazy_static",
  "num-traits",
  "paste",
+ "serde",
  "strum",
  "thiserror",
  "ustr",

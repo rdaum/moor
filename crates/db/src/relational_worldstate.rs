@@ -19,8 +19,8 @@ use crate::{
 };
 use bytes::Bytes;
 use moor_values::model::{
-    BinaryType, CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, PropDef, PropDefs,
-    PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
+    BinaryType, CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectRef, PropDef,
+    PropDefs, PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
     WorldStateError,
 };
 use moor_values::util::BitEnum;
@@ -101,7 +101,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectFlags, obj)
             .map_err(err_map)?
-            .ok_or(WorldStateError::ObjectNotFound(obj))
+            .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(obj)))
     }
 
     fn get_players(&self) -> Result<ObjSet, WorldStateError> {
@@ -135,7 +135,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectOwner, obj)
             .map_err(err_map)?
-            .ok_or(WorldStateError::ObjectNotFound(obj))
+            .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(obj)))
     }
 
     fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError> {
@@ -161,7 +161,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectName, obj)
             .map_err(err_map)?
-            .ok_or(WorldStateError::ObjectNotFound(obj))?;
+            .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(obj)))?;
         Ok(sh.0)
     }
 

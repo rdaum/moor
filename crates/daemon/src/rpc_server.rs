@@ -34,7 +34,7 @@ use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
 use moor_kernel::tasks::TaskHandle;
 use moor_kernel::SchedulerClient;
-use moor_values::model::{Named, PropFlag, ValSet, VerbFlag};
+use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag};
 use moor_values::tasks::SchedulerError::CommandExecutionError;
 use moor_values::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
 use moor_values::util::parse_into_words;
@@ -544,7 +544,7 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         player: Objid,
-        object: Symbol,
+        object: ObjectRef,
         property: Symbol,
     ) -> Result<RpcResponse, RpcRequestError> {
         let pv = match scheduler_client.request_system_property(player, object, property) {
@@ -829,8 +829,8 @@ impl RpcServer {
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: Objid,
-        object: String,
-        verb: String,
+        object: ObjectRef,
+        verb: Symbol,
         code: Vec<String>,
     ) -> Result<RpcResponse, RpcRequestError> {
         if self.clone().new_session(client_id, connection).is_err() {
