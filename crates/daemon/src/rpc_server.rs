@@ -38,10 +38,9 @@ use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag};
 use moor_values::tasks::SchedulerError::CommandExecutionError;
 use moor_values::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
 use moor_values::util::parse_into_words;
-use moor_values::Symbol;
 use moor_values::Variant;
 use moor_values::SYSTEM_OBJECT;
-use moor_values::{v_objid, v_string};
+use moor_values::{v_objid, v_str, Symbol};
 use moor_values::{Objid, Var};
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
 use rpc_common::{
@@ -604,7 +603,7 @@ impl RpcServer {
             connection,
             ObjectRef::Id(SYSTEM_OBJECT),
             Symbol::mk("do_login_command"),
-            args.iter().map(|s| v_string(s.clone())).collect(),
+            args.iter().map(|s| v_str(&s)).collect(),
             args.join(" "),
             SYSTEM_OBJECT,
             session,

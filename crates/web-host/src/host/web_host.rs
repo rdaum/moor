@@ -12,8 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::host::var_as_json;
 use crate::host::ws_connection::WebSocketConnection;
+use crate::host::{json_as_var, var_as_json};
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
@@ -432,6 +432,80 @@ pub async fn eval_handler(
         Ok(RpcResponse::EvalResult(value)) => {
             debug!("Eval result: {:?}", value);
             Json(var_as_json(&value)).into_response()
+        }
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(status) => status.into_response(),
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response
+}
+
+// RpcRequest::InvokeVerb(ClientToken, AuthToken, ObjectRef, Symbol, Vec<Var>)
+// POST /verb/invoke/{object}/{verb}, body: {args} as JSON list
+pub async fn verb_invoke_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Path((object, verb)): Path<(String, String)>,
+    Json(args): Json<Vec<serde_json::Value>>,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let Some(object) = ObjectRef::parse_curie(&object) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+
+    let verb = Symbol::mk(&verb);
+
+    let mut varargs = vec![];
+    for arg in args {
+        if let Some(var) = json_as_var(&arg) {
+            varargs.push(var);
+        } else {
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    }
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        RpcRequest::InvokeVerb(
+            client_token.clone(),
+            auth_token.clone(),
+            object,
+            verb,
+            varargs,
+        ),
+    )
+    .await
+    {
+        Ok(RpcResponse::InvokeResult(Ok(value))) => {
+            debug!("Invoke verb result: {:?}", value);
+            let result_json = var_as_json(&value);
+            Json(json!({
+                "result": result_json
+            }))
+            .into_response()
+        }
+        Ok(RpcResponse::InvokeResult(Err(e))) => {
+            error!("Invoke verb error: {:?}", e);
+            Json(json!({
+                "error": e.to_string()
+            }))
+            .into_response()
         }
         Ok(r) => {
             error!("Unexpected response from RPC server: {:?}", r);
