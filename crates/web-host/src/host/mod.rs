@@ -15,7 +15,7 @@
 pub mod web_host;
 mod ws_connection;
 
-use moor_values::{Var, Variant};
+use moor_values::{v_float, v_int, v_list, v_none, v_str, Var, Variant};
 use serde::Serialize;
 use serde_derive::Deserialize;
 use serde_json::{json, Number};
@@ -61,6 +61,34 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
         Variant::Map(_m) => {
             unimplemented!("Maps are not supported in JSON serialization");
         }
+    }
+}
+
+pub fn json_as_var(j: &serde_json::Value) -> Option<Var> {
+    match j {
+        serde_json::Value::Null => Some(v_none()),
+        serde_json::Value::String(s) => Some(v_str(&s)),
+        serde_json::Value::Number(n) => Some(if n.is_i64() {
+            v_int(n.as_i64().unwrap())
+        } else {
+            v_float(n.as_f64().unwrap())
+        }),
+        serde_json::Value::Object(_o) => {
+            // Object references in JSON are encoded as one of:
+            // { "oid": 1234 }
+            // { "sysobj": "name[.name]" }
+            // { "match": "name[.name]" }
+            // Not valid.
+            unimplemented!("Object references in JSON");
+        }
+        serde_json::Value::Array(a) => {
+            let mut v = Vec::new();
+            for e in a.iter() {
+                v.push(json_as_var(e)?);
+            }
+            Some(v_list(&v))
+        }
+        _ => None,
     }
 }
 
