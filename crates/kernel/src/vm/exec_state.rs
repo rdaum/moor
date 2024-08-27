@@ -17,9 +17,9 @@ use std::time::{Duration, SystemTime};
 use bincode::{Decode, Encode};
 use daumtils::PhantomUnsync;
 
-use moor_values::var::Var;
-use moor_values::var::{Objid, Symbol};
+use moor_values::Var;
 use moor_values::NOTHING;
+use moor_values::{Objid, Symbol};
 
 use crate::vm::activation::{Activation, Frame};
 use moor_values::tasks::TaskId;

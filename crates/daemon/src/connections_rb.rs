@@ -27,8 +27,8 @@ use uuid::Uuid;
 use bytes::Bytes;
 use daumtils::SliceRef;
 use moor_kernel::tasks::sessions::SessionError;
-use moor_values::var::Objid;
 use moor_values::AsByteBuffer;
+use moor_values::Objid;
 use relbox::{relation_info_for, RelBox, RelationId, RelationInfo, Transaction};
 use rpc_common::RpcRequestError;
 
@@ -444,7 +444,7 @@ impl ConnectionsDB for ConnectionsRb {
 mod tests {
     use std::sync::Arc;
 
-    use moor_values::var::Objid;
+    use moor_values::Objid;
 
     use crate::connections::ConnectionsDB;
     use crate::connections_rb::ConnectionsRb;

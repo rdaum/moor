@@ -12,6 +12,7 @@ rust-version.workspace = true
 description = "A tool to connect to a local or remote moor daemon and interact with it via the TTY."
 
 [dependencies]
+moor-compiler = { path = "../compiler" }
 moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
 rpc-sync-client = { path = "../rpc-sync-client" }

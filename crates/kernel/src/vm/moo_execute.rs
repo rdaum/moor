@@ -17,21 +17,22 @@ use std::time::Duration;
 
 use tracing::debug;
 
-use moor_compiler::{Op, ScatterLabel};
-use moor_values::model::WorldState;
-use moor_values::model::WorldStateError;
-use moor_values::var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
-use moor_values::var::Symbol;
-use moor_values::var::Variant;
-use moor_values::var::{v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, Var};
-use moor_values::var::{v_empty_map, v_float};
-use moor_values::var::{v_listv, Error};
-
 use crate::tasks::sessions::Session;
 use crate::vm::activation::Frame;
 use crate::vm::moo_frame::{CatchType, ScopeType};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VMExecState, VmExecParams};
+use moor_compiler::{Op, ScatterLabel};
+use moor_values::model::WorldState;
+use moor_values::model::WorldStateError;
+
+use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_TYPE, E_VARNF};
+use moor_values::Variant;
+use moor_values::{
+    v_bool, v_empty_list, v_empty_map, v_err, v_float, v_int, v_list, v_none, v_obj, v_objid,
+    IndexMode, Sequence,
+};
+use moor_values::{Symbol, VarType};
 
 macro_rules! binary_bool_op {
     ( $f:ident, $op:tt ) => {
@@ -55,18 +56,6 @@ macro_rules! binary_var_op {
             }
         }
     };
-}
-
-#[inline]
-pub(crate) fn one_to_zero_index(v: &Var) -> Result<usize, Error> {
-    let Variant::Int(index) = v.variant() else {
-        return Err(E_TYPE);
-    };
-    let index = index - 1;
-    if index < 0 {
-        return Err(E_RANGE);
-    }
-    Ok(index as usize)
 }
 
 /// Main VM opcode execution for MOO stack frames. The actual meat of the MOO virtual machine.
@@ -201,7 +190,7 @@ pub fn moo_frame_execute(
                 // Track iteration count for range; set id to current list element for the count,
                 // then increment the count, rewind the program counter to the top of the loop, and
                 // continue.
-                f.set_env(id, l.get(count).unwrap().clone());
+                f.set_env(id, l.index(count).unwrap().clone());
                 f.poke(0, v_int((count + 1) as i64));
             }
             Op::ForRange {
@@ -299,62 +288,51 @@ pub fn moo_frame_execute(
             Op::ImmEmptyList => f.push(v_empty_list()),
             Op::ListAddTail => {
                 let (tail, list) = (f.pop(), f.peek_top_mut());
-                let Variant::List(ref mut list) = list.variant_mut() else {
+                if list.type_code() != VarType::TYPE_LIST {
                     f.pop();
                     return state.push_error(E_TYPE);
-                };
-
+                }
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA in list add and append
-                let result = list.push(tail);
-                f.poke(0, result);
+                let result = list.push(&tail);
+                match result {
+                    Ok(v) => {
+                        f.poke(0, v);
+                    }
+                    Err(e) => {
+                        f.pop();
+                        return state.push_error(e);
+                    }
+                }
             }
             Op::ListAppend => {
                 let (tail, list) = (f.pop(), f.peek_top_mut());
 
-                let Variant::List(list) = list.variant_mut() else {
+                // Don't allow strings here.
+                if tail.type_code() != list.type_code() || list.type_code() != VarType::TYPE_LIST {
                     f.pop();
-
                     return state.push_error(E_TYPE);
-                };
-
-                let Variant::List(tail) = tail.take_variant() else {
-                    f.pop();
-
-                    return state.push_error(E_TYPE);
-                };
-
+                }
                 let new_list = list.append(&tail);
-                f.poke(0, new_list);
+                match new_list {
+                    Ok(v) => {
+                        f.poke(0, v);
+                    }
+                    Err(e) => {
+                        f.pop();
+                        return state.push_error(e);
+                    }
+                }
             }
             Op::IndexSet => {
                 let (rhs, index, lhs) = (f.pop(), f.pop(), f.peek_top_mut());
-                match lhs.variant() {
-                    Variant::Map(m) => {
-                        if matches!(index.variant(), Variant::Map(_) | Variant::List(_)) {
-                            f.pop();
-                            return state.push_error(E_TYPE);
-                        } else {
-                            let nmap = m.insert(index, rhs.clone());
-                            f.poke(0, nmap);
-                        }
+                let result = lhs.index_set(&index, &rhs, IndexMode::OneBased);
+                match result {
+                    Ok(v) => {
+                        f.poke(0, v);
                     }
-                    _ => {
-                        let i = match one_to_zero_index(&index) {
-                            Ok(i) => i,
-                            Err(e) => {
-                                f.pop();
-                                return state.push_error(e);
-                            }
-                        };
-                        match lhs.index_set(i, rhs) {
-                            Ok(v) => {
-                                f.poke(0, v);
-                            }
-                            Err(e) => {
-                                f.pop();
-                                return state.push_error(e);
-                            }
-                        }
+                    Err(e) => {
+                        f.pop();
+                        return state.push_error(e);
                     }
                 }
             }
@@ -367,16 +345,16 @@ pub fn moo_frame_execute(
             }
             Op::MapInsert => {
                 let (value, key, map) = (f.pop(), f.pop(), f.peek_top_mut());
-                if matches!(key.variant(), Variant::Map(_) | Variant::List(_)) {
-                    f.pop();
-                    return state.push_error(E_TYPE);
+                let result = map.index_set(&key, &value, IndexMode::OneBased);
+                match result {
+                    Ok(v) => {
+                        f.poke(0, v);
+                    }
+                    Err(e) => {
+                        f.pop();
+                        return state.push_error(e);
+                    }
                 }
-                let Variant::Map(map) = map.variant_mut() else {
-                    f.pop();
-                    return state.push_error(E_TYPE);
-                };
-                let result = map.insert(key, value);
-                f.poke(0, result);
             }
             Op::PutTemp => {
                 f.temp = f.peek_top().clone();
@@ -406,12 +384,16 @@ pub fn moo_frame_execute(
             }
             Op::In => {
                 let (lhs, rhs) = (f.pop(), f.peek_top());
-                let r = lhs.index_in(rhs);
-                if let Variant::Err(e) = r.variant() {
-                    f.pop();
-                    return state.push_error(*e);
+                let r = lhs.index_in(rhs, false, IndexMode::OneBased);
+                match r {
+                    Ok(v) => {
+                        f.poke(0, v);
+                    }
+                    Err(e) => {
+                        f.pop();
+                        return state.push_error(e);
+                    }
                 }
-                f.poke(0, r);
             }
             Op::Mul => {
                 binary_var_op!(self, f, state, mul);
@@ -484,114 +466,49 @@ pub fn moo_frame_execute(
             }
             Op::PushRef => {
                 let (index, value) = f.peek2();
-
-                match value.variant() {
-                    Variant::Map(m) => match m.get(index) {
-                        Some(v) => {
-                            f.push(v.clone());
-                        }
-                        None => {
-                            f.pop();
-                            return state.push_error(E_RANGE);
-                        }
-                    },
-                    _ => {
-                        let index = match one_to_zero_index(index) {
-                            Ok(i) => i,
-                            Err(e) => return state.push_error(e),
-                        };
-                        match value.index(index) {
-                            Err(e) => return state.push_error(e),
-                            Ok(v) => f.push(v),
-                        }
+                let result = value.index(index, IndexMode::OneBased);
+                match result {
+                    Ok(v) => f.push(v),
+                    Err(e) => {
+                        f.pop();
+                        return state.push_error(e);
                     }
                 }
             }
             Op::Ref => {
                 let (index, value) = (f.pop(), f.peek_top());
 
-                match value.variant() {
-                    Variant::Map(m) => {
-                        let v = match m.get(&index) {
-                            Some(v) => v.clone(),
-                            None => {
-                                f.pop();
-                                return state.push_error(E_RANGE);
-                            }
-                        };
-                        f.poke(0, v);
-                    }
-                    _ => {
-                        let index = match one_to_zero_index(&index) {
-                            Ok(i) => i,
-                            Err(e) => {
-                                f.pop();
-                                return state.push_error(e);
-                            }
-                        };
-
-                        match value.index(index) {
-                            Err(e) => {
-                                f.pop();
-                                return state.push_error(e);
-                            }
-                            Ok(v) => f.poke(0, v),
-                        }
+                let result = value.index(&index, IndexMode::OneBased);
+                match result {
+                    Ok(v) => f.poke(0, v),
+                    Err(e) => {
+                        f.pop();
+                        return state.push_error(e);
                     }
                 }
             }
             Op::RangeRef => {
                 let (to, from, base) = (f.pop(), f.pop(), f.peek_top());
-                match base.variant() {
-                    Variant::Map(m) => {
-                        let r = m.range(from, to);
-                        f.poke(0, r);
-                    }
-                    _ => {
-                        match (to.variant(), from.variant()) {
-                            (Variant::Int(to), Variant::Int(from)) => {
-                                match base.range(*from, *to) {
-                                    Err(e) => {
-                                        f.pop();
-                                        return state.push_error(e);
-                                    }
-                                    Ok(v) => f.poke(0, v),
-                                }
-                            }
-                            (_, _) => return state.push_error(E_TYPE),
-                        };
-                    }
+                let result = base.range(&from, &to, IndexMode::OneBased);
+                if let Err(e) = result {
+                    f.pop();
+                    return state.push_error(e);
                 }
+                f.poke(0, result.unwrap());
             }
             Op::RangeSet => {
                 let (value, to, from, base) = (f.pop(), f.pop(), f.pop(), f.peek_top());
-
-                match base.variant() {
-                    Variant::Map(_) => {
-                        f.pop();
-                        return state.push_error(E_TYPE);
-                    }
-                    _ => match (to.variant(), from.variant()) {
-                        (Variant::Int(to), Variant::Int(from)) => {
-                            match base.range_set(value, *from, *to) {
-                                Err(e) => {
-                                    f.pop();
-                                    return state.push_error(e);
-                                }
-                                Ok(v) => f.poke(0, v),
-                            }
-                        }
-                        _ => {
-                            f.pop();
-                            return state.push_error(E_TYPE);
-                        }
-                    },
+                let result = base.range_set(&from, &to, &value, IndexMode::OneBased);
+                if let Err(e) = result {
+                    f.pop();
+                    return state.push_error(e);
                 }
+                f.poke(0, result.unwrap());
             }
             Op::Length(offset) => {
                 let v = f.peek_abs(offset.0 as usize);
                 match v.len() {
-                    Ok(l) => f.push(l),
+                    Ok(l) => f.push(v_int(l as i64)),
                     Err(e) => return state.push_error(e),
                 }
             }
@@ -605,7 +522,7 @@ pub fn moo_frame_execute(
                 let Variant::Obj(obj) = obj.variant() else {
                     return state.push_error(E_INVIND);
                 };
-                let propname = Symbol::mk_case_insensitive(propname.as_str());
+                let propname = Symbol::mk_case_insensitive(&propname.as_string());
                 let result = world_state.retrieve_property(a.permissions, *obj, propname);
                 match result {
                     Ok(v) => {
@@ -629,7 +546,7 @@ pub fn moo_frame_execute(
                 let Variant::Obj(obj) = obj.variant() else {
                     return state.push_error(E_INVIND);
                 };
-                let propname = Symbol::mk_case_insensitive(propname.as_str());
+                let propname = Symbol::mk_case_insensitive(&propname.as_string());
                 let result = world_state.retrieve_property(a.permissions, *obj, propname);
                 match result {
                     Ok(v) => {
@@ -654,7 +571,7 @@ pub fn moo_frame_execute(
                     }
                 };
 
-                let propname = Symbol::mk_case_insensitive(propname.as_str());
+                let propname = Symbol::mk_case_insensitive(&propname.as_string());
                 let update_result =
                     world_state.update_property(a.permissions, *obj, propname, &rhs.clone());
 
@@ -711,7 +628,7 @@ pub fn moo_frame_execute(
                         return state.push_error(E_TYPE);
                     }
                 };
-                let verb = Symbol::mk_case_insensitive(verb.as_str());
+                let verb = Symbol::mk_case_insensitive(&verb.as_string());
                 return state.prepare_call_verb(world_state, *obj, verb, args.clone());
             }
             Op::Return => {
@@ -732,7 +649,7 @@ pub fn moo_frame_execute(
                 };
                 return state.call_builtin_function(
                     *id,
-                    args.clone(),
+                    args.iter().collect(),
                     exec_params,
                     world_state,
                     session,
@@ -896,7 +813,7 @@ pub fn moo_frame_execute(
                                 };
                                 v.push(rest.clone());
                             }
-                            let rest = v_listv(v);
+                            let rest = v_list(&v);
                             f.set_env(id, rest);
                         }
                         ScatterLabel::Required(id) => {

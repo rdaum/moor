@@ -22,18 +22,10 @@ use eyre::Context;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::SinkExt;
 use futures_util::StreamExt;
-use termimad::MadSkin;
-use tmq::subscribe::Subscribe;
-use tmq::{request, subscribe};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::select;
-use tokio_util::codec::{Framed, LinesCodec};
-use tracing::{debug, error, info, trace, warn};
-use uuid::Uuid;
-
+use moor_compiler::to_literal;
 use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_values::util::parse_into_words;
-use moor_values::var::{Objid, Symbol, Variant};
+use moor_values::{Objid, Symbol, Variant};
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::ConnectionEstablish;
@@ -42,6 +34,14 @@ use rpc_common::{
     RpcResult, BROADCAST_TOPIC,
 };
 use rpc_common::{RpcRequest, RpcResponse};
+use termimad::MadSkin;
+use tmq::subscribe::Subscribe;
+use tmq::{request, subscribe};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::select;
+use tokio_util::codec::{Framed, LinesCodec};
+use tracing::{debug, error, info, trace, warn};
+use uuid::Uuid;
 
 /// Out of band messages are prefixed with this string, e.g. for MCP clients.
 const OUT_OF_BAND_PREFIX: &str = "#$#";
@@ -124,7 +124,7 @@ impl TelnetConnection {
         // literal form (for e.g. lists, objrefs, etc)
         match msg.variant() {
             Variant::Str(msg_text) => {
-                let formatted = output_format(msg_text.as_str(), content_type);
+                let formatted = output_format(&msg_text.as_string(), content_type);
                 self.write
                     .send(formatted)
                     .await
@@ -136,7 +136,7 @@ impl TelnetConnection {
                         trace!("Non-string in list output");
                         continue;
                     };
-                    let formatted = output_format(line.as_str(), content_type);
+                    let formatted = output_format(&line.as_string(), content_type);
                     self.write
                         .send(formatted)
                         .await
@@ -145,7 +145,7 @@ impl TelnetConnection {
             }
             _ => {
                 self.write
-                    .send(msg.to_literal())
+                    .send(to_literal(&msg))
                     .await
                     .with_context(|| "Unable to send message to client")?;
             }

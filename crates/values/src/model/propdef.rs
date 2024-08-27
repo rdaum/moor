@@ -14,8 +14,8 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
-use crate::var::Objid;
-use crate::var::Symbol;
+use crate::Objid;
+use crate::Symbol;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{binary_layout, Field};
 use bytes::Bytes;
@@ -144,9 +144,9 @@ mod tests {
     use crate::model::defset::HasUuid;
     use crate::model::propdef::{PropDef, PropDefs};
     use crate::model::ValSet;
-    use crate::var::Objid;
-    use crate::var::Symbol;
     use crate::AsByteBuffer;
+    use crate::Objid;
+    use crate::Symbol;
     use bytes::Bytes;
     use uuid::Uuid;
 

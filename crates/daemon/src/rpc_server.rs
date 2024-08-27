@@ -31,11 +31,11 @@ use moor_kernel::SchedulerClient;
 use moor_values::tasks::SchedulerError::CommandExecutionError;
 use moor_values::tasks::{CommandError, NarrativeEvent, TaskId};
 use moor_values::util::parse_into_words;
-use moor_values::var::Objid;
-use moor_values::var::Symbol;
-use moor_values::var::Variant;
-use moor_values::var::{v_objid, v_string};
+use moor_values::Objid;
+use moor_values::Symbol;
+use moor_values::Variant;
 use moor_values::SYSTEM_OBJECT;
+use moor_values::{v_objid, v_string};
 use rpc_common::RpcResponse::{LoginResult, NewConnection};
 use rpc_common::{
     AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, RpcRequest,

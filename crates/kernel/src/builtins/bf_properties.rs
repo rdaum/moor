@@ -15,11 +15,11 @@
 use moor_compiler::offset_for_builtin;
 use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_values::var::Symbol;
-use moor_values::var::Variant;
-use moor_values::var::{v_bool, v_list, v_none, v_objid, v_string};
-use moor_values::var::{v_empty_list, List};
+use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_values::Variant;
+use moor_values::{v_bool, v_list, v_none, v_objid, v_string};
+use moor_values::{v_empty_list, List};
+use moor_values::{Sequence, Symbol};
 
 use crate::bf_declare;
 use crate::builtins::BfErr::Code;
@@ -43,7 +43,7 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .get_property_info(
             bf_args.task_perms_who(),
             *obj,
-            Symbol::mk_case_insensitive(prop_name.as_str()),
+            Symbol::mk_case_insensitive(&prop_name.as_string()),
         )
         .map_err(world_state_bf_err)?;
     let owner = perms.owner();
@@ -66,7 +66,7 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(property_info, bf_property_info);
 
 enum InfoParseResult {
-    Fail(moor_values::var::Error),
+    Fail(moor_values::Error),
     Success(PropAttrs),
 }
 
@@ -75,26 +75,26 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
         return InfoParseResult::Fail(E_ARGS);
     }
 
-    let owner = info.get(0).unwrap();
+    let owner = info.index(0).unwrap();
     let Variant::Obj(owner) = owner.variant() else {
         return InfoParseResult::Fail(E_TYPE);
     };
-    let perms = info.get(1).unwrap();
+    let perms = info.index(1).unwrap();
     let Variant::Str(perms) = perms.variant() else {
         return InfoParseResult::Fail(E_TYPE);
     };
     let name = if info.len() == 3 {
-        let name = info.get(2).unwrap();
+        let name = info.index(2).unwrap();
         let Variant::Str(name) = name.variant() else {
             return InfoParseResult::Fail(E_TYPE);
         };
-        Some(name.to_string())
+        Some(name.as_string())
     } else {
         None
     };
 
     let mut flags = BitEnum::new();
-    for c in perms.as_str().chars() {
+    for c in perms.as_string().chars() {
         match c {
             'r' => flags |= PropFlag::Read,
             'w' => flags |= PropFlag::Write,
@@ -138,7 +138,7 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .set_property_info(
             bf_args.task_perms_who(),
             *obj,
-            Symbol::mk_case_insensitive(prop_name.as_str()),
+            Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
             attrs,
         )
         .map_err(world_state_bf_err)?;
@@ -161,7 +161,7 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .is_property_clear(
             bf_args.task_perms_who(),
             *obj,
-            Symbol::mk_case_insensitive(prop_name.as_str()),
+            Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
         )
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_bool(is_clear)))
@@ -183,7 +183,7 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .clear_property(
             bf_args.task_perms_who(),
             *obj,
-            Symbol::mk_case_insensitive(prop_name.as_str()),
+            Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
         )
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
@@ -218,7 +218,7 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             bf_args.task_perms_who(),
             *location,
             *location,
-            Symbol::mk_case_insensitive(name.as_str()),
+            Symbol::mk_case_insensitive(name.as_string().as_str()),
             attrs.owner.unwrap(),
             attrs.flags.unwrap(),
             Some(value),
@@ -243,7 +243,7 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .delete_property(
             bf_args.task_perms_who(),
             *obj,
-            Symbol::mk_case_insensitive(prop_name.as_str()),
+            Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
         )
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))

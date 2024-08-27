@@ -19,8 +19,8 @@ use bincode::{Decode, Encode};
 use moor_values::model::WorldStateError;
 use moor_values::model::{PrepSpec, Preposition};
 use moor_values::util;
-use moor_values::var::Objid;
-use moor_values::var::{v_str, Var};
+use moor_values::Objid;
+use moor_values::{v_str, Var};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct ParsedCommand {
@@ -188,7 +188,7 @@ where
 mod tests {
     use moor_values::model::Preposition;
     use moor_values::util::parse_into_words;
-    use moor_values::var::v_str;
+    use moor_values::v_str;
     use moor_values::FAILED_MATCH;
 
     use crate::matching::match_env::MatchEnvironmentParseMatcher;

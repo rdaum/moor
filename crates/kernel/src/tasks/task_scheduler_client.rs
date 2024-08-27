@@ -18,9 +18,9 @@ use crossbeam_channel::Sender;
 
 use moor_values::model::Perms;
 use moor_values::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
-use moor_values::var::Objid;
-use moor_values::var::Symbol;
-use moor_values::var::Var;
+use moor_values::Objid;
+use moor_values::Symbol;
+use moor_values::Var;
 
 use crate::tasks::task::Task;
 use crate::tasks::TaskDescription;

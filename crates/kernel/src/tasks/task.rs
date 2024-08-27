@@ -40,9 +40,9 @@ use moor_values::tasks::CommandError;
 use moor_values::tasks::CommandError::PermissionDenied;
 use moor_values::tasks::TaskId;
 use moor_values::util::parse_into_words;
-use moor_values::var::Symbol;
-use moor_values::var::{v_int, v_str};
-use moor_values::var::{List, Objid};
+use moor_values::Symbol;
+use moor_values::{v_int, v_str};
+use moor_values::Objid;
 use moor_values::{NOTHING, SYSTEM_OBJECT};
 
 use crate::builtins::BuiltinRegistry;
@@ -436,13 +436,13 @@ impl Task {
             }
             Ok(verb_info) => {
                 let arguments = parse_into_words(command);
-                let arguments = arguments.iter().map(|s| v_str(s)).collect::<Vec<_>>();
+                let args = arguments.iter().map(|s| v_str(s)).collect::<Vec<_>>();
                 let verb_call = VerbCall {
                     verb_name: Symbol::mk("do_command"),
                     location: SYSTEM_OBJECT,
                     this: SYSTEM_OBJECT,
                     player,
-                    args: List::from_slice(&arguments),
+                    args,
                     argstr: command.to_string(),
                     caller: SYSTEM_OBJECT,
                 };
@@ -534,7 +534,7 @@ impl Task {
             location: target,
             this: target,
             player,
-            args: List::from_slice(&parsed_command.args),
+            args: parsed_command.args.clone(),
             argstr: parsed_command.argstr.clone(),
             caller: player,
         };
@@ -653,9 +653,9 @@ mod tests {
     };
     use moor_values::tasks::{CommandError, Event, TaskId};
     use moor_values::util::BitEnum;
-    use moor_values::var::Error::E_DIV;
-    use moor_values::var::Symbol;
-    use moor_values::var::{v_int, v_str};
+    use moor_values::Error::E_DIV;
+    use moor_values::Symbol;
+    use moor_values::{v_int, v_str};
     use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
     use crate::builtins::BuiltinRegistry;

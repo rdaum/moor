@@ -13,19 +13,20 @@
 //
 
 use md5::Digest;
-use moor_compiler::offset_for_builtin;
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_values::var::Variant;
-use moor_values::var::{v_bool, v_float, v_int, v_obj, v_str};
-use moor_values::AsByteBuffer;
+use moor_compiler::{offset_for_builtin, to_literal};
+use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_values::Variant;
+use moor_values::{v_bool, v_float, v_int, v_obj, v_str};
+use moor_values::{AsByteBuffer, Sequence};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
+use moor_values::Associative;
 
 fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg = &bf_args.args[0];
-    Ok(Ret(v_int(arg.type_id() as i64)))
+    Ok(Ret(v_int(arg.type_code() as i64)))
 }
 bf_declare!(typeof, bf_typeof);
 
@@ -36,7 +37,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::None => result.push_str("None"),
             Variant::Int(i) => result.push_str(&i.to_string()),
             Variant::Float(f) => result.push_str(format!("{:?}", f).as_str()),
-            Variant::Str(s) => result.push_str(s.as_str()),
+            Variant::Str(s) => result.push_str(s.as_string().as_str()),
             Variant::Obj(o) => result.push_str(&o.to_string()),
             Variant::List(_) => result.push_str("{list}"),
             Variant::Map(_) => result.push_str("[map]"),
@@ -51,7 +52,7 @@ fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let literal = bf_args.args[0].to_literal();
+    let literal = to_literal(&bf_args.args[0]);
     Ok(Ret(v_str(literal.as_str())))
 }
 bf_declare!(toliteral, bf_toliteral);
@@ -65,7 +66,7 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Variant::Float(f) => Ok(Ret(v_int(*f as i64))),
         Variant::Obj(o) => Ok(Ret(v_int(o.0))),
         Variant::Str(s) => {
-            let i = s.as_str().parse::<f64>();
+            let i = s.as_string().as_str().parse::<f64>();
             match i {
                 Ok(i) => Ok(Ret(v_int(i as i64))),
                 Err(_) => Ok(Ret(v_int(0))),
@@ -84,15 +85,15 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_obj(*i))),
         Variant::Float(f) => Ok(Ret(v_obj(*f as i64))),
-        Variant::Str(s) if s.as_str().starts_with('#') => {
-            let i = s.as_str()[1..].parse::<i64>();
+        Variant::Str(s) if s.as_string().as_str().starts_with('#') => {
+            let i = s.as_string().as_str()[1..].parse::<i64>();
             match i {
                 Ok(i) => Ok(Ret(v_obj(i))),
                 Err(_) => Ok(Ret(v_obj(0))),
             }
         }
         Variant::Str(s) => {
-            let i = s.as_str().parse::<i64>();
+            let i = s.as_string().as_str().parse::<i64>();
             match i {
                 Ok(i) => Ok(Ret(v_obj(i))),
                 Err(_) => Ok(Ret(v_obj(0))),
@@ -111,7 +112,7 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Variant::Int(i) => Ok(Ret(v_float(*i as f64))),
         Variant::Float(f) => Ok(Ret(v_float(*f))),
         Variant::Str(s) => {
-            let f = s.as_str().parse::<f64>();
+            let f = s.as_string().as_str().parse::<f64>();
             match f {
                 Ok(f) => Ok(Ret(v_float(f))),
                 Err(_) => Ok(Ret(v_float(0.0))),
@@ -127,11 +128,8 @@ fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let result = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
-        (Variant::Str(s1), Variant::Str(s2)) => s1.as_str() == s2.as_str().to_lowercase(),
-        (Variant::Map(m1), Variant::Map(m2)) => m1.eq_case_sensitive(m2),
-        _ => bf_args.args[0] == bf_args.args[1],
-    };
+    let (a1, a2) = (&bf_args.args[0], &bf_args.args[1]);
+    let result = a1.eq_case_sensitive(a2);
     Ok(Ret(v_bool(result)))
 }
 bf_declare!(equal, bf_equal);
@@ -149,7 +147,7 @@ fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let s = bf_args.args[0].to_literal();
+    let s = to_literal(&bf_args.args[0]);
     let hash_digest = md5::Md5::digest(s.as_bytes());
     Ok(Ret(v_str(
         format!("{:x}", hash_digest).to_uppercase().as_str(),

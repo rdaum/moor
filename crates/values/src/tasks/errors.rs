@@ -14,7 +14,7 @@
 
 use crate::model::{CompileError, WorldStateError};
 use crate::tasks::TaskId;
-use crate::var::{Error, Var};
+use crate::{Error, Var};
 use bincode::{Decode, Encode};
 use std::fmt::Display;
 use std::time::Duration;

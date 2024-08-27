@@ -34,8 +34,8 @@ mod test {
     use moor_values::model::WorldStateSource;
     use moor_values::model::{CommitResult, ValSet};
     use moor_values::model::{HasUuid, Named};
-    use moor_values::var::Objid;
-    use moor_values::var::Symbol;
+    use moor_values::Objid;
+    use moor_values::Symbol;
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 
     fn get_minimal_db() -> File {

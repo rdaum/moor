@@ -14,7 +14,7 @@
 
 use moor_values::model::WorldStateError;
 use moor_values::model::{ObjSet, ValSet};
-use moor_values::var::Objid;
+use moor_values::Objid;
 use moor_values::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 
 use crate::tasks::command_parse::ParseMatcher;
@@ -148,7 +148,7 @@ impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
 
 #[cfg(test)]
 mod tests {
-    use moor_values::var::Objid;
+    use moor_values::Objid;
     use moor_values::{FAILED_MATCH, NOTHING};
 
     use crate::matching::match_env::{

@@ -21,11 +21,11 @@ mod tests {
     use moor_values::model::{BinaryType, VerbFlag};
     use moor_values::model::{WorldState, WorldStateSource};
     use moor_values::util::BitEnum;
-    use moor_values::var::Error::E_DIV;
-    use moor_values::var::{
-        v_bool, v_empty_list, v_err, v_int, v_list, v_none, v_obj, v_objid, v_str, Var,
+    use moor_values::Error::E_DIV;
+    use moor_values::Objid;
+    use moor_values::{
+        v_bool, v_empty_list, v_err, v_int, v_list, v_map, v_none, v_obj, v_objid, v_str, Var,
     };
-    use moor_values::var::{v_map_pairs, Objid};
 
     use moor_values::NOTHING;
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
@@ -39,7 +39,7 @@ mod tests {
     use moor_compiler::{compile, UnboundNames};
     use moor_compiler::{CompileOptions, Names};
     use moor_db_wiredtiger::WiredTigerDB;
-    use moor_values::var::Symbol;
+    use moor_values::Symbol;
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
@@ -1126,11 +1126,11 @@ mod tests {
     #[test_case("return -9223372036854775808;", v_int(i64::MIN); "minint")]
     #[test_case("return [ 1 -> 2][1];", v_int(2); "map index")]
     #[test_case("return [ 0 -> 1, 1 -> 2, 2 -> 3, 3 -> 4][1..3];",
-        v_map_pairs(&[(v_int(1),v_int(2)), (v_int(2),v_int(3))]); "map range")]
+        v_map(&[(v_int(1),v_int(2)), (v_int(2),v_int(3))]); "map range")]
     #[test_case(r#"m = [ 1 -> "one", 2 -> "two", 3 -> "three" ]; m[1] = "abc"; return m;"#,
-        v_map_pairs(&[(v_int(1),v_str("abc")), (v_int(2),v_str("two")), (v_int(3),v_str("three"))]); "map assignment")]
+        v_map(&[(v_int(1),v_str("abc")), (v_int(2),v_str("two")), (v_int(3),v_str("three"))]); "map assignment")]
     #[test_case("return [ 0 -> 1, 1 -> 2, 2 -> 3, 3 -> 4][1..$];",
-        v_map_pairs(&[(v_int(1),v_int(2)), (v_int(2),v_int(3),), (v_int(3),v_int(4))]); "map range to end")]
+        v_map(&[(v_int(1),v_int(2)), (v_int(2),v_int(3),), (v_int(3),v_int(4))]); "map range to end")]
     #[test_case("l = {1,2,3}; l[2..3] = {6, 7, 8, 9}; return l;",
          v_list(&[v_int(1), v_int(6), v_int(7), v_int(8), v_int(9)]); "list assignment to range")]
     fn test_run(program: &str, expected_result: Var) {
@@ -1144,5 +1144,23 @@ mod tests {
             vec![],
         );
         assert_eq!(result, Ok(expected_result));
+    }
+
+    #[test]
+    fn test_list_assignment_to_range() {
+        let program = r#"l = {1,2,3}; l[2..3] = {6, 7, 8, 9}; return l;"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            vec![],
+        );
+        assert_eq!(
+            result,
+            Ok(v_list(&[v_int(1), v_int(6), v_int(7), v_int(8), v_int(9)]))
+        );
     }
 }

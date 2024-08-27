@@ -14,9 +14,9 @@
 
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
-use moor_values::var::Symbol;
-use moor_values::var::VarType;
-use moor_values::var::VarType::TYPE_MAP;
+use moor_values::Symbol;
+use moor_values::VarType;
+use moor_values::VarType::TYPE_MAP;
 /// Global registry of built-in function names.
 use std::collections::HashMap;
 use ArgCount::{Q, U};

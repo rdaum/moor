@@ -24,18 +24,18 @@ use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTINS};
 use moor_values::model::{ObjFlag, WorldStateError};
 use moor_values::tasks::NarrativeEvent;
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
-use moor_values::var::Symbol;
-use moor_values::var::Variant;
-use moor_values::var::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
-use moor_values::var::{v_listv, Error};
+use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
+use moor_values::Symbol;
+use moor_values::Variant;
+use moor_values::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
+use moor_values::{v_list_iter, Error};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::ExecutionResult;
 use moor_values::tasks::TaskId;
-use moor_values::var::VarType::TYPE_STR;
+use moor_values::VarType::TYPE_STR;
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(
@@ -57,7 +57,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         if bf_args.args.len() != 2 {
             return Err(BfErr::Code(E_ARGS));
         }
-        if bf_args.args[1].type_id() != TYPE_STR {
+        if bf_args.args[1].type_code() != TYPE_STR {
             return Err(BfErr::Code(E_TYPE));
         }
     }
@@ -82,7 +82,9 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(content_type) = bf_args.args[2].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        Some(Symbol::mk_case_insensitive(content_type.as_str()))
+        Some(Symbol::mk_case_insensitive(
+            content_type.as_string().as_str(),
+        ))
     } else {
         None
     };
@@ -103,14 +105,13 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    Ok(Ret(v_listv(
+    Ok(Ret(v_list_iter(
         bf_args
             .session
             .connected_players()
             .unwrap()
             .iter()
-            .map(|p| v_objid(*p))
-            .collect::<Vec<Var>>(),
+            .map(|p| v_objid(*p)),
     )))
 }
 bf_declare!(connected_players, bf_connected_players);
@@ -168,28 +169,23 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // We have to exempt ourselves from the callers list.
     let callers = bf_args.exec_state.callers()[1..].to_vec();
-    Ok(Ret(v_listv(
-        callers
-            .iter()
-            .map(|c| {
-                let callers = vec![
-                    // this
-                    v_objid(c.this),
-                    // verb name
-                    v_string(c.verb_name.to_string()),
-                    // 'programmer'
-                    v_objid(c.programmer),
-                    // verb location
-                    v_objid(c.definer),
-                    // player
-                    v_objid(c.player),
-                    // line number
-                    v_int(c.line_number as i64),
-                ];
-                v_listv(callers)
-            })
-            .collect::<Vec<Var>>(),
-    )))
+    Ok(Ret(v_list_iter(callers.iter().map(|c| {
+        let callers = vec![
+            // this
+            v_objid(c.this),
+            // verb name
+            v_string(c.verb_name.to_string()),
+            // 'programmer'
+            v_objid(c.programmer),
+            // verb location
+            v_objid(c.definer),
+            // player
+            v_objid(c.player),
+            // line number
+            v_int(c.line_number as i64),
+        ];
+        v_list(&callers)
+    }))))
 }
 bf_declare!(callers, bf_callers);
 
@@ -277,7 +273,7 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(msg) = bf_args.args[0].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        Some(msg.as_str().to_string())
+        Some(msg.as_string())
     };
 
     bf_args
@@ -354,7 +350,7 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(msg) = bf_args.args[1].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        Some(msg.to_string())
+        Some(msg.as_string())
     } else {
         None
     };
@@ -449,31 +445,28 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // return in form:
     //     {<task-id>, <start-time>, <x>, <y>,
     //      <programmer>, <verb-loc>, <verb-name>, <line>, <this>}
-    let tasks: Vec<_> = tasks
-        .iter()
-        .map(|task| {
-            let task_id = v_int(task.task_id as i64);
-            let start_time = match task.start_time {
-                None => v_none(),
-                Some(start_time) => {
-                    let time = start_time.duration_since(SystemTime::UNIX_EPOCH).unwrap();
-                    v_int(time.as_secs() as i64)
-                }
-            };
-            let x = v_none();
-            let y = v_none();
-            let programmer = v_objid(task.permissions);
-            let verb_loc = v_objid(task.verb_definer);
-            let verb_name = v_str(task.verb_name.as_str());
-            let line = v_int(task.line_number as i64);
-            let this = v_objid(task.this);
-            v_list(&[
-                task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this,
-            ])
-        })
-        .collect();
+    let tasks = tasks.iter().map(|task| {
+        let task_id = v_int(task.task_id as i64);
+        let start_time = match task.start_time {
+            None => v_none(),
+            Some(start_time) => {
+                let time = start_time.duration_since(SystemTime::UNIX_EPOCH).unwrap();
+                v_int(time.as_secs() as i64)
+            }
+        };
+        let x = v_none();
+        let y = v_none();
+        let programmer = v_objid(task.permissions);
+        let verb_loc = v_objid(task.verb_definer);
+        let verb_name = v_str(task.verb_name.as_str());
+        let line = v_int(task.line_number as i64);
+        let this = v_objid(task.this);
+        v_list(&[
+            task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this,
+        ])
+    });
 
-    Ok(Ret(v_listv(tasks)))
+    Ok(Ret(v_list_iter(tasks)))
 }
 bf_declare!(queued_tasks, bf_queued_tasks);
 
@@ -617,7 +610,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let args = &bf_args.args[1..];
 
     // Find the function id for the given function name.
-    let func_name = Symbol::mk_case_insensitive(func_name.as_str());
+    let func_name = Symbol::mk_case_insensitive(func_name.as_string().as_str());
     let builtin = BUILTINS
         .find_builtin(func_name)
         .ok_or(BfErr::Code(E_ARGS))?;
@@ -690,22 +683,16 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
         ArgCount::Q(q) => v_int(q as i64),
         ArgCount::U => v_int(-1),
     };
-    let types = bf
-        .types
-        .iter()
-        .map(|t| match t {
-            ArgType::Typed(ty) => v_int(*ty as i64),
-            ArgType::Any => v_int(-1),
-            ArgType::AnyNum => v_int(-2),
-        })
-        .collect::<Vec<_>>();
+    let types = bf.types.iter().map(|t| match t {
+        ArgType::Typed(ty) => v_int(*ty as i64),
+        ArgType::Any => v_int(-1),
+        ArgType::AnyNum => v_int(-2),
+    });
 
-    v_listv(vec![
-        v_str(bf.name.as_str()),
+    v_list(&[v_str(bf.name.as_str()),
         min_args,
         max_args,
-        v_listv(types),
-    ])
+        v_list_iter(types)])
 }
 
 fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -717,7 +704,7 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(func_name) = bf_args.args[0].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        let func_name = Symbol::mk_case_insensitive(func_name.as_str());
+        let func_name = Symbol::mk_case_insensitive(&func_name.as_string());
         let bf = BUILTINS
             .find_builtin(func_name)
             .ok_or(BfErr::Code(E_ARGS))?;
@@ -728,12 +715,11 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Ok(Ret(desc));
     }
 
-    let bf_list: Vec<_> = BUILTINS
+    let bf_list = BUILTINS
         .descriptions()
         .filter(|&bf| bf.implemented)
-        .map(bf_function_info_to_list)
-        .collect();
-    Ok(Ret(v_listv(bf_list)))
+        .map(bf_function_info_to_list);
+    Ok(Ret(v_list_iter(bf_list)))
 }
 bf_declare!(function_info, bf_function_info);
 
@@ -776,10 +762,10 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match tramp {
         BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE => {
-            let program_code = program_code.as_str();
-            let program = match compile(program_code, bf_args.config.compile_options()) {
+            let program_code = program_code.as_string();
+            let program = match compile(&program_code, bf_args.config.compile_options()) {
                 Ok(program) => program,
-                Err(e) => return Ok(Ret(v_listv(vec![v_int(0), v_string(e.to_string())]))),
+                Err(e) => return Ok(Ret(v_list(&[v_int(0), v_string(e.to_string())]))),
             };
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
@@ -794,7 +780,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         BF_SERVER_EVAL_TRAMPOLINE_RESUME => {
             // Value must be on in our activation's "return value"
             let value = bf_args.exec_state.top().frame.return_value();
-            Ok(Ret(v_listv(vec![v_bool(true), value])))
+            Ok(Ret(v_list(&[v_bool(true), value])))
         }
         _ => {
             panic!("Invalid trampoline value for bf_eval: {}", tramp);

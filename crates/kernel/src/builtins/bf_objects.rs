@@ -20,12 +20,11 @@ use moor_values::model::Named;
 use moor_values::model::WorldStateError;
 use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
-use moor_values::var::v_listv;
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
-use moor_values::var::Symbol;
-use moor_values::var::{v_bool, v_int, v_none, v_objid, v_str};
-use moor_values::var::{List, Variant};
-use moor_values::NOTHING;
+use moor_values::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
+use moor_values::{v_bool, v_int, v_none, v_objid, v_str};
+use moor_values::{v_list, Sequence, Symbol};
+use moor_values::{v_list_iter, NOTHING};
+use moor_values::Variant;
 
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
@@ -109,7 +108,7 @@ fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     let children = children.iter().map(v_objid).collect::<Vec<_>>();
-    Ok(Ret(v_listv(children)))
+    Ok(Ret(v_list(&children)))
 }
 bf_declare!(children, bf_children);
 
@@ -170,7 +169,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     location: new_obj,
                     this: new_obj,
                     player: bf_args.exec_state.top().player,
-                    args: List::new(),
+                    args: vec![],
                     argstr: "".to_string(),
                     caller: bf_args.exec_state.top().this,
                 },
@@ -261,7 +260,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         }
                     }
                 }
-                let contents = v_listv(contents);
+                let contents = v_list(&contents);
                 match bf_args.world_state.find_method_verb_on(
                     bf_args.task_perms_who(),
                     obj,
@@ -280,7 +279,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: obj,
                                 this: obj,
                                 player: bf_args.exec_state.top().player,
-                                args: List::new(),
+                                args: Vec::new(),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
@@ -311,14 +310,14 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     panic!("Invalid trampoline argument for bf_recycle");
                 };
                 'inner: loop {
-                    debug!(?obj, contents = ?contents, "Calling :exitfunc for objects contents");
                     if contents.is_empty() {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline_arg = None;
                         bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_DONE_MOVE);
                         continue 'outer;
                     }
-                    let (head_obj, contents) = contents.pop_front();
+                    let (head_obj, contents) =
+                        contents.pop_front().map_err(|_| BfErr::Code(E_INVARG))?;
                     let Variant::Obj(head_obj) = head_obj.variant() else {
                         panic!("Invalid trampoline argument for bf_recycle");
                     };
@@ -348,7 +347,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             location: *head_obj,
                             this: *head_obj,
                             player: bf_args.exec_state.top().player,
-                            args: List::from_slice(&[v_objid(obj)]),
+                            args: vec![v_objid(obj)],
                             argstr: "".to_string(),
                             caller: bf_args.exec_state.top().this,
                         },
@@ -449,7 +448,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: whereto,
                                 this: whereto,
                                 player: bf_args.exec_state.top().player,
-                                args: List::from_slice(&[v_objid(what)]),
+                                args: vec![v_objid(what)],
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
@@ -526,7 +525,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: original_location,
                                 this: original_location,
                                 player: bf_args.exec_state.top().player,
-                                args: List::from_slice(&[v_objid(what)]),
+                                args: vec![v_objid(what)],
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
@@ -572,7 +571,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: whereto,
                                 this: whereto,
                                 player: bf_args.exec_state.top().player,
-                                args: List::from_slice(&[v_objid(what)]),
+                                args: vec![v_objid(what)],
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this,
                             },
@@ -620,7 +619,7 @@ fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .iter()
         .map(|v| v_str(v.names().first().unwrap()))
         .collect();
-    Ok(Ret(v_listv(verbs)))
+    Ok(Ret(v_list(&verbs)))
 }
 bf_declare!(verbs, bf_verbs);
 
@@ -640,7 +639,7 @@ fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .properties(bf_args.task_perms_who(), *obj)
         .map_err(world_state_bf_err)?;
     let props: Vec<_> = props.iter().map(|p| v_str(p.name())).collect();
-    Ok(Ret(v_listv(props)))
+    Ok(Ret(v_list(&props)))
 }
 bf_declare!(properties, bf_properties);
 
@@ -696,9 +695,7 @@ fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let players = bf_args.world_state.players().map_err(world_state_bf_err)?;
 
-    Ok(Ret(v_listv(
-        players.iter().map(v_objid).collect::<Vec<_>>(),
-    )))
+    Ok(Ret(v_list_iter(players.iter().map(v_objid))))
 }
 bf_declare!(players, bf_players);
 

@@ -24,9 +24,9 @@ use moor_values::model::{
     WorldStateError,
 };
 use moor_values::util::BitEnum;
-use moor_values::var::Symbol;
-use moor_values::var::{v_none, Objid, Var};
+use moor_values::Symbol;
 use moor_values::NOTHING;
+use moor_values::{v_none, Objid, Var};
 use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 

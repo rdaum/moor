@@ -31,7 +31,7 @@ use bytes::Bytes;
 use moor_db_wiredtiger::{WiredTigerRelDb, WiredTigerRelTransaction, WiredTigerRelation};
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::model::{CommitResult, ValSet};
-use moor_values::var::Objid;
+use moor_values::Objid;
 use moor_values::{AsByteBuffer, DecodingError, EncodingError};
 use rpc_common::RpcRequestError;
 
@@ -484,7 +484,7 @@ impl ConnectionsDB for ConnectionsWT {
 mod tests {
     use std::sync::Arc;
 
-    use moor_values::var::Objid;
+    use moor_values::Objid;
 
     use crate::connections::ConnectionsDB;
     use crate::connections_wt::ConnectionsWT;

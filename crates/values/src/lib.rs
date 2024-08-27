@@ -19,13 +19,18 @@ pub use encode::{
     BINCODE_CONFIG,
 };
 
-use crate::var::Objid;
+pub use var::{
+    v_bool, v_empty_list, v_empty_map, v_empty_str, v_err, v_float, v_floatr, v_int, v_list,
+    v_list_iter, v_map, v_none, v_obj, v_objid, v_str, v_string, Associative, ErrorPack, IndexMode,
+    List, Map, Sequence, Str, Var, Variant,
+};
+pub use var::{Error, Objid, Symbol, VarType};
 
 mod encode;
 pub mod model;
 pub mod tasks;
 pub mod util;
-pub mod var;
+mod var;
 
 /// When encoding or decoding types to/from data or network, this is a version tag put into headers
 /// for validity / version checking.

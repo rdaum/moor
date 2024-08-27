@@ -20,8 +20,8 @@ use tracing::{instrument, trace};
 use uuid::Uuid;
 
 use moor_compiler::{compile, Program};
-use moor_values::var::Symbol;
-use moor_values::var::{Objid, Var};
+use moor_values::Symbol;
+use moor_values::{Objid, Var};
 
 use crate::config::Config;
 use crate::tasks::sessions::Session;

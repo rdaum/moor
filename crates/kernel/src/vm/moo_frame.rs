@@ -21,8 +21,8 @@ use daumtils::{BitArray, Bitset16};
 use crate::vm::FinallyReason;
 use moor_compiler::Name;
 use moor_compiler::{GlobalName, Label, Op, Program};
-use moor_values::var::Error::E_VARNF;
-use moor_values::var::{v_none, Error, Var};
+use moor_values::Error::E_VARNF;
+use moor_values::{v_none, Error, Var};
 
 /// The MOO stack-frame specific portions of the activation:
 ///   the value stack, local variables, program, program counter, handler stack, etc.

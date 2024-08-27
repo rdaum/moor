@@ -12,6 +12,7 @@ rust-version.workspace = true
 description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a moor daemon."
 
 [dependencies]
+moor-compiler = { path = "../compiler" }
 moor-moot = { path = "../moot" }
 moor-values = { path = "../values" }
 rpc-async-client = { path = "../rpc-async-client" }

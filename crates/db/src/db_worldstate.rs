@@ -29,11 +29,11 @@ use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
-use moor_values::var::Symbol;
-use moor_values::var::Variant;
-use moor_values::var::{v_int, v_objid, Var};
-use moor_values::var::{v_listv, Objid};
+use moor_values::Objid;
+use moor_values::Variant;
 use moor_values::NOTHING;
+use moor_values::{v_int, v_objid, Var};
+use moor_values::{v_list, Symbol};
 
 use crate::worldstate_transaction::WorldStateTransaction;
 
@@ -234,7 +234,7 @@ impl WorldState for DbTxWorldState {
             return self.location_of(perms, obj).map(Var::from);
         } else if pname == *CONTENTS_SYM {
             let contents: Vec<_> = self.contents_of(perms, obj)?.iter().map(v_objid).collect();
-            return Ok(v_listv(contents));
+            return Ok(v_list(&contents));
         } else if pname == *OWNER_SYM {
             return self.owner_of(obj).map(Var::from);
         } else if pname == *PROGRAMMER_SYM {
@@ -355,7 +355,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Str(name) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.tx.set_object_name(obj, name.to_string())?;
+                self.tx.set_object_name(obj, name.as_string())?;
                 return Ok(());
             }
 
@@ -750,7 +750,13 @@ impl WorldState for DbTxWorldState {
         // Then grab aliases property.
         let aliases = match self.retrieve_property(perms, obj, *ALIASES_SYM) {
             Ok(a) => match a.variant() {
-                Variant::List(a) => a.iter().map(|v| v.to_string()).collect(),
+                Variant::List(a) => a
+                    .iter()
+                    .map(|v| match v.variant() {
+                        Variant::Str(s) => s.as_string(),
+                        _ => "".to_string(),
+                    })
+                    .collect(),
                 _ => {
                     vec![]
                 }

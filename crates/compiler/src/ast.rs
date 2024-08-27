@@ -12,10 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::var::Symbol;
+use moor_values::Symbol;
 use std::fmt::Display;
 
-use moor_values::var::Var;
+use moor_values::Var;
 
 /// The abstract syntax tree produced by the parser and converted by codegen into opcodes.
 use crate::names::UnboundName;

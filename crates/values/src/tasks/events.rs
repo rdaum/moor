@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::{Objid, Symbol, Var};
+use crate::{Objid, Symbol, Var};
 use bincode::{Decode, Encode};
 use std::time::SystemTime;
 

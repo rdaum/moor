@@ -18,8 +18,8 @@ use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{BinaryType, VerbFlag};
 use crate::util::verbname_cmp;
 use crate::util::BitEnum;
-use crate::var::Objid;
-use crate::var::Symbol;
+use crate::Objid;
+use crate::Symbol;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{binary_layout, Field};
 use bytes::BufMut;
@@ -208,8 +208,8 @@ mod tests {
     use crate::model::verbs::VerbFlag;
     use crate::model::ValSet;
     use crate::util::BitEnum;
-    use crate::var::Objid;
     use crate::AsByteBuffer;
+    use crate::Objid;
     use bytes::Bytes;
 
     #[test]

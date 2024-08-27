@@ -20,19 +20,19 @@ use std::time::SystemTime;
 use clap::Parser;
 use clap_derive::Parser;
 use color_eyre::owo_colors::OwoColorize;
-use moor_values::var::Objid;
-use rustyline::config::Configurer;
-use rustyline::error::ReadlineError;
-use rustyline::{ColorMode, DefaultEditor, ExternalPrinter};
-use tracing::{debug, error, info, trace, warn};
-use uuid::Uuid;
-
+use moor_compiler::to_literal;
+use moor_values::Objid;
 use rpc_common::{
     AuthToken, BroadcastEvent, ClientToken, ConnectionEvent, RpcRequest, RpcResponse, RpcResult,
     BROADCAST_TOPIC,
 };
 use rpc_sync_client::RpcSendClient;
 use rpc_sync_client::{broadcast_recv, events_recv};
+use rustyline::config::Configurer;
+use rustyline::error::ReadlineError;
+use rustyline::{ColorMode, DefaultEditor, ExternalPrinter};
+use tracing::{debug, error, info, trace, warn};
+use uuid::Uuid;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -249,14 +249,18 @@ fn console_loop(
             }
             match events_recv(client_id, &narr_sub_socket) {
                 Ok(ConnectionEvent::Narrative(_, msg)) => {
-                    printer
-                        .print(
-                            (match msg.event() {
-                                moor_values::tasks::Event::Notify(s, _content_type) => s,
-                            })
-                            .to_string(),
-                        )
-                        .unwrap();
+                    let var = match msg.event() {
+                        moor_values::tasks::Event::Notify(s, _content_type) => s,
+                    };
+                    match var.variant() {
+                        moor_values::Variant::Str(s) => {
+                            printer.print(s.as_string().to_string()).unwrap();
+                        }
+                        _ => {
+                            let literal = to_literal(&var);
+                            printer.print(format!("{}", literal.yellow())).unwrap();
+                        }
+                    }
                 }
                 Ok(ConnectionEvent::SystemMessage(o, msg)) => {
                     printer

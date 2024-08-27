@@ -15,7 +15,7 @@
 use crate::GlobalName;
 use bincode::{Decode, Encode};
 use moor_values::model::CompileError;
-use moor_values::var::Symbol;
+use moor_values::Symbol;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 

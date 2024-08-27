@@ -24,8 +24,8 @@ use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::model::{ObjAttrs, PropPerms};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::util::BitEnum;
-use moor_values::var::Objid;
-use moor_values::var::Var;
+use moor_values::Objid;
+use moor_values::Var;
 
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what
 /// WorldState could provide, but potentially different constraints/semantics (e.g. no perms checks)

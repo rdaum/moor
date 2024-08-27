@@ -34,11 +34,11 @@ use moor_values::model::{CommitResult, Perms};
 use moor_values::tasks::{
     AbortLimitReason, CommandError, SchedulerError, TaskId, VerbProgramError,
 };
-use moor_values::var::Error::{E_INVARG, E_PERM};
-use moor_values::var::Symbol;
-use moor_values::var::{v_err, v_int, v_none, v_string, List, Var};
-use moor_values::var::{Objid, Variant};
+use moor_values::Error::{E_INVARG, E_PERM};
+use moor_values::Symbol;
+use moor_values::{v_err, v_int, v_none, v_string, Var};
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+use moor_values::{Objid, Variant};
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
@@ -392,7 +392,7 @@ impl Scheduler {
                     player,
                     vloc,
                     verb,
-                    args: List::from_slice(&args),
+                    args,
                     argstr,
                 });
                 let task_id = self.next_task_id;
@@ -461,7 +461,7 @@ impl Scheduler {
                     player,
                     vloc: SYSTEM_OBJECT,
                     verb: *DO_OUT_OF_BAND_COMMAND,
-                    args: List::from_slice(&args),
+                    args,
                     argstr,
                 });
                 let task_id = self.next_task_id;
