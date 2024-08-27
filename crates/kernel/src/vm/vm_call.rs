@@ -16,14 +16,14 @@ use std::sync::Arc;
 
 use tracing::trace;
 
-use moor_compiler::{BuiltinId, Program, BUILTINS};
+use moor_compiler::{to_literal, BuiltinId, Program, BUILTINS};
 use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::var::v_int;
-use moor_values::var::Error::{E_INVIND, E_PERM, E_VERBNF};
-use moor_values::var::Symbol;
-use moor_values::var::{List, Objid};
+use moor_values::Error::{E_INVIND, E_PERM, E_VERBNF};
+use moor_values::Symbol;
+use moor_values::{v_int, Var};
+use moor_values::{List, Objid};
 
 use crate::builtins::{BfCallState, BfErr, BfRet};
 use crate::tasks::command_parse::ParsedCommand;
@@ -34,9 +34,9 @@ use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork};
 use crate::vm::{VMExecState, VmExecParams};
 
-pub(crate) fn args_literal(args: &List) -> String {
+pub(crate) fn args_literal(args: &[Var]) -> String {
     args.iter()
-        .map(|v| v.to_literal())
+        .map(to_literal)
         .collect::<Vec<String>>()
         .join(", ")
 }
@@ -79,7 +79,7 @@ impl VMExecState {
             location: this,
             this,
             player: self.top().player,
-            args,
+            args: args.iter().collect(),
             // caller her is current-activation 'this', not activation caller() ...
             // unless we're a builtin, in which case we're #-1.
             argstr: "".to_string(),
@@ -163,7 +163,7 @@ impl VMExecState {
             location: parent,
             this: self.top().this,
             player: self.top().player,
-            args: args.clone(),
+            args: args.iter().collect(),
             argstr: "".to_string(),
             caller,
         };
@@ -223,7 +223,7 @@ impl VMExecState {
     pub(crate) fn call_builtin_function(
         &mut self,
         bf_id: BuiltinId,
-        args: List,
+        args: Vec<Var>,
         exec_args: &VmExecParams,
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
@@ -255,7 +255,7 @@ impl VMExecState {
             world_state,
             session: session.clone(),
             // TODO: avoid copy here by using List inside BfCallState
-            args: args.iter().collect(),
+            args,
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
             config: exec_args.config.clone(),
         };
@@ -304,7 +304,7 @@ impl VMExecState {
             world_state,
             session: sessions,
             // TODO: avoid copy here by using List inside BfCallState
-            args: args.iter().collect(),
+            args,
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
             config: exec_args.config.clone(),
         };

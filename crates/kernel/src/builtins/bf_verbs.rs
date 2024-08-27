@@ -15,12 +15,12 @@
 use strum::EnumCount;
 use tracing::{error, warn};
 
-use moor_compiler::compile;
 use moor_compiler::offset_for_builtin;
 use moor_compiler::program_to_tree;
 use moor_compiler::unparse;
 use moor_compiler::GlobalName;
 use moor_compiler::Program;
+use moor_compiler::{compile, to_literal};
 use moor_values::model::ObjFlag;
 use moor_values::model::VerbDef;
 use moor_values::model::WorldStateError;
@@ -28,14 +28,14 @@ use moor_values::model::{ArgSpec, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::model::{HasUuid, Named};
 use moor_values::util::BitEnum;
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
-use moor_values::var::List;
-use moor_values::var::Objid;
-use moor_values::var::Symbol;
-use moor_values::var::Variant;
-use moor_values::var::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
-use moor_values::var::{v_listv, Error};
-use moor_values::AsByteBuffer;
+use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
+use moor_values::List;
+use moor_values::Objid;
+use moor_values::Symbol;
+use moor_values::Variant;
+use moor_values::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
+use moor_values::{v_list_iter, Error};
+use moor_values::{AsByteBuffer, Sequence};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
@@ -65,7 +65,7 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .get_verb(
                 bf_args.task_perms_who(),
                 *obj,
-                Symbol::mk_case_insensitive(verb_desc.as_str()),
+                Symbol::mk_case_insensitive(&verb_desc.as_string()),
             )
             .map_err(world_state_bf_err)?,
         Variant::Int(verb_index) => {
@@ -112,7 +112,7 @@ bf_declare!(verb_info, bf_verb_info);
 fn get_verbdef(obj: Objid, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<VerbDef, BfErr> {
     let verbspec_result = match verbspec.variant() {
         Variant::Str(verb_desc) => {
-            let verb_desc = Symbol::mk_case_insensitive(verb_desc.as_str());
+            let verb_desc = Symbol::mk_case_insensitive(&verb_desc.as_string());
             bf_args
                 .world_state
                 .get_verb(bf_args.task_perms_who(), obj, verb_desc)
@@ -144,13 +144,13 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
         return Err(E_INVARG);
     }
     match (
-        info.get(0).unwrap().variant(),
-        info.get(1).unwrap().variant(),
-        info.get(2).unwrap().variant(),
+        info.index(0).unwrap().variant(),
+        info.index(1).unwrap().variant(),
+        info.index(2).unwrap().variant(),
     ) {
         (Variant::Obj(owner), Variant::Str(perms_str), Variant::Str(names)) => {
             let mut perms = BitEnum::new();
-            for c in perms_str.as_str().chars() {
+            for c in perms_str.as_string().chars() {
                 match c {
                     'r' => perms |= VerbFlag::Read,
                     'w' => perms |= VerbFlag::Write,
@@ -162,7 +162,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
 
             // Split the names string into a list of symbols
             let name_strings = names
-                .as_str()
+                .as_string()
                 .split(' ')
                 .map(Symbol::mk_case_insensitive)
                 .collect::<Vec<_>>();
@@ -212,7 +212,7 @@ fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 .update_verb(
                     bf_args.task_perms_who(),
                     *obj,
-                    Symbol::mk_case_insensitive(verb_name.as_str()),
+                    Symbol::mk_case_insensitive(&verb_name.as_string()),
                     update_attrs,
                 )
                 .map_err(world_state_bf_err)?;
@@ -271,15 +271,15 @@ fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
         return Err(E_ARGS);
     }
     match (
-        verbinfo.get(0).unwrap().variant(),
-        verbinfo.get(1).unwrap().variant(),
-        verbinfo.get(2).unwrap().variant(),
+        verbinfo.index(0).unwrap().variant(),
+        verbinfo.index(1).unwrap().variant(),
+        verbinfo.index(2).unwrap().variant(),
     ) {
         (Variant::Str(dobj_str), Variant::Str(prep_str), Variant::Str(iobj_str)) => {
             let (Some(dobj), Some(prep), Some(iobj)) = (
-                ArgSpec::from_string(dobj_str.as_str()),
-                parse_preposition_spec(prep_str.as_str()),
-                ArgSpec::from_string(iobj_str.as_str()),
+                ArgSpec::from_string(&dobj_str.as_string()),
+                parse_preposition_spec(&prep_str.as_string()),
+                ArgSpec::from_string(&iobj_str.as_string()),
             ) else {
                 return Err(E_INVARG);
             };
@@ -329,7 +329,7 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 .update_verb(
                     bf_args.task_perms_who(),
                     *obj,
-                    Symbol::mk_case_insensitive(verb_name.as_str()),
+                    Symbol::mk_case_insensitive(&verb_name.as_string()),
                     update_attrs,
                 )
                 .map_err(world_state_bf_err)?;
@@ -425,9 +425,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             return Err(BfErr::Code(E_INVARG));
         }
     };
-    Ok(Ret(v_listv(
-        unparsed.iter().map(|s| v_str(s)).collect::<Vec<_>>(),
-    )))
+    Ok(Ret(v_list_iter(unparsed.iter().map(|s| v_str(s)))))
 }
 bf_declare!(verb_code, bf_verb_code);
 
@@ -477,7 +475,7 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::Str(line) => line,
             _ => return Err(BfErr::Code(E_TYPE)),
         };
-        code_string.push_str(line.as_str());
+        code_string.push_str(&line.as_string());
         code_string.push('\n');
     }
     // Now try to compile...
@@ -658,7 +656,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Write literals indexed by their offset #
     disassembly.push(v_str("LITERALS:"));
     for (i, l) in program.literals.iter().enumerate() {
-        disassembly.push(v_string(format!("{: >3}: {}", i, l.to_literal())));
+        disassembly.push(v_string(format!("{: >3}: {}", i, to_literal(l))));
     }
 
     // Write jump labels indexed by their offset & showing position & optional name
@@ -697,7 +695,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         disassembly.push(v_string(format!("{: >3}: {:?}{}", i, op, line_no_string)));
     }
 
-    Ok(Ret(v_listv(disassembly)))
+    Ok(Ret(v_list(&disassembly)))
 }
 bf_declare!(disassemble, bf_disassemble);
 

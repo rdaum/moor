@@ -23,6 +23,7 @@ use eyre::Context;
 #[cfg(feature = "relbox")]
 use common::create_relbox_db;
 use common::{create_wiredtiger_db, testsuite_dir};
+use moor_compiler::to_literal;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::{SessionError, SessionFactory};
 use moor_kernel::tasks::NoopTasksDb;
@@ -36,7 +37,7 @@ use moor_kernel::{
     SchedulerClient,
 };
 use moor_moot::{execute_moot_test, MootRunner};
-use moor_values::var::{v_none, Objid, Var};
+use moor_values::{v_none, Objid, Var};
 
 mod common;
 
@@ -102,11 +103,11 @@ impl MootRunner for SchedulerMootRunner {
         unimplemented!("Not supported on SchedulerMootRunner");
     }
 
-    fn read_eval_result(&mut self, player: Objid) -> eyre::Result<Option<moor_values::var::Var>> {
+    fn read_eval_result(&mut self, player: Objid) -> eyre::Result<Option<Var>> {
         Ok(self
             .eval_result
             .take()
-            .inspect(|var| eprintln!("{player} << {var}")))
+            .inspect(|var| eprintln!("{player} << {}", to_literal(var))))
     }
 }
 

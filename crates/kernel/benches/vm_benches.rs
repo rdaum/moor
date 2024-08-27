@@ -35,8 +35,8 @@ use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::tasks::AbortLimitReason;
 use moor_values::util::BitEnum;
-use moor_values::var::{List, Symbol};
-use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
+use moor_values::{AsByteBuffer, Var, NOTHING, SYSTEM_OBJECT};
+use moor_values::Symbol;
 
 fn create_worldstate() -> WiredTigerDB {
     let (ws_source, _) = WiredTigerDB::open(None);
@@ -51,7 +51,7 @@ fn create_worldstate() -> WiredTigerDB {
 pub fn prepare_call_verb(
     world_state: &mut dyn WorldState,
     verb_name: &str,
-    args: List,
+    args: Vec<Var>,
     max_ticks: usize,
 ) -> VmHost {
     let mut vm_host = VmHost::new(0, 20, max_ticks, Duration::from_secs(15));
@@ -95,7 +95,7 @@ fn prepare_vm_execution(
         BinaryType::LambdaMoo18X,
     )
     .unwrap();
-    let vm_host = prepare_call_verb(tx.as_mut(), "test", List::new(), max_ticks);
+    let vm_host = prepare_call_verb(tx.as_mut(), "test", vec![], max_ticks);
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     vm_host
 }

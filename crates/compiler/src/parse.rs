@@ -19,18 +19,18 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use moor_values::var::{v_none, Symbol};
 use moor_values::SYSTEM_OBJECT;
+use moor_values::{v_none, Symbol};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
 use tracing::{instrument, warn};
 
-use moor_values::var::Error::{
+use moor_values::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
     E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use moor_values::var::Objid;
-use moor_values::var::{v_err, v_float, v_int, v_objid, v_str, v_string};
+use moor_values::Objid;
+use moor_values::{v_err, v_float, v_int, v_objid, v_str, v_string};
 
 use crate::ast::Arg::{Normal, Splice};
 use crate::ast::StmtNode::Scope;
@@ -1189,9 +1189,9 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
 
 #[cfg(test)]
 mod tests {
-    use moor_values::var::Error::{E_INVARG, E_PROPNF, E_VARNF};
-    use moor_values::var::{v_err, v_float, v_int, v_obj, v_str};
-    use moor_values::var::{v_none, Symbol};
+    use moor_values::Error::{E_INVARG, E_PROPNF, E_VARNF};
+    use moor_values::{v_err, v_float, v_int, v_obj, v_str};
+    use moor_values::{v_none, Symbol};
 
     use crate::ast::Arg::{Normal, Splice};
     use crate::ast::Expr::{Call, Id, Prop, Value, Verb};

@@ -15,16 +15,16 @@
 use std::ops::BitOr;
 
 use moor_compiler::offset_for_builtin;
-use moor_values::var::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_values::var::Variant;
-use moor_values::var::{v_empty_list, v_int, v_list, v_string};
-use moor_values::var::{v_listv, Error};
+use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_values::{
+    v_empty_list, v_int, v_list, v_list_iter, v_string, IndexMode, Sequence, VarType,
+};
+use moor_values::{Error, Variant};
 use onig::{Region, SearchOptions, SyntaxOperator};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
-use crate::vm::moo_execute::one_to_zero_index;
 
 fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -35,7 +35,7 @@ fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // is not *really* a correct place for it, but `bf_list_sets_and_maps_too_i_guess.rs` is a bit silly.
     match container.variant() {
         Variant::List(list) => {
-            if list.contains_case_sensitive(value) {
+            if list.index_in(value, true).map_err(BfErr::Code)?.is_some() {
                 Ok(Ret(v_int(1)))
             } else {
                 Ok(Ret(v_int(0)))
@@ -43,7 +43,7 @@ fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
         Variant::Map(map) => Ok(Ret(v_int(
             map.iter()
-                .position(|(_item_key, item_value)| value.eq_case_sensitive(item_value))
+                .position(|(_item_key, item_value)| value.eq_case_sensitive(&item_value))
                 .map(|pos| pos + 1)
                 .unwrap_or(0) as i64,
         ))),
@@ -56,48 +56,38 @@ fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let len = bf_args.args.len();
-    let value = bf_args.args[1].clone();
-    if len == 2 {
-        let list = &mut bf_args.args[0];
-        let Variant::List(list) = list.variant_mut() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        Ok(Ret(list.push(value)))
-    } else {
-        let index = bf_args.args[2].clone();
-        let list = &mut bf_args.args[0];
-        let Variant::List(list) = list.variant_mut() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        let index = match one_to_zero_index(&index) {
-            Ok(i) => i,
-            Err(e) => return Err(BfErr::Code(e)),
-        };
-        Ok(Ret(list.insert(index as isize, value)))
+    let value = &bf_args.args[1];
+    let list = &bf_args.args[0];
+    if list.type_code() != VarType::TYPE_LIST {
+        return Err(BfErr::Code(E_TYPE));
     }
+    // If two args, treat as push. If three, treat as insert.
+    if bf_args.args.len() == 2 {
+        return Ok(Ret(list.push(value).map_err(BfErr::Code)?));
+    }
+    let index = &bf_args.args[2];
+    let res = list.insert(index, value, IndexMode::OneBased);
+    Ok(Ret(res.map_err(BfErr::Code)?))
 }
+
 bf_declare!(listinsert, bf_listinsert);
 
 fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let value = bf_args.args[1].clone();
-    let list = &mut bf_args.args[0];
-    let Variant::List(mut list) = list.variant().clone() else {
+    let value = &bf_args.args[1];
+    let list = &bf_args.args[0];
+    if list.type_code() != VarType::TYPE_LIST {
         return Err(BfErr::Code(E_TYPE));
-    };
-    let new_list = if bf_args.args.len() == 2 {
-        list.push(value.clone())
-    } else {
-        let index = bf_args.args[2].variant();
-        let Variant::Int(index) = index else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        list.insert(*index as isize, value.clone())
-    };
-    Ok(Ret(new_list))
+    }
+    // If two args, treat as push. If three, treat as insert.
+    if bf_args.args.len() == 2 {
+        return Ok(Ret(list.push(value).map_err(BfErr::Code)?));
+    }
+    let index = &bf_args.args[2];
+    let res = list.insert(index, value, IndexMode::ZeroBased);
+    Ok(Ret(res.map_err(BfErr::Code)?))
 }
 bf_declare!(listappend, bf_listappend);
 
@@ -106,15 +96,10 @@ fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
     let index = bf_args.args[1].clone();
-    let list = bf_args.args[0].variant_mut();
-    let Variant::List(list) = list else {
-        return Err(BfErr::Code(E_TYPE));
-    };
-    let index = match one_to_zero_index(&index) {
-        Ok(i) => i,
-        Err(e) => return Err(BfErr::Code(e)),
-    };
-    Ok(Ret(list.remove_at(index)))
+    let list = &bf_args.args[0];
+    Ok(Ret(list
+        .remove_at(&index, IndexMode::OneBased)
+        .map_err(BfErr::Code)?))
 }
 bf_declare!(listdelete, bf_listdelete);
 
@@ -125,14 +110,12 @@ fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let index = bf_args.args[2].clone();
     let value = bf_args.args[1].clone();
     let list = &mut bf_args.args[0];
-    let Variant::List(ref mut list) = list.variant_mut() else {
+    if list.type_code() != VarType::TYPE_LIST {
         return Err(BfErr::Code(E_TYPE));
-    };
-    let index = match one_to_zero_index(&index) {
-        Ok(i) => i,
-        Err(e) => return Err(BfErr::Code(e)),
-    };
-    Ok(Ret(list.set(index as usize, value.clone())))
+    }
+    Ok(Ret(list
+        .index_set(&index, &value, IndexMode::OneBased)
+        .map_err(BfErr::Code)?))
 }
 bf_declare!(listset, bf_listset);
 
@@ -142,13 +125,10 @@ fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let value = bf_args.args[1].clone();
     let list = &mut bf_args.args[0];
-    let Variant::List(ref mut list) = list.variant_mut() else {
+    let Variant::List(list) = list.variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    if !list.contains(&value) {
-        return Ok(Ret(list.push(value.clone())));
-    }
-    Ok(Ret(bf_args.args[0].clone()))
+    Ok(Ret(list.set_add(&value).map_err(BfErr::Code)?))
 }
 bf_declare!(setadd, bf_setadd);
 
@@ -157,11 +137,11 @@ fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
     let value = bf_args.args[1].clone();
-    let list = bf_args.args[0].variant_mut();
-    let Variant::List(ref mut list) = list else {
+    let list = bf_args.args[0].variant();
+    let Variant::List(list) = list else {
         return Err(BfErr::Code(E_TYPE));
     };
-    Ok(Ret(list.setremove(&value)))
+    Ok(Ret(list.set_remove(&value).map_err(BfErr::Code)?))
 }
 bf_declare!(setremove, bf_setremove);
 
@@ -290,18 +270,21 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Bf
     };
 
     // TODO: Regex pattern cache?
-    let Some((overall, match_vec)) =
-        perform_regex_match(pattern.as_str(), subject.as_str(), case_matters, reverse)
-            .map_err(BfErr::Code)?
+    let Some((overall, match_vec)) = perform_regex_match(
+        &pattern.as_string(),
+        &subject.as_string(),
+        case_matters,
+        reverse,
+    )
+    .map_err(BfErr::Code)?
     else {
         return Ok(Ret(v_empty_list()));
     };
 
-    let subs = v_listv(
+    let subs = v_list_iter(
         match_vec
             .iter()
-            .map(|(start, end)| v_list(&[v_int(*start as i64), v_int(*end as i64)]))
-            .collect::<Vec<_>>(),
+            .map(|(start, end)| v_list(&[v_int(*start as i64), v_int(*end as i64)])),
     );
     Ok(Ret(v_list(&[
         v_int(overall.0 as i64),
@@ -399,7 +382,7 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_INVARG));
     }
 
-    let (Some(a), Some(b)) = (subs.get(2), subs.get(3)) else {
+    let (Ok(a), Ok(b)) = (subs.index(2), subs.index(3)) else {
         return Err(BfErr::Code(E_INVARG));
     };
     let (Variant::List(subs), Variant::Str(source)) = (a.variant(), b.variant()) else {
@@ -415,7 +398,7 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         if sub.len() != 2 {
             return Err(BfErr::Code(E_INVARG));
         }
-        let (Some(start), Some(end)) = (sub.get(0), sub.get(1)) else {
+        let (Ok(start), Ok(end)) = (sub.index(0), sub.index(1)) else {
             return Err(BfErr::Code(E_INVARG));
         };
         let (Variant::Int(start), Variant::Int(end)) = (start.variant(), end.variant()) else {
@@ -424,7 +407,7 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         mysubs.push((*start as isize, *end as isize));
     }
 
-    match substitute(template.as_str(), &mysubs, source.as_str()) {
+    match substitute(&template.as_string(), &mysubs, &source.as_string()) {
         Ok(r) => Ok(Ret(v_string(r))),
         Err(e) => Err(BfErr::Code(e)),
     }

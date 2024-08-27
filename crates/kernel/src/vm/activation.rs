@@ -25,11 +25,11 @@ use moor_values::model::VerbDef;
 use moor_values::model::VerbInfo;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::util::BitEnum;
-use moor_values::var::Objid;
-use moor_values::var::Symbol;
-use moor_values::var::{v_empty_list, v_int, v_objid, v_str, v_string, Var, VarType};
-use moor_values::var::{v_empty_str, Error, List, Variant};
+use moor_values::Symbol;
 use moor_values::NOTHING;
+use moor_values::{v_empty_list, v_int, v_objid, v_str, v_string, Var, VarType};
+use moor_values::{v_empty_str, Error};
+use moor_values::{v_list, Objid};
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::moo_frame::MooStackFrame;
@@ -52,7 +52,7 @@ pub(crate) struct Activation {
     /// The object that is the 'player' role; that is, the active user of this task.
     pub(crate) player: Objid,
     /// The arguments to the verb or bf being called.
-    pub(crate) args: List,
+    pub(crate) args: Vec<Var>,
     /// The name of the verb that is currently being executed.
     pub(crate) verb_name: Symbol,
     /// The extended information about the verb that is currently being executed.
@@ -169,10 +169,7 @@ impl Activation {
             GlobalName::verb,
             v_str(verb_call_request.call.verb_name.as_str()),
         );
-        frame.set_global_variable(
-            GlobalName::args,
-            Var::new(Variant::List(verb_call_request.call.args.clone())),
-        );
+        frame.set_global_variable(GlobalName::args, v_list(&verb_call_request.call.args));
 
         // From the command, if any...
         if let Some(ref command) = verb_call_request.command {
@@ -263,7 +260,7 @@ impl Activation {
             verb_info,
             verb_name: *EVAL_SYMBOL,
             command: None,
-            args: List::new(),
+            args: vec![],
             permissions,
         }
     }
@@ -271,7 +268,7 @@ impl Activation {
     pub fn for_bf_call(
         bf_id: BuiltinId,
         bf_name: Symbol,
-        args: List,
+        args: Vec<Var>,
         _verb_flags: BitEnum<VerbFlag>,
         player: Objid,
     ) -> Self {

@@ -26,7 +26,7 @@ pub use exec_state::VMExecState;
 use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
 use moor_values::model::VerbInfo;
-use moor_values::var::{Objid, Var};
+use moor_values::{Objid, Var};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 

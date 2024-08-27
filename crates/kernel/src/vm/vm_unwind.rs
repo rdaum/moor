@@ -17,10 +17,9 @@ use moor_compiler::{Label, Offset, BUILTINS};
 use moor_values::model::Named;
 use moor_values::model::VerbFlag;
 use moor_values::tasks::Exception;
-use moor_values::var::v_listv;
-use moor_values::var::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
-use moor_values::var::{Error, ErrorPack};
 use moor_values::NOTHING;
+use moor_values::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
+use moor_values::{Error, ErrorPack};
 use tracing::trace;
 
 use crate::vm::activation::{Activation, Frame};
@@ -74,7 +73,7 @@ impl VMExecState {
                 }
             };
 
-            stack_list.push(v_listv(traceback_entry));
+            stack_list.push(v_list(&traceback_entry));
         }
         stack_list
     }

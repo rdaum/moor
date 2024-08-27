@@ -15,9 +15,9 @@
 use crate::bf_declare;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
-use moor_values::var::Error::{E_ARGS, E_RANGE, E_TYPE};
-use moor_values::var::{v_bool, v_listv, Var, Variant};
-
+use moor_values::Associative;
+use moor_values::Error::{E_ARGS, E_RANGE, E_TYPE};
+use moor_values::{v_bool, v_list, Var, Variant};
 /// Returns a copy of map with the value corresponding to key removed. If key is not a valid key, then E_RANGE is raised.
 fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -35,7 +35,7 @@ fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     }
 
-    let (nm, Some(_)) = m.remove(&bf_args.args[1]) else {
+    let (nm, Some(_)) = m.remove(&bf_args.args[1], false) else {
         return Err(BfErr::Code(E_RANGE));
     };
 
@@ -54,7 +54,7 @@ fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let keys: Vec<Var> = m.iter().map(|kv| kv.0.clone()).collect();
 
-    Ok(BfRet::Ret(v_listv(keys)))
+    Ok(BfRet::Ret(v_list(&keys)))
 }
 bf_declare!(mapkeys, bf_mapkeys);
 
@@ -69,7 +69,7 @@ fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let values: Vec<Var> = m.iter().map(|kv| kv.1.clone()).collect();
 
-    Ok(BfRet::Ret(v_listv(values)))
+    Ok(BfRet::Ret(v_list(&values)))
 }
 bf_declare!(mapvalues, bf_mapvalues);
 
@@ -89,9 +89,10 @@ fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     }
 
-    let v = m.get(&bf_args.args[1]);
-
-    Ok(BfRet::Ret(v_bool(v.is_some())))
+    let contains = m
+        .contains_key(&bf_args.args[1], false)
+        .map_err(BfErr::Code)?;
+    Ok(BfRet::Ret(v_bool(contains)))
 }
 bf_declare!(maphaskey, bf_maphaskey);
 

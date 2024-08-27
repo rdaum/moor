@@ -14,8 +14,8 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::ValSet;
-use crate::var::Objid;
 use crate::AsByteBuffer;
+use crate::Objid;
 use bytes::BufMut;
 use bytes::Bytes;
 use itertools::Itertools;

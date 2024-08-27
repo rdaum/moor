@@ -20,10 +20,10 @@ use moor_compiler::{BuiltinId, BUILTINS};
 use moor_values::model::Perms;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::var::Error;
-use moor_values::var::Objid;
-use moor_values::var::Symbol;
-use moor_values::var::Var;
+use moor_values::Error;
+use moor_values::Objid;
+use moor_values::Symbol;
+use moor_values::Var;
 
 use crate::builtins::bf_list_sets::register_bf_list_sets;
 use crate::builtins::bf_maps::register_bf_maps;

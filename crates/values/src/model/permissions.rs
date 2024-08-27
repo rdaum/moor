@@ -17,7 +17,7 @@ use crate::model::props::PropFlag;
 use crate::model::verbs::VerbFlag;
 use crate::model::{PropPerms, WorldStateError};
 use crate::util::BitEnum;
-use crate::var::Objid;
+use crate::Objid;
 
 /// Combination of who a set of permissions is for, and what permissions they have.
 #[derive(Debug, Clone, Eq, PartialEq)]

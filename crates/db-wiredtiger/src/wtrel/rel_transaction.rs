@@ -582,7 +582,7 @@ mod tests {
 
     use moor_db::RelationalTransaction;
     use moor_values::model::{ObjSet, ValSet};
-    use moor_values::var::Objid;
+    use moor_values::Objid;
     use TestRelation::{CompositeToOne, OneToOne, OneToOneSecondaryIndexed, Sequences};
 
     use crate::wtrel::rel_db::WiredTigerRelDb;

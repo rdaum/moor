@@ -24,9 +24,9 @@ use moor_values::model::{ObjSet, PropPerms};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
-use moor_values::var::Objid;
-use moor_values::var::Symbol;
-use moor_values::var::Var;
+use moor_values::Objid;
+use moor_values::Symbol;
+use moor_values::Var;
 
 /// A trait defining a generic interface to a database for storing the per-attribute values
 /// of our objects and their properties and verbs.  Used by DbTxWorldState.

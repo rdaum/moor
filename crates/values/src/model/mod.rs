@@ -41,7 +41,7 @@ mod verbdef;
 mod verbs;
 mod world_state;
 
-use crate::var::Symbol;
+use crate::Symbol;
 pub use world_state::WorldStateError;
 
 /// The result code from a commit/complete operation on the world's state.

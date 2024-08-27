@@ -29,8 +29,8 @@ use moor_values::model::VerbFlag;
 use moor_values::model::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_values::model::{ObjAttrs, ObjFlag};
 use moor_values::util::BitEnum;
-use moor_values::var::Objid;
-use moor_values::var::Var;
+use moor_values::Objid;
+use moor_values::Var;
 use moor_values::{AsByteBuffer, NOTHING};
 
 use crate::textdump::read::TextdumpReaderError;

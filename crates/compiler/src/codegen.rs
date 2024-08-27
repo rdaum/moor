@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 use tracing::error;
 
-use moor_values::var::Var;
-use moor_values::var::Variant;
+use moor_values::Var;
+use moor_values::Variant;
 
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,

@@ -37,7 +37,7 @@ pub use crate::names::{Name, UnboundNames};
 pub use crate::opcode::{Op, ScatterLabel};
 pub use crate::parse::CompileOptions;
 pub use crate::program::{Program, EMPTY_PROGRAM};
-pub use crate::unparse::unparse;
+pub use crate::unparse::{to_literal, unparse};
 
 #[macro_use]
 extern crate pest_derive;

@@ -12,14 +12,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_values::{Objid, Sequence};
+use moor_values::{Var, VarType, Variant};
 use std::collections::BTreeMap;
 use std::io;
 
-use moor_values::var::Objid;
-use moor_values::var::{Var, VarType, Variant};
-
 use crate::textdump::read::TYPE_CLEAR;
 use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
+use moor_values::Associative;
 
 pub struct TextdumpWriter<W: io::Write> {
     writer: W,
@@ -61,8 +61,8 @@ impl<W: io::Write> TextdumpWriter<W> {
                     EncodingMode::ISO8859_1 => {
                         //
                         let encoding = encoding_rs::WINDOWS_1252;
-                        let s = s.as_str();
-                        let s = encoding.encode(s);
+                        let s = s.as_string();
+                        let s = encoding.encode(&s);
                         let written = self.writer.write(&s.0).unwrap();
                         assert_eq!(written, s.0.len());
                     }
@@ -84,8 +84,8 @@ impl<W: io::Write> TextdumpWriter<W> {
             Variant::Map(m) => {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_MAP as i64, m.len())?;
                 for (k, v) in m.iter() {
-                    self.write_var(k, false)?;
-                    self.write_var(v, false)?;
+                    self.write_var(&k, false)?;
+                    self.write_var(&v, false)?;
                 }
             }
             Variant::None => {

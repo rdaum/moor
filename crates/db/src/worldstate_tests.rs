@@ -23,10 +23,10 @@ use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::model::{HasUuid, Named};
 use moor_values::model::{ObjAttrs, PropFlag, ValSet};
 use moor_values::util::BitEnum;
-use moor_values::var::Objid;
-use moor_values::var::Symbol;
-use moor_values::var::{v_int, v_str};
+use moor_values::Objid;
+use moor_values::Symbol;
 use moor_values::NOTHING;
+use moor_values::{v_int, v_str};
 
 pub fn perform_test_create_object<F, TX>(begin_tx: F)
 where

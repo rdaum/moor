@@ -12,66 +12,47 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#![allow(non_camel_case_types, non_snake_case)]
-
-use std::cmp::Ordering;
-use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
-use std::str::FromStr;
-
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
-use bytes::Bytes;
-use decorum::R64;
-use lazy_static::lazy_static;
-use strum::FromRepr;
-
-use crate::encode::BINCODE_CONFIG;
-use crate::util::quote_str;
-pub use crate::var::error::{Error, ErrorPack};
-pub use crate::var::list::List;
-pub use crate::var::map::Map;
-pub use crate::var::objid::Objid;
-pub use crate::var::string::Str;
-pub use crate::var::symbol::Symbol;
-pub use crate::var::variant::Variant;
-use crate::{AsByteBuffer, DecodingError, EncodingError};
+//! TODO:
+//!     to_literal / formatting
+//!     move everything up and over into `../var`
+//!     go through all uses of existing var and update them to use the new var
+//!     any missed functionality along the way?
+//!     more tests, and make pass moot once above is done
+//!     later:
+//!         more documentation
+//!         builder vs reader mode? - optimization for values under construction.
+//!         some From/Into impls for common types might be missing
 
 mod error;
 mod list;
-#[allow(dead_code)]
-mod list_impl_buffer;
-#[allow(dead_code)]
-mod list_impl_vector;
 mod map;
 mod objid;
+mod scalar;
+mod storage;
 mod string;
 mod symbol;
+#[allow(clippy::module_inception)]
+mod var;
 mod variant;
-mod varops;
 
-lazy_static! {
-    static ref VAR_NONE: Var = Variant::None.into();
-    static ref VAR_EMPTY_LIST: Var = Variant::List(List::new()).into();
-    static ref VAR_EMPTY_STR: Var = Var::new(Variant::Str(Str::from_str("").unwrap()));
-}
-
-// Macro to call v_list with vector arguments to construct instead of having to do v_list(&[...])
-#[allow(unused_macros)]
-macro_rules! v_lst {
-    () => (
-        $crate::values::var::v_empty_list()
-    );
-    ($($x:expr),+ $(,)?) => (
-        vec![$($x),+]
-    );
-}
+pub use error::{Error, ErrorPack};
+pub use list::List;
+pub use map::Map;
+pub use objid::Objid;
+use std::fmt::Debug;
+pub use string::Str;
+use strum::FromRepr;
+pub use symbol::Symbol;
+pub use var::{
+    v_bool, v_empty_list, v_empty_map, v_empty_str, v_err, v_float, v_floatr, v_int, v_list,
+    v_list_iter, v_map, v_none, v_obj, v_objid, v_str, v_string, Var,
+};
+pub use variant::Variant;
 
 /// Integer encoding of values as represented in a `LambdaMOO` textdump, and by `bf_typeof`
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr)]
+#[allow(non_camel_case_types)]
 pub enum VarType {
     TYPE_INT = 0,
     TYPE_OBJ = 1,
@@ -84,873 +65,120 @@ pub enum VarType {
     TYPE_MAP = 10,
 }
 
-/// Var is our variant type / tagged union used to represent MOO's dynamically typed values.
-#[derive(Clone)]
-pub struct Var {
-    value: Variant,
+/// Sequence index modes: 0 or 1 indexed.
+/// This is used to determine how to handle index operations on sequences. Internally containers use
+/// 0-based indexing, but MOO uses 1-based indexing, so we allow the user to choose.
+#[derive(Clone, Copy, Debug)]
+pub enum IndexMode {
+    ZeroBased,
+    OneBased,
 }
 
-impl Var {
-    #[must_use]
-    pub fn new(value: Variant) -> Self {
-        Self { value }
+impl IndexMode {
+    pub fn adjust_i64(&self, index: i64) -> isize {
+        match self {
+            IndexMode::ZeroBased => index as isize,
+            IndexMode::OneBased => (index - 1) as isize,
+        }
     }
 
-    #[must_use]
-    pub fn is_root(&self) -> bool {
-        match self.variant() {
-            Variant::Obj(o) => o.is_sysobj(),
-            _ => false,
+    pub fn adjust_isize(&self, index: isize) -> isize {
+        match self {
+            IndexMode::ZeroBased => index,
+            IndexMode::OneBased => index - 1,
+        }
+    }
+
+    pub fn reverse_adjust_isize(&self, index: isize) -> isize {
+        match self {
+            IndexMode::ZeroBased => index,
+            IndexMode::OneBased => index + 1,
+        }
+    }
+
+    pub fn reverse_adjust_i64(&self, index: i64) -> isize {
+        match self {
+            IndexMode::ZeroBased => index as isize,
+            IndexMode::OneBased => (index + 1) as isize,
         }
     }
 }
 
-impl Encode for Var {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        // Use our own encoded form.
-        let encoded = encode(self);
-        bincode::encode_into_writer(encoded.as_ref(), encoder.writer(), *BINCODE_CONFIG)?;
-        Ok(())
+pub enum TypeClass<'a> {
+    Sequence(&'a dyn Sequence),
+    Associative(&'a dyn Associative),
+    Scalar,
+}
+
+impl<'a> TypeClass<'a> {
+    fn is_sequence(&self) -> bool {
+        matches!(self, TypeClass::Sequence(_))
+    }
+
+    fn is_associative(&self) -> bool {
+        matches!(self, TypeClass::Associative(_))
+    }
+
+    fn is_scalar(&self) -> bool {
+        matches!(self, TypeClass::Scalar)
     }
 }
 
-impl Decode for Var {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let slc: Vec<u8> = bincode::decode_from_reader(decoder.reader(), *BINCODE_CONFIG)?;
-        Ok(decode(Bytes::from(slc)))
-    }
+pub trait Sequence {
+    /// Return true if the sequence is empty.
+    fn is_empty(&self) -> bool;
+    /// Return the length of the sequence.
+    fn len(&self) -> usize;
+    /// Check if the sequence contains the element, returning its offset if it does.
+    /// `case_sensitive` is used to determine if the comparison should be case-sensitive.
+    /// (MOO case sensitivity is often false)
+    fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error>;
+    /// Check if the sequence contains the element, returning true if it does.
+    fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error>;
+    /// Get the `index`nth element of the sequence.
+    fn index(&self, index: usize) -> Result<Var, Error>;
+    /// Assign a new value to `index`nth element of the sequence.
+    fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error>;
+    // Take a copy, add a new value to the end, and return it.
+    fn push(&self, value: &Var) -> Result<Var, Error>;
+    /// Insert a new value at `index` in the sequence.
+    fn insert(&self, index: usize, value: &Var) -> Result<Var, Error>;
+    /// Return a sequence which is a subset of this sequence where the indices lay between `from`
+    /// and `to`, inclusive.
+    fn range(&self, from: isize, to: isize) -> Result<Var, Error>;
+    /// Assign new values to the sequence where the indices lay between `from` and `to`, inclusive.
+    fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error>;
+    /// Append the given sequence to this sequence.
+    fn append(&self, other: &Var) -> Result<Var, Error>;
+    /// Remove the `index`nth element of the sequence and return it.
+    fn remove_at(&self, index: usize) -> Result<Var, Error>;
 }
 
-impl<'de> BorrowDecode<'de> for Var {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let slc: Vec<u8> = bincode::decode_from_reader(decoder.reader(), *BINCODE_CONFIG)?;
-        Ok(decode(Bytes::from(slc)))
-    }
-}
-
-fn encoded_size(v: &Var) -> usize {
-    match v.variant() {
-        Variant::None => 1,
-        Variant::Str(s) => 1 + s.as_bytes().unwrap().len(),
-        Variant::Obj(o) => 1 + o.as_bytes().unwrap().len(),
-        Variant::Int(_) => 9,
-        Variant::Float(_) => 9,
-        Variant::Err(_) => 2,
-        Variant::List(l) => 1 + l.as_bytes().unwrap().len(),
-        Variant::Map(m) => 1 + m.as_bytes().unwrap().len(),
-    }
-}
-
-fn encode(v: &Var) -> Bytes {
-    let mut buffer = vec![];
-    // Push the type first.
-    buffer.push(v.type_id() as u8);
-    match v.variant() {
-        Variant::None => {
-            // Nothing to do.
-        }
-        Variant::Str(s) => {
-            buffer.extend_from_slice(s.as_bytes().unwrap().as_ref());
-        }
-        Variant::Obj(o) => {
-            buffer.extend_from_slice(o.as_bytes().unwrap().as_ref());
-        }
-        Variant::Int(i) => {
-            buffer.extend_from_slice(&i.to_le_bytes());
-        }
-        Variant::Float(f) => {
-            buffer.extend_from_slice(&f.to_le_bytes());
-        }
-        Variant::Err(e) => {
-            buffer.extend_from_slice(&[*e as u8]);
-        }
-        Variant::List(l) => {
-            buffer.extend_from_slice(l.as_bytes().unwrap().as_ref());
-        }
-        Variant::Map(m) => {
-            buffer.extend_from_slice(m.as_bytes().unwrap().as_ref());
-        }
-    }
-    Bytes::from(buffer)
-}
-
-fn decode(s: Bytes) -> Var {
-    assert!(!s.is_empty());
-    let type_id = s.as_ref()[0];
-    let type_id = VarType::from_repr(type_id).expect("Invalid type id");
-    let bytes = s.slice(1..);
-    match type_id {
-        VarType::TYPE_NONE => VAR_NONE.clone(),
-        VarType::TYPE_STR => {
-            let s = Str::from_bytes(bytes).unwrap();
-            Var::new(Variant::Str(s))
-        }
-        VarType::TYPE_OBJ => {
-            let o = Objid::from_bytes(bytes).unwrap();
-            Var::new(Variant::Obj(o))
-        }
-        VarType::TYPE_INT => {
-            let mut i_bytes = [0; 8];
-            i_bytes.copy_from_slice(bytes.as_ref());
-            let i = i64::from_le_bytes(i_bytes);
-            Var::new(Variant::Int(i))
-        }
-        VarType::TYPE_FLOAT => {
-            let mut f_bytes = [0; 8];
-            f_bytes.copy_from_slice(bytes.as_ref());
-            let f = f64::from_le_bytes(f_bytes);
-            Var::new(Variant::Float(f))
-        }
-        VarType::TYPE_ERR => {
-            let e = Error::from_repr(bytes.as_ref()[0]).unwrap();
-            Var::new(Variant::Err(e))
-        }
-        VarType::TYPE_LIST => {
-            let l = List::from_bytes(bytes).unwrap();
-            Var::new(Variant::List(l))
-        }
-        VarType::TYPE_MAP => {
-            let m = Map::from_bytes(bytes).unwrap();
-            Var::new(Variant::Map(m))
-        }
-        _ => panic!("Invalid type id: {:?}", type_id),
-    }
-}
-
-// For now the byte buffer repr of a Var is its Bincode encoding, but this will likely change in
-// the future.
-impl AsByteBuffer for Var {
-    fn size_bytes(&self) -> usize {
-        encoded_size(self)
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError>
-    where
-        Self: Sized,
-    {
-        let encoded = encode(self);
-        Ok(f(encoded.as_ref()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError>
-    where
-        Self: Sized,
-    {
-        let encoded = encode(self);
-        Ok(encoded.as_ref().to_vec())
-    }
-
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
-    where
-        Self: Sized,
-    {
-        Ok(decode(bytes))
-    }
-
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        let encoded = encode(self);
-        Ok(encoded)
-    }
-}
-
-#[must_use]
-pub fn v_bool(b: bool) -> Var {
-    Var::new(Variant::Int(i64::from(b)))
-}
-
-#[must_use]
-pub fn v_int(i: i64) -> Var {
-    Var::new(Variant::Int(i))
-}
-
-#[must_use]
-pub fn v_float(f: f64) -> Var {
-    Var::new(Variant::Float(f))
-}
-
-#[must_use]
-pub fn v_str(s: &str) -> Var {
-    Var::new(Variant::Str(Str::from_str(s).unwrap()))
-}
-
-#[must_use]
-pub fn v_string(s: String) -> Var {
-    Var::new(Variant::Str(Str::from_string(s)))
-}
-
-#[must_use]
-pub fn v_objid(o: Objid) -> Var {
-    Var::new(Variant::Obj(o))
-}
-
-#[must_use]
-pub fn v_obj(o: i64) -> Var {
-    Var::new(Variant::Obj(Objid(o)))
-}
-
-#[must_use]
-pub fn v_err(e: Error) -> Var {
-    Var::new(Variant::Err(e))
-}
-
-#[must_use]
-pub fn v_list(l: &[Var]) -> Var {
-    Var::new(Variant::List(List::from_slice(l)))
-}
-
-#[must_use]
-pub fn v_listv(l: Vec<Var>) -> Var {
-    Var::new(Variant::List(List::from_slice(&l)))
-}
-
-#[must_use]
-pub fn v_empty_list() -> Var {
-    VAR_EMPTY_LIST.clone()
-}
-
-#[must_use]
-pub fn v_empty_str() -> Var {
-    VAR_EMPTY_STR.clone()
-}
-
-#[must_use]
-pub fn v_none() -> Var {
-    VAR_NONE.clone()
-}
-
-#[must_use]
-pub fn v_empty_map() -> Var {
-    Var::new(Variant::Map(Map::new()))
-}
-
-#[must_use]
-pub fn v_map_pairs(pairs: &[(Var, Var)]) -> Var {
-    Var::new(Variant::Map(Map::from_pairs(pairs)))
-}
-
-impl Var {
-    /// Return a reference to the inner variant that this Var is wrapping.
-    #[must_use]
-    #[inline]
-    pub fn variant(&self) -> &Variant {
-        &self.value
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn variant_mut(&mut self) -> &mut Variant {
-        &mut self.value
-    }
-
-    /// Destroy the Var and return the inner variant that it was wrapping.
-    #[must_use]
-    #[inline]
-    pub fn take_variant(self) -> Variant {
-        self.value
-    }
-
-    #[must_use]
-    pub fn type_id(&self) -> VarType {
-        match self.variant() {
-            Variant::None => VarType::TYPE_NONE,
-            Variant::Str(_) => VarType::TYPE_STR,
-            Variant::Obj(_) => VarType::TYPE_OBJ,
-            Variant::Int(_) => VarType::TYPE_INT,
-            Variant::Float(_) => VarType::TYPE_FLOAT,
-            Variant::Err(_) => VarType::TYPE_ERR,
-            Variant::List(_) => VarType::TYPE_LIST,
-            Variant::Map(_) => VarType::TYPE_MAP,
-        }
-    }
-
-    #[must_use]
-    pub fn eq_case_sensitive(&self, other: &Self) -> bool {
-        match (self.variant(), other.variant()) {
-            (Variant::Str(l), Variant::Str(r)) => l.as_str().eq(r.as_str()),
-            _ => self == other,
-        }
-    }
-
-    #[must_use]
-    pub fn to_literal(&self) -> String {
-        match self.variant() {
-            Variant::None => "None".to_string(),
-            Variant::Int(i) => i.to_string(),
-            Variant::Float(f) => format!("{f:?}"),
-            Variant::Str(s) => quote_str(s.as_str()),
-            Variant::Obj(o) => format!("{o}"),
-            Variant::List(l) => {
-                let mut result = String::new();
-                result.push('{');
-                for (i, v) in l.iter().enumerate() {
-                    if i > 0 {
-                        result.push_str(", ");
-                    }
-                    result.push_str(&v.to_literal());
-                }
-                result.push('}');
-                result
-            }
-            Variant::Map(m) => {
-                let mut result = String::new();
-                result.push('[');
-                for (i, (k, v)) in m.iter().enumerate() {
-                    if i > 0 {
-                        result.push_str(", ");
-                    }
-                    result.push_str(&k.to_literal());
-                    result.push_str(" -> ");
-                    result.push_str(&v.to_literal());
-                }
-                result.push(']');
-                result
-            }
-            Variant::Err(e) => e.name().to_string(),
-        }
-    }
-}
-
-impl Display for Var {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_literal().as_str())
-    }
-}
-
-impl Debug for Var {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_literal().as_str())
-    }
-}
-
-impl PartialEq<Self> for Var {
-    fn eq(&self, other: &Self) -> bool {
-        match (self.variant(), other.variant()) {
-            (Variant::None, Variant::None) => true,
-            (Variant::Str(l), Variant::Str(r)) => l == r,
-            (Variant::Obj(l), Variant::Obj(r)) => l == r,
-            (Variant::Int(l), Variant::Int(r)) => l == r,
-            (Variant::Float(l), Variant::Float(r)) => l == r,
-            (Variant::Err(l), Variant::Err(r)) => l == r,
-            (Variant::List(l), Variant::List(r)) => l == r,
-            (Variant::Map(l), Variant::Map(r)) => l == r,
-            (Variant::None, _) => false,
-            (Variant::Str(_), _) => false,
-            (Variant::Obj(_), _) => false,
-            (Variant::Int(_), _) => false,
-            (Variant::Float(_), _) => false,
-            (Variant::Err(_), _) => false,
-            (Variant::List(_), _) => false,
-            (Variant::Map(_), _) => false,
-        }
-    }
-}
-
-impl PartialOrd<Self> for Var {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Var {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self.variant(), other.variant()) {
-            (Variant::None, Variant::None) => Ordering::Equal,
-            (Variant::Str(l), Variant::Str(r)) => l.cmp(r),
-            (Variant::Obj(l), Variant::Obj(r)) => l.cmp(r),
-            (Variant::Int(l), Variant::Int(r)) => l.cmp(r),
-            (Variant::Float(l), Variant::Float(r)) => R64::from(*l).cmp(&R64::from(*r)),
-            (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
-            (Variant::List(l), Variant::List(r)) => l.cmp(r),
-            (Variant::Map(l), Variant::Map(r)) => l.cmp(r),
-            (Variant::None, _) => Ordering::Less,
-            (Variant::Str(_), _) => Ordering::Less,
-            (Variant::Obj(_), _) => Ordering::Less,
-            (Variant::Int(_), _) => Ordering::Less,
-            (Variant::Float(_), _) => Ordering::Less,
-            (Variant::Err(_), _) => Ordering::Less,
-            (Variant::List(_), _) => Ordering::Less,
-            (Variant::Map(_), _) => Ordering::Less,
-        }
-    }
-}
-
-impl Hash for Var {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let t = self.type_id() as u8;
-        t.hash(state);
-        match self.variant() {
-            Variant::None => {}
-            Variant::Str(s) => s.hash(state),
-            Variant::Obj(o) => o.hash(state),
-            Variant::Int(i) => i.hash(state),
-            Variant::Float(f) => R64::from(*f).hash(state),
-            Variant::Err(e) => e.hash(state),
-            Variant::List(l) => l.hash(state),
-            Variant::Map(m) => m.hash(state),
-        }
-    }
-}
-
-impl Eq for Var {}
-
-impl<'a> From<&'a str> for Var {
-    fn from(s: &'a str) -> Self {
-        v_str(s)
-    }
-}
-
-impl From<String> for Var {
-    fn from(s: String) -> Self {
-        v_str(&s)
-    }
-}
-
-impl From<i64> for Var {
-    fn from(i: i64) -> Self {
-        v_int(i)
-    }
-}
-impl From<&i64> for Var {
-    fn from(i: &i64) -> Self {
-        v_int(*i)
-    }
-}
-
-impl From<f64> for Var {
-    fn from(f: f64) -> Self {
-        v_float(f)
-    }
-}
-
-impl From<Objid> for Var {
-    fn from(o: Objid) -> Self {
-        v_objid(o)
-    }
-}
-
-impl From<Vec<Self>> for Var {
-    fn from(l: Vec<Self>) -> Self {
-        v_listv(l)
-    }
-}
-
-impl<T, const COUNT: usize> From<[T; COUNT]> for Var
-where
-    for<'a> Var: From<&'a T>,
-{
-    fn from(a: [T; COUNT]) -> Self {
-        v_list(&a.iter().map(|v| v.into()).collect::<Vec<_>>())
-    }
-}
-
-impl From<Error> for Var {
-    fn from(e: Error) -> Self {
-        v_err(e)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::cmp::Ordering;
-
-    use crate::var::error::Error;
-    use crate::var::error::Error::{E_RANGE, E_TYPE};
-    use crate::var::{v_empty_list, v_err, v_float, v_int, v_list, v_obj, v_str};
-
-    #[test]
-    fn test_add() {
-        assert_eq!(v_int(1).add(&v_int(2)), Ok(v_int(3)));
-        assert_eq!(v_int(1).add(&v_float(2.0)), Ok(v_float(3.0)));
-        assert_eq!(v_float(1.).add(&v_int(2)), Ok(v_float(3.)));
-        assert_eq!(v_float(1.).add(&v_float(2.)), Ok(v_float(3.)));
-        assert_eq!(v_str("a").add(&v_str("b")), Ok(v_str("ab")));
-    }
-
-    #[test]
-    fn test_sub() -> Result<(), Error> {
-        assert_eq!(v_int(1).sub(&v_int(2))?, v_int(-1));
-        assert_eq!(v_int(1).sub(&v_float(2.))?, v_float(-1.));
-        assert_eq!(v_float(1.).sub(&v_int(2))?, v_float(-1.));
-        assert_eq!(v_float(1.).sub(&v_float(2.))?, v_float(-1.));
-        Ok(())
-    }
-
-    #[test]
-    fn test_mul() -> Result<(), Error> {
-        assert_eq!(v_int(1).mul(&v_int(2))?, v_int(2));
-        assert_eq!(v_int(1).mul(&v_float(2.))?, v_float(2.));
-        assert_eq!(v_float(1.).mul(&v_int(2))?, v_float(2.));
-        assert_eq!(v_float(1.).mul(&v_float(2.))?, v_float(2.));
-        Ok(())
-    }
-
-    #[test]
-    fn test_div() -> Result<(), Error> {
-        assert_eq!(v_int(1).div(&v_int(2))?, v_int(0));
-        assert_eq!(v_int(1).div(&v_float(2.))?, v_float(0.5));
-        assert_eq!(v_float(1.).div(&v_int(2))?, v_float(0.5));
-        assert_eq!(v_float(1.).div(&v_float(2.))?, v_float(0.5));
-        Ok(())
-    }
-
-    #[test]
-    fn test_modulus() {
-        assert_eq!(v_int(1).modulus(&v_int(2)), Ok(v_int(1)));
-        assert_eq!(v_int(1).modulus(&v_float(2.)), Ok(v_float(1.)));
-        assert_eq!(v_float(1.).modulus(&v_int(2)), Ok(v_float(1.)));
-        assert_eq!(v_float(1.).modulus(&v_float(2.)), Ok(v_float(1.)));
-        assert_eq!(v_str("moop").modulus(&v_int(2)), Ok(v_err(E_TYPE)));
-    }
-
-    #[test]
-    fn test_pow() {
-        assert_eq!(v_int(1).pow(&v_int(2)), Ok(v_int(1)));
-        assert_eq!(v_int(2).pow(&v_int(2)), Ok(v_int(4)));
-        assert_eq!(v_int(2).pow(&v_float(2.)), Ok(v_float(4.)));
-        assert_eq!(v_float(2.).pow(&v_int(2)), Ok(v_float(4.)));
-        assert_eq!(v_float(2.).pow(&v_float(2.)), Ok(v_float(4.)));
-    }
-
-    #[test]
-    fn test_negative() {
-        assert_eq!(v_int(1).negative(), Ok(v_int(-1)));
-        assert_eq!(v_float(1.).negative(), Ok(v_float(-1.0)));
-    }
-
-    #[test]
-    fn test_index() {
-        assert_eq!(v_list(&[v_int(1), v_int(2)]).index(0), Ok(v_int(1)));
-        assert_eq!(v_list(&[v_int(1), v_int(2)]).index(1), Ok(v_int(2)));
-        assert_eq!(v_list(&[v_int(1), v_int(2)]).index(2), Ok(v_err(E_RANGE)));
-        assert_eq!(v_str("ab").index(0), Ok(v_str("a")));
-        assert_eq!(v_str("ab").index(1), Ok(v_str("b")));
-        assert_eq!(v_str("ab").index(2), Ok(v_err(E_RANGE)));
-    }
-
-    #[test]
-    fn test_eq() {
-        assert_eq!(v_int(1), v_int(1));
-        assert_eq!(v_float(1.), v_float(1.));
-        assert_eq!(v_str("a"), v_str("a"));
-        assert_eq!(v_str("a"), v_str("A"));
-        assert_eq!(v_list(&[v_int(1), v_int(2)]), v_list(&[v_int(1), v_int(2)]));
-        assert_eq!(v_obj(1), v_obj(1));
-        assert_eq!(v_err(E_TYPE), v_err(E_TYPE));
-    }
-
-    #[test]
-    fn test_ne() {
-        assert_ne!(v_int(1), v_int(2));
-        assert_ne!(v_float(1.), v_float(2.));
-        assert_ne!(v_str("a"), v_str("b"));
-        assert_ne!(v_list(&[v_int(1), v_int(2)]), v_list(&[v_int(1), v_int(3)]));
-        assert_ne!(v_obj(1), v_obj(2));
-        assert_ne!(v_err(E_TYPE), v_err(E_RANGE));
-    }
-
-    #[test]
-    fn test_lt() {
-        assert!(v_int(1) < v_int(2));
-        assert!(v_float(1.) < v_float(2.));
-        assert!(v_str("a") < v_str("b"));
-        assert!(v_list(&[v_int(1), v_int(2)]) < v_list(&[v_int(1), v_int(3)]));
-        assert!(v_obj(1) < v_obj(2));
-        assert!(v_err(E_TYPE) < v_err(E_RANGE));
-    }
-
-    #[test]
-    fn test_le() {
-        assert!(v_int(1) <= v_int(2));
-        assert!(v_float(1.) <= v_float(2.));
-        assert!(v_str("a") <= v_str("b"));
-        assert!(v_list(&[v_int(1), v_int(2)]) <= v_list(&[v_int(1), v_int(3)]));
-        assert!(v_obj(1) <= v_obj(2));
-        assert!(v_err(E_TYPE) <= v_err(E_RANGE));
-    }
-
-    #[test]
-    fn test_gt() {
-        assert!(v_int(2) > v_int(1));
-        assert!(v_float(2.) > v_float(1.));
-        assert!(v_str("b") > v_str("a"));
-        assert!(v_list(&[v_int(1), v_int(3)]) > v_list(&[v_int(1), v_int(2)]));
-        assert!(v_obj(2) > v_obj(1));
-        assert!(v_err(E_RANGE) > v_err(E_TYPE));
-    }
-
-    #[test]
-    fn test_ge() {
-        assert!(v_int(2) >= v_int(1));
-        assert!(v_float(2.) >= v_float(1.));
-        assert!(v_str("b") >= v_str("a"));
-        assert!(v_list(&[v_int(1), v_int(3)]) >= v_list(&[v_int(1), v_int(2)]));
-        assert!(v_obj(2) >= v_obj(1));
-        assert!(v_err(E_RANGE) >= v_err(E_TYPE));
-    }
-
-    #[test]
-    fn test_partial_cmp() {
-        assert_eq!(v_int(1).partial_cmp(&v_int(1)), Some(Ordering::Equal));
-        assert_eq!(v_float(1.).partial_cmp(&v_float(1.)), Some(Ordering::Equal));
-        assert_eq!(v_str("a").partial_cmp(&v_str("a")), Some(Ordering::Equal));
-        assert_eq!(
-            v_list(&[v_int(1), v_int(2)]).partial_cmp(&v_list(&[v_int(1), v_int(2)])),
-            Some(Ordering::Equal)
-        );
-        assert_eq!(v_obj(1).partial_cmp(&v_obj(1)), Some(Ordering::Equal));
-        assert_eq!(
-            v_err(E_TYPE).partial_cmp(&v_err(E_TYPE)),
-            Some(Ordering::Equal)
-        );
-
-        assert_eq!(v_int(1).partial_cmp(&v_int(2)), Some(Ordering::Less));
-        assert_eq!(v_float(1.).partial_cmp(&v_float(2.)), Some(Ordering::Less));
-        assert_eq!(v_str("a").partial_cmp(&v_str("b")), Some(Ordering::Less));
-        assert_eq!(
-            v_list(&[v_int(1), v_int(2)]).partial_cmp(&v_list(&[v_int(1), v_int(3)])),
-            Some(Ordering::Less)
-        );
-        assert_eq!(v_obj(1).partial_cmp(&v_obj(2)), Some(Ordering::Less));
-        assert_eq!(
-            v_err(E_TYPE).partial_cmp(&v_err(E_RANGE)),
-            Some(Ordering::Less)
-        );
-
-        assert_eq!(v_int(2).partial_cmp(&v_int(1)), Some(Ordering::Greater));
-        assert_eq!(
-            v_float(2.).partial_cmp(&v_float(1.)),
-            Some(Ordering::Greater)
-        );
-        assert_eq!(v_str("b").partial_cmp(&v_str("a")), Some(Ordering::Greater));
-        assert_eq!(
-            v_list(&[v_int(1), v_int(3)]).partial_cmp(&v_list(&[v_int(1), v_int(2)])),
-            Some(Ordering::Greater)
-        );
-        assert_eq!(v_obj(2).partial_cmp(&v_obj(1)), Some(Ordering::Greater));
-        assert_eq!(
-            v_err(E_RANGE).partial_cmp(&v_err(E_TYPE)),
-            Some(Ordering::Greater)
-        );
-    }
-
-    #[test]
-    fn test_cmp() {
-        assert_eq!(v_int(1).cmp(&v_int(1)), Ordering::Equal);
-        assert_eq!(v_float(1.).cmp(&v_float(1.)), Ordering::Equal);
-        assert_eq!(v_str("a").cmp(&v_str("a")), Ordering::Equal);
-        assert_eq!(
-            v_list(&[v_int(1), v_int(2)]).cmp(&v_list(&[v_int(1), v_int(2)])),
-            Ordering::Equal
-        );
-        assert_eq!(v_obj(1).cmp(&v_obj(1)), Ordering::Equal);
-        assert_eq!(v_err(E_TYPE).cmp(&v_err(E_TYPE)), Ordering::Equal);
-
-        assert_eq!(v_int(1).cmp(&v_int(2)), Ordering::Less);
-        assert_eq!(v_float(1.).cmp(&v_float(2.)), Ordering::Less);
-        assert_eq!(v_str("a").cmp(&v_str("b")), Ordering::Less);
-        assert_eq!(
-            v_list(&[v_int(1), v_int(2)]).cmp(&v_list(&[v_int(1), v_int(3)])),
-            Ordering::Less
-        );
-        assert_eq!(v_obj(1).cmp(&v_obj(2)), Ordering::Less);
-        assert_eq!(v_err(E_TYPE).cmp(&v_err(E_RANGE)), Ordering::Less);
-
-        assert_eq!(v_int(2).cmp(&v_int(1)), Ordering::Greater);
-        assert_eq!(v_float(2.).cmp(&v_float(1.)), Ordering::Greater);
-        assert_eq!(v_str("b").cmp(&v_str("a")), Ordering::Greater);
-        assert_eq!(
-            v_list(&[v_int(1), v_int(3)]).cmp(&v_list(&[v_int(1), v_int(2)])),
-            Ordering::Greater
-        );
-        assert_eq!(v_obj(2).cmp(&v_obj(1)), Ordering::Greater);
-        assert_eq!(v_err(E_RANGE).cmp(&v_err(E_TYPE)), Ordering::Greater);
-    }
-
-    #[test]
-    fn test_partial_ord() {
-        assert_eq!(v_int(1).partial_cmp(&v_int(1)).unwrap(), Ordering::Equal);
-        assert_eq!(
-            v_float(1.).partial_cmp(&v_float(1.)).unwrap(),
-            Ordering::Equal
-        );
-        assert_eq!(
-            v_str("a").partial_cmp(&v_str("a")).unwrap(),
-            Ordering::Equal
-        );
-        assert_eq!(
-            v_list(&[v_int(1), v_int(2)])
-                .partial_cmp(&v_list(&[v_int(1), v_int(2)]))
-                .unwrap(),
-            Ordering::Equal
-        );
-        assert_eq!(v_obj(1).partial_cmp(&v_obj(1)).unwrap(), Ordering::Equal);
-        assert_eq!(
-            v_err(E_TYPE).partial_cmp(&v_err(E_TYPE)).unwrap(),
-            Ordering::Equal
-        );
-
-        assert_eq!(v_int(1).partial_cmp(&v_int(2)).unwrap(), Ordering::Less);
-        assert_eq!(
-            v_float(1.).partial_cmp(&v_float(2.)).unwrap(),
-            Ordering::Less
-        );
-        assert_eq!(v_str("a").partial_cmp(&v_str("b")).unwrap(), Ordering::Less);
-        assert_eq!(
-            v_list(&[v_int(1), v_int(2)])
-                .partial_cmp(&v_list(&[v_int(1), v_int(3)]))
-                .unwrap(),
-            Ordering::Less
-        );
-        assert_eq!(v_obj(1).partial_cmp(&v_obj(2)).unwrap(), Ordering::Less);
-        assert_eq!(
-            v_err(E_TYPE).partial_cmp(&v_err(E_RANGE)).unwrap(),
-            Ordering::Less
-        );
-
-        assert_eq!(v_int(2).partial_cmp(&v_int(1)).unwrap(), Ordering::Greater);
-        assert_eq!(
-            v_float(2.).partial_cmp(&v_float(1.)).unwrap(),
-            Ordering::Greater
-        );
-        assert_eq!(
-            v_str("b").partial_cmp(&v_str("a")).unwrap(),
-            Ordering::Greater
-        );
-        assert_eq!(
-            v_list(&[v_int(1), v_int(3)])
-                .partial_cmp(&v_list(&[v_int(1), v_int(2)]))
-                .unwrap(),
-            Ordering::Greater
-        );
-        assert_eq!(v_obj(2).partial_cmp(&v_obj(1)).unwrap(), Ordering::Greater);
-        assert_eq!(
-            v_err(E_RANGE).partial_cmp(&v_err(E_TYPE)).unwrap(),
-            Ordering::Greater
-        );
-    }
-
-    #[test]
-    fn test_ord() {
-        assert_eq!(v_int(1).cmp(&v_int(1)), Ordering::Equal);
-        assert_eq!(v_float(1.).cmp(&v_float(1.)), Ordering::Equal);
-        assert_eq!(v_str("a").cmp(&v_str("a")), Ordering::Equal);
-        assert_eq!(
-            v_list(&[v_int(1), v_int(2)]).cmp(&v_list(&[v_int(1), v_int(2)])),
-            Ordering::Equal
-        );
-        assert_eq!(v_obj(1).cmp(&v_obj(1)), Ordering::Equal);
-        assert_eq!(v_err(E_TYPE).cmp(&v_err(E_TYPE)), Ordering::Equal);
-
-        assert_eq!(v_int(1).cmp(&v_int(2)), Ordering::Less);
-        assert_eq!(v_float(1.).cmp(&v_float(2.)), Ordering::Less);
-        assert_eq!(v_str("a").cmp(&v_str("b")), Ordering::Less);
-        assert_eq!(
-            v_list(&[v_int(1), v_int(2)]).cmp(&v_list(&[v_int(1), v_int(3)])),
-            Ordering::Less
-        );
-        assert_eq!(v_obj(1).cmp(&v_obj(2)), Ordering::Less);
-        assert_eq!(v_err(E_TYPE).cmp(&v_err(E_RANGE)), Ordering::Less);
-
-        assert_eq!(v_int(2).cmp(&v_int(1)), Ordering::Greater);
-        assert_eq!(v_float(2.).cmp(&v_float(1.)), Ordering::Greater);
-        assert_eq!(v_str("b").cmp(&v_str("a")), Ordering::Greater);
-        assert_eq!(
-            v_list(&[v_int(1), v_int(3)]).cmp(&v_list(&[v_int(1), v_int(2)])),
-            Ordering::Greater
-        );
-        assert_eq!(v_obj(2).cmp(&v_obj(1)), Ordering::Greater);
-        assert_eq!(v_err(E_RANGE).cmp(&v_err(E_TYPE)), Ordering::Greater);
-    }
-
-    #[test]
-    fn test_is_true() {
-        assert!(v_int(1).is_true());
-        assert!(v_float(1.).is_true());
-        assert!(v_str("a").is_true());
-        assert!(v_list(&[v_int(1), v_int(2)]).is_true());
-        assert!(!v_obj(1).is_true());
-        assert!(!v_err(E_TYPE).is_true());
-    }
-
-    #[test]
-    fn test_listrangeset() {
-        let base = v_list(&[v_int(1), v_int(2), v_int(3), v_int(4)]);
-
-        // {1,2,3,4}[1..2] = {"a", "b", "c"} => {1, "a", "b", "c", 4}
-        let value = v_list(&[v_str("a"), v_str("b"), v_str("c")]);
-        let expected = v_list(&[v_int(1), v_str("a"), v_str("b"), v_str("c"), v_int(4)]);
-        assert_eq!(base.range_set(value, 2, 3).unwrap(), expected);
-
-        // {1,2,3,4}[1..2] = {"a"} => {1, "a", 4}
-        let value = v_list(&[v_str("a")]);
-        let expected = v_list(&[v_int(1), v_str("a"), v_int(4)]);
-        assert_eq!(base.range_set(value, 2, 3).unwrap(), expected);
-
-        // {1,2,3,4}[1..2] = {} => {1,4}
-        let value = v_empty_list();
-        let expected = v_list(&[v_int(1), v_int(4)]);
-        assert_eq!(base.range_set(value, 2, 3).unwrap(), expected);
-
-        // {1,2,3,4}[1..2] = {"a", "b"} => {1, "a", "b", 4}
-        let value = v_list(&[v_str("a"), v_str("b")]);
-        let expected = v_list(&[v_int(1), v_str("a"), v_str("b"), v_int(4)]);
-        assert_eq!(base.range_set(value, 2, 3).unwrap(), expected);
-    }
-
-    #[test]
-    fn test_strrangeset() {
-        // Test interior insertion
-        let base = v_str("12345");
-        let value = v_str("abc");
-        let expected = v_str("1abc45");
-        let result = base.range_set(value, 2, 3);
-        assert_eq!(result, Ok(expected));
-
-        // Test interior replacement
-        let base = v_str("12345");
-        let value = v_str("ab");
-        let expected = v_str("1ab45");
-        let result = base.range_set(value, 2, 3);
-        assert_eq!(result, Ok(expected));
-
-        // Test interior deletion
-        let base = v_str("12345");
-        let value = v_str("");
-        let expected = v_str("145");
-        let result = base.range_set(value, 2, 3);
-        assert_eq!(result, Ok(expected));
-
-        // Test interior subtraction
-        let base = v_str("12345");
-        let value = v_str("z");
-        let expected = v_str("1z45");
-        let result = base.range_set(value, 2, 3);
-        assert_eq!(result, Ok(expected));
-    }
-
-    #[test]
-    fn test_range() -> Result<(), Error> {
-        // test on integer list
-        let int_list = v_list(&[1.into(), 2.into(), 3.into(), 4.into(), 5.into()]);
-        assert_eq!(
-            int_list.range(2, 4)?,
-            v_list(&[2.into(), 3.into(), 4.into()])
-        );
-
-        // test on string
-        let string = v_str("hello world");
-        assert_eq!(string.range(2, 7)?, v_str("ello w"));
-
-        // range with upper higher than lower, moo returns empty list for this (!)
-        let empty_list = v_empty_list();
-        assert_eq!(empty_list.range(1, 0), Ok(v_empty_list()));
-        // test on out of range
-        let int_list = v_list(&[1.into(), 2.into(), 3.into()]);
-        assert_eq!(int_list.range(2, 4), Ok(v_err(E_RANGE)));
-        // test on type mismatch
-        let var_int = v_int(10);
-        assert_eq!(var_int.range(1, 5), Ok(v_err(E_TYPE)));
-
-        Ok(())
-    }
+pub trait Associative {
+    /// Return true if the associative container is empty.
+    fn is_empty(&self) -> bool;
+    /// Return the number of key-value pairs in the associative container.
+    fn len(&self) -> usize;
+    /// Get the value associated with the given key.
+    fn index(&self, key: &Var) -> Result<Var, Error>;
+    /// Find the position of the key in the associative container, that is, the offset of the key in
+    /// the list of keys.
+    /// `case_sensitive` is used to determine if the comparison should be case-sensitive.
+    /// (MOO case sensitivity is often false)
+    fn index_in(&self, key: &Var, case_sensitive: bool) -> Result<Option<usize>, Error>;
+    /// Assign a new value to the given key.
+    fn index_set(&self, key: &Var, value: &Var) -> Result<Var, Error>;
+    /// Return the key-value pairs in the associative container between the given `from` and `to`
+    fn range(&self, from: &Var, to: &Var) -> Result<Var, Error>;
+    /// Assign new values to the key-value pairs in the associative container between the given `from` and `to`
+    fn range_set(&self, from: &Var, to: &Var, with: &Var) -> Result<Var, Error>;
+    /// Return the keys in the associative container.
+    fn keys(&self) -> Vec<Var>;
+    /// Return the values in the associative container.
+    fn values(&self) -> Vec<Var>;
+    /// Check if the associative container contains the key, returning true if it does.
+    fn contains_key(&self, key: &Var, case_sensitive: bool) -> Result<bool, Error>;
+    /// Return this map with the key/value pair removed.
+    /// Return the new map and the value that was removed, if any
+    fn remove(&self, key: &Var, case_sensitive: bool) -> (Var, Option<Var>);
 }

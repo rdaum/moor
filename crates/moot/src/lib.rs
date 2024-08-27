@@ -25,7 +25,7 @@ use std::{
 };
 
 use eyre::{eyre, ContextCompat, WrapErr};
-use moor_values::var::Objid;
+use moor_values::Objid;
 
 use pretty_assertions::assert_eq;
 

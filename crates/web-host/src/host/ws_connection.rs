@@ -17,7 +17,7 @@ use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
-use moor_values::var::{Objid, Var};
+use moor_values::{Objid, Var};
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;

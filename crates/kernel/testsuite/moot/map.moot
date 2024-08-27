@@ -127,8 +127,10 @@
 "[map]"
 // Note: item order is different here than in Stunt (but stable). That's *probably* fine.
 // Seems like ordering difference between different key types.
+// Note that stunt's is:
+// ""[5 -> 5, #-1 -> #-1, 3.14 -> 3.14, "1" -> {}, "2" -> []]""
 ; return toliteral($tmp);
-"[#-1 -> #-1, \"1\" -> {}, \"2\" -> [], 5 -> 5, 3.14 -> 3.14]"
+"[#-1 -> #-1, 5 -> 5, 3.14 -> 3.14, \"1\" -> {}, \"2\" -> []]"
 
 // test_that_assignment_copies
 ; x = [$nothing -> $nothing, "2" -> [], "1" -> {}, 5 -> 5, 3.14 -> 3.14]; y = x; return x == y && "yes" || "no";

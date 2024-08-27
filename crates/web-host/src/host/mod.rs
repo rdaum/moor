@@ -15,8 +15,7 @@
 pub mod web_host;
 mod ws_connection;
 
-use moor_values::var::Var;
-use moor_values::var::Variant;
+use moor_values::{Var, Variant};
 use serde::Serialize;
 use serde_derive::Deserialize;
 use serde_json::{json, Number};
@@ -58,12 +57,8 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             }
             serde_json::Value::Array(v)
         }
-        Variant::Map(m) => {
-            let mut v = serde_json::Map::new();
-            for (k, e) in m.iter() {
-                v.insert(k.to_string(), var_as_json(e));
-            }
-            serde_json::Value::Object(v)
+        Variant::Map(_m) => {
+            unimplemented!("Maps are not supported in JSON serialization");
         }
     }
 }

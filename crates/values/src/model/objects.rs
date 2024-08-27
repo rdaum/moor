@@ -21,7 +21,7 @@ use bytes::Bytes;
 use enum_primitive_derive::Primitive;
 
 use crate::util::BitEnum;
-use crate::var::Objid;
+use crate::Objid;
 
 #[derive(Debug, Ord, PartialOrd, Copy, Clone, Eq, PartialEq, Hash, Primitive, Encode, Decode)]
 pub enum ObjFlag {

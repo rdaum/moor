@@ -27,9 +27,9 @@ use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, PropPerms};
 use crate::model::{ObjAttr, Vid};
 use crate::util::BitEnum;
-use crate::var::Symbol;
-use crate::var::Var;
-use crate::var::{Error, Objid};
+use crate::Symbol;
+use crate::Var;
+use crate::{Error, Objid};
 
 /// Errors related to the world state and operations on it.
 #[derive(Error, Debug, Eq, PartialEq, Clone, Decode, Encode)]

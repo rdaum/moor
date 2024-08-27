@@ -18,8 +18,8 @@ use std::time::SystemTime;
 use bincode::{Decode, Encode};
 
 use moor_compiler::Program;
-use moor_values::var::{List, Objid};
-use moor_values::var::{Symbol, Var};
+use moor_values::Objid;
+use moor_values::{Symbol, Var};
 
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
 use crate::vm::Fork;
@@ -75,7 +75,7 @@ pub struct VerbCall {
     pub location: Objid,
     pub this: Objid,
     pub player: Objid,
-    pub args: List,
+    pub args: Vec<Var>,
     pub argstr: String,
     pub caller: Objid,
 }
@@ -124,9 +124,9 @@ pub mod vm_test_utils {
 
     use moor_compiler::Program;
     use moor_values::model::WorldState;
-    use moor_values::var::Symbol;
-    use moor_values::var::{List, Objid, Var};
+    use moor_values::Symbol;
     use moor_values::SYSTEM_OBJECT;
+    use moor_values::{Objid, Var};
 
     use crate::builtins::BuiltinRegistry;
     use crate::config::Config;
@@ -217,7 +217,7 @@ pub mod vm_test_utils {
                     location: SYSTEM_OBJECT,
                     this: SYSTEM_OBJECT,
                     player: SYSTEM_OBJECT,
-                    args: List::from_slice(&args),
+                    args,
                     argstr: "".to_string(),
                     caller: SYSTEM_OBJECT,
                 },
@@ -244,7 +244,7 @@ pub mod scheduler_test_utils {
     use std::time::Duration;
 
     use moor_values::tasks::{CommandError, SchedulerError};
-    use moor_values::var::{Error::E_VERBNF, Objid, Var};
+    use moor_values::{Error::E_VERBNF, Objid, Var};
 
     use super::TaskHandle;
     use crate::config::Config;
@@ -316,7 +316,7 @@ pub enum TaskStart {
         player: Objid,
         vloc: Objid,
         verb: Symbol,
-        args: List,
+        args: Vec<Var>,
         argstr: String,
     },
     /// The scheduler is telling the task to run a task that was forked from another task.

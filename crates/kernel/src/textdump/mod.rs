@@ -18,8 +18,8 @@ use std::collections::BTreeMap;
 
 pub use load_db::{read_textdump, textdump_load};
 
-use moor_values::var::Objid;
-use moor_values::var::Var;
+use moor_values::Objid;
+use moor_values::Var;
 pub use read::TextdumpReader;
 pub use write::TextdumpWriter;
 pub use write_db::make_textdump;

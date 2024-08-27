@@ -23,7 +23,7 @@ use bincode::{BorrowDecode, Decode, Encode};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use moor_values::var::{Objid, Var};
+use moor_values::{Objid, Var};
 
 use crate::tasks::sessions::{NoopClientSession, Session, SessionFactory};
 use crate::tasks::task::Task;

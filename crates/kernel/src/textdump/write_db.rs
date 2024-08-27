@@ -20,8 +20,8 @@ use moor_values::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{HasUuid, Named};
 use moor_values::util::BitEnum;
-use moor_values::var::v_none;
-use moor_values::var::Objid;
+use moor_values::v_none;
+use moor_values::Objid;
 use moor_values::{AsByteBuffer, NOTHING};
 
 use crate::textdump::{

@@ -15,10 +15,11 @@
 use crate::labels::{JumpLabel, Label};
 use crate::names::{Name, Names};
 use crate::opcode::Op;
+use crate::unparse::to_literal;
 use bincode::{Decode, Encode};
 use bytes::Bytes;
 use lazy_static::lazy_static;
-use moor_values::var::Var;
+use moor_values::Var;
 use moor_values::{AsByteBuffer, CountingWriter, DecodingError, EncodingError, BINCODE_CONFIG};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
@@ -84,7 +85,7 @@ impl Display for Program {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write literals indexed by their offset #
         for (i, l) in self.literals.iter().enumerate() {
-            writeln!(f, "L{}: {}", i, l.to_literal())?;
+            writeln!(f, "L{}: {}", i, to_literal(l))?;
         }
 
         // Write jump labels indexed by their offset & showing position & optional name

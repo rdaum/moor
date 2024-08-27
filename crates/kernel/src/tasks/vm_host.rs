@@ -31,11 +31,11 @@ use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::{BinaryType, ObjFlag};
 use moor_values::tasks::{AbortLimitReason, Exception, TaskId};
-use moor_values::var::Error::E_MAXREC;
-use moor_values::var::Var;
-use moor_values::var::{v_none, Symbol};
-use moor_values::var::{List, Objid};
 use moor_values::AsByteBuffer;
+use moor_values::Error::E_MAXREC;
+use moor_values::Var;
+use moor_values::{v_none, Symbol};
+use moor_values::Objid;
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
@@ -306,7 +306,7 @@ impl VmHost {
                     // After this we will loop around and check the result.
                     result = self.vm_exec_state.call_builtin_function(
                         bf_offset,
-                        List::from_slice(&args),
+                        args,
                         &exec_params,
                         world_state,
                         session.clone(),
@@ -458,8 +458,8 @@ impl VmHost {
     pub fn reset_time(&mut self) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
     }
-    pub fn args(&self) -> List {
-        self.vm_exec_state.top().args.clone()
+    pub fn args(&self) -> &Vec<Var> {
+        &self.vm_exec_state.top().args
     }
 }
 

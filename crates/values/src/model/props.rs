@@ -13,8 +13,8 @@
 //
 
 use crate::util::BitEnum;
-use crate::var::Objid;
-use crate::var::Var;
+use crate::Objid;
+use crate::Var;
 use crate::{AsByteBuffer, DecodingError, EncodingError};
 use binary_layout::binary_layout;
 use bincode::{Decode, Encode};

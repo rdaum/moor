@@ -21,9 +21,9 @@ use tracing::info;
 use moor_compiler::Label;
 use moor_values::model::CompileError;
 use moor_values::model::WorldStateError;
-use moor_values::var::{v_err, v_float, v_int, v_none, v_objid, v_str, Var, VarType};
-use moor_values::var::{v_listv, Error};
-use moor_values::var::{v_map_pairs, Objid};
+use moor_values::Objid;
+use moor_values::{v_err, v_float, v_int, v_none, v_objid, v_str, Var, VarType};
+use moor_values::{v_list, v_map, Error};
 
 use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 
@@ -148,7 +148,7 @@ impl<R: Read> TextdumpReader<R> {
             VarType::TYPE_LIST => {
                 let l_size = self.read_num()?;
                 let v: Vec<Var> = (0..l_size).map(|_l| self.read_var().unwrap()).collect();
-                v_listv(v)
+                v_list(&v)
             }
             VarType::TYPE_MAP => {
                 let num_pairs = self.read_num()?;
@@ -159,7 +159,7 @@ impl<R: Read> TextdumpReader<R> {
                         (key, value)
                     })
                     .collect();
-                v_map_pairs(&pairs)
+                v_map(&pairs)
             }
             VarType::TYPE_NONE => v_none(),
             VarType::TYPE_FLOAT => v_float(self.read_float()?),

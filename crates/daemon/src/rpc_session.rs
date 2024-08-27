@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use moor_kernel::tasks::sessions::{Session, SessionError};
 use moor_values::tasks::NarrativeEvent;
-use moor_values::var::Objid;
+use moor_values::Objid;
 
 use crate::rpc_server::RpcServer;
 

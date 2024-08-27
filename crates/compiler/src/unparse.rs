@@ -13,7 +13,7 @@
 //
 
 use moor_values::util::quote_str;
-use moor_values::var::Variant;
+use moor_values::{Var, Variant};
 
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
@@ -109,13 +109,13 @@ impl<'a> Unparse<'a> {
         }
     }
 
-    fn unparse_var(&self, var: &moor_values::var::Var, aggressive: bool) -> String {
+    fn unparse_var(&self, var: &moor_values::Var, aggressive: bool) -> String {
         if !aggressive {
-            return format!("{var}");
+            return to_literal(var);
         }
 
         if let Variant::Str(s) = var.variant() {
-            let s = s.as_str();
+            let s = s.as_string();
 
             // If the string contains anything that isn't alphanumeric and _, it's
             // not a valid ident and needs to be quoted. Likewise if it begins with a non-alpha/underscore
@@ -123,12 +123,12 @@ impl<'a> Unparse<'a> {
                 || (s.chars().next().unwrap().is_numeric() && !s.starts_with('_'));
 
             if !needs_quotes {
-                s.into()
+                s
             } else {
-                format!("({})", quote_str(s))
+                format!("({})", quote_str(&s))
             }
         } else {
-            format!("{var}")
+            to_literal(var)
         }
     }
 
@@ -190,7 +190,7 @@ impl<'a> Unparse<'a> {
             Expr::Unary(op, expr) => Ok(format!("{}{}", op, brace_if_lower(expr))),
             Expr::Prop { location, property } => {
                 let location = match (&**location, &**property) {
-                    (Expr::Value(var), Expr::Value(_)) if var.is_root() => String::from("$"),
+                    (Expr::Value(var), Expr::Value(_)) if var.is_sysobj() => String::from("$"),
                     _ => format!("{}.", brace_if_lower(location)),
                 };
                 let prop = match &**property {
@@ -205,7 +205,7 @@ impl<'a> Unparse<'a> {
                 args,
             } => {
                 let location = match (&**location, &**verb) {
-                    (Expr::Value(var), Expr::Value(_)) if var.is_root() => String::from("$"),
+                    (Expr::Value(var), Expr::Value(_)) if var.is_sysobj() => String::from("$"),
                     _ => format!("{}:", brace_if_lower(location)),
                 };
                 let verb = match &**verb {
@@ -725,6 +725,50 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
         }
     }
     line_no
+}
+
+/// Utility function to produce a MOO literal from a Var/Variant.
+/// This is kept in `compiler` and not in `values` because it's specific to the MOO language, and
+/// other languages could have different representations.
+pub fn to_literal(v: &Var) -> String {
+    match v.variant() {
+        Variant::None => "None".to_string(),
+        Variant::Obj(oid) => {
+            format!("{}", oid)
+        }
+        Variant::Int(i) => i.to_string(),
+        Variant::Float(f) => {
+            format!("{f:?}")
+        }
+        Variant::List(l) => {
+            let mut result = String::new();
+            result.push('{');
+            for (i, v) in l.iter().enumerate() {
+                if i > 0 {
+                    result.push_str(", ");
+                }
+                result.push_str(to_literal(&v).as_str());
+            }
+            result.push('}');
+            result
+        }
+        Variant::Str(s) => quote_str(&s.as_string()),
+        Variant::Map(m) => {
+            let mut result = String::new();
+            result.push('[');
+            for (i, (k, v)) in m.iter().enumerate() {
+                if i > 0 {
+                    result.push_str(", ");
+                }
+                result.push_str(to_literal(&k).as_str());
+                result.push_str(" -> ");
+                result.push_str(to_literal(&v).as_str());
+            }
+            result.push(']');
+            result
+        }
+        Variant::Err(e) => e.name().to_string(),
+    }
 }
 
 #[cfg(test)]

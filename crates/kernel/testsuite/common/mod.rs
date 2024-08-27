@@ -37,8 +37,8 @@ use moor_values::model::Named;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::WorldStateSource;
 use moor_values::model::{BinaryType, VerbFlag};
-use moor_values::var::Objid;
-use moor_values::var::Symbol;
+use moor_values::Objid;
+use moor_values::Symbol;
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 
 #[allow(dead_code)]
