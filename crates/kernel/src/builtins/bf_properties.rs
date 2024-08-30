@@ -42,7 +42,7 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .get_property_info(
             bf_args.task_perms_who(),
-            *obj,
+            obj,
             Symbol::mk_case_insensitive(&prop_name.as_string()),
         )
         .map_err(world_state_bf_err)?;
@@ -107,7 +107,7 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
         name,
         value: None,
         location: None,
-        owner: Some(*owner),
+        owner: Some(owner),
         flags: Some(flags),
     })
 }
@@ -126,7 +126,7 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_TYPE));
     };
 
-    let attrs = match info_to_prop_attrs(info) {
+    let attrs = match info_to_prop_attrs(&info) {
         InfoParseResult::Fail(e) => {
             return Err(Code(e));
         }
@@ -137,7 +137,7 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .set_property_info(
             bf_args.task_perms_who(),
-            *obj,
+            obj,
             Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
             attrs,
         )
@@ -160,7 +160,7 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .is_property_clear(
             bf_args.task_perms_who(),
-            *obj,
+            obj,
             Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
         )
         .map_err(world_state_bf_err)?;
@@ -182,7 +182,7 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .clear_property(
             bf_args.task_perms_who(),
-            *obj,
+            obj,
             Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
         )
         .map_err(world_state_bf_err)?;
@@ -205,7 +205,7 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_ARGS));
     };
 
-    let attrs = match info_to_prop_attrs(info) {
+    let attrs = match info_to_prop_attrs(&info) {
         InfoParseResult::Fail(e) => {
             return Err(Code(e));
         }
@@ -216,8 +216,8 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .define_property(
             bf_args.task_perms_who(),
-            *location,
-            *location,
+            location,
+            location,
             Symbol::mk_case_insensitive(name.as_string().as_str()),
             attrs.owner.unwrap(),
             attrs.flags.unwrap(),
@@ -242,7 +242,7 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .delete_property(
             bf_args.task_perms_who(),
-            *obj,
+            obj,
             Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
         )
         .map_err(world_state_bf_err)?;

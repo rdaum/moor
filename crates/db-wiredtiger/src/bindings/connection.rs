@@ -60,7 +60,7 @@ impl Connection {
     }
 
     /// Open a session.
-    pub fn open_session(self: Arc<Self>, config: SessionConfig) -> Result<session::Session, u8> {
+    pub fn open_session(self: Arc<Self>, config: SessionConfig) -> Result<Session, u8> {
         let mut session: *mut bindings::wiredtiger::WT_SESSION =
             null::<bindings::wiredtiger::WT_SESSION>() as _;
         let config_str = config.as_config_string();

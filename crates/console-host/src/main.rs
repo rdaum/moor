@@ -289,7 +289,7 @@ fn console_loop(
                     return;
                 }
                 Ok(ConnectionEvent::RequestInput(requested_input_id)) => {
-                    (*output_input_request_id.lock().unwrap()) =
+                    *output_input_request_id.lock().unwrap() =
                         Some(Uuid::from_u128(requested_input_id));
                 }
             }

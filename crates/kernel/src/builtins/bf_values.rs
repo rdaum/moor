@@ -62,8 +62,8 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
     match bf_args.args[0].variant() {
-        Variant::Int(i) => Ok(Ret(v_int(*i))),
-        Variant::Float(f) => Ok(Ret(v_int(*f as i64))),
+        Variant::Int(i) => Ok(Ret(v_int(i))),
+        Variant::Float(f) => Ok(Ret(v_int(f as i64))),
         Variant::Obj(o) => Ok(Ret(v_int(o.0))),
         Variant::Str(s) => {
             let i = s.as_string().as_str().parse::<f64>();
@@ -72,7 +72,7 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 Err(_) => Ok(Ret(v_int(0))),
             }
         }
-        Variant::Err(e) => Ok(Ret(v_int(*e as i64))),
+        Variant::Err(e) => Ok(Ret(v_int(e as i64))),
         _ => Err(BfErr::Code(E_INVARG)),
     }
 }
@@ -83,8 +83,8 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
     match bf_args.args[0].variant() {
-        Variant::Int(i) => Ok(Ret(v_obj(*i))),
-        Variant::Float(f) => Ok(Ret(v_obj(*f as i64))),
+        Variant::Int(i) => Ok(Ret(v_obj(i))),
+        Variant::Float(f) => Ok(Ret(v_obj(f as i64))),
         Variant::Str(s) if s.as_string().as_str().starts_with('#') => {
             let i = s.as_string().as_str()[1..].parse::<i64>();
             match i {
@@ -109,8 +109,8 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
     match bf_args.args[0].variant() {
-        Variant::Int(i) => Ok(Ret(v_float(*i as f64))),
-        Variant::Float(f) => Ok(Ret(v_float(*f))),
+        Variant::Int(i) => Ok(Ret(v_float(i as f64))),
+        Variant::Float(f) => Ok(Ret(v_float(f))),
         Variant::Str(s) => {
             let f = s.as_string().as_str().parse::<f64>();
             match f {
@@ -118,7 +118,7 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 Err(_) => Ok(Ret(v_float(0.0))),
             }
         }
-        Variant::Err(e) => Ok(Ret(v_float(*e as u8 as f64))),
+        Variant::Err(e) => Ok(Ret(v_float(e as u8 as f64))),
         _ => Err(BfErr::Code(E_INVARG)),
     }
 }
@@ -176,12 +176,12 @@ fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(o) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_INVARG));
     };
-    if !bf_args.world_state.valid(*o).map_err(world_state_bf_err)? {
+    if !bf_args.world_state.valid(o).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     };
     let size = bf_args
         .world_state
-        .object_bytes(bf_args.caller_perms(), *o)
+        .object_bytes(bf_args.caller_perms(), o)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_int(size as i64)))
 }

@@ -40,6 +40,7 @@ pub use list::List;
 pub use map::Map;
 pub use objid::Objid;
 use std::fmt::Debug;
+use std::sync::Arc;
 pub use string::Str;
 use strum::FromRepr;
 pub use symbol::Symbol;
@@ -104,13 +105,13 @@ impl IndexMode {
     }
 }
 
-pub enum TypeClass<'a> {
-    Sequence(&'a dyn Sequence),
-    Associative(&'a dyn Associative),
+pub enum TypeClass {
+    Sequence(Arc<dyn Sequence>),
+    Associative(Arc<dyn Associative>),
     Scalar,
 }
 
-impl<'a> TypeClass<'a> {
+impl TypeClass {
     fn is_sequence(&self) -> bool {
         matches!(self, TypeClass::Sequence(_))
     }

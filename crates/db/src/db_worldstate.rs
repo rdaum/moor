@@ -363,7 +363,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Obj(owner) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.tx.set_object_owner(obj, *owner)?;
+                self.tx.set_object_owner(obj, owner)?;
                 return Ok(());
             }
 
@@ -371,7 +371,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Int(v) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                if *v == 1 {
+                if v == 1 {
                     flags.set(ObjFlag::Read);
                 } else {
                     flags.clear(ObjFlag::Read);
@@ -384,7 +384,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Int(v) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                if *v == 1 {
+                if v == 1 {
                     flags.set(ObjFlag::Write);
                 } else {
                     flags.clear(ObjFlag::Write);
@@ -397,7 +397,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Int(v) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                if *v == 1 {
+                if v == 1 {
                     flags.set(ObjFlag::Fertile);
                 } else {
                     flags.clear(ObjFlag::Fertile);

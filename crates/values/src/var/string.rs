@@ -27,7 +27,7 @@ use std::hash::Hash;
 #[derive(Clone)]
 pub struct Str {
     // Reader must be boxed to avoid overfilling the stack.
-    pub(crate) reader: Box<Reader<VarBuffer>>,
+    pub(crate) reader: Reader<VarBuffer>,
 }
 
 impl Str {

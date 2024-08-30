@@ -23,6 +23,7 @@ use num_traits::ToPrimitive;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 /// Our series of types
 #[derive(Clone)]
@@ -31,9 +32,9 @@ pub enum Variant {
     Obj(Objid),
     Int(i64),
     Float(f64),
-    List(List),
-    Str(string::Str),
-    Map(map::Map),
+    List(Arc<List>),
+    Str(Arc<string::Str>),
+    Map(Arc<map::Map>),
     Err(Error),
 }
 
@@ -147,9 +148,7 @@ impl Variant {
             }
             VarType::TYPE_STR => {
                 let v = vec_iter.next().unwrap();
-                Self::Str(string::Str {
-                    reader: Box::new(v),
-                })
+                Self::Str(Arc::new(string::Str { reader: v }))
             }
             VarType::TYPE_ERR => {
                 // Error code encoded as u8
@@ -161,9 +160,7 @@ impl Variant {
             VarType::TYPE_LIST => {
                 let v = vec_iter.next().unwrap();
                 let l = v.as_vector();
-                Self::List(List {
-                    reader: Box::new(l),
-                })
+                Self::List(Arc::new(List { reader: l }))
             }
             VarType::TYPE_LABEL => {
                 unimplemented!("Labels are not supported in actual values")
@@ -171,9 +168,7 @@ impl Variant {
             VarType::TYPE_MAP => {
                 let v = vec_iter.next().unwrap();
                 let m = v.as_vector();
-                Self::Map(map::Map {
-                    reader: Box::new(m),
-                })
+                Self::Map(Arc::new(map::Map { reader: m }))
             }
         }
     }

@@ -41,7 +41,7 @@ pub struct Defs<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> {
 }
 
 impl<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> Display for Defs<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let names = self
             .iter()
             .map(|p| p.names().iter().map(|s| s.to_string()).join(":"))

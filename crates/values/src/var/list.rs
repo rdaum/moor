@@ -20,7 +20,7 @@ use crate::var::Error::E_RANGE;
 use crate::var::Sequence;
 use crate::var::{Error, VarType};
 use bytes::Bytes;
-use flexbuffers::{BuilderOptions, Reader, VectorReader};
+use flexbuffers::{BuilderOptions, VectorReader};
 use num_traits::ToPrimitive;
 use std::cmp::max;
 use std::hash::Hash;
@@ -28,7 +28,7 @@ use std::hash::Hash;
 #[derive(Clone)]
 pub struct List {
     // Reader must be boxed to avoid overfilling the stack.
-    pub reader: Box<VectorReader<VarBuffer>>,
+    pub reader: VectorReader<VarBuffer>,
 }
 
 impl List {
@@ -45,9 +45,8 @@ impl List {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        let reader = Reader::get_root(VarBuffer(buf)).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
+        let buf = VarBuffer(buf);
+        Var(buf)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Var> + '_ {
@@ -70,9 +69,9 @@ impl List {
 
     /// Add `item` to the list but only if it's not already there.
     pub fn set_add(&self, item: &Var) -> Result<Var, Error> {
-        // Is the item already in the list? If so, just clone.
+        // Is the item already in the list? If so, just clone self
         if self.iter().any(|v| v == *item) {
-            return Ok(Var(Variant::List(self.clone())));
+            return Ok(Var::from_variant(Variant::List(self.clone().into())));
         }
         let set_added_iter = self.iter().chain(std::iter::once(item.clone()));
         Ok(v_list_iter(set_added_iter))
@@ -127,10 +126,7 @@ impl Sequence for List {
         if index >= self.reader.len() {
             return Err(E_RANGE);
         }
-        let result = self.reader.index(index).unwrap();
-        let v = Variant::from_reader(result);
-        let v = Var(v);
-        Ok(v)
+        Ok(Var::from_reader(self.reader.index(index).unwrap()))
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -285,9 +281,7 @@ impl FromIterator<Var> for Var {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        let reader = Reader::get_root(VarBuffer(buf)).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
+        Var(VarBuffer(buf))
     }
 }
 #[cfg(test)]
@@ -313,7 +307,7 @@ mod tests {
         let r = l.index(&Var::mk_integer(1), IndexMode::ZeroBased).unwrap();
         let r = r.variant();
         match r {
-            Variant::Int(i) => assert_eq!(*i, 2),
+            Variant::Int(i) => assert_eq!(i, 2),
             _ => panic!("Expected integer, got {:?}", r),
         }
     }
@@ -362,7 +356,7 @@ mod tests {
         let r = l.index(&Var::mk_integer(1), IndexMode::ZeroBased).unwrap();
         let r = r.variant();
         match r {
-            Variant::Int(i) => assert_eq!(*i, 2),
+            Variant::Int(i) => assert_eq!(i, 2),
             _ => panic!("Expected integer, got {:?}", r),
         }
     }
@@ -383,7 +377,7 @@ mod tests {
                 let r = l.index(1).unwrap();
                 let r = r.variant();
                 match r {
-                    Variant::Int(i) => assert_eq!(*i, 42),
+                    Variant::Int(i) => assert_eq!(i, 42),
                     _ => panic!("Expected integer, got {:?}", r),
                 }
             }
@@ -431,13 +425,13 @@ mod tests {
         let l = Var::mk_list(&[Var::mk_integer(1), Var::mk_integer(2), Var::mk_integer(3)]);
         // Only works on list variants.
         let l = match l.variant() {
-            Variant::List(l) => l,
+            Variant::List(l) => l.clone(),
             _ => panic!("Expected list"),
         };
         // This will only add the first instance of 2...
         let added = l.set_add(&Var::mk_integer(2)).unwrap();
         let added_v = match added.variant() {
-            Variant::List(l) => l,
+            Variant::List(l) => l.clone(),
             _ => panic!("Expected list"),
         };
         // should still be [1, 2, 3]
@@ -448,7 +442,7 @@ mod tests {
         );
 
         // now add 4
-        let added = l.set_add(&Var::mk_integer(4)).unwrap();
+        let added = l.clone().set_add(&Var::mk_integer(4)).unwrap();
         let added_v = match added.variant() {
             Variant::List(l) => l,
             _ => panic!("Expected list"),

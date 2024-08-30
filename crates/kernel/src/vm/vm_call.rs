@@ -72,7 +72,7 @@ impl VMExecState {
         world_state: &mut dyn WorldState,
         this: Objid,
         verb_name: Symbol,
-        args: List,
+        args: Arc<List>,
     ) -> ExecutionResult {
         let call = VerbCall {
             verb_name,

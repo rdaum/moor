@@ -42,7 +42,7 @@ fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
+    match (&bf_args.args[0].variant(), &bf_args.args[1].variant()) {
         (Variant::Int(a), Variant::Int(b)) => Ok(Ret(v_int(*a.min(b)))),
         (Variant::Float(a), Variant::Float(b)) => {
             let m = R64::from(*a).min(R64::from(*b));
@@ -58,7 +58,7 @@ fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
+    match (&bf_args.args[0].variant(), &bf_args.args[1].variant()) {
         (Variant::Int(a), Variant::Int(b)) => Ok(Ret(v_int(*a.max(b)))),
         (Variant::Float(a), Variant::Float(b)) => {
             let m = R64::from(*a).max(R64::from(*b));
@@ -75,7 +75,7 @@ fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     let mut rng = rand::thread_rng();
-    match bf_args.args.first().map(|var| var.variant()) {
+    match &bf_args.args.first().map(|var| var.variant()) {
         Some(Variant::Int(i)) if *i > 0 => Ok(Ret(v_int(rng.gen_range(1..=*i)))),
         Some(Variant::Int(_)) => Err(BfErr::Code(E_INVARG)),
         None => Ok(Ret(v_int(rng.gen_range(1..=2147483647)))),
@@ -94,12 +94,12 @@ fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    let precision = match bf_args.args[1].variant() {
+    let precision = match &bf_args.args[1].variant() {
         Variant::Int(i) if *i > 0 => *i as usize,
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    let scientific = match bf_args.args[2].variant() {
+    let scientific = match &bf_args.args[2].variant() {
         Variant::Int(b) => *b == 1,
         _ => return Err(BfErr::Code(E_TYPE)),
     };
@@ -165,7 +165,7 @@ fn bf_sqrt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if *x < 0.0 {
+    if x < 0.0 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -183,7 +183,7 @@ fn bf_asin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if !(-1.0..=1.0).contains(x) {
+    if !(-1.0..=1.0).contains(&x) {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -201,7 +201,7 @@ fn bf_acos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if !(-1.0..=1.0).contains(x) {
+    if !(-1.0..=1.0).contains(&x) {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -220,7 +220,7 @@ fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let x = match bf_args.args[1].variant() {
-        Variant::Float(f) => *f,
+        Variant::Float(f) => f,
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
@@ -294,7 +294,7 @@ fn bf_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if *x <= 0.0 {
+    if x <= 0.0 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -312,7 +312,7 @@ fn bf_log10(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if *x <= 0.0 {
+    if x <= 0.0 {
         return Err(BfErr::Code(E_ARGS));
     }
 

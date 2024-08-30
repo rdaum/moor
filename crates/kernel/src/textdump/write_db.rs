@@ -178,7 +178,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
                 .get_verb_binary(*db_objid, verb.uuid())
                 .expect("Failed to get verb binary");
 
-            let program = if !(binary.is_empty()) {
+            let program = if !binary.is_empty() {
                 let program = Program::from_bytes(binary).expect("Failed to parse verb binary");
                 if !program.main_vector.is_empty() {
                     let ast = moor_compiler::program_to_tree(&program)

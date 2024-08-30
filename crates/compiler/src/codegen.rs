@@ -76,7 +76,7 @@ impl CodegenState {
     // Create an anonymous jump label at the current position and return its unique ID.
     fn make_jump_label(&mut self, name: Option<Name>) -> Label {
         let id = Label(self.jumps.len() as u16);
-        let position = (self.ops.len()).into();
+        let position = self.ops.len().into();
         self.jumps.push(JumpLabel { id, name, position });
         id
     }
@@ -316,15 +316,15 @@ impl CodegenState {
                         self.emit(Op::ImmNone);
                     }
                     Variant::Obj(oid) => {
-                        self.emit(Op::ImmObjid(*oid));
+                        self.emit(Op::ImmObjid(oid));
                     }
-                    Variant::Int(i) => match i32::try_from(*i) {
+                    Variant::Int(i) => match i32::try_from(i) {
                         Ok(n) => self.emit(Op::ImmInt(n)),
-                        Err(_) => self.emit(Op::ImmBigInt(*i)),
+                        Err(_) => self.emit(Op::ImmBigInt(i)),
                     },
-                    Variant::Float(f) => self.emit(Op::ImmFloat(*f)),
+                    Variant::Float(f) => self.emit(Op::ImmFloat(f)),
                     Variant::Err(e) => {
-                        self.emit(Op::ImmErr(*e));
+                        self.emit(Op::ImmErr(e));
                     }
                     _ => {
                         let literal = self.add_literal(v);
@@ -444,7 +444,7 @@ impl CodegenState {
                 self.pop_stack(1);
                 self.generate_expr(consequence.as_ref())?;
                 let end_label = self.make_jump_label(None);
-                self.emit(Op::Jump { label: end_label });
+                self.emit(Jump { label: end_label });
                 self.pop_stack(1);
                 self.commit_jump_label(else_label);
                 self.generate_expr(alternative.as_ref())?;
@@ -533,7 +533,7 @@ impl CodegenState {
                     self.emit(Op::EndScope {
                         num_bindings: arm.environment_width as u16,
                     });
-                    self.emit(Op::Jump { label: end_label });
+                    self.emit(Jump { label: end_label });
 
                     // This is where we jump to if the condition is false; either the end of the
                     // if statement, or the start of the next ('else or elseif') arm.
@@ -587,7 +587,7 @@ impl CodegenState {
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
-                self.emit(Op::Jump { label: loop_top });
+                self.emit(Jump { label: loop_top });
                 // This opcode should never get hit.
                 self.emit(Op::EndScope {
                     num_bindings: *environment_width as u16,
@@ -666,7 +666,7 @@ impl CodegenState {
                 for s in body {
                     self.generate_stmt(s)?;
                 }
-                self.emit(Op::Jump {
+                self.emit(Jump {
                     label: loop_start_label,
                 });
                 self.emit(Op::EndScope {
@@ -730,7 +730,7 @@ impl CodegenState {
                         self.generate_stmt(stmt)?;
                     }
                     if i + 1 < excepts.len() {
-                        self.emit(Op::Jump { label: end_label });
+                        self.emit(Jump { label: end_label });
                     }
                 }
                 self.emit(Op::EndScope {

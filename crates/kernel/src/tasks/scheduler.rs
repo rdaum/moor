@@ -135,7 +135,7 @@ fn load_int_sysprop(server_options_obj: Objid, name: Symbol, tx: &dyn WorldState
         return None;
     };
     match value.variant() {
-        Variant::Int(i) if *i >= 0 => Some(*i as u64),
+        Variant::Int(i) if i >= 0 => Some(i as u64),
         _ => {
             warn!("$bg_seconds is not a positive integer");
             None
@@ -246,20 +246,20 @@ impl Scheduler {
             return;
         };
 
-        if let Some(bg_seconds) = load_int_sysprop(*server_options_obj, *BG_SECONDS, tx.as_ref()) {
+        if let Some(bg_seconds) = load_int_sysprop(server_options_obj, *BG_SECONDS, tx.as_ref()) {
             so.bg_seconds = bg_seconds;
         }
-        if let Some(bg_ticks) = load_int_sysprop(*server_options_obj, *BG_TICKS, tx.as_ref()) {
+        if let Some(bg_ticks) = load_int_sysprop(server_options_obj, *BG_TICKS, tx.as_ref()) {
             so.bg_ticks = bg_ticks as usize;
         }
-        if let Some(fg_seconds) = load_int_sysprop(*server_options_obj, *FG_SECONDS, tx.as_ref()) {
+        if let Some(fg_seconds) = load_int_sysprop(server_options_obj, *FG_SECONDS, tx.as_ref()) {
             so.fg_seconds = fg_seconds;
         }
-        if let Some(fg_ticks) = load_int_sysprop(*server_options_obj, *FG_TICKS, tx.as_ref()) {
+        if let Some(fg_ticks) = load_int_sysprop(server_options_obj, *FG_TICKS, tx.as_ref()) {
             so.fg_ticks = fg_ticks as usize;
         }
         if let Some(max_stack_depth) =
-            load_int_sysprop(*server_options_obj, *MAX_STACK_DEPTH, tx.as_ref())
+            load_int_sysprop(server_options_obj, *MAX_STACK_DEPTH, tx.as_ref())
         {
             so.max_stack_depth = max_stack_depth as usize;
         }
@@ -566,7 +566,7 @@ impl Scheduler {
                 };
 
                 let Ok(property_value) =
-                    world_state.retrieve_property(SYSTEM_OBJECT, *sysprop, property)
+                    world_state.retrieve_property(SYSTEM_OBJECT, sysprop, property)
                 else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))

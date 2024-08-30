@@ -19,14 +19,14 @@ use crate::var::Associative;
 use crate::var::Error::{E_RANGE, E_TYPE};
 use crate::var::{Error, VarType};
 use bytes::Bytes;
-use flexbuffers::{BuilderOptions, Reader, VectorReader};
+use flexbuffers::{BuilderOptions, VectorReader};
 use std::cmp::Ordering;
 use std::hash::Hash;
 
 #[derive(Clone)]
 pub struct Map {
     // Reader must be boxed to avoid overfilling the stack.
-    pub reader: Box<VectorReader<VarBuffer>>,
+    pub reader: VectorReader<VarBuffer>,
 }
 
 impl Map {
@@ -56,18 +56,15 @@ impl Map {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        let reader = Reader::get_root(VarBuffer(buf)).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
+        Var(VarBuffer(buf))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (Var, Var)> + '_ {
         (0..self.len()).map(move |i| {
             let k = self.reader.idx(i * 2);
             let v = self.reader.idx(i * 2 + 1);
-            let key = Variant::from_reader(k);
-            let value = Variant::from_reader(v);
-            (Var(key), Var(value))
+
+            (Var::from_reader(k), Var::from_reader(v))
         })
     }
 
@@ -82,8 +79,7 @@ impl Map {
         while low <= high {
             let mid = (low + high) / 2;
             let k = self.reader.idx((mid * 2) as usize);
-            let k = Variant::from_reader(k);
-            let v = Var(k);
+            let v = Var::from_reader(k);
             match f(c, &v) {
                 Ordering::Less => high = mid - 1,
                 Ordering::Greater => low = mid + 1,
@@ -134,9 +130,7 @@ impl Associative for Map {
         };
 
         let v = self.reader.idx((pos * 2) + 1);
-        let v = Variant::from_reader(v);
-        let v = Var(v);
-        Ok(v)
+        Ok(Var::from_reader(v))
     }
 
     fn index_in(&self, key: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
@@ -144,8 +138,7 @@ impl Associative for Map {
         // Linear O(N) operation.
         for i in 0..self.len() {
             let v = self.reader.idx((i * 2) + 1);
-            let v = Variant::from_reader(v);
-            let v = Var(v);
+            let v = Var::from_reader(v);
             let matches = if case_sensitive {
                 v.eq_case_sensitive(key)
             } else {
@@ -198,17 +191,15 @@ impl Associative for Map {
 
         // Now scan forward to find the end.
         let mut new_vec = Vec::new();
-        let to = to.variant();
         for i in start..self.len() {
             let k = self.reader.idx(i * 2);
-            let k = Variant::from_reader(k);
+            let k = Var::from_reader(k);
             let order = k.cmp(to);
             if order == Ordering::Greater || order == Ordering::Equal {
                 break;
             }
             let v = self.reader.idx(i * 2 + 1);
-            let v = Variant::from_reader(v);
-            new_vec.push((Var(k), Var(v)));
+            new_vec.push((k, Var::from_reader(v)));
         }
 
         Ok(Self::build_presorted(new_vec.iter()))
@@ -249,8 +240,7 @@ impl Associative for Map {
         let mut keys = Vec::new();
         for i in 0..self.len() {
             let k = self.reader.idx(i * 2);
-            let key = Variant::from_reader(k);
-            keys.push(Var(key));
+            keys.push(Var::from_reader(k))
         }
         keys
     }
@@ -259,8 +249,7 @@ impl Associative for Map {
         let mut values = Vec::new();
         for i in 0..self.len() {
             let v = self.reader.idx(i * 2 + 1);
-            let value = Variant::from_reader(v);
-            values.push(Var(value));
+            values.push(Var::from_reader(v))
         }
         values
     }
@@ -364,7 +353,7 @@ mod tests {
         let key = Var::mk_str("a");
         let value = m.index(&key, IndexMode::ZeroBased).unwrap();
         match value.variant() {
-            Variant::Int(i) => assert_eq!(*i, 1),
+            Variant::Int(i) => assert_eq!(i, 1),
             _ => panic!("Expected integer"),
         }
     }
@@ -442,7 +431,7 @@ mod tests {
         let key = Var::mk_str("b");
         let value = m.index(&key, IndexMode::ZeroBased).unwrap();
         match value.variant() {
-            Variant::Int(i) => assert_eq!(*i, 2),
+            Variant::Int(i) => assert_eq!(i, 2),
             _ => panic!("Expected integer"),
         }
     }
@@ -467,7 +456,7 @@ mod tests {
             Variant::Map(m) => {
                 let r = m.index(&Var::mk_str("b")).unwrap();
                 match r.variant() {
-                    Variant::Int(i) => assert_eq!(*i, 42),
+                    Variant::Int(i) => assert_eq!(i, 42),
                     _ => panic!("Expected integer, got {:?}", r),
                 }
             }
@@ -487,7 +476,7 @@ mod tests {
             Variant::Map(m) => {
                 let r = m.index(&Var::mk_str("d")).unwrap();
                 match r.variant() {
-                    Variant::Int(i) => assert_eq!(*i, 42),
+                    Variant::Int(i) => assert_eq!(i, 42),
                     _ => panic!("Expected integer, got {:?}", r),
                 }
             }

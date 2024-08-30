@@ -25,22 +25,43 @@ use flexbuffers::{BuilderOptions, Reader};
 use num_traits::ToPrimitive;
 use std::cmp::{min, Ordering};
 use std::fmt::{Debug, Formatter};
+use std::hash::Hash;
 
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct Var(pub Variant);
+#[derive(Clone)]
+pub struct Var(pub VarBuffer);
 
 impl Debug for Var {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.0)
+        write!(f, "{:?}", self.variant())
     }
 }
 
 impl Var {
     pub fn from_bytes(data: Bytes) -> Self {
-        let buf = VarBuffer(data);
-        let reader = Reader::get_root(buf).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
+        Var(VarBuffer(data))
+    }
+
+    pub fn from_reader(reader: Reader<VarBuffer>) -> Self {
+        // Unpack and then repack into a new buffer, since it seems flexbuffers won't let us pull the
+        // offsets out of the underlying buffer in the reader?
+        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
+        let mut vb = builder.start_vector();
+        let variant = Variant::from_reader(reader);
+        variant.push_to(&mut vb);
+        vb.end_vector();
+        let buf = builder.take_buffer();
+        let buf = Bytes::from(buf);
+        Var(VarBuffer(buf))
+    }
+
+    pub fn from_variant(variant: Variant) -> Self {
+        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
+        let mut vb = builder.start_vector();
+        variant.push_to(&mut vb);
+        vb.end_vector();
+        let buf = builder.take_buffer();
+        let buf = Bytes::from(buf);
+        Var(VarBuffer(buf))
     }
 
     pub fn mk_integer(i: i64) -> Self {
@@ -51,9 +72,7 @@ impl Var {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        let reader = Reader::get_root(VarBuffer(buf)).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
+        Var(VarBuffer(buf))
     }
 
     pub fn mk_none() -> Self {
@@ -63,9 +82,7 @@ impl Var {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        let reader = Reader::get_root(VarBuffer(buf)).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
+        Var(VarBuffer(buf))
     }
 
     pub fn mk_str(s: &str) -> Self {
@@ -76,9 +93,7 @@ impl Var {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        let reader = Reader::get_root(VarBuffer(buf)).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
+        Var(VarBuffer(buf))
     }
 
     pub fn mk_float(f: R64) -> Self {
@@ -89,9 +104,7 @@ impl Var {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        let reader = Reader::get_root(VarBuffer(buf)).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
+        Var(VarBuffer(buf))
     }
 
     pub fn mk_error(e: Error) -> Self {
@@ -102,9 +115,18 @@ impl Var {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        let reader = Reader::get_root(VarBuffer(buf)).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
+        Var(VarBuffer(buf))
+    }
+
+    pub fn mk_object(o: Objid) -> Self {
+        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
+        let mut vb = builder.start_vector();
+        vb.push(VarType::TYPE_OBJ as u8);
+        vb.push(o.0);
+        vb.end_vector();
+        let buf = builder.take_buffer();
+        let buf = Bytes::from(buf);
+        Var(VarBuffer(buf))
     }
 
     pub fn type_code(&self) -> VarType {
@@ -132,29 +154,16 @@ impl Var {
         map::Map::build(pairs.iter())
     }
 
-    pub fn mk_object(o: Objid) -> Self {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        vb.push(VarType::TYPE_OBJ as u8);
-        vb.push(o.0);
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        let reader = Reader::get_root(VarBuffer(buf)).unwrap();
-        let v = Variant::from_reader(reader);
-        Var(v)
-    }
-
-    pub fn variant(&self) -> &Variant {
-        &self.0
+    pub fn variant(&self) -> Variant {
+        Variant::from_reader(Reader::get_root(self.0.clone()).unwrap())
     }
 
     pub fn is_true(&self) -> bool {
         match self.variant() {
             Variant::None => false,
             Variant::Obj(_) => false,
-            Variant::Int(i) => *i != 0,
-            Variant::Float(f) => *f != 0.0,
+            Variant::Int(i) => i != 0,
+            Variant::Float(f) => f != 0.0,
             Variant::List(l) => !l.reader.is_empty(),
             Variant::Str(s) => !s.as_string().is_empty(),
             Variant::Map(m) => !m.reader.is_empty(),
@@ -172,7 +181,7 @@ impl Var {
             TypeClass::Sequence(s) => {
                 let idx = match index.variant() {
                     Variant::Int(i) => {
-                        let i = index_mode.adjust_i64(*i);
+                        let i = index_mode.adjust_i64(i);
                         if i < 0 {
                             return Err(E_RANGE);
                         }
@@ -205,7 +214,7 @@ impl Var {
             TypeClass::Sequence(s) => {
                 let idx = match idx.variant() {
                     Variant::Int(i) => {
-                        let i = index_mode.adjust_i64(*i);
+                        let i = index_mode.adjust_i64(i);
 
                         if i < 0 {
                             return Err(E_RANGE);
@@ -229,7 +238,7 @@ impl Var {
         match self.type_class() {
             TypeClass::Sequence(s) => {
                 let index = match index.variant() {
-                    Variant::Int(i) => index_mode.adjust_i64(*i),
+                    Variant::Int(i) => index_mode.adjust_i64(i),
                     _ => return Err(E_INVARG),
                 };
                 let index = if index < 0 {
@@ -252,12 +261,12 @@ impl Var {
         match self.type_class() {
             TypeClass::Sequence(s) => {
                 let from = match from.variant() {
-                    Variant::Int(i) => index_mode.adjust_i64(*i),
+                    Variant::Int(i) => index_mode.adjust_i64(i),
                     _ => return Err(E_INVARG),
                 };
 
                 let to = match to.variant() {
-                    Variant::Int(i) => index_mode.adjust_i64(*i),
+                    Variant::Int(i) => index_mode.adjust_i64(i),
                     _ => return Err(E_INVARG),
                 };
 
@@ -278,12 +287,12 @@ impl Var {
         match self.type_class() {
             TypeClass::Sequence(s) => {
                 let from = match from.variant() {
-                    Variant::Int(i) => index_mode.adjust_i64(*i),
+                    Variant::Int(i) => index_mode.adjust_i64(i),
                     _ => return Err(E_INVARG),
                 };
 
                 let to = match to.variant() {
-                    Variant::Int(i) => index_mode.adjust_i64(*i),
+                    Variant::Int(i) => index_mode.adjust_i64(i),
                     _ => return Err(E_INVARG),
                 };
 
@@ -351,7 +360,7 @@ impl Var {
         match self.type_class() {
             TypeClass::Sequence(s) => {
                 let index = match index.variant() {
-                    Variant::Int(i) => index_mode.adjust_i64(*i),
+                    Variant::Int(i) => index_mode.adjust_i64(i),
                     _ => return Err(E_INVARG),
                 };
 
@@ -386,14 +395,6 @@ impl Var {
 
     pub fn is_string(&self) -> bool {
         matches!(self.variant(), Variant::Str(_))
-    }
-
-    pub fn as_sequence(&self) -> Option<&dyn Sequence> {
-        match self.variant() {
-            Variant::List(l) => Some(l),
-            Variant::Str(s) => Some(s),
-            _ => None,
-        }
     }
 
     pub fn is_empty(&self) -> Result<bool, Error> {
@@ -564,6 +565,32 @@ impl From<Error> for Var {
     }
 }
 
+impl PartialEq<Self> for Var {
+    fn eq(&self, other: &Self) -> bool {
+        self.variant() == other.variant()
+    }
+}
+
+impl Eq for Var {}
+
+impl Ord for Var {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.variant().cmp(&other.variant())
+    }
+}
+
+impl PartialOrd<Self> for Var {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Hash for Var {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.variant().hash(state)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::var::var::Var;
@@ -574,7 +601,7 @@ mod tests {
         let i = Var::mk_integer(42);
 
         match i.variant() {
-            Variant::Int(i) => assert_eq!(*i, 42),
+            Variant::Int(i) => assert_eq!(i, 42),
             _ => panic!("Expected integer"),
         }
     }
@@ -584,7 +611,7 @@ mod tests {
         let f = Var::mk_float(42.0.into());
 
         match f.variant() {
-            Variant::Float(f) => assert_eq!(*f, 42.0),
+            Variant::Float(f) => assert_eq!(f, 42.0),
             _ => panic!("Expected float"),
         }
     }

@@ -264,7 +264,7 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Bf
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *case_matters == 1
+        case_matters == 1
     } else {
         false
     };
@@ -404,7 +404,7 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let (Variant::Int(start), Variant::Int(end)) = (start.variant(), end.variant()) else {
             return Err(BfErr::Code(E_INVARG));
         };
-        mysubs.push((*start as isize, *end as isize));
+        mysubs.push((start as isize, end as isize));
     }
 
     match substitute(&template.as_string(), &mysubs, &source.as_string()) {

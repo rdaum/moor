@@ -75,7 +75,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
         .map_err(world_state_bf_err)?
-        .check_obj_owner_perms(*player)
+        .check_obj_owner_perms(player)
         .map_err(world_state_bf_err)?;
 
     let content_type = if bf_args.config.rich_notify && bf_args.args.len() == 3 {
@@ -93,7 +93,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.args[1].clone(),
         content_type,
     );
-    bf_args.task_scheduler_client.notify(*player, event);
+    bf_args.task_scheduler_client.notify(player, event);
 
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
@@ -125,7 +125,7 @@ fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    let is_player = match bf_args.world_state.flags_of(*player) {
+    let is_player = match bf_args.world_state.flags_of(player) {
         Ok(flags) => flags.contains(ObjFlag::User),
         Err(WorldStateError::ObjectNotFound(_)) => return Err(BfErr::Code(E_ARGS)),
         Err(e) => return Err(world_state_bf_err(e)),
@@ -205,7 +205,7 @@ fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let Ok(idle_seconds) = bf_args.session.idle_seconds(*who) else {
+    let Ok(idle_seconds) = bf_args.session.idle_seconds(who) else {
         return Err(BfErr::Code(E_ARGS));
     };
 
@@ -220,7 +220,7 @@ fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let Ok(connected_seconds) = bf_args.session.connected_seconds(*who) else {
+    let Ok(connected_seconds) = bf_args.session.connected_seconds(who) else {
         return Err(BfErr::Code(E_INVARG));
     };
 
@@ -250,12 +250,12 @@ fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?
         .check_is_wizard()
         .map_err(world_state_bf_err)?
-        && caller != *player
+        && caller != player
     {
         return Err(BfErr::Code(E_PERM));
     }
 
-    let Ok(connection_name) = bf_args.session.connection_name(*player) else {
+    let Ok(connection_name) = bf_args.session.connection_name(player) else {
         return Err(BfErr::Code(E_ARGS));
     };
 
@@ -311,7 +311,7 @@ fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Int(time) = bf_args.args[0].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        if *time < 0 {
+        if time < 0 {
             SystemTime::UNIX_EPOCH - Duration::from_secs(time.unsigned_abs())
         } else {
             SystemTime::UNIX_EPOCH + Duration::from_secs(time.unsigned_abs())
@@ -361,7 +361,7 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         None
     };
 
-    Err(BfErr::Raise(*err, msg, value))
+    Err(BfErr::Raise(err, msg, value))
 }
 
 bf_declare!(raise, bf_raise);
@@ -391,8 +391,8 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         None
     } else {
         let seconds = match bf_args.args[0].variant() {
-            Variant::Float(seconds) => *seconds,
-            Variant::Int(seconds) => *seconds as f64,
+            Variant::Float(seconds) => seconds,
+            Variant::Int(seconds) => seconds as f64,
             _ => return Err(BfErr::Code(E_TYPE)),
         };
         if seconds < 0.0 {
@@ -418,7 +418,7 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             return Err(BfErr::Code(E_ARGS));
         };
         let player = bf_args.exec_state.top().player;
-        if *requested_player != player {
+        if requested_player != player {
             // We log this because we'd like to know if cores are trying to do this.
             warn!(
                 requested_player = ?requested_player,
@@ -485,7 +485,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // If the task ID is itself, that means returning an Complete execution result, which will cascade
     // back to the task loop and it will terminate itself.
     // Not sure this is *exactly* what MOO does, but it's close enough for now.
-    let victim_task_id = *victim_task_id as TaskId;
+    let victim_task_id = victim_task_id as TaskId;
 
     if victim_task_id == bf_args.exec_state.task_id {
         return Ok(VmInstr(ExecutionResult::Complete(v_none())));
@@ -496,7 +496,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.task_perms().map_err(world_state_bf_err)?,
     );
     if let Variant::Err(err) = result.variant() {
-        return Err(BfErr::Code(*err));
+        return Err(BfErr::Code(err));
     }
     Ok(Ret(result))
 }
@@ -518,7 +518,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         v_none()
     };
 
-    let task_id = *resume_task_id as TaskId;
+    let task_id = resume_task_id as TaskId;
 
     // Resuming ourselves makes no sense, it's not suspended. E_INVARG.
     if task_id == bf_args.exec_state.task_id {
@@ -531,7 +531,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return_value.clone(),
     );
     if let Variant::Err(err) = result.variant() {
-        return Err(BfErr::Code(*err));
+        return Err(BfErr::Code(err));
     }
     Ok(Ret(result))
 }
@@ -584,11 +584,11 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
-    if task_perms.who != *player && !task_perms.check_is_wizard().map_err(world_state_bf_err)? {
+    if task_perms.who != player && !task_perms.check_is_wizard().map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_PERM));
     }
 
-    bf_args.task_scheduler_client.boot_player(*player);
+    bf_args.task_scheduler_client.boot_player(player);
 
     Ok(Ret(v_none()))
 }
@@ -642,7 +642,7 @@ fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Int(is_error) = bf_args.args[1].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *is_error == 1
+        is_error == 1
     } else {
         false
     };
@@ -689,10 +689,12 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
         ArgType::AnyNum => v_int(-2),
     });
 
-    v_list(&[v_str(bf.name.as_str()),
+    v_list(&[
+        v_str(bf.name.as_str()),
         min_args,
         max_args,
-        v_list_iter(types)])
+        v_list_iter(types),
+    ])
 }
 
 fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {

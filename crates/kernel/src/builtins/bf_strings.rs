@@ -57,7 +57,7 @@ fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Int(case_matters) = bf_args.args[3].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *case_matters == 1
+        case_matters == 1
     } else {
         return Err(BfErr::Code(E_ARGS));
     };
@@ -112,7 +112,7 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *case_matters == 1
+        case_matters == 1
     } else {
         return Err(BfErr::Code(E_ARGS));
     };
@@ -136,7 +136,7 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *case_matters == 1
+        case_matters == 1
     } else {
         return Err(BfErr::Code(E_ARGS));
     };

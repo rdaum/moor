@@ -73,7 +73,7 @@ impl<W: io::Write> TextdumpWriter<W> {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_STR as i64, s)?;
             }
             Variant::Err(e) => {
-                writeln!(self.writer, "{}\n{}", VarType::TYPE_ERR as i64, *e as u8)?;
+                writeln!(self.writer, "{}\n{}", VarType::TYPE_ERR as i64, e as u8)?;
             }
             Variant::List(l) => {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_LIST as i64, l.len())?;

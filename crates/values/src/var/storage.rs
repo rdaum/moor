@@ -18,7 +18,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use bytes::Bytes;
-use flexbuffers::{Buffer, BuilderOptions};
+use flexbuffers::Buffer;
 use std::ops::{Deref, Range};
 use std::str::Utf8Error;
 
@@ -63,28 +63,22 @@ impl Deref for VarBuffer {
 
 impl Var {
     pub fn to_bytes(&self) -> Bytes {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::default());
-        let mut vb = builder.start_vector();
-        self.variant().push_to(&mut vb);
-        vb.end_vector();
-        Bytes::from(builder.take_buffer())
+        self.0 .0.clone()
     }
 }
 
 impl AsByteBuffer for Var {
     fn size_bytes(&self) -> usize {
-        let buf = self.to_bytes();
-        buf.len()
+        self.0 .0.len()
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        let buf = self.to_bytes();
-        Ok(f(buf.as_ref()))
+        let buf = self.0 .0.as_ref();
+        Ok(f(buf))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        let buf = self.to_bytes();
-        Ok(buf.to_vec())
+        Ok(self.0 .0.to_vec())
     }
 
     fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
