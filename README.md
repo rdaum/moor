@@ -113,8 +113,8 @@ with the following caveats:
 
 - No external network connection support or builtins for that. (Web front ends and alternative protocols are done
   in the Rust server layer, not in the MOO core.)
-- No support for the extensions present in ToastStunt, Stunt, etc. (e.g. `map` type, WAIFs etc.). (Some of these may
-  come in the future. Or not.)
+- Little support for the extensions present in ToastStunt, Stunt, etc. (e.g. WAIFs etc.). (Some of these may
+  come in the future. Or not. Stunt-compatible Maps *were* added, recently).
 
 The easiest way to get started is to run the `docker compose` setup. This will bring up a complete server with `telnet`
 and `websocket` interfaces. The server will be setup with an initial `JaysHouseCore` core import.
