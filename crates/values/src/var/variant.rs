@@ -119,6 +119,11 @@ impl Debug for Variant {
 }
 
 impl Variant {
+    pub(crate) fn from_bytes(buffer: VarBuffer) -> Self {
+        let reader = Reader::get_root(buffer).unwrap();
+        Self::from_reader(reader)
+    }
+
     pub(crate) fn from_reader(vec: Reader<VarBuffer>) -> Self {
         // Each Var is a vector of two elements, the type and the value.
         let vec = vec.as_vector();

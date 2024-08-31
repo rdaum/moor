@@ -56,7 +56,7 @@ impl Map {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+        Var::from_bytes(buf)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (Var, Var)> + '_ {

@@ -45,8 +45,7 @@ impl List {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        let buf = VarBuffer(buf);
-        Var(buf)
+        Var::from_bytes(buf)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Var> + '_ {
@@ -97,18 +96,6 @@ impl Sequence for List {
         self.reader.len()
     }
 
-    fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
-        for v in self.iter() {
-            if case_sensitive {
-                if v.eq_case_sensitive(value) {
-                    return Ok(true);
-                }
-            } else if v == *value {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
     fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
         for (i, v) in self.iter().enumerate() {
             if case_sensitive {
@@ -120,6 +107,18 @@ impl Sequence for List {
             }
         }
         Ok(None)
+    }
+    fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
+        for v in self.iter() {
+            if case_sensitive {
+                if v.eq_case_sensitive(value) {
+                    return Ok(true);
+                }
+            } else if v == *value {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     fn index(&self, index: usize) -> Result<Var, Error> {
@@ -281,7 +280,7 @@ impl FromIterator<Var> for Var {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+        Var::from_bytes(buf)
     }
 }
 #[cfg(test)]

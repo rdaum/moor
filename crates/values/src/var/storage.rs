@@ -63,22 +63,23 @@ impl Deref for VarBuffer {
 
 impl Var {
     pub fn to_bytes(&self) -> Bytes {
-        self.0 .0.clone()
+        self.0.to_bytes()
     }
 }
 
 impl AsByteBuffer for Var {
     fn size_bytes(&self) -> usize {
-        self.0 .0.len()
+        self.0.to_bytes().len()
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        let buf = self.0 .0.as_ref();
+        let bytes = self.0.to_bytes();
+        let buf = bytes.as_ref();
         Ok(f(buf))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0 .0.to_vec())
+        Ok(self.0.to_bytes().to_vec())
     }
 
     fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
@@ -89,7 +90,7 @@ impl AsByteBuffer for Var {
     }
 
     fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(self.to_bytes())
+        Ok(self.to_bytes().clone())
     }
 }
 

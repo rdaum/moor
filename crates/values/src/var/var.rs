@@ -20,7 +20,6 @@ use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::{map, IndexMode, Sequence, TypeClass};
 use crate::var::{Error, Objid, VarType};
 use bytes::Bytes;
-use decorum::R64;
 use flexbuffers::{BuilderOptions, Reader};
 use num_traits::ToPrimitive;
 use std::cmp::{min, Ordering};
@@ -28,7 +27,29 @@ use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 
 #[derive(Clone)]
-pub struct Var(pub VarBuffer);
+pub struct Var(pub(crate) Store);
+
+#[derive(Clone)]
+pub(crate) enum Store {
+    Buffer(VarBuffer),
+    Variant(Variant),
+}
+
+impl Store {
+    pub(crate) fn to_bytes(&self) -> Bytes {
+        match self {
+            Store::Buffer(b) => b.0.clone(),
+            Store::Variant(v) => {
+                let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
+                let mut vb = builder.start_vector();
+                v.push_to(&mut vb);
+                vb.end_vector();
+                let buf = builder.take_buffer();
+                Bytes::from(buf)
+            }
+        }
+    }
+}
 
 impl Debug for Var {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -38,51 +59,29 @@ impl Debug for Var {
 
 impl Var {
     pub fn from_bytes(data: Bytes) -> Self {
-        Var(VarBuffer(data))
+        Var(Store::Buffer(VarBuffer(data)))
+    }
+
+    pub fn from_buffer(buf: VarBuffer) -> Self {
+        Var(Store::Buffer(buf))
     }
 
     pub fn from_reader(reader: Reader<VarBuffer>) -> Self {
-        // Unpack and then repack into a new buffer, since it seems flexbuffers won't let us pull the
-        // offsets out of the underlying buffer in the reader?
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        let variant = Variant::from_reader(reader);
-        variant.push_to(&mut vb);
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+        let v = Variant::from_reader(reader);
+        Var(Store::Variant(v))
     }
 
     pub fn from_variant(variant: Variant) -> Self {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        variant.push_to(&mut vb);
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+        Var(Store::Variant(variant))
     }
 
     pub fn mk_integer(i: i64) -> Self {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        vb.push(VarType::TYPE_INT as u8);
-        vb.push(i);
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+        let v = Variant::Int(i);
+        Var(Store::Variant(v))
     }
 
     pub fn mk_none() -> Self {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        vb.push(VarType::TYPE_NONE as u8);
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+        Var(Store::Variant(Variant::None))
     }
 
     pub fn mk_str(s: &str) -> Self {
@@ -93,40 +92,19 @@ impl Var {
         vb.end_vector();
         let buf = builder.take_buffer();
         let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+        Var::from_bytes(buf)
     }
 
-    pub fn mk_float(f: R64) -> Self {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        vb.push(VarType::TYPE_FLOAT as u8);
-        vb.push(f.to_f64().unwrap());
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+    pub fn mk_float(f: f64) -> Self {
+        Var(Store::Variant(Variant::Float(f)))
     }
 
     pub fn mk_error(e: Error) -> Self {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        vb.push(VarType::TYPE_ERR as u8);
-        vb.push(e as u8);
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+        Var(Store::Variant(Variant::Err(e)))
     }
 
     pub fn mk_object(o: Objid) -> Self {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        vb.push(VarType::TYPE_OBJ as u8);
-        vb.push(o.0);
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var(VarBuffer(buf))
+        Var(Store::Variant(Variant::Obj(o)))
     }
 
     pub fn type_code(&self) -> VarType {
@@ -155,7 +133,10 @@ impl Var {
     }
 
     pub fn variant(&self) -> Variant {
-        Variant::from_reader(Reader::get_root(self.0.clone()).unwrap())
+        match &self.0 {
+            Store::Buffer(b) => Variant::from_bytes(b.clone()),
+            Store::Variant(v) => v.clone(),
+        }
     }
 
     pub fn is_true(&self) -> bool {
@@ -501,10 +482,6 @@ pub fn v_map(pairs: &[(Var, Var)]) -> Var {
 }
 
 pub fn v_float(f: f64) -> Var {
-    Var::mk_float(R64::from(f))
-}
-
-pub fn v_floatr(f: R64) -> Var {
     Var::mk_float(f)
 }
 
