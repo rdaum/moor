@@ -21,7 +21,7 @@ https://github.com/toddsundsted/stunt/tree/master/test
 | 🚫     | `test_json.rb`                                 | N/A                      | `moor` doesn't support this Stunt extension.                                                |
 | 🔜     | `test_limits.rb`                               | N/A                      |                                                                                             |
 | ✅     | `test_looping.rb`                              | `looping.moot`           |                                                                                             |
-| ✅     | ️ `test_map.rb`                                 | `map.moot`               |                                                                                             |
+| ✅     | ️`test_map.rb`                                  | `map.moot`               |                                                                                             |
 | ✅     | `test_math.rb`                                 | `math.moot`              |                                                                                             |
 | 🚫     | `test_miscellaneous.rb`                        | N/A                      | `moor` doesn't support this Stunt extension (`isa`)                                         |
 | 🔜     | `test_moocode_parsing.rb`                      | N/A                      | Dropped tests for Stunt extensions (`^` collection, bitwise operators)                      |
@@ -37,3 +37,5 @@ https://github.com/toddsundsted/stunt/tree/master/test
 | 🔜     | `test_task_local.rb`                           | N/A                      |                                                                                             |
 | 🔜     | `test_things_that_used_to_crash_the_server.rb` | N/A                      | Probably useful to test these, since they were tricky for another server at somepoint       |
 | 🚫     | `test_verb_cache.rb`                           | N/A                      | `moor` doesn't support this Stunt extension.                                                |
+
+`.moot` files not mentioned above are not related to Stunt.

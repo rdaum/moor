@@ -77,7 +77,6 @@ fn test_moo(path: &Path) {
 #[ignore = "Useful for debugging; just run a single test against 'real' MOO"]
 fn test_single() {
     test_moo(
-        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../kernel/testsuite/moot/moocode_parsing.moot"),
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../kernel/testsuite/moot/truthiness.moot"),
     );
 }

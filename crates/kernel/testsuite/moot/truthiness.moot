@@ -1,0 +1,55 @@
+// integers
+; return 0 && "yes" || "no";
+"no"
+; return 1 && "yes" || "no";
+"yes"
+; return 323232 && "yes" || "no";
+"yes"
+; return -2000 && "yes" || "no";
+"yes"
+
+// real numbers
+; return 0.0 && "yes" || "no";
+"no"
+; return 32500e-2 && "yes" || "no";
+"yes"
+; return -32500e+3 && "yes" || "no";
+"yes"
+
+// strings
+; return "" && "yes" || "no";
+"no"
+; return "\0" && "yes" || "no";
+"yes"
+; return "  " && "yes" || "no";
+"yes"
+; return "  \n  " && "yes" || "no";
+"yes"
+; return "foobarbaz" && "yes" || "no";
+"yes"
+
+// objects
+; return #0 && "yes" || "no";
+"no"
+; return #1 && "yes" || "no";
+"no"
+
+// errors
+; return E_ARGS && "yes" || "no";
+"no"
+; return E_INVARG && "yes" || "no";
+"no"
+
+// lists
+; return {} && "yes" || "no";
+"no"
+; return {0} && "yes" || "no";
+"yes"
+; return {1, 2, "foo", E_ARGS} && "yes" || "no";
+"yes"
+
+// maps
+; return [] && "yes" || "no";
+"no"
+; return [1 -> 2] && "yes" || "no";
+"yes"
