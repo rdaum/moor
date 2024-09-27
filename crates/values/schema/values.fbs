@@ -1,0 +1,43 @@
+namespace moor.values;
+
+struct Uuid {
+    v: [ubyte:16];
+}
+
+enum ArgSpec : byte {
+    None = 0,
+    Any = 1,
+    This = 2,
+}
+
+struct VerbArgsSpec {
+    dobj: ArgSpec;
+    // -2 = None, -1 = Any, >0 = numeric index of prep
+    prep: byte;
+    iobj: ArgSpec;
+}
+
+table VerbDef {
+    data_version:ubyte;
+    uuid:Uuid;
+    location:long;
+    owner:long;
+    flags:ubyte;
+    binary_type:ubyte;
+    args:VerbArgsSpec;
+    names:[string];
+}
+
+/// The binding of both a `VerbDef` and the binary (program) associated with it.
+table VerbInfo {
+    verbdef:VerbDef;
+    binary:[ubyte];
+}
+
+table PropDef {
+    data_version:ubyte;
+    uuid:Uuid;
+    definer:long;
+    location:long;
+    name:string;
+}

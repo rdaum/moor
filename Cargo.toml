@@ -102,6 +102,7 @@ decorum = "0.3" # For ordering & comparing our floats
 encoding_rs = "0.8.34"
 enum-primitive-derive = "0.3"
 flatbuffers = "24.3.25"
+flatc-rust = "0.2.0"
 flexbuffers = "2.0.0"
 im = "15.1"
 inventory = "0.3.15"

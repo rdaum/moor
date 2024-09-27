@@ -14,24 +14,15 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
+use crate::model::{uuid_fb, values_flatbuffers};
 use crate::Objid;
 use crate::Symbol;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
-use binary_layout::{binary_layout, Field};
 use bytes::Bytes;
-use bytes::{Buf, BufMut};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PropDef(Bytes);
-
-binary_layout!(propdef, LittleEndian, {
-    data_version: u8,
-    uuid: [u8; 16],
-    definer: Objid as i64,
-    location: Objid as i64,
-    name: [u8],
-});
 
 impl PropDef {
     fn from_bytes(bytes: Bytes) -> Self {
@@ -40,60 +31,42 @@ impl PropDef {
 
     #[must_use]
     pub fn new(uuid: Uuid, definer: Objid, location: Objid, name: &str) -> Self {
-        let header_size = propdef::name::OFFSET;
-        let mut buf = vec![0; header_size + name.len() + 8];
-        let mut propdef_view = propdef::View::new(&mut buf);
-        propdef_view.data_version_mut().write(DATA_LAYOUT_VERSION);
-        propdef_view.uuid_mut().copy_from_slice(uuid.as_bytes());
-        propdef_view
-            .definer_mut()
-            .try_write(definer)
-            .expect("Failed to encode definer");
-        propdef_view
-            .location_mut()
-            .try_write(location)
-            .expect("Failed to encode location");
-
-        let mut name_buf = propdef_view.name_mut();
-        name_buf.put_u8(name.len() as u8);
-        name_buf.put_slice(name.as_bytes());
-
-        Self(Bytes::from(buf))
+        let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(256);
+        let name = builder.create_string(name);
+        let mut pbuilder = values_flatbuffers::moor::values::PropDefBuilder::new(&mut builder);
+        pbuilder.add_data_version(DATA_LAYOUT_VERSION);
+        pbuilder.add_definer(definer.0);
+        pbuilder.add_location(location.0);
+        pbuilder.add_name(name);
+        pbuilder.add_uuid(&uuid_fb(&uuid));
+        let root = pbuilder.finish();
+        builder.finish_minimal(root);
+        let (vec, start) = builder.collapse();
+        let b = Bytes::from(vec);
+        let b = b.slice(start..);
+        Self(b)
     }
 
-    fn get_layout_view(&self) -> propdef::View<&[u8]> {
-        let view = propdef::View::new(self.0.as_ref());
-        assert_eq!(
-            view.data_version().read(),
-            DATA_LAYOUT_VERSION,
-            "Unsupported data layout version: {}",
-            view.data_version().read()
-        );
-        view
+    fn get_flatbuffer(&self) -> values_flatbuffers::moor::values::PropDef {
+        let pd = flatbuffers::root::<values_flatbuffers::moor::values::PropDef>(self.0.as_ref())
+            .unwrap();
+        assert_eq!(pd.data_version(), DATA_LAYOUT_VERSION);
+        pd
     }
 
     #[must_use]
     pub fn definer(&self) -> Objid {
-        self.get_layout_view()
-            .definer()
-            .try_read()
-            .expect("Failed to decode definer")
+        Objid(self.get_flatbuffer().definer())
     }
+
     #[must_use]
     pub fn location(&self) -> Objid {
-        self.get_layout_view()
-            .location()
-            .try_read()
-            .expect("Failed to decode location")
+        Objid(self.get_flatbuffer().location())
     }
 
     #[must_use]
     pub fn name(&self) -> &str {
-        let names_offset = propdef::name::OFFSET;
-        let mut names_buf = &self.0.as_ref()[names_offset..];
-        let name_len = names_buf.get_u8() as usize;
-        let name_slice = names_buf.get(..name_len).unwrap();
-        return std::str::from_utf8(name_slice).unwrap();
+        self.get_flatbuffer().name().unwrap()
     }
 }
 
@@ -132,8 +105,9 @@ impl Named for PropDef {
 
 impl HasUuid for PropDef {
     fn uuid(&self) -> Uuid {
-        let view = propdef::View::new(self.0.as_ref());
-        Uuid::from_bytes(*view.uuid())
+        let fb = self.get_flatbuffer();
+        let uuid = fb.uuid().unwrap();
+        Uuid::from_bytes(uuid.0)
     }
 }
 

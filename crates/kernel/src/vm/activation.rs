@@ -12,7 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::{Decode, Encode};
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use bytes::Bytes;
 use lazy_static::lazy_static;
 use uuid::Uuid;
@@ -22,14 +25,13 @@ use moor_compiler::Program;
 use moor_compiler::{BuiltinId, GlobalName};
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDef;
-use moor_values::model::VerbInfo;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::util::BitEnum;
-use moor_values::Symbol;
 use moor_values::NOTHING;
 use moor_values::{v_empty_list, v_int, v_objid, v_str, v_string, Var, VarType};
 use moor_values::{v_empty_str, Error};
 use moor_values::{v_list, Objid};
+use moor_values::{AsByteBuffer, Symbol};
 
 use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::moo_frame::MooStackFrame;
@@ -42,7 +44,7 @@ lazy_static! {
 
 /// Activation frame for the call stack of verb executions.
 /// Holds the current VM stack frame, along with the current verb activation information.
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone)]
 pub(crate) struct Activation {
     /// The current stack frame, which holds the current execution state for the interpreter
     /// running this activation.
@@ -56,7 +58,7 @@ pub(crate) struct Activation {
     /// The name of the verb that is currently being executed.
     pub(crate) verb_name: Symbol,
     /// The extended information about the verb that is currently being executed.
-    pub(crate) verb_info: VerbInfo,
+    pub(crate) verbdef: VerbDef,
     /// This is the "task perms" for the current activation. It is the "who" the verb is acting on
     /// behalf-of in terms of permissions in the world.
     /// Set initially to verb owner ('programmer'). It is what set_task_perms() can override,
@@ -66,6 +68,77 @@ pub(crate) struct Activation {
     pub(crate) command: Option<ParsedCommand>,
 }
 
+impl Encode for Activation {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // Everything is standard bincodable except verbdef, which is a flatbuffer.
+        // TODO: this is temporary, and should be replaced with a flatbuffer encoding.
+        self.frame.encode(encoder)?;
+        self.this.encode(encoder)?;
+        self.player.encode(encoder)?;
+        self.args.encode(encoder)?;
+        self.verb_name.encode(encoder)?;
+        self.permissions.encode(encoder)?;
+        self.command.encode(encoder)?;
+
+        // verbdef gets encoded as its raw bytes from the flatbuffer
+        let verbdef_bytes = self.verbdef.as_bytes().unwrap();
+        verbdef_bytes.encode(encoder)
+    }
+}
+
+impl Decode for Activation {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let frame = Frame::decode(decoder)?;
+        let this = Objid::decode(decoder)?;
+        let player = Objid::decode(decoder)?;
+        let args = Vec::<Var>::decode(decoder)?;
+        let verb_name = Symbol::decode(decoder)?;
+        let permissions = Objid::decode(decoder)?;
+        let command = Option::<ParsedCommand>::decode(decoder)?;
+
+        let verbdef_bytes = Vec::<u8>::decode(decoder)?;
+        let verbdef_bytes = Bytes::from(verbdef_bytes);
+        let verbdef = VerbDef::from_bytes(verbdef_bytes).unwrap();
+
+        Ok(Self {
+            frame,
+            this,
+            player,
+            args,
+            verb_name,
+            verbdef,
+            permissions,
+            command,
+        })
+    }
+}
+
+impl<'de> BorrowDecode<'de> for Activation {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let frame = Frame::decode(decoder)?;
+        let this = Objid::decode(decoder)?;
+        let player = Objid::decode(decoder)?;
+        let args = Vec::<Var>::decode(decoder)?;
+        let verb_name = Symbol::decode(decoder)?;
+        let permissions = Objid::decode(decoder)?;
+        let command = Option::<ParsedCommand>::decode(decoder)?;
+
+        let verbdef_bytes = Vec::<u8>::decode(decoder)?;
+        let verbdef_bytes = Bytes::from(verbdef_bytes);
+        let verbdef = VerbDef::from_bytes(verbdef_bytes).unwrap();
+
+        Ok(Self {
+            frame,
+            this,
+            player,
+            args,
+            verb_name,
+            verbdef,
+            permissions,
+            command,
+        })
+    }
+}
 #[derive(Clone, Debug, Encode, Decode)]
 pub enum Frame {
     Moo(MooStackFrame),
@@ -154,7 +227,7 @@ impl Activation {
     #[allow(irrefutable_let_patterns)] // We know this is a Moo frame. We're just making room
     pub fn for_call(verb_call_request: VerbExecutionRequest) -> Self {
         let program = verb_call_request.program;
-        let verb_owner = verb_call_request.resolved_verb.verbdef().owner();
+        let verb_owner = verb_call_request.resolved_verb.owner();
 
         let VerbProgram::Moo(program) = program else {
             unimplemented!("Only MOO programs are supported")
@@ -213,7 +286,7 @@ impl Activation {
             frame,
             this: verb_call_request.call.this,
             player: verb_call_request.call.player,
-            verb_info: verb_call_request.resolved_verb,
+            verbdef: verb_call_request.resolved_verb,
             verb_name: verb_call_request.call.verb_name,
             command: verb_call_request.command.clone(),
             args: verb_call_request.call.args.clone(),
@@ -222,19 +295,14 @@ impl Activation {
     }
 
     pub fn for_eval(permissions: Objid, player: Objid, program: Program) -> Self {
-        let verb_info = VerbInfo::new(
-            // Fake verbdef. Not sure how I feel about this. Similar to with BF calls.
-            // Might need to clean up the requirement for a VerbInfo in Activation.
-            VerbDef::new(
-                Uuid::new_v4(),
-                NOTHING,
-                NOTHING,
-                &["eval"],
-                BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Debug,
-                BinaryType::None,
-                VerbArgsSpec::this_none_this(),
-            ),
-            Bytes::new(),
+        let verbdef = VerbDef::new(
+            Uuid::new_v4(),
+            NOTHING,
+            NOTHING,
+            &["eval"],
+            BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Debug,
+            BinaryType::None,
+            VerbArgsSpec::this_none_this(),
         );
 
         let frame = MooStackFrame::new(program);
@@ -257,7 +325,7 @@ impl Activation {
             frame,
             this: player,
             player,
-            verb_info,
+            verbdef,
             verb_name: *EVAL_SYMBOL,
             command: None,
             args: vec![],
@@ -272,18 +340,14 @@ impl Activation {
         _verb_flags: BitEnum<VerbFlag>,
         player: Objid,
     ) -> Self {
-        let verb_info = VerbInfo::new(
-            // Fake verbdef. Not sure how I feel about this.
-            VerbDef::new(
-                Uuid::new_v4(),
-                NOTHING,
-                NOTHING,
-                &[bf_name.as_str()],
-                BitEnum::new_with(VerbFlag::Exec),
-                BinaryType::None,
-                VerbArgsSpec::this_none_this(),
-            ),
-            Bytes::new(),
+        let verbdef = VerbDef::new(
+            Uuid::new_v4(),
+            NOTHING,
+            NOTHING,
+            &[bf_name.as_str()],
+            BitEnum::new_with(VerbFlag::Exec),
+            BinaryType::None,
+            VerbArgsSpec::this_none_this(),
         );
 
         let bf_frame = BfFrame {
@@ -297,7 +361,7 @@ impl Activation {
             frame,
             this: NOTHING,
             player,
-            verb_info,
+            verbdef,
             verb_name: bf_name,
             command: None,
             args,
@@ -308,11 +372,11 @@ impl Activation {
     pub fn verb_definer(&self) -> Objid {
         match self.frame {
             Frame::Bf(_) => NOTHING,
-            _ => self.verb_info.verbdef().location(),
+            _ => self.verbdef.location(),
         }
     }
 
     pub fn verb_owner(&self) -> Objid {
-        self.verb_info.verbdef().owner()
+        self.verbdef.owner()
     }
 }

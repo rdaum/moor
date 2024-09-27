@@ -16,30 +16,50 @@ use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{BinaryType, VerbFlag};
+use crate::model::{uuid_fb, values_flatbuffers, ArgSpec, PrepSpec, Preposition};
 use crate::util::verbname_cmp;
 use crate::util::BitEnum;
 use crate::Objid;
 use crate::Symbol;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
-use binary_layout::{binary_layout, Field};
-use bytes::BufMut;
 use bytes::Bytes;
+use num_traits::FromPrimitive;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VerbDef(Bytes);
 
-binary_layout!(verbdef, LittleEndian, {
-    data_version: u8,
-    uuid: [u8; 16],
-    location: Objid as i64,
-    owner: Objid as i64,
-    flags: BitEnum::<VerbFlag> as u16,
-    binary_type: BinaryType as u8,
-    args: VerbArgsSpec as u32,
-    num_names: u8,
-    names: [u8],
-});
+fn pack_arg_spec(s: &ArgSpec) -> values_flatbuffers::moor::values::ArgSpec {
+    match s {
+        ArgSpec::None => values_flatbuffers::moor::values::ArgSpec::None,
+        ArgSpec::Any => values_flatbuffers::moor::values::ArgSpec::Any,
+        ArgSpec::This => values_flatbuffers::moor::values::ArgSpec::This,
+    }
+}
+
+fn unpack_arg_spec(s: values_flatbuffers::moor::values::ArgSpec) -> ArgSpec {
+    match s {
+        values_flatbuffers::moor::values::ArgSpec::None => ArgSpec::None,
+        values_flatbuffers::moor::values::ArgSpec::Any => ArgSpec::Any,
+        values_flatbuffers::moor::values::ArgSpec::This => ArgSpec::This,
+        _ => panic!("Invalid ArgSpec"),
+    }
+}
+fn pack_prep(p: &PrepSpec) -> i8 {
+    match p {
+        PrepSpec::Any => -2,
+        PrepSpec::None => -1,
+        PrepSpec::Other(p) => (*p as u16) as i8,
+    }
+}
+
+fn unpack_prep(p: i8) -> PrepSpec {
+    match p {
+        -2 => PrepSpec::Any,
+        -1 => PrepSpec::None,
+        p => PrepSpec::Other(Preposition::from_repr(p as u16).unwrap()),
+    }
+}
 
 impl VerbDef {
     fn from_bytes(bytes: Bytes) -> Self {
@@ -56,89 +76,70 @@ impl VerbDef {
         binary_type: BinaryType,
         args: VerbArgsSpec,
     ) -> Self {
-        let header_size = verbdef::names::OFFSET;
-        let num_names = names.len();
-        let names_region_size = names.iter().map(|n| n.len()).sum::<usize>() + num_names;
-        let total_size = header_size + names_region_size;
+        let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(256);
+        let name_strings = names
+            .iter()
+            .map(|name| builder.create_string(name))
+            .collect::<Vec<_>>();
+        let names = builder.create_vector(&name_strings);
+        let mut vbuilder = values_flatbuffers::moor::values::VerbDefBuilder::new(&mut builder);
+        vbuilder.add_data_version(DATA_LAYOUT_VERSION);
+        vbuilder.add_uuid(&uuid_fb(&uuid));
+        vbuilder.add_location(location.0);
+        vbuilder.add_owner(owner.0);
+        vbuilder.add_flags(flags.to_u16() as u8);
+        vbuilder.add_binary_type(binary_type as u8);
+        vbuilder.add_names(names);
 
-        let mut buffer = vec![0; total_size];
-
-        let mut verbdef_layout = verbdef::View::new(&mut buffer);
-        verbdef_layout.data_version_mut().write(DATA_LAYOUT_VERSION);
-        verbdef_layout.uuid_mut().copy_from_slice(uuid.as_bytes());
-        verbdef_layout
-            .location_mut()
-            .try_write(location)
-            .expect("Failed to encode location");
-        verbdef_layout
-            .owner_mut()
-            .try_write(owner)
-            .expect("Failed to encode owner");
-        verbdef_layout
-            .flags_mut()
-            .try_write(flags)
-            .expect("Failed to encode flags");
-        verbdef_layout
-            .binary_type_mut()
-            .try_write(binary_type)
-            .expect("Failed to encode binary_type");
-        verbdef_layout
-            .args_mut()
-            .try_write(args)
-            .expect("Failed to encode args");
-        verbdef_layout.num_names_mut().write(names.len() as u8);
-
-        // Now write the names, into the names region.
-        let mut names_buf = verbdef_layout.names_mut();
-        for name in names {
-            names_buf.put_u8(name.len() as u8);
-            names_buf.put_slice(name.as_bytes());
-        }
-
-        Self(Bytes::from(buffer))
+        let args_builder = values_flatbuffers::moor::values::VerbArgsSpec::new(
+            pack_arg_spec(&args.dobj),
+            pack_prep(&args.prep),
+            pack_arg_spec(&args.iobj),
+        );
+        vbuilder.add_args(&args_builder);
+        let root = vbuilder.finish();
+        builder.finish_minimal(root);
+        let (vec, start) = builder.collapse();
+        let b = Bytes::from(vec);
+        let b = b.slice(start..);
+        Self(b)
     }
 
-    fn get_header_view(&self) -> verbdef::View<&[u8]> {
-        let view = verbdef::View::new(self.0.as_ref());
-        assert_eq!(
-            view.data_version().read(),
-            DATA_LAYOUT_VERSION,
-            "Unsupported data layout version: {}",
-            view.data_version().read()
-        );
-        view
+    pub(crate) fn get_flatbuffer(&self) -> values_flatbuffers::moor::values::VerbDef {
+        let vd = flatbuffers::root::<values_flatbuffers::moor::values::VerbDef>(self.0.as_ref())
+            .unwrap();
+        assert_eq!(vd.data_version(), DATA_LAYOUT_VERSION);
+        vd
     }
 
     #[must_use]
     pub fn location(&self) -> Objid {
-        let view = self.get_header_view();
-        view.location()
-            .try_read()
-            .expect("Failed to decode location")
+        Objid(self.get_flatbuffer().location())
     }
+
     #[must_use]
     pub fn owner(&self) -> Objid {
-        let view = self.get_header_view();
-        view.owner().try_read().expect("Failed to decode owner")
+        Objid(self.get_flatbuffer().owner())
     }
     #[must_use]
     pub fn flags(&self) -> BitEnum<VerbFlag> {
-        let view = self.get_header_view();
-        view.flags().try_read().expect("Failed to decode flags")
+        let flags = self.get_flatbuffer().flags();
+        BitEnum::from_u8(flags)
     }
     #[must_use]
     pub fn binary_type(&self) -> BinaryType {
-        let view = self.get_header_view();
-        view.binary_type()
-            .try_read()
-            .expect("Failed to decode binary_type")
+        let binary_type = self.get_flatbuffer().binary_type();
+        BinaryType::from_u8(binary_type).expect("Invalid binary type")
     }
+
     #[must_use]
     pub fn args(&self) -> VerbArgsSpec {
-        let view = self.get_header_view();
-        view.args()
-            .try_read()
-            .expect("Failed to decode verb args spec")
+        let args = self.get_flatbuffer().args().unwrap();
+        VerbArgsSpec {
+            dobj: unpack_arg_spec(args.dobj()),
+            prep: unpack_prep(args.prep()),
+            iobj: unpack_arg_spec(args.iobj()),
+        }
     }
 }
 
@@ -151,27 +152,18 @@ impl Named for VerbDef {
 
     #[must_use]
     fn names(&self) -> Vec<&str> {
-        let view = self.get_header_view();
-        let num_names = view.num_names().read() as usize;
-        let offset = verbdef::names::OFFSET;
-        let slice = &self.0.as_ref()[offset..];
-        let mut position = 0;
-        let mut names = Vec::with_capacity(num_names);
-        for _ in 0..num_names {
-            let length = slice[position];
-            position += 1;
-            let name_slice = &slice[position..position + length as usize];
-            position += length as usize;
-            names.push(std::str::from_utf8(name_slice).unwrap());
-        }
-        names
+        self.get_flatbuffer()
+            .names()
+            .map(|names| names.iter().collect())
+            .unwrap_or_else(Vec::new)
     }
 }
 
 impl HasUuid for VerbDef {
     fn uuid(&self) -> Uuid {
-        let view = self.get_header_view();
-        Uuid::from_bytes(*view.uuid())
+        let fb = self.get_flatbuffer();
+        let uuid = fb.uuid().unwrap();
+        Uuid::from_bytes(uuid.0)
     }
 }
 
@@ -241,8 +233,8 @@ mod tests {
             VerbArgsSpec::this_none_this(),
         );
 
-        let bytes = vd.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let vd2 = VerbDef::from_bytes(Bytes::from(bytes));
+        let bytes = vd.0.clone();
+        let vd2 = VerbDef::from_bytes(bytes);
 
         assert_eq!(vd, vd2);
         assert_eq!(vd.uuid(), vd2.uuid());

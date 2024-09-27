@@ -27,15 +27,14 @@ use tracing::{debug, error, trace, warn};
 use moor_compiler::Name;
 use moor_compiler::Program;
 use moor_compiler::{compile, CompileOptions};
-use moor_values::model::VerbInfo;
-use moor_values::model::WorldState;
 use moor_values::model::{BinaryType, ObjFlag};
+use moor_values::model::{VerbDef, WorldState};
 use moor_values::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_values::AsByteBuffer;
 use moor_values::Error::E_MAXREC;
+use moor_values::Objid;
 use moor_values::Var;
 use moor_values::{v_none, Symbol};
-use moor_values::Objid;
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
@@ -126,15 +125,15 @@ impl VmHost {
     pub fn start_call_command_verb(
         &mut self,
         task_id: TaskId,
-        vi: VerbInfo,
+        verb: (Bytes, VerbDef),
         verb_call: VerbCall,
         command: ParsedCommand,
         permissions: Objid,
     ) {
-        let program = Self::decode_program(vi.verbdef().binary_type(), vi.binary());
+        let program = Self::decode_program(verb.1.binary_type(), verb.0);
         let call_request = VerbExecutionRequest {
             permissions,
-            resolved_verb: vi,
+            resolved_verb: verb.1,
             call: verb_call,
             command: Some(command),
             program,
@@ -148,14 +147,14 @@ impl VmHost {
         &mut self,
         task_id: TaskId,
         perms: Objid,
-        verb_info: VerbInfo,
+        verb_info: (Bytes, VerbDef),
         verb_call: VerbCall,
     ) {
-        let binary = Self::decode_program(verb_info.verbdef().binary_type(), verb_info.binary());
+        let binary = Self::decode_program(verb_info.1.binary_type(), verb_info.0);
 
         let call_request = VerbExecutionRequest {
             permissions: perms,
-            resolved_verb: verb_info.clone(),
+            resolved_verb: verb_info.1,
             call: verb_call,
             command: None,
             program: binary,
@@ -267,15 +266,13 @@ impl VmHost {
                 ExecutionResult::ContinueVerb {
                     permissions,
                     resolved_verb,
+                    binary,
                     call,
                     command,
                 } => {
                     trace!(task_id, call = ?call, "Task continue, call into verb");
 
-                    let program = Self::decode_program(
-                        resolved_verb.verbdef().binary_type(),
-                        resolved_verb.binary(),
-                    );
+                    let program = Self::decode_program(resolved_verb.binary_type(), binary);
 
                     let call_request = VerbExecutionRequest {
                         permissions,

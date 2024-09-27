@@ -147,7 +147,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // We're going to try to call :initialize on the new object.
             // Then trampoline into the done case.
             // If :initialize doesn't exist, we'll just skip ahead.
-            let Ok(initialize) = bf_args.world_state.find_method_verb_on(
+            let Ok((binary, resolved_verb)) = bf_args.world_state.find_method_verb_on(
                 bf_args.task_perms_who(),
                 new_obj,
                 *INITIALIZE_SYM,
@@ -158,9 +158,10 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
             bf_frame.bf_trampoline_arg = Some(v_objid(new_obj));
-            return Ok(VmInstr(ContinueVerb {
+            Ok(VmInstr(ContinueVerb {
                 permissions: bf_args.task_perms_who(),
-                resolved_verb: initialize,
+                resolved_verb,
+                binary,
                 call: VerbCall {
                     verb_name: *INITIALIZE_SYM,
                     location: new_obj,
@@ -171,7 +172,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     caller: bf_args.exec_state.top().this,
                 },
                 command: None,
-            }));
+            }))
         }
         BF_CREATE_OBJECT_TRAMPOLINE_DONE => {
             // The trampoline argument is the object we just created.
@@ -263,14 +264,15 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     obj,
                     *RECYCLE_SYM,
                 ) {
-                    Ok(dispatch) => {
+                    Ok((binary, resolved_verb)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = Some(contents);
 
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
-                            resolved_verb: dispatch,
+                            resolved_verb,
+                            binary,
                             call: VerbCall {
                                 verb_name: *RECYCLE_SYM,
                                 location: obj,
@@ -321,7 +323,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     // :exitfunc *should* exist because we looked for it earlier, and we're supposed to
                     // be transactionally isolated. But we need to do resolution anyways, so we will
                     // look again anyways.
-                    let Ok(exitfunc) = bf_args.world_state.find_method_verb_on(
+                    let Ok((binary, resolved_verb)) = bf_args.world_state.find_method_verb_on(
                         bf_args.task_perms_who(),
                         head_obj,
                         *EXITFUNC_SYM,
@@ -338,7 +340,8 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     // Call :exitfunc on the head object.
                     return Ok(VmInstr(ContinueVerb {
                         permissions: bf_args.task_perms_who(),
-                        resolved_verb: exitfunc,
+                        resolved_verb,
+                        binary,
                         call: VerbCall {
                             verb_name: *EXITFUNC_SYM,
                             location: head_obj,
@@ -433,13 +436,14 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     whereto,
                     *ACCEPT_SYM,
                 ) {
-                    Ok(dispatch) => {
+                    Ok((binary, resolved_verb)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = None;
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
-                            resolved_verb: dispatch,
+                            resolved_verb,
+                            binary,
                             call: VerbCall {
                                 verb_name: *ACCEPT_SYM,
                                 location: whereto,
@@ -509,14 +513,15 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     original_location,
                     *EXITFUNC_SYM,
                 ) {
-                    Ok(dispatch) => {
+                    Ok((binary, resolved_verb)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC);
                         bf_frame.bf_trampoline_arg = None;
 
                         let continuation = ContinueVerb {
                             permissions: bf_args.task_perms_who(),
-                            resolved_verb: dispatch,
+                            resolved_verb,
+                            binary,
                             call: VerbCall {
                                 verb_name: *EXITFUNC_SYM,
                                 location: original_location,
@@ -555,14 +560,15 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     whereto,
                     *ENTERFUNC_SYM,
                 ) {
-                    Ok(dispatch) => {
+                    Ok((binary, resolved_verb)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_DONE);
                         bf_frame.bf_trampoline_arg = None;
 
                         return Ok(VmInstr(ContinueVerb {
                             permissions: bf_args.task_perms_who(),
-                            resolved_verb: dispatch,
+                            resolved_verb,
+                            binary,
                             call: VerbCall {
                                 verb_name: *ENTERFUNC_SYM,
                                 location: whereto,

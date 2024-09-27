@@ -53,7 +53,7 @@ impl VMExecState {
                 Frame::Moo(_) => {
                     vec![
                         v_objid(a.this),
-                        v_str(a.verb_info.verbdef().names().join(" ").as_str()),
+                        v_str(a.verbdef.names().join(" ").as_str()),
                         v_objid(a.verb_definer()),
                         v_objid(a.verb_owner()),
                         v_objid(a.player),
@@ -138,12 +138,7 @@ impl VMExecState {
         self.set_return_value(v_err(code));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {
-            if activation
-                .verb_info
-                .verbdef()
-                .flags()
-                .contains(VerbFlag::Debug)
-            {
+            if activation.verbdef.flags().contains(VerbFlag::Debug) {
                 return self.raise_error_pack(code.make_error_pack(None, None));
             }
         }
@@ -173,12 +168,7 @@ impl VMExecState {
         // Filter out frames for builtin invocations
         let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
         if let Some(activation) = verb_frame {
-            if activation
-                .verb_info
-                .verbdef()
-                .flags()
-                .contains(VerbFlag::Debug)
-            {
+            if activation.verbdef.flags().contains(VerbFlag::Debug) {
                 return self.raise_error_pack(code.make_error_pack(msg, value));
             }
         }
@@ -203,12 +193,7 @@ impl VMExecState {
         // Filter out frames for builtin invocations
         let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
         if let Some(activation) = verb_frame {
-            if activation
-                .verb_info
-                .verbdef()
-                .flags()
-                .contains(VerbFlag::Debug)
-            {
+            if activation.verbdef.flags().contains(VerbFlag::Debug) {
                 return self.raise_error_pack(code.make_error_pack(None, None));
             }
         }

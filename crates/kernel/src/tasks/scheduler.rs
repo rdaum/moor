@@ -295,11 +295,11 @@ impl Scheduler {
                 return Err(CommandExecutionError(CommandError::NoObjectMatch));
             };
 
-            let vi = tx
+            let (_, verbdef) = tx
                 .find_method_verb_on(perms, o, verb_name)
                 .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
 
-            if vi.verbdef().location() != o {
+            if verbdef.location() != o {
                 let _ = tx.rollback();
                 return Err(VerbProgramFailed(VerbProgramError::NoVerbToProgram));
             }
@@ -323,7 +323,7 @@ impl Scheduler {
                 binary_type: Some(BinaryType::LambdaMoo18X),
                 binary: Some(binary),
             };
-            tx.update_verb_with_id(perms, o, vi.verbdef().uuid(), update_attrs)
+            tx.update_verb_with_id(perms, o, verbdef.uuid(), update_attrs)
                 .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
 
             let commit_result = tx.commit().unwrap();
@@ -765,7 +765,7 @@ impl Scheduler {
                     return;
                 };
 
-                let verb_info = match world_state.find_method_verb_on(perms, object, verb) {
+                let (binary, verbdef) = match world_state.find_method_verb_on(perms, object, verb) {
                     Ok(v) => v,
                     Err(e) => {
                         reply
@@ -775,7 +775,6 @@ impl Scheduler {
                     }
                 };
 
-                let verbdef = verb_info.verbdef();
                 if verbdef.binary_type() != BinaryType::LambdaMoo18X {
                     reply
                         .send(Err(SchedulerError::VerbRetrievalFailed(
@@ -785,18 +784,8 @@ impl Scheduler {
                     return;
                 }
 
-                let verb_info = match world_state.retrieve_verb(perms, object, verbdef.uuid()) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
-                            .expect("Could not send verb code reply");
-                        return;
-                    }
-                };
-
                 // If the binary is empty, just return empty rather than try to decode it.
-                if verb_info.binary().is_empty() {
+                if binary.is_empty() {
                     reply
                         .send(Ok((verbdef, Vec::new())))
                         .expect("Could not send verb code reply");
@@ -804,7 +793,7 @@ impl Scheduler {
                 }
 
                 // Decode.
-                let Ok(program) = Program::from_bytes(verb_info.binary()) else {
+                let Ok(program) = Program::from_bytes(binary) else {
                     reply
                         .send(Err(SchedulerError::VerbRetrievalFailed(
                             WorldStateError::DatabaseError(

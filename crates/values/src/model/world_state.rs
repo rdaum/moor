@@ -13,6 +13,7 @@
 //
 
 use bincode::{Decode, Encode};
+use bytes::Bytes;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -21,7 +22,6 @@ use crate::model::objset::ObjSet;
 use crate::model::propdef::{PropDef, PropDefs};
 use crate::model::props::{PropAttrs, PropFlag};
 use crate::model::r#match::{PrepSpec, VerbArgsSpec};
-use crate::model::verb_info::VerbInfo;
 use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};
@@ -334,7 +334,7 @@ pub trait WorldState: Send {
         perms: Objid,
         obj: Objid,
         uuid: Uuid,
-    ) -> Result<VerbInfo, WorldStateError>;
+    ) -> Result<(Bytes, VerbDef), WorldStateError>;
 
     /// Retrieve a verb/method from the given object (or its parents).
     fn find_method_verb_on(
@@ -342,7 +342,7 @@ pub trait WorldState: Send {
         perms: Objid,
         obj: Objid,
         vname: Symbol,
-    ) -> Result<VerbInfo, WorldStateError>;
+    ) -> Result<(Bytes, VerbDef), WorldStateError>;
 
     /// Seek the verb referenced by the given command on the given object.
     fn find_command_verb_on(
@@ -353,7 +353,7 @@ pub trait WorldState: Send {
         dobj: Objid,
         prep: PrepSpec,
         iobj: Objid,
-    ) -> Result<Option<VerbInfo>, WorldStateError>;
+    ) -> Result<Option<(Bytes, VerbDef)>, WorldStateError>;
 
     /// Get the object that is the parent of the given object.
     fn parent_of(&self, perms: Objid, obj: Objid) -> Result<Objid, WorldStateError>;

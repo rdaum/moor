@@ -12,12 +12,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use bytes::Bytes;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
 use moor_values::model::ObjSet;
 use moor_values::model::Perms;
-use moor_values::model::VerbInfo;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 use moor_values::model::{ArgSpec, PrepSpec, VerbArgsSpec};
@@ -619,7 +619,7 @@ impl WorldState for DbTxWorldState {
         perms: Objid,
         obj: Objid,
         uuid: Uuid,
-    ) -> Result<VerbInfo, WorldStateError> {
+    ) -> Result<(Bytes, VerbDef), WorldStateError> {
         let verbs = self.tx.get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
@@ -627,7 +627,7 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
         let binary = self.tx.get_verb_binary(vh.location(), vh.uuid())?;
-        Ok(VerbInfo::new(vh, binary))
+        Ok((binary, vh))
     }
 
     #[tracing::instrument(skip(self))]
@@ -636,13 +636,13 @@ impl WorldState for DbTxWorldState {
         perms: Objid,
         obj: Objid,
         vname: Symbol,
-    ) -> Result<VerbInfo, WorldStateError> {
+    ) -> Result<(Bytes, VerbDef), WorldStateError> {
         let vh = self.tx.resolve_verb(obj, vname, None)?;
         self.perms(perms)?
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
         let binary = self.tx.get_verb_binary(vh.location(), vh.uuid())?;
-        Ok(VerbInfo::new(vh, binary))
+        Ok((binary, vh))
     }
 
     #[tracing::instrument(skip(self))]
@@ -654,7 +654,7 @@ impl WorldState for DbTxWorldState {
         dobj: Objid,
         prep: PrepSpec,
         iobj: Objid,
-    ) -> Result<Option<VerbInfo>, WorldStateError> {
+    ) -> Result<Option<(Bytes, VerbDef)>, WorldStateError> {
         if !self.valid(obj)? {
             return Ok(None);
         }
@@ -692,7 +692,7 @@ impl WorldState for DbTxWorldState {
             .check_verb_allows(vh.owner(), vh.flags(), VerbFlag::Read)?;
 
         let binary = self.tx.get_verb_binary(vh.location(), vh.uuid())?;
-        Ok(Some(VerbInfo::new(vh, binary)))
+        Ok(Some((binary, vh)))
     }
 
     #[tracing::instrument(skip(self))]
