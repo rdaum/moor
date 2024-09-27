@@ -35,3 +35,6 @@ uuid.workspace = true
 # If List and String are backed by Bytes instead of Arc<Vec<Var>> and Arc<String> respectively.
 list_impl_buffer = []
 default = []
+
+[build-dependencies]
+flatc-rust.workspace = true

@@ -40,6 +40,7 @@ excludes:
   - \.git/.*
   - \.idea/.*
   - \.cargo/.*
+  - crates/web-host/src/client/flexbuffers/*
   - crates/db-wiredtiger/third-party/*
   - target/.*
   - README.*

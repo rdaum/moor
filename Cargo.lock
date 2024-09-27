@@ -1112,6 +1112,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "flatc-rust"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57e61227926ef5b237af48bee74394cc4a5a221ebd10c5147a98e612f207851d"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "flexbuffers"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1992,6 +2001,7 @@ dependencies = [
  "decorum",
  "enum-primitive-derive",
  "flatbuffers",
+ "flatc-rust",
  "flexbuffers",
  "im",
  "itertools 0.13.0",

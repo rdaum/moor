@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tracing::trace;
 
 use moor_compiler::{to_literal, BuiltinId, Program, BUILTINS};
-use moor_values::model::VerbInfo;
+use moor_values::model::VerbDef;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 use moor_values::Error::{E_INVIND, E_PERM, E_VERBNF};
@@ -47,7 +47,7 @@ pub struct VerbExecutionRequest {
     /// The applicable permissions.
     pub permissions: Objid,
     /// The resolved verb.
-    pub resolved_verb: VerbInfo,
+    pub resolved_verb: VerbDef,
     /// The call parameters that were used to resolve the verb.
     pub call: VerbCall,
     /// The parsed user command that led to this verb dispatch, if any.
@@ -93,7 +93,7 @@ impl VMExecState {
             return self.push_error(E_INVIND);
         }
         // Find the callable verb ...
-        let verb_info =
+        let (binary, resolved_verb) =
             match world_state.find_method_verb_on(self.top().permissions, this, verb_name) {
                 Ok(vi) => vi,
                 Err(WorldStateError::ObjectPermissionDenied) => {
@@ -115,11 +115,12 @@ impl VMExecState {
             };
 
         // Permissions for the activation are the verb's owner.
-        let permissions = verb_info.verbdef().owner();
+        let permissions = resolved_verb.owner();
 
         ExecutionResult::ContinueVerb {
             permissions,
-            resolved_verb: verb_info,
+            resolved_verb,
+            binary,
             call,
             command: self.top().command.clone(),
         }
@@ -149,13 +150,14 @@ impl VMExecState {
         // call verb on parent, but with our current 'this'
         trace!(task_id = self.task_id, ?verb, ?definer, ?parent);
 
-        let vi = match world_state.find_method_verb_on(permissions, parent, verb) {
-            Ok(vi) => vi,
-            Err(WorldStateError::RollbackRetry) => {
-                return ExecutionResult::RollbackRestart;
-            }
-            Err(e) => return self.raise_error(e.to_error_code()),
-        };
+        let (binary, resolved_verb) =
+            match world_state.find_method_verb_on(permissions, parent, verb) {
+                Ok(vi) => vi,
+                Err(WorldStateError::RollbackRetry) => {
+                    return ExecutionResult::RollbackRestart;
+                }
+                Err(e) => return self.raise_error(e.to_error_code()),
+            };
 
         let caller = self.caller();
         let call = VerbCall {
@@ -170,7 +172,8 @@ impl VMExecState {
 
         ExecutionResult::ContinueVerb {
             permissions,
-            resolved_verb: vi,
+            resolved_verb,
+            binary,
             call,
             command: self.top().command.clone(),
         }
@@ -239,7 +242,7 @@ impl VMExecState {
         );
 
         // Push an activation frame for the builtin function.
-        let flags = self.top().verb_info.verbdef().flags();
+        let flags = self.top().verbdef.flags();
         self.stack.push(Activation::for_bf_call(
             bf_id,
             bf_name,

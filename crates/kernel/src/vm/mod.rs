@@ -21,11 +21,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bincode::{Decode, Encode};
-
+use bytes::Bytes;
 pub use exec_state::VMExecState;
 use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
-use moor_values::model::VerbInfo;
+use moor_values::model::VerbDef;
 use moor_values::{Objid, Var};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
@@ -92,7 +92,9 @@ pub enum ExecutionResult {
         /// The applicable permissions context.
         permissions: Objid,
         /// The requested verb.
-        resolved_verb: VerbInfo,
+        resolved_verb: VerbDef,
+        /// And its binary
+        binary: Bytes,
         /// The call parameters that were used to resolve the verb.
         call: VerbCall,
         /// The parsed user command that led to this verb dispatch, if any.

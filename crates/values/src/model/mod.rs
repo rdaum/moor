@@ -12,10 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bincode::{Decode, Encode};
-use std::fmt::Debug;
-use thiserror::Error;
-
 pub use crate::model::defset::{Defs, DefsIter, HasUuid, Named};
 pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, ObjectRef};
 pub use crate::model::objset::{ObjSet, ObjSetIter};
@@ -23,11 +19,14 @@ pub use crate::model::permissions::Perms;
 pub use crate::model::propdef::{PropDef, PropDefs};
 pub use crate::model::props::{PropAttr, PropAttrs, PropFlag, PropPerms};
 pub use crate::model::r#match::{ArgSpec, PrepSpec, Preposition, VerbArgsSpec};
-pub use crate::model::verb_info::VerbInfo;
 pub use crate::model::verbdef::{VerbDef, VerbDefs};
 pub use crate::model::verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid};
 pub use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::AsByteBuffer;
+use bincode::{Decode, Encode};
+use std::fmt::Debug;
+use thiserror::Error;
+use uuid::Uuid;
 
 mod defset;
 mod r#match;
@@ -36,13 +35,17 @@ mod objset;
 mod permissions;
 mod propdef;
 mod props;
-mod verb_info;
 mod verbdef;
 mod verbs;
 mod world_state;
 
 use crate::Symbol;
 pub use world_state::WorldStateError;
+
+#[allow(dead_code, unused_imports)]
+#[allow(clippy::all)]
+#[path = "../../../target/flatbuffers/values_generated.rs"]
+pub mod values_flatbuffers;
 
 /// The result code from a commit/complete operation on the world's state.
 #[derive(Debug, Eq, PartialEq)]
@@ -57,6 +60,10 @@ pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
     fn iter(&self) -> impl Iterator<Item = V>;
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
+}
+
+pub fn uuid_fb(&uuid: &Uuid) -> values_flatbuffers::moor::values::Uuid {
+    values_flatbuffers::moor::values::Uuid::new(&uuid.as_bytes())
 }
 
 #[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]

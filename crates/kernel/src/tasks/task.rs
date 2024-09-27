@@ -31,18 +31,19 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
+use bytes::Bytes;
 use crossbeam_channel::Sender;
 use lazy_static::lazy_static;
 use tracing::{error, trace, warn};
 
-use moor_values::model::{CommitResult, VerbInfo, WorldState, WorldStateError};
+use moor_values::model::{CommitResult, VerbDef, WorldState, WorldStateError};
 use moor_values::tasks::CommandError;
 use moor_values::tasks::CommandError::PermissionDenied;
 use moor_values::tasks::TaskId;
 use moor_values::util::parse_into_words;
+use moor_values::Objid;
 use moor_values::Symbol;
 use moor_values::{v_int, v_str};
-use moor_values::Objid;
 use moor_values::{NOTHING, SYSTEM_OBJECT};
 
 use crate::builtins::BuiltinRegistry;
@@ -554,7 +555,7 @@ fn find_verb_for_command(
     player_location: Objid,
     pc: &ParsedCommand,
     ws: &mut dyn WorldState,
-) -> Result<Option<(VerbInfo, Objid)>, CommandError> {
+) -> Result<Option<((Bytes, VerbDef), Objid)>, CommandError> {
     let targets_to_search = vec![
         player,
         player_location,
