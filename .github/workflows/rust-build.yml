@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: cmake python3-dev swig
+          packages: cmake python3-dev swig flatbuffers-compilers
           version: 1.0
       - uses: actions/checkout@v4
         with:
@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: cmake python3-dev swig
+          packages: cmake python3-dev swig flatbuffers-compilers
           version: 1.0
       - uses: actions/checkout@v4
         with:
@@ -41,6 +41,7 @@ jobs:
     steps:
       - name: Get CMake
         uses: symbitic/install-cmake@master
+      - uses: aisightgmbh/actions-install-flatc@v1
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
@@ -54,7 +55,7 @@ jobs:
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: cmake python3-dev swig
+          packages: cmake python3-dev swig flatbuffers-compilers
           version: 1.0
       - uses: actions/checkout@v4
         with:
