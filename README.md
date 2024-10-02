@@ -181,10 +181,18 @@ existing LambdaMOO compatible textdumps, the `read()` builtin and user input, an
 telnet and websockets,
 and can be extended to support other protocols.
 
+`Moor` also adds, on top of LambdaMOO 1.8.x:
+
+- Support for map/dictionary types using the same syntax as Stunt/ToastSunt.
+- Lexically (block) scoped variables; allows local variables in the context of `for`/`endfor`, `try`/`endtry`,
+  `while`/`endwhile`, `if`/`endif`, and a new `begin`/`end` block.
+- Transmission of values other than strings (and MOO type) over `notify` when the transport layer is `websocket`
+  (currently transmitted as JSON)
+
 With some caveats:
 
 - Outbound network connections are not supported.
-- Extensions present in ToastStunt, Stunt, etc. including map types, WAIFs, etc. are not supported. Some of these are
+- Extensions present in ToastStunt, Stunt, etc. WAIFs, etc. are not supported. Some of these are
   possible to add in the future, others do not fit the design philosophy of the system going forward.
 
 For a list of the status of the implementation of standard LambdaMOO builtin functions, see
