@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: cmake python3-dev swig flatbuffers-compilers
+          packages: cmake python3-dev swig
           version: 1.1
       - uses: actions/checkout@v4
         with:
@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: cmake python3-dev swig flatbuffers-compilers
+          packages: cmake python3-dev swig
           version: 1.1
       - uses: actions/checkout@v4
         with:
@@ -39,9 +39,9 @@ jobs:
   build_default_macos:
     runs-on: macos-latest
     steps:
-      - name: Get CMake
-        uses: symbitic/install-cmake@master
-      - uses: aisightgmbh/actions-install-flatc@v1
+      - uses: tecolicom/actions-use-homebrew-tools@v1
+        with:
+          tools: cmake
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: cmake python3-dev swig flatbuffers-compilers
+          packages: cmake python3-dev swig
           version: 1.1
       - uses: actions/checkout@v4
         with:

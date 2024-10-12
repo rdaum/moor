@@ -37,4 +37,4 @@ list_impl_buffer = []
 default = []
 
 [build-dependencies]
-flatc-rust.workspace = true
+flatc.workspace = true
