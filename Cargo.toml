@@ -101,8 +101,8 @@ daumtils = { git = "https://github.com/rdaum/daumtils.git", version = "0.2.0" }
 decorum = "0.3" # For ordering & comparing our floats
 encoding_rs = "0.8.34"
 enum-primitive-derive = "0.3"
-flatbuffers = "24.3.25"
-flatc-rust = "0.2.0"
+flatbuffers = "23.5.26"
+flatc = "0.2.2+23.5.26"
 flexbuffers = "2.0.0"
 im = "15.1"
 inventory = "0.3.15"

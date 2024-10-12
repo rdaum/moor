@@ -12,14 +12,33 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::path::Path;
-
 fn main() {
     println!("cargo:rerun-if-changed=schema/values.fbs");
-    flatc_rust::run(flatc_rust::Args {
-        inputs: &[Path::new("schema/values.fbs")],
-        out_dir: Path::new("../target/flatbuffers/"),
-        ..Default::default()
-    })
-    .expect("flatc");
+
+    // Find the flatc binary.
+    let flatc_path = flatc::flatc();
+
+    // Emit the version # by executing the binary with --version
+    let version = std::process::Command::new(flatc_path)
+        .arg("--version")
+        .output()
+        .expect("failed to get flatc version")
+        .stdout;
+
+    println!(
+        "cargo:warning=Compiling flatbuffers with {}",
+        String::from_utf8(version).unwrap()
+    );
+
+    // Invoke flatc to generate Rust code
+    std::process::Command::new(flatc_path)
+        // Rust output
+        .arg("-r")
+        // My output directory
+        .arg("-o")
+        .arg("../target/flatbuffers/")
+        // My schema
+        .arg("schema/values.fbs")
+        .output()
+        .expect("failed to run flatc");
 }
