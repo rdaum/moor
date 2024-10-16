@@ -1,20 +1,13 @@
 # Docker composition for starting up the Moor system in cargo-watch mode, running with separate `daemon` and `host`
 # binaries (communicating via ZMQ RPC),
 
-# The first time the image starts, it will import JHCore-DEV-2.db from the root of the repository. This is a recent
+# The first time the system starts, it will import JHCore-DEV-2.db from the root of the repository. This is a recent
 # JaysHouseCore database, with no modifications. After import, `development.db` will contain the database
 # that resulted. To re-import the textdump, simply delete this directory.
-
-# This composition is not intended for production use, but for development and testing, but could be used as a template
-# production once we're in a better place.
 
 # After this is running, a MUD client / telnet client can connect to port 8888 on localhost to interact with the
 # system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
 
-volumes:
-  vmagentdata: { }
-  vmdata: { }
-  grafanadata: { }
 networks:
   moor_net:
 services:
@@ -23,15 +16,11 @@ services:
       context: .
       network: host
     container_name: "moor-daemon"
-    volumes:
-      - ./.cargo/registry:/usr/local/cargo/registry:cached
-      - ./.target:/root/target:cached
-      - ./:/moor:cached
     environment:
-      - CARGO_TARGET_DIR=/root/target
+      - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "RUST_BACKTRACE=1 cargo run -p moor-daemon -- development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --generate-keypair --textdump-out=out.db"
+      sh -c "./target/release/moor-daemon development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --generate-keypair --textdump-out=out.db"
     ports:
       # ZMQ ports
       - "7899:7899"
@@ -43,15 +32,11 @@ services:
       context: .
       network: host
     container_name: "moor-telnet-host"
-    volumes:
-      - ./.cargo/registry:/usr/local/cargo/registry:cached
-      - ./.target:/root/target:cached
-      - ./:/moor:cached
     environment:
-      - CARGO_TARGET_DIR=/root/target
+      - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "RUST_BACKTRACE=1 cargo run -p moor-telnet-host -- --telnet-address=0.0.0.0:8888 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
+      sh -c "./target/release/moor-telnet-host --telnet-address=0.0.0.0:8888 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
     ports:
       # Telnet listener
       - "8888:8888"
@@ -62,15 +47,11 @@ services:
       context: .
       network: host
     container_name: "moor-web-host"
-    volumes:
-      - ./.cargo/registry:/usr/local/cargo/registry:cached
-      - ./.target:/root/target:cached
-      - ./:/moor:cached
     environment:
-      - CARGO_TARGET_DIR=/root/target
+      - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "RUST_BACKTRACE=1 cargo run -p moor-web-host -- --listen-address=0.0.0.0:8080 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
+      sh -c "./target/release/moor-web-host --listen-address=0.0.0.0:8080 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
     ports:
       # HTTP listener
       - "8080:8080"
