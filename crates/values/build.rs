@@ -12,6 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::path::PathBuf;
+
 fn main() {
     println!("cargo:rerun-if-changed=schema/values.fbs");
 
@@ -26,8 +28,25 @@ fn main() {
         .stdout;
 
     println!(
+        "cargo:warning=Working directory: {:?}",
+        std::env::current_dir().unwrap()
+    );
+
+    // Get absolute path to the target output directory
+    let target_directory = PathBuf::from("../../target/flatbuffers/");
+    // Make it exist.
+    std::fs::create_dir_all(&target_directory).expect("Failed to create output directory");
+    let target_directory =
+        std::fs::canonicalize(target_directory).expect("Output directory not found");
+
+    println!(
         "cargo:warning=Compiling flatbuffers with {}",
-        String::from_utf8(version).unwrap()
+        String::from_utf8(version).unwrap(),
+    );
+
+    println!(
+        "cargo:warning=Outputting to {}",
+        target_directory.to_str().unwrap(),
     );
 
     // Invoke flatc to generate Rust code
@@ -36,7 +55,7 @@ fn main() {
         .arg("-r")
         // My output directory
         .arg("-o")
-        .arg("../target/flatbuffers/")
+        .arg(target_directory)
         // My schema
         .arg("schema/values.fbs")
         .output()

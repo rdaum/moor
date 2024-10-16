@@ -44,7 +44,7 @@ pub use world_state::WorldStateError;
 
 #[allow(dead_code, unused_imports)]
 #[allow(clippy::all)]
-#[path = "../../../target/flatbuffers/values_generated.rs"]
+#[path = "../../../../target/flatbuffers/values_generated.rs"]
 pub mod values_flatbuffers;
 
 /// The result code from a commit/complete operation on the world's state.

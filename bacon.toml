@@ -1,0 +1,46 @@
+# This is a "bacon" setup for the project which is used for development.
+# Bacon is a tool for cargo which watches for local file changes and runs commands when they occur.
+# See: https://dystroy.org/bacon/
+# To install bacon, run `cargo install bacon`
+# To run:
+# `bacon daemon`, `bacon telnet`, and `bacon web` respectively.
+
+default_job = "daemon"
+
+[jobs.daemon]
+command = [
+    "cargo",
+    "run",
+    "-p",
+    "moor-daemon",
+    "--",
+    "development.db",
+    "--textdump",
+    "JHCore-DEV-2.db",
+    "--textdump-out",
+    "out.db",
+]
+allow_warnings = true
+need_stdout = true
+env.RUST_BACKTRACE = "full"
+
+[jobs.telnet]
+command = ["cargo", "run", "-p", "moor-telnet-host"]
+allow_warnings = true
+need_stdout = true
+
+[jobs.web]
+command = ["cargo", "run", "-p", "moor-web-host"]
+allow_warnings = true
+
+[jobs.test]
+command = [
+    "cargo",
+    "test",
+    "--color",
+    "always",
+    "--",
+    "--color",
+    "always", # see https://github.com/Canop/bacon/issues/124
+]
+need_stdout = true
