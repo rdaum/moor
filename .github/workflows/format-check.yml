@@ -12,6 +12,8 @@ jobs:
           git config --global core.eol lf
 
       - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
 
       - name: Check formatting latest
         uses: ./
