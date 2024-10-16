@@ -19,7 +19,9 @@ networks:
   moor_net:
 services:
   moor-daemon:
-    build: ./
+    build:
+      context: .
+      network: host
     container_name: "moor-daemon"
     volumes:
       - ./.cargo/registry:/usr/local/cargo/registry:cached
@@ -29,18 +31,17 @@ services:
       - CARGO_TARGET_DIR=/root/target
     working_dir: /moor
     command: >
-      sh -c "RUST_BACKTRACE=1 cargo watch -w crates/kernel -w crates/rpc-common -w crates/daemon -w crates/values -w crates/db -x 
-      'run -p moor-daemon -- development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --generate-keypair --textdump-out=out.db'"
+      sh -c "RUST_BACKTRACE=1 cargo run -p moor-daemon -- development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --generate-keypair --textdump-out=out.db"
     ports:
       # ZMQ ports
       - "7899:7899"
       - "7898:7898"
-      # HTTP port for prometheus endpoint for metrics export
-      - "9000:9000"
     networks:
       - moor_net
   moor-telnet-host:
-    build: ./
+    build:
+      context: .
+      network: host
     container_name: "moor-telnet-host"
     volumes:
       - ./.cargo/registry:/usr/local/cargo/registry:cached
@@ -50,15 +51,16 @@ services:
       - CARGO_TARGET_DIR=/root/target
     working_dir: /moor
     command: >
-      sh -c "RUST_BACKTRACE=1 cargo watch -w crates/rpc-common -w crates/telnet-host -w crates/values -x 
-      'run -p moor-telnet-host -- --telnet-address=0.0.0.0:8888 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898'"
+      sh -c "RUST_BACKTRACE=1 cargo run -p moor-telnet-host -- --telnet-address=0.0.0.0:8888 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
     ports:
       # Telnet listener
       - "8888:8888"
     networks:
       - moor_net
   moor-web-host:
-    build: ./
+    build:
+      context: .
+      network: host
     container_name: "moor-web-host"
     volumes:
       - ./.cargo/registry:/usr/local/cargo/registry:cached
@@ -68,8 +70,7 @@ services:
       - CARGO_TARGET_DIR=/root/target
     working_dir: /moor
     command: >
-      sh -c "RUST_BACKTRACE=1 cargo watch -w crates/rpc-common -w crates/web-host -w crates/values -x 
-      'run -p moor-web-host -- --listen-address=0.0.0.0:8080 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898'"
+      sh -c "RUST_BACKTRACE=1 cargo run -p moor-web-host -- --listen-address=0.0.0.0:8080 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
     ports:
       # HTTP listener
       - "8080:8080"
