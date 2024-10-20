@@ -79,8 +79,8 @@ tokio-test = "0.4"
 tokio-util = { version = "0.7", features = ["full"] }
 
 # Used for RPC daemon/client
-tmq = "0.4.0"
-zmq = "0.10.0"
+tmq = "0.5"
+zmq = "0.10"
 
 ## Logging & tracing
 tracing = "0.1"
@@ -91,8 +91,8 @@ tracing-test = "0.2"
 arc-swap = "1.7"
 binary-layout = "4.0"
 bincode = "2.0.0-rc.3"
-bindgen = "0.69"
-bytes = "1.6"
+bindgen = "0.70"
+bytes = "1.7"
 chrono = "0.4"
 cmake = "0.1"
 criterion = { version = "0.5", features = ["async_tokio"] }
@@ -107,27 +107,27 @@ flexbuffers = "2.0.0"
 im = "15.1"
 inventory = "0.3.15"
 itertools = "0.13.0"
-lazy_static = "1.4.0"
+lazy_static = "1.5"
 num-traits = "0.2.19"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
 owo-colors = "3.5"
-rustyline = "14.0.0"
-strum = { version = "0.26.2", features = ["derive"] }
-text-diff = "0.4.0"
-ustr = "1.0.0"
-uuid = { version = "1.8.0", features = ["v4"] }
+rustyline = "14.0"
+strum = { version = "0.26", features = ["derive"] }
+text-diff = "0.4"
+ustr = "1.0"
+uuid = { version = "1.11", features = ["v4"] }
 
 ## Required for MOO builtins.
-chrono-tz = "0.9.0"
-iana-time-zone = "0.1.60"
-md-5 = "0.9.1" # For MOO's "string_hash"
-onig = { version = "6.4.0", default-features = false }
-pwhash = { version = "1.0.0", default-features = false }
+chrono-tz = "0.10"
+iana-time-zone = "0.1"
+md-5 = "0.10" # For MOO's "string_hash"
+onig = { version = "6.4", default-features = false }
+pwhash = { version = "1.0", default-features = false }
 rand = "0.8"
 
 ## Compiler grammar/parser
-pest = "2.7.11"
-pest_derive = "2.7.11"
+pest = "2.7"
+pest_derive = "2.7"
 
 ## Error declaration/ handling
 color-eyre = "0.6"
