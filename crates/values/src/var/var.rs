@@ -584,7 +584,7 @@ mod tests {
 
     #[test]
     fn test_float_pack_unpack() {
-        let f = Var::mk_float(42.0.into());
+        let f = Var::mk_float(42.0);
 
         match f.variant() {
             Variant::Float(f) => assert_eq!(f, 42.0),

@@ -399,11 +399,11 @@ impl Scheduler {
                     };
                     vloc
                 } else {
-                    let vloc = match vloc {
+                    
+                    match vloc {
                         ObjectRef::Id(id) => id,
                         _ => panic!("Unexpected object reference in vloc"),
-                    };
-                    vloc
+                    }
                 };
 
                 let task_start = Arc::new(TaskStart::StartVerb {

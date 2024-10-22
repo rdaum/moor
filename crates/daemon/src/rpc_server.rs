@@ -603,7 +603,7 @@ impl RpcServer {
             connection,
             ObjectRef::Id(SYSTEM_OBJECT),
             Symbol::mk("do_login_command"),
-            args.iter().map(|s| v_str(&s)).collect(),
+            args.iter().map(|s| v_str(s)).collect(),
             args.join(" "),
             SYSTEM_OBJECT,
             session,

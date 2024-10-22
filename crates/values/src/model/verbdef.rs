@@ -155,7 +155,7 @@ impl Named for VerbDef {
         self.get_flatbuffer()
             .names()
             .map(|names| names.iter().collect())
-            .unwrap_or_else(Vec::new)
+            .unwrap_or_default()
     }
 }
 

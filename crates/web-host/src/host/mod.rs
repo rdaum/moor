@@ -67,7 +67,7 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
 pub fn json_as_var(j: &serde_json::Value) -> Option<Var> {
     match j {
         serde_json::Value::Null => Some(v_none()),
-        serde_json::Value::String(s) => Some(v_str(&s)),
+        serde_json::Value::String(s) => Some(v_str(s)),
         serde_json::Value::Number(n) => Some(if n.is_i64() {
             v_int(n.as_i64().unwrap())
         } else {

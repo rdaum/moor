@@ -321,7 +321,7 @@ fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let tz_str = get_timezone().unwrap();
     let tz: Tz = tz_str.parse().unwrap();
     let offset = tz.offset_from_local_date(&date_time.date_naive()).unwrap();
-    let abbreviation = offset.abbreviation().unwrap_or_else(|| "??");
+    let abbreviation = offset.abbreviation().unwrap_or("??");
     let datetime_str = format!(
         "{} {}",
         date_time.format("%a %b %d %H:%M:%S %Y"),

@@ -63,7 +63,7 @@ pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
 }
 
 pub fn uuid_fb(&uuid: &Uuid) -> values_flatbuffers::moor::values::Uuid {
-    values_flatbuffers::moor::values::Uuid::new(&uuid.as_bytes())
+    values_flatbuffers::moor::values::Uuid::new(uuid.as_bytes())
 }
 
 #[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]

@@ -29,11 +29,11 @@ use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
-use moor_values::Objid;
 use moor_values::Variant;
 use moor_values::NOTHING;
-use moor_values::{v_int, v_objid, Var};
+use moor_values::{v_bool, Objid};
 use moor_values::{v_list, Symbol};
+use moor_values::{v_objid, Var};
 
 use crate::worldstate_transaction::WorldStateTransaction;
 
@@ -81,6 +81,22 @@ impl DbTxWorldState {
         }
 
         self.tx.update_verb(obj, verbdef.uuid(), verb_attrs)?;
+        Ok(())
+    }
+
+    /// Check the permissions for the application of an application of inheritance to a parent.
+    /// This is a helper function for `create_object` and `change_parent`.
+    /// It checks that the parent is writable and fertile, and that the parent is either the
+    /// NOTHING object or that the parent is usable by the object's owner.
+    fn check_parent(&self, perms: Objid, parent: Objid) -> Result<(), WorldStateError> {
+        if parent != NOTHING {
+            let (parentflags, parentowner) = (self.flags_of(parent)?, self.owner_of(parent)?);
+            self.perms(perms)?.check_object_allows(
+                parentowner,
+                parentflags,
+                BitEnum::new_with(ObjFlag::Write) | ObjFlag::Fertile,
+            )?;
+        }
         Ok(())
     }
 }
@@ -148,14 +164,7 @@ impl WorldState for DbTxWorldState {
         owner: Objid,
         flags: BitEnum<ObjFlag>,
     ) -> Result<Objid, WorldStateError> {
-        if parent != NOTHING {
-            let (flags, parent_owner) = (self.flags_of(parent)?, self.owner_of(parent)?);
-            self.perms(perms)?.check_object_allows(
-                parent_owner,
-                flags,
-                BitEnum::new_with(ObjFlag::Read) | ObjFlag::Fertile,
-            )?;
-        }
+        self.check_parent(perms, parent)?;
 
         // TODO: ownership_quota support
         //    If the intended owner of the new object has a property named `ownership_quota' and the value of that property is an integer, then `create()' treats that value
@@ -227,7 +236,7 @@ impl WorldState for DbTxWorldState {
             return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(obj)));
         }
 
-        // Special properties like namnne, location, and contents get treated specially.
+        // Special properties like name, location, and contents get treated specially.
         if pname == *NAME_SYM {
             return self.names_of(perms, obj).map(|(name, _)| Var::from(name));
         } else if pname == *LOCATION_SYM {
@@ -239,39 +248,34 @@ impl WorldState for DbTxWorldState {
             return self.owner_of(obj).map(Var::from);
         } else if pname == *PROGRAMMER_SYM {
             let flags = self.flags_of(obj)?;
-            return if flags.contains(ObjFlag::Programmer) {
-                Ok(v_int(1))
-            } else {
-                Ok(v_int(0))
-            };
+            return Ok(flags
+                .contains(ObjFlag::Programmer)
+                .then(|| v_bool(true))
+                .unwrap_or(v_bool(false)));
         } else if pname == *WIZARD_SYM {
             let flags = self.flags_of(obj)?;
-            return if flags.contains(ObjFlag::Wizard) {
-                Ok(v_int(1))
-            } else {
-                Ok(v_int(0))
-            };
+            return Ok(flags
+                .contains(ObjFlag::Wizard)
+                .then(|| v_bool(true))
+                .unwrap_or(v_bool(false)));
         } else if pname == *R_SYM {
             let flags = self.flags_of(obj)?;
-            return if flags.contains(ObjFlag::Read) {
-                Ok(v_int(1))
-            } else {
-                Ok(v_int(0))
-            };
+            return Ok(flags
+                .contains(ObjFlag::Read)
+                .then(|| v_bool(true))
+                .unwrap_or(v_bool(false)));
         } else if pname == *W_SYM {
             let flags = self.flags_of(obj)?;
-            return if flags.contains(ObjFlag::Write) {
-                Ok(v_int(1))
-            } else {
-                Ok(v_int(0))
-            };
+            return Ok(flags
+                .contains(ObjFlag::Write)
+                .then(|| v_bool(true))
+                .unwrap_or(v_bool(false)));
         } else if pname == *F_SYM {
             let flags = self.flags_of(obj)?;
-            return if flags.contains(ObjFlag::Fertile) {
-                Ok(v_int(1))
-            } else {
-                Ok(v_int(0))
-            };
+            return Ok(flags
+                .contains(ObjFlag::Fertile)
+                .then(|| v_bool(true))
+                .unwrap_or(v_bool(false)));
         }
 
         let (_, value, propperms, _) = self.tx.resolve_property(obj, pname)?;
@@ -712,15 +716,7 @@ impl WorldState for DbTxWorldState {
 
         let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
 
-        if new_parent != NOTHING {
-            let (parentflags, parentowner) =
-                (self.flags_of(new_parent)?, self.owner_of(new_parent)?);
-            self.perms(perms)?.check_object_allows(
-                parentowner,
-                parentflags,
-                BitEnum::new_with(ObjFlag::Write) | ObjFlag::Fertile,
-            )?;
-        }
+        self.check_parent(perms, new_parent)?;
         self.perms(perms)?
             .check_object_allows(owner, objflags, ObjFlag::Write.into())?;
 
