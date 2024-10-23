@@ -12,18 +12,26 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+mod auth;
+mod props;
+mod verbs;
 pub mod web_host;
 mod ws_connection;
 
+pub use auth::connect_auth_handler;
+pub use auth::create_auth_handler;
 use moor_values::{v_err, v_float, v_int, v_list, v_map, v_none, v_obj, v_str, Var, Variant};
+pub use props::properties_handler;
+pub use props::property_retrieval_handler;
 use serde::Serialize;
 use serde_derive::Deserialize;
 use serde_json::{json, Number};
+pub use verbs::verb_program_handler;
+pub use verbs::verb_retrieval_handler;
+pub use verbs::verbs_handler;
 pub use web_host::WebHost;
 pub use web_host::{
-    connect_auth_handler, create_auth_handler, eval_handler, properties_handler,
-    property_retrieval_handler, verb_program_handler, verb_retrieval_handler, verbs_handler,
-    welcome_message_handler, ws_connect_attach_handler, ws_create_attach_handler,
+    eval_handler, welcome_message_handler, ws_connect_attach_handler, ws_create_attach_handler,
 };
 
 #[derive(serde_derive::Serialize, Deserialize)]
