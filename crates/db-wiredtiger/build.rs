@@ -29,6 +29,8 @@ fn main() {
         // WiredTiger has naughties that causes -Werror=array-bounds to puke all over in release
         // build.
         .cflag("-Wno-error=array-bounds")
+        // clang builds on some machines were dying on this one
+        .cflag("-Wno-error=format-overflow")
         .build();
     let build = dst.join("build");
     let include_dir = build.join("include");
