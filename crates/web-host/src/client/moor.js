@@ -98,7 +98,9 @@ async function connect(player, mode, username, password) {
   player.val = new Player(player_name, auth_token, false);
 
   // Now initiate the websocket connection.
-  let ws = new WebSocket("ws/attach/" + mode + "/" + auth_token);
+  const baseUrl = window.location.host;
+  const wsUrl = "ws://" + baseUrl + "/ws/attach/" + mode + "/" + auth_token;
+  let ws = new WebSocket(wsUrl);
   ws.onopen = () => {
     console.log("Connected to server!");
     player.val = new Player(player_name, auth_token, true);
