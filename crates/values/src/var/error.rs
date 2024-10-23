@@ -132,4 +132,26 @@ impl Error {
             value: value.unwrap_or(v_none()),
         }
     }
+
+    pub fn parse_str(s: &str) -> Option<Self> {
+        match s.to_uppercase().as_str() {
+            "E_NONE" => Some(Self::E_NONE),
+            "E_TYPE" => Some(Self::E_TYPE),
+            "E_DIV" => Some(Self::E_DIV),
+            "E_PERM" => Some(Self::E_PERM),
+            "E_PROPNF" => Some(Self::E_PROPNF),
+            "E_VERBNF" => Some(Self::E_VERBNF),
+            "E_VARNF" => Some(Self::E_VARNF),
+            "E_INVIND" => Some(Self::E_INVIND),
+            "E_RECMOVE" => Some(Self::E_RECMOVE),
+            "E_MAXREC" => Some(Self::E_MAXREC),
+            "E_RANGE" => Some(Self::E_RANGE),
+            "E_ARGS" => Some(Self::E_ARGS),
+            "E_NACC" => Some(Self::E_NACC),
+            "E_INVARG" => Some(Self::E_INVARG),
+            "E_QUOTA" => Some(Self::E_QUOTA),
+            "E_FLOAT" => Some(Self::E_FLOAT),
+            _ => None,
+        }
+    }
 }

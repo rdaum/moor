@@ -12,11 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import * as monaco from "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/+esm";
+import {createEditor, updateEditor} from "./editor.js";
 
 const { button, div, input, select, option, br, pre, form, a } = van.tags;
-
-import { createEditor, updateEditor } from "./editor.js";
 
 export const context = {
   ws: null,
@@ -41,8 +39,7 @@ async function retrieveWelcome() {
     let welcome_text = await result.json();
     // "welcome_text" is a json array of strings, but we want to treat it as one djot doc,
     // so we'll join them together with a newline.
-    let welcome_joined = welcome_text.join("\n");
-    return welcome_joined;
+    return welcome_text.join("\n");
   } else {
     console.log("Failed to retrieve welcome text!");
     context.sys_msg.show({ message: "Unavailable" });
@@ -281,21 +278,23 @@ function djotRender(author, ast) {
         }
 
         // Handle invoke:
+        // TODO: these should all be constructed with a PASETO token that is produced by the server, signed etc.
+        //   and then validated here on the client side.
         var function_invoke;
-        if (spec[0] == "invoke") {
+        if (spec[0] === "invoke") {
           let verb = spec[1];
           // If there's an argument, it's the second element.
           let arg = JSON.stringify(spec[2]) || "null";
 
           // Turns into a javascript: link that will invoke the verb on the object.
           function_invoke = "module.action_invoke(\"" + author + "\", \"" + verb + "\", " + arg + ")";
-        } else if (spec[0] == "edit_verb") {
+        } else if (spec[0] === "edit_verb") {
           // TODO validate object and verb names
           let object = spec[1];
           let verb = spec[2];
 
           function_invoke = "module.action_edit_verb(\"" + object + "\", \"" + verb + "\")";
-        } else if (spec[0] == "edit_prop") {
+        } else if (spec[0] === "edit_prop") {
           // TODO validate object and prop names
           let object = spec[1];
           let prop = spec[2];
@@ -408,7 +407,7 @@ const InputArea = (player) => {
             }
           }
         }
-      } else if (e.key == "ArrowDown") {
+      } else if (e.key === "ArrowDown") {
         if (context.history_offset > 0) {
           context.history_offset -= 1;
           if (context.history.length - context.history_offset >= 0) {
@@ -449,10 +448,9 @@ const Hello = () => {
   const playerName = van.derive(() => player.val.name);
   const connected = van.derive(() => player.val.connected);
   const dom = div();
-  const sys_msg = new MessageBoard({
+  context.sys_msg = new MessageBoard({
     top: "20px",
   });
-  context.sys_msg = sys_msg;
   return div(
     dom,
     Login(player, welcome_message),
