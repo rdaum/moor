@@ -165,6 +165,7 @@ pub enum Expr {
     },
     Index(Box<Expr>, Box<Expr>),
     List(Vec<Arg>),
+    Frob(Box<Expr>, Box<Expr>),
     Map(Vec<(Expr, Expr)>),
     Scatter(Vec<ScatterItem>, Box<Expr>),
     Length,

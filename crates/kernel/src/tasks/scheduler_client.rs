@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use moor_compiler::{compile, Program};
 use moor_values::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
-use moor_values::{Objid, Var, Symbol};
+use moor_values::{Objid, Symbol, Var};
 
 use crate::config::Config;
 use crate::tasks::sessions::Session;

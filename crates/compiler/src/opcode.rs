@@ -80,6 +80,7 @@ pub enum Op {
     MakeSingletonList,
     MakeMap,
     MapInsert,
+    MakeFrob,
     Mod,
     Mul,
     Ne,

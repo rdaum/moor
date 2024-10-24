@@ -141,6 +141,7 @@ primary    = _{
   | sysprop_call
   | sysprop
   | try_expr
+  | frob
   | map
   | list
   | atom
@@ -157,6 +158,7 @@ sysprop_call = { sysprop ~ arglist }
 atom     = { integer | float | string | object | err | ident }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
+frob     = { "<" ~ expr ~ "," ~ expr ~ ">" }
 exprlist = { argument ~ ("," ~ argument)* }
 argument = { expr | "@" ~ expr }
 map      = { ("[" ~ (expr ~ "->" ~ expr) ~ ("," ~ expr ~ "->" ~ expr)* ~ "]") | "[]" }

@@ -71,6 +71,7 @@ impl Expr {
             Expr::Id(_) => 1,
             Expr::List(_) => 1,
             Expr::Map(_) => 1,
+            Expr::Frob(_, _) => 1,
             Expr::Pass { .. } => 1,
             Expr::Call { .. } => 1,
             Expr::Length => 1,
@@ -335,6 +336,15 @@ impl<'a> Unparse<'a> {
                 buffer.pop();
                 buffer.push_str("} = ");
                 buffer.push_str(self.unparse_expr(expr)?.as_str());
+                Ok(buffer)
+            }
+            Expr::Frob(o, d) => {
+                let mut buffer = String::new();
+                buffer.push('<');
+                buffer.push_str(self.unparse_expr(o)?.as_str());
+                buffer.push_str(", ");
+                buffer.push_str(self.unparse_expr(d)?.as_str());
+                buffer.push('>');
                 Ok(buffer)
             }
             Expr::Length => Ok(String::from("$")),
@@ -766,6 +776,10 @@ pub fn to_literal(v: &Var) -> String {
             }
             result.push(']');
             result
+        }
+        Variant::Frob(o, v) => {
+            // <object, value>
+            format!("<{}, {}>", o, to_literal(v.as_ref()))
         }
         Variant::Err(e) => e.name().to_string(),
     }

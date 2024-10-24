@@ -15,7 +15,7 @@
 use bincode::{Decode, Encode};
 use moor_values::model::ObjectRef;
 use moor_values::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
-use moor_values::{Objid, Var, Symbol};
+use moor_values::{Objid, Symbol, Var};
 use std::time::SystemTime;
 use thiserror::Error;
 

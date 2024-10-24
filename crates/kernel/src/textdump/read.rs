@@ -21,8 +21,8 @@ use tracing::info;
 use moor_compiler::Label;
 use moor_values::model::CompileError;
 use moor_values::model::WorldStateError;
-use moor_values::Objid;
 use moor_values::{v_err, v_float, v_int, v_none, v_objid, v_str, Var, VarType};
+use moor_values::{v_frob, Objid};
 use moor_values::{v_list, v_map, Error};
 
 use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
@@ -160,6 +160,11 @@ impl<R: Read> TextdumpReader<R> {
                     })
                     .collect();
                 v_map(&pairs)
+            }
+            VarType::TYPE_FROB => {
+                let o = self.read_objid()?;
+                let d = self.read_var()?;
+                v_frob(o, d)
             }
             VarType::TYPE_NONE => v_none(),
             VarType::TYPE_FLOAT => v_float(self.read_float()?),

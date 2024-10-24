@@ -20,7 +20,9 @@ mod ws_connection;
 
 pub use auth::connect_auth_handler;
 pub use auth::create_auth_handler;
-use moor_values::{v_err, v_float, v_int, v_list, v_map, v_none, v_obj, v_str, Var, Variant};
+use moor_values::{
+    v_err, v_float, v_int, v_list, v_map, v_none, v_obj, v_objid, v_str, Var, Variant,
+};
 pub use props::properties_handler;
 pub use props::property_retrieval_handler;
 use serde::Serialize;
@@ -83,6 +85,10 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             }
             json!({ "map_pairs": v })
         }
+        Variant::Frob(o, d) => {
+            // Frob is object with frob:  array of two elements, the object and the data.
+            json!({ "frob": [var_as_json(&v_objid(o)), var_as_json(d.as_ref())] })
+        }
     }
 }
 
@@ -129,7 +135,7 @@ pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
                     if pair.len() != 2 {
                         return Err(JsonParseError::InvalidRepresentation);
                     }
-                    let key = pair.get(0).ok_or(JsonParseError::InvalidRepresentation)?;
+                    let key = pair.first().ok_or(JsonParseError::InvalidRepresentation)?;
                     let value = pair.get(1).ok_or(JsonParseError::InvalidRepresentation)?;
                     m.push((json_as_var(key)?, json_as_var(value)?));
                 }

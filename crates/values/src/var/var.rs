@@ -24,6 +24,7 @@ use flexbuffers::{BuilderOptions, Reader};
 use std::cmp::{min, Ordering};
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Var(pub(crate) Store);
@@ -106,6 +107,10 @@ impl Var {
         Var(Store::Variant(Variant::Obj(o)))
     }
 
+    pub fn mk_frob(o: Objid, data: Var) -> Self {
+        Var(Store::Variant(Variant::Frob(o, Arc::new(data))))
+    }
+
     pub fn type_code(&self) -> VarType {
         match self.variant() {
             Variant::Int(_) => VarType::TYPE_INT,
@@ -116,6 +121,7 @@ impl Var {
             Variant::None => VarType::TYPE_NONE,
             Variant::Float(_) => VarType::TYPE_FLOAT,
             Variant::Map(_) => VarType::TYPE_MAP,
+            Variant::Frob(_, _) => VarType::TYPE_FROB,
         }
     }
 
@@ -148,6 +154,7 @@ impl Var {
             Variant::Str(s) => !s.as_string().is_empty(),
             Variant::Map(m) => !m.reader.is_empty(),
             Variant::Err(_) => false,
+            Variant::Frob(_, _) => true,
         }
     }
 
@@ -509,6 +516,10 @@ pub fn v_empty_str() -> Var {
 pub fn v_empty_map() -> Var {
     // TODO: lazy static
     v_map(&[])
+}
+
+pub fn v_frob(o: Objid, data: Var) -> Var {
+    Var::mk_frob(o, data)
 }
 
 impl From<i64> for Var {

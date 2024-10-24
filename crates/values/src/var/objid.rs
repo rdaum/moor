@@ -93,7 +93,7 @@ impl TryFrom<&str> for Objid {
     type Error = DecodingError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if let Some(value) =value.strip_prefix('#') {
+        if let Some(value) = value.strip_prefix('#') {
             let value = value.parse::<i64>().map_err(|e| {
                 DecodingError::CouldNotDecode(format!("Could not parse Objid: {}", e))
             })?;

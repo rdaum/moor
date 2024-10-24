@@ -243,9 +243,7 @@ impl<R: MootRunner> MootState<R> {
         line_no: usize,
     ) -> eyre::Result<()> {
         match command_kind {
-            CommandKind::Eval => {
-                runner.eval(player, format!("{command} \"moot-line:{line_no}\";"))
-            }
+            CommandKind::Eval => runner.eval(player, format!("{command} \"moot-line:{line_no}\";")),
             CommandKind::Command => runner.command(player, command),
         }?;
         Ok(())

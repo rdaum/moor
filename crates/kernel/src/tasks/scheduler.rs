@@ -399,7 +399,6 @@ impl Scheduler {
                     };
                     vloc
                 } else {
-                    
                     match vloc {
                         ObjectRef::Id(id) => id,
                         _ => panic!("Unexpected object reference in vloc"),

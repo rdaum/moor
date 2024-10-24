@@ -34,6 +34,8 @@ pub struct Config {
     pub lexical_scopes: bool,
     /// Whether to support a Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt
     pub map_type: bool,
+    /// Whether to support a ColdMUD-like Frob datatype (<class, repr>)
+    pub frob_type: bool,
 }
 
 impl Default for Config {
@@ -44,6 +46,7 @@ impl Default for Config {
             textdump_encoding: EncodingMode::UTF8,
             lexical_scopes: true,
             map_type: true,
+            frob_type: true,
         }
     }
 }
@@ -53,6 +56,7 @@ impl Config {
         CompileOptions {
             lexical_scopes: self.lexical_scopes,
             map_type: self.map_type,
+            frob_type: self.frob_type
         }
     }
 }

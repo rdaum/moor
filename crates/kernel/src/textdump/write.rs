@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::{Objid, Sequence};
+use moor_values::{v_objid, Objid, Sequence};
 use moor_values::{Var, VarType, Variant};
 use std::collections::BTreeMap;
 use std::io;
@@ -87,6 +87,11 @@ impl<W: io::Write> TextdumpWriter<W> {
                     self.write_var(&k, false)?;
                     self.write_var(&v, false)?;
                 }
+            }
+            Variant::Frob(o, d) => {
+                writeln!(self.writer, "{}\n{}", VarType::TYPE_FROB as i64, o.0)?;
+                self.write_var(&v_objid(o), false)?;
+                self.write_var(d.as_ref(), false)?;
             }
             Variant::None => {
                 writeln!(self.writer, "{}", VarType::TYPE_NONE as i64)?;

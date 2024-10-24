@@ -12,17 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! TODO:
-//!     to_literal / formatting
-//!     move everything up and over into `../var`
-//!     go through all uses of existing var and update them to use the new var
-//!     any missed functionality along the way?
-//!     more tests, and make pass moot once above is done
-//!     later:
-//!         more documentation
-//!         builder vs reader mode? - optimization for values under construction.
-//!         some From/Into impls for common types might be missing
-
 mod error;
 mod list;
 mod map;
@@ -45,8 +34,8 @@ pub use string::Str;
 use strum::FromRepr;
 pub use symbol::Symbol;
 pub use var::{
-    v_bool, v_empty_list, v_empty_map, v_empty_str, v_err, v_float, v_int, v_list, v_list_iter,
-    v_map, v_none, v_obj, v_objid, v_str, v_string, Var,
+    v_bool, v_empty_list, v_empty_map, v_empty_str, v_err, v_float, v_frob, v_int, v_list,
+    v_list_iter, v_map, v_none, v_obj, v_objid, v_str, v_string, Var,
 };
 pub use variant::Variant;
 
@@ -64,6 +53,7 @@ pub enum VarType {
     TYPE_LABEL = 7, // present only in textdump */
     TYPE_FLOAT = 9,
     TYPE_MAP = 10,
+    TYPE_FROB = 11,
 }
 
 /// Sequence index modes: 0 or 1 indexed.

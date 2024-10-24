@@ -56,6 +56,8 @@ pub struct CompileOptions {
     pub lexical_scopes: bool,
     /// Whether to support a Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt
     pub map_type: bool,
+    /// Whether to support a ColdMUD-like Frob datatype (<class, repr>)
+    pub frob_type: bool,
     // TODO: future options:
     //      - symbol types
     //      - disable "#" style object references (obscure_references)
@@ -66,6 +68,7 @@ impl Default for CompileOptions {
         Self {
             lexical_scopes: true,
             map_type: true,
+            frob_type: true
         }
     }
 }
@@ -311,6 +314,21 @@ impl TreeTransformer {
                         })
                         .collect();
                     Ok(Expr::Map(pairs))
+                }
+                Rule::frob => {
+                    if !self.options.frob_type {
+                        return Err(CompileError::DisabledFeature("Frobs".to_string()));
+                    }
+
+                    let mut inner = primary.into_inner();
+                    // Two values, obj, then data
+                    let obj = primary_self
+                        .clone()
+                        .parse_expr(inner.next().unwrap().into_inner())?;
+                    let data = primary_self
+                        .clone()
+                        .parse_expr(inner.next().unwrap().into_inner())?;
+                    Ok(Expr::Frob(Box::new(obj), Box::new(data)))
                 }
                 Rule::builtin_call => {
                     let mut inner = primary.into_inner();
@@ -1194,7 +1212,7 @@ mod tests {
     use moor_values::{v_none, Symbol};
 
     use crate::ast::Arg::{Normal, Splice};
-    use crate::ast::Expr::{Call, Id, Prop, Value, Verb};
+    use crate::ast::Expr::{Call, Frob, Id, Prop, Value, Verb};
     use crate::ast::{
         BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
         StmtNode, UnaryOp,
@@ -2691,5 +2709,31 @@ mod tests {
         "#;
         let parse = parse_program(program, CompileOptions::default());
         assert!(matches!(parse, Err(CompileError::DuplicateVariable(_))));
+    }
+
+    #[test]
+    fn test_frob_parse() {
+        let program = "<#123, 456>;";
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Frob(
+                Box::new(Value(v_obj(123))),
+                Box::new(Value(v_int(456)))
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_no_frob() {
+        let program = "<#123, 456>;";
+        let parse = parse_program(
+            program,
+            CompileOptions {
+                frob_type: false,
+                ..CompileOptions::default()
+            },
+        );
+        assert!(matches!(parse, Err(CompileError::DisabledFeature(_))));
     }
 }

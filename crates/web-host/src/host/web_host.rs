@@ -13,24 +13,21 @@
 //
 
 use crate::host::ws_connection::WebSocketConnection;
-use crate::host::{auth, json_as_var, var_as_json};
+use crate::host::{auth, var_as_json};
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::{Form, Json};
+use axum::Json;
 use eyre::eyre;
 
 use moor_values::model::ObjectRef;
-use moor_values::tasks::VerbProgramError;
 use moor_values::{Objid, Symbol};
 use rpc_async_client::rpc_client::RpcSendClient;
+use rpc_common::AuthToken;
 use rpc_common::RpcRequest::{Attach, ConnectionEstablish};
-use rpc_common::{AuthToken, EntityType, PropInfo, VerbInfo, VerbProgramResponse};
 use rpc_common::{ClientToken, RpcRequestError};
 use rpc_common::{ConnectType, RpcRequest, RpcResponse, RpcResult, BROADCAST_TOPIC};
-use serde_derive::Deserialize;
-use serde_json::json;
 use std::net::SocketAddr;
 use tmq::{request, subscribe};
 use tracing::warn;

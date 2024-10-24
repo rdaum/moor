@@ -17,6 +17,7 @@ use crate::var::storage::VarBuffer;
 use crate::var::Associative;
 use crate::var::{map, string, Sequence};
 use crate::var::{Error, Objid, VarType};
+use crate::Var;
 use decorum::R64;
 use flexbuffers::{Reader, VectorBuilder};
 use num_traits::ToPrimitive;
@@ -36,6 +37,7 @@ pub enum Variant {
     Str(Arc<string::Str>),
     Map(Arc<map::Map>),
     Err(Error),
+    Frob(Objid, Arc<Var>),
 }
 
 impl Hash for Variant {
@@ -49,6 +51,10 @@ impl Hash for Variant {
             Variant::Str(s) => s.hash(state),
             Variant::Map(m) => m.hash(state),
             Variant::Err(e) => e.hash(state),
+            Variant::Frob(o, v) => {
+                o.0.hash(state);
+                v.hash(state);
+            }
         }
     }
 }
@@ -69,6 +75,14 @@ impl Ord for Variant {
             (Variant::Str(l), Variant::Str(r)) => l.cmp(r),
             (Variant::Map(l), Variant::Map(r)) => l.cmp(r),
             (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
+            (Variant::Frob(l, lv), Variant::Frob(r, rv)) => {
+                let c = l.cmp(r);
+                if c == Ordering::Equal {
+                    lv.cmp(rv)
+                } else {
+                    c
+                }
+            }
             (Variant::None, _) => Ordering::Less,
             (_, Variant::None) => Ordering::Greater,
             (Variant::Obj(_), _) => Ordering::Less,
@@ -83,6 +97,8 @@ impl Ord for Variant {
             (_, Variant::Str(_)) => Ordering::Greater,
             (Variant::Map(_), _) => Ordering::Less,
             (_, Variant::Map(_)) => Ordering::Greater,
+            (_, Variant::Frob(_, _)) => Ordering::Greater,
+            (Variant::Frob(_, _), _) => Ordering::Less,
         }
     }
 }
@@ -114,6 +130,7 @@ impl Debug for Variant {
                 write!(f, "Map([size = {}, items = {:?}])", m.len(), i)
             }
             Variant::Err(e) => write!(f, "Error({:?})", e),
+            Variant::Frob(o, v) => write!(f, "Frob({:?}, {:?})", o, v),
         }
     }
 }
@@ -175,6 +192,14 @@ impl Variant {
                 let m = v.as_vector();
                 Self::Map(Arc::new(map::Map { reader: m }))
             }
+            VarType::TYPE_FROB => {
+                let v = vec_iter.next().unwrap();
+                let o = v.as_i64();
+                let v = vec_iter.next().unwrap();
+                let v = Variant::from_reader(v);
+                let v = Arc::new(Var::from_variant(v));
+                Self::Frob(Objid(o), v)
+            }
         }
     }
 
@@ -229,6 +254,11 @@ impl Variant {
             Variant::Err(e) => {
                 item_vec.push(VarType::TYPE_ERR as u8);
                 item_vec.push(*e as u8);
+            }
+            Variant::Frob(o, v) => {
+                item_vec.push(VarType::TYPE_FROB as u8);
+                item_vec.push(o.0);
+                v.variant().push_item(item_vec);
             }
         }
     }

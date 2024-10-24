@@ -499,6 +499,13 @@ impl CodegenState {
                 }
                 self.push_stack(1);
             }
+            Expr::Frob(obj, val) => {
+                self.generate_expr(obj)?;
+                self.generate_expr(val)?;
+                self.emit(Op::MakeFrob);
+                self.pop_stack(2);
+                self.push_stack(1);
+            }
             Expr::Scatter(scatter, right) => self.generate_scatter_assign(scatter, right)?,
             Expr::Assign { left, right } => self.generate_assign(left, right)?,
         }

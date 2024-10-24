@@ -27,11 +27,11 @@ use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 
 use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_TYPE, E_VARNF};
-use moor_values::Variant;
 use moor_values::{
     v_bool, v_empty_list, v_empty_map, v_err, v_float, v_int, v_list, v_none, v_obj, v_objid,
     IndexMode, Sequence,
 };
+use moor_values::{v_frob, Variant};
 use moor_values::{Symbol, VarType};
 
 macro_rules! binary_bool_op {
@@ -356,6 +356,14 @@ pub fn moo_frame_execute(
                     }
                 }
             }
+            Op::MakeFrob => {
+                // Two values on stack, <o, d>
+                let (d, o) = (f.pop(), f.pop());
+                let Variant::Obj(o) = o.variant() else {
+                    return state.push_error(E_TYPE);
+                };
+                f.push(v_frob(o, d));
+            }
             Op::PutTemp => {
                 f.temp = f.peek_top().clone();
             }
@@ -623,7 +631,17 @@ pub fn moo_frame_execute(
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
                 let (args, verb, obj) = match (args.variant(), verb.variant(), obj.variant()) {
+                    // Verb on object as usual
                     (Variant::List(l), Variant::Str(s), Variant::Obj(o)) => (l, s, o),
+                    // Verb via frob, we pull the object from the frob, and then insert its data portion as first argument.
+                    (Variant::List(l), Variant::Str(s), Variant::Frob(o, d)) => {
+                        let l = l.clone();
+                        let l = l.insert(0, d.as_ref()).unwrap();
+                        let Variant::List(l) = l.variant() else {
+                            return state.push_error(E_TYPE);
+                        };
+                        (l, s, o)
+                    }
                     _ => {
                         return state.push_error(E_TYPE);
                     }

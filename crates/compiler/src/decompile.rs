@@ -603,6 +603,12 @@ impl Decompile {
                 map.push((k, v));
                 self.push_expr(Expr::Map(map));
             }
+            Op::MakeFrob => {
+                // Two items on stack, obj and value
+                let value = self.pop_expr()?;
+                let obj = self.pop_expr()?;
+                self.push_expr(Expr::Frob(Box::new(obj), Box::new(value)));
+            }
             Op::ListAddTail | Op::ListAppend => {
                 let e = self.pop_expr()?;
                 let list = self.pop_expr()?;

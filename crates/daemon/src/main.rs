@@ -219,6 +219,14 @@ struct Args {
         default_value = "true"
     )]
     map_type: bool,
+
+    #[arg(
+        long,
+        help = "Enable the ColdMUD-like Frob datatype (<class, repr>)",
+        default_value = "true"
+    )]
+    frob_type: bool,
+
 }
 
 fn main() -> Result<(), Report> {
@@ -308,6 +316,7 @@ fn main() -> Result<(), Report> {
         rich_notify: args.rich_notify,
         lexical_scopes: args.lexical_scopes,
         map_type: args.map_type,
+        frob_type: args.frob_type,
     });
 
     // If the database already existed, do not try to import the textdump...
