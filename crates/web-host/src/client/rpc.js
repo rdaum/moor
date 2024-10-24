@@ -12,6 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+// import {ObjectRef} from "./var";
+
 // Converts a JSON representation of a MOO value into a MOO expression string
 // JSON values look like:
 //     number -> number
@@ -19,6 +21,8 @@
 //     { error_code: number, error_name: string (e.g. E_PROPNF), error_message: string } -> E_<error_name>
 //     { oid: number } -> #<oid>
 //     [ ... ] -> { ... }
+import {oidRef, matchRef, ObjectRef } from "./var.js";
+
 function json_to_moo(json) {
   if (typeof json === "number") {
     return json.toString();
@@ -67,7 +71,8 @@ function transform_eval(json) {
     return json;
   }
   if (json["oid"] != null) {
-    return new MoorRPCObject(json["oid"], context.auth_token);
+    let oref = ObjectRef(json["oid"]);
+    return new MoorRPCObject(oref, context.auth_token);
   } else if (Array.isArray(json)) {
     let result = [];
     for (let i = 0; i < json.length; i++) {
@@ -84,16 +89,16 @@ function transform_eval(json) {
 }
 
 // Object handle for a MOO object to permit simple RPC type behaviours.
-class MoorRPCObject {
-  constructor(object_id, auth_token) {
-    this.object_id = object_id;
+export class MoorRPCObject {
+  constructor(oref, auth_token) {
+    this.oref = oref;
     this.auth_token = auth_token;
   }
 
   // Call a verb on the object by eval.
   // "return #<object_id>:<verb>(<args>)"
   async invoke_verb(verb_name, args) {
-    let self = "#" + this.object_id;
+    let self = "#" + this.oref;
     let args_str = transform_args(args);
     let expr = "return " + self + ":" + verb_name + "(" + args_str + ");";
     return perform_eval(this.auth_token, expr);
@@ -102,7 +107,7 @@ class MoorRPCObject {
   // Get the code and property value of a verb.
   async get_verb_code(verb_name) {
     // REST resource /verbs/#object_id/verb_name
-    let result = await fetch("/verbs/" + oid_curie(this.object_id) + "/" + verb_name, {
+    let result = await fetch("/verbs/" + oref_curie(this.oref) + "/" + verb_name, {
       method: "GET",
       headers: {
         "X-Moor-Auth-Token": this.auth_token,
@@ -118,7 +123,7 @@ class MoorRPCObject {
 
   async get_verbs() {
     // REST resource /verbs/#object_id
-    let result = await fetch("/verbs/" + oid_curie(this.object_id), {
+    let result = await fetch("/verbs/" + oref_curie(this.oref), {
       method: "GET",
       headers: {
         "X-Moor-Auth-Token": this.auth_token,
@@ -134,7 +139,7 @@ class MoorRPCObject {
 
   async compile_verb(verb_name, code) {
     // REST post /verbs/#object_id/verb_name
-    let result = await fetch("/verbs/" + oid_curie(this.object_id) + "/" + verb_name, {
+    let result = await fetch("/verbs/" + oref_curie(this.oref) + "/" + verb_name, {
       method: "POST",
       headers: {
         "X-Moor-Auth-Token": this.auth_token,
@@ -158,7 +163,7 @@ class MoorRPCObject {
 
   async get_property(property_name) {
     // /properties/#object_id/property_name
-    let result = await fetch("/properties/" + oid_curie(this.object_id) + "/" + property_name, {
+    let result = await fetch("/properties/" + oref_curie(this.oref) + "/" + property_name, {
       method: "GET",
       headers: {
         "X-Moor-Auth-Token": this.auth_token,
@@ -174,7 +179,7 @@ class MoorRPCObject {
 
   async get_properties() {
     // /properties/object_id
-    let result = await fetch("/properties/" + oid_curie(this.object_id), {
+    let result = await fetch("/properties/" + oref_curie(this.oref), {
       method: "GET",
       headers: {
         "X-Moor-Auth-Token": this.auth_token,
@@ -189,10 +194,42 @@ class MoorRPCObject {
   }
 }
 
-// Construct a CURI from an object id.
-function oid_curie(oid) {
-  return "oid:" + oid;
+// Construct a CURI from an object ref
+export function oref_curie(oref) {
+  if (oref.oid != null) {
+    return "oid:" + oref.oid;
+  }
+
+  if (oref.sysobj != null) {
+      return "sysobj:" + encodeURIComponent(oref.sysobj.join("."));
+  }
+
+  if (oref.match_env != null) {
+      return "match_env:" + encodeURIComponent(oref.match);
+  }
 }
+
+export function curie_oref(curie) {
+    let parts = curie.split(":");
+    if (parts.length != 2) {
+        throw "Invalid OREF CURI: " + curie
+    }
+
+    if (parts[0] == "oid") {
+        return oidRef(parseInt(parts[1]));
+    }
+
+    if (parts[0] == "sysobj") {
+        return sysobjRef(parts[1].split("."));
+    }
+
+    if (parts[0] == "match_env") {
+        return matchRef(parts[1]);
+    }
+
+    throw "Unknown CURI type: " + parts[0];
+}
+
 
 // Handle for a Verb.
 class MoorVerb {

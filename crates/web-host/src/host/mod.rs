@@ -31,7 +31,8 @@ pub use verbs::verb_retrieval_handler;
 pub use verbs::verbs_handler;
 pub use web_host::WebHost;
 pub use web_host::{
-    eval_handler, welcome_message_handler, ws_connect_attach_handler, ws_create_attach_handler,
+    eval_handler, resolve_objref_handler, welcome_message_handler, ws_connect_attach_handler,
+    ws_create_attach_handler,
 };
 
 #[derive(serde_derive::Serialize, Deserialize)]
@@ -129,7 +130,7 @@ pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
                     if pair.len() != 2 {
                         return Err(JsonParseError::InvalidRepresentation);
                     }
-                    let key = pair.get(0).ok_or(JsonParseError::InvalidRepresentation)?;
+                    let key = pair.first().ok_or(JsonParseError::InvalidRepresentation)?;
                     let value = pair.get(1).ok_or(JsonParseError::InvalidRepresentation)?;
                     m.push((json_as_var(key)?, json_as_var(value)?));
                 }

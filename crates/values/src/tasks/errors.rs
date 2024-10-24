@@ -66,6 +66,8 @@ pub enum SchedulerError {
     PropertyRetrievalFailed(WorldStateError),
     #[error("Unable to retrieve verb {0}")]
     VerbRetrievalFailed(WorldStateError),
+    #[error("Unable to resolve object reference {0}")]
+    ObjectResolutionFailed(WorldStateError),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]

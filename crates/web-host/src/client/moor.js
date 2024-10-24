@@ -13,6 +13,7 @@
 //
 
 import {createEditor, updateEditor} from "./editor.js";
+import {MoorRPCObject, oref_curie, curie_oref} from "./rpc.js";
 
 const { button, div, input, select, option, br, pre, form, a } = van.tags;
 
@@ -191,8 +192,10 @@ async function compile_verb(object, verb, code, compile_state) {
   }
 }
 
-export function action_edit_verb(object, verb) {
+export function action_edit_verb(objcurie, verb) {
   // First things first, retrieve the verb.
+  // Decode the 'object' as a reference to an object, in curie form.
+  let object = curie_oref(objcurie);
   let mrpc_object = new MoorRPCObject(object, module.context.auth_token);
   let vc = mrpc_object.get_verb_code(verb).then((result) => {
     console.log("Verb code: " + result);
@@ -264,15 +267,15 @@ function djotRender(author, ast) {
 
         // Destination structures:
         //   invoke an action verb on the author of the message with an optional argument
-        //      invoke:<verb>[:arg]
+        //      invoke/<verb>[/arg]
         //   retrieve verb contents and bring up editor with it.
         //   is invoked: <compile_command> object:verb on save
-        //      edit_verb:<object>:<verb>
+        //      edit_verb/<object>/<verb>
         //   retrieve property contents and bring up editor with it.
         //   is invoked: <set_command> object.prop on save
-        //      edit_prop:<object>:<prop>:
+        //      edit_prop/<object>/<prop>
 
-        let spec = destination.split(":");
+        let spec = destination.split("/");
 
         if (spec.length > 3) {
           console.log("Invalid destination: " + destination);

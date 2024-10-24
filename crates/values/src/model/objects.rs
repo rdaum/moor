@@ -15,13 +15,13 @@
 use binary_layout::{binary_layout, Field};
 use std::fmt::{Display, Formatter};
 
+use crate::util::BitEnum;
+use crate::var::{Objid, Symbol};
 use crate::{AsByteBuffer, DecodingError, EncodingError, NOTHING};
 use bincode::{Decode, Encode};
 use bytes::Bytes;
 use enum_primitive_derive::Primitive;
-
-use crate::util::BitEnum;
-use crate::var::{Objid, Symbol};
+use serde::{Deserialize, Serialize};
 
 /// A reference to an object in the system, used in external interface (RPC, etc.) to refer to
 /// objects.
@@ -32,7 +32,7 @@ use crate::var::{Objid, Symbol};
 ///    sysobj:ident[.subident] -> $ident[.subident] ObjectRef::SysObj(["ident", "subident"])
 ///    match("phrase") -> env match onn "phrase" ObjectRef::Match("phrase")
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Serialize, Deserialize)]
 pub enum ObjectRef {
     /// An absolute numeric object reference (e.g. #1234)
     Id(Objid),

@@ -13,24 +13,22 @@
 //
 
 use crate::host::ws_connection::WebSocketConnection;
-use crate::host::{auth, json_as_var, var_as_json};
+use crate::host::{auth, var_as_json};
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::{Form, Json};
+use axum::Json;
 use eyre::eyre;
 
 use moor_values::model::ObjectRef;
-use moor_values::tasks::VerbProgramError;
-use moor_values::{Objid, Symbol};
+use moor_values::Error::E_INVIND;
+use moor_values::{v_err, Objid, Symbol};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::RpcRequest::{Attach, ConnectionEstablish};
-use rpc_common::{AuthToken, EntityType, PropInfo, VerbInfo, VerbProgramResponse};
+use rpc_common::AuthToken;
 use rpc_common::{ClientToken, RpcRequestError};
 use rpc_common::{ConnectType, RpcRequest, RpcResponse, RpcResult, BROADCAST_TOPIC};
-use serde_derive::Deserialize;
-use serde_json::json;
 use std::net::SocketAddr;
 use tmq::{request, subscribe};
 use tracing::warn;
@@ -305,6 +303,55 @@ pub async fn eval_handler(
         Ok(RpcResponse::EvalResult(value)) => {
             debug!("Eval result: {:?}", value);
             Json(var_as_json(&value)).into_response()
+        }
+        Ok(r) => {
+            error!("Unexpected response from RPC server: {:?}", r);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Err(status) => status.into_response(),
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response
+}
+
+pub async fn resolve_objref_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Path(object): Path<String>,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let objref = match ObjectRef::parse_curie(&object) {
+        None => {
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+        Some(oref) => oref,
+    };
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        RpcRequest::Resolve(client_token.clone(), auth_token.clone(), objref),
+    )
+    .await
+    {
+        Ok(RpcResponse::ResolveResult(obj)) => {
+            if obj == v_err(E_INVIND) {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                Json(var_as_json(&obj)).into_response()
+            }
         }
         Ok(r) => {
             error!("Unexpected response from RPC server: {:?}", r);

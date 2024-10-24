@@ -14,14 +14,16 @@
 
 use std::fmt::{Debug, Display, Formatter};
 
+use crate::encode::{DecodingError, EncodingError};
+use crate::AsByteBuffer;
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use bytes::Bytes;
+use serde::{Deserialize, Serialize};
 
-use crate::encode::{DecodingError, EncodingError};
-use crate::AsByteBuffer;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode, Serialize, Deserialize,
+)]
 pub struct Objid(pub i64);
 
 impl LayoutAs<i64> for Objid {
@@ -93,7 +95,7 @@ impl TryFrom<&str> for Objid {
     type Error = DecodingError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if let Some(value) =value.strip_prefix('#') {
+        if let Some(value) = value.strip_prefix('#') {
             let value = value.parse::<i64>().map_err(|e| {
                 DecodingError::CouldNotDecode(format!("Could not parse Objid: {}", e))
             })?;

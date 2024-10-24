@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use moor_compiler::{compile, Program};
 use moor_values::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
-use moor_values::{Objid, Var, Symbol};
+use moor_values::{Objid, Symbol, Var};
 
 use crate::config::Config;
 use crate::tasks::sessions::Session;
@@ -339,6 +339,17 @@ impl SchedulerClient {
             .recv_timeout(Duration::from_secs(5))
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
+
+    pub fn resolve_object(&self, player: Objid, obj: ObjectRef) -> Result<Var, SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::ResolveObject { player, obj, reply })
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
 }
 
 pub enum SchedulerClientMsg {
@@ -429,6 +440,12 @@ pub enum SchedulerClientMsg {
         obj: ObjectRef,
         property: Symbol,
         reply: oneshot::Sender<Result<(PropDef, PropPerms, Var), SchedulerError>>,
+    },
+    /// Resolve an ObjectRef into a Var
+    ResolveObject {
+        player: Objid,
+        obj: ObjectRef,
+        reply: oneshot::Sender<Result<Var, SchedulerError>>,
     },
     /// Submit a request to checkpoint the database.
     Checkpoint(oneshot::Sender<Result<(), SchedulerError>>),

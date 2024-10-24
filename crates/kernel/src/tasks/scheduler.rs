@@ -34,9 +34,8 @@ use moor_values::model::{WorldState, WorldStateError};
 use moor_values::tasks::{
     AbortLimitReason, CommandError, SchedulerError, TaskId, VerbProgramError,
 };
-use moor_values::Error::{E_INVARG, E_PERM};
-use moor_values::Symbol;
-use moor_values::{v_err, v_int, v_none, v_string, Var};
+use moor_values::Error::{E_INVARG, E_INVIND, E_PERM};
+use moor_values::{v_err, v_int, v_none, v_objid, v_string, Symbol, Var};
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 use moor_values::{Objid, Variant};
 
@@ -385,10 +384,7 @@ impl Scheduler {
                 // before we can start the task.
                 // If they're all just plain object references, we can just use them as-is, without
                 // starting a transaction. Otherwise, we need to start a transaction to resolve them.
-                let need_tx_oref = match vloc {
-                    ObjectRef::Id(_) => false,
-                    _ => true,
-                };
+                let need_tx_oref = !matches!(vloc, ObjectRef::Id(_));
                 let vloc = if need_tx_oref {
                     let mut tx = self.database.new_world_state().unwrap();
                     let Ok(vloc) = match_object_ref(player, perms, vloc, tx.as_mut()) else {
@@ -399,7 +395,6 @@ impl Scheduler {
                     };
                     vloc
                 } else {
-                    
                     match vloc {
                         ObjectRef::Id(id) => id,
                         _ => panic!("Unexpected object reference in vloc"),
@@ -836,6 +831,33 @@ impl Scheduler {
                 reply
                     .send(Ok((verbdef, unparsed)))
                     .expect("Could not send verb code reply");
+            }
+            SchedulerClientMsg::ResolveObject { player, obj, reply } => {
+                let mut world_state = match self.database.new_world_state() {
+                    Ok(ws) => ws,
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::ObjectResolutionFailed(e)))
+                            .expect("Could not send object resolution reply");
+                        return;
+                    }
+                };
+
+                // Value is the resolved object or E_INVIND
+                let omatch = match match_object_ref(player, player, obj, world_state.as_mut()) {
+                    Ok(oid) => v_objid(oid),
+                    Err(WorldStateError::ObjectNotFound(_)) => v_err(E_INVIND),
+                    Err(e) => {
+                        reply
+                            .send(Err(SchedulerError::ObjectResolutionFailed(e)))
+                            .expect("Could not send object resolution reply");
+                        return;
+                    }
+                };
+
+                reply
+                    .send(Ok(omatch))
+                    .expect("Could not send object resolution reply");
             }
         }
     }

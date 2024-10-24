@@ -15,7 +15,7 @@
 use bincode::{Decode, Encode};
 use moor_values::model::ObjectRef;
 use moor_values::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
-use moor_values::{Objid, Var, Symbol};
+use moor_values::{Objid, Symbol, Var};
 use std::time::SystemTime;
 use thiserror::Error;
 
@@ -75,6 +75,8 @@ pub enum RpcRequest {
     OutOfBand(ClientToken, AuthToken, String),
     /// Evaluate a MOO expression.
     Eval(ClientToken, AuthToken, String),
+    /// Resolve an object reference into a Var
+    Resolve(ClientToken, AuthToken, ObjectRef),
     /// Respond to a ping request.
     Pong(ClientToken, SystemTime),
     /// We're done with this connection, buh-bye.
@@ -146,6 +148,7 @@ pub enum RpcResponse {
     ProgramResponse(VerbProgramResponse),
     PropertyValue(PropInfo, Var),
     VerbValue(VerbInfo, Vec<String>),
+    ResolveResult(Var),
     InvokeResult(Result<Var, SchedulerError>),
 }
 

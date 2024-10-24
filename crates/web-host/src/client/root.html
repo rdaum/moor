@@ -30,6 +30,11 @@
 </script>
 <script type="module">
     import { context, action_invoke, action_edit_verb } from "./moor.js";
+    import { MoorRPCObject } from "./rpc.js";
+    import { ObjectRef } from "./var.js";
+
+    module.ObjectRef = ObjectRef;
+    module.MoorRPCObject = MoorRPCObject;
     module.action_invoke = action_invoke;
     module.action_edit_verb = action_edit_verb;
     module.context = context;

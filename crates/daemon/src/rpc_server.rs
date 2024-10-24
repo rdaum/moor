@@ -400,6 +400,19 @@ impl RpcServer {
                     }
                 }
             }
+            RpcRequest::Resolve(token, auth_token, objref) => {
+                let connection = self.client_auth(token, client_id)?;
+                self.validate_auth_token(auth_token, Some(connection))?;
+
+                let resolved = scheduler_client
+                    .resolve_object(connection, objref)
+                    .map_err(|e| {
+                        error!(error = ?e, "Error resolving object");
+                        RpcRequestError::EntityRetrievalError("error resolving object".to_string())
+                    })?;
+
+                Ok(RpcResponse::ResolveResult(resolved))
+            }
             RpcRequest::Properties(token, auth_token, obj) => {
                 let connection = self.client_auth(token, client_id)?;
                 self.validate_auth_token(auth_token, Some(connection))?;

@@ -16,6 +16,7 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
+use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
 use ustr::Ustr;
 
@@ -24,6 +25,20 @@ use ustr::Ustr;
 /// (There will eventually be a TYPE_SYMBOL and a syntax for it in the language, but not for 1.0.)
 #[derive(Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct Symbol(Ustr);
+
+impl Serialize for Symbol {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.as_str().serialize(serializer)
+    }
+}
+
+impl<'a> Deserialize<'a> for Symbol {
+    fn deserialize<D: serde::Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        // Deserialize a string.
+        let s: String = Deserialize::deserialize(deserializer)?;
+        Ok(Symbol(Ustr::from(&s)))
+    }
+}
 
 impl Symbol {
     pub fn as_str(&self) -> &str {

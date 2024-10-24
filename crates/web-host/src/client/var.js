@@ -73,11 +73,31 @@ export function valueToJson(v) {
     }
 }
 
+// An ObjectRef can be one of:
+//      .oid: number - literal object id
+//      .sysobj: array of strings - system object reference, a "path" starting from #0.  $login.welcome_message
+//      .match: string - a string to match in the player's current environment (room)
+
 export class ObjectRef {
-    constructor(oid) {
+    constructor(oid, sysobj = null, match = null) {
         this.oid = oid
+        this.sysobj = sysobj
+        this.match_env = match
     }
 }
+
+export function oidRef(oid) {
+    return new ObjectRef(oid)
+}
+
+export function sysobjRef(sysobj) {
+    return new ObjectRef(null, sysobj)
+}
+
+export function matchRef(match) {
+    return new ObjectRef(null, null, match)
+}
+
 
 export class Error {
     constructor(code, message) {
