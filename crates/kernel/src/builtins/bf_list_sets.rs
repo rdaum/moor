@@ -346,15 +346,21 @@ fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<S
             return Err(E_INVARG);
         }
 
-        // We're 1-indexed, so we'll subtract 1 from the number.
-        let number = number - 1;
+        // Special case for 0
+        let (start, end) = if number == 0 {
+            (subs[0].0, subs[0].1)
+        } else {
+            // We're 1-indexed, so we'll subtract 1 from the number.
+            let number = number - 1;
 
-        // And look it up in `subs`.
-        let (start, end) = (subs[number].0, subs[number].1);
+            // Look it up in matching `subs` pairs.
+            (subs[number].0, subs[number].1)
+        };
 
-        // Now validate the range in the source string, and raise an E_INVARG if it's invalid.
+        // Now validate the range in the source string, and if the range is invalid, we just skip,
+        // as this seems to be how LambdaMOO behaves.
         if start < 0 || start > end || end > (source.len() as isize) {
-            return Err(E_INVARG);
+            continue;
         }
 
         let (start, end) = (start as usize - 1, end as usize);
