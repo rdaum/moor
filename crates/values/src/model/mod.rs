@@ -26,7 +26,6 @@ use crate::AsByteBuffer;
 use bincode::{Decode, Encode};
 use std::fmt::Debug;
 use thiserror::Error;
-use uuid::Uuid;
 
 mod defset;
 mod r#match;
@@ -42,12 +41,6 @@ mod world_state;
 use crate::Symbol;
 pub use world_state::WorldStateError;
 
-mod tied_flatbuffer;
-#[allow(dead_code, unused_imports)]
-#[allow(clippy::all)]
-#[path = "../../../../target/flatbuffers/values_generated.rs"]
-pub mod values_flatbuffers;
-
 /// The result code from a commit/complete operation on the world's state.
 #[derive(Debug, Eq, PartialEq)]
 pub enum CommitResult {
@@ -61,10 +54,6 @@ pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
     fn iter(&self) -> impl Iterator<Item = V>;
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
-}
-
-pub fn uuid_fb(&uuid: &Uuid) -> values_flatbuffers::moor::values::Uuid {
-    values_flatbuffers::moor::values::Uuid::new(uuid.as_bytes())
 }
 
 #[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]

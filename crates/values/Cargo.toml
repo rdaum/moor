@@ -18,7 +18,6 @@ bytes.workspace = true
 daumtils.workspace = true
 decorum.workspace = true
 enum-primitive-derive.workspace = true
-flatbuffers.workspace = true
 flexbuffers.workspace = true
 im.workspace = true
 itertools.workspace = true
@@ -30,11 +29,3 @@ strum.workspace = true
 thiserror.workspace = true
 ustr.workspace = true
 uuid.workspace = true
-
-[features]
-# If List and String are backed by Bytes instead of Arc<Vec<Var>> and Arc<String> respectively.
-list_impl_buffer = []
-default = []
-
-[build-dependencies]
-flatc.workspace = true
