@@ -160,9 +160,27 @@ impl Sequence for List {
         let base_len = self.len();
         let from = from.to_usize().unwrap_or(0);
         let to = to.to_usize().unwrap_or(0);
-        if to + 1 > base_len {
+
+        // If from isn't in range that's E_RANGE.
+        if from != 0 && from >= base_len {
             return Err(E_RANGE);
         }
+
+        // MOO does a weird thing where it allows you to set a range where the end is out of bounds,
+        // and does not return E_RANGE (but does not do the same for single index set).
+        // So for example:
+        // foo = {}; foo[1..2] = {1, 2, 3} => {1, 2, 3}
+        // but
+        // foo = {}; foo[4..5] = {1, 2, 3} => E_RANGE
+        //
+        let to = if base_len == 0 {
+            0
+        } else if to + 1 > base_len {
+            base_len - 1
+        } else {
+            to
+        };
+
         // Iterator taking up to `from`
         let base_iter = self.iter().take(from);
         // Iterator for with_val...
@@ -626,5 +644,42 @@ mod tests {
             .insert(&v_int(10), &v_int(10), IndexMode::OneBased)
             .unwrap();
         assert_eq!(r, v_list(&[v_int(1), v_int(2), v_int(3), v_int(10)]));
+    }
+
+    #[test]
+    fn test_range_set() {
+        // foo = {}; foo[1..2] = {1, 2, 3} => {1, 2, 3}
+        let l = v_list(&[]);
+        let r = l
+            .range_set(
+                &v_int(1),
+                &v_int(2),
+                &v_list(&[v_int(1), v_int(2), v_int(3)]),
+                IndexMode::OneBased,
+            )
+            .unwrap();
+        assert_eq!(r, v_list(&[v_int(1), v_int(2), v_int(3)]));
+
+        // foo = {1}; foo[1..5] = {1, 2, 3} => {1, 2, 3}
+        let l = v_list(&[v_int(1)]);
+        let r = l
+            .range_set(
+                &v_int(1),
+                &v_int(5),
+                &v_list(&[v_int(1), v_int(2), v_int(3)]),
+                IndexMode::OneBased,
+            )
+            .unwrap();
+        assert_eq!(r, v_list(&[v_int(1), v_int(2), v_int(3)]));
+
+        // foo = {1}; foo[2..3] = {2, 3} => E_RANGE
+        let l = v_list(&[v_int(1)]);
+        let r = l.range_set(
+            &v_int(2),
+            &v_int(3),
+            &v_list(&[v_int(2), v_int(3)]),
+            IndexMode::OneBased,
+        );
+        assert_eq!(r, Err(E_RANGE));
     }
 }
