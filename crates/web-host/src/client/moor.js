@@ -12,8 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import {createEditor, updateEditor} from "./editor.js";
-import {MoorRPCObject, oref_curie, curie_oref} from "./rpc.js";
+import { createEditor, updateEditor } from "./editor.js";
+import { curie_oref, MoorRPCObject, oref_curie } from "./rpc.js";
 
 const { button, div, input, select, option, br, pre, form, a } = van.tags;
 

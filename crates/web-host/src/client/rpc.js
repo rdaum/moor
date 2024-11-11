@@ -21,7 +21,7 @@
 //     { error_code: number, error_name: string (e.g. E_PROPNF), error_message: string } -> E_<error_name>
 //     { oid: number } -> #<oid>
 //     [ ... ] -> { ... }
-import {oidRef, matchRef, ObjectRef } from "./var.js";
+import { matchRef, ObjectRef, oidRef } from "./var.js";
 
 function json_to_moo(json) {
   if (typeof json === "number") {
@@ -201,35 +201,34 @@ export function oref_curie(oref) {
   }
 
   if (oref.sysobj != null) {
-      return "sysobj:" + encodeURIComponent(oref.sysobj.join("."));
+    return "sysobj:" + encodeURIComponent(oref.sysobj.join("."));
   }
 
   if (oref.match_env != null) {
-      return "match_env:" + encodeURIComponent(oref.match);
+    return "match_env:" + encodeURIComponent(oref.match);
   }
 }
 
 export function curie_oref(curie) {
-    let parts = curie.split(":");
-    if (parts.length != 2) {
-        throw "Invalid OREF CURI: " + curie
-    }
+  let parts = curie.split(":");
+  if (parts.length != 2) {
+    throw "Invalid OREF CURI: " + curie;
+  }
 
-    if (parts[0] == "oid") {
-        return oidRef(parseInt(parts[1]));
-    }
+  if (parts[0] == "oid") {
+    return oidRef(parseInt(parts[1]));
+  }
 
-    if (parts[0] == "sysobj") {
-        return sysobjRef(parts[1].split("."));
-    }
+  if (parts[0] == "sysobj") {
+    return sysobjRef(parts[1].split("."));
+  }
 
-    if (parts[0] == "match_env") {
-        return matchRef(parts[1]);
-    }
+  if (parts[0] == "match_env") {
+    return matchRef(parts[1]);
+  }
 
-    throw "Unknown CURI type: " + parts[0];
+  throw "Unknown CURI type: " + parts[0];
 }
-
 
 // Handle for a Verb.
 class MoorVerb {

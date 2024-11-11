@@ -30,47 +30,47 @@
 // - Future things like WAIFs, etc. will need to be encoded in a way that makes sense for JSON.
 
 export function jsonToValue(json) {
-    if (typeof json === "number") {
-        return new Int(json)
-    } else if (typeof json === "string") {
-        return new Str(json)
-    } else if (typeof json === "object") {
-        if (json["error"]) {
-            return new Error(json["error"], json["message"])
-        } else if (json["oid"] != null) {
-            return new ObjectRef(json["oid"])
-        } else if (json["map_pairs"] != null) {
-            let pairs = []
-            let jsonPairs = json["map_pairs"]
-            if (!Array.isArray(jsonPairs)) {
-                throw "Map pairs must be an array"
-            }
-            for (let i = 0; i < json.length; i++) {
-                pairs.push(jsonToValue(jsonPairs[i]))
-            }
-            return new Map(pairs)
-        } else {
-            throw "Unknown object type: " + json
-        }
+  if (typeof json === "number") {
+    return new Int(json);
+  } else if (typeof json === "string") {
+    return new Str(json);
+  } else if (typeof json === "object") {
+    if (json["error"]) {
+      return new Error(json["error"], json["message"]);
+    } else if (json["oid"] != null) {
+      return new ObjectRef(json["oid"]);
+    } else if (json["map_pairs"] != null) {
+      let pairs = [];
+      let jsonPairs = json["map_pairs"];
+      if (!Array.isArray(jsonPairs)) {
+        throw "Map pairs must be an array";
+      }
+      for (let i = 0; i < json.length; i++) {
+        pairs.push(jsonToValue(jsonPairs[i]));
+      }
+      return new Map(pairs);
     } else {
-        throw "Unknown JSON type: " + json
+      throw "Unknown object type: " + json;
     }
+  } else {
+    throw "Unknown JSON type: " + json;
+  }
 }
 
 export function valueToJson(v) {
-    if (v instanceof Int) {
-        return v.value
-    } else if (v instanceof Str) {
-        return v.value
-    } else if (v instanceof Error) {
-        return { error: v.code, message: v.message }
-    } else if (v instanceof ObjectRef) {
-        return { oid: v.oid }
-    } else if (v instanceof Map) {
-        return { map_pairs: v.pairs.map(valueToJson) }
-    } else {
-        throw "Unknown object type: " + v
-    }
+  if (v instanceof Int) {
+    return v.value;
+  } else if (v instanceof Str) {
+    return v.value;
+  } else if (v instanceof Error) {
+    return { error: v.code, message: v.message };
+  } else if (v instanceof ObjectRef) {
+    return { oid: v.oid };
+  } else if (v instanceof Map) {
+    return { map_pairs: v.pairs.map(valueToJson) };
+  } else {
+    throw "Unknown object type: " + v;
+  }
 }
 
 // An ObjectRef can be one of:
@@ -79,91 +79,90 @@ export function valueToJson(v) {
 //      .match: string - a string to match in the player's current environment (room)
 
 export class ObjectRef {
-    constructor(oid, sysobj = null, match = null) {
-        this.oid = oid
-        this.sysobj = sysobj
-        this.match_env = match
-    }
+  constructor(oid, sysobj = null, match = null) {
+    this.oid = oid;
+    this.sysobj = sysobj;
+    this.match_env = match;
+  }
 }
 
 export function oidRef(oid) {
-    return new ObjectRef(oid)
+  return new ObjectRef(oid);
 }
 
 export function sysobjRef(sysobj) {
-    return new ObjectRef(null, sysobj)
+  return new ObjectRef(null, sysobj);
 }
 
 export function matchRef(match) {
-    return new ObjectRef(null, null, match)
+  return new ObjectRef(null, null, match);
 }
 
-
 export class Error {
-    constructor(code, message) {
-        this.code = code
-        this.message = message
-    }
+  constructor(code, message) {
+    this.code = code;
+    this.message = message;
+  }
 }
 
 export class Map {
-    constructor(pairs = []) {
-        this.pairs = pairs
-    }
+  constructor(pairs = []) {
+    this.pairs = pairs;
+  }
 
-    // Insert a key-value pair into the map, replacing the value if the key already exists, values are kept in sorted
-    // order.
-    // As in MOO, we are CoW friendly, so we return a new map with the new pair inserted.
-    insert(key, value) {
-        let pairs = this.pairs.slice()
-        let i = pairs.findIndex(pair => pair[0] >= key)
-        if (i < 0) {
-            i = pairs.length
-        } else if (pairs[i][0] === key) {
-            pairs[i] = [key, value]
-            return new Map(pairs)
-        }
-        pairs.splice(i, 0, [key, value])
-        return new Map(pairs)
+  // Insert a key-value pair into the map, replacing the value if the key already exists, values are kept in sorted
+  // order.
+  // As in MOO, we are CoW friendly, so we return a new map with the new pair inserted.
+  insert(key, value) {
+    let pairs = this.pairs.slice();
+    let i = pairs.findIndex(pair => pair[0] >= key);
+    if (i < 0) {
+      i = pairs.length;
+    } else if (pairs[i][0] === key) {
+      pairs[i] = [key, value];
+      return new Map(pairs);
     }
+    pairs.splice(i, 0, [key, value]);
+    return new Map(pairs);
+  }
 
-    // Remove a key-value pair from the map, returning a new map with the pair removed.
-    remove(key) {
-        let pairs = this.pairs.slice()
-        let i = pairs.findIndex(pair => pair[0] === key)
-        if (i < 0) {
-            return this
-        }
-        pairs.splice(i, 1)
-        return new Map(pairs)
+  // Remove a key-value pair from the map, returning a new map with the pair removed.
+  remove(key) {
+    let pairs = this.pairs.slice();
+    let i = pairs.findIndex(pair => pair[0] === key);
+    if (i < 0) {
+      return this;
     }
+    pairs.splice(i, 1);
+    return new Map(pairs);
+  }
 
-    // Get the value for a key, or undefined if the key is not in the map.
-    get(key) {
-        let i = this.pairs.findIndex(pair => pair[0] === key)
-        if (i < 0) {
-            return undefined
-        }
-        return this.pairs[i][1]
+  // Get the value for a key, or undefined if the key is not in the map.
+  get(key) {
+    let i = this.pairs.findIndex(pair => pair[0] === key);
+    if (i < 0) {
+      return undefined;
     }
+    return this.pairs[i][1];
+  }
 
-    // Return the set of pairs
-    pairs() {
-        return this.pairs
-    }
+  // Return the set of pairs
+  pairs() {
+    return this.pairs;
+  }
 
-    // Return the keys in the map
-    keys() {
-        return this.pairs.map(pair => pair[0])
-    }
+  // Return the keys in the map
+  keys() {
+    return this.pairs.map(pair => pair[0]);
+  }
 
-    // Return the values in the map
-    values() {
-        return this.pairs.map(pair => pair[1])
-    }
+  // Return the values in the map
+  values() {
+    return this.pairs.map(pair => pair[1]);
+  }
 
-    // Return the number of pairs in the map
-    size() {
-        return this.pairs.length
-    }
+  // Return the number of pairs in the map
+  size() {
+    return this.pairs.length;
+  }
 }
