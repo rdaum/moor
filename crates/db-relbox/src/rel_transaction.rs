@@ -89,14 +89,14 @@ impl<T> RelationalTransaction<T> for RelboxTransaction<T>
 where
     T: Into<usize> + Send,
 {
-    fn commit(&self) -> CommitResult {
+    fn commit(self) -> CommitResult {
         if self.tx.commit().is_err() {
             return CommitResult::ConflictRetry;
         }
         CommitResult::Success
     }
 
-    fn rollback(&self) {
+    fn rollback(self) {
         self.tx.rollback().expect("Failed to rollback transaction");
     }
 

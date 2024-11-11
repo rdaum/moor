@@ -90,7 +90,7 @@ impl<Tables> RelationalTransaction<Tables> for WiredTigerRelTransaction<Tables>
 where
     Tables: WiredTigerRelation + Send,
 {
-    fn commit(&self) -> CommitResult {
+    fn commit(self) -> CommitResult {
         match self.session.commit() {
             Ok(_) => CommitResult::Success,
             Err(Error::Rollback) => CommitResult::ConflictRetry,
@@ -100,7 +100,7 @@ where
         }
     }
 
-    fn rollback(&self) {
+    fn rollback(self) {
         self.session
             .rollback_transaction()
             .expect("Failed to rollback transaction")

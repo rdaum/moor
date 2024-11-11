@@ -40,8 +40,8 @@ impl Error for RelationalError {}
 
 /// Traits defining a generic quasi binary-relational database transaction.
 pub trait RelationalTransaction<Relation>: Send {
-    fn commit(&self) -> CommitResult;
-    fn rollback(&self);
+    fn commit(self) -> CommitResult;
+    fn rollback(self);
 
     fn increment_sequence<S: Into<u8>>(&self, seq: S) -> i64;
     fn update_sequence_max<S: Into<u8>>(&self, seq: S, value: i64) -> i64;

@@ -43,7 +43,7 @@ pub struct RelationalWorldStateTransaction<RTX: RelationalTransaction<WorldState
 
 impl<RTX: RelationalTransaction<WorldStateTable>> Drop for RelationalWorldStateTransaction<RTX> {
     fn drop(&mut self) {
-        if let Some(tx) = self.tx.as_ref() {
+        if let Some(tx) = self.tx.take() {
             tx.rollback();
         }
     }
