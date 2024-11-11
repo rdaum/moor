@@ -12,46 +12,51 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::storage::VarBuffer;
 use crate::var::var::{v_str, Var};
 use crate::var::variant::Variant;
 use crate::var::Error;
 use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::Sequence;
-use flexbuffers::Reader;
+use bincode::{Decode, Encode};
 use num_traits::ToPrimitive;
 use std::cmp::max;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
+use std::sync::Arc;
 
-#[derive(Clone)]
-pub struct Str {
-    // Reader must be boxed to avoid overfilling the stack.
-    pub(crate) reader: Reader<VarBuffer>,
-}
+#[derive(Clone, Encode, Decode)]
+pub struct Str(Arc<String>);
 
 impl Str {
-    pub fn as_string(&self) -> String {
-        self.reader.get_str().unwrap()
+    pub fn mk_str(s: &str) -> Self {
+        Str(Arc::new(s.to_string()))
+    }
+
+    pub fn as_string(&self) -> &String {
+        self.0.as_ref()
     }
 
     pub fn index_set(&self, index: usize, value: &Self) -> Result<Var, Error> {
         if value.len() != 1 {
             return Err(E_INVARG);
         }
-        let string = self.as_string();
+        let string = self.0.as_ref();
         if index >= string.len() {
             return Err(E_RANGE);
         }
         let mut s = string.clone();
-        s.replace_range(index..=index, &value.as_string());
-        Ok(Var::mk_str(&s))
+        s.replace_range(index..=index, value.as_string());
+        let s = Str(Arc::new(s));
+        let v = Variant::Str(s);
+        Ok(Var::from_variant(v))
     }
 
     pub fn append(&self, other: &Self) -> Var {
-        let mut s = self.as_string().clone();
-        s.push_str(&other.as_string());
-        Var::mk_str(&s)
+        let mut s = self.0.as_ref().clone();
+        s.push_str(other.as_string());
+        let s = Str(Arc::new(s));
+        let v = Variant::Str(s);
+        Var::from_variant(v)
     }
 }
 
@@ -136,9 +141,9 @@ impl Sequence for Str {
         }
         let base_str = self.as_string();
         let mut ans = base_str.get(..from).unwrap_or("").to_string();
-        ans.push_str(&with_val.as_string());
+        ans.push_str(with_val.as_string());
         if to == 0 {
-            ans.push_str(&base_str);
+            ans.push_str(base_str);
         } else {
             ans.push_str(base_str.get(to + 1..).unwrap_or(""));
         }
@@ -186,7 +191,7 @@ impl Sequence for Str {
         let s = self.as_string();
         let value = value.as_string();
         let contains = if case_sensitive {
-            s.contains(&value)
+            s.contains(value)
         } else {
             s.to_lowercase().contains(&value.to_lowercase())
         };
@@ -199,11 +204,11 @@ impl Sequence for Str {
             _ => return Err(E_TYPE),
         };
 
-        let s: String = self.as_string();
+        let s = self.as_string();
         let value = value.as_string();
         let contains = if case_sensitive {
             // Get the index of the substring in the string.
-            s.find(&value)
+            s.find(value)
         } else {
             s.to_lowercase().find(&value.to_lowercase())
         };

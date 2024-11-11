@@ -13,28 +13,26 @@
 //
 
 use crate::var::list::List;
-use crate::var::storage::VarBuffer;
 use crate::var::Associative;
 use crate::var::{map, string, Sequence};
-use crate::var::{Error, Objid, VarType};
+use crate::var::{Error, Objid};
+use bincode::{Decode, Encode};
 use decorum::R64;
-use flexbuffers::{Reader, VectorBuilder};
 use num_traits::ToPrimitive;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
 /// Our series of types
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
 pub enum Variant {
     None,
     Obj(Objid),
     Int(i64),
     Float(f64),
-    List(Arc<List>),
-    Str(Arc<string::Str>),
-    Map(Arc<map::Map>),
+    List(List),
+    Str(string::Str),
+    Map(map::Map),
     Err(Error),
 }
 
@@ -102,142 +100,19 @@ impl Debug for Variant {
             Variant::Float(fl) => write!(f, "Float({})", fl),
             Variant::List(l) => {
                 // Items...
-                let r = l.reader.iter();
-                let i: Vec<_> = r.map(Variant::from_reader).collect();
+                let r = l.iter();
+                let i: Vec<_> = r.collect();
                 write!(f, "List([size = {}, items = {:?}])", l.len(), i)
             }
             Variant::Str(s) => write!(f, "String({:?})", s.as_string()),
             Variant::Map(m) => {
                 // Items...
-                let r = m.reader.iter();
-                let i: Vec<_> = r.map(Variant::from_reader).collect();
+                let r = m.iter();
+                let i: Vec<_> = r.collect();
                 write!(f, "Map([size = {}, items = {:?}])", m.len(), i)
             }
             Variant::Err(e) => write!(f, "Error({:?})", e),
         }
-    }
-}
-
-impl Variant {
-    pub(crate) fn from_bytes(buffer: VarBuffer) -> Self {
-        let reader = Reader::get_root(buffer).unwrap();
-        Self::from_reader(reader)
-    }
-
-    pub(crate) fn from_reader(vec: Reader<VarBuffer>) -> Self {
-        // Each Var is a vector of two elements, the type and the value.
-        let vec = vec.as_vector();
-
-        let mut vec_iter = vec.iter();
-        let type_reader = vec_iter.next().unwrap();
-        let t = type_reader.as_u8();
-        let t = VarType::from_repr(t).unwrap();
-
-        // Now we can match on the type and pull out the value.
-        match t {
-            VarType::TYPE_NONE => Variant::None,
-            VarType::TYPE_INT => {
-                let v = vec_iter.next().unwrap();
-                let i = v.as_i64();
-                Self::Int(i)
-            }
-            VarType::TYPE_FLOAT => {
-                let v = vec_iter.next().unwrap();
-                let f = v.as_f64();
-                Self::Float(f)
-            }
-            VarType::TYPE_OBJ => {
-                let v = vec_iter.next().unwrap();
-                let o = v.as_i64();
-                Self::Obj(Objid(o))
-            }
-            VarType::TYPE_STR => {
-                let v = vec_iter.next().unwrap();
-                Self::Str(Arc::new(string::Str { reader: v }))
-            }
-            VarType::TYPE_ERR => {
-                // Error code encoded as u8
-                let v = vec_iter.next().unwrap();
-                let e = v.as_u8();
-                let e = Error::from_repr(e).unwrap();
-                Self::Err(e)
-            }
-            VarType::TYPE_LIST => {
-                let v = vec_iter.next().unwrap();
-                let l = v.as_vector();
-                Self::List(Arc::new(List { reader: l }))
-            }
-            VarType::TYPE_LABEL => {
-                unimplemented!("Labels are not supported in actual values")
-            }
-            VarType::TYPE_MAP => {
-                let v = vec_iter.next().unwrap();
-                let m = v.as_vector();
-                Self::Map(Arc::new(map::Map { reader: m }))
-            }
-        }
-    }
-
-    /// Push a copy of Self into a flexbuffer
-    pub(crate) fn push_to(&self, item_vec: &mut VectorBuilder) {
-        match self {
-            Variant::None => {
-                item_vec.push(VarType::TYPE_NONE as u8);
-            }
-            Variant::Obj(o) => {
-                item_vec.push(VarType::TYPE_OBJ as u8);
-                item_vec.push(o.0);
-            }
-            Variant::Int(i) => {
-                item_vec.push(VarType::TYPE_INT as u8);
-                item_vec.push(*i);
-            }
-            Variant::Float(f) => {
-                item_vec.push(VarType::TYPE_FLOAT as u8);
-                item_vec.push(f.to_f64().unwrap());
-            }
-            Variant::List(l) => {
-                item_vec.push(VarType::TYPE_LIST as u8);
-                let mut vb = item_vec.start_vector();
-                // Then we iterate over the rest of the elements.
-                for i in 0..l.reader.len() {
-                    let item_reader = l.reader.idx(i);
-                    let v = Variant::from_reader(item_reader);
-                    v.push_item(&mut vb);
-                }
-                vb.end_vector();
-            }
-            Variant::Map(m) => {
-                item_vec.push(VarType::TYPE_MAP as u8);
-                let mut vb = item_vec.start_vector();
-                let mut iter = m.reader.iter();
-                // Now iterate over the pairs.
-                for _ in 0..m.len() {
-                    let k = iter.next().unwrap();
-                    let v = iter.next().unwrap();
-                    let key = Variant::from_reader(k);
-                    let value = Variant::from_reader(v);
-                    key.push_item(&mut vb);
-                    value.push_item(&mut vb);
-                }
-                vb.end_vector();
-            }
-            Variant::Str(s) => {
-                item_vec.push(VarType::TYPE_STR as u8);
-                item_vec.push(s.as_string().as_str());
-            }
-            Variant::Err(e) => {
-                item_vec.push(VarType::TYPE_ERR as u8);
-                item_vec.push(*e as u8);
-            }
-        }
-    }
-
-    /// Push a copy along with an item vector
-    pub(crate) fn push_item(&self, item_vec: &mut VectorBuilder) {
-        let mut vb = item_vec.start_vector();
-        self.push_to(&mut vb);
-        vb.end_vector();
     }
 }
 

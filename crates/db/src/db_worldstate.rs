@@ -359,7 +359,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Str(name) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.tx.set_object_name(obj, name.as_string())?;
+                self.tx.set_object_name(obj, name.as_string().clone())?;
                 return Ok(());
             }
 
@@ -367,7 +367,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Obj(owner) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.tx.set_object_owner(obj, owner)?;
+                self.tx.set_object_owner(obj, *owner)?;
                 return Ok(());
             }
 
@@ -375,7 +375,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Int(v) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                if v == 1 {
+                if *v == 1 {
                     flags.set(ObjFlag::Read);
                 } else {
                     flags.clear(ObjFlag::Read);
@@ -388,7 +388,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Int(v) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                if v == 1 {
+                if *v == 1 {
                     flags.set(ObjFlag::Write);
                 } else {
                     flags.clear(ObjFlag::Write);
@@ -401,7 +401,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Int(v) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                if v == 1 {
+                if *v == 1 {
                     flags.set(ObjFlag::Fertile);
                 } else {
                     flags.clear(ObjFlag::Fertile);
@@ -749,7 +749,7 @@ impl WorldState for DbTxWorldState {
                 Variant::List(a) => a
                     .iter()
                     .map(|v| match v.variant() {
-                        Variant::Str(s) => s.as_string(),
+                        Variant::Str(s) => s.as_string().clone(),
                         _ => "".to_string(),
                     })
                     .collect(),

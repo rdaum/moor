@@ -165,7 +165,7 @@ fn bf_sqrt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if x < 0.0 {
+    if *x < 0.0 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -183,7 +183,7 @@ fn bf_asin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if !(-1.0..=1.0).contains(&x) {
+    if !(-1.0..=1.0).contains(x) {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -201,7 +201,7 @@ fn bf_acos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if !(-1.0..=1.0).contains(&x) {
+    if !(-1.0..=1.0).contains(x) {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -224,7 +224,7 @@ fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    Ok(Ret(v_float(y.atan2(x))))
+    Ok(Ret(v_float(y.atan2(*x))))
 }
 bf_declare!(atan, bf_atan);
 
@@ -294,7 +294,7 @@ fn bf_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if x <= 0.0 {
+    if *x <= 0.0 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -312,7 +312,7 @@ fn bf_log10(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    if x <= 0.0 {
+    if *x <= 0.0 {
         return Err(BfErr::Code(E_ARGS));
     }
 

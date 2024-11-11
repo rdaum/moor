@@ -12,23 +12,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! TODO:
-//!     to_literal / formatting
-//!     move everything up and over into `../var`
-//!     go through all uses of existing var and update them to use the new var
-//!     any missed functionality along the way?
-//!     more tests, and make pass moot once above is done
-//!     later:
-//!         more documentation
-//!         builder vs reader mode? - optimization for values under construction.
-//!         some From/Into impls for common types might be missing
-
 mod error;
 mod list;
 mod map;
 mod objid;
 mod scalar;
-mod storage;
 mod string;
 mod symbol;
 #[allow(clippy::module_inception)]
@@ -40,7 +28,6 @@ pub use list::List;
 pub use map::Map;
 pub use objid::Objid;
 use std::fmt::Debug;
-use std::sync::Arc;
 pub use string::Str;
 use strum::FromRepr;
 pub use symbol::Symbol;
@@ -105,13 +92,13 @@ impl IndexMode {
     }
 }
 
-pub enum TypeClass {
-    Sequence(Arc<dyn Sequence>),
-    Associative(Arc<dyn Associative>),
+pub enum TypeClass<'a> {
+    Sequence(&'a dyn Sequence),
+    Associative(&'a dyn Associative),
     Scalar,
 }
 
-impl TypeClass {
+impl<'a> TypeClass<'a> {
     fn is_sequence(&self) -> bool {
         matches!(self, TypeClass::Sequence(_))
     }

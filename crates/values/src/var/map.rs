@@ -12,22 +12,20 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::storage::VarBuffer;
 use crate::var::var::Var;
 use crate::var::variant::Variant;
 use crate::var::Associative;
+use crate::var::Error;
 use crate::var::Error::{E_RANGE, E_TYPE};
-use crate::var::{Error, VarType};
-use bytes::Bytes;
-use flexbuffers::{BuilderOptions, VectorReader};
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use std::cmp::Ordering;
 use std::hash::Hash;
 
 #[derive(Clone)]
-pub struct Map {
-    // Reader must be boxed to avoid overfilling the stack.
-    pub reader: VectorReader<VarBuffer>,
-}
+pub struct Map(Box<im::Vector<(Var, Var)>>);
 
 impl Map {
     // Construct from an Iterator of paris
@@ -38,56 +36,23 @@ impl Map {
         // Construction, however, is O(n) because we need to insert the pairs in sorted order.
         // And make a copy, to boot.
         let mut sorted: Vec<_> = pairs.collect();
-        sorted.sort();
+        sorted.sort_by(|(a, _), (b, _)| a.cmp(b));
 
         Self::build_presorted(sorted.into_iter())
     }
 
     pub(crate) fn build_presorted<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        vb.push(VarType::TYPE_MAP as u8);
-        let mut mv = vb.start_vector();
-        for (k, v) in pairs {
-            k.variant().push_item(&mut mv);
-            v.variant().push_item(&mut mv);
-        }
-        mv.end_vector();
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var::from_bytes(buf)
+        let l = im::Vector::from(
+            pairs
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect::<Vec<_>>(),
+        );
+        let m = Map(Box::new(l));
+        Var::from_variant(Variant::Map(m))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (Var, Var)> + '_ {
-        (0..self.len()).map(move |i| {
-            let k = self.reader.idx(i * 2);
-            let v = self.reader.idx(i * 2 + 1);
-
-            (Var::from_reader(k), Var::from_reader(v))
-        })
-    }
-
-    fn binary_search<'a, F: Fn(&'a Var, &Var) -> Ordering>(
-        &self,
-        f: F,
-        c: &'a Var,
-    ) -> Option<usize> {
-        let n = self.reader.len() / 2;
-        let mut low = 0;
-        let mut high = (n as isize) - 1;
-        while low <= high {
-            let mid = (low + high) / 2;
-            let k = self.reader.idx((mid * 2) as usize);
-            let v = Var::from_reader(k);
-            match f(c, &v) {
-                Ordering::Less => high = mid - 1,
-                Ordering::Greater => low = mid + 1,
-                Ordering::Equal => return Some(mid as usize),
-            }
-        }
-
-        None
+        self.0.iter().map(|(k, v)| (k.clone(), v.clone()))
     }
 }
 
@@ -110,45 +75,33 @@ impl PartialEq for Map {
 
 impl Associative for Map {
     fn is_empty(&self) -> bool {
-        self.reader.len() == 0
+        self.0.is_empty()
     }
 
     fn len(&self) -> usize {
-        self.reader.len() / 2
+        self.0.len()
     }
 
     fn index(&self, key: &Var) -> Result<Var, Error> {
-        let n = self.reader.len() / 2;
-
-        if n == 0 {
-            return Err(E_RANGE);
+        // Binary search for the key.
+        let pos = self.0.binary_search_by(|(k, _)| k.cmp(key));
+        match pos {
+            Ok(pos) => Ok(self.0[pos].1.clone()),
+            Err(_) => Err(E_RANGE),
         }
-
-        // Items are in sorted order, so we can binary search.
-        let Some(pos) = self.binary_search(|a, b| a.cmp(b), key) else {
-            return Err(E_RANGE);
-        };
-
-        let v = self.reader.idx((pos * 2) + 1);
-        Ok(Var::from_reader(v))
     }
 
     fn index_in(&self, key: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
         // Check the values in the key-value pairs and return the index of the first match.
         // Linear O(N) operation.
-        for i in 0..self.len() {
-            let v = self.reader.idx((i * 2) + 1);
-            let v = Var::from_reader(v);
-            let matches = if case_sensitive {
-                v.eq_case_sensitive(key)
+        let pos = self.iter().position(|(_, v)| {
+            if case_sensitive {
+                v.cmp_case_sensitive(key) == Ordering::Equal
             } else {
-                v.eq(key)
-            };
-            if matches {
-                return Ok(Some(i));
+                v == *key
             }
-        }
-        Ok(None)
+        });
+        Ok(pos)
     }
 
     fn index_set(&self, key: &Var, value: &Var) -> Result<Var, Error> {
@@ -184,22 +137,20 @@ impl Associative for Map {
     /// Return the range of key-value pairs between the two keys.
     fn range(&self, from: &Var, to: &Var) -> Result<Var, Error> {
         // Find start with binary search.
-        let start = match self.binary_search(|a, b| a.cmp(b), from) {
-            Some(pos) => pos,
-            None => return Err(E_RANGE),
+        let start = match self.0.binary_search_by(|(k, _)| k.cmp(from)) {
+            Ok(pos) => pos,
+            Err(_) => return Err(E_RANGE),
         };
 
         // Now scan forward to find the end.
         let mut new_vec = Vec::new();
         for i in start..self.len() {
-            let k = self.reader.idx(i * 2);
-            let k = Var::from_reader(k);
-            let order = k.cmp(to);
-            if order == Ordering::Greater || order == Ordering::Equal {
+            let (k, v) = &self.0[i];
+            let ordering = k.cmp(to);
+            if ordering == Ordering::Greater || ordering == Ordering::Equal {
                 break;
             }
-            let v = self.reader.idx(i * 2 + 1);
-            new_vec.push((k, Var::from_reader(v)));
+            new_vec.push((k.clone(), v.clone()));
         }
 
         Ok(Self::build_presorted(new_vec.iter()))
@@ -237,59 +188,48 @@ impl Associative for Map {
     }
 
     fn keys(&self) -> Vec<Var> {
-        let mut keys = Vec::new();
-        for i in 0..self.len() {
-            let k = self.reader.idx(i * 2);
-            keys.push(Var::from_reader(k))
-        }
-        keys
+        self.0.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>()
     }
 
     fn values(&self) -> Vec<Var> {
-        let mut values = Vec::new();
-        for i in 0..self.len() {
-            let v = self.reader.idx(i * 2 + 1);
-            values.push(Var::from_reader(v))
-        }
-        values
+        self.0.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>()
     }
 
     fn contains_key(&self, key: &Var, case_sensitive: bool) -> Result<bool, Error> {
-        let n = self.reader.len() / 2;
-
-        if n == 0 {
+        if self.is_empty() {
             return Ok(false);
         }
         let cmp = |a: &Var, b: &Var| {
             if case_sensitive {
-                b.cmp_case_sensitive(a)
+                a.cmp_case_sensitive(b)
             } else {
-                b.cmp(a)
+                a.cmp(b)
             }
         };
-        let result = self.binary_search(cmp, key).is_some();
-        Ok(result)
+        Ok(self.0.binary_search_by(|(k, _)| cmp(k, key)).is_ok())
     }
 
     /// Return this map with the key/value pair removed.
     /// Return the new map and the value that was removed, if any
     fn remove(&self, key: &Var, case_sensitive: bool) -> (Var, Option<Var>) {
-        // Return a copy of self without the key, and the value that was removed, if any.
-        let mut new_pairs = Vec::with_capacity(self.len());
-        let mut removed = None;
-        for (k, v) in self.iter() {
-            let matches = if case_sensitive {
-                k.cmp_case_sensitive(key) == Ordering::Equal
+        let position = self.0.binary_search_by(|(k, _)| {
+            if case_sensitive {
+                k.cmp_case_sensitive(key)
             } else {
-                k == *key
-            };
-            if matches {
-                removed = Some(v);
-            } else {
-                new_pairs.push((k, v));
+                k.cmp(key)
+            }
+        });
+        match position {
+            Ok(pos) => {
+                let mut new = self.0.as_ref().clone();
+                new.remove(pos);
+                (Self::build(new.iter()), Some(self.0[pos].1.clone()))
+            }
+            Err(_) => {
+                let variant = Variant::Map(self.clone());
+                (Var::from_variant(variant), None)
             }
         }
-        (Self::build(new_pairs.iter()), removed)
     }
 }
 
@@ -328,6 +268,41 @@ impl Hash for Map {
     }
 }
 
+impl Encode for Map {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // encode the length followed by the elements in sequence
+        self.len().encode(encoder)?;
+        for pair in self.iter() {
+            pair.encode(encoder)?;
+        }
+        Ok(())
+    }
+}
+
+impl Decode for Map {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let len = usize::decode(decoder)?;
+        let mut l = im::Vector::new();
+        for _ in 0..len {
+            let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
+            l.push_back(pair);
+        }
+        Ok(Map(Box::new(l)))
+    }
+}
+
+impl<'de> BorrowDecode<'de> for Map {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let len = usize::decode(decoder)?;
+        let mut l = im::Vector::new();
+        for _ in 0..len {
+            let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
+            l.push_back(pair);
+        }
+        Ok(Map(Box::new(l)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::var::var::Var;
@@ -353,7 +328,7 @@ mod tests {
         let key = Var::mk_str("a");
         let value = m.index(&key, IndexMode::ZeroBased).unwrap();
         match value.variant() {
-            Variant::Int(i) => assert_eq!(i, 1),
+            Variant::Int(i) => assert_eq!(*i, 1),
             _ => panic!("Expected integer"),
         }
     }
@@ -431,7 +406,7 @@ mod tests {
         let key = Var::mk_str("b");
         let value = m.index(&key, IndexMode::ZeroBased).unwrap();
         match value.variant() {
-            Variant::Int(i) => assert_eq!(i, 2),
+            Variant::Int(i) => assert_eq!(*i, 2),
             _ => panic!("Expected integer"),
         }
     }
@@ -456,7 +431,7 @@ mod tests {
             Variant::Map(m) => {
                 let r = m.index(&Var::mk_str("b")).unwrap();
                 match r.variant() {
-                    Variant::Int(i) => assert_eq!(i, 42),
+                    Variant::Int(i) => assert_eq!(*i, 42),
                     _ => panic!("Expected integer, got {:?}", r),
                 }
             }
@@ -476,7 +451,7 @@ mod tests {
             Variant::Map(m) => {
                 let r = m.index(&Var::mk_str("d")).unwrap();
                 match r.variant() {
-                    Variant::Int(i) => assert_eq!(i, 42),
+                    Variant::Int(i) => assert_eq!(*i, 42),
                     _ => panic!("Expected integer, got {:?}", r),
                 }
             }
@@ -705,5 +680,16 @@ mod tests {
 
         assert!(!m_a.eq_case_sensitive(&m_b));
         assert!(m_a.eq(&m_b));
+    }
+
+    #[test]
+    fn test_contains_index() {
+        // ; $tmp = ["FOO" -> "BAR"];
+        // ; return "bar" in $tmp;
+        let m = Var::mk_map(&[(Var::mk_str("FOO"), Var::mk_str("BAR"))]);
+        let key = Var::mk_str("bar");
+
+        let result = m.index_in(&key, false, IndexMode::OneBased).unwrap();
+        assert_eq!(result, v_bool(true));
     }
 }

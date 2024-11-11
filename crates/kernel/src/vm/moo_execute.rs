@@ -169,7 +169,7 @@ pub fn moo_frame_execute(
                     f.jump(end_label);
                     return state.raise_error(E_TYPE);
                 };
-                let count = count as usize;
+                let count = *count as usize;
                 let Variant::List(l) = list.variant() else {
                     f.pop();
                     f.pop();
@@ -522,8 +522,8 @@ pub fn moo_frame_execute(
                 let Variant::Obj(obj) = obj.variant() else {
                     return state.push_error(E_INVIND);
                 };
-                let propname = Symbol::mk_case_insensitive(&propname.as_string());
-                let result = world_state.retrieve_property(a.permissions, obj, propname);
+                let propname = Symbol::mk_case_insensitive(propname.as_string());
+                let result = world_state.retrieve_property(a.permissions, *obj, propname);
                 match result {
                     Ok(v) => {
                         f.poke(0, v);
@@ -546,8 +546,8 @@ pub fn moo_frame_execute(
                 let Variant::Obj(obj) = obj.variant() else {
                     return state.push_error(E_INVIND);
                 };
-                let propname = Symbol::mk_case_insensitive(&propname.as_string());
-                let result = world_state.retrieve_property(a.permissions, obj, propname);
+                let propname = Symbol::mk_case_insensitive(propname.as_string());
+                let result = world_state.retrieve_property(a.permissions, *obj, propname);
                 match result {
                     Ok(v) => {
                         f.push(v);
@@ -571,9 +571,9 @@ pub fn moo_frame_execute(
                     }
                 };
 
-                let propname = Symbol::mk_case_insensitive(&propname.as_string());
+                let propname = Symbol::mk_case_insensitive(propname.as_string());
                 let update_result =
-                    world_state.update_property(a.permissions, obj, propname, &rhs.clone());
+                    world_state.update_property(a.permissions, *obj, propname, &rhs.clone());
 
                 match update_result {
                     Ok(()) => {
@@ -590,8 +590,8 @@ pub fn moo_frame_execute(
                 let time = f.pop();
 
                 let time = match time.variant() {
-                    Variant::Int(time) => time as f64,
-                    Variant::Float(time) => time,
+                    Variant::Int(time) => *time as f64,
+                    Variant::Float(time) => *time,
                     _ => {
                         return state.push_error(E_TYPE);
                     }
@@ -618,7 +618,7 @@ pub fn moo_frame_execute(
                 let Variant::List(args) = args.variant() else {
                     return state.push_error(E_TYPE);
                 };
-                return state.prepare_pass_verb(world_state, &args);
+                return state.prepare_pass_verb(world_state, args);
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
@@ -628,8 +628,8 @@ pub fn moo_frame_execute(
                         return state.push_error(E_TYPE);
                     }
                 };
-                let verb = Symbol::mk_case_insensitive(&verb.as_string());
-                return state.prepare_call_verb(world_state, obj, verb, args.clone());
+                let verb = Symbol::mk_case_insensitive(verb.as_string());
+                return state.prepare_call_verb(world_state, *obj, verb, args.clone());
             }
             Op::Return => {
                 let ret_val = f.pop();
@@ -667,10 +667,10 @@ pub fn moo_frame_execute(
                             let Variant::Err(e) = v.variant() else {
                                 panic!("Error codes list contains non-error code");
                             };
-                            e
+                            *e
                         });
                         f.catch_stack
-                            .push((CatchType::Errors(error_codes.collect()), *label));
+                            .push((CatchType::Errors(error_codes.into_iter().collect()), *label));
                     }
                     Variant::Int(0) => {
                         f.catch_stack.push((CatchType::Any, *label));

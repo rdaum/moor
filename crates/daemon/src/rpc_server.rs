@@ -636,7 +636,7 @@ impl RpcServer {
                 // with its new player objid and login result.
                 // If it's not an objid, that's considered an auth failure.
                 match v.variant() {
-                    Variant::Obj(o) => o,
+                    Variant::Obj(o) => *o,
                     _ => {
                         return Ok(LoginResult(None));
                     }

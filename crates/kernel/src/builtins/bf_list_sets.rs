@@ -264,15 +264,15 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Bf
         let Variant::Int(case_matters) = bf_args.args[2].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        case_matters == 1
+        *case_matters == 1
     } else {
         false
     };
 
     // TODO: Regex pattern cache?
     let Some((overall, match_vec)) = perform_regex_match(
-        &pattern.as_string(),
-        &subject.as_string(),
+        pattern.as_string(),
+        subject.as_string(),
         case_matters,
         reverse,
     )
@@ -404,10 +404,10 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let (Variant::Int(start), Variant::Int(end)) = (start.variant(), end.variant()) else {
             return Err(BfErr::Code(E_INVARG));
         };
-        mysubs.push((start as isize, end as isize));
+        mysubs.push((*start as isize, *end as isize));
     }
 
-    match substitute(&template.as_string(), &mysubs, &source.as_string()) {
+    match substitute(template.as_string(), &mysubs, source.as_string()) {
         Ok(r) => Ok(Ret(v_string(r))),
         Err(e) => Err(BfErr::Code(e)),
     }

@@ -123,9 +123,9 @@ impl<'a> Unparse<'a> {
                 || (s.chars().next().unwrap().is_numeric() && !s.starts_with('_'));
 
             if !needs_quotes {
-                s
+                s.clone()
             } else {
-                format!("({})", quote_str(&s))
+                format!("({})", quote_str(s))
             }
         } else {
             to_literal(var)
@@ -752,7 +752,7 @@ pub fn to_literal(v: &Var) -> String {
             result.push('}');
             result
         }
-        Variant::Str(s) => quote_str(&s.as_string()),
+        Variant::Str(s) => quote_str(s.as_string()),
         Variant::Map(m) => {
             let mut result = String::new();
             result.push('[');

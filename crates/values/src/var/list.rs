@@ -13,39 +13,26 @@
 //
 
 use crate::v_list_iter;
-use crate::var::storage::VarBuffer;
 use crate::var::var::Var;
 use crate::var::variant::Variant;
+use crate::var::Error;
 use crate::var::Error::E_RANGE;
 use crate::var::Sequence;
-use crate::var::{Error, VarType};
-use bytes::Bytes;
-use flexbuffers::{BuilderOptions, VectorReader};
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{BorrowDecode, Decode, Encode};
 use num_traits::ToPrimitive;
 use std::cmp::max;
 use std::hash::Hash;
 
 #[derive(Clone)]
-pub struct List {
-    // Reader must be boxed to avoid overfilling the stack.
-    pub reader: VectorReader<VarBuffer>,
-}
+pub struct List(Box<im::Vector<Var>>);
 
 impl List {
     pub fn build(values: &[Var]) -> Var {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        vb.push(VarType::TYPE_LIST as u8);
-        let mut lv = vb.start_vector();
-        for v in values {
-            let v = v.variant();
-            v.push_item(&mut lv);
-        }
-        lv.end_vector();
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var::from_bytes(buf)
+        let l = im::Vector::from(values.to_vec());
+        Var::from_variant(Variant::List(List(Box::new(l))))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Var> + '_ {
@@ -54,46 +41,45 @@ impl List {
 
     /// Remove the first found instance of `item` from the list.
     pub fn set_remove(&self, item: &Var) -> Result<Var, Error> {
-        let mut found = false;
-        let set_removed_iter = self.iter().filter_map(|v| {
-            if v == *item && !found {
-                found = true;
-                None
-            } else {
-                Some(v)
-            }
-        });
-        Ok(v_list_iter(set_removed_iter))
+        let idx = self.0.iter().position(|v| *v == *item);
+        let result = if let Some(idx) = idx {
+            let mut new = self.0.clone();
+            new.remove(idx);
+            List(new)
+        } else {
+            self.clone()
+        };
+        Ok(Var::from_variant(Variant::List(result)))
     }
 
     /// Add `item` to the list but only if it's not already there.
     pub fn set_add(&self, item: &Var) -> Result<Var, Error> {
         // Is the item already in the list? If so, just clone self
         if self.iter().any(|v| v == *item) {
-            return Ok(Var::from_variant(Variant::List(self.clone().into())));
+            return Ok(Var::from_variant(Variant::List(self.clone())));
         }
-        let set_added_iter = self.iter().chain(std::iter::once(item.clone()));
-        Ok(v_list_iter(set_added_iter))
+        let mut l = self.0.clone();
+        l.push_back(item.clone());
+        Ok(Var::from_variant(Variant::List(List(l))))
     }
 
     pub fn pop_front(&self) -> Result<(Var, Var), Error> {
         if self.is_empty() {
             return Err(E_RANGE);
         }
-        let mut iter = self.iter();
-        let first = iter.next().unwrap();
-        let rest = v_list_iter(iter);
-        Ok((first, rest))
+        let mut l = self.0.clone();
+        let first = l.pop_front().unwrap();
+        Ok((first, Var::from_variant(Variant::List(List(l)))))
     }
 }
 
 impl Sequence for List {
     fn is_empty(&self) -> bool {
-        self.reader.len() == 0
+        self.0.is_empty()
     }
 
     fn len(&self) -> usize {
-        self.reader.len()
+        self.0.len()
     }
 
     fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
@@ -122,26 +108,25 @@ impl Sequence for List {
     }
 
     fn index(&self, index: usize) -> Result<Var, Error> {
-        if index >= self.reader.len() {
+        if index >= self.len() {
             return Err(E_RANGE);
         }
-        Ok(Var::from_reader(self.reader.index(index).unwrap()))
+        Ok(self.0[index].clone())
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
-        if index >= self.reader.len() {
+        if index >= self.len() {
             return Err(E_RANGE);
         }
-        let replaced_iter = self
-            .iter()
-            .enumerate()
-            .map(|(i, v)| if i == index { value.clone() } else { v });
-        Ok(v_list_iter(replaced_iter))
+        let mut new = self.0.clone();
+        new[index] = value.clone();
+        Ok(Var::from_variant(Variant::List(List(new))))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
-        let with_added = self.iter().chain(std::iter::once(value.clone()));
-        Ok(Var::mk_list_iter(with_added))
+        let mut new = self.0.clone();
+        new.push_back(value.clone());
+        Ok(Var::from_variant(Variant::List(List(new))))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -268,21 +253,44 @@ impl Hash for List {
 
 impl FromIterator<Var> for Var {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
-        let mut builder = flexbuffers::Builder::new(BuilderOptions::empty());
-        let mut vb = builder.start_vector();
-        vb.push(VarType::TYPE_LIST as u8);
-        let mut lv = vb.start_vector();
-        for v in iter {
-            let v = v.variant();
-            v.push_item(&mut lv);
-        }
-        lv.end_vector();
-        vb.end_vector();
-        let buf = builder.take_buffer();
-        let buf = Bytes::from(buf);
-        Var::from_bytes(buf)
+        let l: im::Vector<Var> = im::Vector::from_iter(iter);
+        Var::from_variant(Variant::List(List(Box::new(l))))
     }
 }
+
+impl Encode for List {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // encode the length followed by the elements in sequence
+        self.len().encode(encoder)?;
+        for v in self.iter() {
+            v.encode(encoder)?;
+        }
+        Ok(())
+    }
+}
+
+impl Decode for List {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let len = usize::decode(decoder)?;
+        let mut l = im::Vector::new();
+        for _ in 0..len {
+            l.push_back(Var::decode(decoder)?);
+        }
+        Ok(List(Box::new(l)))
+    }
+}
+
+impl<'de> BorrowDecode<'de> for List {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let len = usize::decode(decoder)?;
+        let mut l = im::Vector::new();
+        for _ in 0..len {
+            l.push_back(Var::borrow_decode(decoder)?);
+        }
+        Ok(List(Box::new(l)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::v_bool;
@@ -306,7 +314,7 @@ mod tests {
         let r = l.index(&Var::mk_integer(1), IndexMode::ZeroBased).unwrap();
         let r = r.variant();
         match r {
-            Variant::Int(i) => assert_eq!(i, 2),
+            Variant::Int(i) => assert_eq!(*i, 2),
             _ => panic!("Expected integer, got {:?}", r),
         }
     }
@@ -355,7 +363,7 @@ mod tests {
         let r = l.index(&Var::mk_integer(1), IndexMode::ZeroBased).unwrap();
         let r = r.variant();
         match r {
-            Variant::Int(i) => assert_eq!(i, 2),
+            Variant::Int(i) => assert_eq!(*i, 2),
             _ => panic!("Expected integer, got {:?}", r),
         }
     }
@@ -376,7 +384,7 @@ mod tests {
                 let r = l.index(1).unwrap();
                 let r = r.variant();
                 match r {
-                    Variant::Int(i) => assert_eq!(i, 42),
+                    Variant::Int(i) => assert_eq!(*i, 42),
                     _ => panic!("Expected integer, got {:?}", r),
                 }
             }

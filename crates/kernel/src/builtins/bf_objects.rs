@@ -51,7 +51,10 @@ fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let is_valid = bf_args.world_state.valid(obj).map_err(world_state_bf_err)?;
+    let is_valid = bf_args
+        .world_state
+        .valid(*obj)
+        .map_err(world_state_bf_err)?;
     Ok(Ret(v_bool(is_valid)))
 }
 bf_declare!(valid, bf_valid);
@@ -68,7 +71,7 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let parent = bf_args
         .world_state
-        .parent_of(bf_args.task_perms_who(), obj)
+        .parent_of(bf_args.task_perms_who(), *obj)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_objid(parent)))
 }
@@ -86,7 +89,7 @@ fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     bf_args
         .world_state
-        .change_parent(bf_args.task_perms_who(), obj, new_parent)
+        .change_parent(bf_args.task_perms_who(), *obj, *new_parent)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_none()))
 }
@@ -101,7 +104,7 @@ fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let children = bf_args
         .world_state
-        .children_of(bf_args.task_perms_who(), obj)
+        .children_of(bf_args.task_perms_who(), *obj)
         .map_err(world_state_bf_err)?;
 
     let children = children.iter().map(v_objid).collect::<Vec<_>>();
@@ -325,7 +328,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     // look again anyways.
                     let Ok((binary, resolved_verb)) = bf_args.world_state.find_method_verb_on(
                         bf_args.task_perms_who(),
-                        head_obj,
+                        *head_obj,
                         *EXITFUNC_SYM,
                     ) else {
                         // If there's no :exitfunc, we can just move on to the next object.
@@ -344,8 +347,8 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         binary,
                         call: VerbCall {
                             verb_name: *EXITFUNC_SYM,
-                            location: head_obj,
-                            this: head_obj,
+                            location: *head_obj,
+                            this: *head_obj,
                             player: bf_args.exec_state.top().player,
                             args: vec![v_objid(obj)],
                             argstr: "".to_string(),
@@ -616,7 +619,7 @@ fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let verbs = bf_args
         .world_state
-        .verbs(bf_args.task_perms_who(), obj)
+        .verbs(bf_args.task_perms_who(), *obj)
         .map_err(world_state_bf_err)?;
     let verbs: Vec<_> = verbs
         .iter()
@@ -639,7 +642,7 @@ fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let props = bf_args
         .world_state
-        .properties(bf_args.task_perms_who(), obj)
+        .properties(bf_args.task_perms_who(), *obj)
         .map_err(world_state_bf_err)?;
     let props: Vec<_> = props.iter().map(|p| v_str(p.name())).collect();
     Ok(Ret(v_list(&props)))
@@ -657,7 +660,7 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_INVARG));
     };
 
-    let f = f == 1;
+    let f = *f == 1;
 
     // User must be a wizard.
     bf_args
@@ -669,7 +672,7 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Get and set object flags
     let mut flags = bf_args
         .world_state
-        .flags_of(obj)
+        .flags_of(*obj)
         .map_err(world_state_bf_err)?;
 
     if f {
@@ -680,12 +683,12 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args
         .world_state
-        .set_flags_of(bf_args.task_perms_who(), obj, flags)
+        .set_flags_of(bf_args.task_perms_who(), *obj, flags)
         .map_err(world_state_bf_err)?;
 
     // If the object was player, update the VM's copy of the perms.
-    if obj == bf_args.task_perms().map_err(world_state_bf_err)?.who {
-        bf_args.exec_state.set_task_perms(obj);
+    if *obj == bf_args.task_perms().map_err(world_state_bf_err)?.who {
+        bf_args.exec_state.set_task_perms(*obj);
     }
 
     Ok(Ret(v_none()))
