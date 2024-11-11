@@ -30,7 +30,7 @@ struct Args {
         long,
         value_name = "telnet-address",
         help = "Telnet server listen address",
-        default_value = "0.0.0.0:8080"
+        default_value = "0.0.0.0:8888"
     )]
     telnet_address: String,
 
