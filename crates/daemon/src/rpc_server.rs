@@ -23,6 +23,7 @@ use std::time::{Duration, SystemTime};
 use eyre::{Context, Error};
 
 use crate::connections::ConnectionsDB;
+use crate::connections_fjall::ConnectionsFjall;
 #[cfg(feature = "relbox")]
 use crate::connections_rb::ConnectionsRb;
 use crate::connections_wt::ConnectionsWT;
@@ -116,6 +117,7 @@ impl RpcServer {
             .expect("Unable to bind ZMQ PUB socket");
         let connections: Arc<dyn ConnectionsDB + Send + Sync> = match db_flavor {
             DatabaseFlavour::WiredTiger => Arc::new(ConnectionsWT::new(Some(connections_db_path))),
+            DatabaseFlavour::Fjall => Arc::new(ConnectionsFjall::new(Some(connections_db_path))),
             #[cfg(feature = "relbox")]
             DatabaseFlavour::RelBox => Arc::new(ConnectionsRb::new(Some(connections_db_path))),
         };

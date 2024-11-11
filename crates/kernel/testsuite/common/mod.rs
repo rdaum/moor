@@ -22,6 +22,7 @@ use EncodingMode::UTF8;
 use moor_compiler::Program;
 use moor_compiler::{compile, CompileOptions};
 use moor_db::Database;
+use moor_db_fjall::FjallDb;
 #[cfg(feature = "relbox")]
 use moor_db_relbox::RelBoxWorldState;
 use moor_db_wiredtiger::WiredTigerDB;
@@ -66,6 +67,13 @@ pub fn create_relbox_db() -> Box<dyn Database> {
 
 pub fn create_wiredtiger_db() -> Box<dyn Database> {
     let (db, _) = WiredTigerDB::open(None);
+    let db = Box::new(db);
+    load_textdump(db.as_ref());
+    db
+}
+
+pub fn create_fjall_db() -> Box<dyn Database> {
+    let (db, _) = FjallDb::open(None);
     let db = Box::new(db);
     load_textdump(db.as_ref());
     db

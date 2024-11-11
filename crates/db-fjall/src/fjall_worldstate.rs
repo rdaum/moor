@@ -12,66 +12,29 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use daumtils::SliceRef;
-use std::path::PathBuf;
-use std::sync::Arc;
-
-use strum::{EnumCount, IntoEnumIterator};
-
+use crate::fjall_db::FjallDb;
+use fjall::PersistMode;
 use moor_db::db_worldstate::DbTxWorldState;
 use moor_db::loader::LoaderInterface;
-use moor_db::{Database, RelationalWorldStateTransaction, WorldStateSequence, WorldStateTable};
-use moor_values::model::WorldStateError;
-use moor_values::model::{WorldState, WorldStateSource};
-use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
-use relbox::relation_info_for;
-use relbox::{RelBox, RelationInfo};
+use moor_db::{Database, RelationalWorldStateTransaction, WorldStateTable};
+use moor_values::model::{WorldState, WorldStateError, WorldStateSource};
 
-use crate::rel_transaction::RelboxTransaction;
-
-/// An implementation of `WorldState` / `WorldStateSource` that uses the relbox as its backing
-pub struct RelBoxWorldState {
-    db: Arc<RelBox>,
-}
-
-impl RelBoxWorldState {
-    pub fn open(path: Option<PathBuf>, memory_size: usize) -> (Self, bool) {
-        let relations: Vec<RelationInfo> = WorldStateTable::iter().map(relation_info_for).collect();
-
-        let db = RelBox::new(memory_size, path, &relations, WorldStateSequence::COUNT);
-
-        // Check the db for sys (#0) object to see if this is a fresh DB or not.
-        let fresh_db = {
-            let canonical = db.copy_canonical();
-            canonical[WorldStateTable::ObjectParent as usize]
-                .seek_by_domain(SliceRef::from_byte_source(
-                    SYSTEM_OBJECT.as_bytes().unwrap(),
-                ))
-                .expect("Could not seek for freshness check on DB")
-                .is_empty()
-        };
-        (Self { db }, fresh_db)
-    }
-}
-
-impl WorldStateSource for RelBoxWorldState {
+impl WorldStateSource for FjallDb<WorldStateTable> {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
-        let tx = self.db.clone().start_tx();
-        let tx = RelboxTransaction::new(tx);
+        let tx = self.new_transaction();
         let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
         Ok(Box::new(DbTxWorldState { tx: rel_tx }))
     }
 
     fn checkpoint(&self) -> Result<(), WorldStateError> {
-        // noop
+        self.keyspace.persist(PersistMode::SyncAll).unwrap();
         Ok(())
     }
 }
 
-impl Database for RelBoxWorldState {
+impl Database for FjallDb<WorldStateTable> {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
-        let tx = self.db.clone().start_tx();
-        let tx = RelboxTransaction::new(tx);
+        let tx = self.new_transaction();
         let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
         Ok(Box::new(DbTxWorldState { tx: rel_tx }))
     }
@@ -79,10 +42,8 @@ impl Database for RelBoxWorldState {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use strum::{EnumCount, IntoEnumIterator};
-
+    use crate::fjall_db::FjallDb;
+    use crate::FjallTransaction;
     use moor_db::{
         perform_reparent_props, perform_test_create_object, perform_test_create_object_fixed_id,
         perform_test_descendants, perform_test_location_contents, perform_test_max_object,
@@ -92,24 +53,20 @@ mod tests {
         perform_test_transitive_property_resolution,
         perform_test_transitive_property_resolution_clear_property, perform_test_verb_add_update,
         perform_test_verb_resolve, perform_test_verb_resolve_inherited,
-        perform_test_verb_resolve_wildcard, RelationalWorldStateTransaction, WorldStateSequence,
-        WorldStateTable,
+        perform_test_verb_resolve_wildcard, RelationalWorldStateTransaction, WorldStateTable,
     };
-    use relbox::{relation_info_for, RelBox, RelationInfo};
+    use std::path::Path;
 
-    use crate::rel_transaction::RelboxTransaction;
-
-    fn test_db() -> Arc<RelBox> {
-        let relations: Vec<RelationInfo> = WorldStateTable::iter().map(relation_info_for).collect();
-
-        RelBox::new(1 << 24, None, &relations, WorldStateSequence::COUNT)
+    fn test_db() -> super::FjallDb<WorldStateTable> {
+        let (db, _) = super::FjallDb::open(None);
+        db
     }
-
     pub fn begin_tx(
-        db: &Arc<RelBox>,
-    ) -> RelationalWorldStateTransaction<RelboxTransaction<WorldStateTable>> {
-        let tx = RelboxTransaction::new(db.clone().start_tx());
-        RelationalWorldStateTransaction { tx: Some(tx) }
+        db: &FjallDb<WorldStateTable>,
+    ) -> RelationalWorldStateTransaction<FjallTransaction<WorldStateTable>> {
+        RelationalWorldStateTransaction {
+            tx: Some(db.new_transaction()),
+        }
     }
 
     #[test]

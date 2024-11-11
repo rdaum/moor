@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::fmt::Debug;
 use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
 
@@ -107,7 +106,7 @@ where
     }
 
     fn increment_sequence<S: Into<u8>>(&self, seq: S) -> i64 {
-        self.sequences[seq.into() as usize].fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        self.sequences[seq.into() as usize].fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
     }
 
     /// Update the given sequence to `value` iff `value` is greater than the current value.
@@ -115,10 +114,14 @@ where
         let sequence = &self.sequences[seq.into() as usize];
         loop {
             let current = sequence.load(std::sync::atomic::Ordering::SeqCst);
+            let max = std::cmp::max(current, value);
+            if max <= current {
+                return current;
+            }
             if sequence
                 .compare_exchange(
                     current,
-                    std::cmp::max(current, value),
+                    max,
                     std::sync::atomic::Ordering::SeqCst,
                     std::sync::atomic::Ordering::SeqCst,
                 )
@@ -129,8 +132,8 @@ where
         }
     }
 
-    fn get_sequence<S: Into<u8>>(&self, seq: S) -> i64 {
-        self.sequences[seq.into() as usize].load(std::sync::atomic::Ordering::Relaxed)
+    fn get_sequence<S: Into<u8>>(&self, seq: S) -> Option<i64> {
+        Some(self.sequences[seq.into() as usize].load(std::sync::atomic::Ordering::Relaxed))
     }
 
     fn remove_by_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
@@ -173,7 +176,10 @@ where
         Ok(())
     }
 
-    fn remove_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+    fn remove_by_codomain<
+        Domain: Clone + Eq + PartialEq + AsByteBuffer,
+        Codomain: Clone + Eq + PartialEq + AsByteBuffer,
+    >(
         &self,
         rel: Tables,
         codomain: Codomain,
@@ -230,8 +236,8 @@ where
         Ok(())
     }
     fn insert_tuple<
-        Domain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
-        Codomain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
+        Domain: Clone + Eq + PartialEq + AsByteBuffer,
+        Codomain: Clone + Eq + PartialEq + AsByteBuffer,
     >(
         &self,
         rel: Tables,
@@ -254,8 +260,8 @@ where
             Ok(_) => {}
             Err(Error::DuplicateKey) => {
                 return Err(RelationalError::Duplicate(format!(
-                    "Duplicate key {:?} for relation {}",
-                    domain, rel
+                    "Duplicate key for relation {}",
+                    rel
                 )));
             }
             Err(e) => panic!("Unexpected error: {:?}", e),
@@ -383,8 +389,8 @@ where
     }
 
     fn seek_by_codomain<
-        Domain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
-        Codomain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
+        Domain: Clone + Eq + PartialEq + AsByteBuffer,
+        Codomain: Clone + Eq + PartialEq + AsByteBuffer,
         ResultSet: ValSet<Domain>,
     >(
         &self,

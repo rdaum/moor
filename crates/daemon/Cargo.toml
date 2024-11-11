@@ -16,6 +16,7 @@ moor-db-relbox = { path = "../db-relbox", optional = true }
 relbox = { workspace = true, optional = true }
 
 moor-db = { path = "../db" }
+moor-db-fjall = { path = "../db-fjall" }
 moor-db-wiredtiger = { path = "../db-wiredtiger" }
 moor-kernel = { path = "../kernel" }
 moor-values = { path = "../values" }
@@ -32,6 +33,7 @@ bytes.workspace = true
 color-eyre.workspace = true
 daumtils.workspace = true
 eyre.workspace = true
+fjall.workspace = true
 oneshot.workspace = true
 signal-hook.workspace = true
 tempfile.workspace = true

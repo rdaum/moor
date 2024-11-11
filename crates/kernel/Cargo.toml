@@ -14,6 +14,7 @@ description = "The actual implementation of most of the moor system; virtual mac
 
 [dev-dependencies]
 moor-db-wiredtiger = { path = "../db-wiredtiger" }
+moor-db-fjall = { path = "../db-fjall" }
 
 criterion.workspace = true
 eyre.workspace = true

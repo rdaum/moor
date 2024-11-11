@@ -22,15 +22,15 @@ use ed25519_dalek::SigningKey;
 use eyre::Report;
 
 use moor_db::DatabaseFlavour;
-use pem::Pem;
-use rand::rngs::OsRng;
-use rusty_paseto::core::Key;
-use tracing::{info, warn};
-
+use moor_db_fjall::FjallDbWorldStateSource;
 use moor_db_wiredtiger::WiredTigerDatabaseBuilder;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::{textdump_load, EncodingMode};
+use pem::Pem;
+use rand::rngs::OsRng;
+use rusty_paseto::core::Key;
+use tracing::{info, warn};
 
 use crate::rpc_server::RpcServer;
 
@@ -43,6 +43,7 @@ use rpc_common::load_keypair;
 
 mod connections;
 
+mod connections_fjall;
 #[cfg(feature = "relbox")]
 mod connections_rb;
 mod connections_wt;
@@ -50,6 +51,7 @@ mod rpc_hosts;
 mod rpc_server;
 mod rpc_session;
 mod sys_ctrl;
+mod tasks_fjall;
 mod tasks_wt;
 
 #[macro_export]
@@ -181,7 +183,7 @@ struct Args {
         // For those that don't appreciate proper English.
         alias = "db-flavor",
         help = "The database flavour to use",
-        default_value = "wiredtiger"
+        default_value = "fjall"
     )]
     db_flavour: DatabaseFlavour,
 
@@ -292,6 +294,11 @@ fn main() -> Result<(), Report> {
             info!(path = ?args.db, "Opened database");
             (db_source, freshly_made)
         }
+        DatabaseFlavour::Fjall => {
+            let (db, fresh) = FjallDbWorldStateSource::open(Some(&args.db));
+            let boxed_db: Box<dyn moor_db::Database> = Box::new(db);
+            (boxed_db, fresh)
+        }
         #[cfg(feature = "relbox")]
         DatabaseFlavour::RelBox => {
             let db_source_builder = RelBoxDatabaseBuilder::new()
@@ -341,6 +348,10 @@ fn main() -> Result<(), Report> {
     let tasks_db: Box<dyn TasksDb> = match args.db_flavour {
         DatabaseFlavour::WiredTiger => {
             let (tasks_db, _) = tasks_wt::WiredTigerTasksDb::open(Some(&args.tasks_db));
+            Box::new(tasks_db)
+        }
+        DatabaseFlavour::Fjall => {
+            let (tasks_db, _) = tasks_fjall::FjallTasksDB::open(&args.tasks_db);
             Box::new(tasks_db)
         }
         #[cfg(feature = "relbox")]

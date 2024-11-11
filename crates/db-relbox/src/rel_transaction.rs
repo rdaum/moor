@@ -101,17 +101,17 @@ where
     }
 
     fn increment_sequence<S: Into<u8>>(&self, seq: S) -> i64 {
-        self.tx.increment_sequence(seq.into() as usize) as i64
+        self.tx.increment_sequence(seq.into() as usize) + 1
     }
 
     fn update_sequence_max<S: Into<u8>>(&self, seq: S, value: i64) -> i64 {
         let seq_num = seq.into() as usize;
-        self.tx.update_sequence_max(seq_num, value as u64);
-        self.tx.sequence_current(seq_num) as i64
+        self.tx.update_sequence_max(seq_num, value);
+        self.tx.sequence_current(seq_num)
     }
 
-    fn get_sequence<S: Into<u8>>(&self, seq: S) -> i64 {
-        self.tx.sequence_current(seq.into() as usize) as i64
+    fn get_sequence<S: Into<u8>>(&self, seq: S) -> Option<i64> {
+        Some(self.tx.sequence_current(seq.into() as usize))
     }
 
     fn remove_by_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
@@ -141,7 +141,10 @@ where
             .map_err(err_map)
     }
 
-    fn remove_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+    fn remove_by_codomain<
+        Domain: Clone + Eq + PartialEq + AsByteBuffer,
+        Codomain: Clone + Eq + PartialEq + AsByteBuffer,
+    >(
         &self,
         _rel: T,
         _codomain: Codomain,
@@ -168,8 +171,8 @@ where
     }
 
     fn insert_tuple<
-        Domain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
-        Codomain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
+        Domain: Clone + Eq + PartialEq + AsByteBuffer,
+        Codomain: Clone + Eq + PartialEq + AsByteBuffer,
     >(
         &self,
         rel: T,
@@ -321,8 +324,8 @@ where
     }
 
     fn seek_by_codomain<
-        Domain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
-        Codomain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
+        Domain: Clone + Eq + PartialEq + AsByteBuffer,
+        Codomain: Clone + Eq + PartialEq + AsByteBuffer,
         ResultSet: ValSet<Domain>,
     >(
         &self,

@@ -167,7 +167,7 @@ impl TasksDb for WiredTigerTasksDb {
             .open_session(self.session_config.clone())
             .map_err(|e| {
                 error!("Failed to open session: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
+                TasksDbError::CouldNotSaveTask
             })?;
 
         session.begin_transaction(None).unwrap();
@@ -175,34 +175,34 @@ impl TasksDb for WiredTigerTasksDb {
             .open_cursor(&self.tasks_table, Some(CursorConfig::new().raw(true)))
             .map_err(|e| {
                 error!("Failed to open cursor: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
+                TasksDbError::CouldNotSaveTask
             })?;
 
         let task_id = task.task.task_id.to_le_bytes();
         let task_bytes = bincode::encode_to_vec(task, *BINCODE_CONFIG).map_err(|e| {
             error!("Failed to serialize record: {:?}", e);
-            TasksDbError::CouldNotLoadTasks
+            TasksDbError::CouldNotSaveTask
         })?;
 
         cursor
             .set_key(Datum::from_vec(task_id.to_vec()))
             .map_err(|e| {
                 error!("Failed to set key: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
+                TasksDbError::CouldNotSaveTask
             })?;
         cursor.set_value(Datum::from_vec(task_bytes)).map_err(|e| {
             error!("Failed to set value: {:?}", e);
-            TasksDbError::CouldNotLoadTasks
+            TasksDbError::CouldNotSaveTask
         })?;
 
         cursor.insert().map_err(|e| {
             error!("Failed to insert record: {:?}", e);
-            TasksDbError::CouldNotLoadTasks
+            TasksDbError::CouldNotSaveTask
         })?;
 
         session.commit().map_err(|e| {
             error!("Failed to commit transaction: {:?}", e);
-            TasksDbError::CouldNotLoadTasks
+            TasksDbError::CouldNotSaveTask
         })?;
 
         Ok(())
@@ -215,7 +215,7 @@ impl TasksDb for WiredTigerTasksDb {
             .open_session(self.session_config.clone())
             .map_err(|e| {
                 error!("Failed to open session: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
+                TasksDbError::CouldNotDeleteTask
             })?;
 
         session.begin_transaction(None).unwrap();
@@ -223,7 +223,7 @@ impl TasksDb for WiredTigerTasksDb {
             .open_cursor(&self.tasks_table, Some(CursorConfig::new().raw(true)))
             .map_err(|e| {
                 error!("Failed to open cursor: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
+                TasksDbError::CouldNotDeleteTask
             })?;
 
         let task_id = task_id.to_le_bytes();
@@ -232,16 +232,16 @@ impl TasksDb for WiredTigerTasksDb {
             .set_key(Datum::from_vec(task_id.to_vec()))
             .map_err(|e| {
                 error!("Failed to set key: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
+                TasksDbError::CouldNotDeleteTask
             })?;
         cursor.remove().map_err(|e| {
             error!("Failed to remove record: {:?}", e);
-            TasksDbError::CouldNotLoadTasks
+            TasksDbError::CouldNotDeleteTask
         })?;
 
         session.commit().map_err(|e| {
             error!("Failed to commit transaction: {:?}", e);
-            TasksDbError::CouldNotLoadTasks
+            TasksDbError::CouldNotDeleteTask
         })?;
 
         Ok(())
@@ -255,7 +255,7 @@ impl TasksDb for WiredTigerTasksDb {
             .open_session(self.session_config.clone())
             .map_err(|e| {
                 error!("Failed to open session: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
+                TasksDbError::CouldNotDeleteTask
             })?;
 
         session.begin_transaction(None).unwrap();
@@ -263,12 +263,12 @@ impl TasksDb for WiredTigerTasksDb {
             .open_cursor(&self.tasks_table, Some(CursorConfig::new().raw(true)))
             .map_err(|e| {
                 error!("Failed to open cursor: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
+                TasksDbError::CouldNotDeleteTask
             })?;
 
         cursor.reset().map_err(|e| {
             error!("Failed to reset cursor to start: {:?}", e);
-            TasksDbError::CouldNotLoadTasks
+            TasksDbError::CouldNotDeleteTask
         })?;
 
         loop {
@@ -279,19 +279,19 @@ impl TasksDb for WiredTigerTasksDb {
                 }
                 Err(e) => {
                     error!("Failed to advance cursor: {:?}", e);
-                    return Err(TasksDbError::CouldNotLoadTasks);
+                    return Err(TasksDbError::CouldNotDeleteTask);
                 }
             }
 
             cursor.remove().map_err(|e| {
                 error!("Failed to remove record: {:?}", e);
-                TasksDbError::CouldNotLoadTasks
+                TasksDbError::CouldNotDeleteTask
             })?;
         }
 
         session.commit().map_err(|e| {
             error!("Failed to commit transaction: {:?}", e);
-            TasksDbError::CouldNotLoadTasks
+            TasksDbError::CouldNotDeleteTask
         })?;
         Ok(())
     }

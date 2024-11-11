@@ -45,7 +45,7 @@ pub trait RelationalTransaction<Relation>: Send {
 
     fn increment_sequence<S: Into<u8>>(&self, seq: S) -> i64;
     fn update_sequence_max<S: Into<u8>>(&self, seq: S, value: i64) -> i64;
-    fn get_sequence<S: Into<u8>>(&self, seq: S) -> i64;
+    fn get_sequence<S: Into<u8>>(&self, seq: S) -> Option<i64>;
 
     fn remove_by_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
@@ -61,7 +61,10 @@ pub trait RelationalTransaction<Relation>: Send {
         domain_a: DomainA,
         domain_b: DomainB,
     ) -> Result<()>;
-    fn remove_by_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
+    fn remove_by_codomain<
+        Domain: Clone + Eq + PartialEq + AsByteBuffer,
+        Codomain: Clone + Eq + PartialEq + AsByteBuffer,
+    >(
         &self,
         rel: Relation,
         codomain: Codomain,
@@ -76,8 +79,8 @@ pub trait RelationalTransaction<Relation>: Send {
         codomain: Codomain,
     ) -> Result<()>;
     fn insert_tuple<
-        Domain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
-        Codomain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
+        Domain: Clone + Eq + PartialEq + AsByteBuffer,
+        Codomain: Clone + Eq + PartialEq + AsByteBuffer,
     >(
         &self,
         rel: Relation,
@@ -121,8 +124,8 @@ pub trait RelationalTransaction<Relation>: Send {
     ) -> Result<Domain>;
 
     fn seek_by_codomain<
-        Domain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
-        Codomain: Clone + Eq + PartialEq + AsByteBuffer + Debug,
+        Domain: Clone + Eq + PartialEq + AsByteBuffer,
+        Codomain: Clone + Eq + PartialEq + AsByteBuffer,
         ResultSet: ValSet<Domain>,
     >(
         &self,

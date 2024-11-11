@@ -46,6 +46,8 @@ pub enum DatabaseFlavour {
     /// WiredTiger, a high-performance, scalable, transactional storage engine, also used in MongoDB.
     /// Adaptation still under development.
     WiredTiger,
+    /// Fjall, and LSM-based storage engine (https://github.com/fjall-rs/fjall)
+    Fjall,
     /// In-house in-memory MVCC transactional store based on copy-on-write hashes and trees and
     /// custom buffer pool management. Consider experimental.
     #[cfg(feature = "relbox")]
@@ -58,6 +60,7 @@ impl From<&str> for DatabaseFlavour {
             "wiredtiger" => DatabaseFlavour::WiredTiger,
             #[cfg(feature = "relbox")]
             "relbox" => DatabaseFlavour::RelBox,
+            "fjall" => DatabaseFlavour::Fjall,
             _ => panic!("Unknown database flavour: {}", s),
         }
     }

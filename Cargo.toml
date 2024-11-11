@@ -5,6 +5,7 @@ members = [
     "crates/compiler",
     "crates/daemon",
     "crates/db",
+    "crates/db-fjall",
     "crates/db-relbox",
     "crates/db-wiredtiger",
     "crates/kernel",
@@ -133,6 +134,7 @@ thiserror = "2.0"
 paste = "1.0"
 
 # For the DB & values layer.
+fjall = { version = "2.3.2", default-features = false, features = ["ssi_tx", "bytes"] }
 libc = "0.2"
 relbox = { git = "https://github.com/rdaum/Relbox.git", version = "0.2.0" }
 text_io = "0.1" # Used for reading text dumps.

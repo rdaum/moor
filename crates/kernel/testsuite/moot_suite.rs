@@ -20,6 +20,7 @@ use std::{path::Path, sync::Arc};
 
 use eyre::Context;
 
+use crate::common::create_fjall_db;
 #[cfg(feature = "relbox")]
 use common::create_relbox_db;
 use common::{create_wiredtiger_db, testsuite_dir};
@@ -123,6 +124,11 @@ fn test_wiredtiger(path: &Path) {
 }
 test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiredtiger => test_wiredtiger }
 
+fn test_fjall(path: &Path) {
+    test(create_fjall_db(), path);
+}
+test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as fjall => test_fjall }
+
 struct NoopSessionFactory {}
 impl SessionFactory for NoopSessionFactory {
     fn mk_background_session(
@@ -170,5 +176,5 @@ fn test(db: Box<dyn Database>, path: &Path) {
 fn test_single() {
     // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
     // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    test_wiredtiger(&testsuite_dir().join("moot/truthiness.moot"));
+    test_fjall(&testsuite_dir().join("moot/truthiness.moot"));
 }

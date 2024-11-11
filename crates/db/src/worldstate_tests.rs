@@ -150,7 +150,7 @@ where
 
     let a = tx
         .create_object(
-            None,
+            Some(Objid(0)),
             ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
         )
         .unwrap();
@@ -1154,4 +1154,23 @@ where
         result.err().unwrap(),
         WorldStateError::PropertyNotFound(d, "test2".to_string())
     );
+}
+
+// Verify that 'max_object' is the highest object id in the database, not one higher.
+pub fn perform_test_max_object<F, TX>(begin_tx: F)
+where
+    F: Fn() -> RelationalWorldStateTransaction<TX>,
+    TX: RelationalTransaction<WorldStateTable>,
+{
+    let tx = begin_tx();
+    // Max object in a virgin DB should return #-1
+    let max_obj = tx.get_max_object().unwrap();
+    assert_eq!(max_obj, Objid(-1));
+    let obj = tx
+        .create_object(
+            None,
+            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+        )
+        .unwrap();
+    assert_eq!(tx.get_max_object().unwrap(), obj);
 }

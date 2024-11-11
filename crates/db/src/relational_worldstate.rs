@@ -125,7 +125,8 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             self.tx
                 .as_ref()
                 .unwrap()
-                .get_sequence(WorldStateSequence::MaximumObject),
+                .get_sequence(WorldStateSequence::MaximumObject)
+                .unwrap_or(-1),
         ))
     }
 
@@ -222,7 +223,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         self.tx
             .as_ref()
             .unwrap()
-            .update_sequence_max(WorldStateSequence::MaximumObject, id.0 + 1);
+            .update_sequence_max(WorldStateSequence::MaximumObject, id.0);
 
         Ok(id)
     }

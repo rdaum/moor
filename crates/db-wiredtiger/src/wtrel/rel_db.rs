@@ -69,7 +69,7 @@ where
         }
         let connection = Connection::open(path, options).unwrap();
 
-        let sequences = Arc::new([(); MAX_NUM_SEQUENCES].map(|_| AtomicI64::new(0)));
+        let sequences = Arc::new([(); MAX_NUM_SEQUENCES].map(|_| AtomicI64::new(-1)));
 
         Arc::new(WiredTigerRelDb {
             connection,

@@ -19,6 +19,10 @@ use moor_values::tasks::TaskId;
 pub enum TasksDbError {
     #[error("Could not load tasks")]
     CouldNotLoadTasks,
+    #[error("Could not save task")]
+    CouldNotSaveTask,
+    #[error("Could not delete task")]
+    CouldNotDeleteTask,
     #[error("Task not found: {0}")]
     TaskNotFound(TaskId),
 }
