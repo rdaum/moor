@@ -80,16 +80,3 @@ static_js_handler!(var_handler, "var.js");
 static_js_handler!(editor_handler, "editor.js");
 static_js_handler!(rpc_handler, "rpc.js");
 static_css_handler!(css_handler, "moor.css");
-
-static_js_handler!(flexbuffers_bit_width, "flexbuffers/bit-width.js");
-static_js_handler!(flexbuffers_bit_width_util, "flexbuffers/bit-width-util.js");
-static_js_handler!(flexbuffers_builder, "flexbuffers/builder.js");
-static_js_handler!(flexbuffers_util, "flexbuffers/flexbuffers-util.js");
-static_js_handler!(flexbuffers_reference, "flexbuffers/reference.js");
-static_js_handler!(flexbuffers_reference_util, "flexbuffers/reference-util.js");
-static_js_handler!(flexbuffers_stack_value, "flexbuffers/stack-value.js");
-static_js_handler!(flexbuffers_value_type, "flexbuffers/value-type.js");
-static_js_handler!(
-    flexbuffers_value_type_util,
-    "flexbuffers/value-type-util.js"
-);
