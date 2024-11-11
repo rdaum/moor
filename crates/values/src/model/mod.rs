@@ -42,6 +42,7 @@ mod world_state;
 use crate::Symbol;
 pub use world_state::WorldStateError;
 
+mod tied_flatbuffer;
 #[allow(dead_code, unused_imports)]
 #[allow(clippy::all)]
 #[path = "../../../../target/flatbuffers/values_generated.rs"]

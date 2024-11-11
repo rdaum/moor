@@ -15,58 +15,23 @@
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::r#match::VerbArgsSpec;
+use crate::model::tied_flatbuffer::TiedFlatBuffer;
 use crate::model::verbs::{BinaryType, VerbFlag};
 use crate::model::{uuid_fb, values_flatbuffers, ArgSpec, PrepSpec, Preposition};
 use crate::util::verbname_cmp;
 use crate::util::BitEnum;
-use crate::Objid;
 use crate::Symbol;
+use crate::{tied_flatbuffer, Objid};
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use bytes::Bytes;
+use flatbuffers::FlatBufferBuilder;
 use num_traits::FromPrimitive;
+use std::fmt::{Debug, Formatter};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct VerbDef(Bytes);
-
-fn pack_arg_spec(s: &ArgSpec) -> values_flatbuffers::moor::values::ArgSpec {
-    match s {
-        ArgSpec::None => values_flatbuffers::moor::values::ArgSpec::None,
-        ArgSpec::Any => values_flatbuffers::moor::values::ArgSpec::Any,
-        ArgSpec::This => values_flatbuffers::moor::values::ArgSpec::This,
-    }
-}
-
-fn unpack_arg_spec(s: values_flatbuffers::moor::values::ArgSpec) -> ArgSpec {
-    match s {
-        values_flatbuffers::moor::values::ArgSpec::None => ArgSpec::None,
-        values_flatbuffers::moor::values::ArgSpec::Any => ArgSpec::Any,
-        values_flatbuffers::moor::values::ArgSpec::This => ArgSpec::This,
-        _ => panic!("Invalid ArgSpec"),
-    }
-}
-fn pack_prep(p: &PrepSpec) -> i8 {
-    match p {
-        PrepSpec::Any => -2,
-        PrepSpec::None => -1,
-        PrepSpec::Other(p) => (*p as u16) as i8,
-    }
-}
-
-fn unpack_prep(p: i8) -> PrepSpec {
-    match p {
-        -2 => PrepSpec::Any,
-        -1 => PrepSpec::None,
-        p => PrepSpec::Other(Preposition::from_repr(p as u16).unwrap()),
-    }
-}
+tied_flatbuffer!(VerbDef, values_flatbuffers::moor::values::VerbDef<'static>);
 
 impl VerbDef {
-    fn from_bytes(bytes: Bytes) -> Self {
-        Self(bytes)
-    }
-
-    #[must_use]
     pub fn new(
         uuid: Uuid,
         location: Objid,
@@ -99,17 +64,7 @@ impl VerbDef {
         vbuilder.add_args(&args_builder);
         let root = vbuilder.finish();
         builder.finish_minimal(root);
-        let (vec, start) = builder.collapse();
-        let b = Bytes::from(vec);
-        let b = b.slice(start..);
-        Self(b)
-    }
-
-    pub(crate) fn get_flatbuffer(&self) -> values_flatbuffers::moor::values::VerbDef {
-        let vd = flatbuffers::root::<values_flatbuffers::moor::values::VerbDef>(self.0.as_ref())
-            .unwrap();
-        assert_eq!(vd.data_version(), DATA_LAYOUT_VERSION);
-        vd
+        Self::build(builder)
     }
 
     #[must_use]
@@ -143,6 +98,38 @@ impl VerbDef {
     }
 }
 
+fn pack_arg_spec(s: &ArgSpec) -> values_flatbuffers::moor::values::ArgSpec {
+    match s {
+        ArgSpec::None => values_flatbuffers::moor::values::ArgSpec::None,
+        ArgSpec::Any => values_flatbuffers::moor::values::ArgSpec::Any,
+        ArgSpec::This => values_flatbuffers::moor::values::ArgSpec::This,
+    }
+}
+
+fn unpack_arg_spec(s: values_flatbuffers::moor::values::ArgSpec) -> ArgSpec {
+    match s {
+        values_flatbuffers::moor::values::ArgSpec::None => ArgSpec::None,
+        values_flatbuffers::moor::values::ArgSpec::Any => ArgSpec::Any,
+        values_flatbuffers::moor::values::ArgSpec::This => ArgSpec::This,
+        _ => panic!("Invalid ArgSpec"),
+    }
+}
+
+fn pack_prep(p: &PrepSpec) -> i8 {
+    match p {
+        PrepSpec::Any => -2,
+        PrepSpec::None => -1,
+        PrepSpec::Other(p) => (*p as u16) as i8,
+    }
+}
+fn unpack_prep(p: i8) -> PrepSpec {
+    match p {
+        -2 => PrepSpec::Any,
+        -1 => PrepSpec::None,
+        p => PrepSpec::Other(Preposition::from_repr(p as u16).unwrap()),
+    }
+}
+
 impl Named for VerbDef {
     fn matches_name(&self, name: Symbol) -> bool {
         self.names()
@@ -167,28 +154,26 @@ impl HasUuid for VerbDef {
     }
 }
 
-impl AsByteBuffer for VerbDef {
-    fn size_bytes(&self) -> usize {
-        self.0.len()
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_ref()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_ref().to_vec())
-    }
-
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
-        // TODO: Validate VerbDef on decode
-        Ok(Self::from_bytes(bytes))
-    }
-
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(self.0.clone())
+impl Debug for VerbDef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VerbDef")
+            .field("uuid", &self.uuid())
+            .field("location", &self.location())
+            .field("owner", &self.owner())
+            .field("flags", &self.flags())
+            .field("binary_type", &self.binary_type())
+            .field("args", &self.args())
+            .finish()
     }
 }
+
+impl PartialEq for VerbDef {
+    fn eq(&self, other: &Self) -> bool {
+        self.uuid() == other.uuid()
+    }
+}
+
+impl Eq for VerbDef {}
 
 pub type VerbDefs = Defs<VerbDef>;
 
@@ -233,8 +218,8 @@ mod tests {
             VerbArgsSpec::this_none_this(),
         );
 
-        let bytes = vd.0.clone();
-        let vd2 = VerbDef::from_bytes(bytes);
+        let bytes = vd.0.data().clone();
+        let vd2 = VerbDef::from_bytes(bytes).unwrap();
 
         assert_eq!(vd, vd2);
         assert_eq!(vd.uuid(), vd2.uuid());
@@ -318,8 +303,8 @@ mod tests {
             VerbArgsSpec::this_none_this(),
         );
 
-        let bytes = vd1.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let vd2 = VerbDef::from_bytes(Bytes::from(bytes));
+        let bytes = vd1.make_copy_as_vec().unwrap();
+        let vd2 = VerbDef::from_bytes(Bytes::from(bytes)).unwrap();
         assert_eq!(vd1, vd2);
         assert_eq!(vd1.names(), Vec::<String>::new());
     }

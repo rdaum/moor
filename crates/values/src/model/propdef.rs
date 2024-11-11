@@ -14,21 +14,19 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
+use crate::model::tied_flatbuffer::TiedFlatBuffer;
 use crate::model::{uuid_fb, values_flatbuffers};
-use crate::Objid;
 use crate::Symbol;
+use crate::{tied_flatbuffer, Objid};
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use bytes::Bytes;
+use flatbuffers::FlatBufferBuilder;
+use std::fmt::{Debug, Formatter};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct PropDef(Bytes);
+tied_flatbuffer!(PropDef, values_flatbuffers::moor::values::PropDef<'static>);
 
 impl PropDef {
-    fn from_bytes(bytes: Bytes) -> Self {
-        Self(bytes)
-    }
-
     #[must_use]
     pub fn new(uuid: Uuid, definer: Objid, location: Objid, name: &str) -> Self {
         let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(256);
@@ -41,17 +39,7 @@ impl PropDef {
         pbuilder.add_uuid(&uuid_fb(&uuid));
         let root = pbuilder.finish();
         builder.finish_minimal(root);
-        let (vec, start) = builder.collapse();
-        let b = Bytes::from(vec);
-        let b = b.slice(start..);
-        Self(b)
-    }
-
-    fn get_flatbuffer(&self) -> values_flatbuffers::moor::values::PropDef {
-        let pd = flatbuffers::root::<values_flatbuffers::moor::values::PropDef>(self.0.as_ref())
-            .unwrap();
-        assert_eq!(pd.data_version(), DATA_LAYOUT_VERSION);
-        pd
+        Self::build(builder)
     }
 
     #[must_use]
@@ -67,29 +55,6 @@ impl PropDef {
     #[must_use]
     pub fn name(&self) -> &str {
         self.get_flatbuffer().name().unwrap()
-    }
-}
-
-impl AsByteBuffer for PropDef {
-    fn size_bytes(&self) -> usize {
-        self.0.len()
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(self.0.as_ref()))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_ref().to_vec())
-    }
-
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
-        // TODO: Validate propdef on decode
-        Ok(Self::from_bytes(bytes))
-    }
-
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(self.0.clone())
     }
 }
 
@@ -111,6 +76,25 @@ impl HasUuid for PropDef {
     }
 }
 
+impl Debug for PropDef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PropDef")
+            .field("uuid", &self.uuid())
+            .field("definer", &self.definer())
+            .field("location", &self.location())
+            .field("name", &self.name())
+            .finish()
+    }
+}
+
+impl PartialEq for PropDef {
+    fn eq(&self, other: &Self) -> bool {
+        self.uuid() == other.uuid()
+    }
+}
+
+impl Eq for PropDef {}
+
 pub type PropDefs = Defs<PropDef>;
 
 #[cfg(test)]
@@ -129,7 +113,7 @@ mod tests {
         let uuid = Uuid::new_v4();
         let test_pd = PropDef::new(uuid, Objid(1), Objid(2), "test");
 
-        let re_pd = PropDef::from_bytes(test_pd.0);
+        let re_pd = PropDef::from_bytes(test_pd.as_bytes().unwrap()).unwrap();
         assert_eq!(re_pd.uuid(), uuid);
         assert_eq!(re_pd.definer(), Objid(1));
         assert_eq!(re_pd.location(), Objid(2));
@@ -142,7 +126,7 @@ mod tests {
         let test_pd = PropDef::new(uuid, Objid(1), Objid(2), "test");
 
         let bytes = test_pd.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let re_pd = PropDef::from_bytes(bytes.into());
+        let re_pd = PropDef::from_bytes(bytes.into()).unwrap();
         assert_eq!(re_pd.uuid(), uuid);
         assert_eq!(re_pd.definer(), Objid(1));
         assert_eq!(re_pd.location(), Objid(2));
