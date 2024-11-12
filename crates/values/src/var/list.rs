@@ -309,6 +309,13 @@ impl<'de> BorrowDecode<'de> for List {
     }
 }
 
+impl std::iter::FromIterator<Var> for List {
+    fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
+        let l: im::Vector<Var> = im::Vector::from_iter(iter);
+        List(Box::new(l))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::v_bool;
