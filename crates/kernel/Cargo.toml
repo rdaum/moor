@@ -51,7 +51,6 @@ moor-values = { path = "../values" }
 moor-db-relbox = { path = "../db-relbox", optional = true }
 
 ## General usefulness
-arc-swap.workspace = true
 bytes.workspace = true
 chrono.workspace = true
 crossbeam-channel.workspace = true

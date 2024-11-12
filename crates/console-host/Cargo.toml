@@ -34,6 +34,5 @@ uuid.workspace = true
 zmq.workspace = true
 
 ## For console
-owo-colors.workspace = true
 rustyline.workspace = true
 signal-hook.workspace = true

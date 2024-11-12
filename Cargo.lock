@@ -118,12 +118,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arc-swap"
-version = "1.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
-
-[[package]]
 name = "async-trait"
 version = "0.1.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1753,7 +1747,6 @@ dependencies = [
  "eyre",
  "moor-compiler",
  "moor-values",
- "owo-colors",
  "rpc-common",
  "rpc-sync-client",
  "rustyline",
@@ -1849,7 +1842,6 @@ dependencies = [
 name = "moor-kernel"
 version = "0.1.0"
 dependencies = [
- "arc-swap",
  "bincode",
  "bytes",
  "chrono",
@@ -1895,7 +1887,6 @@ dependencies = [
 name = "moor-moot"
 version = "0.1.0"
 dependencies = [
- "eyre",
  "moor-values",
  "pretty_assertions",
  "tracing",
