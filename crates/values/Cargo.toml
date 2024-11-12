@@ -18,7 +18,6 @@ bytes.workspace = true
 daumtils.workspace = true
 decorum.workspace = true
 enum-primitive-derive.workspace = true
-flexbuffers.workspace = true
 im.workspace = true
 itertools.workspace = true
 lazy_static.workspace = true

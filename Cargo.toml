@@ -71,7 +71,8 @@ serde_derive = "1.0"
 serde_json = "1.0"
 tower-http = { version = "0.5.2", features = ["add-extension", "auth", "compression-full", "trace"] }
 
-## Asynchronous transaction processing & networking
+## Asynchronous transaction processing & networking, used in web-host and telnet-host.
+## the daemon itself uses its own threading
 futures = "0.3"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 tokio = { version = "1.37", features = ["full"] }
@@ -101,12 +102,11 @@ daumtils = { git = "https://github.com/rdaum/daumtils.git", version = "0.2.0" }
 decorum = "0.3" # For ordering & comparing our floats
 encoding_rs = "0.8.34"
 enum-primitive-derive = "0.3"
-flexbuffers = "2.0.0"
 im = "15.1"
-inventory = "0.3.15"
-itertools = "0.13.0"
+inventory = "0.3"
+itertools = "0.13"
 lazy_static = "1.5"
-num-traits = "0.2.19"
+num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
 owo-colors = "3.5"
 rustyline = "14.0"
@@ -130,7 +130,7 @@ pest_derive = "2.7"
 ## Error declaration/ handling
 color-eyre = "0.6"
 eyre = "0.6"
-thiserror = "1.0"
+thiserror = "2.0"
 
 ## For macro-ing
 paste = "1.0"
@@ -158,4 +158,4 @@ rusty_paseto = { version = "0.7" }
 signal-hook = "0.3"
 
 # For the telnet host
-termimad = "0.30"
+termimad = "0.31"
