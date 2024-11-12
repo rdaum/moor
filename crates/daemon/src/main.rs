@@ -219,6 +219,13 @@ struct Args {
         default_value = "true"
     )]
     map_type: bool,
+
+    #[arg(
+        long,
+        help = "Enable primitive-type verb dispatching. E.g. \"test\":reverse() becomes $string:reverse(\"test\")",
+        default_value = "true"
+    )]
+    type_dispatch: bool,
 }
 
 fn main() -> Result<(), Report> {
@@ -308,6 +315,7 @@ fn main() -> Result<(), Report> {
         rich_notify: args.rich_notify,
         lexical_scopes: args.lexical_scopes,
         map_type: args.map_type,
+        type_dispatch: args.type_dispatch,
     });
 
     // If the database already existed, do not try to import the textdump...

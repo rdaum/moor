@@ -34,6 +34,9 @@ pub struct Config {
     pub lexical_scopes: bool,
     /// Whether to support a Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt
     pub map_type: bool,
+    /// Whether to support primitive-type verb dispatching. E.g. "test":reverse() becomes
+    ///   $string:reverse("test")
+    pub type_dispatch: bool,
 }
 
 impl Default for Config {
@@ -44,6 +47,7 @@ impl Default for Config {
             textdump_encoding: EncodingMode::UTF8,
             lexical_scopes: true,
             map_type: true,
+            type_dispatch: true,
         }
     }
 }

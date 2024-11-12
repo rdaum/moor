@@ -27,12 +27,12 @@ use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 
 use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_TYPE, E_VARNF};
-use moor_values::Variant;
 use moor_values::{
     v_bool, v_empty_list, v_empty_map, v_err, v_float, v_int, v_list, v_none, v_obj, v_objid,
     IndexMode, Sequence,
 };
 use moor_values::{Symbol, VarType};
+use moor_values::{Variant, SYSTEM_OBJECT};
 
 macro_rules! binary_bool_op {
     ( $f:ident, $op:tt ) => {
@@ -623,13 +623,53 @@ pub fn moo_frame_execute(
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
                 let (args, verb, obj) = match (args.variant(), verb.variant(), obj.variant()) {
-                    (Variant::List(l), Variant::Str(s), Variant::Obj(o)) => (l, s, o),
+                    (Variant::List(l), Variant::Str(s), Variant::Obj(o)) => (l.clone(), s, *o),
+                    (Variant::List(l), Variant::Str(s), non_obj) => {
+                        if !exec_params.config.type_dispatch {
+                            return state.push_error(E_TYPE);
+                        }
+                        // If the object is not an object, we look at its type, and look for a
+                        // sysprop that corresponds, then dispatch to that, with the object as the
+                        // first argument.
+                        // e.g. "blah":reverse() becomes $string:reverse("blah")
+                        let sysprop_sym = match non_obj {
+                            Variant::Int(_) => Symbol::mk_case_insensitive("integer"),
+                            Variant::Float(_) => Symbol::mk_case_insensitive("float"),
+                            Variant::Str(_) => Symbol::mk_case_insensitive("string"),
+                            Variant::List(_) => Symbol::mk_case_insensitive("list"),
+                            Variant::Map(_) => Symbol::mk_case_insensitive("map"),
+                            Variant::Err(_) => Symbol::mk_case_insensitive("error"),
+                            _ => {
+                                return state.push_error(E_TYPE);
+                            }
+                        };
+                        let prop_val = match world_state.retrieve_property(
+                            a.permissions,
+                            SYSTEM_OBJECT,
+                            sysprop_sym,
+                        ) {
+                            Ok(prop_val) => prop_val,
+                            Err(e) => {
+                                return state.push_error(e.to_error_code());
+                            }
+                        };
+                        let Variant::Obj(prop_val) = prop_val.variant() else {
+                            return state.push_error(E_TYPE);
+                        };
+                        let arguments = l
+                            .insert(0, &obj)
+                            .expect("Failed to insert object for dispatch");
+                        let Variant::List(arguments) = arguments.variant() else {
+                            return state.push_error(E_TYPE);
+                        };
+                        (arguments.clone(), s, *prop_val)
+                    }
                     _ => {
                         return state.push_error(E_TYPE);
                     }
                 };
                 let verb = Symbol::mk_case_insensitive(verb.as_string());
-                return state.prepare_call_verb(world_state, *obj, verb, args.clone());
+                return state.prepare_call_verb(world_state, obj, verb, args);
             }
             Op::Return => {
                 let ret_val = f.pop();
