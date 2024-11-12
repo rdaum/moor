@@ -12,9 +12,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use lazy_static::lazy_static;
 use std::sync::Arc;
 use std::time::Duration;
-
 use tracing::debug;
 
 use crate::tasks::sessions::Session;
@@ -33,6 +33,15 @@ use moor_values::{
 };
 use moor_values::{Symbol, VarType};
 use moor_values::{Variant, SYSTEM_OBJECT};
+
+lazy_static! {
+    static ref LIST_SYM: Symbol = Symbol::mk("list");
+    static ref MAP_SYM: Symbol = Symbol::mk("map");
+    static ref STRING_SYM: Symbol = Symbol::mk("string");
+    static ref INTEGER_SYM: Symbol = Symbol::mk("integer");
+    static ref FLOAT_SYM: Symbol = Symbol::mk("float");
+    static ref ERROR_SYM: Symbol = Symbol::mk("error");
+}
 
 macro_rules! binary_bool_op {
     ( $f:ident, $op:tt ) => {
@@ -633,12 +642,12 @@ pub fn moo_frame_execute(
                         // first argument.
                         // e.g. "blah":reverse() becomes $string:reverse("blah")
                         let sysprop_sym = match non_obj {
-                            Variant::Int(_) => Symbol::mk_case_insensitive("integer"),
-                            Variant::Float(_) => Symbol::mk_case_insensitive("float"),
-                            Variant::Str(_) => Symbol::mk_case_insensitive("string"),
-                            Variant::List(_) => Symbol::mk_case_insensitive("list"),
-                            Variant::Map(_) => Symbol::mk_case_insensitive("map"),
-                            Variant::Err(_) => Symbol::mk_case_insensitive("error"),
+                            Variant::Int(_) => INTEGER_SYM.clone(),
+                            Variant::Float(_) => FLOAT_SYM.clone(),
+                            Variant::Str(_) => STRING_SYM.clone(),
+                            Variant::List(_) => LIST_SYM.clone(),
+                            Variant::Map(_) => MAP_SYM.clone(),
+                            Variant::Err(_) => ERROR_SYM.clone(),
                             _ => {
                                 return state.push_error(E_TYPE);
                             }
