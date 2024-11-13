@@ -13,10 +13,14 @@ description = "Utilities for connection to the 0MQ RPC server via tokio/async ca
 
 [dependencies]
 # Own
+moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
 
 bincode.workspace = true
 futures-util.workspace = true
+rusty_paseto.workspace = true
+thiserror.workspace = true
 tmq.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true

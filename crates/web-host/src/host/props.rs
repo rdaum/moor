@@ -19,7 +19,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use moor_values::model::ObjectRef;
 use moor_values::Symbol;
-use rpc_common::{EntityType, PropInfo, RpcRequest, RpcResponse};
+use rpc_common::{DaemonToClientReply, EntityType, HostClientToDaemonMessage, PropInfo};
 use serde_json::json;
 use std::net::SocketAddr;
 use tracing::{debug, error};
@@ -43,11 +43,11 @@ pub async fn properties_handler(
     let response = match web_host::rpc_call(
         client_id,
         &mut rpc_client,
-        RpcRequest::Properties(client_token.clone(), auth_token.clone(), object),
+        HostClientToDaemonMessage::Properties(client_token.clone(), auth_token.clone(), object),
     )
     .await
     {
-        Ok(RpcResponse::Properties(properties)) => Json(
+        Ok(DaemonToClientReply::Properties(properties)) => Json(
             properties
                 .iter()
                 .map(|prop| {
@@ -73,7 +73,10 @@ pub async fn properties_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -101,7 +104,7 @@ pub async fn property_retrieval_handler(
     let response = match web_host::rpc_call(
         client_id,
         &mut rpc_client,
-        RpcRequest::Retrieve(
+        HostClientToDaemonMessage::Retrieve(
             client_token.clone(),
             auth_token.clone(),
             object,
@@ -111,7 +114,7 @@ pub async fn property_retrieval_handler(
     )
     .await
     {
-        Ok(RpcResponse::PropertyValue(
+        Ok(DaemonToClientReply::PropertyValue(
             PropInfo {
                 definer,
                 location,
@@ -145,7 +148,10 @@ pub async fn property_retrieval_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 

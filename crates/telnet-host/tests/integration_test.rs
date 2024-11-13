@@ -84,7 +84,7 @@ fn telnet_host_bin() -> &'static PathBuf {
     })
 }
 
-fn start_telnet_host(uuid: Uuid, port: u16) -> ManagedChild {
+fn start_telnet_host(workdir: &Path, uuid: Uuid, port: u16) -> ManagedChild {
     ManagedChild::new(
         "telnet-host",
         Command::new(telnet_host_bin())
@@ -93,10 +93,13 @@ fn start_telnet_host(uuid: Uuid, port: u16) -> ManagedChild {
             .arg("--rpc-address")
             .arg(format!("{}{}", RPC_PATH_ROOT, uuid))
             .arg("--telnet-address")
-            .arg(format!("0.0.0.0:{}", port))
+            .arg("0.0.0.0")
+            .arg("--telnet-port")
+            .arg(format!("{}", port))
             .arg("--debug")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            .current_dir(workdir)
             .spawn()
             .expect("Failed to start telnet host"),
     )
@@ -111,16 +114,32 @@ fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
     // Assign our unique identifier for this test run to be used in the paths for the IPC sockets.
     let uuid = Uuid::new_v4();
 
-    let daemon_workdir = tempfile::TempDir::new().expect("Failed to create temporary directory");
+    let test_workdir = tempfile::TempDir::new().expect("Failed to create temporary directory");
+    let daemon = Arc::new(Mutex::new(start_daemon(test_workdir.path(), uuid)));
+    daemon.lock().unwrap().assert_running().unwrap();
 
-    let daemon = Arc::new(Mutex::new(start_daemon(daemon_workdir.path(), uuid)));
+    // Spin until the generated keypair is available (private_key.pem, public_key.pem in test_workdir)
+    let start = std::time::Instant::now();
+    loop {
+        if test_workdir.path().join("private_key.pem").exists() {
+            break;
+        }
+        if start.elapsed() > std::time::Duration::from_secs(5) {
+            panic!("Daemon failed to generate keypair in time for the test");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
 
     // Ask the OS for a random unused port. Then immediately drop the listener and use the port
     // for the telnet host.
     let listener = TcpListener::bind("0.0.0.0:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
-    let telnet_host = Arc::new(Mutex::new(start_telnet_host(uuid, port)));
+    let telnet_host = Arc::new(Mutex::new(start_telnet_host(
+        test_workdir.path(),
+        uuid,
+        port,
+    )));
 
     let daemon_clone = daemon.clone();
     let telnet_host_clone = telnet_host.clone();

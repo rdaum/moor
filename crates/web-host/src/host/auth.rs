@@ -19,7 +19,9 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Form;
 use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_common::{AuthToken, ClientToken, RpcRequest, RpcResponse, RpcResult};
+use rpc_common::{
+    AuthToken, ClientToken, DaemonToClientReply, HostClientToDaemonMessage, ReplyResult,
+};
 use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use tracing::{debug, error, warn};
@@ -83,14 +85,22 @@ async fn auth_handler(
 
     let words = vec![auth_verb.to_string(), player, password];
     let response = rpc_client
-        .make_rpc_call(
+        .make_client_rpc_call(
             client_id,
-            RpcRequest::LoginCommand(client_token.clone(), words, false),
+            HostClientToDaemonMessage::LoginCommand(
+                client_token.clone(),
+                host.handler_object,
+                words,
+                false,
+            ),
         )
         .await
         .expect("Unable to send login request to RPC server");
-    let RpcResult::Success(RpcResponse::LoginResult(Some((auth_token, _connect_type, player)))) =
-        response
+    let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(Some((
+        auth_token,
+        _connect_type,
+        player,
+    )))) = response
     else {
         error!(?response, "Login failed");
 
@@ -111,7 +121,10 @@ async fn auth_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 

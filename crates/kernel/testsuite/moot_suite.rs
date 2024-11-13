@@ -25,7 +25,7 @@ use common::create_relbox_db;
 use common::{create_wiredtiger_db, testsuite_dir};
 use moor_compiler::to_literal;
 use moor_db::Database;
-use moor_kernel::tasks::sessions::{SessionError, SessionFactory};
+use moor_kernel::tasks::sessions::{NoopSystemControl, SessionError, SessionFactory};
 use moor_kernel::tasks::NoopTasksDb;
 use moor_kernel::{
     config::Config,
@@ -138,7 +138,12 @@ fn test(db: Box<dyn Database>, path: &Path) {
         return;
     }
     let tasks_db = Box::new(NoopTasksDb {});
-    let scheduler = Scheduler::new(db, tasks_db, Arc::new(Config::default()));
+    let scheduler = Scheduler::new(
+        db,
+        tasks_db,
+        Arc::new(Config::default()),
+        Arc::new(NoopSystemControl::default()),
+    );
     let scheduler_client = scheduler.client().unwrap();
     let session_factory = Arc::new(NoopSessionFactory {});
     let scheduler_loop_jh = std::thread::Builder::new()

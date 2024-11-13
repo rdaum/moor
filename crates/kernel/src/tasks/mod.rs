@@ -244,7 +244,7 @@ pub mod scheduler_test_utils {
     use std::time::Duration;
 
     use moor_values::tasks::{CommandError, SchedulerError};
-    use moor_values::{Error::E_VERBNF, Objid, Var};
+    use moor_values::{Error::E_VERBNF, Objid, Var, SYSTEM_OBJECT};
 
     use super::TaskHandle;
     use crate::config::Config;
@@ -286,7 +286,7 @@ pub mod scheduler_test_utils {
         player: Objid,
         command: &str,
     ) -> Result<Var, SchedulerError> {
-        execute(|| scheduler.submit_command_task(player, command, session))
+        execute(|| scheduler.submit_command_task(SYSTEM_OBJECT, player, command, session))
     }
 
     pub fn call_eval(
@@ -305,12 +305,24 @@ pub mod scheduler_test_utils {
 pub enum TaskStart {
     /// The scheduler is telling the task to parse a command and execute whatever verbs are
     /// associated with it.
-    StartCommandVerb { player: Objid, command: String },
+    StartCommandVerb {
+        /// The object that will handle the command, usually #0 (the system object), but can
+        /// be a connection handler passed from `listen()`.
+        handler_object: Objid,
+        player: Objid,
+        command: String,
+    },
     /// The task start has been turned into an invocation to $do_command, which is a verb on the
     /// system object that is called when a player types a command. If it returns true, all is
     /// well and we just return. If it returns false, we intercept and turn it back into a
     /// StartCommandVerb and dispatch it as an old school parsed command.
-    StartDoCommand { player: Objid, command: String },
+    StartDoCommand {
+        /// The object that will handle the command, usually #0 (the system object), but can
+        /// be a connection handler passed from `listen()`.
+        handler_object: Objid,
+        player: Objid,
+        command: String,
+    },
     /// The scheduler is telling the task to run a (method) verb.
     StartVerb {
         player: Objid,

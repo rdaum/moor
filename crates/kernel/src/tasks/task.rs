@@ -236,11 +236,17 @@ impl Task {
                 // Special case: in case of return from $do_command @ top-level, we need to look at the results:
                 //      non-true value? => parse_command and restart.
                 //      true value? => commit and return success.
-                if let TaskStart::StartDoCommand { player, command } = &self.task_start.as_ref() {
+                if let TaskStart::StartDoCommand {
+                    handler_object,
+                    player,
+                    command,
+                } = &self.task_start.as_ref()
+                {
                     let (player, command) = (*player, command.clone());
                     if !result.is_true() {
                         // Intercept and rewrite us back to StartVerbCommand and do old school parse.
                         self.task_start = Arc::new(TaskStart::StartCommandVerb {
+                            handler_object: *handler_object,
                             player,
                             command: command.clone(),
                         });
@@ -326,8 +332,14 @@ impl Task {
         match self.task_start.clone().as_ref() {
             // We've been asked to start a command.
             // We need to set up the VM and then execute it.
-            TaskStart::StartCommandVerb { player, command } => {
-                if let Err(e) = self.start_command(*player, command.as_str(), world_state) {
+            TaskStart::StartCommandVerb {
+                handler_object,
+                player,
+                command,
+            } => {
+                if let Err(e) =
+                    self.start_command(*handler_object, *player, command.as_str(), world_state)
+                {
                     control_sender
                         .send((self.task_id, TaskControlMsg::TaskCommandError(e)))
                         .expect("Could not send start response");
@@ -409,6 +421,7 @@ impl Task {
 
     fn start_command(
         &mut self,
+        handler_object: Objid,
         player: Objid,
         command: &str,
         world_state: &mut dyn WorldState,
@@ -440,16 +453,17 @@ impl Task {
                 let args = arguments.iter().map(|s| v_str(s)).collect::<Vec<_>>();
                 let verb_call = VerbCall {
                     verb_name: Symbol::mk("do_command"),
-                    location: SYSTEM_OBJECT,
-                    this: SYSTEM_OBJECT,
+                    location: handler_object,
+                    this: handler_object,
                     player,
                     args,
                     argstr: command.to_string(),
-                    caller: SYSTEM_OBJECT,
+                    caller: handler_object,
                 };
                 self.vm_host
                     .start_call_method_verb(self.task_id, self.perms, verb_info, verb_call);
                 self.task_start = Arc::new(TaskStart::StartDoCommand {
+                    handler_object,
                     player,
                     command: command.to_string(),
                 });
@@ -780,6 +794,7 @@ mod tests {
         Receiver<(TaskId, TaskControlMsg)>,
     ) {
         let task_start = Arc::new(TaskStart::StartCommandVerb {
+            handler_object: SYSTEM_OBJECT,
             player: SYSTEM_OBJECT,
             command: command.to_string(),
         });

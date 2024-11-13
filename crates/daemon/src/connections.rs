@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::Objid;
-use rpc_common::RpcRequestError;
+use rpc_common::RpcMessageError;
 
 pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);
 
@@ -37,7 +37,7 @@ pub trait ConnectionsDB {
         client_id: Uuid,
         hostname: String,
         player: Option<Objid>,
-    ) -> Result<Objid, RpcRequestError>;
+    ) -> Result<Objid, RpcMessageError>;
 
     /// Record activity for the given client.
     fn record_client_activity(&self, client_id: Uuid, connobj: Objid) -> Result<(), eyre::Error>;

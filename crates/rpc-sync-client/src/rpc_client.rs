@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use rpc_common::{RpcError, RpcRequest, RpcResult};
+use rpc_common::{HostClientToDaemonMessage, ReplyResult, RpcError};
 use tracing::error;
 use uuid::Uuid;
 use zmq::Socket;
@@ -36,8 +36,8 @@ impl RpcSendClient {
     pub fn make_rpc_call(
         &mut self,
         client_id: Uuid,
-        rpc_msg: RpcRequest,
-    ) -> Result<RpcResult, RpcError> {
+        rpc_msg: HostClientToDaemonMessage,
+    ) -> Result<ReplyResult, RpcError> {
         let rpc_msg_payload = bincode::encode_to_vec(rpc_msg, bincode::config::standard())
             .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
 

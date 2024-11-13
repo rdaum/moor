@@ -642,12 +642,12 @@ pub fn moo_frame_execute(
                         // first argument.
                         // e.g. "blah":reverse() becomes $string:reverse("blah")
                         let sysprop_sym = match non_obj {
-                            Variant::Int(_) => INTEGER_SYM.clone(),
-                            Variant::Float(_) => FLOAT_SYM.clone(),
-                            Variant::Str(_) => STRING_SYM.clone(),
-                            Variant::List(_) => LIST_SYM.clone(),
-                            Variant::Map(_) => MAP_SYM.clone(),
-                            Variant::Err(_) => ERROR_SYM.clone(),
+                            Variant::Int(_) => *INTEGER_SYM,
+                            Variant::Float(_) => *FLOAT_SYM,
+                            Variant::Str(_) => *STRING_SYM,
+                            Variant::List(_) => *LIST_SYM,
+                            Variant::Map(_) => *MAP_SYM,
+                            Variant::Err(_) => *ERROR_SYM,
                             _ => {
                                 return state.push_error(E_TYPE);
                             }

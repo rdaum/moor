@@ -18,12 +18,12 @@ use tmq::subscribe::Subscribe;
 use tracing::trace;
 use uuid::Uuid;
 
-use rpc_common::{BroadcastEvent, ConnectionEvent, RpcError};
+use rpc_common::{ClientEvent, ClientsBroadcastEvent, HostBroadcastEvent, RpcError};
 
 pub async fn events_recv(
     client_id: Uuid,
     subscribe: &mut Subscribe,
-) -> Result<ConnectionEvent, RpcError> {
+) -> Result<ClientEvent, RpcError> {
     let Some(Ok(mut inbound)) = subscribe.next().await else {
         return Err(RpcError::CouldNotReceive(
             "Unable to receive published event".to_string(),
@@ -54,14 +54,14 @@ pub async fn events_recv(
     }
 
     let decode_result = bincode::decode_from_slice(event.as_ref(), bincode::config::standard());
-    let (msg, _msg_size): (ConnectionEvent, usize) = decode_result.map_err(|e| {
+    let (msg, _msg_size): (ClientEvent, usize) = decode_result.map_err(|e| {
         RpcError::CouldNotDecode(format!("Unable to decode published event: {}", e))
     })?;
 
     Ok(msg)
 }
 
-pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<BroadcastEvent, RpcError> {
+pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<ClientsBroadcastEvent, RpcError> {
     let Some(Ok(mut inbound)) = subscribe.next().await else {
         return Err(RpcError::CouldNotReceive(
             "Unable to receive broadcast message".to_string(),
@@ -95,9 +95,50 @@ pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<BroadcastEvent,
         ));
     };
 
-    let (msg, _msg_size): (BroadcastEvent, usize) =
+    let (msg, _msg_size): (ClientsBroadcastEvent, usize) =
         bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
             RpcError::CouldNotDecode(format!("Unable to decode broadcast message: {}", e))
+        })?;
+    Ok(msg)
+}
+
+pub async fn hosts_events_recv(subscribe: &mut Subscribe) -> Result<HostBroadcastEvent, RpcError> {
+    let Some(Ok(mut inbound)) = subscribe.next().await else {
+        return Err(RpcError::CouldNotReceive(
+            "Unable to receive host broadcast message".to_string(),
+        ));
+    };
+
+    trace!(message = ?inbound, "host_broadcast_message");
+    if inbound.len() != 2 {
+        return Err(RpcError::CouldNotDecode(format!(
+            "Unexpected message length: {}",
+            inbound.len()
+        )));
+    }
+
+    let Some(topic) = inbound.pop_front() else {
+        return Err(RpcError::CouldNotDecode(
+            "Unexpected message format".to_string(),
+        ));
+    };
+
+    if &topic[..] != b"hosts" {
+        return Err(RpcError::CouldNotDecode(format!(
+            "Unexpected topic: {:?}",
+            topic
+        )));
+    }
+
+    let Some(event) = inbound.pop_front() else {
+        return Err(RpcError::CouldNotDecode(
+            "Unexpected message format".to_string(),
+        ));
+    };
+
+    let (msg, _msg_size): (HostBroadcastEvent, usize) =
+        bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
+            RpcError::CouldNotDecode(format!("Unable to decode host broadcast message: {}", e))
         })?;
     Ok(msg)
 }

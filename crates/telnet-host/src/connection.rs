@@ -29,16 +29,14 @@ use moor_values::util::parse_into_words;
 use moor_values::{Objid, Symbol, Variant};
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_common::RpcRequest::ConnectionEstablish;
 use rpc_common::{
-    AuthToken, BroadcastEvent, ClientToken, ConnectType, ConnectionEvent, RpcRequestError,
-    RpcResult, VerbProgramResponse, BROADCAST_TOPIC,
+    AuthToken, ClientEvent, ClientToken, ClientsBroadcastEvent, ConnectType, HostType, ReplyResult,
+    RpcMessageError, VerbProgramResponse,
 };
-use rpc_common::{RpcRequest, RpcResponse};
+use rpc_common::{DaemonToClientReply, HostClientToDaemonMessage};
 use termimad::MadSkin;
 use tmq::subscribe::Subscribe;
-use tmq::{request, subscribe};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 use tokio::select;
 use tokio_util::codec::{Framed, LinesCodec};
 use tracing::{debug, error, info, trace, warn};
@@ -51,12 +49,18 @@ const OUT_OF_BAND_PREFIX: &str = "#$#";
 const CONTENT_TYPE_MARKDOWN: &str = "text/markdown";
 
 pub(crate) struct TelnetConnection {
-    client_id: Uuid,
+    pub(crate) peer_addr: SocketAddr,
+    /// The "handler" object, who is responsible for this connection, defaults to SYSTEM_OBJECT,
+    /// but custom listeners can be set up to handle connections differently.
+    pub(crate) handler_object: Objid,
+    /// The MOO connection object ID.
+    pub(crate) connection_oid: Objid,
+    pub(crate) client_id: Uuid,
     /// Current PASETO token.
-    client_token: ClientToken,
-    write: SplitSink<Framed<TcpStream, LinesCodec>, String>,
-    read: SplitStream<Framed<TcpStream, LinesCodec>>,
-    kill_switch: Arc<AtomicBool>,
+    pub(crate) client_token: ClientToken,
+    pub(crate) write: SplitSink<Framed<TcpStream, LinesCodec>, String>,
+    pub(crate) read: SplitStream<Framed<TcpStream, LinesCodec>>,
+    pub(crate) kill_switch: Arc<AtomicBool>,
 }
 
 /// The input modes the telnet session can be in.
@@ -71,7 +75,7 @@ enum LineMode {
 }
 
 impl TelnetConnection {
-    async fn run(
+    pub(crate) async fn run(
         &mut self,
         events_sub: &mut Subscribe,
         broadcast_sub: &mut Subscribe,
@@ -80,9 +84,14 @@ impl TelnetConnection {
         // Provoke welcome message, which is a login command with no arguments, and we
         // don't care about the reply at this point.
         rpc_client
-            .make_rpc_call(
+            .make_client_rpc_call(
                 self.client_id,
-                RpcRequest::LoginCommand(self.client_token.clone(), vec![], false),
+                HostClientToDaemonMessage::LoginCommand(
+                    self.client_token.clone(),
+                    self.handler_object,
+                    vec![],
+                    false,
+                ),
             )
             .await
             .expect("Unable to send login request to RPC server");
@@ -112,9 +121,9 @@ impl TelnetConnection {
 
         // Let the server know this client is gone.
         rpc_client
-            .make_rpc_call(
+            .make_client_rpc_call(
                 self.client_id,
-                RpcRequest::Detach(self.client_token.clone()),
+                HostClientToDaemonMessage::Detach(self.client_token.clone()),
             )
             .await?;
 
@@ -167,32 +176,32 @@ impl TelnetConnection {
                 Ok(event) = broadcast_recv(broadcast_sub) => {
                     trace!(?event, "broadcast_event");
                     match event {
-                        BroadcastEvent::PingPong(_server_time) => {
-                            let _ = rpc_client.make_rpc_call(self.client_id,
-                                RpcRequest::Pong(self.client_token.clone(), SystemTime::now())).await?;
+                        ClientsBroadcastEvent::PingPong(_server_time) => {
+                            let _ = rpc_client.make_client_rpc_call(self.client_id,
+                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(), self.connection_oid, HostType::TCP, self.peer_addr)).await?;
                         }
                     }
                 }
                 Ok(event) = events_recv(self.client_id, narrative_sub) => {
                     trace!(?event, "narrative_event");
                     match event {
-                        ConnectionEvent::SystemMessage(_author, msg) => {
+                        ClientEvent::SystemMessage(_author, msg) => {
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
                         }
-                        ConnectionEvent::Narrative(_author, event) => {
+                        ClientEvent::Narrative(_author, event) => {
                             self.output(event.event()).await?;
                         }
-                        ConnectionEvent::RequestInput(_request_id) => {
+                        ClientEvent::RequestInput(_request_id) => {
                             bail!("RequestInput before login");
                         }
-                        ConnectionEvent::Disconnect() => {
+                        ClientEvent::Disconnect() => {
                             self.write.close().await?;
                             bail!("Disconnect before login");
                         }
-                        ConnectionEvent::TaskError(te) => {
+                        ClientEvent::TaskError(te) => {
                             self.handle_task_error(te).await?;
                         }
-                        ConnectionEvent::TaskSuccess(result) => {
+                        ClientEvent::TaskSuccess(result) => {
                             trace!(?result, "TaskSuccess")
                             // We don't need to do anything with successes.
                         }
@@ -205,10 +214,11 @@ impl TelnetConnection {
                     };
                     let line = line.unwrap();
                     let words = parse_into_words(&line);
-                    let response = rpc_client.make_rpc_call(self.client_id,
-                        RpcRequest::LoginCommand(self.client_token.clone(), words, true)).await.expect("Unable to send login request to RPC server");
-                    if let RpcResult::Success(RpcResponse::LoginResult(Some((auth_token, connect_type, player)))) = response {
+                    let response = rpc_client.make_client_rpc_call(self.client_id,
+                        HostClientToDaemonMessage::LoginCommand(self.client_token.clone(), self.handler_object, words, true)).await.expect("Unable to send login request to RPC server");
+                    if let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(Some((auth_token, connect_type, player)))) = response {
                         info!(?player, client_id = ?self.client_id, "Login successful");
+                        self.connection_oid = player;
                         return Ok((auth_token, player, connect_type))
                     }
                 }
@@ -279,15 +289,15 @@ impl TelnetConnection {
                             // If the line begins with the out of band prefix, then send it that way,
                             // instead. And really just fire and forget.
                             if line.starts_with(OUT_OF_BAND_PREFIX) {
-                                rpc_client.make_rpc_call(self.client_id, RpcRequest::OutOfBand(self.client_token.clone(), auth_token.clone(), line)).await?
+                                rpc_client.make_client_rpc_call(self.client_id, HostClientToDaemonMessage::OutOfBand(self.client_token.clone(), auth_token.clone(), self.handler_object, line)).await?
                             } else {
-                                rpc_client.make_rpc_call(self.client_id, RpcRequest::Command(self.client_token.clone(), auth_token.clone(), line)).await?
+                                rpc_client.make_client_rpc_call(self.client_id, HostClientToDaemonMessage::Command(self.client_token.clone(), auth_token.clone(), self.handler_object, line)).await?
                             }
                         },
                         // Are we expecting to respond to prompt input? If so, send this through to that, and switch the mode back to input
                         LineMode::WaitingReply(ref input_reply_id) => {
                             line_mode = LineMode::Input;
-                            rpc_client.make_rpc_call(self.client_id, RpcRequest::RequestedInput(self.client_token.clone(), auth_token.clone(), *input_reply_id, line)).await?
+                            rpc_client.make_client_rpc_call(self.client_id, HostClientToDaemonMessage::RequestedInput(self.client_token.clone(), auth_token.clone(), *input_reply_id, line)).await?
 
                         }
                         LineMode::SpoolingProgram(target, verb) => {
@@ -299,7 +309,7 @@ impl TelnetConnection {
                                 let code = std::mem::take(&mut program_input);
                                 let target = ObjectRef::Match(target);
                                 let verb = Symbol::mk(&verb);
-                                rpc_client.make_rpc_call(self.client_id, RpcRequest::Program(self.client_token.clone(), auth_token.clone(), target, verb, code)).await?
+                                rpc_client.make_client_rpc_call(self.client_id, HostClientToDaemonMessage::Program(self.client_token.clone(), auth_token.clone(), target, verb, code)).await?
                             } else {
                                 // Otherwise, we're still spooling up the program, so just keep spooling.
                                 program_input.push(line);
@@ -309,18 +319,21 @@ impl TelnetConnection {
                     };
 
                     match response {
-                        RpcResult::Success(RpcResponse::CommandSubmitted(_)) |
-                        RpcResult::Success(RpcResponse::InputThanks) => {
+                        ReplyResult::ClientSuccess(DaemonToClientReply::CommandSubmitted(_)) |
+                        ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
                             // Nothing to do
                         }
-                        RpcResult::Failure(RpcRequestError::TaskError(te)) => {
+                        ReplyResult::HostSuccess(_) => {
+                            error!("Unexpected host response to client message!");
+                        }
+                        ReplyResult::Failure(RpcMessageError::TaskError(te)) => {
                             self.handle_task_error(te).await?;
                         }
-                        RpcResult::Failure(e) => {
+                        ReplyResult::Failure(e) => {
                             error!("Unhandled RPC error: {:?}", e);
                             continue;
                         }
-                        RpcResult::Success(RpcResponse::ProgramResponse(resp)) => {
+                        ReplyResult::ClientSuccess(DaemonToClientReply::ProgramResponse(resp)) => {
                             match resp {
                                 VerbProgramResponse::Success(o,verb) => {
                                     self.write.send(format!("0 error(s).\nVerb {} programmed on object {}", verb, o)).await?;
@@ -337,7 +350,7 @@ impl TelnetConnection {
                             }
                             continue;
                         }
-                        RpcResult::Success(s) => {
+                        ReplyResult::ClientSuccess(s) => {
                             error!("Unexpected RPC success: {:?}", s);
                             continue;
                         }
@@ -346,33 +359,33 @@ impl TelnetConnection {
                 Ok(event) = broadcast_recv(broadcast_sub) => {
                     trace!(?event, "broadcast_event");
                     match event {
-                        BroadcastEvent::PingPong(_server_time) => {
-                            let _ = rpc_client.make_rpc_call(self.client_id,
-                                RpcRequest::Pong(self.client_token.clone(), SystemTime::now())).await?;
+                        ClientsBroadcastEvent::PingPong(_server_time) => {
+                            let _ = rpc_client.make_client_rpc_call(self.client_id,
+                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(), self.connection_oid, HostType::TCP, self.peer_addr)).await?;
                         }
                     }
                 }
                 Ok(event) = events_recv(self.client_id, events_sub) => {
                     match event {
-                        ConnectionEvent::SystemMessage(_author, msg) => {
+                        ClientEvent::SystemMessage(_author, msg) => {
                             self.write.send(msg).await.with_context(|| "Unable to send message to client")?;
                         }
-                        ConnectionEvent::Narrative(_author, event) => {
+                        ClientEvent::Narrative(_author, event) => {
                             self.output(event.event()).await?;
                         }
-                        ConnectionEvent::RequestInput(request_id) => {
+                        ClientEvent::RequestInput(request_id) => {
                             // Server is requesting that the next line of input get sent through as a response to this request.
                             line_mode = LineMode::WaitingReply(request_id);
                         }
-                        ConnectionEvent::Disconnect() => {
+                        ClientEvent::Disconnect() => {
                             self.write.send("** Disconnected **".to_string()).await.expect("Unable to send disconnect message to client");
                             self.write.close().await.expect("Unable to close connection");
                             return Ok(())
                         }
-                        ConnectionEvent::TaskError(te) => {
+                        ClientEvent::TaskError(te) => {
                             self.handle_task_error(te).await?;
                         }
-                        ConnectionEvent::TaskSuccess(result) => {
+                        ClientEvent::TaskSuccess(result) => {
                             trace!(?result, "TaskSuccess")
                             // We don't need to do anything with successes.
 
@@ -440,105 +453,6 @@ impl TelnetConnection {
     }
 }
 
-pub async fn telnet_listen_loop(
-    telnet_sockaddr: SocketAddr,
-    rpc_address: &str,
-    events_address: &str,
-    kill_switch: Arc<AtomicBool>,
-) -> Result<(), eyre::Error> {
-    let listener = TcpListener::bind(telnet_sockaddr).await?;
-    let zmq_ctx = tmq::Context::new();
-    zmq_ctx
-        .set_io_threads(8)
-        .expect("Unable to set ZMQ IO threads");
-
-    loop {
-        if kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
-            info!("Kill switch activated, stopping...");
-            return Ok(());
-        }
-        let (stream, peer_addr) = listener.accept().await?;
-        let zmq_ctx = zmq_ctx.clone();
-        let pubsub_address = events_address.to_string();
-        let rpc_address = rpc_address.to_string();
-        let connection_kill_switch = kill_switch.clone();
-        tokio::spawn(async move {
-            let client_id = Uuid::new_v4();
-            info!(peer_addr = ?peer_addr, client_id = ?client_id,
-                "Accepted connection"
-            );
-
-            let rpc_request_sock = request(&zmq_ctx)
-                .set_rcvtimeo(100)
-                .set_sndtimeo(100)
-                .connect(rpc_address.as_str())
-                .expect("Unable to bind RPC server for connection");
-
-            // And let the RPC server know we're here, and it should start sending events on the
-            // narrative subscription.
-            debug!(rpc_address, "Contacting RPC server to establish connection");
-            let mut rpc_client = RpcSendClient::new(rpc_request_sock);
-
-            let (token, connection_oid) = match rpc_client
-                .make_rpc_call(client_id, ConnectionEstablish(peer_addr.to_string()))
-                .await
-            {
-                Ok(RpcResult::Success(RpcResponse::NewConnection(token, objid))) => {
-                    info!("Connection established, connection ID: {}", objid);
-                    (token, objid)
-                }
-                Ok(RpcResult::Failure(f)) => {
-                    bail!("RPC failure in connection establishment: {}", f);
-                }
-                Ok(_) => {
-                    bail!("Unexpected response from RPC server");
-                }
-                Err(e) => {
-                    bail!("Unable to establish connection: {}", e);
-                }
-            };
-            debug!(client_id = ?client_id, connection = ?connection_oid, "Connection established");
-
-            // Before attempting login, we subscribe to the events socket, using our client
-            // id. The daemon should be sending events here.
-            let events_sub = subscribe(&zmq_ctx)
-                .connect(pubsub_address.as_str())
-                .expect("Unable to connect narrative subscriber ");
-            let mut events_sub = events_sub
-                .subscribe(&client_id.as_bytes()[..])
-                .expect("Unable to subscribe to narrative messages for client connection");
-
-            let broadcast_sub = subscribe(&zmq_ctx)
-                .connect(pubsub_address.as_str())
-                .expect("Unable to connect broadcast subscriber ");
-            let mut broadcast_sub = broadcast_sub
-                .subscribe(BROADCAST_TOPIC)
-                .expect("Unable to subscribe to broadcast messages for client connection");
-
-            info!(
-                "Subscribed on pubsub socket for {:?}, socket addr {}",
-                client_id, pubsub_address
-            );
-
-            // Re-ify the connection.
-            let framed_stream = Framed::new(stream, LinesCodec::new());
-            let (write, read): (SplitSink<Framed<TcpStream, LinesCodec>, String>, _) =
-                framed_stream.split();
-            let mut tcp_connection = TelnetConnection {
-                client_token: token,
-                client_id,
-                write,
-                read,
-                kill_switch: connection_kill_switch,
-            };
-
-            tcp_connection
-                .run(&mut events_sub, &mut broadcast_sub, &mut rpc_client)
-                .await?;
-            Ok(())
-        });
-    }
-}
 fn markdown_to_ansi(markdown: &str) -> String {
     let skin = MadSkin::default_dark();
     // TODO: permit different text stylings here. e.g. user themes for colours, styling, etc.

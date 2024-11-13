@@ -18,7 +18,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use moor_values::tasks::NarrativeEvent;
-use moor_values::Objid;
+use moor_values::{Error, Objid};
 
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.
@@ -82,8 +82,8 @@ pub trait Session: Send + Sync {
     /// across multiple connections, etc.
     fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError>;
 
-    /// Process a (wizard) request for system shutdown, with an optional shutdown message.
-    fn shutdown(&self, msg: Option<String>) -> Result<(), SessionError>;
+    /// Let the player know that the server is shutting down, with an optional message.
+    fn notify_shutdown(&self, msg: Option<String>) -> Result<(), SessionError>;
 
     /// The 'name' of the *most recent* connection associated with the player.
     /// In a networked environment this is the hostname.
@@ -101,6 +101,29 @@ pub trait Session: Send + Sync {
 
     /// Return how many seconds the given player has been idle (no tasks submitted).
     fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError>;
+}
+
+/// A handle back to the controlling process (e.g. RpcServer) for handling system level events,
+/// such as shutdown, listen(), etc.
+///
+pub trait SystemControl: Send + Sync {
+    /// Process a (wizard) request for system shutdown, with an optional shutdown message.
+    fn shutdown(&self, msg: Option<String>) -> Result<(), Error>;
+
+    /// Ask hosts of `host_type` to listen on the given port, with the given handler object.
+    fn listen(
+        &self,
+        handler_object: Objid,
+        host_type: &str,
+        port: u16,
+        print_messages: bool,
+    ) -> Result<(), Error>;
+
+    /// Ask hosts of `host_type` to stop listening on the given port.
+    fn unlisten(&self, port: u16, host_type: &str) -> Result<(), Error>;
+
+    /// Return the set of listeners, their type, and the port they are listening on.
+    fn listeners(&self) -> Result<Vec<(Objid, String, u16, bool)>, Error>;
 }
 
 /// A factory for creating background sessions, usually on task resumption on server restart.
@@ -165,9 +188,10 @@ impl Session for NoopClientSession {
         Ok(())
     }
 
-    fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
+    fn notify_shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
         Ok(())
     }
+
     fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
         Ok(format!("player-{}", player.0))
     }
@@ -187,6 +211,32 @@ impl Session for NoopClientSession {
     }
 }
 
+#[derive(Default)]
+pub struct NoopSystemControl {}
+
+impl SystemControl for NoopSystemControl {
+    fn shutdown(&self, _msg: Option<String>) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn listen(
+        &self,
+        _handler_object: Objid,
+        _host_type: &str,
+        _port: u16,
+        _print_messages: bool,
+    ) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn unlisten(&self, _port: u16, _host_type: &str) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn listeners(&self) -> Result<Vec<(Objid, String, u16, bool)>, Error> {
+        Ok(vec![])
+    }
+}
 /// A 'mock' client connection which collects output in a vector of strings that tests can use to
 /// verify output.
 /// For now that's all it does, but facilities for pretending players are connected, mocking
@@ -270,7 +320,7 @@ impl Session for MockClientSession {
         Ok(())
     }
 
-    fn shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
+    fn notify_shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
         let mut system = self.system.write().unwrap();
         if let Some(msg) = msg {
             system.push(format!("shutdown: {}", msg));
@@ -300,5 +350,35 @@ impl Session for MockClientSession {
 
     fn idle_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
         Ok(0.0)
+    }
+}
+
+impl SystemControl for MockClientSession {
+    fn shutdown(&self, _msg: Option<String>) -> Result<(), Error> {
+        let mut system = self.system.write().unwrap();
+        system.push(String::from("shutdown"));
+        Ok(())
+    }
+
+    fn listen(
+        &self,
+        _handler_object: Objid,
+        _host_type: &str,
+        _port: u16,
+        _print_messages: bool,
+    ) -> Result<(), Error> {
+        let mut system = self.system.write().unwrap();
+        system.push(String::from("listen"));
+        Ok(())
+    }
+
+    fn unlisten(&self, port: u16, host_type: &str) -> Result<(), Error> {
+        let mut system = self.system.write().unwrap();
+        system.push(format!("unlisten: {} {}", host_type, port));
+        Ok(())
+    }
+
+    fn listeners(&self) -> Result<Vec<(Objid, String, u16, bool)>, Error> {
+        Ok(vec![(Objid(0), String::from("tcp"), 8888, true)])
     }
 }

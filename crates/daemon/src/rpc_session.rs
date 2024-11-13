@@ -97,8 +97,14 @@ impl Session for RpcSession {
         Ok(())
     }
 
-    fn shutdown(&self, _msg: Option<String>) -> Result<(), SessionError> {
-        todo!()
+    fn notify_shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
+        let shutdown_msg = match msg {
+            Some(msg) => format!("** Server is shutting down: {} **", msg),
+            None => "** Server is shutting down ** ".to_string(),
+        };
+        self.rpc_server
+            .send_system_message(self.client_id, self.player, shutdown_msg.clone())?;
+        Ok(())
     }
 
     fn connection_name(&self, player: Objid) -> Result<String, SessionError> {

@@ -35,8 +35,8 @@ use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::tasks::AbortLimitReason;
 use moor_values::util::BitEnum;
-use moor_values::{AsByteBuffer, Var, NOTHING, SYSTEM_OBJECT};
 use moor_values::Symbol;
+use moor_values::{AsByteBuffer, Var, NOTHING, SYSTEM_OBJECT};
 
 fn create_worldstate() -> WiredTigerDB {
     let (ws_source, _) = WiredTigerDB::open(None);

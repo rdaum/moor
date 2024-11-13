@@ -30,7 +30,7 @@ use moor_kernel::tasks::sessions::SessionError;
 use moor_values::AsByteBuffer;
 use moor_values::Objid;
 use relbox::{relation_info_for, RelBox, RelationId, RelationInfo, Transaction};
-use rpc_common::RpcRequestError;
+use rpc_common::RpcMessageError;
 
 use crate::connections::{ConnectionsDB, CONNECTION_TIMEOUT_DURATION};
 
@@ -191,7 +191,7 @@ impl ConnectionsDB for ConnectionsRb {
         client_id: Uuid,
         hostname: String,
         player: Option<Objid>,
-    ) -> Result<Objid, RpcRequestError> {
+    ) -> Result<Objid, RpcMessageError> {
         let connection_oid = match player {
             None => {
                 // The connection object is pulled from the sequence, then we invert it and subtract from

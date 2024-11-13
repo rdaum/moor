@@ -21,7 +21,9 @@ use axum::Json;
 use moor_values::model::ObjectRef;
 use moor_values::tasks::VerbProgramError;
 use moor_values::Symbol;
-use rpc_common::{EntityType, RpcRequest, RpcResponse, VerbInfo, VerbProgramResponse};
+use rpc_common::{
+    DaemonToClientReply, EntityType, HostClientToDaemonMessage, VerbInfo, VerbProgramResponse,
+};
 use serde_json::json;
 use std::net::SocketAddr;
 use tracing::{debug, error};
@@ -59,7 +61,7 @@ pub async fn verb_invoke_handler(
     let response = match web_host::rpc_call(
         client_id,
         &mut rpc_client,
-        RpcRequest::InvokeVerb(
+        HostClientToDaemonMessage::InvokeVerb(
             client_token.clone(),
             auth_token.clone(),
             object,
@@ -69,7 +71,7 @@ pub async fn verb_invoke_handler(
     )
     .await
     {
-        Ok(RpcResponse::InvokeResult(Ok(value))) => {
+        Ok(DaemonToClientReply::InvokeResult(Ok(value))) => {
             debug!("Invoke verb result: {:?}", value);
             let result_json = var_as_json(&value);
             Json(json!({
@@ -77,7 +79,7 @@ pub async fn verb_invoke_handler(
             }))
             .into_response()
         }
-        Ok(RpcResponse::InvokeResult(Err(e))) => {
+        Ok(DaemonToClientReply::InvokeResult(Err(e))) => {
             error!("Invoke verb error: {:?}", e);
             Json(json!({
                 "error": e.to_string()
@@ -93,7 +95,10 @@ pub async fn verb_invoke_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -128,27 +133,34 @@ pub async fn verb_program_handler(
     let response = match web_host::rpc_call(
         client_id,
         &mut rpc_client,
-        RpcRequest::Program(client_token.clone(), auth_token.clone(), object, name, code),
+        HostClientToDaemonMessage::Program(
+            client_token.clone(),
+            auth_token.clone(),
+            object,
+            name,
+            code,
+        ),
     )
     .await
     {
-        Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Success(objid, verb_name))) => {
-            Json(json!({
-                "location": objid.0,
-                "name": verb_name,
-            }))
-            .into_response()
-        }
-        Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Failure(
+        Ok(DaemonToClientReply::ProgramResponse(VerbProgramResponse::Success(
+            objid,
+            verb_name,
+        ))) => Json(json!({
+            "location": objid.0,
+            "name": verb_name,
+        }))
+        .into_response(),
+        Ok(DaemonToClientReply::ProgramResponse(VerbProgramResponse::Failure(
             VerbProgramError::NoVerbToProgram,
         ))) => {
             // 404
             StatusCode::NOT_FOUND.into_response()
         }
-        Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Failure(
+        Ok(DaemonToClientReply::ProgramResponse(VerbProgramResponse::Failure(
             VerbProgramError::DatabaseError,
         ))) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        Ok(RpcResponse::ProgramResponse(VerbProgramResponse::Failure(
+        Ok(DaemonToClientReply::ProgramResponse(VerbProgramResponse::Failure(
             VerbProgramError::CompilationError(errors),
         ))) => Json(json!({
             "errors": errors.iter().map(|e| e.to_string()).collect::<Vec<String>>()
@@ -163,7 +175,10 @@ pub async fn verb_program_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -191,7 +206,7 @@ pub async fn verb_retrieval_handler(
     let response = match web_host::rpc_call(
         client_id,
         &mut rpc_client,
-        RpcRequest::Retrieve(
+        HostClientToDaemonMessage::Retrieve(
             client_token.clone(),
             auth_token.clone(),
             object,
@@ -201,7 +216,7 @@ pub async fn verb_retrieval_handler(
     )
     .await
     {
-        Ok(RpcResponse::VerbValue(
+        Ok(DaemonToClientReply::VerbValue(
             VerbInfo {
                 location,
                 owner,
@@ -234,7 +249,10 @@ pub async fn verb_retrieval_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -260,11 +278,11 @@ pub async fn verbs_handler(
     let response = match web_host::rpc_call(
         client_id,
         &mut rpc_client,
-        RpcRequest::Verbs(client_token.clone(), auth_token.clone(), object),
+        HostClientToDaemonMessage::Verbs(client_token.clone(), auth_token.clone(), object),
     )
         .await
     {
-        Ok(RpcResponse::Verbs(verbs)) => Json(
+        Ok(DaemonToClientReply::Verbs(verbs)) => Json(
             verbs
                 .iter()
                 .map(|verb| {
@@ -291,7 +309,10 @@ pub async fn verbs_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 

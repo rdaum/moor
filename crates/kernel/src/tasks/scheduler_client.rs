@@ -45,6 +45,7 @@ impl SchedulerClient {
     #[instrument(skip(self, session))]
     pub fn submit_command_task(
         &self,
+        handler_object: Objid,
         player: Objid,
         command: &str,
         session: Arc<dyn Session>,
@@ -53,6 +54,7 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitCommandTask {
+                handler_object,
                 player,
                 command: command.to_string(),
                 session,
@@ -129,6 +131,7 @@ impl SchedulerClient {
     #[instrument(skip(self, session))]
     pub fn submit_out_of_band_task(
         &self,
+        handler_object: Objid,
         player: Objid,
         command: Vec<String>,
         argstr: String,
@@ -138,6 +141,7 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitOobTask {
+                handler_object,
                 player,
                 command,
                 argstr,
@@ -355,6 +359,7 @@ impl SchedulerClient {
 pub enum SchedulerClientMsg {
     /// Submit a command to be executed by the player.
     SubmitCommandTask {
+        handler_object: Objid,
         player: Objid,
         command: String,
         session: Arc<dyn Session>,
@@ -380,6 +385,7 @@ pub enum SchedulerClientMsg {
     },
     /// Submit an out-of-band task to be executed
     SubmitOobTask {
+        handler_object: Objid,
         player: Objid,
         command: Vec<String>,
         argstr: String,

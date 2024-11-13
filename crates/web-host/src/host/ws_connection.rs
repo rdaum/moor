@@ -21,11 +21,12 @@ use moor_values::{Objid, Var};
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_common::BroadcastEvent;
-use rpc_common::ConnectionEvent;
+use rpc_common::ClientsBroadcastEvent;
 use rpc_common::{
-    AuthToken, ClientToken, ConnectType, RpcRequest, RpcRequestError, RpcResponse, RpcResult,
+    AuthToken, ClientToken, ConnectType, DaemonToClientReply, HostClientToDaemonMessage,
+    ReplyResult, RpcMessageError,
 };
+use rpc_common::{ClientEvent, HostType};
 use serde_json::Value;
 use std::net::SocketAddr;
 use std::time::SystemTime;
@@ -43,6 +44,7 @@ pub struct WebSocketConnection {
     pub(crate) client_token: ClientToken,
     pub(crate) auth_token: AuthToken,
     pub(crate) rpc_client: RpcSendClient,
+    pub(crate) handler_object: Objid,
 }
 
 /// The JSON output of a narrative event.
@@ -105,16 +107,18 @@ impl WebSocketConnection {
                 Ok(event) = broadcast_recv(&mut self.broadcast_sub) => {
                     trace!(?event, "broadcast_event");
                     match event {
-                        BroadcastEvent::PingPong(_server_time) => {
-                            let _ = self.rpc_client.make_rpc_call(self.client_id,
-                                RpcRequest::Pong(self.client_token.clone(), SystemTime::now())).await.expect("Unable to send pong to RPC server");
+                        ClientsBroadcastEvent::PingPong(_server_time) => {
+                            let _ = self.rpc_client.make_client_rpc_call(self.client_id,
+                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(),
+                                    self.handler_object, HostType::WebSocket, self.peer_addr)).await.expect("Unable to send pong to RPC server");
+
                         }
                     }
                 }
                 Ok(event) = events_recv(self.client_id, &mut self.narrative_sub) => {
                     trace!(?event, "narrative_event");
                     match event {
-                        ConnectionEvent::SystemMessage(author, msg) => {
+                        ClientEvent::SystemMessage(author, msg) => {
                             Self::emit_narrative(&mut ws_sender, NarrativeOutput {
                                 author: author.0,
                                 system_message: Some(msg),
@@ -123,7 +127,7 @@ impl WebSocketConnection {
                                 server_time: SystemTime::now(),
                             }).await;
                         }
-                        ConnectionEvent::Narrative(_author, event) => {
+                        ClientEvent::Narrative(_author, event) => {
                             let msg = event.event();
                             let Event::Notify(msg, content_type) = msg;
                             let content_type = content_type.map(|s| s.to_string());
@@ -135,10 +139,10 @@ impl WebSocketConnection {
                                 server_time: event.timestamp(),
                             }).await;
                         }
-                        ConnectionEvent::RequestInput(request_id) => {
+                        ClientEvent::RequestInput(request_id) => {
                             expecting_input = Some(request_id);
                         }
-                        ConnectionEvent::Disconnect() => {
+                        ClientEvent::Disconnect() => {
                             Self::emit_narrative(&mut ws_sender, NarrativeOutput {
                                 author: self.player.0,
                                 system_message: Some("** Disconnected **".to_string()),
@@ -149,10 +153,10 @@ impl WebSocketConnection {
                             ws_sender.close().await.expect("Unable to close connection");
                             return ;
                         }
-                        ConnectionEvent::TaskError(te) => {
+                        ClientEvent::TaskError(te) => {
                             self.handle_task_error(&mut ws_sender, te).await.expect("Unable to handle task error");
                         }
-                        ConnectionEvent::TaskSuccess(s) => {
+                        ClientEvent::TaskSuccess(s) => {
                             Self::emit_value(&mut ws_sender, ValueResult(s)).await;
                         }
                     }
@@ -173,9 +177,9 @@ impl WebSocketConnection {
         let response = match expecting_input.take() {
             Some(input_request_id) => self
                 .rpc_client
-                .make_rpc_call(
+                .make_client_rpc_call(
                     self.client_id,
-                    RpcRequest::RequestedInput(
+                    HostClientToDaemonMessage::RequestedInput(
                         self.client_token.clone(),
                         self.auth_token.clone(),
                         input_request_id,
@@ -186,29 +190,37 @@ impl WebSocketConnection {
                 .expect("Unable to send input to RPC server"),
             None => self
                 .rpc_client
-                .make_rpc_call(
+                .make_client_rpc_call(
                     self.client_id,
-                    RpcRequest::Command(self.client_token.clone(), self.auth_token.clone(), cmd),
+                    HostClientToDaemonMessage::Command(
+                        self.client_token.clone(),
+                        self.auth_token.clone(),
+                        self.handler_object,
+                        cmd,
+                    ),
                 )
                 .await
                 .expect("Unable to send command to RPC server"),
         };
 
         match response {
-            RpcResult::Success(RpcResponse::CommandSubmitted(_))
-            | RpcResult::Success(RpcResponse::InputThanks) => {
+            ReplyResult::ClientSuccess(DaemonToClientReply::CommandSubmitted(_))
+            | ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
                 // Nothing to do
             }
-            RpcResult::Failure(RpcRequestError::TaskError(e)) => {
+            ReplyResult::Failure(RpcMessageError::TaskError(e)) => {
                 self.handle_task_error(ws_sender, e)
                     .await
                     .expect("Unable to handle task error");
             }
-            RpcResult::Failure(e) => {
+            ReplyResult::Failure(e) => {
                 error!("Unhandled RPC error: {:?}", e);
             }
-            RpcResult::Success(s) => {
+            ReplyResult::ClientSuccess(s) => {
                 error!("Unexpected RPC success: {:?}", s);
+            }
+            ReplyResult::HostSuccess(hs) => {
+                error!("Unexpected host success: {:?}", hs);
             }
         }
     }

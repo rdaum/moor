@@ -17,10 +17,10 @@ use tracing::trace;
 use uuid::Uuid;
 use zmq::Socket;
 
-use rpc_common::{BroadcastEvent, ConnectionEvent, RpcError};
+use rpc_common::{ClientEvent, ClientsBroadcastEvent, RpcError};
 
 /// Blocking receive on the narrative channel, returning a `ConnectionEvent`.
-pub fn events_recv(client_id: Uuid, subscribe: &Socket) -> Result<ConnectionEvent, RpcError> {
+pub fn events_recv(client_id: Uuid, subscribe: &Socket) -> Result<ClientEvent, RpcError> {
     let Ok(inbound) = subscribe.recv_multipart(0) else {
         return Err(RpcError::CouldNotReceive(
             "Unable to receive narrative message".to_string(),
@@ -48,7 +48,7 @@ pub fn events_recv(client_id: Uuid, subscribe: &Socket) -> Result<ConnectionEven
     }
 
     let decode_result = bincode::decode_from_slice(event.as_ref(), bincode::config::standard());
-    let (msg, _msg_size): (ConnectionEvent, usize) = decode_result.map_err(|e| {
+    let (msg, _msg_size): (ClientEvent, usize) = decode_result.map_err(|e| {
         RpcError::CouldNotDecode(format!("Unable to decode narrative message: {}", e))
     })?;
 
@@ -56,7 +56,7 @@ pub fn events_recv(client_id: Uuid, subscribe: &Socket) -> Result<ConnectionEven
 }
 
 /// Blocking receive on the broadcast channel, returning a `BroadcastEvent`.
-pub fn broadcast_recv(subscribe: &mut Socket) -> Result<BroadcastEvent, RpcError> {
+pub fn broadcast_recv(subscribe: &mut Socket) -> Result<ClientsBroadcastEvent, RpcError> {
     let Ok(inbound) = subscribe.recv_multipart(0) else {
         return Err(RpcError::CouldNotReceive(
             "Unable to receive broadcast message".to_string(),
@@ -80,7 +80,7 @@ pub fn broadcast_recv(subscribe: &mut Socket) -> Result<BroadcastEvent, RpcError
         )));
     }
 
-    let (msg, _msg_size): (BroadcastEvent, usize) =
+    let (msg, _msg_size): (ClientsBroadcastEvent, usize) =
         bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
             RpcError::CouldNotDecode(format!("Unable to decode broadcast message: {}", e))
         })?;

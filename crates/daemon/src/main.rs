@@ -39,6 +39,7 @@ use moor_db_relbox::RelBoxDatabaseBuilder;
 #[cfg(feature = "relbox")]
 use moor_kernel::tasks::NoopTasksDb;
 use moor_kernel::tasks::TasksDb;
+use rpc_common::load_keypair;
 
 mod connections;
 
@@ -128,7 +129,7 @@ struct Args {
     #[arg(
         long,
         value_name = "public_key",
-        help = "file containing a pkcs8 ed25519 public key, used for authenticating client connections",
+        help = "file containing a pkcs8 ed25519 public key, used for authenticating client & host connections",
         default_value = "public_key.pem"
     )]
     public_key: PathBuf,
@@ -136,7 +137,7 @@ struct Args {
     #[arg(
         long,
         value_name = "private_key",
-        help = "file containing a pkcs8 ed25519 private key, used for authenticating client connections",
+        help = "file containing a pkcs8 ed25519 private key, used for authenticating client & host connections",
         default_value = "private_key.pem"
     )]
     private_key: PathBuf,
@@ -251,21 +252,11 @@ fn main() -> Result<(), Report> {
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
     // the keypair from it...
     let keypair = if args.public_key.exists() && args.private_key.exists() {
-        let privkey_pem = std::fs::read(args.private_key).expect("Unable to read private key");
-        let pubkey_pem = std::fs::read(args.public_key).expect("Unable to read public key");
-
-        let privkey_pem = pem::parse(privkey_pem).expect("Unable to parse private key");
-        let pubkey_pem = pem::parse(pubkey_pem).expect("Unable to parse public key");
-
-        let mut key_bytes = privkey_pem.contents().to_vec();
-        key_bytes.extend_from_slice(pubkey_pem.contents());
-
-        let key: Key<64> = Key::from(&key_bytes[0..64]);
-        key
+        load_keypair(&args.public_key, &args.private_key)
+            .expect("Unable to load keypair from public and private key files")
     } else {
         // Otherwise, check to see if --generate-keypair was passed. If it was, generate a new
         // keypair and save it to the file; otherwise, error out.
-
         if args.generate_keypair {
             let mut csprng = OsRng;
             let signing_key: SigningKey = SigningKey::generate(&mut csprng);
@@ -355,12 +346,6 @@ fn main() -> Result<(), Report> {
         }
     };
 
-    // The pieces from core we're going to use:
-    //   Our DB.
-    //   Our scheduler.
-    let scheduler = Scheduler::new(database, tasks_db, config.clone());
-    let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
-
     // We have to create the RpcServer before starting the scheduler because we need to pass it in
     // as a parameter to the scheduler for background session construction.
 
@@ -374,16 +359,21 @@ fn main() -> Result<(), Report> {
         zmq_ctx.clone(),
         args.events_listen.as_str(),
         args.db_flavour,
-        config,
+        config.clone(),
     ));
+    let kill_switch = rpc_server.kill_switch();
+
+    // The pieces from core we're going to use:
+    //   Our DB.
+    //   Our scheduler.
+    let scheduler = Scheduler::new(database, tasks_db, config, rpc_server.clone());
+    let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
     // The scheduler thread:
     let scheduler_rpc_server = rpc_server.clone();
     let scheduler_loop_jh = std::thread::Builder::new()
         .name("moor-scheduler".to_string())
         .spawn(move || scheduler.run(scheduler_rpc_server))?;
-
-    let kill_switch = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     // Background DB checkpoint thread.
     let checkpoint_kill_switch = kill_switch.clone();
@@ -402,15 +392,13 @@ fn main() -> Result<(), Report> {
                 .expect("Failed to submit checkpoint");
         })?;
 
-    let rpc_kill_switch = kill_switch.clone();
-
     let rpc_loop_scheduler_client = scheduler_client.clone();
     let rpc_listen = args.rpc_listen.clone();
     let rpc_loop_thread = std::thread::Builder::new()
         .name("moor-rpc".to_string())
         .spawn(move || {
             rpc_server
-                .zmq_loop(rpc_listen, rpc_loop_scheduler_client, rpc_kill_switch)
+                .request_loop(rpc_listen, rpc_loop_scheduler_client)
                 .expect("RPC thread failed");
         })?;
 

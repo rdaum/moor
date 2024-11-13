@@ -16,24 +16,43 @@ use bincode::{Decode, Encode};
 use moor_values::model::ObjectRef;
 use moor_values::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
 use moor_values::{Objid, Symbol, Var};
+use pem::PemError;
+use rusty_paseto::prelude::Key;
+use std::net::SocketAddr;
+use std::path::Path;
 use std::time::SystemTime;
 use thiserror::Error;
 
-pub const BROADCAST_TOPIC: &[u8; 9] = b"broadcast";
+/// A ZMQ topic for broadcasting to all clients of all hosts.
+pub const CLIENT_BROADCAST_TOPIC: &[u8; 9] = b"broadcast";
 
-pub const MOOR_SESSION_TOKEN_FOOTER: &str = "key-id:moor_rpc";
+/// A ZMQ topic for broadcasting to just the hosts.
+pub const HOST_BROADCAST_TOPIC: &[u8; 5] = b"hosts";
+
+pub const MOOR_HOST_TOKEN_FOOTER: &str = "key-id:moor_host";
+pub const MOOR_SESSION_TOKEN_FOOTER: &str = "key-id:moor_client";
 pub const MOOR_AUTH_TOKEN_FOOTER: &str = "key-id:moor_player";
 
 /// Errors at the RPC transport / encoding layer.
 #[derive(Debug, Error)]
 pub enum RpcError {
+    #[error("could not initiate session: {0}")]
+    CouldNotInitiateSession(String),
+    #[error("could not authenticate: {0}")]
+    AuthenticationError(String),
     #[error("could not send RPC request: {0}")]
     CouldNotSend(String),
     #[error("could not receive RPC response: {0}")]
     CouldNotReceive(String),
     #[error("could not decode RPC response: {0}")]
     CouldNotDecode(String),
+    #[error("unexpected reply: {0}")]
+    UnexpectedReply(String),
 }
+
+/// PASETO public token representing the host's identity.
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
+pub struct HostToken(pub String);
 
 /// PASETO public token for a connection, used for the validation of RPC requests after the initial
 /// connection is established.
@@ -44,21 +63,64 @@ pub struct ClientToken(pub String);
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct AuthToken(pub String);
 
+#[derive(Debug, Eq, PartialEq, Clone, Decode, Encode)]
+pub enum MessageType {
+    HostToDaemon(HostToken),
+    /// A message from a host to the daemon on behalf of a client (client id is included)
+    HostClientToDaemon(Vec<u8>),
+}
+
+#[derive(Copy, Debug, Eq, PartialEq, Clone, Decode, Encode)]
+pub enum HostType {
+    TCP,
+    WebSocket,
+}
+
+impl HostType {
+    pub fn id_str(&self) -> &str {
+        match self {
+            HostType::TCP => "tcp",
+            HostType::WebSocket => "websocket",
+        }
+    }
+
+    pub fn parse_id_str(id_str: &str) -> Option<Self> {
+        match id_str {
+            "tcp" => Some(HostType::TCP),
+            "websocket" => Some(HostType::WebSocket),
+            _ => None,
+        }
+    }
+}
+/// An RPC message sent from a host itself to the daemon, on behalf of the host
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
-pub enum RpcRequest {
+pub enum HostToDaemonMessage {
+    /// Register the presence of this host's listeners with the daemon.
+    /// Lets the daemon know about the listeners, and then respond to the host with any additional
+    /// listeners that the daemon expects the host to start listening on.
+    RegisterHost(SystemTime, HostType, Vec<(Objid, SocketAddr)>),
+    /// Unregister the presence of this host's listeners with the daemon.
+    DetachHost(),
+    /// Respond to a host ping request.
+    HostPong(SystemTime, HostType, Vec<(Objid, SocketAddr)>),
+}
+
+/// An RPC message sent from a host to the daemon on behalf of a client.
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub enum HostClientToDaemonMessage {
     /// Establish a new connection, requesting a client token and a connection object
     ConnectionEstablish(String),
     /// Anonymously request a sysprop (e.g. $login.welcome_message)
     RequestSysProp(ClientToken, ObjectRef, Symbol),
     /// Login using the words (e.g. "create player bob" or "connect player bob") and return an
     /// auth token and the object id of the player. None if the login failed.
-    LoginCommand(ClientToken, Vec<String>, bool /* attach? */),
+    LoginCommand(ClientToken, Objid, Vec<String>, bool /* attach? */),
     /// Attach to a previously-authenticated user, returning the object id of the player,
     /// and a client token -- or None if the auth token is not valid.
     /// If a ConnectType is specified, the user_connected verb will be called.
-    Attach(AuthToken, Option<ConnectType>, String),
+    Attach(AuthToken, Option<ConnectType>, Objid, String),
     /// Send a command to be executed.
-    Command(ClientToken, AuthToken, String),
+    Command(ClientToken, AuthToken, Objid, String),
     /// Return the (visible) verbs on the given object.
     Verbs(ClientToken, AuthToken, ObjectRef),
     /// Invoke the given verb on the given object.
@@ -72,13 +134,13 @@ pub enum RpcRequest {
     /// Respond to a request for input.
     RequestedInput(ClientToken, AuthToken, u128, String),
     /// Send an "out of band" command to be executed.
-    OutOfBand(ClientToken, AuthToken, String),
+    OutOfBand(ClientToken, AuthToken, Objid, String),
     /// Evaluate a MOO expression.
     Eval(ClientToken, AuthToken, String),
     /// Resolve an object reference into a Var
     Resolve(ClientToken, AuthToken, ObjectRef),
-    /// Respond to a ping request.
-    Pong(ClientToken, SystemTime),
+    /// Respond to a client ping request.
+    ClientPong(ClientToken, SystemTime, Objid, HostType, SocketAddr),
     /// We're done with this connection, buh-bye.
     Detach(ClientToken),
 }
@@ -98,9 +160,10 @@ pub enum ConnectType {
 }
 
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
-pub enum RpcResult {
-    Success(RpcResponse),
-    Failure(RpcRequestError),
+pub enum ReplyResult {
+    HostSuccess(DaemonToHostReply),
+    ClientSuccess(DaemonToClientReply),
+    Failure(RpcMessageError),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
@@ -132,8 +195,19 @@ pub struct PropInfo {
     pub chown: bool,
 }
 
+/// An RPC message sent from the daemon to a host in response to a HostToDaemonMessage.
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
-pub enum RpcResponse {
+pub enum DaemonToHostReply {
+    /// The daemon is happy with this host and its messages.
+    Ack,
+    /// The daemon does not like this host for some reason. The host should die.
+    Reject(String),
+}
+
+/// An RPC message sent from the daemon to a client on a specific host, in response to a
+/// HostClientToDaemonMessage.
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+pub enum DaemonToClientReply {
     NewConnection(ClientToken, Objid),
     SysPropValue(Option<Var>),
     LoginResult(Option<(AuthToken, ConnectType, Objid)>),
@@ -152,13 +226,13 @@ pub enum RpcResponse {
     InvokeResult(Result<Var, SchedulerError>),
 }
 
-/// Errors at the call/request level.
+/// Errors at the message passing level.
 #[derive(Debug, PartialEq, Error, Clone, Decode, Encode)]
-pub enum RpcRequestError {
+pub enum RpcMessageError {
     #[error("Already connected")]
     AlreadyConnected,
     #[error("Invalid request")]
-    InvalidRequest,
+    InvalidRequest(String),
     #[error("No connection for client")]
     NoConnection,
     #[error("Could not retrieve system property")]
@@ -177,9 +251,9 @@ pub enum RpcRequestError {
     InternalError(String),
 }
 
-/// Events which occur over the pubsub channel, per client.
+/// Events which occur over the pubsub channel, but destined for specific clients.
 #[derive(Debug, PartialEq, Clone, Decode, Encode)]
-pub enum ConnectionEvent {
+pub enum ClientEvent {
     /// An event has occurred in the narrative that the connections for the given object are
     /// expected to see.
     Narrative(Objid, NarrativeEvent),
@@ -197,15 +271,67 @@ pub enum ConnectionEvent {
     TaskSuccess(Var),
 }
 
-/// Events which occur over the pubsub channel, but are for all hosts.
+/// Events which occur over the pubsub endpoint, but are for all the hosts.
 #[derive(Debug, Eq, PartialEq, Clone, Decode, Encode)]
-pub enum BroadcastEvent {
+pub enum HostBroadcastEvent {
+    /// The system is requesting that all hosts are of the given HostType begin listening on
+    /// the given port.
+    /// Triggered from the `listen` builtin.
+    Listen {
+        handler_object: Objid,
+        host_type: HostType,
+        port: u16,
+        print_messages: bool,
+    },
+    /// The system is requesting that all hosts of the given HostType stop listening on the given port.
+    Unlisten { host_type: HostType, port: u16 },
+    /// The system wants to know which hosts are still alive. They should respond by sending
+    /// a `HostPong` message RPC to the server.
+    /// If a host does not respond, the server will assume it is dead and remove its listeners
+    /// from the list of active listeners.
+    PingPong(SystemTime),
+}
+
+/// Events which occur over the pubsub endpoint, but are for all clients on all hosts.
+#[derive(Debug, Eq, PartialEq, Clone, Decode, Encode)]
+pub enum ClientsBroadcastEvent {
     /// The system wants to know which clients are still alive. The host should respond by sending
     /// a `Pong` message RPC to the server (and it will then respond with ThanksPong) for each
-    /// active client it still has.
+    /// active client it still has, along with the host type and IP address of the client.
+    /// This is used to keep track of which clients are still connected to the server, and
+    /// also to fill in output from `listeners`.
+    ///
     /// (The time parameter is the server's current time. The client will respond with its own
     /// current time. This could be used in the future to synchronize event times, but isn't currently
     /// used.)
     PingPong(SystemTime),
-    // TODO: Shutdown, Broadcast BroadcastEvent messages in RPC layer
+}
+
+#[derive(Error, Debug)]
+pub enum KeyError {
+    #[error("Could not read key from file: {0}")]
+    ParseError(PemError),
+    #[error("Could not read key from file: {0}")]
+    ReadError(std::io::Error),
+}
+
+/// Load a keypair from the given public and private key (PEM) files.
+pub fn load_keypair(public_key: &Path, private_key: &Path) -> Result<Key<64>, KeyError> {
+    let (Some(pubkey_pem), Some(privkey_pem)) = (
+        std::fs::read(public_key).ok(),
+        std::fs::read(private_key).ok(),
+    ) else {
+        return Err(KeyError::ReadError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Could not read key from file",
+        )));
+    };
+
+    let privkey_pem = pem::parse(privkey_pem).map_err(KeyError::ParseError)?;
+    let pubkey_pem = pem::parse(pubkey_pem).map_err(KeyError::ParseError)?;
+
+    let mut key_bytes = privkey_pem.contents().to_vec();
+    key_bytes.extend_from_slice(pubkey_pem.contents());
+
+    Ok(Key::from(&key_bytes[0..64]))
 }

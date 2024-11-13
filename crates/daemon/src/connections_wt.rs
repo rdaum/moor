@@ -33,7 +33,7 @@ use moor_kernel::tasks::sessions::SessionError;
 use moor_values::model::{CommitResult, ValSet};
 use moor_values::Objid;
 use moor_values::{AsByteBuffer, DecodingError, EncodingError};
-use rpc_common::RpcRequestError;
+use rpc_common::RpcMessageError;
 
 use crate::connections::{ConnectionsDB, CONNECTION_TIMEOUT_DURATION};
 use crate::connections_wt::ConnectionRelation::{
@@ -280,7 +280,7 @@ impl ConnectionsDB for ConnectionsWT {
         client_id: Uuid,
         hostname: String,
         player: Option<Objid>,
-    ) -> Result<Objid, RpcRequestError> {
+    ) -> Result<Objid, RpcMessageError> {
         retry_tx_action(&self.db, |tx| {
             let connection_oid = match player {
                 None => {
@@ -304,7 +304,7 @@ impl ConnectionsDB for ConnectionsWT {
 
             Ok(connection_oid)
         })
-        .map_err(|e| RpcRequestError::InternalError(e.to_string()))
+        .map_err(|e| RpcMessageError::InternalError(e.to_string()))
     }
 
     fn record_client_activity(&self, client_id: Uuid, _connobj: Objid) -> Result<(), Error> {

@@ -17,15 +17,26 @@ mod host;
 
 use crate::client::{editor_handler, js_handler, root_handler};
 use crate::host::WebHost;
+use std::collections::HashMap;
 
 use axum::routing::{get, post};
 use axum::Router;
 use clap::Parser;
 use clap_derive::Parser;
 
+use moor_values::{Objid, SYSTEM_OBJECT};
+use rpc_async_client::{
+    make_host_token, proces_hosts_events, start_host_session, ListenersClient, ListenersMessage,
+};
+use rpc_common::{load_keypair, HostType};
 use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::info;
+use tokio::select;
+use tokio::signal::unix::{signal, SignalKind};
+use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -33,7 +44,7 @@ struct Args {
         long,
         value_name = "listen-address",
         help = "HTTP listen address",
-        default_value = "0.0.0.0:8888"
+        default_value = "0.0.0.0:8080"
     )]
     listen_address: String,
 
@@ -52,8 +63,155 @@ struct Args {
         default_value = "ipc:///tmp/moor_events.sock"
     )]
     events_address: String,
+
+    #[arg(
+        long,
+        value_name = "public_key",
+        help = "file containing the pkcs8 ed25519 public key (shared with the daemon), used for authenticating client & host connections",
+        default_value = "public_key.pem"
+    )]
+    public_key: PathBuf,
+
+    #[arg(
+        long,
+        value_name = "private_key",
+        help = "file containing a pkcs8 ed25519 private key (shared with the daemon), used for authenticating client & host connections",
+        default_value = "private_key.pem"
+    )]
+    private_key: PathBuf,
 }
 
+struct Listeners {
+    listeners: HashMap<SocketAddr, Listener>,
+    zmq_ctx: tmq::Context,
+    rpc_address: String,
+    events_address: String,
+    kill_switch: Arc<AtomicBool>,
+}
+
+impl Listeners {
+    pub fn new(
+        zmq_ctx: tmq::Context,
+        rpc_address: String,
+        events_address: String,
+        kill_switch: Arc<AtomicBool>,
+    ) -> (
+        Self,
+        tokio::sync::mpsc::Receiver<ListenersMessage>,
+        ListenersClient,
+    ) {
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let listeners = Self {
+            listeners: HashMap::new(),
+            zmq_ctx,
+            rpc_address,
+            events_address,
+            kill_switch,
+        };
+        let listeners_client = ListenersClient::new(tx);
+        (listeners, rx, listeners_client)
+    }
+
+    pub async fn run(
+        &mut self,
+        mut listeners_channel: tokio::sync::mpsc::Receiver<ListenersMessage>,
+    ) {
+        self.zmq_ctx
+            .set_io_threads(8)
+            .expect("Unable to set ZMQ IO threads");
+
+        loop {
+            if self.kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                info!("Host kill switch activated, stopping...");
+                return;
+            }
+
+            match listeners_channel.recv().await {
+                Some(ListenersMessage::AddListener(handler, addr)) => {
+                    let ws_host = WebHost::new(
+                        self.rpc_address.clone(),
+                        self.events_address.clone(),
+                        handler,
+                    );
+                    let main_router = match mk_routes(ws_host) {
+                        Ok(mr) => mr,
+                        Err(e) => {
+                            warn!(?e, "Unable to create main router");
+                            return;
+                        }
+                    };
+
+                    let listener = TcpListener::bind(addr)
+                        .await
+                        .expect("Unable to bind listener");
+                    let (terminate_send, terminate_receive) = tokio::sync::watch::channel(false);
+                    self.listeners
+                        .insert(addr, Listener::new(terminate_send, handler));
+
+                    // One task per listener.
+                    tokio::spawn(async move {
+                        let mut term_receive = terminate_receive.clone();
+                        select! {
+                            _ = term_receive.changed() => {
+                                info!("Listener terminated, stopping...");
+                            }
+                            _ = Listener::serve(listener, main_router) => {
+                                info!("Listener exited, restarting...");
+                            }
+                        }
+                    });
+                }
+                Some(ListenersMessage::RemoveListener(addr)) => {
+                    let listener = self.listeners.remove(&addr);
+                    info!(?addr, "Removing listener");
+                    if let Some(listener) = listener {
+                        listener
+                            .terminate
+                            .send(true)
+                            .expect("Unable to send terminate message");
+                    }
+                }
+                Some(ListenersMessage::GetListeners(tx)) => {
+                    let listeners = self
+                        .listeners
+                        .iter()
+                        .map(|(addr, listener)| (listener.handler_object, *addr))
+                        .collect();
+                    tx.send(listeners).expect("Unable to send listeners list");
+                }
+                None => {
+                    warn!("Listeners channel closed, stopping...");
+                    return;
+                }
+            }
+        }
+    }
+}
+pub struct Listener {
+    pub(crate) handler_object: Objid,
+    pub(crate) terminate: tokio::sync::watch::Sender<bool>,
+}
+
+impl Listener {
+    pub fn new(terminate: tokio::sync::watch::Sender<bool>, handler_object: Objid) -> Self {
+        Self {
+            handler_object,
+            terminate,
+        }
+    }
+
+    pub async fn serve(listener: TcpListener, main_router: Router) -> eyre::Result<()> {
+        let addr = listener.local_addr()?;
+        info!("Listening on {:?}", addr);
+        axum::serve(
+            listener,
+            main_router.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await?;
+        info!("Done listening on {:?}", addr);
+        Ok(())
+    }
+}
 fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
     let webhost_router = Router::new()
         .route(
@@ -105,23 +263,71 @@ async fn main() -> Result<(), eyre::Error> {
     tracing::subscriber::set_global_default(main_subscriber)
         .expect("Unable to set configure logging");
 
-    let ws_host = WebHost::new(args.rpc_address, args.events_address);
+    let mut hup_signal =
+        signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
+    let mut stop_signal =
+        signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
 
-    let main_router = mk_routes(ws_host).expect("Unable to create main router");
+    let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let address = &args.listen_address.parse::<SocketAddr>().unwrap();
-    info!(address=?address, "Listening");
+    let keypair = load_keypair(&args.public_key, &args.private_key)
+        .expect("Unable to load keypair from public and private key files");
+    let host_token = make_host_token(&keypair, HostType::TCP);
 
-    let listener = TcpListener::bind(address)
-        .await
-        .expect("Unable to bind HTTP listener");
+    let zmq_ctx = tmq::Context::new();
 
-    axum::serve(
-        listener,
-        main_router.into_make_service_with_connect_info::<SocketAddr>(),
+    let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
+        zmq_ctx.clone(),
+        args.rpc_address.clone(),
+        args.events_address.clone(),
+        kill_switch.clone(),
+    );
+    let listeners_thread = tokio::spawn(async move {
+        listeners_server.run(listeners_channel).await;
+    });
+
+    let rpc_client = start_host_session(
+        host_token.clone(),
+        zmq_ctx.clone(),
+        args.rpc_address.clone(),
+        kill_switch.clone(),
+        listeners.clone(),
     )
     .await
-    .unwrap();
+    .expect("Unable to establish initial host session");
+
+    listeners
+        .add_listener(SYSTEM_OBJECT, args.listen_address.parse().unwrap())
+        .await
+        .expect("Unable to start default listener");
+
+    let host_listen_loop = proces_hosts_events(
+        rpc_client,
+        host_token,
+        zmq_ctx.clone(),
+        args.events_address.clone(),
+        args.listen_address.clone(),
+        kill_switch.clone(),
+        listeners.clone(),
+        HostType::TCP,
+    );
+    select! {
+        _ = host_listen_loop => {
+            info!("Host events loop exited.");
+        },
+        _ = listeners_thread => {
+            info!("Listener set exited.");
+        }
+        _ = hup_signal.recv() => {
+            info!("HUP received, stopping...");
+            kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
+        },
+        _ = stop_signal.recv() => {
+            info!("STOP received, stopping...");
+            kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    info!("Done.");
 
     Ok(())
 }

@@ -12,19 +12,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crossbeam_channel::Sender;
-
-use moor_values::model::Perms;
-use moor_values::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
-use moor_values::Objid;
-use moor_values::Symbol;
-use moor_values::Var;
 
 use crate::tasks::task::Task;
 use crate::tasks::TaskDescription;
 use crate::vm::Fork;
+use moor_values::model::Perms;
+use moor_values::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
+use moor_values::Symbol;
+use moor_values::Var;
+use moor_values::{Error, Objid};
 
 /// A handle for talking to the scheduler from within a task.
 #[derive(Clone)]
@@ -192,6 +191,59 @@ impl TaskSchedulerClient {
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 
+    pub fn listen(
+        &self,
+        handler_object: Objid,
+        host_type: String,
+        port: u16,
+        print_messages: bool,
+    ) -> Option<Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::Listen {
+                    reply,
+                    handler_object,
+                    host_type,
+                    port,
+                    print_messages,
+                },
+            ))
+            .expect("Unable to send listen message to scheduler");
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .expect("Listen message timed out")
+    }
+
+    pub fn listeners(&self) -> Vec<(Objid, String, u16, bool)> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((self.task_id, TaskControlMsg::GetListeners(reply)))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive listeners -- scheduler shut down?")
+    }
+
+    pub fn unlisten(&self, host_type: String, port: u16) -> Option<Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::Unlisten {
+                    host_type,
+                    port,
+                    reply,
+                },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive unlisten reply -- scheduler shut down?")
+    }
+
     /// Request that the server refresh its set of information off $server_options
     pub fn refresh_server_options(&self) {
         self.scheduler_sender
@@ -247,12 +299,31 @@ pub enum TaskControlMsg {
         result_sender: oneshot::Sender<Var>,
     },
     /// Task is requesting that the scheduler boot a player.
-    BootPlayer { player: Objid },
+    BootPlayer {
+        player: Objid,
+    },
     /// Task is requesting that a textdump checkpoint happen, to the configured file.
     Checkpoint,
     Notify {
         player: Objid,
         event: NarrativeEvent,
+    },
+    GetListeners(oneshot::Sender<Vec<(Objid, String, u16, bool)>>),
+    /// Ask hosts to listen for connections on `port` and send them to `handler_object`
+    /// `print_messages` is a flag to enable or disable printing of connected etc strings
+    /// `host_type` is a string identifying the type of host
+    Listen {
+        handler_object: Objid,
+        host_type: String,
+        port: u16,
+        print_messages: bool,
+        reply: oneshot::Sender<Option<Error>>,
+    },
+    /// Ask hosts of type `host_type` to stop listening on `port`
+    Unlisten {
+        host_type: String,
+        port: u16,
+        reply: oneshot::Sender<Option<Error>>,
     },
     /// Request that the server refresh its set of information off $server_options
     RefreshServerOptions,

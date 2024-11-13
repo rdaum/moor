@@ -724,20 +724,140 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(function_info, bf_function_info);
 
+/// Function: value listen (obj object, point [, print-messages], [host-type])
+/// Start listening for connections on the given port.
+/// `object` is the object to call when a connection is established, in lieux of #0 (the system object)
+/// if `print-messages` is true, then the server will print messages like ** Connected ** etc to the connection when it establishes
+/// if `host-type` is provided, it should be a string, and it will be used to determine the type of host that will be expected to listen.
+///   this defaults to "tcp", but other values can include "websocket"
+fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // Requires wizard permissions.
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Variant::Obj(object) = bf_args.args[0].variant().clone() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    // point is a protocol specific value, but for now we'll just assume it's an integer for port
+    let Variant::Int(point) = bf_args.args[1].variant().clone() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    if point < 0 || point > (u16::MAX as i64) {
+        return Err(BfErr::Code(E_INVARG));
+    }
+
+    let port = point as u16;
+
+    let print_messages = if bf_args.args.len() >= 3 {
+        let Variant::Int(print_messages) = bf_args.args[2].variant().clone() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        print_messages == 1
+    } else {
+        false
+    };
+
+    let host_type = if bf_args.args.len() == 4 {
+        let Variant::Str(host_type) = bf_args.args[3].variant().clone() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        host_type.as_string().clone()
+    } else {
+        "tcp".to_string()
+    };
+
+    // Ask the scheduler to broadcast a listen request out to all the hosts.
+    if let Some(error) =
+        bf_args
+            .task_scheduler_client
+            .listen(object, host_type, port, print_messages)
+    {
+        return Err(BfErr::Code(error));
+    }
+
+    // "Listen() returns canon, a `canonicalized' version of point, with any configuration-specific defaulting or aliasing accounted for. "
+    // Uh, ok for now we'll just return the port.
+    Ok(Ret(v_int(port as i64)))
+}
+
+bf_declare!(listen, bf_listen);
+
 fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // Requires wizard permissions.
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
     if !bf_args.args.is_empty() {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    // TODO: Return something better from bf_listeners, rather than hardcoded value
-    //   this function is hardcoded to just return {{#0, 7777, 1}}
-    //   this is on account that existing cores expect this to be the case
-    //   but we have no intend of supporting other network listener magic at this point
-    let listeners = v_list(&[v_list(&[v_int(0), v_int(7777), v_int(1)])]);
+    let listeners = bf_args.task_scheduler_client.listeners();
+    let listeners = listeners.iter().map(|listener| {
+        let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
+        v_list(&[
+            v_objid(listener.0),
+            v_int(listener.2 as i64),
+            print_messages,
+        ])
+    });
+
+    let listeners = v_list_iter(listeners);
 
     Ok(Ret(listeners))
 }
 bf_declare!(listeners, bf_listeners);
+
+// unlisten(port, [host-type])
+fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // Requires wizard permissions.
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    // point is a protocol specific value, but for now we'll just assume it's an integer for port
+    let Variant::Int(point) = bf_args.args[0].variant().clone() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    if point < 0 || point > (u16::MAX as i64) {
+        return Err(BfErr::Code(E_INVARG));
+    }
+
+    let port = point as u16;
+    let host_type = if bf_args.args.len() == 4 {
+        let Variant::Str(host_type) = bf_args.args[3].variant().clone() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        host_type.as_string().clone()
+    } else {
+        "tcp".to_string()
+    };
+
+    if let Some(err) = bf_args.task_scheduler_client.unlisten(host_type, port) {
+        return Err(BfErr::Code(err));
+    }
+
+    Ok(Ret(v_none()))
+}
+bf_declare!(unlisten, bf_unlisten);
 
 pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
@@ -928,6 +1048,8 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("server_log")] = Box::new(BfServerLog {});
     builtins[offset_for_builtin("function_info")] = Box::new(BfFunctionInfo {});
     builtins[offset_for_builtin("listeners")] = Box::new(BfListeners {});
+    builtins[offset_for_builtin("listen")] = Box::new(BfListen {});
+    builtins[offset_for_builtin("unlisten")] = Box::new(BfUnlisten {});
     builtins[offset_for_builtin("eval")] = Box::new(BfEval {});
     builtins[offset_for_builtin("read")] = Box::new(BfRead {});
     builtins[offset_for_builtin("dump_database")] = Box::new(BfDumpDatabase {});

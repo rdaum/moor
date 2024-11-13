@@ -36,7 +36,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "./target/release/moor-telnet-host --telnet-address=0.0.0.0:8888 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
+      sh -c "./target/release/moor-telnet-host --telnet-address=0.0.0.0 --telnet-port=8888 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
     ports:
       # Telnet listener
       - "8888:8888"

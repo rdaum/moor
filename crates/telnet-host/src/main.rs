@@ -12,32 +12,47 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::net::SocketAddr;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+#![allow(clippy::too_many_arguments)]
 
+use crate::listen::Listeners;
 use clap::Parser;
 use clap_derive::Parser;
+use moor_values::SYSTEM_OBJECT;
+use rpc_async_client::{make_host_token, proces_hosts_events, start_host_session};
+use rpc_common::{load_keypair, HostType};
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::info;
 
-mod telnet;
+mod connection;
+mod listen;
 
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(
         long,
         value_name = "telnet-address",
-        help = "Telnet server listen address",
-        default_value = "0.0.0.0:8888"
+        help = "Listen address for the default telnet connections listener",
+        default_value = "0.0.0.0"
     )]
     telnet_address: String,
 
     #[arg(
         long,
+        value_name = "telnet-port",
+        help = "Listen port for the default telnet connections listener",
+        default_value = "8888"
+    )]
+    telnet_port: u16,
+
+    #[arg(
+        long,
         value_name = "rpc-address",
-        help = "RPC socket address",
+        help = "RPC ZMQ req-reply socket address",
         default_value = "ipc:///tmp/moor_rpc.sock"
     )]
     rpc_address: String,
@@ -45,10 +60,26 @@ struct Args {
     #[arg(
         long,
         value_name = "events-address",
-        help = "Events socket address",
+        help = "Events ZMQ pub-sub address",
         default_value = "ipc:///tmp/moor_events.sock"
     )]
     events_address: String,
+
+    #[arg(
+        long,
+        value_name = "public_key",
+        help = "file containing the pkcs8 ed25519 public key (shared with the daemon), used for authenticating client & host connections",
+        default_value = "public_key.pem"
+    )]
+    public_key: PathBuf,
+
+    #[arg(
+        long,
+        value_name = "private_key",
+        help = "file containing a pkcs8 ed25519 private key (shared with the daemon), used for authenticating client & host connections",
+        default_value = "private_key.pem"
+    )]
+    private_key: PathBuf,
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
@@ -80,19 +111,58 @@ async fn main() -> Result<(), eyre::Error> {
         signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
 
     let kill_switch = Arc::new(AtomicBool::new(false));
-    let telnet_sockaddr = args.telnet_address.parse::<SocketAddr>().unwrap();
-    let listen_loop = telnet::telnet_listen_loop(
-        telnet_sockaddr,
-        args.rpc_address.as_str(),
-        args.events_address.as_str(),
+
+    // Parse the telnet address and port.
+    let listen_addr = format!("{}:{}", args.telnet_address, args.telnet_port);
+    let telnet_sockaddr = listen_addr.parse::<SocketAddr>().unwrap();
+
+    let zmq_ctx = tmq::Context::new();
+
+    let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
+        zmq_ctx.clone(),
+        args.rpc_address.clone(),
+        args.events_address.clone(),
         kill_switch.clone(),
     );
+    let listeners_thread = tokio::spawn(async move {
+        listeners_server.run(listeners_channel).await;
+    });
 
-    info!("Host started, listening @ {}...", args.telnet_address);
+    listeners
+        .add_listener(SYSTEM_OBJECT, telnet_sockaddr)
+        .await
+        .expect("Unable to start default listener");
+
+    let keypair = load_keypair(&args.public_key, &args.private_key)
+        .expect("Unable to load keypair from public and private key files");
+    let host_token = make_host_token(&keypair, HostType::TCP);
+
+    let rpc_client = start_host_session(
+        host_token.clone(),
+        zmq_ctx.clone(),
+        args.rpc_address.clone(),
+        kill_switch.clone(),
+        listeners.clone(),
+    )
+    .await
+    .expect("Unable to establish initial host session");
+
+    let host_listen_loop = proces_hosts_events(
+        rpc_client,
+        host_token,
+        zmq_ctx.clone(),
+        args.events_address.clone(),
+        args.telnet_address.clone(),
+        kill_switch.clone(),
+        listeners.clone(),
+        HostType::TCP,
+    );
     select! {
-        msg = listen_loop => {
-            msg?;
-            info!("ZMQ client loop exited, stopping...");
+        _ = host_listen_loop => {
+            info!("Host events loop exited.");
+        },
+        _ = listeners_thread => {
+            info!("Listener set exited.");
         }
         _ = hup_signal.recv() => {
             info!("HUP received, stopping...");

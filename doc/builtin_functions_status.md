@@ -171,17 +171,14 @@ The following is a table of the status of various builtin-functions, to keep an 
 
 ### Network connections
 
-These will likely never be implemented. But should return, e.g. E_PERM or similar
-to the caller if attempted.
-
-| Name                    | Complete | Notes                                                |
-| ----------------------- | -------- | ---------------------------------------------------- |
-| set_connection_option   |          |                                                      |
-| connection_option       |          |                                                      |
-| connection_options      |          |                                                      |
-| open_network_connection |          |                                                      |
-| listen                  |          |                                                      |
-| unlisten                |          |                                                      |
-| listeners               | &check;  | Ehhh.. hardcoded, just to shut core login process up |
-| output_delimiters       |          |                                                      |
-| buffered_output_length  |          |                                                      |
+| Name                    | Complete | Notes                                                                                                |
+| ----------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| set_connection_option   |          |                                                                                                      |
+| connection_option       |          |                                                                                                      |
+| connection_options      |          |                                                                                                      |
+| open_network_connection |          |                                                                                                      |
+| listen                  | &check;  | `print-messages` not yet implemented. errors in binding not properly propagating back to the builtin |
+| unlisten                | &check;  |                                                                                                      |
+| listeners               | &check;  |                                                                                                      |
+| output_delimiters       |          |                                                                                                      |
+| buffered_output_length  |          |                                                                                                      |

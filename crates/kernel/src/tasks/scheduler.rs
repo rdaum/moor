@@ -45,7 +45,7 @@ use crate::matching::match_env::MatchEnvironmentParseMatcher;
 use crate::matching::ws_match_env::WsMatchEnv;
 use crate::tasks::command_parse::ParseMatcher;
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
-use crate::tasks::sessions::{Session, SessionFactory};
+use crate::tasks::sessions::{Session, SessionFactory, SystemControl};
 use crate::tasks::suspension::{SuspensionQ, WakeCondition};
 use crate::tasks::task::Task;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
@@ -93,6 +93,8 @@ pub struct Scheduler {
     server_options: ServerOptions,
 
     builtin_registry: Arc<BuiltinRegistry>,
+
+    system_control: Arc<dyn SystemControl>,
 
     /// The internal task queue which holds our suspended tasks, and control records for actively
     /// running tasks.
@@ -147,6 +149,7 @@ impl Scheduler {
         database: Box<dyn Database>,
         tasks_database: Box<dyn TasksDb>,
         config: Arc<Config>,
+        system_control: Arc<dyn SystemControl>,
     ) -> Self {
         let (task_control_sender, task_control_receiver) = crossbeam_channel::unbounded();
         let (scheduler_sender, scheduler_receiver) = crossbeam_channel::unbounded();
@@ -175,6 +178,7 @@ impl Scheduler {
             scheduler_receiver,
             builtin_registry,
             server_options: default_server_options,
+            system_control,
         }
     }
 
@@ -341,12 +345,14 @@ impl Scheduler {
         let task_q = &mut self.task_q;
         match msg {
             SchedulerClientMsg::SubmitCommandTask {
+                handler_object,
                 player,
                 command,
                 session,
                 reply,
             } => {
                 let task_start = Arc::new(TaskStart::StartCommandVerb {
+                    handler_object,
                     player,
                     command: command.to_string(),
                 });
@@ -463,6 +469,7 @@ impl Scheduler {
                 reply.send(response).expect("Could not send input reply");
             }
             SchedulerClientMsg::SubmitOobTask {
+                handler_object,
                 player,
                 command,
                 argstr,
@@ -472,7 +479,7 @@ impl Scheduler {
                 let args = command.into_iter().map(v_string).collect::<Vec<Var>>();
                 let task_start = Arc::new(TaskStart::StartVerb {
                     player,
-                    vloc: SYSTEM_OBJECT,
+                    vloc: handler_object,
                     verb: *DO_OUT_OF_BAND_COMMAND,
                     args,
                     argstr,
@@ -1108,6 +1115,52 @@ impl Scheduler {
                     return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
             }
+            TaskControlMsg::GetListeners(reply) => {
+                let listeners = self
+                    .system_control
+                    .listeners()
+                    .expect("Could not get listeners");
+                if let Err(e) = reply.send(listeners) {
+                    error!(?e, "Could not send listeners to requester");
+                }
+            }
+            TaskControlMsg::Listen {
+                handler_object,
+                host_type,
+                port,
+                print_messages,
+                reply,
+            } => {
+                let Some(_task) = task_q.tasks.get_mut(&task_id) else {
+                    warn!(task_id, "Task not found for listen request");
+                    return;
+                };
+                let result = match self.system_control.listen(
+                    handler_object,
+                    &host_type,
+                    port,
+                    print_messages,
+                ) {
+                    Ok(()) => None,
+                    Err(e) => Some(e),
+                };
+                reply.send(result).expect("Could not send listen reply");
+            }
+            TaskControlMsg::Unlisten {
+                host_type,
+                port,
+                reply,
+            } => {
+                let Some(_task) = task_q.tasks.get_mut(&task_id) else {
+                    warn!(task_id, "Task not found for unlisten request");
+                    return;
+                };
+                let result = match self.system_control.unlisten(port, &host_type) {
+                    Ok(_) => None,
+                    Err(_) => Some(E_PERM),
+                };
+                reply.send(result).expect("Could not send unlisten reply");
+            }
             TaskControlMsg::Shutdown(msg) => {
                 info!("Shutting down scheduler. Reason: {msg:?}");
                 self.stop(msg)
@@ -1225,7 +1278,7 @@ impl Scheduler {
     fn stop(&mut self, msg: Option<String>) -> Result<(), SchedulerError> {
         // Send shutdown notification to all live tasks.
         for (_, task) in self.task_q.tasks.iter() {
-            let _ = task.session.shutdown(msg.clone());
+            let _ = task.session.notify_shutdown(msg.clone());
         }
         warn!("Issuing clean shutdown...");
         {
@@ -1245,6 +1298,11 @@ impl Scheduler {
             }
             yield_now();
         }
+
+        // Now ask the rpc server and hosts to shutdown
+        self.system_control
+            .shutdown(msg)
+            .expect("Could not cleanly shutdown system");
 
         warn!("All tasks finished.  Stopping scheduler.");
         self.running = false;

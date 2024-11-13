@@ -12,6 +12,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#![allow(clippy::too_many_arguments)]
+
 use crate::host::ws_connection::WebSocketConnection;
 use crate::host::{auth, var_as_json};
 use axum::body::{Body, Bytes};
@@ -25,10 +27,13 @@ use moor_values::model::ObjectRef;
 use moor_values::Error::E_INVIND;
 use moor_values::{v_err, Objid, Symbol};
 use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_common::RpcRequest::{Attach, ConnectionEstablish};
 use rpc_common::AuthToken;
-use rpc_common::{ClientToken, RpcRequestError};
-use rpc_common::{ConnectType, RpcRequest, RpcResponse, RpcResult, BROADCAST_TOPIC};
+use rpc_common::HostClientToDaemonMessage::{Attach, ConnectionEstablish};
+use rpc_common::{ClientToken, RpcMessageError};
+use rpc_common::{
+    ConnectType, DaemonToClientReply, HostClientToDaemonMessage, ReplyResult,
+    CLIENT_BROADCAST_TOPIC,
+};
 use std::net::SocketAddr;
 use tmq::{request, subscribe};
 use tracing::warn;
@@ -46,12 +51,13 @@ pub struct WebHost {
     zmq_context: tmq::Context,
     rpc_addr: String,
     pubsub_addr: String,
+    pub(crate) handler_object: Objid,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum WsHostError {
     #[error("RPC request error: {0}")]
-    RpcFailure(RpcRequestError),
+    RpcFailure(RpcMessageError),
     #[error("RPC system error: {0}")]
     RpcError(eyre::Error),
     #[error("Authentication failed")]
@@ -59,12 +65,13 @@ pub enum WsHostError {
 }
 
 impl WebHost {
-    pub fn new(rpc_addr: String, narrative_addr: String) -> Self {
+    pub fn new(rpc_addr: String, narrative_addr: String, handler_object: Objid) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
             zmq_context: tmq_context,
             rpc_addr,
             pubsub_addr: narrative_addr,
+            handler_object,
         }
     }
 }
@@ -95,21 +102,29 @@ impl WebHost {
         let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
         let (client_token, player) = match rpc_client
-            .make_rpc_call(
+            .make_client_rpc_call(
                 client_id,
-                Attach(auth_token, connect_type, peer_addr.to_string()),
+                Attach(
+                    auth_token,
+                    connect_type,
+                    self.handler_object,
+                    peer_addr.to_string(),
+                ),
             )
             .await
         {
-            Ok(RpcResult::Success(RpcResponse::AttachResult(Some((client_token, player))))) => {
+            Ok(ReplyResult::ClientSuccess(DaemonToClientReply::AttachResult(Some((
+                client_token,
+                player,
+            ))))) => {
                 info!("Connection authenticated, player: {}", player);
                 (client_token, player)
             }
-            Ok(RpcResult::Success(RpcResponse::AttachResult(None))) => {
+            Ok(ReplyResult::ClientSuccess(DaemonToClientReply::AttachResult(None))) => {
                 warn!("Connection authentication failed from {}", peer_addr);
                 return Err(WsHostError::AuthenticationFailed);
             }
-            Ok(RpcResult::Failure(f)) => {
+            Ok(ReplyResult::Failure(f)) => {
                 error!("RPC failure in connection establishment: {}", f);
                 return Err(WsHostError::RpcFailure(f));
             }
@@ -130,6 +145,7 @@ impl WebHost {
     /// Actually instantiate the connection now that we've validated the auth token.
     pub async fn start_ws_connection(
         &self,
+        handler_object: Objid,
         player: Objid,
         client_id: Uuid,
         client_token: ClientToken,
@@ -151,7 +167,7 @@ impl WebHost {
             .connect(self.pubsub_addr.as_str())
             .expect("Unable to connect broadcast subscriber ");
         let broadcast_sub = broadcast_sub
-            .subscribe(BROADCAST_TOPIC)
+            .subscribe(CLIENT_BROADCAST_TOPIC)
             .expect("Unable to subscribe to broadcast messages for client connection");
 
         info!(
@@ -160,6 +176,7 @@ impl WebHost {
         );
 
         Ok(WebSocketConnection {
+            handler_object,
             player,
             peer_addr,
             broadcast_sub,
@@ -186,18 +203,21 @@ impl WebHost {
         let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
         let client_token = match rpc_client
-            .make_rpc_call(client_id, ConnectionEstablish(addr.to_string()))
+            .make_client_rpc_call(client_id, ConnectionEstablish(addr.to_string()))
             .await
         {
-            Ok(RpcResult::Success(RpcResponse::NewConnection(client_token, objid))) => {
+            Ok(ReplyResult::ClientSuccess(DaemonToClientReply::NewConnection(
+                client_token,
+                objid,
+            ))) => {
                 info!("Connection established, connection ID: {}", objid);
                 client_token
             }
-            Ok(RpcResult::Failure(f)) => {
+            Ok(ReplyResult::Failure(f)) => {
                 error!("RPC failure in connection establishment: {}", f);
                 return Err(WsHostError::RpcFailure(f));
             }
-            Ok(RpcResult::Success(r)) => {
+            Ok(ReplyResult::ClientSuccess(r)) => {
                 error!("Unexpected response from RPC server");
                 return Err(WsHostError::RpcError(eyre!(
                     "Unexpected response from RPC server: {:?}",
@@ -208,6 +228,13 @@ impl WebHost {
                 error!("Unable to establish connection: {}", e);
                 return Err(WsHostError::RpcError(eyre!(e)));
             }
+            Ok(ReplyResult::HostSuccess(hs)) => {
+                error!("Unexpected response from RPC server: {:?}", hs);
+                return Err(WsHostError::RpcError(eyre!(
+                    "Unexpected response from RPC server: {:?}",
+                    hs
+                )));
+            }
         };
 
         Ok((client_id, rpc_client, client_token))
@@ -217,17 +244,21 @@ impl WebHost {
 pub(crate) async fn rpc_call(
     client_id: Uuid,
     rpc_client: &mut RpcSendClient,
-    request: RpcRequest,
-) -> Result<RpcResponse, StatusCode> {
-    match rpc_client.make_rpc_call(client_id, request).await {
+    request: HostClientToDaemonMessage,
+) -> Result<DaemonToClientReply, StatusCode> {
+    match rpc_client.make_client_rpc_call(client_id, request).await {
         Ok(rpc_response) => match rpc_response {
-            RpcResult::Success(r) => Ok(r),
+            ReplyResult::ClientSuccess(r) => Ok(r),
 
-            RpcResult::Failure(RpcRequestError::PermissionDenied) => {
+            ReplyResult::Failure(RpcMessageError::PermissionDenied) => {
                 Err(StatusCode::INTERNAL_SERVER_ERROR)
             }
-            RpcResult::Failure(f) => {
+            ReplyResult::Failure(f) => {
                 error!("RPC failure in welcome message retrieval: {:?}", f);
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+            ReplyResult::HostSuccess(hs) => {
+                error!("Unexpected response from RPC server: {:?}", hs);
                 Err(StatusCode::INTERNAL_SERVER_ERROR)
             }
         },
@@ -253,7 +284,7 @@ pub async fn welcome_message_handler(
     let response = match rpc_call(
         client_id,
         &mut rpc_client,
-        RpcRequest::RequestSysProp(
+        HostClientToDaemonMessage::RequestSysProp(
             client_token.clone(),
             ObjectRef::SysObj(vec![Symbol::mk("login")]),
             Symbol::mk("welcome_message"),
@@ -261,8 +292,10 @@ pub async fn welcome_message_handler(
     )
     .await
     {
-        Ok(RpcResponse::SysPropValue(Some(value))) => Json(var_as_json(&value)).into_response(),
-        Ok(RpcResponse::SysPropValue(None)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(DaemonToClientReply::SysPropValue(Some(value))) => {
+            Json(var_as_json(&value)).into_response()
+        }
+        Ok(DaemonToClientReply::SysPropValue(None)) => StatusCode::NOT_FOUND.into_response(),
         Ok(r) => {
             error!("Unexpected response from RPC server: {:?}", r);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -272,7 +305,10 @@ pub async fn welcome_message_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -296,11 +332,11 @@ pub async fn eval_handler(
     let response = match rpc_call(
         client_id,
         &mut rpc_client,
-        RpcRequest::Eval(client_token.clone(), auth_token.clone(), expression),
+        HostClientToDaemonMessage::Eval(client_token.clone(), auth_token.clone(), expression),
     )
     .await
     {
-        Ok(RpcResponse::EvalResult(value)) => {
+        Ok(DaemonToClientReply::EvalResult(value)) => {
             debug!("Eval result: {:?}", value);
             Json(var_as_json(&value)).into_response()
         }
@@ -313,7 +349,10 @@ pub async fn eval_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -342,11 +381,11 @@ pub async fn resolve_objref_handler(
     let response = match rpc_call(
         client_id,
         &mut rpc_client,
-        RpcRequest::Resolve(client_token.clone(), auth_token.clone(), objref),
+        HostClientToDaemonMessage::Resolve(client_token.clone(), auth_token.clone(), objref),
     )
     .await
     {
-        Ok(RpcResponse::ResolveResult(obj)) => {
+        Ok(DaemonToClientReply::ResolveResult(obj)) => {
             if obj == v_err(E_INVIND) {
                 StatusCode::NOT_FOUND.into_response()
             } else {
@@ -362,7 +401,10 @@ pub async fn resolve_objref_handler(
 
     // We're done with this RPC connection, so we detach it.
     let _ = rpc_client
-        .make_rpc_call(client_id, RpcRequest::Detach(client_token.clone()))
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
         .await
         .expect("Unable to send detach to RPC server");
 
@@ -403,6 +445,7 @@ async fn attach(
 
     let Ok(mut connection) = host
         .start_ws_connection(
+            host.handler_object,
             player,
             client_id,
             client_token,

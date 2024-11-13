@@ -3,7 +3,6 @@ resolver = "2"
 
 members = [
     "crates/compiler",
-    "crates/console-host",
     "crates/daemon",
     "crates/db",
     "crates/db-relbox",
@@ -29,7 +28,6 @@ default-members = [
     "crates/daemon",
     "crates/telnet-host",
     "crates/web-host",
-    "crates/console-host",
     "crates/moot",
 ]
 

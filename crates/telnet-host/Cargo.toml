@@ -42,6 +42,11 @@ uuid.workspace = true
 ## Rich content
 termimad.workspace = true
 
+# Auth/Auth
+ed25519-dalek.workspace = true
+pem.workspace = true
+rusty_paseto.workspace = true
+
 # Testing
 [dev-dependencies]
 escargot.workspace = true
