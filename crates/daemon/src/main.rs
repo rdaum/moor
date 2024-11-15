@@ -46,8 +46,10 @@ mod connections;
 #[cfg(feature = "relbox")]
 mod connections_rb;
 mod connections_wt;
+mod rpc_hosts;
 mod rpc_server;
 mod rpc_session;
+mod sys_ctrl;
 mod tasks_wt;
 
 #[macro_export]
@@ -65,10 +67,12 @@ macro_rules! clap_enum_variants {
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
-    #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
+    #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath
+    )]
     db: PathBuf,
 
-    #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
+    #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath
+    )]
     textdump: Option<PathBuf>,
 
     #[arg(

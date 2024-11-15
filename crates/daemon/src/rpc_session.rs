@@ -18,7 +18,7 @@ use std::sync::Mutex;
 use tracing::trace;
 use uuid::Uuid;
 
-use moor_kernel::tasks::sessions::{Session, SessionError};
+use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
 use moor_values::tasks::NarrativeEvent;
 use moor_values::Objid;
 
@@ -125,5 +125,14 @@ impl Session for RpcSession {
 
     fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError> {
         self.rpc_server.idle_seconds_for(player)
+    }
+}
+
+impl SessionFactory for RpcServer {
+    fn mk_background_session(
+        self: Arc<Self>,
+        player: Objid,
+    ) -> Result<Arc<dyn Session>, SessionError> {
+        self.clone().new_session(Uuid::new_v4(), player)
     }
 }

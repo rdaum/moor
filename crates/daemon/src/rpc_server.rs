@@ -15,7 +15,6 @@
 //! The core of the server logic for the RPC daemon
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -27,12 +26,13 @@ use crate::connections::ConnectionsDB;
 #[cfg(feature = "relbox")]
 use crate::connections_rb::ConnectionsRb;
 use crate::connections_wt::ConnectionsWT;
+use crate::rpc_hosts::Hosts;
 use crate::rpc_session::RpcSession;
 use moor_db::DatabaseFlavour;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::command_parse::preposition_to_string;
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
-use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory, SystemControl};
+use moor_kernel::tasks::sessions::{Session, SessionError};
 use moor_kernel::tasks::TaskHandle;
 use moor_kernel::SchedulerClient;
 use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag};
@@ -63,66 +63,16 @@ use zmq::{Socket, SocketType};
 pub struct RpcServer {
     zmq_context: zmq::Context,
     keypair: Key<64>,
-    events_publish: Arc<Mutex<Socket>>,
+    pub(crate) events_publish: Arc<Mutex<Socket>>,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
     task_handles: Mutex<HashMap<TaskId, (Uuid, TaskHandle)>>,
     config: Arc<Config>,
-    kill_switch: Arc<AtomicBool>,
-    hosts: Arc<Mutex<Hosts>>,
+    pub(crate) kill_switch: Arc<AtomicBool>,
+    pub(crate) hosts: Arc<Mutex<Hosts>>,
 }
 
 /// If we don't hear from a host in this time, we consider it dead and its listeners gone.
 pub const HOST_TIMEOUT: Duration = Duration::from_secs(10);
-
-#[derive(Default)]
-struct Hosts(HashMap<HostToken, (SystemTime, HostType, Vec<(Objid, SocketAddr)>)>);
-
-impl Hosts {
-    fn receive_ping(
-        &mut self,
-        host_token: HostToken,
-        host_type: HostType,
-        listeners: Vec<(Objid, SocketAddr)>,
-    ) -> bool {
-        let now = SystemTime::now();
-        self.0
-            .insert(host_token, (now, host_type, listeners))
-            .is_none()
-    }
-
-    fn ping_check(&mut self, timeout: std::time::Duration) {
-        let now = SystemTime::now();
-        let mut expired = vec![];
-        for (host_token, (last_seen, _, _)) in self.0.iter() {
-            if now.duration_since(*last_seen).unwrap() > timeout {
-                warn!(
-                    "Host {} has not responded in time: {:?}, removing its listeners from the list",
-                    host_token.0,
-                    now.duration_since(*last_seen).unwrap()
-                );
-                expired.push(host_token.clone());
-            }
-        }
-        for host_token in expired {
-            self.unregister_host(&host_token);
-        }
-    }
-
-    fn listeners(&self) -> Vec<(Objid, HostType, SocketAddr)> {
-        self.0
-            .values()
-            .flat_map(|(_, host_type, listeners)| {
-                listeners
-                    .iter()
-                    .map(move |(oid, addr)| (*oid, *host_type, *addr))
-            })
-            .collect()
-    }
-
-    fn unregister_host(&mut self, host_token: &HostToken) {
-        self.0.remove(host_token);
-    }
-}
 
 pub(crate) fn pack_client_response(
     result: Result<DaemonToClientReply, RpcMessageError>,
@@ -375,7 +325,8 @@ impl RpcServer {
                 pack_host_response(Ok(DaemonToHostReply::Ack))
             }
             HostToDaemonMessage::HostPong(_, host_type, listeners) => {
-                // Record this as a ping
+                // Record this to our hosts DB.
+                // This will update the last-seen time for the host and its listeners-set.
                 let num_listeners = listeners.len();
                 if hosts.receive_ping(host_token.clone(), host_type, listeners) {
                     info!(
@@ -1424,103 +1375,5 @@ impl RpcServer {
         //   forwards.
 
         Ok(token_player)
-    }
-}
-
-impl SystemControl for RpcServer {
-    fn shutdown(&self, msg: Option<String>) -> Result<(), moor_values::Error> {
-        warn!("Shutting down server: {}", msg.unwrap_or_default());
-        self.kill_switch.store(true, Ordering::SeqCst);
-        Ok(())
-    }
-
-    fn listen(
-        &self,
-        handler_object: Objid,
-        host_type: &str,
-        port: u16,
-        print_messages: bool,
-    ) -> Result<(), moor_values::Error> {
-        let host_type = match host_type {
-            "tcp" => HostType::TCP,
-            _ => return Err(moor_values::Error::E_INVARG),
-        };
-
-        let event = HostBroadcastEvent::Listen {
-            handler_object,
-            host_type,
-            port,
-            print_messages,
-        };
-
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
-
-        // We want responses from all clients, so send on this broadcast "topic"
-        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish
-                .send_multipart(payload, 0)
-                .map_err(|e| {
-                    error!(error = ?e, "Unable to send Listen to client");
-                    DeliveryError
-                })
-                .map_err(|e| {
-                    error!("Could not send Listen event: {}", e);
-                    moor_values::Error::E_INVARG
-                })?;
-        }
-
-        // TODO: we should probably wait for a response from the host to make sure it was successful
-        //   this is a bit tricky because the response comes on a different socket (REQ/REP)
-        //   and we can't really block here waiting for it. So we'd need to do something fancy
-        //   with a channel or semaphore, etc.
-        Ok(())
-    }
-
-    fn unlisten(&self, port: u16, host_type: &str) -> Result<(), moor_values::Error> {
-        let host_type = match host_type {
-            "tcp" => HostType::TCP,
-            _ => return Err(moor_values::Error::E_INVARG),
-        };
-
-        let event = HostBroadcastEvent::Unlisten { host_type, port };
-
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
-
-        // We want responses from all clients, so send on this broadcast "topic"
-        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish
-                .send_multipart(payload, 0)
-                .map_err(|e| {
-                    error!(error = ?e, "Unable to send Unlisten to client");
-                    DeliveryError
-                })
-                .map_err(|e| {
-                    error!("Could not send Unlisten event: {}", e);
-                    moor_values::Error::E_INVARG
-                })?;
-        }
-        Ok(())
-    }
-
-    fn listeners(&self) -> Result<Vec<(Objid, String, u16, bool)>, moor_values::Error> {
-        let hosts = self.hosts.lock().unwrap();
-        let listeners = hosts
-            .listeners()
-            .iter()
-            .map(|(o, t, h)| (*o, t.id_str().to_string(), h.port(), true))
-            .collect();
-        Ok(listeners)
-    }
-}
-impl SessionFactory for RpcServer {
-    fn mk_background_session(
-        self: Arc<Self>,
-        player: Objid,
-    ) -> Result<Arc<dyn Session>, SessionError> {
-        self.clone().new_session(Uuid::new_v4(), player)
     }
 }
