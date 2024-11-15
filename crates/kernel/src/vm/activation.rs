@@ -33,10 +33,10 @@ use moor_values::{v_empty_str, Error};
 use moor_values::{v_list, Objid};
 use moor_values::{AsByteBuffer, Symbol};
 
-use crate::tasks::command_parse::ParsedCommand;
 use crate::vm::moo_frame::MooStackFrame;
 use crate::vm::vm_call::VerbProgram;
 use crate::vm::VerbExecutionRequest;
+use moor_values::matching::command_parse::ParsedCommand;
 
 lazy_static! {
     static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");

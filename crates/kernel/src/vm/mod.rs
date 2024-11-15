@@ -25,6 +25,7 @@ use bytes::Bytes;
 pub use exec_state::VMExecState;
 use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
+use moor_values::matching::command_parse::ParsedCommand;
 use moor_values::model::VerbDef;
 use moor_values::{Objid, Var};
 pub use vm_call::VerbExecutionRequest;
@@ -33,7 +34,6 @@ pub use vm_unwind::FinallyReason;
 // Exports to the rest of the kernel
 use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
-use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;

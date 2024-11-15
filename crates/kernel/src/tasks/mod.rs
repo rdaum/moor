@@ -25,7 +25,6 @@ pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
 use crate::vm::Fork;
 use moor_values::tasks::{SchedulerError, TaskId};
 
-pub mod command_parse;
 pub mod scheduler;
 pub mod sessions;
 

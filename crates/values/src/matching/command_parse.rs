@@ -16,11 +16,11 @@ use std::string::ToString;
 
 use bincode::{Decode, Encode};
 
-use moor_values::model::WorldStateError;
-use moor_values::model::{PrepSpec, Preposition};
-use moor_values::util;
-use moor_values::Objid;
-use moor_values::{v_str, Var};
+use crate::model::WorldStateError;
+use crate::model::{PrepSpec, Preposition};
+use crate::util;
+use crate::Objid;
+use crate::{v_str, Var};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct ParsedCommand {
@@ -96,7 +96,6 @@ pub enum ParseCommandError {
     PermissionDenied,
 }
 
-#[tracing::instrument(skip(command_environment))]
 pub fn parse_command<M>(
     input: &str,
     command_environment: M,
@@ -186,10 +185,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use moor_values::model::Preposition;
-    use moor_values::util::parse_into_words;
-    use moor_values::v_str;
-    use moor_values::FAILED_MATCH;
+    use crate::model::Preposition;
+    use crate::util::parse_into_words;
+    use crate::v_str;
+    use crate::FAILED_MATCH;
 
     use crate::matching::match_env::MatchEnvironmentParseMatcher;
     use crate::matching::mock_matching_env::{

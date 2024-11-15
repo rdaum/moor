@@ -20,7 +20,6 @@ pub use moor_values::tasks::TaskId;
 
 pub mod builtins;
 pub mod config;
-pub mod matching;
 pub mod tasks;
 pub mod textdump;
 pub mod vm;

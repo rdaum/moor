@@ -38,7 +38,6 @@ use moor_values::{v_none, Symbol};
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
-use crate::tasks::command_parse::ParsedCommand;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
@@ -49,6 +48,7 @@ use crate::vm::vm_call::VerbProgram;
 use crate::vm::VmExecParams;
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest};
 use crate::vm::{FinallyReason, VMExecState};
+use moor_values::matching::command_parse::ParsedCommand;
 
 /// Return values from exec_interpreter back to the Task scheduler loop
 pub enum VMHostResponse {

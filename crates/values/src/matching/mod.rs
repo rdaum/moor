@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+pub mod command_parse;
 pub mod match_env;
 #[doc(hidden)]
 pub mod mock_matching_env;

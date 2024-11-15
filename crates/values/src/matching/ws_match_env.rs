@@ -12,10 +12,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::model::ObjSet;
-use moor_values::model::WorldState;
-use moor_values::model::WorldStateError;
-use moor_values::Objid;
+use crate::model::ObjSet;
+use crate::model::WorldState;
+use crate::model::WorldStateError;
+use crate::Objid;
 
 use crate::matching::match_env::MatchEnvironment;
 
@@ -25,6 +25,11 @@ pub struct WsMatchEnv<'a> {
     pub(crate) perms: Objid,
 }
 
+impl<'a> WsMatchEnv<'a> {
+    pub fn new(ws: &'a dyn WorldState, perms: Objid) -> Self {
+        Self { ws, perms }
+    }
+}
 impl<'a> MatchEnvironment for WsMatchEnv<'a> {
     fn obj_valid(&self, oid: Objid) -> Result<bool, WorldStateError> {
         self.ws.valid(oid)

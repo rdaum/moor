@@ -27,9 +27,11 @@ pub use var::{
 pub use var::{Error, Objid, Symbol, VarType};
 
 mod encode;
+pub mod matching;
 pub mod model;
 pub mod tasks;
 pub mod util;
+
 mod var;
 
 /// When encoding or decoding types to/from data or network, this is a version tag put into headers

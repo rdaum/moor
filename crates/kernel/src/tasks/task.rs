@@ -48,13 +48,13 @@ use moor_values::{NOTHING, SYSTEM_OBJECT};
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
-use crate::matching::match_env::MatchEnvironmentParseMatcher;
-use crate::matching::ws_match_env::WsMatchEnv;
-use crate::tasks::command_parse::{parse_command, ParseCommandError, ParsedCommand};
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::{VMHostResponse, VmHost};
 use crate::tasks::{ServerOptions, TaskStart, VerbCall};
+use moor_values::matching::command_parse::{parse_command, ParseCommandError, ParsedCommand};
+use moor_values::matching::match_env::MatchEnvironmentParseMatcher;
+use moor_values::matching::ws_match_env::WsMatchEnv;
 
 lazy_static! {
     static ref HUH_SYM: Symbol = Symbol::mk("huh");
@@ -495,10 +495,7 @@ impl Task {
         };
 
         // Parse the command in the current environment.
-        let me = WsMatchEnv {
-            ws: world_state,
-            perms: player,
-        };
+        let me = WsMatchEnv::new(world_state, player);
         let matcher = MatchEnvironmentParseMatcher { env: me, player };
         let parsed_command = match parse_command(command, matcher) {
             Ok(pc) => pc,

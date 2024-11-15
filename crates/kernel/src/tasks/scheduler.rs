@@ -31,19 +31,8 @@ use moor_values::model::{BinaryType, HasUuid, ObjectRef, ValSet, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
 use moor_values::model::{WorldState, WorldStateError};
 
-use moor_values::tasks::{
-    AbortLimitReason, CommandError, SchedulerError, TaskId, VerbProgramError,
-};
-use moor_values::Error::{E_INVARG, E_INVIND, E_PERM};
-use moor_values::{v_err, v_int, v_none, v_objid, v_string, Symbol, Var};
-use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
-use moor_values::{Objid, Variant};
-
 use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
-use crate::matching::match_env::MatchEnvironmentParseMatcher;
-use crate::matching::ws_match_env::WsMatchEnv;
-use crate::tasks::command_parse::ParseMatcher;
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::sessions::{Session, SessionFactory, SystemControl};
 use crate::tasks::suspension::{SuspensionQ, WakeCondition};
@@ -56,10 +45,20 @@ use crate::tasks::{
 };
 use crate::textdump::{make_textdump, TextdumpWriter};
 use crate::vm::Fork;
+use moor_values::matching::command_parse::ParseMatcher;
+use moor_values::matching::match_env::MatchEnvironmentParseMatcher;
+use moor_values::matching::ws_match_env::WsMatchEnv;
 use moor_values::tasks::SchedulerError::{
     CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
     TaskAbortedException, TaskAbortedLimit, VerbProgramFailed,
 };
+use moor_values::tasks::{
+    AbortLimitReason, CommandError, SchedulerError, TaskId, VerbProgramError,
+};
+use moor_values::Error::{E_INVARG, E_INVIND, E_PERM};
+use moor_values::{v_err, v_int, v_none, v_objid, v_string, Symbol, Var};
+use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+use moor_values::{Objid, Variant};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 
@@ -1732,7 +1731,7 @@ fn match_object_ref(
             Ok(obj)
         }
         ObjectRef::Match(object_name) => {
-            let match_env = WsMatchEnv { ws: tx, perms };
+            let match_env = WsMatchEnv::new(tx, perms);
             let matcher = MatchEnvironmentParseMatcher {
                 env: match_env,
                 player,
