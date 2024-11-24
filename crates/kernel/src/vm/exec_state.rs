@@ -161,7 +161,14 @@ impl VMExecState {
     /// Update the permissions of the current task, as called by the `set_task_perms`
     /// built-in.
     pub(crate) fn set_task_perms(&mut self, perms: Objid) {
-        self.top_mut().permissions = perms;
+        // Copy the stack perms up to the last non-builtin. That is, make sure builtin-frames
+        // get the permissions update, and the first non-builtin, too.
+        for activation in self.stack.iter_mut().rev() {
+            activation.permissions = perms;
+            if !activation.is_builtin_frame() {
+                break;
+            }
+        }
     }
 
     /// Push a value onto the value stack
