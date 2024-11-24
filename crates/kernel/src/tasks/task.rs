@@ -294,6 +294,13 @@ impl Task {
                 //   We may revisit this later and add a user-selectable mode for this, and
                 //   evaluate this behaviour generally.
 
+                let CommitResult::Success = world_state.commit().expect("Could not attempt commit")
+                else {
+                    warn!("Conflict during commit before complete, asking scheduler to retry task");
+                    task_scheduler_client.conflict_retry(self);
+                    return None;
+                };
+
                 warn!(task_id = self.task_id, "Task exception");
                 self.vm_host.stop();
 
