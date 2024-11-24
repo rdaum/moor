@@ -240,7 +240,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
             parent,
             child,
             sibling,
-            name: db_obj.name().clone().unwrap(),
+            name: db_obj.name().clone().expect("Invalid object, missing name"),
             flags: db_obj.flags().to_u16() as _,
             verbdefs,
             propdefs,

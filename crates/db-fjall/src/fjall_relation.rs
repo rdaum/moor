@@ -466,7 +466,15 @@ where
         let key = domain.as_bytes().unwrap();
         let result = tx.get(&table, &key).unwrap();
         match result {
-            Some(value) => Ok(Some(Codomain::from_bytes(value.into()).unwrap())),
+            Some(value) => {
+                let result = Codomain::from_bytes(value.into());
+                match result {
+                    Ok(value) => Ok(Some(value)),
+                    Err(e) => {
+                        panic!("Error decoding codomain: {:?} in relation {}", e, rel);
+                    }
+                }
+            }
             None => Ok(None),
         }
     }

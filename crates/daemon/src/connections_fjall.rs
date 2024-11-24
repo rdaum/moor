@@ -131,13 +131,11 @@ fn retry_tx_action<
         let r = match r {
             Ok(r) => r,
             Err(RelationalError::ConflictRetry) => {
-                error!("Conflict in transaction, retrying");
                 tx.rollback();
                 sleep(Duration::from_millis(100));
                 continue;
             }
             Err(e) => {
-                error!(?e, "Non-rollback error in transaction");
                 return Err(e);
             }
         };
