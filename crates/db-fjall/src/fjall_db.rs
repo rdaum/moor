@@ -67,10 +67,11 @@ where
             .unwrap();
         let mut relations_partitions = Vec::new();
 
-        // If the partitions count in the keyspaces is not equal to the count of relations in the
-        // WorldStateTable, we're "fresh"
-        let fresh = keyspace.partition_count() != WorldStateTable::iter().count();
+        let mut fresh = false;
         for relation in WorldStateTable::iter() {
+            if !keyspace.partition_exists(&relation.to_string()) {
+                fresh = true;
+            }
             let partition = keyspace
                 .open_partition(&relation.to_string(), PartitionCreateOptions::default())
                 .unwrap();
