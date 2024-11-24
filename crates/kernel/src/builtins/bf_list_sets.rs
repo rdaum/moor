@@ -20,7 +20,7 @@ use moor_values::{
     v_empty_list, v_int, v_list, v_list_iter, v_string, IndexMode, Sequence, VarType,
 };
 use moor_values::{Error, Variant};
-use onig::{Region, SearchOptions, SyntaxOperator};
+use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
@@ -212,8 +212,13 @@ fn perform_regex_match(
             .bitor(SyntaxOperator::SYNTAX_OPERATOR_QMARK_ZERO_ONE)
             .bitor(SyntaxOperator::SYNTAX_OPERATOR_PLUS_ONE_INF),
     );
-    let regex = onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
-        .map_err(|_| E_INVARG)?;
+    syntax.set_behavior(SyntaxBehavior::SYNTAX_BEHAVIOR_ALLOW_DOUBLE_RANGE_OP_IN_CC);
+
+    let regex =
+        onig::Regex::with_options(translated_pattern.as_str(), options, &syntax).map_err(|e| {
+            eprintln!("Error in regex: {:?}", e);
+            E_INVARG
+        })?;
 
     let (search_start, search_end) = if reverse {
         (subject.len(), 0)
@@ -536,5 +541,13 @@ mod tests {
                 ]
             )
         );
+    }
+
+    /// This pattern was causing an E_INVARG in BfMatch, due to the "-" after the 9.
+    /// Turning on SyntaxBehavior::SYNTAX_BEHAVIOR_ALLOW_DOUBLE_RANGE_OP_IN_CC seems to fix it.
+    #[test]
+    fn test_bug() {
+        let problematic_regex = "^[]a-zA-Z0-9-%~`!@#$^&()=+{}[|';?/><.,]+$";
+        perform_regex_match(problematic_regex, "foo", false, false).unwrap();
     }
 }
