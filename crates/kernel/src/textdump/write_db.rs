@@ -229,6 +229,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
                 is_clear,
             });
         }
+
         // To construct the child linkage list, we need to scan all objects, and find all objects whose parent
         // is the current object, and add them to the list.
         let obj = Object {
@@ -240,7 +241,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
             parent,
             child,
             sibling,
-            name: db_obj.name().clone().expect("Invalid object, missing name"),
+            name: db_obj.name().clone().unwrap_or("".to_string()),
             flags: db_obj.flags().to_u16() as _,
             verbdefs,
             propdefs,
