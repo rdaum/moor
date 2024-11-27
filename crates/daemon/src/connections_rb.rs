@@ -300,7 +300,7 @@ impl ConnectionsDB for ConnectionsRb {
 
     fn last_activity_for(&self, connection_obj: Objid) -> Result<SystemTime, SessionError> {
         let tx = self.tb.clone().start_tx();
-        let mut client_times = Self::most_recent_client_connection(&tx, connection_obj)?;
+        let mut client_times = Self::most_recent_client_connection(&tx, connection_obj.clone())?;
 
         // Most recent time is the last one.
         let Some(time) = client_times.pop() else {
@@ -312,7 +312,7 @@ impl ConnectionsDB for ConnectionsRb {
 
     fn connection_name_for(&self, connection_obj: Objid) -> Result<String, SessionError> {
         let tx = self.tb.clone().start_tx();
-        let mut client_times = Self::most_recent_client_connection(&tx, connection_obj)?;
+        let mut client_times = Self::most_recent_client_connection(&tx, connection_obj.clone())?;
 
         let Some(most_recent) = client_times.pop() else {
             return Err(SessionError::NoConnectionForPlayer(connection_obj));
@@ -469,12 +469,12 @@ mod tests {
                 let oid = db
                     .new_connection(client_id, "localhost".to_string(), None)
                     .unwrap();
-                let client_ids = db.client_ids_for(oid).unwrap();
+                let client_ids = db.client_ids_for(oid.clone()).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
-                db.record_client_activity(client_id, oid).unwrap();
-                db.notify_is_alive(client_id, oid).unwrap();
-                let last_activity = db.last_activity_for(oid);
+                db.record_client_activity(client_id, oid.clone()).unwrap();
+                db.notify_is_alive(client_id, oid.clone()).unwrap();
+                let last_activity = db.last_activity_for(oid.clone());
                 assert!(
                     last_activity.is_ok(),
                     "Unable to get last activity for {x}th oid ({oid}) client {client_id}",

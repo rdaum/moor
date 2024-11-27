@@ -131,7 +131,7 @@ impl Listeners {
                     let ws_host = WebHost::new(
                         self.rpc_address.clone(),
                         self.events_address.clone(),
-                        handler,
+                        handler.clone(),
                     );
                     let main_router = match mk_routes(ws_host) {
                         Ok(mr) => mr,
@@ -175,7 +175,7 @@ impl Listeners {
                     let listeners = self
                         .listeners
                         .iter()
-                        .map(|(addr, listener)| (listener.handler_object, *addr))
+                        .map(|(addr, listener)| (listener.handler_object.clone(), *addr))
                         .collect();
                     tx.send(listeners).expect("Unable to send listeners list");
                 }
@@ -297,7 +297,7 @@ async fn main() -> Result<(), eyre::Error> {
     .expect("Unable to establish initial host session");
 
     listeners
-        .add_listener(SYSTEM_OBJECT, args.listen_address.parse().unwrap())
+        .add_listener(&SYSTEM_OBJECT, args.listen_address.parse().unwrap())
         .await
         .expect("Unable to start default listener");
 

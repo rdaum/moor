@@ -22,16 +22,16 @@ use crate::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 // Separated out so can be more easily mocked.
 pub trait MatchEnvironment {
     // Test whether a given object is valid in this environment.
-    fn obj_valid(&self, oid: Objid) -> Result<bool, WorldStateError>;
+    fn obj_valid(&self, oid: &Objid) -> Result<bool, WorldStateError>;
 
     // Return all match names & aliases for an object.
-    fn get_names(&self, oid: Objid) -> Result<Vec<String>, WorldStateError>;
+    fn get_names(&self, oid: &Objid) -> Result<Vec<String>, WorldStateError>;
 
     // Returns location, contents, and player, all the things we'd search for matches on.
-    fn get_surroundings(&self, player: Objid) -> Result<ObjSet, WorldStateError>;
+    fn get_surroundings(&self, player: &Objid) -> Result<ObjSet, WorldStateError>;
 
     // Return the location of a given object.
-    fn location_of(&self, player: Objid) -> Result<Objid, WorldStateError>;
+    fn location_of(&self, player: &Objid) -> Result<Objid, WorldStateError>;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -54,14 +54,14 @@ fn do_match_object_names(
             // exact match
             if match_name == object_name {
                 if match_data.exact == NOTHING || match_data.exact == oid {
-                    match_data.exact = oid;
+                    match_data.exact = oid.clone();
                 } else {
                     return Ok(AMBIGUOUS);
                 }
             } else {
                 // partial match
                 if match_data.partial == FAILED_MATCH || match_data.partial == oid {
-                    match_data.partial = oid;
+                    match_data.partial = oid.clone();
                 } else {
                     match_data.partial = AMBIGUOUS
                 }
@@ -70,15 +70,15 @@ fn do_match_object_names(
     }
 
     if match_data.exact != NOTHING {
-        Ok(match_data.exact)
+        Ok(match_data.exact.clone())
     } else {
-        Ok(match_data.partial)
+        Ok(match_data.partial.clone())
     }
 }
 
 pub fn match_contents<M: MatchEnvironment>(
     env: &M,
-    player: Objid,
+    player: &Objid,
     object_name: &str,
 ) -> Result<Option<Objid>, WorldStateError> {
     let mut match_data = MatchData {
@@ -88,11 +88,11 @@ pub fn match_contents<M: MatchEnvironment>(
 
     let search = env.get_surroundings(player)?; // location, contents, player
     for oid in search.iter() {
-        if !env.obj_valid(oid)? {
+        if !env.obj_valid(&oid)? {
             continue;
         }
 
-        let object_names = env.get_names(oid)?;
+        let object_names = env.get_names(&oid)?;
         let result = do_match_object_names(oid, &mut match_data, object_names, object_name)?;
         if result == AMBIGUOUS {
             return Ok(Some(AMBIGUOUS));
@@ -126,7 +126,7 @@ impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
         }
 
         // Check if the player is valid.
-        if !self.env.obj_valid(self.player)? {
+        if !self.env.obj_valid(&self.player)? {
             return Err(WorldStateError::FailedMatch(
                 "Invalid current player when performing object match".to_string(),
             ));
@@ -134,14 +134,14 @@ impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
 
         // Check 'me' and 'here' first.
         if object_name == "me" {
-            return Ok(Some(self.player));
+            return Ok(Some(self.player.clone()));
         }
 
         if object_name == "here" {
-            return Ok(Some(self.env.location_of(self.player)?));
+            return Ok(Some(self.env.location_of(&self.player)?));
         }
 
-        match_contents(&self.env, self.player, object_name)
+        match_contents(&self.env, &self.player, object_name)
     }
 }
 

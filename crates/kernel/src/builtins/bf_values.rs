@@ -176,12 +176,12 @@ fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(o) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_INVARG));
     };
-    if !bf_args.world_state.valid(*o).map_err(world_state_bf_err)? {
+    if !bf_args.world_state.valid(o).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     };
     let size = bf_args
         .world_state
-        .object_bytes(bf_args.caller_perms(), *o)
+        .object_bytes(&bf_args.caller_perms(), o)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_int(size as i64)))
 }

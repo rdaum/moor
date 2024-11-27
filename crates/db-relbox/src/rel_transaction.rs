@@ -49,7 +49,7 @@ struct Composite<DomainA: AsByteBuffer, DomainB: AsByteBuffer> {
 }
 
 impl<DomainA: AsByteBuffer, DomainB: AsByteBuffer> Composite<DomainA, DomainB> {
-    fn new(domain_a: DomainA, domain_b: DomainB) -> Self {
+    fn new(domain_a: &DomainA, domain_b: &DomainB) -> Self {
         let (a_bytes, b_bytes) = (domain_a.as_bytes().unwrap(), domain_b.as_bytes().unwrap());
         let mut bytes =
             Vec::with_capacity(a_bytes.len() + b_bytes.len() + std::mem::size_of::<usize>());
@@ -117,7 +117,7 @@ where
     fn remove_by_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: T,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<()> {
         self.tx
             .relation(relbox::RelationId(rel.into()))
@@ -131,8 +131,8 @@ where
     >(
         &self,
         rel: T,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<()> {
         let composite = Composite::new(domain_a, domain_b);
         self.tx
@@ -147,7 +147,7 @@ where
     >(
         &self,
         _rel: T,
-        _codomain: Codomain,
+        _codomain: &Codomain,
     ) -> Result<()> {
         unimplemented!("remove_by_codomain")
     }
@@ -158,8 +158,8 @@ where
     >(
         &self,
         rel: T,
-        domain: Domain,
-        codomain: Codomain,
+        domain: &Domain,
+        codomain: &Codomain,
     ) -> Result<()> {
         self.tx
             .relation(relbox::RelationId(rel.into()))
@@ -176,8 +176,8 @@ where
     >(
         &self,
         rel: T,
-        domain: Domain,
-        codomain: Codomain,
+        domain: &Domain,
+        codomain: &Codomain,
     ) -> Result<()> {
         self.tx
             .relation(relbox::RelationId(rel.into()))
@@ -229,7 +229,7 @@ where
     >(
         &self,
         rel: T,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<Option<Codomain>> {
         match self
             .tx
@@ -250,7 +250,7 @@ where
     fn tuple_size_for_unique_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: T,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<Option<usize>> {
         match self
             .tx
@@ -266,7 +266,7 @@ where
     fn tuple_size_for_unique_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: T,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<Option<usize>> {
         match self
             .tx
@@ -296,7 +296,7 @@ where
     >(
         &self,
         rel: T,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<Domain> {
         match self
             .tx
@@ -330,7 +330,7 @@ where
     >(
         &self,
         rel: T,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<ResultSet> {
         let results = self
             .tx
@@ -350,8 +350,8 @@ where
     >(
         &self,
         rel: T,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<Option<Codomain>> {
         let composite = Composite::new(domain_a, domain_b);
         match self
@@ -376,8 +376,8 @@ where
     >(
         &self,
         rel: T,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<Option<usize>> {
         let composite = Composite::new(domain_a, domain_b);
         match self
@@ -398,9 +398,9 @@ where
     >(
         &self,
         rel: T,
-        domain_a: DomainA,
-        domain_b: DomainB,
-        codomain: Codomain,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
+        codomain: &Codomain,
     ) -> Result<()> {
         let composite = Composite::new(domain_a, domain_b);
         self.tx
@@ -418,8 +418,8 @@ where
     >(
         &self,
         rel: T,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<()> {
         let composite = Composite::new(domain_a, domain_b);
         self.tx
@@ -435,9 +435,9 @@ where
     >(
         &self,
         rel: T,
-        domain_a: DomainA,
-        domain_b: DomainB,
-        value: Codomain,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
+        value: &Codomain,
     ) -> Result<()> {
         let composite = Composite::new(domain_a, domain_b);
         self.tx
@@ -452,7 +452,7 @@ where
     fn delete_if_exists<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: T,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<()> {
         self.tx
             .relation(relbox::RelationId(rel.into()))

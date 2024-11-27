@@ -110,7 +110,7 @@ impl WebSocketConnection {
                         ClientsBroadcastEvent::PingPong(_server_time) => {
                             let _ = self.rpc_client.make_client_rpc_call(self.client_id,
                                 HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(),
-                                    self.handler_object, HostType::WebSocket, self.peer_addr)).await.expect("Unable to send pong to RPC server");
+                                    self.handler_object.clone(), HostType::WebSocket, self.peer_addr)).await.expect("Unable to send pong to RPC server");
 
                         }
                     }
@@ -195,7 +195,7 @@ impl WebSocketConnection {
                     HostClientToDaemonMessage::Command(
                         self.client_token.clone(),
                         self.auth_token.clone(),
-                        self.handler_object,
+                        self.handler_object.clone(),
                         cmd,
                     ),
                 )

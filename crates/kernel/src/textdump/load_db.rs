@@ -54,9 +54,9 @@ fn resolve_prop(omap: &BTreeMap<Objid, Object>, offset: usize, o: &Object) -> Op
         let name = o.propdefs[offset].clone();
         let pval = &o.propvals[offset];
         return Some(RProp {
-            definer: o.id,
+            definer: o.id.clone(),
             name,
-            owner: pval.owner,
+            owner: pval.owner.clone(),
             flags: pval.flags,
             value: pval.value.clone(),
         });
@@ -123,7 +123,7 @@ pub fn read_textdump<T: io::Read>(
         );
         loader
             .create_object(
-                Some(*objid),
+                Some(objid.clone()),
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, flags, &o.name),
             )
             .unwrap();
@@ -132,13 +132,13 @@ pub fn read_textdump<T: io::Read>(
     info!("Setting object attributes (parent/location/owner)");
     for (objid, o) in &td.objects {
         trace!(owner = ?o.owner, parent = ?o.parent, location = ?o.location, "Setting attributes");
-        loader.set_object_owner(*objid, o.owner).map_err(|e| {
+        loader.set_object_owner(objid, &o.owner).map_err(|e| {
             TextdumpReaderError::LoadError(format!("setting owner of {}", objid), e.clone())
         })?;
-        loader.set_object_parent(*objid, o.parent).map_err(|e| {
+        loader.set_object_parent(objid, &o.parent).map_err(|e| {
             TextdumpReaderError::LoadError(format!("setting parent of {}", objid), e.clone())
         })?;
-        loader.set_object_location(*objid, o.location).unwrap();
+        loader.set_object_location(objid, &o.location).unwrap();
     }
 
     info!("Defining properties...");
@@ -155,10 +155,10 @@ pub fn read_textdump<T: io::Read>(
                 let value = Some(resolved.value);
                 loader
                     .define_property(
-                        resolved.definer,
-                        *objid,
+                        &resolved.definer,
+                        objid,
                         resolved.name.as_str(),
-                        resolved.owner,
+                        &resolved.owner,
                         flags,
                         value,
                     )
@@ -176,7 +176,7 @@ pub fn read_textdump<T: io::Read>(
             let value = (!p.is_clear).then(|| p.value.clone());
 
             loader
-                .set_property(*objid, resolved.name.as_str(), p.owner, flags, value)
+                .set_property(objid, resolved.name.as_str(), &p.owner, flags, value)
                 .unwrap();
         }
     }
@@ -209,7 +209,7 @@ pub fn read_textdump<T: io::Read>(
 
             let names: Vec<&str> = v.name.split(' ').collect();
 
-            let program = match td.verbs.get(&(*objid, vn)) {
+            let program = match td.verbs.get(&(objid.clone(), vn)) {
                 Some(verb) if verb.program.is_some() => compile(
                     verb.program.clone().unwrap().as_str(),
                     compile_options.clone(),
@@ -230,7 +230,7 @@ pub fn read_textdump<T: io::Read>(
                 program.with_byte_buffer(|d| Vec::from(d)).expect("Failed to encode program");
 
             loader
-                .add_verb(*objid, names.clone(), v.owner, flags, argspec, binary)
+                .add_verb(objid, names.clone(), &v.owner, flags, argspec, binary)
                 .map_err(|e| {
                     TextdumpReaderError::LoadError(
                         format!("adding verb #{}/{} ({:?})", objid.0, vn, names),

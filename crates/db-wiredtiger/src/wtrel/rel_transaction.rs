@@ -139,7 +139,7 @@ where
     fn remove_by_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Tables,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<()> {
         let table = rel.into();
         let cursor = self
@@ -147,7 +147,7 @@ where
             .open_cursor(&table, Some(cursor_options()))
             .map_err(err_map)?;
 
-        let domain_datum = to_datum(&self.session, &domain);
+        let domain_datum = to_datum(&self.session, domain);
         cursor.set_key(domain_datum).map_err(err_map)?;
         cursor.remove().map_err(err_map)?;
         Ok(())
@@ -159,10 +159,10 @@ where
     >(
         &self,
         rel: Tables,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<()> {
-        let key_bytes = self.composite_key_for(&domain_a, &domain_b);
+        let key_bytes = self.composite_key_for(domain_a, domain_b);
         let table = rel.into();
         let cursor = self
             .session
@@ -182,14 +182,14 @@ where
     >(
         &self,
         rel: Tables,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<()> {
         let table = rel.get_secondary_index();
         let cursor = self
             .session
             .open_cursor(&table, Some(cursor_options()))
             .map_err(err_map)?;
-        let codomain_sr = to_datum(&self.session, &codomain);
+        let codomain_sr = to_datum(&self.session, codomain);
         cursor.set_key(codomain_sr).map_err(err_map)?;
         if let Err(Error::NotFound) = cursor.search() {
             return Ok(());
@@ -200,7 +200,7 @@ where
                 Ok(_) => {
                     let codomain_scan =
                         from_datum::<Codomain>(&self.session, cursor.get_value().map_err(err_map)?);
-                    if codomain_scan != codomain {
+                    if codomain_scan.ne(codomain) {
                         break;
                     }
                     cursor.remove().map_err(err_map)?;
@@ -218,8 +218,8 @@ where
     >(
         &self,
         rel: Tables,
-        domain: Domain,
-        codomain: Codomain,
+        domain: &Domain,
+        codomain: &Codomain,
     ) -> Result<()> {
         let table = rel.into();
         let cursor = self
@@ -227,10 +227,10 @@ where
             .open_cursor(&table, Some(cursor_options().overwrite(true)))
             .map_err(err_map)?;
         cursor
-            .set_key(to_datum(&self.session, &domain))
+            .set_key(to_datum(&self.session, domain))
             .map_err(err_map)?;
         cursor
-            .set_value(to_datum(&self.session, &codomain))
+            .set_value(to_datum(&self.session, codomain))
             .map_err(err_map)?;
         cursor.insert().map_err(err_map)?;
         Ok(())
@@ -241,8 +241,8 @@ where
     >(
         &self,
         rel: Tables,
-        domain: Domain,
-        codomain: Codomain,
+        domain: &Domain,
+        codomain: &Codomain,
     ) -> Result<()> {
         let table = rel.into();
         let cursor = self
@@ -250,10 +250,10 @@ where
             .open_cursor(&table, Some(cursor_options().overwrite(false)))
             .map_err(err_map)?;
         cursor
-            .set_key(to_datum(&self.session, &domain))
+            .set_key(to_datum(&self.session, domain))
             .map_err(err_map)?;
         cursor
-            .set_value(to_datum(&self.session, &codomain))
+            .set_value(to_datum(&self.session, codomain))
             .map_err(err_map)?;
 
         match cursor.insert() {
@@ -295,7 +295,7 @@ where
                     let codatum = cursor.get_value().map_err(err_map)?;
                     let codomain = from_datum::<Codomain>(&self.session, codatum);
                     if pred(&domain, &codomain) {
-                        results.push((domain, codomain));
+                        results.push((domain.clone(), codomain.clone()));
                     }
                 }
                 Err(Error::NotFound) => break,
@@ -310,7 +310,7 @@ where
     >(
         &self,
         rel: Tables,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<Option<Codomain>> {
         let table = rel.into();
         let cursor = self
@@ -318,7 +318,7 @@ where
             .open_cursor(&table, Some(cursor_options().readonly(true)))
             .map_err(err_map)?;
         cursor
-            .set_key(to_datum(&self.session, &domain))
+            .set_key(to_datum(&self.session, domain))
             .map_err(err_map)?;
         match cursor.search() {
             Ok(_) => Ok(Some(from_datum(
@@ -332,7 +332,7 @@ where
     fn tuple_size_for_unique_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Tables,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<Option<usize>> {
         let table = rel.into();
         let cursor = self
@@ -340,7 +340,7 @@ where
             .open_cursor(&table, Some(cursor_options().readonly(true)))
             .map_err(err_map)?;
         cursor
-            .set_key(to_datum(&self.session, &domain))
+            .set_key(to_datum(&self.session, domain))
             .map_err(err_map)?;
         match cursor.search() {
             Ok(_) => Ok(Some(cursor.get_value().map_err(err_map)?.len())),
@@ -351,7 +351,7 @@ where
     fn tuple_size_for_unique_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Tables,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<Option<usize>> {
         // Requires there be a secondary index on the relation named 'codomain'
         let index = rel.get_secondary_index();
@@ -360,7 +360,7 @@ where
             .open_cursor(&index, Some(cursor_options().readonly(true)))
             .map_err(err_map)?;
         cursor
-            .set_key(to_datum(&self.session, &codomain))
+            .set_key(to_datum(&self.session, codomain))
             .map_err(err_map)?;
         match cursor.search() {
             Ok(_) => Ok(Some(cursor.get_value().map_err(err_map)?.len())),
@@ -374,12 +374,12 @@ where
     >(
         &self,
         rel: Tables,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<Domain> {
         // Requires there be a secondary index on the relation named 'codomain'
         let index = rel.get_secondary_index();
         let cursor = self.session.open_cursor(&index, None).map_err(err_map)?;
-        let codomain_datum = to_datum(&self.session, &codomain);
+        let codomain_datum = to_datum(&self.session, codomain);
         cursor.set_key(codomain_datum).map_err(err_map)?;
         cursor.search().map_err(err_map)?;
         Ok(from_datum(
@@ -395,12 +395,12 @@ where
     >(
         &self,
         rel: Tables,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<ResultSet> {
         // Requires there be a secondary index on the relation named 'codomain'
         let index = rel.get_secondary_index();
         let cursor = self.session.open_cursor(&index, None).map_err(err_map)?;
-        let codomain_sr = to_datum(&self.session, &codomain);
+        let codomain_sr = to_datum(&self.session, codomain);
         cursor.set_key(codomain_sr).map_err(err_map)?;
         match cursor.search() {
             Ok(_) => {}
@@ -417,7 +417,7 @@ where
                 Ok(_) => {
                     let codomain_scan: Codomain =
                         from_datum::<Codomain>(&self.session, cursor.get_key().map_err(err_map)?);
-                    if codomain_scan != codomain {
+                    if codomain_scan.ne(codomain) {
                         break;
                     }
                 }
@@ -437,10 +437,10 @@ where
     >(
         &self,
         rel: Tables,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<Option<Codomain>> {
-        let key_bytes = self.composite_key_for(&domain_a, &domain_b);
+        let key_bytes = self.composite_key_for(domain_a, domain_b);
         let table = rel.into();
         let cursor = self
             .session
@@ -462,10 +462,10 @@ where
     >(
         &self,
         rel: Tables,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<Option<usize>> {
-        let key_bytes = self.composite_key_for(&domain_a, &domain_b);
+        let key_bytes = self.composite_key_for(domain_a, domain_b);
         let table = rel.into();
         let cursor = self
             .session
@@ -485,11 +485,11 @@ where
     >(
         &self,
         rel: Tables,
-        domain_a: DomainA,
-        domain_b: DomainB,
-        codomain: Codomain,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
+        codomain: &Codomain,
     ) -> Result<()> {
-        let key_bytes = self.composite_key_for(&domain_a, &domain_b);
+        let key_bytes = self.composite_key_for(domain_a, domain_b);
         let table = rel.into();
         let cursor = self
             .session
@@ -497,7 +497,7 @@ where
             .map_err(err_map)?;
         cursor.set_key(key_bytes).map_err(err_map)?;
         cursor
-            .set_value(to_datum(&self.session, &codomain))
+            .set_value(to_datum(&self.session, codomain))
             .map_err(err_map)?;
         match cursor.insert() {
             Ok(_) => Ok(()),
@@ -514,10 +514,10 @@ where
     >(
         &self,
         rel: Tables,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<()> {
-        let key_bytes = self.composite_key_for(&domain_a, &domain_b);
+        let key_bytes = self.composite_key_for(domain_a, domain_b);
         let table = rel.into();
         let cursor = self
             .session
@@ -538,11 +538,11 @@ where
     >(
         &self,
         rel: Tables,
-        domain_a: DomainA,
-        domain_b: DomainB,
-        value: Codomain,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
+        value: &Codomain,
     ) -> Result<()> {
-        let key_bytes = self.composite_key_for(&domain_a, &domain_b);
+        let key_bytes = self.composite_key_for(domain_a, domain_b);
         let table = rel.into();
         let cursor = self
             .session
@@ -551,7 +551,7 @@ where
 
         cursor.set_key(key_bytes).map_err(err_map)?;
         cursor
-            .set_value(to_datum(&self.session, &value))
+            .set_value(to_datum(&self.session, value))
             .map_err(err_map)?;
         cursor.insert().map_err(err_map)?;
         Ok(())
@@ -561,7 +561,7 @@ where
     fn delete_if_exists<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Tables,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<()> {
         let table = rel.into();
         let cursor = self
@@ -569,7 +569,7 @@ where
             .open_cursor(&table, Some(cursor_options()))
             .map_err(err_map)?;
         cursor
-            .set_key(to_datum(&self.session, &domain))
+            .set_key(to_datum(&self.session, domain))
             .map_err(err_map)?;
         match cursor.remove() {
             Ok(_) => Ok(()),
@@ -626,28 +626,27 @@ mod tests {
         db.load_sequences();
         db
     }
-
     #[test]
     fn test_insert_seek_unique() {
         let tmpdir = tempfile::tempdir().unwrap();
         let db = test_db(tmpdir.path());
         let tx = db.clone().start_tx();
 
-        tx.insert_tuple(OneToOne, Objid(1), Objid(2)).unwrap();
-        tx.insert_tuple(OneToOne, Objid(2), Objid(3)).unwrap();
-        tx.insert_tuple(OneToOne, Objid(3), Objid(4)).unwrap();
+        tx.insert_tuple(OneToOne, &Objid(1), &Objid(2)).unwrap();
+        tx.insert_tuple(OneToOne, &Objid(2), &Objid(3)).unwrap();
+        tx.insert_tuple(OneToOne, &Objid(3), &Objid(4)).unwrap();
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, Objid(1))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid(1))
                 .unwrap(),
             Some(Objid(2))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, Objid(2))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid(2))
                 .unwrap(),
             Some(Objid(3))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, Objid(3))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid(3))
                 .unwrap(),
             Some(Objid(4))
         );
@@ -658,19 +657,18 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let db = test_db(tmpdir.path());
         let tx = db.clone().start_tx();
-
-        tx.insert_composite_domain_tuple(CompositeToOne, Objid(1), Objid(2), Objid(3))
+        tx.insert_composite_domain_tuple(CompositeToOne, &Objid(1), &Objid(2), &Objid(3))
             .unwrap();
-        tx.insert_composite_domain_tuple(CompositeToOne, Objid(2), Objid(3), Objid(4))
+        tx.insert_composite_domain_tuple(CompositeToOne, &Objid(2), &Objid(3), &Objid(4))
             .unwrap();
-        tx.insert_composite_domain_tuple(CompositeToOne, Objid(3), Objid(4), Objid(5))
+        tx.insert_composite_domain_tuple(CompositeToOne, &Objid(3), &Objid(4), &Objid(5))
             .unwrap();
 
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(1),
-                Objid(2)
+                &Objid(1),
+                &Objid(2)
             )
             .unwrap(),
             Some(Objid(3))
@@ -678,8 +676,8 @@ mod tests {
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(2),
-                Objid(3)
+                &Objid(2),
+                &Objid(3)
             )
             .unwrap(),
             Some(Objid(4))
@@ -687,34 +685,34 @@ mod tests {
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(3),
-                Objid(4)
+                &Objid(3),
+                &Objid(4)
             )
             .unwrap(),
             Some(Objid(5))
         );
 
         // Now upsert an existing value...
-        tx.upsert_composite(CompositeToOne, Objid(1), Objid(2), Objid(4))
+        tx.upsert_composite(CompositeToOne, &Objid(1), &Objid(2), &Objid(4))
             .unwrap();
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(1),
-                Objid(2)
+                &Objid(1),
+                &Objid(2)
             )
             .unwrap(),
             Some(Objid(4))
         );
 
         // And insert a new using upsert
-        tx.upsert_composite(CompositeToOne, Objid(4), Objid(5), Objid(6))
+        tx.upsert_composite(CompositeToOne, &Objid(4), &Objid(5), &Objid(6))
             .unwrap();
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(4),
-                Objid(5)
+                &Objid(4),
+                &Objid(5)
             )
             .unwrap(),
             Some(Objid(6))
@@ -726,120 +724,120 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let db = test_db(tmpdir.path());
         let tx = db.clone().start_tx();
-        tx.insert_tuple(OneToOneSecondaryIndexed, Objid(3), Objid(2))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(3), &Objid(2))
             .unwrap();
-        tx.insert_tuple(OneToOneSecondaryIndexed, Objid(2), Objid(1))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(2), &Objid(1))
             .unwrap();
-        tx.insert_tuple(OneToOneSecondaryIndexed, Objid(1), Objid(0))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(1), &Objid(0))
             .unwrap();
-        tx.insert_tuple(OneToOneSecondaryIndexed, Objid(4), Objid(0))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(4), &Objid(0))
             .unwrap();
 
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(3))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(3))
                 .unwrap(),
             Some(Objid(2))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             Some(Objid(1))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             Some(Objid(0))
         );
 
         assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(0))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
                 .unwrap(),
-            Objid(1)
+            ObjSet::from_items(&[Objid(1), Objid(4)])
         );
         assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             Objid(2)
         );
         assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             Objid(3)
         );
 
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(3))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(3))
                 .unwrap(),
             ObjSet::empty()
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(0))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
                 .unwrap(),
             ObjSet::from_items(&[Objid(1), Objid(4)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             ObjSet::from_items(&[Objid(2)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             ObjSet::from_items(&[Objid(3)])
         );
 
         // Now commit and re-verify.
         assert_eq!(tx.commit(), super::CommitResult::Success);
-        let tx = db.clone().start_tx();
+        let tx = db.start_tx();
 
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(3))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(3))
                 .unwrap(),
             Some(Objid(2))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             Some(Objid(1))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             Some(Objid(0))
         );
 
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(3))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(3))
                 .unwrap(),
             ObjSet::empty(),
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             ObjSet::from_items(&[Objid(3)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             ObjSet::from_items(&[Objid(2)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(0))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
                 .unwrap(),
             ObjSet::from_items(&[Objid(1), Objid(4)])
         );
 
         // And then update a value and verify.
-        tx.upsert::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1), Objid(2))
+        tx.upsert::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1), &Objid(2))
             .unwrap();
         assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             Objid(2)
         );
         // Verify that the secondary index is updated... First check for new value.
         let children: ObjSet = tx
-            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(2))
+            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(2))
             .unwrap();
         assert_eq!(children.len(), 2);
         assert!(
@@ -852,7 +850,7 @@ mod tests {
         );
         // Now check the old value.
         let children = tx
-            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(0))
+            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
             .unwrap();
         assert_eq!(children, ObjSet::from_items(&[Objid(4)]));
     }

@@ -42,7 +42,7 @@ fn create_worldstate() -> WiredTigerDB {
     let (ws_source, _) = WiredTigerDB::open(None);
     let mut tx = ws_source.new_world_state().unwrap();
     let _sysobj = tx
-        .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
+        .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::all())
         .unwrap();
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
     ws_source
@@ -58,11 +58,11 @@ pub fn prepare_call_verb(
 
     let verb_name = Symbol::mk(verb_name);
     let vi = world_state
-        .find_method_verb_on(SYSTEM_OBJECT, SYSTEM_OBJECT, verb_name)
+        .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
         .unwrap();
     vm_host.start_call_method_verb(
         0,
-        SYSTEM_OBJECT,
+        &SYSTEM_OBJECT,
         vi,
         VerbCall {
             verb_name,
@@ -85,10 +85,10 @@ fn prepare_vm_execution(
     let binary = compile(program, CompileOptions::default()).unwrap();
     let mut tx = ws_source.new_world_state().unwrap();
     tx.add_verb(
-        SYSTEM_OBJECT,
-        SYSTEM_OBJECT,
+        &SYSTEM_OBJECT,
+        &SYSTEM_OBJECT,
         vec![Symbol::mk("test")],
-        SYSTEM_OBJECT,
+        &SYSTEM_OBJECT,
         VerbFlag::rxd(),
         VerbArgsSpec::this_none_this(),
         binary.make_copy_as_vec().unwrap(),

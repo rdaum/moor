@@ -205,11 +205,11 @@ pub mod vm_test_utils {
         execute(world_state, session, builtins, |world_state, vm_host| {
             let verb_name = Symbol::mk_case_insensitive(verb_name);
             let vi = world_state
-                .find_method_verb_on(SYSTEM_OBJECT, SYSTEM_OBJECT, verb_name)
+                .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
                 .unwrap();
             vm_host.start_call_method_verb(
                 0,
-                SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
                 vi,
                 VerbCall {
                     verb_name,
@@ -233,7 +233,7 @@ pub mod vm_test_utils {
         program: Program,
     ) -> ExecResult {
         execute(world_state, session, builtins, |world_state, vm_host| {
-            vm_host.start_eval(0, player, program, world_state);
+            vm_host.start_eval(0, &player, program, world_state);
         })
     }
 }
@@ -282,16 +282,16 @@ pub mod scheduler_test_utils {
     pub fn call_command(
         scheduler: SchedulerClient,
         session: Arc<dyn Session>,
-        player: Objid,
+        player: &Objid,
         command: &str,
     ) -> Result<Var, SchedulerError> {
-        execute(|| scheduler.submit_command_task(SYSTEM_OBJECT, player, command, session))
+        execute(|| scheduler.submit_command_task(&SYSTEM_OBJECT, player, command, session))
     }
 
     pub fn call_eval(
         scheduler: SchedulerClient,
         session: Arc<dyn Session>,
-        player: Objid,
+        player: &Objid,
         code: String,
     ) -> Result<Var, SchedulerError> {
         execute(|| {

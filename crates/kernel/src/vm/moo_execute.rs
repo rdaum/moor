@@ -270,7 +270,7 @@ pub fn moo_frame_execute(
                 f.push(v_int(*val as i64));
             }
             Op::ImmObjid(val) => {
-                f.push(v_objid(*val));
+                f.push(v_objid(val.clone()));
             }
             Op::ImmErr(val) => {
                 f.push(v_err(*val));
@@ -532,7 +532,7 @@ pub fn moo_frame_execute(
                     return state.push_error(E_INVIND);
                 };
                 let propname = Symbol::mk_case_insensitive(propname.as_string());
-                let result = world_state.retrieve_property(a.permissions, *obj, propname);
+                let result = world_state.retrieve_property(&a.permissions, obj, propname);
                 match result {
                     Ok(v) => {
                         f.poke(0, v);
@@ -556,7 +556,7 @@ pub fn moo_frame_execute(
                     return state.push_error(E_INVIND);
                 };
                 let propname = Symbol::mk_case_insensitive(propname.as_string());
-                let result = world_state.retrieve_property(a.permissions, *obj, propname);
+                let result = world_state.retrieve_property(&a.permissions, obj, propname);
                 match result {
                     Ok(v) => {
                         f.push(v);
@@ -582,7 +582,7 @@ pub fn moo_frame_execute(
 
                 let propname = Symbol::mk_case_insensitive(propname.as_string());
                 let update_result =
-                    world_state.update_property(a.permissions, *obj, propname, &rhs.clone());
+                    world_state.update_property(&a.permissions, obj, propname, &rhs.clone());
 
                 match update_result {
                     Ok(()) => {
@@ -612,8 +612,8 @@ pub fn moo_frame_execute(
                 let delay = (time != 0.0).then(|| Duration::from_secs_f64(time));
                 let new_activation = a.clone();
                 let fork = Fork {
-                    player: a.player,
-                    progr: a.permissions,
+                    player: a.player.clone(),
+                    progr: a.permissions.clone(),
                     parent_task_id: state.task_id,
                     delay,
                     activation: new_activation,
@@ -632,7 +632,9 @@ pub fn moo_frame_execute(
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
                 let (args, verb, obj) = match (args.variant(), verb.variant(), obj.variant()) {
-                    (Variant::List(l), Variant::Str(s), Variant::Obj(o)) => (l.clone(), s, *o),
+                    (Variant::List(l), Variant::Str(s), Variant::Obj(o)) => {
+                        (l.clone(), s, o.clone())
+                    }
                     (Variant::List(l), Variant::Str(s), non_obj) => {
                         if !exec_params.config.type_dispatch {
                             return state.push_error(E_TYPE);
@@ -653,8 +655,8 @@ pub fn moo_frame_execute(
                             }
                         };
                         let prop_val = match world_state.retrieve_property(
-                            a.permissions,
-                            SYSTEM_OBJECT,
+                            &a.permissions,
+                            &SYSTEM_OBJECT,
                             sysprop_sym,
                         ) {
                             Ok(prop_val) => prop_val,
@@ -671,14 +673,14 @@ pub fn moo_frame_execute(
                         let Variant::List(arguments) = arguments.variant() else {
                             return state.push_error(E_TYPE);
                         };
-                        (arguments.clone(), s, *prop_val)
+                        (arguments.clone(), s, prop_val.clone())
                     }
                     _ => {
                         return state.push_error(E_TYPE);
                     }
                 };
                 let verb = Symbol::mk_case_insensitive(verb.as_string());
-                return state.prepare_call_verb(world_state, obj, verb, args);
+                return state.prepare_call_verb(world_state, &obj, verb, args);
             }
             Op::Return => {
                 let ret_val = f.pop();

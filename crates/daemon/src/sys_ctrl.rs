@@ -100,7 +100,7 @@ impl SystemControl for RpcServer {
         let listeners = hosts
             .listeners()
             .iter()
-            .map(|(o, t, h)| (*o, t.id_str().to_string(), h.port(), true))
+            .map(|(o, t, h)| (o.clone(), t.id_str().to_string(), h.port(), true))
             .collect();
         Ok(listeners)
     }

@@ -44,13 +44,13 @@ impl ListenersClient {
 
     pub async fn add_listener(
         &self,
-        handler: Objid,
+        handler: &Objid,
         addr: SocketAddr,
     ) -> Result<(), ListenersError> {
         self.listeners_channel
-            .send(ListenersMessage::AddListener(handler, addr))
+            .send(ListenersMessage::AddListener(handler.clone(), addr))
             .await
-            .map_err(|_| ListenersError::AddListenerFailed(handler, addr))?;
+            .map_err(|_| ListenersError::AddListenerFailed(handler.clone(), addr))?;
         Ok(())
     }
 

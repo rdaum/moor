@@ -50,7 +50,7 @@ pub trait RelationalTransaction<Relation>: Send {
     fn remove_by_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Relation,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<()>;
     fn remove_by_composite_domain<
         DomainA: Clone + Eq + PartialEq + AsByteBuffer,
@@ -58,8 +58,8 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<()>;
     fn remove_by_codomain<
         Domain: Clone + Eq + PartialEq + AsByteBuffer,
@@ -67,7 +67,7 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<()>;
     fn upsert<
         Domain: Clone + Eq + PartialEq + AsByteBuffer,
@@ -75,8 +75,8 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        domain: Domain,
-        codomain: Codomain,
+        domain: &Domain,
+        codomain: &Codomain,
     ) -> Result<()>;
     fn insert_tuple<
         Domain: Clone + Eq + PartialEq + AsByteBuffer,
@@ -84,8 +84,8 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        domain: Domain,
-        codomain: Codomain,
+        domain: &Domain,
+        codomain: &Codomain,
     ) -> Result<()>;
     fn scan_with_predicate<P, Domain, Codomain>(
         &self,
@@ -102,17 +102,17 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<Option<Codomain>>;
     fn tuple_size_for_unique_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Relation,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<Option<usize>>;
     fn tuple_size_for_unique_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Relation,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<Option<usize>>;
     fn seek_unique_by_codomain<
         Domain: Clone + Eq + PartialEq + AsByteBuffer,
@@ -120,7 +120,7 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<Domain>;
 
     fn seek_by_codomain<
@@ -130,7 +130,7 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> Result<ResultSet>;
     fn seek_by_unique_composite_domain<
         DomainA: Clone + Eq + PartialEq + AsByteBuffer,
@@ -139,8 +139,8 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<Option<Codomain>>;
     fn tuple_size_by_composite_domain<
         DomainA: Clone + Eq + PartialEq + AsByteBuffer,
@@ -148,8 +148,8 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<Option<usize>>;
     fn insert_composite_domain_tuple<
         Codomain: Clone + Eq + PartialEq + AsByteBuffer,
@@ -158,9 +158,9 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
-        codomain: Codomain,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
+        codomain: &Codomain,
     ) -> Result<()>;
     fn delete_composite_if_exists<
         DomainA: Clone + Eq + PartialEq + AsByteBuffer,
@@ -168,8 +168,8 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> Result<()>;
     fn upsert_composite<
         DomainA: Clone + Eq + PartialEq + AsByteBuffer,
@@ -178,14 +178,14 @@ pub trait RelationalTransaction<Relation>: Send {
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
-        value: Codomain,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
+        value: &Codomain,
     ) -> Result<()>;
     #[allow(dead_code)]
     fn delete_if_exists<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Relation,
-        domain: Domain,
+        domain: &Domain,
     ) -> Result<()>;
 }

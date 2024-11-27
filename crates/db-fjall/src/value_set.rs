@@ -155,7 +155,7 @@ where
         Self::new(Bytes::from(new_values))
     }
 
-    pub(crate) fn find(&self, value: Value) -> Option<usize> {
+    pub(crate) fn find(&self, value: &Value) -> Option<usize> {
         let bytes = self.contents.as_ref();
         let mut len_bytes = [0; 4];
         len_bytes.copy_from_slice(&bytes[..4]);

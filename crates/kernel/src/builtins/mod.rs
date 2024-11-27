@@ -116,8 +116,11 @@ impl BfCallState<'_> {
     }
     pub fn task_perms(&self) -> Result<Perms, WorldStateError> {
         let who = self.task_perms_who();
-        let flags = self.world_state.flags_of(who)?;
-        Ok(Perms { who, flags })
+        let flags = self.world_state.flags_of(&who)?;
+        Ok(Perms {
+            who: who.clone(),
+            flags,
+        })
     }
 
     pub fn bf_frame(&self) -> &BfFrame {

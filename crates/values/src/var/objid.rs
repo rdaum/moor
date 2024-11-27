@@ -12,17 +12,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::fmt::{Debug, Display, Formatter};
-
 use crate::encode::{DecodingError, EncodingError};
-use crate::AsByteBuffer;
+use crate::{AsByteBuffer, NOTHING};
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use std::fmt::{Debug, Display, Formatter};
 
 #[derive(
-    Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode, Serialize, Deserialize,
+    Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode, Serialize, Deserialize,
 )]
 pub struct Objid(pub i64);
 
@@ -54,6 +53,10 @@ impl Objid {
     #[must_use]
     pub fn is_sysobj(&self) -> bool {
         self.0 == 0
+    }
+
+    pub fn is_nothing(&self) -> bool {
+        self.0 == NOTHING.0
     }
 }
 

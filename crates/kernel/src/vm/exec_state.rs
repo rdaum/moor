@@ -84,10 +84,10 @@ impl VMExecState {
         for activation in callers_iter {
             let verb_name = activation.verb_name;
             let definer = activation.verb_definer();
-            let player = activation.player;
+            let player = activation.player.clone();
             let line_number = activation.frame.find_line_no().unwrap_or(0);
-            let this = activation.this;
-            let perms = activation.permissions;
+            let this = activation.this.clone();
+            let perms = activation.permissions.clone();
             let programmer = match activation.frame {
                 Frame::Bf(_) => NOTHING,
                 _ => perms,
@@ -123,7 +123,7 @@ impl VMExecState {
             if let Frame::Bf(_) = activation.frame {
                 continue;
             }
-            return activation.this;
+            return activation.this.clone();
         }
         NOTHING
     }
@@ -142,7 +142,10 @@ impl VMExecState {
         let mut stack_iter = self.stack.iter().rev().filter(|a| !a.is_builtin_frame());
         // caller is the frame just before us.
         stack_iter.next();
-        stack_iter.next().map(|a| a.permissions).unwrap_or(NOTHING)
+        stack_iter
+            .next()
+            .map(|a| a.permissions.clone())
+            .unwrap_or(NOTHING)
     }
 
     /// Return the permissions of the current task, which is the "starting"
@@ -150,12 +153,12 @@ impl VMExecState {
     /// the `set_task_perms` built-in function.
     pub(crate) fn task_perms(&self) -> Objid {
         let stack_top = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
-        stack_top.map(|a| a.permissions).unwrap_or(NOTHING)
+        stack_top.map(|a| a.permissions.clone()).unwrap_or(NOTHING)
     }
 
     pub(crate) fn this(&self) -> Objid {
         let stack_top = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
-        stack_top.map(|a| a.this).unwrap_or(NOTHING)
+        stack_top.map(|a| a.this.clone()).unwrap_or(NOTHING)
     }
 
     /// Update the permissions of the current task, as called by the `set_task_perms`
@@ -164,7 +167,7 @@ impl VMExecState {
         // Copy the stack perms up to the last non-builtin. That is, make sure builtin-frames
         // get the permissions update, and the first non-builtin, too.
         for activation in self.stack.iter_mut().rev() {
-            activation.permissions = perms;
+            activation.permissions = perms.clone();
             if !activation.is_builtin_frame() {
                 break;
             }

@@ -128,11 +128,11 @@ impl VmHost {
         verb: (Bytes, VerbDef),
         verb_call: VerbCall,
         command: ParsedCommand,
-        permissions: Objid,
+        permissions: &Objid,
     ) {
         let program = Self::decode_program(verb.1.binary_type(), verb.0);
         let call_request = VerbExecutionRequest {
-            permissions,
+            permissions: permissions.clone(),
             resolved_verb: verb.1,
             call: verb_call,
             command: Some(command),
@@ -146,14 +146,14 @@ impl VmHost {
     pub fn start_call_method_verb(
         &mut self,
         task_id: TaskId,
-        perms: Objid,
+        perms: &Objid,
         verb_info: (Bytes, VerbDef),
         verb_call: VerbCall,
     ) {
         let binary = Self::decode_program(verb_info.1.binary_type(), verb_info.0);
 
         let call_request = VerbExecutionRequest {
-            permissions: perms,
+            permissions: perms.clone(),
             resolved_verb: verb_info.1,
             call: verb_call,
             command: None,
@@ -191,7 +191,7 @@ impl VmHost {
     pub fn start_eval(
         &mut self,
         task_id: TaskId,
-        player: Objid,
+        player: &Objid,
         program: Program,
         world_state: &dyn WorldState,
     ) {
@@ -291,7 +291,7 @@ impl VmHost {
                     program,
                 } => {
                     self.vm_exec_state
-                        .exec_eval_request(permissions, player, program);
+                        .exec_eval_request(&permissions, &player, program);
                     return ContinueOk;
                 }
                 ExecutionResult::ContinueBuiltin {
@@ -434,7 +434,7 @@ impl VmHost {
     }
 
     pub fn permissions(&self) -> Objid {
-        self.vm_exec_state.top().permissions
+        self.vm_exec_state.top().permissions.clone()
     }
     pub fn verb_name(&self) -> Symbol {
         self.vm_exec_state.top().verb_name
@@ -443,7 +443,7 @@ impl VmHost {
         self.vm_exec_state.top().verb_definer()
     }
     pub fn this(&self) -> Objid {
-        self.vm_exec_state.top().this
+        self.vm_exec_state.top().this.clone()
     }
     pub fn line_number(&self) -> usize {
         self.vm_exec_state.top().frame.find_line_no().unwrap_or(0)

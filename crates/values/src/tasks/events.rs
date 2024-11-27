@@ -54,8 +54,8 @@ impl NarrativeEvent {
         self.timestamp
     }
     #[must_use]
-    pub fn author(&self) -> Objid {
-        self.author
+    pub fn author(&self) -> &Objid {
+        &self.author
     }
     #[must_use]
     pub fn event(&self) -> Event {

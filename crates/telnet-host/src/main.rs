@@ -129,7 +129,7 @@ async fn main() -> Result<(), eyre::Error> {
     });
 
     listeners
-        .add_listener(SYSTEM_OBJECT, telnet_sockaddr)
+        .add_listener(&SYSTEM_OBJECT, telnet_sockaddr)
         .await
         .expect("Unable to start default listener");
 

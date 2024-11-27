@@ -30,8 +30,11 @@ pub struct Perms {
 
 impl Perms {
     #[must_use]
-    pub fn new(obj: Objid, flags: BitEnum<ObjFlag>) -> Self {
-        Self { who: obj, flags }
+    pub fn new(obj: &Objid, flags: BitEnum<ObjFlag>) -> Self {
+        Self {
+            who: obj.clone(),
+            flags,
+        }
     }
 
     pub fn check_property_allows(
@@ -53,11 +56,11 @@ impl Perms {
 
     pub fn check_verb_allows(
         &self,
-        verb_owner: Objid,
+        verb_owner: &Objid,
         verb_flags: BitEnum<VerbFlag>,
         allows: VerbFlag,
     ) -> Result<(), WorldStateError> {
-        if self.who == verb_owner {
+        if self.who.eq(verb_owner) {
             return Ok(());
         }
         if self.flags.contains(ObjFlag::Wizard) {
@@ -71,11 +74,11 @@ impl Perms {
 
     pub fn check_object_allows(
         &self,
-        object_owner: Objid,
+        object_owner: &Objid,
         object_flags: BitEnum<ObjFlag>,
         allows: BitEnum<ObjFlag>,
     ) -> Result<(), WorldStateError> {
-        if self.who == object_owner {
+        if self.who.eq(object_owner) {
             return Ok(());
         }
         if self.flags.contains(ObjFlag::Wizard) {
@@ -87,8 +90,8 @@ impl Perms {
         Ok(())
     }
 
-    pub fn check_obj_owner_perms(&self, object_owner: Objid) -> Result<(), WorldStateError> {
-        if self.who == object_owner {
+    pub fn check_obj_owner_perms(&self, object_owner: &Objid) -> Result<(), WorldStateError> {
+        if self.who.eq(object_owner) {
             return Ok(());
         }
         if self.flags.contains(ObjFlag::Wizard) {

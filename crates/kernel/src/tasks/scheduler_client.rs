@@ -45,8 +45,8 @@ impl SchedulerClient {
     #[instrument(skip(self, session))]
     pub fn submit_command_task(
         &self,
-        handler_object: Objid,
-        player: Objid,
+        handler_object: &Objid,
+        player: &Objid,
         command: &str,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
@@ -54,8 +54,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitCommandTask {
-                handler_object,
-                player,
+                handler_object: handler_object.clone(),
+                player: player.clone(),
                 command: command.to_string(),
                 session,
                 reply,
@@ -75,24 +75,24 @@ impl SchedulerClient {
     #[allow(clippy::too_many_arguments)]
     pub fn submit_verb_task(
         &self,
-        player: Objid,
-        vloc: ObjectRef,
+        player: &Objid,
+        vloc: &ObjectRef,
         verb: Symbol,
         args: Vec<Var>,
         argstr: String,
-        perms: Objid,
+        perms: &Objid,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
         trace!(?player, ?verb, ?args, "Verb submitting");
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitVerbTask {
-                player,
-                vloc,
+                player: player.clone(),
+                vloc: vloc.clone(),
                 verb: Symbol::mk_case_insensitive(verb.as_str()),
                 args,
                 argstr,
-                perms,
+                perms: perms.clone(),
                 session,
                 reply,
             })
@@ -109,14 +109,14 @@ impl SchedulerClient {
     /// a new transaction.
     pub fn submit_requested_input(
         &self,
-        player: Objid,
+        player: &Objid,
         input_request_id: Uuid,
         input: String,
     ) -> Result<(), SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitTaskInput {
-                player,
+                player: player.clone(),
                 input_request_id,
                 input,
                 reply,
@@ -131,8 +131,8 @@ impl SchedulerClient {
     #[instrument(skip(self, session))]
     pub fn submit_out_of_band_task(
         &self,
-        handler_object: Objid,
-        player: Objid,
+        handler_object: &Objid,
+        player: &Objid,
         command: Vec<String>,
         argstr: String,
         session: Arc<dyn Session>,
@@ -141,8 +141,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitOobTask {
-                handler_object,
-                player,
+                handler_object: handler_object.clone(),
+                player: player.clone(),
                 command,
                 argstr,
                 session,
@@ -159,8 +159,8 @@ impl SchedulerClient {
     #[instrument(skip(self, sessions))]
     pub fn submit_eval_task(
         &self,
-        player: Objid,
-        perms: Objid,
+        player: &Objid,
+        perms: &Objid,
         code: String,
         sessions: Arc<dyn Session>,
         config: Arc<Config>,
@@ -174,8 +174,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitEvalTask {
-                player,
-                perms,
+                player: player.clone(),
+                perms: perms.clone(),
                 program,
                 sessions,
                 reply,
@@ -201,18 +201,18 @@ impl SchedulerClient {
 
     pub fn submit_verb_program(
         &self,
-        player: Objid,
-        perms: Objid,
-        obj: ObjectRef,
+        player: &Objid,
+        perms: &Objid,
+        obj: &ObjectRef,
         verb_name: Symbol,
         code: Vec<String>,
     ) -> Result<(Objid, Symbol), SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitProgramVerb {
-                player,
-                perms,
-                obj,
+                player: player.clone(),
+                perms: perms.clone(),
+                obj: obj.clone(),
                 verb_name,
                 code,
                 reply,
@@ -226,15 +226,15 @@ impl SchedulerClient {
 
     pub fn request_system_property(
         &self,
-        player: Objid,
-        obj: ObjectRef,
+        player: &Objid,
+        obj: &ObjectRef,
         property: Symbol,
     ) -> Result<Var, SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestSystemProperty {
-                player,
-                obj,
+                player: player.clone(),
+                obj: obj.clone(),
                 property,
                 reply,
             })
@@ -258,16 +258,16 @@ impl SchedulerClient {
 
     pub fn request_verbs(
         &self,
-        player: Objid,
-        perms: Objid,
-        obj: ObjectRef,
+        player: &Objid,
+        perms: &Objid,
+        obj: &ObjectRef,
     ) -> Result<VerbDefs, SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestVerbs {
-                player,
-                perms,
-                obj,
+                player: player.clone(),
+                perms: perms.clone(),
+                obj: obj.clone(),
                 reply,
             })
             .map_err(|_| SchedulerError::SchedulerNotResponding)?;
@@ -279,17 +279,17 @@ impl SchedulerClient {
 
     pub fn request_verb(
         &self,
-        player: Objid,
-        perms: Objid,
-        obj: ObjectRef,
+        player: &Objid,
+        perms: &Objid,
+        obj: &ObjectRef,
         verb: Symbol,
     ) -> Result<(VerbDef, Vec<String>), SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestVerbCode {
-                player,
-                perms,
-                obj,
+                player: player.clone(),
+                perms: perms.clone(),
+                obj: obj.clone(),
                 verb,
                 reply,
             })
@@ -302,16 +302,16 @@ impl SchedulerClient {
 
     pub fn request_properties(
         &self,
-        player: Objid,
-        perms: Objid,
-        obj: ObjectRef,
+        player: &Objid,
+        perms: &Objid,
+        obj: &ObjectRef,
     ) -> Result<Vec<(PropDef, PropPerms)>, SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestProperties {
-                player,
-                perms,
-                obj,
+                player: player.clone(),
+                perms: perms.clone(),
+                obj: obj.clone(),
                 reply,
             })
             .map_err(|_| SchedulerError::SchedulerNotResponding)?;
@@ -323,17 +323,17 @@ impl SchedulerClient {
 
     pub fn request_property(
         &self,
-        player: Objid,
-        perms: Objid,
-        obj: ObjectRef,
+        player: &Objid,
+        perms: &Objid,
+        obj: &ObjectRef,
         property: Symbol,
     ) -> Result<(PropDef, PropPerms, Var), SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestProperty {
-                player,
-                perms,
-                obj,
+                player: player.clone(),
+                perms: perms.clone(),
+                obj: obj.clone(),
                 property,
                 reply,
             })

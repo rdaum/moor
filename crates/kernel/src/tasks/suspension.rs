@@ -101,7 +101,7 @@ impl SuspensionQ {
                 start = ?task.task.task_start , "Loaded suspended task from tasks database");
             task.session = bg_session_factory
                 .clone()
-                .mk_background_session(task.task.player)
+                .mk_background_session(&task.task.player)
                 .expect("Unable to create new background session for suspended task");
             self.tasks.insert(task.task.task_id, task);
         }
@@ -176,12 +176,12 @@ impl SuspensionQ {
     pub(crate) fn pull_task_for_input(
         &mut self,
         input_request_id: Uuid,
-        player: Objid,
+        player: &Objid,
     ) -> Option<SuspendedTask> {
         let (task_id, perms) = self.tasks.iter().find_map(|(task_id, sr)| {
             if let WakeCondition::Input(request_id) = &sr.wake_condition {
                 if *request_id == input_request_id {
-                    Some((*task_id, sr.task.perms))
+                    Some((*task_id, sr.task.perms.clone()))
                 } else {
                     None
                 }
@@ -191,7 +191,7 @@ impl SuspensionQ {
         })?;
 
         // If the player doesn't match, we'll pretend we didn't even see it.
-        if perms != player {
+        if perms.ne(player) {
             warn!(
                 ?task_id,
                 ?input_request_id,
@@ -221,7 +221,7 @@ impl SuspensionQ {
             tasks.push(TaskDescription {
                 task_id: sr.task.task_id,
                 start_time,
-                permissions: sr.task.perms,
+                permissions: sr.task.perms.clone(),
                 verb_name: sr.task.vm_host.verb_name(),
                 verb_definer: sr.task.vm_host.verb_definer(),
                 line_number: sr.task.vm_host.line_number(),
@@ -240,16 +240,16 @@ impl SuspensionQ {
                 return None;
             }
         }
-        Some(sr.task.perms)
+        Some(sr.task.perms.clone())
     }
 
     /// Remove all non-background tasks for the given player.
-    pub(crate) fn prune_foreground_tasks(&mut self, player: Objid) {
+    pub(crate) fn prune_foreground_tasks(&mut self, player: &Objid) {
         let to_remove = self
             .tasks
             .iter()
             .filter_map(|(task_id, sr)| {
-                (!sr.task.task_start.is_background() && sr.task.player == player)
+                (!sr.task.task_start.is_background() && sr.task.player.eq(player))
                     .then_some(*task_id)
             })
             .collect::<Vec<_>>();

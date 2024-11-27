@@ -107,7 +107,7 @@ impl WebHost {
                 Attach(
                     auth_token,
                     connect_type,
-                    self.handler_object,
+                    self.handler_object.clone(),
                     peer_addr.to_string(),
                 ),
             )
@@ -145,8 +145,8 @@ impl WebHost {
     /// Actually instantiate the connection now that we've validated the auth token.
     pub async fn start_ws_connection(
         &self,
-        handler_object: Objid,
-        player: Objid,
+        handler_object: &Objid,
+        player: &Objid,
         client_id: Uuid,
         client_token: ClientToken,
         auth_token: AuthToken,
@@ -176,8 +176,8 @@ impl WebHost {
         );
 
         Ok(WebSocketConnection {
-            handler_object,
-            player,
+            handler_object: handler_object.clone(),
+            player: player.clone(),
             peer_addr,
             broadcast_sub,
             narrative_sub,
@@ -445,8 +445,8 @@ async fn attach(
 
     let Ok(mut connection) = host
         .start_ws_connection(
-            host.handler_object,
-            player,
+            &host.handler_object,
+            &player,
             client_id,
             client_token,
             auth_token,

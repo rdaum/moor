@@ -51,10 +51,7 @@ fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let is_valid = bf_args
-        .world_state
-        .valid(*obj)
-        .map_err(world_state_bf_err)?;
+    let is_valid = bf_args.world_state.valid(obj).map_err(world_state_bf_err)?;
     Ok(Ret(v_bool(is_valid)))
 }
 bf_declare!(valid, bf_valid);
@@ -71,7 +68,7 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let parent = bf_args
         .world_state
-        .parent_of(bf_args.task_perms_who(), *obj)
+        .parent_of(&bf_args.task_perms_who(), obj)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_objid(parent)))
 }
@@ -89,7 +86,7 @@ fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     bf_args
         .world_state
-        .change_parent(bf_args.task_perms_who(), *obj, *new_parent)
+        .change_parent(&bf_args.task_perms_who(), obj, new_parent)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_none()))
 }
@@ -104,7 +101,7 @@ fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let children = bf_args
         .world_state
-        .children_of(bf_args.task_perms_who(), *obj)
+        .children_of(&bf_args.task_perms_who(), obj)
         .map_err(world_state_bf_err)?;
 
     let children = children.iter().map(v_objid).collect::<Vec<_>>();
@@ -144,15 +141,15 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
             let new_obj = bf_args
                 .world_state
-                .create_object(bf_args.task_perms_who(), parent, owner, BitEnum::new())
+                .create_object(&bf_args.task_perms_who(), &parent, &owner, BitEnum::new())
                 .map_err(world_state_bf_err)?;
 
             // We're going to try to call :initialize on the new object.
             // Then trampoline into the done case.
             // If :initialize doesn't exist, we'll just skip ahead.
             let Ok((binary, resolved_verb)) = bf_args.world_state.find_method_verb_on(
-                bf_args.task_perms_who(),
-                new_obj,
+                &bf_args.task_perms_who(),
+                &new_obj,
                 *INITIALIZE_SYM,
             ) else {
                 return Ok(Ret(v_objid(new_obj)));
@@ -160,19 +157,19 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
-            bf_frame.bf_trampoline_arg = Some(v_objid(new_obj));
+            bf_frame.bf_trampoline_arg = Some(v_objid(new_obj.clone()));
             Ok(VmInstr(ContinueVerb {
                 permissions: bf_args.task_perms_who(),
                 resolved_verb,
                 binary,
                 call: VerbCall {
                     verb_name: *INITIALIZE_SYM,
-                    location: new_obj,
-                    this: new_obj,
-                    player: bf_args.exec_state.top().player,
+                    location: new_obj.clone(),
+                    this: new_obj.clone(),
+                    player: bf_args.exec_state.top().player.clone(),
                     args: vec![],
                     argstr: "".to_string(),
-                    caller: bf_args.exec_state.top().this,
+                    caller: bf_args.exec_state.top().this.clone(),
                 },
                 command: None,
             }))
@@ -208,7 +205,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    let valid = bf_args.world_state.valid(obj);
+    let valid = bf_args.world_state.valid(&obj);
     if valid == Ok(false)
         || valid
             .err()
@@ -221,7 +218,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Check if the given task perms can control the object before continuing.
     if !bf_args
         .world_state
-        .controls(bf_args.task_perms_who(), obj)
+        .controls(&bf_args.task_perms_who(), &obj)
         .map_err(world_state_bf_err)?
     {
         return Err(BfErr::Code(E_PERM));
@@ -241,14 +238,14 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // now
                 let object_contents = bf_args
                     .world_state
-                    .contents_of(bf_args.task_perms_who(), obj)
+                    .contents_of(&bf_args.task_perms_who(), &obj)
                     .map_err(world_state_bf_err)?;
                 // Filter contents for objects that have an :exitfunc verb.
                 let mut contents = vec![];
                 for o in object_contents.iter() {
                     match bf_args.world_state.find_method_verb_on(
-                        bf_args.task_perms_who(),
-                        o,
+                        &bf_args.task_perms_who(),
+                        &o,
                         *EXITFUNC_SYM,
                     ) {
                         Ok(_) => {
@@ -263,8 +260,8 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 }
                 let contents = v_list(&contents);
                 match bf_args.world_state.find_method_verb_on(
-                    bf_args.task_perms_who(),
-                    obj,
+                    &bf_args.task_perms_who(),
+                    &obj,
                     *RECYCLE_SYM,
                 ) {
                     Ok((binary, resolved_verb)) => {
@@ -278,12 +275,12 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             binary,
                             call: VerbCall {
                                 verb_name: *RECYCLE_SYM,
-                                location: obj,
+                                location: obj.clone(),
                                 this: obj,
-                                player: bf_args.exec_state.top().player,
+                                player: bf_args.exec_state.top().player.clone(),
                                 args: Vec::new(),
                                 argstr: "".to_string(),
-                                caller: bf_args.exec_state.top().this,
+                                caller: bf_args.exec_state.top().this.clone(),
                             },
                             command: None,
                         }));
@@ -327,8 +324,8 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     // be transactionally isolated. But we need to do resolution anyways, so we will
                     // look again anyways.
                     let Ok((binary, resolved_verb)) = bf_args.world_state.find_method_verb_on(
-                        bf_args.task_perms_who(),
-                        *head_obj,
+                        &bf_args.task_perms_who(),
+                        head_obj,
                         *EXITFUNC_SYM,
                     ) else {
                         // If there's no :exitfunc, we can just move on to the next object.
@@ -347,12 +344,12 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         binary,
                         call: VerbCall {
                             verb_name: *EXITFUNC_SYM,
-                            location: *head_obj,
-                            this: *head_obj,
-                            player: bf_args.exec_state.top().player,
+                            location: head_obj.clone(),
+                            this: head_obj.clone(),
+                            player: bf_args.exec_state.top().player.clone(),
                             args: vec![v_objid(obj)],
                             argstr: "".to_string(),
-                            caller: bf_args.exec_state.top().this,
+                            caller: bf_args.exec_state.top().this.clone(),
                         },
                         command: None,
                     }));
@@ -362,7 +359,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 debug!(obj = ?obj, "Recycling object");
                 bf_args
                     .world_state
-                    .recycle_object(bf_args.task_perms_who(), obj)
+                    .recycle_object(&bf_args.task_perms_who(), &obj)
                     .map_err(world_state_bf_err)?;
                 return Ok(Ret(v_int(0)));
             }
@@ -380,7 +377,7 @@ fn bf_max_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let max_obj = bf_args
         .world_state
-        .max_object(bf_args.task_perms_who())
+        .max_object(&bf_args.task_perms_who())
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_objid(max_obj)))
 }
@@ -429,14 +426,14 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     loop {
         match tramp {
             BF_MOVE_TRAMPOLINE_START_ACCEPT => {
-                if whereto == NOTHING {
+                if whereto.is_nothing() {
                     shortcircuit = true;
                     tramp = BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC;
                     continue;
                 }
                 match bf_args.world_state.find_method_verb_on(
-                    bf_args.task_perms_who(),
-                    whereto,
+                    &bf_args.task_perms_who(),
+                    &whereto,
                     *ACCEPT_SYM,
                 ) {
                     Ok((binary, resolved_verb)) => {
@@ -449,12 +446,12 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             binary,
                             call: VerbCall {
                                 verb_name: *ACCEPT_SYM,
-                                location: whereto,
-                                this: whereto,
-                                player: bf_args.exec_state.top().player,
+                                location: whereto.clone(),
+                                this: whereto.clone(),
+                                player: bf_args.exec_state.top().player.clone(),
                                 args: vec![v_objid(what)],
                                 argstr: "".to_string(),
-                                caller: bf_args.exec_state.top().this,
+                                caller: bf_args.exec_state.top().this.clone(),
                             },
                             command: None,
                         }));
@@ -495,13 +492,13 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
                 let original_location = bf_args
                     .world_state
-                    .location_of(bf_args.task_perms_who(), what)
+                    .location_of(&bf_args.task_perms_who(), &what)
                     .map_err(world_state_bf_err)?;
 
                 // Failure here is likely due to permissions, so we'll just propagate that error.
                 bf_args
                     .world_state
-                    .move_object(bf_args.task_perms_who(), what, whereto)
+                    .move_object(&bf_args.task_perms_who(), &what, &whereto)
                     .map_err(world_state_bf_err)?;
 
                 // If the object has no location, then we can move on to the enterfunc.
@@ -512,8 +509,8 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
                 // Call exitfunc...
                 match bf_args.world_state.find_method_verb_on(
-                    bf_args.task_perms_who(),
-                    original_location,
+                    &bf_args.task_perms_who(),
+                    &original_location,
                     *EXITFUNC_SYM,
                 ) {
                     Ok((binary, resolved_verb)) => {
@@ -527,12 +524,12 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             binary,
                             call: VerbCall {
                                 verb_name: *EXITFUNC_SYM,
-                                location: original_location,
+                                location: original_location.clone(),
                                 this: original_location,
-                                player: bf_args.exec_state.top().player,
+                                player: bf_args.exec_state.top().player.clone(),
                                 args: vec![v_objid(what)],
                                 argstr: "".to_string(),
-                                caller: bf_args.exec_state.top().this,
+                                caller: bf_args.exec_state.top().this.clone(),
                             },
                             command: None,
                         };
@@ -559,8 +556,8 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 // Exitfunc has been called, and returned. Result is irrelevant. Prepare to call
                 // :enterfunc on the destination.
                 match bf_args.world_state.find_method_verb_on(
-                    bf_args.task_perms_who(),
-                    whereto,
+                    &bf_args.task_perms_who(),
+                    &whereto,
                     *ENTERFUNC_SYM,
                 ) {
                     Ok((binary, resolved_verb)) => {
@@ -574,12 +571,12 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             binary,
                             call: VerbCall {
                                 verb_name: *ENTERFUNC_SYM,
-                                location: whereto,
+                                location: whereto.clone(),
                                 this: whereto,
-                                player: bf_args.exec_state.top().player,
+                                player: bf_args.exec_state.top().player.clone(),
                                 args: vec![v_objid(what)],
                                 argstr: "".to_string(),
-                                caller: bf_args.exec_state.top().this,
+                                caller: bf_args.exec_state.top().this.clone(),
                             },
                             command: None,
                         }));
@@ -619,7 +616,7 @@ fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let verbs = bf_args
         .world_state
-        .verbs(bf_args.task_perms_who(), *obj)
+        .verbs(&bf_args.task_perms_who(), obj)
         .map_err(world_state_bf_err)?;
     let verbs: Vec<_> = verbs
         .iter()
@@ -642,7 +639,7 @@ fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     let props = bf_args
         .world_state
-        .properties(bf_args.task_perms_who(), *obj)
+        .properties(&bf_args.task_perms_who(), obj)
         .map_err(world_state_bf_err)?;
     let props: Vec<_> = props.iter().map(|p| v_str(p.name())).collect();
     Ok(Ret(v_list(&props)))
@@ -672,7 +669,7 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Get and set object flags
     let mut flags = bf_args
         .world_state
-        .flags_of(*obj)
+        .flags_of(obj)
         .map_err(world_state_bf_err)?;
 
     if f {
@@ -683,12 +680,12 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args
         .world_state
-        .set_flags_of(bf_args.task_perms_who(), *obj, flags)
+        .set_flags_of(&bf_args.task_perms_who(), obj, flags)
         .map_err(world_state_bf_err)?;
 
     // If the object was player, update the VM's copy of the perms.
-    if *obj == bf_args.task_perms().map_err(world_state_bf_err)?.who {
-        bf_args.exec_state.set_task_perms(*obj);
+    if obj.eq(&bf_args.task_perms().map_err(world_state_bf_err)?.who) {
+        bf_args.exec_state.set_task_perms(obj.clone());
     }
 
     Ok(Ret(v_none()))

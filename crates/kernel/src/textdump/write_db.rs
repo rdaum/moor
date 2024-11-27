@@ -68,7 +68,10 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
     // Retrieve all the objects
     let mut db_objects = BTreeMap::new();
     for id in object_ids.iter() {
-        db_objects.insert(id, tx.get_object(id).expect("Failed to get object"));
+        db_objects.insert(
+            id.clone(),
+            tx.get_object(&id).expect("Failed to get object"),
+        );
     }
 
     // Build a map of parent -> children
@@ -79,7 +82,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
         children_map
             .entry(parent)
             .or_insert_with(Vec::new)
-            .push(*id);
+            .push(id.clone());
     }
 
     // Same with location -> contents
@@ -88,9 +91,9 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
         let obj = db_objects.get(id).expect("Failed to get object");
         let location = obj.location().unwrap_or(NOTHING);
         contents_map
-            .entry(location)
+            .entry(location.clone())
             .or_insert_with(Vec::new)
-            .push(*id);
+            .push(id.clone());
     }
 
     // Objid -> Object
@@ -117,7 +120,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
             if position == roommates.len() - 1 {
                 Objid(-1)
             } else {
-                roommates[position + 1]
+                roommates[position + 1].clone()
             }
         } else {
             NOTHING
@@ -125,7 +128,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
 
         // To find 'contents' we're looking for the first object whose location is the current object
         let contents = match contents_map.get_mut(db_objid) {
-            Some(contents) => *contents.first().unwrap_or(&Objid(-1)),
+            Some(contents) => contents.first().unwrap_or(&Objid(-1)).clone(),
             None => NOTHING,
         };
 
@@ -142,17 +145,17 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
         let sibling = if position == siblings.len() - 1 {
             NOTHING
         } else {
-            siblings[position + 1]
+            siblings[position + 1].clone()
         };
 
         // To find child, we need to find the first object whose parent is the current object
         let child = match children_map.get_mut(db_objid) {
-            Some(children) => *children.first().unwrap_or(&NOTHING),
+            Some(children) => children.first().unwrap_or(&NOTHING).clone(),
             None => NOTHING,
         };
 
         // Find the verbdefs and transform them into textdump verbdefs
-        let db_verbdefs = tx.get_object_verbs(*db_objid).expect("Failed to get verbs");
+        let db_verbdefs = tx.get_object_verbs(db_objid).expect("Failed to get verbs");
         let verbdefs = db_verbdefs
             .iter()
             .map(|db_verbdef| {
@@ -175,7 +178,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
             }
 
             let binary = tx
-                .get_verb_binary(*db_objid, verb.uuid())
+                .get_verb_binary(db_objid, verb.uuid())
                 .expect("Failed to get verb binary");
 
             let program = if !binary.is_empty() {
@@ -193,11 +196,11 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
                 None
             };
 
-            let objid = *db_objid;
+            let objid = db_objid;
             verbs.insert(
-                (objid, verbnum),
+                (objid.clone(), verbnum),
                 Verb {
-                    objid,
+                    objid: objid.clone(),
                     verbnum,
                     program,
                 },
@@ -207,7 +210,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
         // propvals have wonky logic which resolve relative to position in the inheritance hierarchy of
         // propdefs up to the root. So we grab that all from the loader_client, and then we can just
         // iterate through them all.
-        let properties = tx.get_all_property_values(*db_objid).unwrap();
+        let properties = tx.get_all_property_values(db_objid).unwrap();
 
         let mut propdefs = vec![];
         for (p, _) in &properties {
@@ -233,7 +236,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
         // To construct the child linkage list, we need to scan all objects, and find all objects whose parent
         // is the current object, and add them to the list.
         let obj = Object {
-            id: *db_objid,
+            id: db_objid.clone(),
             owner: db_obj.owner().unwrap(),
             location: db_obj.location().unwrap_or(NOTHING),
             contents,
@@ -248,7 +251,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
             propvals,
         };
 
-        objects.insert(*db_objid, obj);
+        objects.insert(db_objid.clone(), obj);
     }
 
     let users = tx

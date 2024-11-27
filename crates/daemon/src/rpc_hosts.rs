@@ -60,7 +60,7 @@ impl Hosts {
             .flat_map(|(_, host_type, listeners)| {
                 listeners
                     .iter()
-                    .map(move |(oid, addr)| (*oid, *host_type, *addr))
+                    .map(move |(oid, addr)| (oid.clone(), *host_type, *addr))
             })
             .collect()
     }

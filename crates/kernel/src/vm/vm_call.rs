@@ -70,15 +70,15 @@ impl VMExecState {
     pub(crate) fn prepare_call_verb(
         &mut self,
         world_state: &mut dyn WorldState,
-        this: Objid,
+        this: &Objid,
         verb_name: Symbol,
         args: List,
     ) -> ExecutionResult {
         let call = VerbCall {
             verb_name,
-            location: this,
-            this,
-            player: self.top().player,
+            location: this.clone(),
+            this: this.clone(),
+            player: self.top().player.clone(),
             args: args.iter().collect(),
             // caller her is current-activation 'this', not activation caller() ...
             // unless we're a builtin, in which case we're #-1.
@@ -94,7 +94,7 @@ impl VMExecState {
         }
         // Find the callable verb ...
         let (binary, resolved_verb) =
-            match world_state.find_method_verb_on(self.top().permissions, this, verb_name) {
+            match world_state.find_method_verb_on(&self.top().permissions, this, verb_name) {
                 Ok(vi) => vi,
                 Err(WorldStateError::ObjectPermissionDenied) => {
                     return self.push_error(E_PERM);
@@ -136,9 +136,9 @@ impl VMExecState {
     ) -> ExecutionResult {
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
-        let permissions = self.top().permissions;
+        let permissions = &self.top().permissions;
 
-        let parent = match world_state.parent_of(permissions, definer) {
+        let parent = match world_state.parent_of(permissions, &definer) {
             Ok(parent) => parent,
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::RollbackRestart;
@@ -151,7 +151,7 @@ impl VMExecState {
         trace!(task_id = self.task_id, ?verb, ?definer, ?parent);
 
         let (binary, resolved_verb) =
-            match world_state.find_method_verb_on(permissions, parent, verb) {
+            match world_state.find_method_verb_on(permissions, &parent, verb) {
                 Ok(vi) => vi,
                 Err(WorldStateError::RollbackRetry) => {
                     return ExecutionResult::RollbackRestart;
@@ -163,15 +163,15 @@ impl VMExecState {
         let call = VerbCall {
             verb_name: verb,
             location: parent,
-            this: self.top().this,
-            player: self.top().player,
+            this: self.top().this.clone(),
+            player: self.top().player.clone(),
             args: args.iter().collect(),
             argstr: "".to_string(),
             caller,
         };
 
         ExecutionResult::ContinueVerb {
-            permissions,
+            permissions: permissions.clone(),
             resolved_verb,
             binary,
             call,
@@ -187,8 +187,8 @@ impl VMExecState {
         self.stack.push(a);
     }
 
-    pub fn exec_eval_request(&mut self, permissions: Objid, player: Objid, program: Program) {
-        let a = Activation::for_eval(permissions, player, program);
+    pub fn exec_eval_request(&mut self, permissions: &Objid, player: &Objid, program: Program) {
+        let a = Activation::for_eval(permissions.clone(), player, program);
 
         self.stack.push(a);
     }
@@ -250,7 +250,7 @@ impl VMExecState {
             // We copy the flags from the calling verb, that will determine error handling 'd'
             // behaviour below.
             flags,
-            self.top().player,
+            self.top().player.clone(),
         ));
         let mut bf_args = BfCallState {
             exec_state: self,

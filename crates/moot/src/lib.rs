@@ -62,11 +62,11 @@ pub fn test_db_path() -> PathBuf {
 pub trait MootRunner {
     type Value: PartialEq + std::fmt::Debug;
 
-    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> eyre::Result<()>;
-    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> eyre::Result<()>;
+    fn eval<S: Into<String>>(&mut self, player: &Objid, command: S) -> eyre::Result<()>;
+    fn command<S: AsRef<str>>(&mut self, player: &Objid, command: S) -> eyre::Result<()>;
 
-    fn read_line(&mut self, player: Objid) -> eyre::Result<Option<String>>;
-    fn read_eval_result(&mut self, player: Objid) -> eyre::Result<Option<Self::Value>>;
+    fn read_line(&mut self, player: &Objid) -> eyre::Result<Option<String>>;
+    fn read_eval_result(&mut self, player: &Objid) -> eyre::Result<Option<Self::Value>>;
 
     fn none(&self) -> Self::Value;
 }
@@ -128,7 +128,12 @@ impl<R: MootRunner> MootState<R> {
                 } else if line.is_empty() || line.starts_with("//") {
                     Ok(MootState::new(runner, player))
                 } else if let Some(expectation) = line.strip_prefix('=') {
-                    Self::assert_raw_line(&mut runner, player, Some(expectation), new_line_no)?;
+                    Self::assert_raw_line(
+                        &mut runner,
+                        player.clone(),
+                        Some(expectation),
+                        new_line_no,
+                    )?;
                     Ok(MootState::new(runner, player))
                 } else {
                     Err(eyre::eyre!(
@@ -153,16 +158,16 @@ impl<R: MootRunner> MootState<R> {
                         command_kind,
                     })
                 } else if let Some(new_player) = line.strip_prefix('@') {
-                    Self::execute_command(&mut runner, player, &command, command_kind, line_no)?;
+                    Self::execute_command(&mut runner, &player, &command, command_kind, line_no)?;
                     Ok(MootState::new(runner, Self::player(new_player)?))
                 } else if line.is_empty()
                     || line.starts_with("//")
                     || line.starts_with([';', '%', '='])
                 {
-                    Self::execute_command(&mut runner, player, &command, command_kind, line_no)?;
+                    Self::execute_command(&mut runner, &player, &command, command_kind, line_no)?;
                     MootState::new(runner, player).process_line(new_line_no, line)
                 } else {
-                    Self::execute_command(&mut runner, player, &command, command_kind, line_no)?;
+                    Self::execute_command(&mut runner, &player, &command, command_kind, line_no)?;
                     let line = line.strip_prefix('<').unwrap_or(line);
                     Ok(MootState::ReadingEvalAssertion {
                         runner,
@@ -179,7 +184,7 @@ impl<R: MootRunner> MootState<R> {
                 mut expectation,
             } => {
                 if line.is_empty() || line.starts_with("//") || line.starts_with([';', '%', '=']) {
-                    Self::assert_eval_result(&mut runner, player, Some(&expectation), line_no)?;
+                    Self::assert_eval_result(&mut runner, &player, Some(&expectation), line_no)?;
                 }
                 if line.is_empty() || line.starts_with("//") {
                     Ok(MootState::new(runner, player))
@@ -214,15 +219,15 @@ impl<R: MootRunner> MootState<R> {
                 line_no,
                 command_kind,
             } => {
-                Self::execute_command(&mut runner, player, &command, command_kind, line_no)?;
-                Self::assert_eval_result(&mut runner, player, None, line_no)
+                Self::execute_command(&mut runner, &player, &command, command_kind, line_no)?;
+                Self::assert_eval_result(&mut runner, &player, None, line_no)
             }
             MootState::ReadingEvalAssertion {
                 mut runner,
                 player,
                 line_no,
                 expectation,
-            } => Self::assert_eval_result(&mut runner, player, Some(&expectation), line_no),
+            } => Self::assert_eval_result(&mut runner, &player, Some(&expectation), line_no),
         }
     }
 
@@ -237,7 +242,7 @@ impl<R: MootRunner> MootState<R> {
 
     fn execute_command(
         runner: &mut R,
-        player: Objid,
+        player: &Objid,
         command: &str,
         command_kind: CommandKind,
         line_no: usize,
@@ -251,7 +256,7 @@ impl<R: MootRunner> MootState<R> {
 
     fn assert_eval_result(
         runner: &mut R,
-        player: Objid,
+        player: &Objid,
         expectation: Option<&str>,
         line_no: usize, // for the assertion message
     ) -> eyre::Result<()> {
@@ -292,7 +297,7 @@ impl<R: MootRunner> MootState<R> {
         expectation: Option<&str>,
         line_no: usize,
     ) -> eyre::Result<()> {
-        let actual = runner.read_line(player)?;
+        let actual = runner.read_line(&player)?;
         assert_eq!(actual.as_deref(), expectation, "Line {line_no}");
         Ok(())
     }
@@ -415,8 +420,8 @@ impl TelnetMootRunner {
         }
     }
 
-    fn client(&mut self, player: Objid) -> &mut MootClient {
-        self.clients.entry(player).or_insert_with(|| {
+    fn client(&mut self, player: &Objid) -> &mut MootClient {
+        self.clients.entry(player.clone()).or_insert_with(|| {
             let start = Instant::now();
             loop {
                 if let Ok(mut client) = MootClient::new(self.port) {
@@ -437,7 +442,7 @@ impl TelnetMootRunner {
         })
     }
 
-    fn resolve_response(&mut self, player: Objid, response: String) -> eyre::Result<String> {
+    fn resolve_response(&mut self, player: &Objid, response: String) -> eyre::Result<String> {
         let client = self.client(player);
         // Resolve the response; for example, the test assertion may be `$object`; resolve it to the object's specific number.
         client.write_line(format!(
@@ -452,14 +457,14 @@ impl TelnetMootRunner {
 impl MootRunner for TelnetMootRunner {
     type Value = String;
 
-    fn eval<S: Into<String>>(&mut self, player: Objid, command: S) -> eyre::Result<()> {
+    fn eval<S: Into<String>>(&mut self, player: &Objid, command: S) -> eyre::Result<()> {
         let command: String = command.into();
         self.client(player)
             .write_line(format!("; {} \"TelnetMootRunner::eval\";", command))
             .with_context(|| format!("TelnetMootRunner::eval({player}, {:?})", command))
     }
 
-    fn command<S: AsRef<str>>(&mut self, player: Objid, command: S) -> eyre::Result<()> {
+    fn command<S: AsRef<str>>(&mut self, player: &Objid, command: S) -> eyre::Result<()> {
         let command: &str = command.as_ref();
         self.client(player)
             .write_line(command)
@@ -470,13 +475,13 @@ impl MootRunner for TelnetMootRunner {
         "0".to_string()
     }
 
-    fn read_line(&mut self, player: Objid) -> eyre::Result<Option<String>> {
+    fn read_line(&mut self, player: &Objid) -> eyre::Result<Option<String>> {
         self.client(player)
             .read_line()
             .with_context(|| format!("TelnetMootRunner::read_line({player})"))
     }
 
-    fn read_eval_result(&mut self, player: Objid) -> eyre::Result<Option<Self::Value>> {
+    fn read_eval_result(&mut self, player: &Objid) -> eyre::Result<Option<Self::Value>> {
         let raw = self
             .client(player)
             .read_line()

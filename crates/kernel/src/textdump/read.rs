@@ -313,7 +313,7 @@ impl<R: Read> TextdumpReader<R> {
         let mut objects = BTreeMap::new();
         for _i in 0..nobjs {
             if let Some(o) = self.read_object()? {
-                objects.insert(o.id, o);
+                objects.insert(o.id.clone(), o);
             }
         }
 
@@ -321,7 +321,7 @@ impl<R: Read> TextdumpReader<R> {
         let mut verbs = BTreeMap::new();
         for _p in 0..nprogs {
             let verb = self.read_verb()?;
-            verbs.insert((verb.objid, verb.verbnum), verb);
+            verbs.insert((verb.objid.clone(), verb.verbnum), verb);
         }
 
         Ok(Textdump {

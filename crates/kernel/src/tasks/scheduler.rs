@@ -130,8 +130,8 @@ struct TaskQ {
     suspended: SuspensionQ,
 }
 
-fn load_int_sysprop(server_options_obj: Objid, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
-    let Ok(value) = tx.retrieve_property(SYSTEM_OBJECT, server_options_obj, name) else {
+fn load_int_sysprop(server_options_obj: &Objid, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
+    let Ok(value) = tx.retrieve_property(&SYSTEM_OBJECT, server_options_obj, name) else {
         return None;
     };
     match value.variant() {
@@ -236,7 +236,7 @@ impl Scheduler {
         let mut so = self.server_options.clone();
 
         let Ok(server_options_obj) =
-            tx.retrieve_property(SYSTEM_OBJECT, SYSTEM_OBJECT, *SERVER_OPTIONS)
+            tx.retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, *SERVER_OPTIONS)
         else {
             info!("No server options object found; using defaults");
             tx.rollback().unwrap();
@@ -248,20 +248,20 @@ impl Scheduler {
             return;
         };
 
-        if let Some(bg_seconds) = load_int_sysprop(*server_options_obj, *BG_SECONDS, tx.as_ref()) {
+        if let Some(bg_seconds) = load_int_sysprop(server_options_obj, *BG_SECONDS, tx.as_ref()) {
             so.bg_seconds = bg_seconds;
         }
-        if let Some(bg_ticks) = load_int_sysprop(*server_options_obj, *BG_TICKS, tx.as_ref()) {
+        if let Some(bg_ticks) = load_int_sysprop(server_options_obj, *BG_TICKS, tx.as_ref()) {
             so.bg_ticks = bg_ticks as usize;
         }
-        if let Some(fg_seconds) = load_int_sysprop(*server_options_obj, *FG_SECONDS, tx.as_ref()) {
+        if let Some(fg_seconds) = load_int_sysprop(server_options_obj, *FG_SECONDS, tx.as_ref()) {
             so.fg_seconds = fg_seconds;
         }
-        if let Some(fg_ticks) = load_int_sysprop(*server_options_obj, *FG_TICKS, tx.as_ref()) {
+        if let Some(fg_ticks) = load_int_sysprop(server_options_obj, *FG_TICKS, tx.as_ref()) {
             so.fg_ticks = fg_ticks as usize;
         }
         if let Some(max_stack_depth) =
-            load_int_sysprop(*server_options_obj, *MAX_STACK_DEPTH, tx.as_ref())
+            load_int_sysprop(server_options_obj, *MAX_STACK_DEPTH, tx.as_ref())
         {
             so.max_stack_depth = max_stack_depth as usize;
         }
@@ -282,9 +282,9 @@ impl Scheduler {
     #[instrument(skip(self))]
     fn program_verb(
         &self,
-        player: Objid,
-        perms: Objid,
-        obj: ObjectRef,
+        player: &Objid,
+        perms: &Objid,
+        obj: &ObjectRef,
         verb_name: Symbol,
         code: Vec<String>,
     ) -> Result<(Objid, Symbol), SchedulerError> {
@@ -293,12 +293,12 @@ impl Scheduler {
         for _ in 0..NUM_VERB_PROGRAM_ATTEMPTS {
             let mut tx = self.database.new_world_state().unwrap();
 
-            let Ok(o) = match_object_ref(player, perms, obj.clone(), tx.as_mut()) else {
+            let Ok(o) = match_object_ref(player, perms, obj, tx.as_mut()) else {
                 return Err(CommandExecutionError(CommandError::NoObjectMatch));
             };
 
             let (_, verbdef) = tx
-                .find_method_verb_on(perms, o, verb_name)
+                .find_method_verb_on(perms, &o, verb_name)
                 .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
 
             if verbdef.location() != o {
@@ -325,7 +325,7 @@ impl Scheduler {
                 binary_type: Some(BinaryType::LambdaMoo18X),
                 binary: Some(binary),
             };
-            tx.update_verb_with_id(perms, o, verbdef.uuid(), update_attrs)
+            tx.update_verb_with_id(perms, &o, verbdef.uuid(), update_attrs)
                 .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
 
             let commit_result = tx.commit().unwrap();
@@ -352,7 +352,7 @@ impl Scheduler {
             } => {
                 let task_start = Arc::new(TaskStart::StartCommandVerb {
                     handler_object,
-                    player,
+                    player: player.clone(),
                     command: command.to_string(),
                 });
 
@@ -361,10 +361,10 @@ impl Scheduler {
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
-                    player,
+                    &player,
                     session,
                     None,
-                    player,
+                    &player,
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
@@ -392,7 +392,7 @@ impl Scheduler {
                 let need_tx_oref = !matches!(vloc, ObjectRef::Id(_));
                 let vloc = if need_tx_oref {
                     let mut tx = self.database.new_world_state().unwrap();
-                    let Ok(vloc) = match_object_ref(player, perms, vloc, tx.as_mut()) else {
+                    let Ok(vloc) = match_object_ref(&player, &perms, &vloc, tx.as_mut()) else {
                         reply
                             .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                             .expect("Could not send task handle reply");
@@ -407,7 +407,7 @@ impl Scheduler {
                 };
 
                 let task_start = Arc::new(TaskStart::StartVerb {
-                    player,
+                    player: player.clone(),
                     vloc,
                     verb,
                     args,
@@ -418,10 +418,10 @@ impl Scheduler {
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
-                    player,
+                    &player,
                     session,
                     None,
-                    perms,
+                    &perms,
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
@@ -445,7 +445,7 @@ impl Scheduler {
                 // Find the task that requested this input, if any
                 let Some(sr) = task_q
                     .suspended
-                    .pull_task_for_input(input_request_id, player)
+                    .pull_task_for_input(input_request_id, &player)
                 else {
                     warn!(?input_request_id, "Input request not found");
                     reply
@@ -477,7 +477,7 @@ impl Scheduler {
             } => {
                 let args = command.into_iter().map(v_string).collect::<Vec<Var>>();
                 let task_start = Arc::new(TaskStart::StartVerb {
-                    player,
+                    player: player.clone(),
                     vloc: handler_object,
                     verb: *DO_OUT_OF_BAND_COMMAND,
                     args,
@@ -488,10 +488,10 @@ impl Scheduler {
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
-                    player,
+                    &player,
                     session,
                     None,
-                    player,
+                    &player,
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
@@ -509,16 +509,19 @@ impl Scheduler {
                 sessions,
                 reply,
             } => {
-                let task_start = Arc::new(TaskStart::StartEval { player, program });
+                let task_start = Arc::new(TaskStart::StartEval {
+                    player: player.clone(),
+                    program,
+                });
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
                 let result = task_q.start_task_thread(
                     task_id,
                     task_start,
-                    player,
+                    &player,
                     sessions,
                     None,
-                    perms,
+                    &perms,
                     &self.server_options,
                     &self.task_control_sender,
                     self.database.as_ref(),
@@ -543,7 +546,7 @@ impl Scheduler {
                 code,
                 reply,
             } => {
-                let result = self.program_verb(player, perms, obj, verb_name, code);
+                let result = self.program_verb(&player, &perms, &obj, verb_name, code);
                 reply
                     .send(result)
                     .expect("Could not send program verb reply");
@@ -567,7 +570,7 @@ impl Scheduler {
                 };
 
                 let Ok(object) =
-                    match_object_ref(SYSTEM_OBJECT, SYSTEM_OBJECT, obj, world_state.as_mut())
+                    match_object_ref(&SYSTEM_OBJECT, &SYSTEM_OBJECT, &obj, world_state.as_mut())
                 else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
@@ -576,7 +579,7 @@ impl Scheduler {
                 };
                 let property = Symbol::mk_case_insensitive(property.as_str());
                 let Ok(property_value) =
-                    world_state.retrieve_property(SYSTEM_OBJECT, object, property)
+                    world_state.retrieve_property(&SYSTEM_OBJECT, &object, property)
                 else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
@@ -609,14 +612,15 @@ impl Scheduler {
                     }
                 };
 
-                let Ok(object) = match_object_ref(player, perms, obj, world_state.as_mut()) else {
+                let Ok(object) = match_object_ref(&player, &perms, &obj, world_state.as_mut())
+                else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                         .expect("Could not send properties reply");
                     return;
                 };
 
-                let properties = match world_state.properties(perms, object) {
+                let properties = match world_state.properties(&perms, &object) {
                     Ok(v) => v,
                     Err(e) => {
                         reply
@@ -628,19 +632,19 @@ impl Scheduler {
 
                 let mut props = Vec::new();
                 for prop in properties.iter() {
-                    let (info, perms) =
-                        match world_state.get_property_info(perms, object, Symbol::mk(prop.name()))
-                        {
-                            Ok(v) => v,
-                            Err(e) => {
-                                reply
-                                    .send(Err(CommandExecutionError(CommandError::DatabaseError(
-                                        e,
-                                    ))))
-                                    .expect("Could not send properties reply");
-                                return;
-                            }
-                        };
+                    let (info, perms) = match world_state.get_property_info(
+                        &perms,
+                        &object,
+                        Symbol::mk(prop.name()),
+                    ) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            reply
+                                .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
+                                .expect("Could not send properties reply");
+                            return;
+                        }
+                    };
                     props.push((info, perms));
                 }
 
@@ -669,14 +673,16 @@ impl Scheduler {
 
                 // TODO: User must be a programmer...
 
-                let Ok(object) = match_object_ref(player, perms, obj, world_state.as_mut()) else {
+                let Ok(object) = match_object_ref(&player, &perms, &obj, world_state.as_mut())
+                else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                         .expect("Could not send property reply");
                     return;
                 };
 
-                let property_value = match world_state.retrieve_property(player, object, property) {
+                let property_value = match world_state.retrieve_property(&player, &object, property)
+                {
                     Ok(v) => v,
                     Err(e) => {
                         reply
@@ -687,7 +693,7 @@ impl Scheduler {
                 };
 
                 let (property_info, property_perms) =
-                    match world_state.get_property_info(perms, object, property) {
+                    match world_state.get_property_info(&perms, &object, property) {
                         Ok(v) => v,
                         Err(e) => {
                             reply
@@ -720,14 +726,15 @@ impl Scheduler {
                     }
                 };
 
-                let Ok(object) = match_object_ref(perms, perms, obj, world_state.as_mut()) else {
+                let Ok(object) = match_object_ref(&perms, &perms, &obj, world_state.as_mut())
+                else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                         .expect("Could not send verbs reply");
                     return;
                 };
 
-                let verbdefs = match world_state.verbs(perms, object) {
+                let verbdefs = match world_state.verbs(&perms, &object) {
                     Ok(v) => v,
                     Err(e) => {
                         reply
@@ -759,14 +766,16 @@ impl Scheduler {
                 };
 
                 // TODO: User must be a programmer...
-                let Ok(object) = match_object_ref(perms, perms, obj, world_state.as_mut()) else {
+                let Ok(object) = match_object_ref(&perms, &perms, &obj, world_state.as_mut())
+                else {
                     reply
                         .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
                         .expect("Could not send verb code reply");
                     return;
                 };
 
-                let (binary, verbdef) = match world_state.find_method_verb_on(perms, object, verb) {
+                let (binary, verbdef) = match world_state.find_method_verb_on(&perms, &object, verb)
+                {
                     Ok(v) => v,
                     Err(e) => {
                         reply
@@ -850,7 +859,7 @@ impl Scheduler {
                 };
 
                 // Value is the resolved object or E_INVIND
-                let omatch = match match_object_ref(player, player, obj, world_state.as_mut()) {
+                let omatch = match match_object_ref(&player, &player, &obj, world_state.as_mut()) {
                     Ok(oid) => v_objid(oid),
                     Err(WorldStateError::ObjectNotFound(_)) => v_err(E_INVIND),
                     Err(e) => {
@@ -922,7 +931,7 @@ impl Scheduler {
                 };
                 if let Err(send_error) = task
                     .session
-                    .send_system_msg(task.player, "Aborted.".to_string().as_str())
+                    .send_system_msg(task.player.clone(), "Aborted.".to_string().as_str())
                 {
                     warn!("Could not send abort message to player: {:?}", send_error);
                 };
@@ -952,7 +961,7 @@ impl Scheduler {
                 };
 
                 task.session
-                    .send_system_msg(task.player, &abort_reason_text)
+                    .send_system_msg(task.player.clone(), &abort_reason_text)
                     .expect("Could not send abort message to player");
 
                 let _ = task.session.commit();
@@ -977,7 +986,10 @@ impl Scheduler {
                 }
 
                 for l in traceback.iter() {
-                    if let Err(send_error) = task.session.send_system_msg(task.player, l.as_str()) {
+                    if let Err(send_error) = task
+                        .session
+                        .send_system_msg(task.player.clone(), l.as_str())
+                    {
                         warn!("Could not send traceback to player: {:?}", send_error);
                     }
                 }
@@ -1101,7 +1113,7 @@ impl Scheduler {
             }
             TaskControlMsg::BootPlayer { player } => {
                 // Task is asking to boot a player.
-                task_q.disconnect_task(task_id, player);
+                task_q.disconnect_task(task_id, &player);
             }
             TaskControlMsg::Notify { player, event } => {
                 // Task is asking to notify a player of an event.
@@ -1236,9 +1248,9 @@ impl Scheduler {
         let forked_session = session.clone();
 
         let suspended = fork_request.delay.is_some();
-        let player = fork_request.player;
+        let player = fork_request.player.clone();
         let delay = fork_request.delay;
-        let progr = fork_request.progr;
+        let progr = fork_request.progr.clone();
 
         let task_start = Arc::new(TaskStart::StartFork {
             fork_request,
@@ -1249,10 +1261,10 @@ impl Scheduler {
         match self.task_q.start_task_thread(
             task_id,
             task_start,
-            player,
+            &player,
             forked_session,
             delay,
-            progr,
+            &progr,
             &self.server_options,
             &self.task_control_sender,
             self.database.as_ref(),
@@ -1317,10 +1329,10 @@ impl TaskQ {
         &mut self,
         task_id: TaskId,
         task_start: Arc<TaskStart>,
-        player: Objid,
+        player: &Objid,
         session: Arc<dyn Session>,
         delay_start: Option<Duration>,
-        perms: Objid,
+        perms: &Objid,
         server_options: &ServerOptions,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
@@ -1334,9 +1346,9 @@ impl TaskQ {
         let kill_switch = Arc::new(AtomicBool::new(false));
         let mut task = Task::new(
             task_id,
-            player,
+            player.clone(),
             task_start,
-            perms,
+            perms.clone(),
             server_options,
             kill_switch.clone(),
         );
@@ -1378,7 +1390,7 @@ impl TaskQ {
 
         // Otherwise, we create a task control record and fire up a thread.
         let task_control = RunningTaskControl {
-            player,
+            player: player.clone(),
             kill_switch,
             session: session.clone(),
             result_sender: Some(sender),
@@ -1461,10 +1473,10 @@ impl TaskQ {
         };
 
         let task_id = task.task_id;
-        let player = task.perms;
+        let player = task.perms.clone();
         let kill_switch = task.kill_switch.clone();
         let task_control = RunningTaskControl {
-            player,
+            player: player.clone(),
             kill_switch,
             session: session.clone(),
             result_sender,
@@ -1541,10 +1553,10 @@ impl TaskQ {
         if let Err(e) = self.start_task_thread(
             task.task_id,
             task_start,
-            old_tc.player,
+            &old_tc.player,
             old_tc.session,
             None,
-            task.perms,
+            &task.perms,
             server_options,
             control_sender,
             database,
@@ -1563,7 +1575,7 @@ impl TaskQ {
         let (perms, is_suspended) = match self.suspended.perms_check(victim_task_id, false) {
             Some(perms) => (perms, true),
             None => match self.tasks.get(&victim_task_id) {
-                Some(tc) => (tc.player, false),
+                Some(tc) => (tc.player.clone(), false),
                 None => {
                     return v_err(E_INVARG);
                 }
@@ -1667,14 +1679,14 @@ impl TaskQ {
     }
 
     #[instrument(skip(self))]
-    fn disconnect_task(&mut self, disconnect_task_id: TaskId, player: Objid) {
+    fn disconnect_task(&mut self, disconnect_task_id: TaskId, player: &Objid) {
         let Some(task) = self.tasks.get_mut(&disconnect_task_id) else {
             warn!(task = disconnect_task_id, "Disconnecting task not found");
             return;
         };
         // First disconnect the player...
         warn!(?player, ?disconnect_task_id, "Disconnecting player");
-        if let Err(e) = task.session.disconnect(player) {
+        if let Err(e) = task.session.disconnect(player.clone()) {
             warn!(?player, ?disconnect_task_id, error = ?e, "Could not disconnect player's session");
             return;
         }
@@ -1685,7 +1697,7 @@ impl TaskQ {
             if *task_id == disconnect_task_id {
                 continue;
             }
-            if tc.player != player {
+            if tc.player.eq(player) {
                 continue;
             }
             warn!(
@@ -1700,48 +1712,48 @@ impl TaskQ {
 }
 
 fn match_object_ref(
-    player: Objid,
-    perms: Objid,
-    obj_ref: ObjectRef,
+    player: &Objid,
+    perms: &Objid,
+    obj_ref: &ObjectRef,
     tx: &mut dyn WorldState,
 ) -> Result<Objid, WorldStateError> {
     match &obj_ref {
         ObjectRef::Id(obj) => {
-            if !tx.valid(*obj)? {
-                return Err(WorldStateError::ObjectNotFound(obj_ref));
+            if !tx.valid(obj)? {
+                return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
             }
-            Ok(*obj)
+            Ok(obj.clone())
         }
         ObjectRef::SysObj(names) => {
             // Follow the chain of properties from #0 to the actual object.
             // The final value has to be an object, or this is an error.
             let mut obj = SYSTEM_OBJECT;
             for name in names {
-                let Ok(value) = tx.retrieve_property(perms, obj, *name) else {
-                    return Err(WorldStateError::ObjectNotFound(obj_ref));
+                let Ok(value) = tx.retrieve_property(perms, &obj, *name) else {
+                    return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
                 };
                 let Variant::Obj(o) = value.variant() else {
-                    return Err(WorldStateError::ObjectNotFound(obj_ref));
+                    return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
                 };
-                obj = *o;
+                obj = o.clone();
             }
-            if !tx.valid(obj)? {
-                return Err(WorldStateError::ObjectNotFound(obj_ref));
+            if !tx.valid(&obj)? {
+                return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
             }
             Ok(obj)
         }
         ObjectRef::Match(object_name) => {
-            let match_env = WsMatchEnv::new(tx, perms);
+            let match_env = WsMatchEnv::new(tx, perms.clone());
             let matcher = MatchEnvironmentParseMatcher {
                 env: match_env,
-                player,
+                player: player.clone(),
             };
             let Ok(Some(o)) = matcher.match_object(object_name) else {
                 let _ = tx.rollback();
-                return Err(WorldStateError::ObjectNotFound(obj_ref));
+                return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
             };
-            if !tx.valid(o)? {
-                return Err(WorldStateError::ObjectNotFound(obj_ref));
+            if !tx.valid(&o)? {
+                return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
             }
             Ok(o)
         }

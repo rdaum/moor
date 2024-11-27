@@ -240,14 +240,14 @@ impl Task {
                     handler_object,
                     player,
                     command,
-                } = &self.task_start.as_ref()
+                } = self.task_start.clone().as_ref()
                 {
-                    let (player, command) = (*player, command.clone());
+                    let (player, command) = (player, command.clone());
                     if !result.is_true() {
                         // Intercept and rewrite us back to StartVerbCommand and do old school parse.
                         self.task_start = Arc::new(TaskStart::StartCommandVerb {
-                            handler_object: *handler_object,
-                            player,
+                            handler_object: handler_object.clone(),
+                            player: player.clone(),
                             command: command.clone(),
                         });
 
@@ -345,7 +345,7 @@ impl Task {
                 command,
             } => {
                 if let Err(e) =
-                    self.start_command(*handler_object, *player, command.as_str(), world_state)
+                    self.start_command(handler_object, player, command.as_str(), world_state)
                 {
                     control_sender
                         .send((self.task_id, TaskControlMsg::TaskCommandError(e)))
@@ -364,17 +364,17 @@ impl Task {
 
                 let verb_call = VerbCall {
                     verb_name: *verb,
-                    location: *vloc,
-                    this: *vloc,
-                    player: *player,
+                    location: vloc.clone(),
+                    this: vloc.clone(),
+                    player: player.clone(),
                     args: args.clone(),
                     argstr: argstr.clone(),
                     caller: NOTHING,
                 };
                 // Find the callable verb ...
                 match world_state.find_method_verb_on(
-                    self.perms,
-                    verb_call.this,
+                    &self.perms,
+                    &verb_call.this,
                     verb_call.verb_name,
                 ) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -400,7 +400,7 @@ impl Task {
                     Ok(verb_info) => {
                         self.vm_host.start_call_method_verb(
                             self.task_id,
-                            self.perms,
+                            &self.perms,
                             verb_info,
                             verb_call,
                         );
@@ -417,7 +417,7 @@ impl Task {
             }
             TaskStart::StartEval { player, program } => {
                 self.vm_host
-                    .start_eval(self.task_id, *player, program.clone(), world_state);
+                    .start_eval(self.task_id, player, program.clone(), world_state);
             }
             TaskStart::StartDoCommand { .. } => {
                 panic!("StartDoCommand invocation should not happen on initial setup_task_start");
@@ -428,8 +428,8 @@ impl Task {
 
     fn start_command(
         &mut self,
-        handler_object: Objid,
-        player: Objid,
+        handler_object: &Objid,
+        player: &Objid,
         command: &str,
         world_state: &mut dyn WorldState,
     ) -> Result<(), CommandError> {
@@ -449,7 +449,7 @@ impl Task {
         // that verb with the command as an argument. If that then fails (non-true return code)
         // we'll end up in the start_parse_command phase.
         let do_command =
-            world_state.find_method_verb_on(self.perms, SYSTEM_OBJECT, Symbol::mk("do_command"));
+            world_state.find_method_verb_on(&self.perms, &SYSTEM_OBJECT, Symbol::mk("do_command"));
 
         match do_command {
             Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -460,18 +460,22 @@ impl Task {
                 let args = arguments.iter().map(|s| v_str(s)).collect::<Vec<_>>();
                 let verb_call = VerbCall {
                     verb_name: Symbol::mk("do_command"),
-                    location: handler_object,
-                    this: handler_object,
-                    player,
+                    location: handler_object.clone(),
+                    this: handler_object.clone(),
+                    player: player.clone(),
                     args,
                     argstr: command.to_string(),
-                    caller: handler_object,
+                    caller: handler_object.clone(),
                 };
-                self.vm_host
-                    .start_call_method_verb(self.task_id, self.perms, verb_info, verb_call);
+                self.vm_host.start_call_method_verb(
+                    self.task_id,
+                    &self.perms,
+                    verb_info,
+                    verb_call,
+                );
                 self.task_start = Arc::new(TaskStart::StartDoCommand {
-                    handler_object,
-                    player,
+                    handler_object: handler_object.clone(),
+                    player: player.clone(),
                     command: command.to_string(),
                 });
             }
@@ -484,7 +488,7 @@ impl Task {
 
     fn setup_start_parse_command(
         &mut self,
-        player: Objid,
+        player: &Objid,
         command: &str,
         world_state: &mut dyn WorldState,
     ) -> Result<(), CommandError> {
@@ -502,8 +506,11 @@ impl Task {
         };
 
         // Parse the command in the current environment.
-        let me = WsMatchEnv::new(world_state, player);
-        let matcher = MatchEnvironmentParseMatcher { env: me, player };
+        let me = WsMatchEnv::new(world_state, player.clone());
+        let matcher = MatchEnvironmentParseMatcher {
+            env: me,
+            player: player.clone(),
+        };
         let parsed_command = match parse_command(command, matcher) {
             Ok(pc) => pc,
             Err(ParseCommandError::PermissionDenied) => {
@@ -516,7 +523,7 @@ impl Task {
 
         // Look for the verb...
         let parse_results =
-            find_verb_for_command(player, player_location, &parsed_command, world_state)?;
+            find_verb_for_command(player, &player_location, &parsed_command, world_state)?;
         let (verb_info, target) = match parse_results {
             // If we have a successful match, that's what we'll call into
             Some((verb_info, target)) => {
@@ -537,7 +544,7 @@ impl Task {
                 // Try to find :huh. If it exists, we'll dispatch to that, instead.
                 // If we don't find it, that's the end of the line.
                 let Ok(verb_info) =
-                    world_state.find_method_verb_on(self.perms, player_location, *HUH_SYM)
+                    world_state.find_method_verb_on(&self.perms, &player_location, *HUH_SYM)
                 else {
                     return Err(CommandError::NoCommandMatch);
                 };
@@ -550,44 +557,44 @@ impl Task {
         };
         let verb_call = VerbCall {
             verb_name: Symbol::mk_case_insensitive(parsed_command.verb.as_str()),
-            location: target,
+            location: target.clone(),
             this: target,
-            player,
+            player: player.clone(),
             args: parsed_command.args.clone(),
             argstr: parsed_command.argstr.clone(),
-            caller: player,
+            caller: player.clone(),
         };
         self.vm_host.start_call_command_verb(
             self.task_id,
             verb_info,
             verb_call,
             parsed_command,
-            self.perms,
+            &self.perms,
         );
         Ok(())
     }
 }
 
 fn find_verb_for_command(
-    player: Objid,
-    player_location: Objid,
+    player: &Objid,
+    player_location: &Objid,
     pc: &ParsedCommand,
     ws: &mut dyn WorldState,
 ) -> Result<Option<((Bytes, VerbDef), Objid)>, CommandError> {
     let targets_to_search = vec![
-        player,
-        player_location,
-        pc.dobj.unwrap_or(NOTHING),
-        pc.iobj.unwrap_or(NOTHING),
+        player.clone(),
+        player_location.clone(),
+        pc.dobj.clone().unwrap_or(NOTHING),
+        pc.iobj.clone().unwrap_or(NOTHING),
     ];
     for target in targets_to_search {
         let match_result = ws.find_command_verb_on(
             player,
-            target,
+            &target,
             Symbol::mk_case_insensitive(pc.verb.as_str()),
-            pc.dobj.unwrap_or(NOTHING),
+            &pc.dobj.clone().unwrap_or(NOTHING),
             pc.prep,
-            pc.iobj.unwrap_or(NOTHING),
+            &pc.iobj.clone().unwrap_or(NOTHING),
         );
         let match_result = match match_result {
             Ok(m) => m,
@@ -725,13 +732,18 @@ mod tests {
         let mut tx = db.new_world_state().unwrap();
 
         let sysobj = tx
-            .create_object(SYSTEM_OBJECT, NOTHING, SYSTEM_OBJECT, BitEnum::all())
+            .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::all())
             .unwrap();
-        tx.update_property(SYSTEM_OBJECT, sysobj, Symbol::mk("name"), &v_str("system"))
+        tx.update_property(
+            &SYSTEM_OBJECT,
+            &sysobj,
+            Symbol::mk("name"),
+            &v_str("system"),
+        )
+        .unwrap();
+        tx.update_property(&SYSTEM_OBJECT, &sysobj, Symbol::mk("programmer"), &v_int(1))
             .unwrap();
-        tx.update_property(SYSTEM_OBJECT, sysobj, Symbol::mk("programmer"), &v_int(1))
-            .unwrap();
-        tx.update_property(SYSTEM_OBJECT, sysobj, Symbol::mk("wizard"), &v_int(1))
+        tx.update_property(&SYSTEM_OBJECT, &sysobj, Symbol::mk("wizard"), &v_int(1))
             .unwrap();
 
         for TestVerb {
@@ -742,10 +754,10 @@ mod tests {
         {
             let binary = program.make_copy_as_vec().unwrap();
             tx.add_verb(
-                SYSTEM_OBJECT,
-                SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
                 vec![*name],
-                SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
                 BitEnum::new_with(VerbFlag::Exec),
                 *argspec,
                 binary,
@@ -879,7 +891,7 @@ mod tests {
             panic!("Expected Notify, got {:?}", msg);
         };
         assert_eq!(player, SYSTEM_OBJECT);
-        assert_eq!(event.author(), SYSTEM_OBJECT);
+        assert_eq!(event.author(), &SYSTEM_OBJECT);
         assert_eq!(event.event, Event::Notify(v_str("12345"), None));
 
         // Also scheduler should have received a TaskSuccess message.

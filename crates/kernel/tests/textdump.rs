@@ -200,24 +200,24 @@ mod test {
         // Check a few things in a new transaction.
         let tx = db.new_world_state().unwrap();
         assert_eq!(
-            tx.names_of(Objid(3), Objid(1)).unwrap(),
+            tx.names_of(&Objid(3), &Objid(1)).unwrap(),
             ("Root Class".into(), vec![])
         );
         assert_eq!(
-            tx.names_of(Objid(3), Objid(2)).unwrap(),
+            tx.names_of(&Objid(3), &Objid(2)).unwrap(),
             ("The First Room".into(), vec![])
         );
         assert_eq!(
-            tx.names_of(Objid(3), Objid(3)).unwrap(),
+            tx.names_of(&Objid(3), &Objid(3)).unwrap(),
             ("Wizard".into(), vec![])
         );
         assert_eq!(
-            tx.names_of(Objid(3), SYSTEM_OBJECT).unwrap(),
+            tx.names_of(&Objid(3), &SYSTEM_OBJECT).unwrap(),
             ("System Object".into(), vec![])
         );
 
         let dlc = tx
-            .get_verb(Objid(3), SYSTEM_OBJECT, Symbol::mk("do_login_command"))
+            .get_verb(&Objid(3), &SYSTEM_OBJECT, Symbol::mk("do_login_command"))
             .unwrap();
         assert_eq!(dlc.owner(), Objid(3));
         assert_eq!(dlc.flags(), VerbFlag::rxd());
@@ -306,8 +306,8 @@ mod test {
 
         for o in objects1 {
             // set of properties should be the same
-            let o1_props = tx1.get_object_properties(o).unwrap();
-            let o2_props = tx2.get_object_properties(o).unwrap();
+            let o1_props = tx1.get_object_properties(&o).unwrap();
+            let o2_props = tx2.get_object_properties(&o).unwrap();
             let mut o1_props = o1_props.iter().collect::<Vec<_>>();
             let mut o2_props = o2_props.iter().collect::<Vec<_>>();
 
@@ -321,7 +321,13 @@ mod test {
             for (i, prop) in zipped.enumerate() {
                 let (p1, p2) = prop;
 
-                assert_eq!(p1.name(), p2.name(), "{}.{}, name mismatch", o, p1.name(),);
+                assert_eq!(
+                    p1.name(),
+                    p2.name(),
+                    "{}.{}, name mismatch",
+                    o.clone(),
+                    p1.name(),
+                );
 
                 assert_eq!(
                     p1.definer(),
@@ -341,8 +347,8 @@ mod test {
                     p1.name()
                 );
 
-                let (value1, perms1) = tx1.get_property_value(o, p1.uuid()).unwrap();
-                let (value2, perms2) = tx2.get_property_value(o, p2.uuid()).unwrap();
+                let (value1, perms1) = tx1.get_property_value(&o, p1.uuid()).unwrap();
+                let (value2, perms2) = tx2.get_property_value(&o, p2.uuid()).unwrap();
 
                 assert_eq!(
                     perms1.flags(),
@@ -370,8 +376,8 @@ mod test {
             }
 
             // Now compare verbdefs
-            let o1_verbs = tx1.get_object_verbs(o).unwrap();
-            let o2_verbs = tx2.get_object_verbs(o).unwrap();
+            let o1_verbs = tx1.get_object_verbs(&o).unwrap();
+            let o2_verbs = tx2.get_object_verbs(&o).unwrap();
             let o1_verbs = o1_verbs.iter().collect::<Vec<_>>();
             let o2_verbs = o2_verbs.iter().collect::<Vec<_>>();
 
@@ -386,8 +392,8 @@ mod test {
 
                 // We want to actually decode and compare the opcode streams rather than
                 // the binary, so that we can make meaningful error reports.
-                let binary1 = tx1.get_verb_binary(o, v1.uuid()).unwrap();
-                let binary2 = tx2.get_verb_binary(o, v2.uuid()).unwrap();
+                let binary1 = tx1.get_verb_binary(&o, v1.uuid()).unwrap();
+                let binary2 = tx2.get_verb_binary(&o, v2.uuid()).unwrap();
 
                 let program1 =
                     moor_compiler::program_to_tree(&Program::from_bytes(binary1).unwrap()).unwrap();

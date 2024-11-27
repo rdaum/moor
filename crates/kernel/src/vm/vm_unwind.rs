@@ -52,22 +52,22 @@ impl VMExecState {
             let traceback_entry = match &a.frame {
                 Frame::Moo(_) => {
                     vec![
-                        v_objid(a.this),
+                        v_objid(a.this.clone()),
                         v_str(a.verbdef.names().join(" ").as_str()),
                         v_objid(a.verb_definer()),
                         v_objid(a.verb_owner()),
-                        v_objid(a.player),
+                        v_objid(a.player.clone()),
                         line_no,
                     ]
                 }
                 Frame::Bf(bf_frame) => {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
                     vec![
-                        v_objid(a.this),
+                        v_objid(a.this.clone()),
                         v_str(bf_name.as_str()),
                         v_objid(NOTHING),
                         v_objid(NOTHING),
-                        v_objid(a.player),
+                        v_objid(a.player.clone()),
                         v_none(),
                     ]
                 }

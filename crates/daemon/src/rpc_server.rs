@@ -370,16 +370,16 @@ impl RpcServer {
                 let player = self.validate_auth_token(auth_token, None)?;
 
                 self.connections
-                    .new_connection(client_id, hostname, Some(player))?;
+                    .new_connection(client_id, hostname, Some(player.clone()))?;
                 let client_token = self.make_client_token(client_id);
 
                 if let Some(connect_type) = connect_type {
                     trace!(?player, "Submitting user_connected task");
                     if let Err(e) = self.clone().submit_connected_task(
-                        handler_object,
+                        &handler_object,
                         scheduler_client,
                         client_id,
-                        player,
+                        &player,
                         connect_type,
                     ) {
                         error!(error = ?e, "Error submitting user_connected task");
@@ -390,7 +390,7 @@ impl RpcServer {
                 }
                 Ok(DaemonToClientReply::AttachResult(Some((
                     client_token,
-                    player,
+                    player.clone(),
                 ))))
             }
             // Bodacious Totally Awesome Hey Dudes Have Mr Pong's Chinese Food
@@ -418,68 +418,68 @@ impl RpcServer {
                 let connection = self.client_auth(token, client_id)?;
 
                 self.clone().perform_login(
-                    handler_object,
+                    &handler_object,
                     scheduler_client,
                     client_id,
-                    connection,
+                    &connection,
                     args,
                     attach,
                 )
             }
             HostClientToDaemonMessage::Command(token, auth_token, handler_object, command) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
 
                 self.clone().perform_command(
                     scheduler_client,
                     client_id,
-                    handler_object,
-                    connection,
+                    &handler_object,
+                    &connection,
                     command,
                 )
             }
             HostClientToDaemonMessage::RequestedInput(token, auth_token, request_id, input) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
 
                 let request_id = Uuid::from_u128(request_id);
                 self.clone().respond_input(
                     scheduler_client,
                     client_id,
-                    connection,
+                    &connection,
                     request_id,
                     input,
                 )
             }
             HostClientToDaemonMessage::OutOfBand(token, auth_token, handler_object, command) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
 
                 self.clone().perform_out_of_band(
                     scheduler_client,
-                    handler_object,
+                    &handler_object,
                     client_id,
-                    connection,
+                    &connection,
                     command,
                 )
             }
 
             HostClientToDaemonMessage::Eval(token, auth_token, evalstr) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
                 self.clone()
-                    .eval(scheduler_client, client_id, connection, evalstr)
+                    .eval(scheduler_client, client_id, &connection, evalstr)
             }
 
             HostClientToDaemonMessage::InvokeVerb(token, auth_token, object, verb, args) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
 
                 self.clone().invoke_verb(
                     scheduler_client,
                     client_id,
-                    connection,
-                    object,
+                    &connection,
+                    &object,
                     verb,
                     args,
                 )
@@ -487,12 +487,12 @@ impl RpcServer {
 
             HostClientToDaemonMessage::Retrieve(token, auth_token, who, retr_type, what) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
 
                 match retr_type {
                     EntityType::Property => {
                         let (propdef, propperms, value) = scheduler_client
-                            .request_property(connection, connection, who, what)
+                            .request_property(&connection, &connection, &who, what)
                             .map_err(|e| {
                                 error!(error = ?e, "Error requesting property");
                                 RpcMessageError::EntityRetrievalError(
@@ -514,7 +514,7 @@ impl RpcServer {
                     }
                     EntityType::Verb => {
                         let (verbdef, code) = scheduler_client
-                            .request_verb(connection, connection, who, what)
+                            .request_verb(&connection, &connection, &who, what)
                             .map_err(|e| {
                                 error!(error = ?e, "Error requesting verb");
                                 RpcMessageError::EntityRetrievalError(
@@ -545,7 +545,7 @@ impl RpcServer {
             }
             HostClientToDaemonMessage::Resolve(token, auth_token, objref) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
 
                 let resolved = scheduler_client
                     .resolve_object(connection, objref)
@@ -558,10 +558,10 @@ impl RpcServer {
             }
             HostClientToDaemonMessage::Properties(token, auth_token, obj) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
 
                 let props = scheduler_client
-                    .request_properties(connection, connection, obj)
+                    .request_properties(&connection, &connection, &obj)
                     .map_err(|e| {
                         error!(error = ?e, "Error requesting properties");
                         RpcMessageError::EntityRetrievalError(
@@ -586,10 +586,10 @@ impl RpcServer {
             }
             HostClientToDaemonMessage::Verbs(token, auth_token, obj) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
 
                 let verbs = scheduler_client
-                    .request_verbs(connection, connection, obj)
+                    .request_verbs(&connection, &connection, &obj)
                     .map_err(|e| {
                         error!(error = ?e, "Error requesting verbs");
                         RpcMessageError::EntityRetrievalError("error requesting verbs".to_string())
@@ -631,13 +631,13 @@ impl RpcServer {
             }
             HostClientToDaemonMessage::Program(token, auth_token, object, verb, code) => {
                 let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(connection))?;
+                self.validate_auth_token(auth_token, Some(&connection))?;
 
                 self.clone().program_verb(
                     scheduler_client,
                     client_id,
-                    connection,
-                    object,
+                    &connection,
+                    &object,
                     verb,
                     code,
                 )
@@ -716,7 +716,7 @@ impl RpcServer {
         object: ObjectRef,
         property: Symbol,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let pv = match scheduler_client.request_system_property(player, object, property) {
+        let pv = match scheduler_client.request_system_property(&player, &object, property) {
             Ok(pv) => pv,
             Err(CommandExecutionError(CommandError::NoObjectMatch)) => {
                 return Ok(DaemonToClientReply::SysPropValue(None));
@@ -734,10 +734,10 @@ impl RpcServer {
 
     fn perform_login(
         self: Arc<Self>,
-        handler_object: Objid,
+        handler_object: &Objid,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: Objid,
+        connection: &Objid,
         args: Vec<String>,
         attach: bool,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
@@ -753,16 +753,16 @@ impl RpcServer {
             "Performing {:?} login for client: {}",
             connect_type, client_id
         );
-        let Ok(session) = self.clone().new_session(client_id, connection) else {
+        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
             return Err(RpcMessageError::CreateSessionFailed);
         };
         let task_handle = match scheduler_client.submit_verb_task(
             connection,
-            ObjectRef::Id(handler_object),
+            &ObjectRef::Id(handler_object.clone()),
             Symbol::mk("do_login_command"),
             args.iter().map(|s| v_str(s)).collect(),
             args.join(" "),
-            SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
             session,
         ) {
             Ok(t) => t,
@@ -780,7 +780,7 @@ impl RpcServer {
                 // with its new player objid and login result.
                 // If it's not an objid, that's considered an auth failure.
                 match v.variant() {
-                    Variant::Obj(o) => *o,
+                    Variant::Obj(o) => o.clone(),
                     _ => {
                         return Ok(LoginResult(None));
                     }
@@ -806,7 +806,7 @@ impl RpcServer {
         );
         let Ok(_) = self
             .connections
-            .update_client_connection(connection, player)
+            .update_client_connection(connection.clone(), player.clone())
         else {
             return Err(RpcMessageError::InternalError(
                 "Unable to update client connection".to_string(),
@@ -819,7 +819,7 @@ impl RpcServer {
                 handler_object,
                 scheduler_client,
                 client_id,
-                player,
+                &player,
                 connect_type,
             ) {
                 error!(error = ?e, "Error submitting user_connected task");
@@ -829,22 +829,26 @@ impl RpcServer {
             }
         }
 
-        let auth_token = self.make_auth_token(player);
+        let auth_token = self.make_auth_token(&player);
 
-        Ok(LoginResult(Some((auth_token, connect_type, player))))
+        Ok(LoginResult(Some((
+            auth_token,
+            connect_type,
+            player.clone(),
+        ))))
     }
 
     fn submit_connected_task(
         self: Arc<Self>,
-        handler_object: Objid,
+        handler_object: &Objid,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        player: Objid,
+        player: &Objid,
         initiation_type: ConnectType,
     ) -> Result<(), eyre::Error> {
         let session = self
             .clone()
-            .new_session(client_id, player)
+            .new_session(client_id, player.clone())
             .with_context(|| "could not create 'connected' task session for player")?;
 
         let connected_verb = match initiation_type {
@@ -855,11 +859,11 @@ impl RpcServer {
         scheduler_client
             .submit_verb_task(
                 player,
-                ObjectRef::Id(handler_object),
+                &ObjectRef::Id(handler_object.clone()),
                 connected_verb,
-                vec![v_objid(player)],
+                vec![v_objid(player.clone())],
                 "".to_string(),
-                SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
                 session,
             )
             .with_context(|| "could not submit 'connected' task")?;
@@ -870,17 +874,17 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        handler_object: Objid,
-        connection: Objid,
+        handler_object: &Objid,
+        connection: &Objid,
         command: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let Ok(session) = self.clone().new_session(client_id, connection) else {
+        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
             return Err(RpcMessageError::CreateSessionFailed);
         };
 
         if let Err(e) = self
             .connections
-            .record_client_activity(client_id, connection)
+            .record_client_activity(client_id, connection.clone())
         {
             warn!("Unable to update client connection activity: {}", e);
         };
@@ -911,19 +915,20 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: Objid,
+        connection: &Objid,
         input_request_id: Uuid,
         input: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         if let Err(e) = self
             .connections
-            .record_client_activity(client_id, connection)
+            .record_client_activity(client_id, connection.clone())
         {
             warn!("Unable to update client connection activity: {}", e);
         };
 
         // Pass this back over to the scheduler to handle.
-        if let Err(e) = scheduler_client.submit_requested_input(connection, input_request_id, input)
+        if let Err(e) =
+            scheduler_client.submit_requested_input(connection, input_request_id, input)
         {
             error!(error = ?e, "Error submitting requested input");
             return Err(RpcMessageError::InternalError(e.to_string()));
@@ -937,12 +942,12 @@ impl RpcServer {
     fn perform_out_of_band(
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
-        handler_object: Objid,
+        handler_object: &Objid,
         client_id: Uuid,
-        connection: Objid,
+        connection: &Objid,
         command: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let Ok(session) = self.clone().new_session(client_id, connection) else {
+        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
             return Err(RpcMessageError::CreateSessionFailed);
         };
 
@@ -972,10 +977,10 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: Objid,
+        connection: &Objid,
         expression: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let Ok(session) = self.clone().new_session(client_id, connection) else {
+        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
             return Err(RpcMessageError::CreateSessionFailed);
         };
 
@@ -1007,12 +1012,12 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: Objid,
-        object: ObjectRef,
+        connection: &Objid,
+        object: &ObjectRef,
         verb: Symbol,
         args: Vec<Var>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let Ok(session) = self.clone().new_session(client_id, connection) else {
+        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
             return Err(RpcMessageError::CreateSessionFailed);
         };
 
@@ -1022,7 +1027,7 @@ impl RpcServer {
             verb,
             args,
             "".to_string(),
-            SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
             session,
         ) {
             Ok(t) => t,
@@ -1042,12 +1047,16 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: Objid,
-        object: ObjectRef,
+        connection: &Objid,
+        object: &ObjectRef,
         verb: Symbol,
         code: Vec<String>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        if self.clone().new_session(client_id, connection).is_err() {
+        if self
+            .clone()
+            .new_session(client_id, connection.clone())
+            .is_err()
+        {
             return Err(RpcMessageError::CreateSessionFailed);
         };
 
@@ -1106,8 +1115,8 @@ impl RpcServer {
     ) -> Result<(), Error> {
         let publish = self.events_publish.lock().unwrap();
         for (player, event) in events {
-            let client_ids = self.connections.client_ids_for(*player)?;
-            let event = ClientEvent::Narrative(*player, event.clone());
+            let client_ids = self.connections.client_ids_for(player.clone())?;
+            let event = ClientEvent::Narrative(player.clone(), event.clone());
             let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
             for client_id in &client_ids {
                 let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
@@ -1231,7 +1240,7 @@ impl RpcServer {
 
     /// Construct a PASETO token for this player login. This token is used to provide credentials
     /// for requests, to allow reconnection with a different client_id.
-    fn make_auth_token(&self, oid: Objid) -> AuthToken {
+    fn make_auth_token(&self, oid: &Objid) -> AuthToken {
         let privkey = PasetoAsymmetricPrivateKey::from(self.keypair.as_ref());
         let token = Paseto::<V4, Public>::default()
             .set_footer(Footer::from(MOOR_AUTH_TOKEN_FOOTER))
@@ -1331,7 +1340,7 @@ impl RpcServer {
     fn validate_auth_token(
         &self,
         token: AuthToken,
-        objid: Option<Objid>,
+        objid: Option<&Objid>,
     ) -> Result<Objid, RpcMessageError> {
         let key: Key<32> = Key::from(&self.keypair[32..]);
         let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
@@ -1364,7 +1373,7 @@ impl RpcServer {
         let token_player = Objid(token_player);
         if let Some(objid) = objid {
             // Does the 'player' match objid? If not, reject it.
-            if objid != token_player {
+            if objid.ne(&token_player) {
                 debug!(?objid, ?token_player, "Token player does not match objid");
                 return Err(RpcMessageError::PermissionDenied);
             }

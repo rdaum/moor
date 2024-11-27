@@ -46,22 +46,22 @@ impl MockMatchEnv {
 }
 
 impl MatchEnvironment for MockMatchEnv {
-    fn obj_valid(&self, oid: Objid) -> Result<bool, WorldStateError> {
-        Ok(self.objects.contains_key(&oid))
+    fn obj_valid(&self, oid: &Objid) -> Result<bool, WorldStateError> {
+        Ok(self.objects.contains_key(oid))
     }
 
-    fn get_names(&self, oid: Objid) -> Result<Vec<String>, WorldStateError> {
+    fn get_names(&self, oid: &Objid) -> Result<Vec<String>, WorldStateError> {
         Ok(self
             .objects
-            .get(&oid)
+            .get(oid)
             .map_or_else(Vec::new, |o| o.names.clone()))
     }
 
-    fn get_surroundings(&self, player: Objid) -> Result<ObjSet, WorldStateError> {
+    fn get_surroundings(&self, player: &Objid) -> Result<ObjSet, WorldStateError> {
         let mut result = Vec::new();
-        if let Some(player_obj) = self.objects.get(&player) {
+        if let Some(player_obj) = self.objects.get(player) {
             result.push(MOCK_PLAYER);
-            result.push(player_obj.location);
+            result.push(player_obj.location.clone());
             result.extend(player_obj.contents.iter().cloned());
 
             if let Some(location_obj) = self.objects.get(&player_obj.location) {
@@ -71,11 +71,11 @@ impl MatchEnvironment for MockMatchEnv {
         Ok(ObjSet::from_items(&result))
     }
 
-    fn location_of(&self, oid: Objid) -> Result<Objid, WorldStateError> {
+    fn location_of(&self, oid: &Objid) -> Result<Objid, WorldStateError> {
         self.objects
-            .get(&oid)
-            .map(|o| o.location)
-            .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(oid)))
+            .get(oid)
+            .map(|o| o.location.clone())
+            .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(oid.clone())))
     }
 }
 

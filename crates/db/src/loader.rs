@@ -37,16 +37,16 @@ pub trait LoaderInterface: Send {
         objid: Option<Objid>,
         attrs: &ObjAttrs,
     ) -> Result<Objid, WorldStateError>;
-    fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), WorldStateError>;
+    fn set_object_parent(&self, obj: &Objid, parent: &Objid) -> Result<(), WorldStateError>;
 
-    fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), WorldStateError>;
-    fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError>;
+    fn set_object_location(&self, o: &Objid, location: &Objid) -> Result<(), WorldStateError>;
+    fn set_object_owner(&self, obj: &Objid, owner: &Objid) -> Result<(), WorldStateError>;
 
     fn add_verb(
         &self,
-        obj: Objid,
+        obj: &Objid,
         names: Vec<&str>,
-        owner: Objid,
+        owner: &Objid,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
         binary: Vec<u8>,
@@ -54,19 +54,19 @@ pub trait LoaderInterface: Send {
 
     fn define_property(
         &self,
-        definer: Objid,
-        objid: Objid,
+        definer: &Objid,
+        objid: &Objid,
         propname: &str,
-        owner: Objid,
+        owner: &Objid,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError>;
 
     fn set_property(
         &self,
-        objid: Objid,
+        objid: &Objid,
         propname: &str,
-        owner: Objid,
+        owner: &Objid,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError>;
@@ -82,20 +82,20 @@ pub trait LoaderInterface: Send {
     fn get_players(&self) -> Result<ObjSet, WorldStateError>;
 
     /// Get the attributes of a given object
-    fn get_object(&self, objid: Objid) -> Result<ObjAttrs, WorldStateError>;
+    fn get_object(&self, objid: &Objid) -> Result<ObjAttrs, WorldStateError>;
 
     /// Get the verbs living on a given object
-    fn get_object_verbs(&self, objid: Objid) -> Result<VerbDefs, WorldStateError>;
+    fn get_object_verbs(&self, objid: &Objid) -> Result<VerbDefs, WorldStateError>;
 
     /// Get the binary for a given verb
-    fn get_verb_binary(&self, objid: Objid, uuid: Uuid) -> Result<Bytes, WorldStateError>;
+    fn get_verb_binary(&self, objid: &Objid, uuid: Uuid) -> Result<Bytes, WorldStateError>;
 
     /// Get the properties defined on a given object
-    fn get_object_properties(&self, objid: Objid) -> Result<PropDefs, WorldStateError>;
+    fn get_object_properties(&self, objid: &Objid) -> Result<PropDefs, WorldStateError>;
 
     fn get_property_value(
         &self,
-        obj: Objid,
+        obj: &Objid,
         uuid: Uuid,
     ) -> Result<(Option<Var>, PropPerms), WorldStateError>;
 
@@ -104,6 +104,6 @@ pub trait LoaderInterface: Send {
     #[allow(clippy::type_complexity)]
     fn get_all_property_values(
         &self,
-        objid: Objid,
+        objid: &Objid,
     ) -> Result<Vec<(PropDef, (Option<Var>, PropPerms))>, WorldStateError>;
 }

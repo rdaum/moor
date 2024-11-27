@@ -74,7 +74,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
     let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
     task_perms
-        .check_obj_owner_perms(*player)
+        .check_obj_owner_perms(player)
         .map_err(world_state_bf_err)?;
 
     let content_type = if bf_args.config.rich_notify && bf_args.args.len() == 3 {
@@ -92,7 +92,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.args[1].clone(),
         content_type,
     );
-    bf_args.task_scheduler_client.notify(*player, event);
+    bf_args.task_scheduler_client.notify(player.clone(), event);
 
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
@@ -110,7 +110,7 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .connected_players()
             .unwrap()
             .iter()
-            .map(|p| v_objid(*p)),
+            .map(|p| v_objid(p.clone())),
     )))
 }
 bf_declare!(connected_players, bf_connected_players);
@@ -124,7 +124,7 @@ fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    let is_player = match bf_args.world_state.flags_of(*player) {
+    let is_player = match bf_args.world_state.flags_of(player) {
         Ok(flags) => flags.contains(ObjFlag::User),
         Err(WorldStateError::ObjectNotFound(_)) => return Err(BfErr::Code(E_ARGS)),
         Err(e) => return Err(world_state_bf_err(e)),
@@ -171,15 +171,15 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(callers.iter().map(|c| {
         let callers = vec![
             // this
-            v_objid(c.this),
+            v_objid(c.this.clone()),
             // verb name
             v_string(c.verb_name.to_string()),
             // 'programmer'
-            v_objid(c.programmer),
+            v_objid(c.programmer.clone()),
             // verb location
-            v_objid(c.definer),
+            v_objid(c.definer.clone()),
             // player
-            v_objid(c.player),
+            v_objid(c.player.clone()),
             // line number
             v_int(c.line_number as i64),
         ];
@@ -204,7 +204,7 @@ fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let Ok(idle_seconds) = bf_args.session.idle_seconds(*who) else {
+    let Ok(idle_seconds) = bf_args.session.idle_seconds(who.clone()) else {
         return Err(BfErr::Code(E_ARGS));
     };
 
@@ -219,7 +219,7 @@ fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(who) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let Ok(connected_seconds) = bf_args.session.connected_seconds(*who) else {
+    let Ok(connected_seconds) = bf_args.session.connected_seconds(who.clone()) else {
         return Err(BfErr::Code(E_INVARG));
     };
 
@@ -254,7 +254,7 @@ fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_PERM));
     }
 
-    let Ok(connection_name) = bf_args.session.connection_name(*player) else {
+    let Ok(connection_name) = bf_args.session.connection_name(player.clone()) else {
         return Err(BfErr::Code(E_ARGS));
     };
 
@@ -416,8 +416,8 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Obj(requested_player) = bf_args.args[0].variant() else {
             return Err(BfErr::Code(E_ARGS));
         };
-        let player = bf_args.exec_state.top().player;
-        if *requested_player != player {
+        let player = &bf_args.exec_state.top().player;
+        if requested_player != player {
             // We log this because we'd like to know if cores are trying to do this.
             warn!(
                 requested_player = ?requested_player,
@@ -455,11 +455,11 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         };
         let x = v_none();
         let y = v_none();
-        let programmer = v_objid(task.permissions);
-        let verb_loc = v_objid(task.verb_definer);
+        let programmer = v_objid(task.permissions.clone());
+        let verb_loc = v_objid(task.verb_definer.clone());
         let verb_name = v_str(task.verb_name.as_str());
         let line = v_int(task.line_number as i64);
-        let this = v_objid(task.this);
+        let this = v_objid(task.this.clone());
         v_list(&[
             task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this,
         ])
@@ -587,7 +587,7 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_PERM));
     }
 
-    bf_args.task_scheduler_client.boot_player(*player);
+    bf_args.task_scheduler_client.boot_player(player.clone());
 
     Ok(Ret(v_none()))
 }
@@ -807,7 +807,7 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let listeners = listeners.iter().map(|listener| {
         let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
         v_list(&[
-            v_objid(listener.0),
+            v_objid(listener.0.clone()),
             v_int(listener.2 as i64),
             print_messages,
         ])
@@ -894,7 +894,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // setup-for-eval result here.
             return Ok(VmInstr(ExecutionResult::PerformEval {
                 permissions: bf_args.task_perms_who(),
-                player: bf_args.exec_state.top().player,
+                player: bf_args.exec_state.top().player.clone(),
                 program,
             }));
         }

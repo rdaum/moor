@@ -64,7 +64,7 @@ where
         }
     }
 
-    fn composite_key(domain_a: DomainA, domain_b: DomainB) -> CompositeDomain<DomainA, DomainB> {
+    fn composite_key(domain_a: &DomainA, domain_b: &DomainB) -> CompositeDomain<DomainA, DomainB> {
         let mut key = Vec::new();
         key.extend_from_slice(&domain_a.as_bytes().unwrap());
         key.extend_from_slice(&domain_b.as_bytes().unwrap());
@@ -168,7 +168,7 @@ where
         &self,
         tx: &mut WriteTransaction,
         table: TxPartitionHandle,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> OpResult<ValueSet<Domain>> {
         let result = tx.get(&table, codomain.as_bytes().unwrap()).unwrap();
         if result.is_none() {
@@ -208,15 +208,15 @@ where
         &self,
         tx: &mut WriteTransaction,
         table: TxPartitionHandle,
-        codomain: Codomain,
-        domain: Domain,
+        codomain: &Codomain,
+        domain: &Domain,
     ) -> OpResult<()> {
         let result = tx.get(&table, codomain.as_bytes().unwrap()).unwrap();
         let cset = match result {
             Some(value) => ValueSet::new(value.into()),
             None => ValueSet::new(Bytes::from(vec![0, 0, 0, 0])),
         };
-        let new_cset = cset.append(domain);
+        let new_cset = cset.append(domain.clone());
         tx.insert(&table, codomain.as_bytes().unwrap(), &new_cset.data());
 
         Ok(())
@@ -299,7 +299,7 @@ where
     fn remove_by_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Relation,
-        domain: Domain,
+        domain: &Domain,
     ) -> OpResult<()> {
         let tx = self.write_tx();
         let table = self.primary_partition(rel);
@@ -324,8 +324,8 @@ where
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> OpResult<()> {
         let tx = self.write_tx();
         let table = &self.primary_partition(rel);
@@ -354,7 +354,7 @@ where
     >(
         &self,
         rel: Relation,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> OpResult<()> {
         // Seek the codomain index first to find the domain.
         // If we find it, remove it from both places, otherwise return NotFound.
@@ -381,8 +381,8 @@ where
     >(
         &self,
         rel: Relation,
-        domain: Domain,
-        codomain: Codomain,
+        domain: &Domain,
+        codomain: &Codomain,
     ) -> OpResult<()> {
         let tx = self.write_tx();
         let table = self.primary_partition(rel);
@@ -408,8 +408,8 @@ where
     >(
         &self,
         rel: Relation,
-        domain: Domain,
-        codomain: Codomain,
+        domain: &Domain,
+        codomain: &Codomain,
     ) -> OpResult<()> {
         // Have to check if the tuple already exists.
         let tx = self.write_tx();
@@ -459,7 +459,7 @@ where
     >(
         &self,
         rel: Relation,
-        domain: Domain,
+        domain: &Domain,
     ) -> OpResult<Option<Codomain>> {
         let tx = self.write_tx();
         let table = self.primary_partition(rel);
@@ -482,7 +482,7 @@ where
     fn tuple_size_for_unique_domain<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Relation,
-        domain: Domain,
+        domain: &Domain,
     ) -> OpResult<Option<usize>> {
         let tx = self.write_tx();
         let table = self.primary_partition(rel);
@@ -497,7 +497,7 @@ where
     fn tuple_size_for_unique_codomain<Codomain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Relation,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> OpResult<Option<usize>> {
         let tx = self.write_tx();
         let table = self.secondary_partition(rel).unwrap();
@@ -520,7 +520,7 @@ where
     >(
         &self,
         rel: Relation,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> OpResult<Domain> {
         let cset: ValueSet<Domain> = self.codomain_lookup(
             self.write_tx(),
@@ -548,7 +548,7 @@ where
     >(
         &self,
         rel: Relation,
-        codomain: Codomain,
+        codomain: &Codomain,
     ) -> OpResult<ResultSet> {
         let cset = match self.codomain_lookup(
             self.write_tx(),
@@ -575,11 +575,11 @@ where
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> OpResult<Option<Codomain>> {
         let key = CompositeDomain::composite_key(domain_a, domain_b);
-        self.seek_unique_by_domain(rel, key)
+        self.seek_unique_by_domain(rel, &key)
     }
 
     fn tuple_size_by_composite_domain<
@@ -588,11 +588,11 @@ where
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> OpResult<Option<usize>> {
         let key = CompositeDomain::composite_key(domain_a, domain_b);
-        self.tuple_size_for_unique_domain(rel, key)
+        self.tuple_size_for_unique_domain(rel, &key)
     }
 
     fn insert_composite_domain_tuple<
@@ -602,12 +602,12 @@ where
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
-        codomain: Codomain,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
+        codomain: &Codomain,
     ) -> OpResult<()> {
         let key = CompositeDomain::composite_key(domain_a, domain_b);
-        self.insert_tuple(rel, key, codomain)
+        self.insert_tuple(rel, &key, codomain)
     }
 
     fn delete_composite_if_exists<
@@ -616,11 +616,11 @@ where
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
     ) -> OpResult<()> {
         let key = CompositeDomain::composite_key(domain_a, domain_b);
-        let result = self.remove_by_domain(rel, key);
+        let result = self.remove_by_domain(rel, &key);
         match result {
             Ok(()) => Ok(()),
             Err(NotFound) => Ok(()),
@@ -635,18 +635,18 @@ where
     >(
         &self,
         rel: Relation,
-        domain_a: DomainA,
-        domain_b: DomainB,
-        value: Codomain,
+        domain_a: &DomainA,
+        domain_b: &DomainB,
+        value: &Codomain,
     ) -> OpResult<()> {
         let key = CompositeDomain::composite_key(domain_a, domain_b);
-        self.upsert(rel, key, value)
+        self.upsert(rel, &key, value)
     }
 
     fn delete_if_exists<Domain: Clone + Eq + PartialEq + AsByteBuffer>(
         &self,
         rel: Relation,
-        domain: Domain,
+        domain: &Domain,
     ) -> OpResult<()> {
         let result = self.remove_by_domain(rel, domain);
         match result {
@@ -702,21 +702,21 @@ mod tests {
         let db = test_db();
         let tx = db.new_transaction();
 
-        tx.insert_tuple(OneToOne, Objid(1), Objid(2)).unwrap();
-        tx.insert_tuple(OneToOne, Objid(2), Objid(3)).unwrap();
-        tx.insert_tuple(OneToOne, Objid(3), Objid(4)).unwrap();
+        tx.insert_tuple(OneToOne, &Objid(1), &Objid(2)).unwrap();
+        tx.insert_tuple(OneToOne, &Objid(2), &Objid(3)).unwrap();
+        tx.insert_tuple(OneToOne, &Objid(3), &Objid(4)).unwrap();
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, Objid(1))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid(1))
                 .unwrap(),
             Some(Objid(2))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, Objid(2))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid(2))
                 .unwrap(),
             Some(Objid(3))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, Objid(3))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid(3))
                 .unwrap(),
             Some(Objid(4))
         );
@@ -727,18 +727,18 @@ mod tests {
         let db = test_db();
         let tx = db.new_transaction();
 
-        tx.insert_composite_domain_tuple(CompositeToOne, Objid(1), Objid(2), Objid(3))
+        tx.insert_composite_domain_tuple(CompositeToOne, &Objid(1), &Objid(2), &Objid(3))
             .unwrap();
-        tx.insert_composite_domain_tuple(CompositeToOne, Objid(2), Objid(3), Objid(4))
+        tx.insert_composite_domain_tuple(CompositeToOne, &Objid(2), &Objid(3), &Objid(4))
             .unwrap();
-        tx.insert_composite_domain_tuple(CompositeToOne, Objid(3), Objid(4), Objid(5))
+        tx.insert_composite_domain_tuple(CompositeToOne, &Objid(3), &Objid(4), &Objid(5))
             .unwrap();
 
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(1),
-                Objid(2)
+                &Objid(1),
+                &Objid(2)
             )
             .unwrap(),
             Some(Objid(3))
@@ -746,8 +746,8 @@ mod tests {
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(2),
-                Objid(3)
+                &Objid(2),
+                &Objid(3)
             )
             .unwrap(),
             Some(Objid(4))
@@ -755,34 +755,34 @@ mod tests {
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(3),
-                Objid(4)
+                &Objid(3),
+                &Objid(4)
             )
             .unwrap(),
             Some(Objid(5))
         );
 
         // Now upsert an existing value...
-        tx.upsert_composite(CompositeToOne, Objid(1), Objid(2), Objid(4))
+        tx.upsert_composite(CompositeToOne, &Objid(1), &Objid(2), &Objid(4))
             .unwrap();
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(1),
-                Objid(2)
+                &Objid(1),
+                &Objid(2)
             )
             .unwrap(),
             Some(Objid(4))
         );
 
         // And insert a new using upsert
-        tx.upsert_composite(CompositeToOne, Objid(4), Objid(5), Objid(6))
+        tx.upsert_composite(CompositeToOne, &Objid(4), &Objid(5), &Objid(6))
             .unwrap();
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                Objid(4),
-                Objid(5)
+                &Objid(4),
+                &Objid(5)
             )
             .unwrap(),
             Some(Objid(6))
@@ -794,64 +794,64 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let db = test_db();
         let tx = db.new_transaction();
-        tx.insert_tuple(OneToOneSecondaryIndexed, Objid(3), Objid(2))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(3), &Objid(2))
             .unwrap();
-        tx.insert_tuple(OneToOneSecondaryIndexed, Objid(2), Objid(1))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(2), &Objid(1))
             .unwrap();
-        tx.insert_tuple(OneToOneSecondaryIndexed, Objid(1), Objid(0))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(1), &Objid(0))
             .unwrap();
-        tx.insert_tuple(OneToOneSecondaryIndexed, Objid(4), Objid(0))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(4), &Objid(0))
             .unwrap();
 
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(3))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(3))
                 .unwrap(),
             Some(Objid(2))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             Some(Objid(1))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             Some(Objid(0))
         );
 
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(0))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
                 .unwrap(),
             ObjSet::from_items(&[Objid(1), Objid(4)])
         );
         assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             Objid(2)
         );
         assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             Objid(3)
         );
 
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(3))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(3))
                 .unwrap(),
             ObjSet::empty()
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(0))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
                 .unwrap(),
             ObjSet::from_items(&[Objid(1), Objid(4)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             ObjSet::from_items(&[Objid(2)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             ObjSet::from_items(&[Objid(3)])
         );
@@ -861,53 +861,53 @@ mod tests {
         let tx = db.new_transaction();
 
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(3))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(3))
                 .unwrap(),
             Some(Objid(2))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             Some(Objid(1))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             Some(Objid(0))
         );
 
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(3))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(3))
                 .unwrap(),
             ObjSet::empty(),
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(2))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(2))
                 .unwrap(),
             ObjSet::from_items(&[Objid(3)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             ObjSet::from_items(&[Objid(2)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(0))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
                 .unwrap(),
             ObjSet::from_items(&[Objid(1), Objid(4)])
         );
 
         // And then update a value and verify.
-        tx.upsert::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1), Objid(2))
+        tx.upsert::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1), &Objid(2))
             .unwrap();
         assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, Objid(1))
+            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
                 .unwrap(),
             Objid(2)
         );
         // Verify that the secondary index is updated... First check for new value.
         let children: ObjSet = tx
-            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(2))
+            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(2))
             .unwrap();
         assert_eq!(children.len(), 2);
         assert!(
@@ -920,7 +920,7 @@ mod tests {
         );
         // Now check the old value.
         let children = tx
-            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, Objid(0))
+            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
             .unwrap();
         assert_eq!(children, ObjSet::from_items(&[Objid(4)]));
     }

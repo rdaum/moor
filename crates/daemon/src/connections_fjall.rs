@@ -94,14 +94,14 @@ impl ConnectionsFjall {
         connection_obj: Objid,
     ) -> Result<Vec<(ClientId, SystemTime)>, RelationalError> {
         let clients: ClientSet =
-            tx.seek_by_codomain::<ClientId, Objid, ClientSet>(ClientConnection, connection_obj)?;
+            tx.seek_by_codomain::<ClientId, Objid, ClientSet>(ClientConnection, &connection_obj)?;
 
         // Seek the most recent activity for the connection, so pull in the activity relation for
         // each client.
         let mut times = Vec::new();
         for client in clients.iter() {
             if let Some(last_activity) =
-                tx.seek_unique_by_domain::<ClientId, SystemTimeHolder>(ClientActivity, client)?
+                tx.seek_unique_by_domain::<ClientId, SystemTimeHolder>(ClientActivity, &client)?
             {
                 times.push((client, last_activity.0));
             } else {
@@ -228,7 +228,7 @@ impl ConnectionsDB for ConnectionsFjall {
         Ok(retry_tx_action(&self.db, |tx| {
             let client_ids = tx.seek_by_codomain::<ClientId, Objid, ClientSet>(
                 ClientConnection,
-                from_connection,
+                &from_connection,
             )?;
             if client_ids.is_empty() {
                 error!(?from_connection, ?to_player, "No client ids for connection");
@@ -236,7 +236,7 @@ impl ConnectionsDB for ConnectionsFjall {
             }
             // TODO use join once it's implemented
             for client_id in client_ids.iter() {
-                tx.upsert(ClientConnection, client_id, to_player)?;
+                tx.upsert(ClientConnection, &client_id, &to_player)?;
             }
             Ok(())
         })?)
@@ -249,7 +249,7 @@ impl ConnectionsDB for ConnectionsFjall {
         player: Option<Objid>,
     ) -> Result<Objid, RpcMessageError> {
         retry_tx_action(&self.db, |tx| {
-            let connection_oid = match player {
+            let connection_oid = match &player {
                 None => {
                     // The connection object is pulled from the sequence, then we invert it and subtract from
                     // -4 to get the connection object, since they always grow downwards from there.
@@ -257,17 +257,17 @@ impl ConnectionsDB for ConnectionsFjall {
                     let connection_id: i64 = -4 - connection_id;
                     Objid(connection_id)
                 }
-                Some(player) => player,
+                Some(player) => player.clone(),
             };
 
             // Insert the initial tuples for the connection.
             let client_id = ClientId(client_id);
             let now = SystemTimeHolder(SystemTime::now());
-            tx.insert_tuple(ClientConnection, client_id, connection_oid)?;
-            tx.insert_tuple(ClientActivity, client_id, now.clone())?;
-            tx.insert_tuple(ClientConnectTime, client_id, now.clone())?;
-            tx.insert_tuple(ClientPingTime, client_id, now)?;
-            tx.insert_tuple(ClientName, client_id, StringHolder(hostname.clone()))?;
+            tx.insert_tuple(ClientConnection, &client_id, &connection_oid)?;
+            tx.insert_tuple(ClientActivity, &client_id, &now)?;
+            tx.insert_tuple(ClientConnectTime, &client_id, &now)?;
+            tx.insert_tuple(ClientPingTime, &client_id, &now)?;
+            tx.insert_tuple(ClientName, &client_id, &StringHolder(hostname.clone()))?;
 
             Ok(connection_oid)
         })
@@ -279,8 +279,8 @@ impl ConnectionsDB for ConnectionsFjall {
             let client_id = ClientId(client_id);
             tx.upsert(
                 ClientActivity,
-                client_id,
-                SystemTimeHolder(SystemTime::now()),
+                &client_id,
+                &SystemTimeHolder(SystemTime::now()),
             )?;
             Ok(())
         })?)
@@ -291,8 +291,8 @@ impl ConnectionsDB for ConnectionsFjall {
             let client_id = ClientId(client_id);
             tx.upsert(
                 ClientPingTime,
-                client_id,
-                SystemTimeHolder(SystemTime::now()),
+                &client_id,
+                &SystemTimeHolder(SystemTime::now()),
             )?;
             Ok(())
         })?)
@@ -314,11 +314,11 @@ impl ConnectionsDB for ConnectionsFjall {
 
             for expired_ping in expired.iter() {
                 let client_id = expired_ping.0;
-                tx.remove_by_domain(ClientConnection, client_id)?;
-                tx.remove_by_domain(ClientActivity, client_id)?;
-                tx.remove_by_domain(ClientConnectTime, client_id)?;
-                tx.remove_by_domain(ClientPingTime, client_id)?;
-                tx.remove_by_domain(ClientName, client_id)?;
+                tx.remove_by_domain(ClientConnection, &client_id)?;
+                tx.remove_by_domain(ClientActivity, &client_id)?;
+                tx.remove_by_domain(ClientConnectTime, &client_id)?;
+                tx.remove_by_domain(ClientPingTime, &client_id)?;
+                tx.remove_by_domain(ClientName, &client_id)?;
             }
             Ok::<(), RelationalError>(())
         })
@@ -327,7 +327,7 @@ impl ConnectionsDB for ConnectionsFjall {
 
     fn last_activity_for(&self, connection_obj: Objid) -> Result<SystemTime, SessionError> {
         let result = retry_tx_action(&self.db, |tx| {
-            let mut client_times = Self::most_recent_client_connection(tx, connection_obj)?;
+            let mut client_times = Self::most_recent_client_connection(tx, connection_obj.clone())?;
             let Some(time) = client_times.pop() else {
                 return Err(RelationalError::NotFound);
             };
@@ -344,13 +344,13 @@ impl ConnectionsDB for ConnectionsFjall {
 
     fn connection_name_for(&self, connection_obj: Objid) -> Result<String, SessionError> {
         let result = retry_tx_action(&self.db, |tx| {
-            let mut client_times = Self::most_recent_client_connection(tx, connection_obj)?;
+            let mut client_times = Self::most_recent_client_connection(tx, connection_obj.clone())?;
             let Some(most_recent) = client_times.pop() else {
                 return Err(RelationalError::NotFound);
             };
             let client_id = most_recent.0;
             let Some(name) =
-                tx.seek_unique_by_domain::<ClientId, StringHolder>(ClientName, client_id)?
+                tx.seek_unique_by_domain::<ClientId, StringHolder>(ClientName, &client_id)?
             else {
                 return Err(RelationalError::NotFound);
             };
@@ -370,7 +370,7 @@ impl ConnectionsDB for ConnectionsFjall {
             // In this case we need to find the earliest connection time for the player, and then
             // subtract that from the current time.
             let clients =
-                tx.seek_by_codomain::<ClientId, Objid, ClientSet>(ClientConnection, player)?;
+                tx.seek_by_codomain::<ClientId, Objid, ClientSet>(ClientConnection, &player)?;
             if clients.is_empty() {
                 return Err(RelationalError::NotFound);
             }
@@ -378,7 +378,7 @@ impl ConnectionsDB for ConnectionsFjall {
             let mut times: Vec<(ClientId, SystemTime)> = vec![];
             for client in clients.iter() {
                 if let Some(connect_time) =
-                    tx.seek_unique_by_domain::<_, SystemTimeHolder>(ClientConnectTime, client)?
+                    tx.seek_unique_by_domain::<_, SystemTimeHolder>(ClientConnectTime, &client)?
                 {
                     {
                         times.push((client, connect_time.0));
@@ -402,7 +402,7 @@ impl ConnectionsDB for ConnectionsFjall {
     fn client_ids_for(&self, player: Objid) -> Result<Vec<Uuid>, SessionError> {
         retry_tx_action(&self.db, |tx| {
             let clients =
-                tx.seek_by_codomain::<ClientId, Objid, ClientSet>(ClientConnection, player)?;
+                tx.seek_by_codomain::<ClientId, Objid, ClientSet>(ClientConnection, &player)?;
             Ok(clients.iter().map(|c| c.0).collect())
         })
         .map_err(|e| match e {
@@ -420,7 +420,7 @@ impl ConnectionsDB for ConnectionsFjall {
                 tx.scan_with_predicate::<_, ClientId, Objid>(ClientConnection, |_, _| true)?;
 
             for entry in clients.iter() {
-                let oid = entry.1;
+                let oid = entry.1.clone();
                 connections.insert(oid);
             }
             Ok::<Vec<Objid>, RelationalError>(connections.into_iter().collect())
@@ -430,18 +430,18 @@ impl ConnectionsDB for ConnectionsFjall {
 
     fn connection_object_for_client(&self, client_id: Uuid) -> Option<Objid> {
         retry_tx_action(&self.db, |tx| {
-            tx.seek_unique_by_domain(ClientConnection, ClientId(client_id))
+            tx.seek_unique_by_domain(ClientConnection, &ClientId(client_id))
         })
         .unwrap()
     }
 
     fn remove_client_connection(&self, client_id: Uuid) -> Result<(), Error> {
         Ok(retry_tx_action(&self.db, |tx| {
-            tx.remove_by_domain(ClientConnection, ClientId(client_id))?;
-            tx.remove_by_domain(ClientActivity, ClientId(client_id))?;
-            tx.remove_by_domain(ClientConnectTime, ClientId(client_id))?;
-            tx.remove_by_domain(ClientPingTime, ClientId(client_id))?;
-            tx.remove_by_domain(ClientName, ClientId(client_id))?;
+            tx.remove_by_domain(ClientConnection, &ClientId(client_id))?;
+            tx.remove_by_domain(ClientActivity, &ClientId(client_id))?;
+            tx.remove_by_domain(ClientConnectTime, &ClientId(client_id))?;
+            tx.remove_by_domain(ClientPingTime, &ClientId(client_id))?;
+            tx.remove_by_domain(ClientName, &ClientId(client_id))?;
             Ok(())
         })?)
     }
@@ -476,25 +476,28 @@ mod tests {
                 let oid = db
                     .new_connection(client_id, "localhost".to_string(), None)
                     .unwrap();
-                let client_ids = db.client_ids_for(oid).unwrap();
+                let client_ids = db.client_ids_for(oid.clone()).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
-                db.record_client_activity(client_id, oid).unwrap();
-                db.notify_is_alive(client_id, oid).unwrap();
-                let last_activity = db.last_activity_for(oid);
+                db.record_client_activity(client_id, oid.clone()).unwrap();
+                db.notify_is_alive(client_id, oid.clone()).unwrap();
+                let last_activity = db.last_activity_for(oid.clone());
                 assert!(
                     last_activity.is_ok(),
                     "Unable to get last activity for {x} ({oid}) client {client_id}",
                 );
                 let last_activity = last_activity.unwrap().elapsed().unwrap().as_secs_f64();
                 assert!(last_activity < 1.0);
-                assert_eq!(db.connection_object_for_client(client_id), Some(oid));
+                assert_eq!(
+                    db.connection_object_for_client(client_id),
+                    Some(oid.clone())
+                );
                 let connection_object = Objid(x);
-                db.update_client_connection(oid, connection_object)
+                db.update_client_connection(oid, connection_object.clone())
                     .unwrap_or_else(|e| {
                         panic!("Unable to update client connection for {:?}: {:?}", x, e)
                     });
-                let client_ids = db.client_ids_for(connection_object).unwrap();
+                let client_ids = db.client_ids_for(connection_object.clone()).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
                 db.remove_client_connection(client_id).unwrap();
@@ -525,15 +528,15 @@ mod tests {
                     .new_connection(client_id2, "localhost".to_string(), None)
                     .unwrap();
                 let new_conn = Objid(x);
-                db.update_client_connection(con_oid1, new_conn)
+                db.update_client_connection(con_oid1, new_conn.clone())
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(new_conn).unwrap();
+                let client_ids = db.client_ids_for(new_conn.clone()).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert!(client_ids.contains(&client_id1));
 
-                db.update_client_connection(con_oid2, new_conn)
+                db.update_client_connection(con_oid2, new_conn.clone())
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(new_conn).unwrap();
+                let client_ids = db.client_ids_for(new_conn.clone()).unwrap();
                 assert_eq!(
                     client_ids.len(),
                     2,
@@ -542,16 +545,17 @@ mod tests {
                 );
                 assert!(client_ids.contains(&client_id2));
 
-                db.record_client_activity(client_id1, new_conn).unwrap();
+                db.record_client_activity(client_id1, new_conn.clone())
+                    .unwrap();
                 let last_activity = db
-                    .last_activity_for(new_conn)
+                    .last_activity_for(new_conn.clone())
                     .unwrap()
                     .elapsed()
                     .unwrap()
                     .as_secs_f64();
                 assert!(last_activity < 1.0);
                 db.remove_client_connection(client_id1).unwrap();
-                let client_ids = db.client_ids_for(new_conn).unwrap();
+                let client_ids = db.client_ids_for(new_conn.clone()).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert!(client_ids.contains(&client_id2));
             }));
@@ -572,7 +576,10 @@ mod tests {
         db.ping_check();
         let client_ids = db.connections();
         assert_eq!(client_ids.len(), 1);
-        assert_eq!(db.connection_object_for_client(client_id1), Some(ob));
+        assert_eq!(
+            db.connection_object_for_client(client_id1),
+            Some(ob.clone())
+        );
 
         let client_ids = db.client_ids_for(ob).unwrap();
         assert_eq!(client_ids.len(), 1);

@@ -41,20 +41,20 @@ impl LoaderInterface for DbTxWorldState {
     ) -> Result<Objid, WorldStateError> {
         self.tx.create_object(objid, attrs.clone())
     }
-    fn set_object_parent(&self, obj: Objid, parent: Objid) -> Result<(), WorldStateError> {
+    fn set_object_parent(&self, obj: &Objid, parent: &Objid) -> Result<(), WorldStateError> {
         self.tx.set_object_parent(obj, parent)
     }
-    fn set_object_location(&self, o: Objid, location: Objid) -> Result<(), WorldStateError> {
+    fn set_object_location(&self, o: &Objid, location: &Objid) -> Result<(), WorldStateError> {
         self.tx.set_object_location(o, location)
     }
-    fn set_object_owner(&self, obj: Objid, owner: Objid) -> Result<(), WorldStateError> {
+    fn set_object_owner(&self, obj: &Objid, owner: &Objid) -> Result<(), WorldStateError> {
         self.tx.set_object_owner(obj, owner)
     }
     fn add_verb(
         &self,
-        obj: Objid,
+        obj: &Objid,
         names: Vec<&str>,
-        owner: Objid,
+        owner: &Objid,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
         binary: Vec<u8>,
@@ -76,10 +76,10 @@ impl LoaderInterface for DbTxWorldState {
 
     fn define_property(
         &self,
-        definer: Objid,
-        objid: Objid,
+        definer: &Objid,
+        objid: &Objid,
         propname: &str,
-        owner: Objid,
+        owner: &Objid,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
@@ -95,9 +95,9 @@ impl LoaderInterface for DbTxWorldState {
     }
     fn set_property(
         &self,
-        objid: Objid,
+        objid: &Objid,
         propname: &str,
-        owner: Objid,
+        owner: &Objid,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
@@ -112,8 +112,13 @@ impl LoaderInterface for DbTxWorldState {
         }
 
         // And then set the flags and owner the child had.
-        self.tx
-            .update_property_info(objid, propdef.uuid(), Some(owner), Some(flags), None)?;
+        self.tx.update_property_info(
+            objid,
+            propdef.uuid(),
+            Some(owner.clone()),
+            Some(flags),
+            None,
+        )?;
         Ok(())
     }
 
@@ -130,7 +135,7 @@ impl LoaderInterface for DbTxWorldState {
         self.tx.get_players()
     }
 
-    fn get_object(&self, objid: Objid) -> Result<ObjAttrs, WorldStateError> {
+    fn get_object(&self, objid: &Objid) -> Result<ObjAttrs, WorldStateError> {
         Ok(ObjAttrs::new(
             self.tx.get_object_owner(objid)?,
             self.tx.get_object_parent(objid)?,
@@ -140,21 +145,21 @@ impl LoaderInterface for DbTxWorldState {
         ))
     }
 
-    fn get_object_verbs(&self, objid: Objid) -> Result<VerbDefs, WorldStateError> {
+    fn get_object_verbs(&self, objid: &Objid) -> Result<VerbDefs, WorldStateError> {
         self.tx.get_verbs(objid)
     }
 
-    fn get_verb_binary(&self, objid: Objid, uuid: Uuid) -> Result<Bytes, WorldStateError> {
+    fn get_verb_binary(&self, objid: &Objid, uuid: Uuid) -> Result<Bytes, WorldStateError> {
         self.tx.get_verb_binary(objid, uuid)
     }
 
-    fn get_object_properties(&self, objid: Objid) -> Result<PropDefs, WorldStateError> {
+    fn get_object_properties(&self, objid: &Objid) -> Result<PropDefs, WorldStateError> {
         self.tx.get_properties(objid)
     }
 
     fn get_property_value(
         &self,
-        obj: Objid,
+        obj: &Objid,
         uuid: Uuid,
     ) -> Result<(Option<Var>, PropPerms), WorldStateError> {
         self.tx.retrieve_property(obj, uuid)
@@ -163,7 +168,7 @@ impl LoaderInterface for DbTxWorldState {
     #[allow(clippy::type_complexity)]
     fn get_all_property_values(
         &self,
-        this: Objid,
+        this: &Objid,
     ) -> Result<Vec<(PropDef, (Option<Var>, PropPerms))>, WorldStateError> {
         // First get the entire inheritance hierarchy.
         let hierarchy = self.tx.ancestors(this)?;
@@ -173,7 +178,7 @@ impl LoaderInterface for DbTxWorldState {
         // At the same time, get the values.
         let mut properties = vec![];
         for obj in hierarchy.iter() {
-            let obj_propdefs = self.tx.get_properties(obj)?;
+            let obj_propdefs = self.tx.get_properties(&obj)?;
             for p in obj_propdefs.iter() {
                 if p.definer() != obj {
                     continue;

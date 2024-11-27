@@ -316,7 +316,7 @@ impl CodegenState {
                         self.emit(Op::ImmNone);
                     }
                     Variant::Obj(oid) => {
-                        self.emit(Op::ImmObjid(*oid));
+                        self.emit(Op::ImmObjid(oid.clone()));
                     }
                     Variant::Int(i) => match i32::try_from(*i) {
                         Ok(n) => self.emit(Op::ImmInt(n)),

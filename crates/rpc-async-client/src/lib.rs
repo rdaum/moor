@@ -189,7 +189,7 @@ pub async fn proces_hosts_events(
                             .parse::<SocketAddr>()
                             .unwrap_or_else(|_| panic!("Unable to parse address: {}", listen_addr));
                         if let Err(e) = listeners
-                            .add_listener(handler_object, sockaddr_sockaddr)
+                            .add_listener(&handler_object, sockaddr_sockaddr)
                             .await
                         {
                             error!("Error starting listener: {}", e);

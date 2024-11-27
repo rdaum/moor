@@ -130,7 +130,7 @@ pub trait SystemControl: Send + Sync {
 pub trait SessionFactory {
     fn mk_background_session(
         self: Arc<Self>,
-        player: Objid,
+        player: &Objid,
     ) -> Result<Arc<dyn Session>, SessionError>;
 }
 

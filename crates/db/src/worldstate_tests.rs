@@ -41,17 +41,17 @@ where
         )
         .unwrap();
     assert_eq!(oid, Objid(0));
-    assert!(tx.object_valid(oid).unwrap());
-    assert_eq!(tx.get_object_owner(oid).unwrap(), oid);
-    assert_eq!(tx.get_object_parent(oid).unwrap(), NOTHING);
-    assert_eq!(tx.get_object_location(oid).unwrap(), NOTHING);
-    assert_eq!(tx.get_object_name(oid).unwrap(), "test");
+    assert!(tx.object_valid(&oid).unwrap());
+    assert_eq!(tx.get_object_owner(&oid).unwrap(), oid);
+    assert_eq!(tx.get_object_parent(&oid).unwrap(), NOTHING);
+    assert_eq!(tx.get_object_location(&oid).unwrap(), NOTHING);
+    assert_eq!(tx.get_object_name(&oid).unwrap(), "test");
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
     // Verify existence in a new transaction.
     let tx = begin_tx();
-    assert!(tx.object_valid(oid).unwrap());
-    assert_eq!(tx.get_object_owner(oid).unwrap(), oid);
+    assert!(tx.object_valid(&oid).unwrap());
+    assert_eq!(tx.get_object_owner(&oid).unwrap(), oid);
 }
 
 pub fn perform_test_create_object_fixed_id<F, TX>(begin_tx: F)
@@ -90,35 +90,35 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
 
-    assert_eq!(tx.get_object_parent(b).unwrap(), a);
+    assert_eq!(tx.get_object_parent(&b).unwrap(), a);
     assert!(tx
-        .get_object_children(a)
+        .get_object_children(&a)
         .unwrap()
-        .is_same(ObjSet::from_items(&[b])));
+        .is_same(ObjSet::from_items(&[b.clone()])));
 
-    assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
-    assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::empty());
+    assert_eq!(tx.get_object_parent(&a).unwrap(), NOTHING);
+    assert_eq!(tx.get_object_children(&b).unwrap(), ObjSet::empty());
 
     // Add a second child
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
         )
         .unwrap();
 
-    assert_eq!(tx.get_object_parent(c).unwrap(), a);
+    assert_eq!(tx.get_object_parent(&c).unwrap(), a);
     assert!(tx
-        .get_object_children(a)
+        .get_object_children(&a)
         .unwrap()
-        .is_same(ObjSet::from_items(&[b, c])));
+        .is_same(ObjSet::from_items(&[b.clone(), c.clone()])));
 
-    assert_eq!(tx.get_object_parent(a).unwrap(), NOTHING);
-    assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::empty());
+    assert_eq!(tx.get_object_parent(&a).unwrap(), NOTHING);
+    assert_eq!(tx.get_object_children(&b).unwrap(), ObjSet::empty());
 
     // Create new obj and reparent one child
     let d = tx
@@ -128,16 +128,16 @@ where
         )
         .unwrap();
 
-    tx.set_object_parent(b, d).unwrap();
-    assert_eq!(tx.get_object_parent(b).unwrap(), d);
+    tx.set_object_parent(&b, &d).unwrap();
+    assert_eq!(tx.get_object_parent(&b).unwrap(), d);
     assert!(tx
-        .get_object_children(a)
+        .get_object_children(&a)
         .unwrap()
-        .is_same(ObjSet::from_items(&[c])));
+        .is_same(ObjSet::from_items(&[c.clone()])));
     assert!(tx
-        .get_object_children(d)
+        .get_object_children(&d)
         .unwrap()
-        .is_same(ObjSet::from_items(&[b])));
+        .is_same(ObjSet::from_items(&[b.clone()])));
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
@@ -159,7 +159,7 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
     assert_eq!(b, Objid(1));
@@ -167,7 +167,7 @@ where
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
         )
         .unwrap();
     assert_eq!(c, Objid(2));
@@ -175,32 +175,43 @@ where
     let d = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, c, NOTHING, BitEnum::new(), "test4"),
+            ObjAttrs::new(NOTHING, c.clone(), NOTHING, BitEnum::new(), "test4"),
         )
         .unwrap();
     assert_eq!(d, Objid(3));
 
-    assert!(tx
-        .descendants(a)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[b, c, d])));
-    assert_eq!(tx.descendants(b).unwrap(), ObjSet::empty());
-    assert_eq!(tx.descendants(c).unwrap(), ObjSet::from_items(&[d]));
+    assert!(tx.descendants(&a).unwrap().is_same(ObjSet::from_items(&[
+        b.clone(),
+        c.clone(),
+        d.clone()
+    ])));
+    assert_eq!(tx.descendants(&b).unwrap(), ObjSet::empty());
+    assert_eq!(
+        tx.descendants(&c).unwrap(),
+        ObjSet::from_items(&[d.clone()])
+    );
 
     // Now reparent d to b
-    tx.set_object_parent(d, b).unwrap();
+    tx.set_object_parent(&d, &b).unwrap();
     assert!(tx
-        .get_object_children(a)
+        .get_object_children(&a)
         .unwrap()
-        .is_same(ObjSet::from_items(&[b, c])));
-    assert_eq!(tx.get_object_children(b).unwrap(), ObjSet::from_items(&[d]));
-    assert_eq!(tx.get_object_children(c).unwrap(), ObjSet::empty());
-    assert!(tx
-        .descendants(a)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[b, c, d])));
-    assert_eq!(tx.descendants(b).unwrap(), ObjSet::from_items(&[d]));
-    assert_eq!(tx.descendants(c).unwrap(), ObjSet::empty());
+        .is_same(ObjSet::from_items(&[b.clone(), c.clone()])));
+    assert_eq!(
+        tx.get_object_children(&b).unwrap(),
+        ObjSet::from_items(&[d.clone()])
+    );
+    assert_eq!(tx.get_object_children(&c).unwrap(), ObjSet::empty());
+    assert!(tx.descendants(&a).unwrap().is_same(ObjSet::from_items(&[
+        b.clone(),
+        c.clone(),
+        d.clone()
+    ])));
+    assert_eq!(
+        tx.descendants(&b).unwrap(),
+        ObjSet::from_items(&[d.clone()])
+    );
+    assert_eq!(tx.descendants(&c).unwrap(), ObjSet::empty());
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
@@ -221,15 +232,18 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, a, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, NOTHING, a.clone(), BitEnum::new(), "test2"),
         )
         .unwrap();
 
-    assert_eq!(tx.get_object_location(b).unwrap(), a);
-    assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from_items(&[b]));
+    assert_eq!(tx.get_object_location(&b).unwrap(), a);
+    assert_eq!(
+        tx.get_object_contents(&a).unwrap(),
+        ObjSet::from_items(&[b.clone()])
+    );
 
-    assert_eq!(tx.get_object_location(a).unwrap(), NOTHING);
-    assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
+    assert_eq!(tx.get_object_location(&a).unwrap(), NOTHING);
+    assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
 
     let c = tx
         .create_object(
@@ -238,10 +252,13 @@ where
         )
         .unwrap();
 
-    tx.set_object_location(b, c).unwrap();
-    assert_eq!(tx.get_object_location(b).unwrap(), c);
-    assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::empty());
-    assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from_items(&[b]));
+    tx.set_object_location(&b, &c).unwrap();
+    assert_eq!(tx.get_object_location(&b).unwrap(), c);
+    assert_eq!(tx.get_object_contents(&a).unwrap(), ObjSet::empty());
+    assert_eq!(
+        tx.get_object_contents(&c).unwrap(),
+        ObjSet::from_items(&[b.clone()])
+    );
 
     let d = tx
         .create_object(
@@ -249,22 +266,22 @@ where
             ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test4"),
         )
         .unwrap();
-    tx.set_object_location(d, c).unwrap();
+    tx.set_object_location(&d, &c).unwrap();
     assert!(tx
-        .get_object_contents(c)
+        .get_object_contents(&c)
         .unwrap()
-        .is_same(ObjSet::from_items(&[b, d])));
-    assert_eq!(tx.get_object_location(d).unwrap(), c);
+        .is_same(ObjSet::from_items(&[b.clone(), d.clone()])));
+    assert_eq!(tx.get_object_location(&d).unwrap(), c);
 
-    tx.set_object_location(a, c).unwrap();
+    tx.set_object_location(&a, &c).unwrap();
     assert!(tx
-        .get_object_contents(c)
+        .get_object_contents(&c)
         .unwrap()
-        .is_same(ObjSet::from_items(&[b, d, a])));
-    assert_eq!(tx.get_object_location(a).unwrap(), c);
+        .is_same(ObjSet::from_items(&[b.clone(), d.clone(), a.clone()])));
+    assert_eq!(tx.get_object_location(&a).unwrap(), c);
 
     // Validate recursive move detection.
-    match tx.set_object_location(c, b).err() {
+    match tx.set_object_location(&c, &b).err() {
         Some(WorldStateError::RecursiveMove(_, _)) => {}
         _ => {
             panic!("Expected recursive move error");
@@ -272,8 +289,8 @@ where
     }
 
     // Move b one level deeper, and then check recursive move detection again.
-    tx.set_object_location(b, d).unwrap();
-    match tx.set_object_location(c, b).err() {
+    tx.set_object_location(&b, &d).unwrap();
+    match tx.set_object_location(&c, &b).err() {
         Some(WorldStateError::RecursiveMove(_, _)) => {}
         _ => {
             panic!("Expected recursive move error");
@@ -281,7 +298,7 @@ where
     }
 
     // The other way around, d to c should be fine.
-    tx.set_object_location(d, c).unwrap();
+    tx.set_object_location(&d, &c).unwrap();
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
@@ -303,7 +320,7 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, a, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, NOTHING, a.clone(), BitEnum::new(), "test2"),
         )
         .unwrap();
 
@@ -314,46 +331,58 @@ where
         )
         .unwrap();
 
-    tx.set_object_location(b, a).unwrap();
-    tx.set_object_location(c, a).unwrap();
-    assert_eq!(tx.get_object_location(b).unwrap(), a);
-    assert_eq!(tx.get_object_location(c).unwrap(), a);
+    tx.set_object_location(&b, &a).unwrap();
+    tx.set_object_location(&c, &a).unwrap();
+    assert_eq!(tx.get_object_location(&b).unwrap(), a);
+    assert_eq!(tx.get_object_location(&c).unwrap(), a);
     assert!(tx
-        .get_object_contents(a)
+        .get_object_contents(&a)
         .unwrap()
-        .is_same(ObjSet::from_items(&[b, c])));
-    assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
-    assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::empty());
+        .is_same(ObjSet::from_items(&[b.clone(), c.clone()])));
+    assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
+    assert_eq!(tx.get_object_contents(&c).unwrap(), ObjSet::empty());
 
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
     let mut tx = begin_tx();
-    assert_eq!(tx.get_object_location(b).unwrap(), a);
-    assert_eq!(tx.get_object_location(c).unwrap(), a);
-    let contents = tx.get_object_contents(a).expect("Unable to get contents");
+    assert_eq!(tx.get_object_location(&b).unwrap(), a);
+    assert_eq!(tx.get_object_location(&c).unwrap(), a);
+    let contents = tx.get_object_contents(&a).expect("Unable to get contents");
     assert!(
-        contents.is_same(ObjSet::from_items(&[b, c])),
+        contents.is_same(ObjSet::from_items(&[b.clone(), c.clone()])),
         "Contents of a are not as expected: {:?} vs {:?}",
         contents,
-        ObjSet::from_items(&[b, c])
+        ObjSet::from_items(&[b.clone(), c.clone()])
     );
-    assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
-    assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::empty());
+    assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
+    assert_eq!(tx.get_object_contents(&c).unwrap(), ObjSet::empty());
 
-    tx.set_object_location(b, c).unwrap();
-    assert_eq!(tx.get_object_location(b).unwrap(), c);
-    assert_eq!(tx.get_object_location(c).unwrap(), a);
-    assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from_items(&[c]));
-    assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
-    assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from_items(&[b]));
+    tx.set_object_location(&b, &c).unwrap();
+    assert_eq!(tx.get_object_location(&b).unwrap(), c);
+    assert_eq!(tx.get_object_location(&c).unwrap(), a);
+    assert_eq!(
+        tx.get_object_contents(&a).unwrap(),
+        ObjSet::from_items(&[c.clone()])
+    );
+    assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
+    assert_eq!(
+        tx.get_object_contents(&c).unwrap(),
+        ObjSet::from_items(&[b.clone()])
+    );
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
     let tx = begin_tx();
-    assert_eq!(tx.get_object_location(c).unwrap(), a);
-    assert_eq!(tx.get_object_location(b).unwrap(), c);
-    assert_eq!(tx.get_object_contents(a).unwrap(), ObjSet::from_items(&[c]));
-    assert_eq!(tx.get_object_contents(b).unwrap(), ObjSet::empty());
-    assert_eq!(tx.get_object_contents(c).unwrap(), ObjSet::from_items(&[b]));
+    assert_eq!(tx.get_object_location(&c).unwrap(), a);
+    assert_eq!(tx.get_object_location(&b).unwrap(), c);
+    assert_eq!(
+        tx.get_object_contents(&a).unwrap(),
+        ObjSet::from_items(&[c.clone()])
+    );
+    assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
+    assert_eq!(
+        tx.get_object_contents(&c).unwrap(),
+        ObjSet::from_items(&[b.clone()])
+    );
 }
 
 pub fn perform_test_simple_property<F, TX>(begin_tx: F)
@@ -371,16 +400,16 @@ where
         .unwrap();
 
     tx.define_property(
-        oid,
-        oid,
+        &oid,
+        &oid,
         Symbol::mk_case_insensitive("test"),
-        NOTHING,
+        &NOTHING,
         BitEnum::new(),
         Some(v_str("test")),
     )
     .unwrap();
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(oid, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&oid, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test"));
@@ -403,8 +432,8 @@ where
         )
         .unwrap();
     tx.add_object_verb(
-        oid,
-        oid,
+        &oid,
+        &oid,
         vec![Symbol::mk_case_insensitive("test")],
         vec![],
         BinaryType::LambdaMoo18X,
@@ -414,16 +443,16 @@ where
     .unwrap();
     // resolve the verb to its vh.
     let vh = tx
-        .resolve_verb(oid, Symbol::mk_case_insensitive("test"), None)
+        .resolve_verb(&oid, Symbol::mk_case_insensitive("test"), None)
         .unwrap();
     assert_eq!(vh.names(), vec!["test"]);
     // Verify it's actually on the object when we get verbs.
-    let verbs = tx.get_verbs(oid).unwrap();
+    let verbs = tx.get_verbs(&oid).unwrap();
     assert_eq!(verbs.len(), 1);
     assert!(verbs.contains(vh.uuid()));
     // update the verb using its uuid, renaming it.
     tx.update_verb(
-        oid,
+        &oid,
         vh.uuid(),
         VerbAttrs {
             definer: None,
@@ -438,7 +467,7 @@ where
     .unwrap();
     // resolve with the new name.
     let vh = tx
-        .resolve_verb(oid, Symbol::mk_case_insensitive("test2"), None)
+        .resolve_verb(&oid, Symbol::mk_case_insensitive("test2"), None)
         .unwrap();
     assert_eq!(vh.names(), vec!["test2"]);
 
@@ -446,7 +475,7 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
     let mut tx = begin_tx();
     let vh = tx
-        .resolve_verb(oid, Symbol::mk_case_insensitive("test2"), None)
+        .resolve_verb(&oid, Symbol::mk_case_insensitive("test2"), None)
         .unwrap();
     assert_eq!(vh.names(), vec!["test2"]);
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
@@ -469,21 +498,21 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
 
     tx.define_property(
-        a,
-        a,
+        &a,
+        &a,
         Symbol::mk_case_insensitive("test"),
-        NOTHING,
+        &NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
     )
     .unwrap();
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
@@ -499,9 +528,9 @@ where
         )
         .unwrap();
 
-    tx.set_object_parent(b, c).unwrap();
+    tx.set_object_parent(&b, &c).unwrap();
 
-    let result = tx.resolve_property(b, Symbol::mk_case_insensitive("test"));
+    let result = tx.resolve_property(&b, Symbol::mk_case_insensitive("test"));
     assert_eq!(
         result.err().unwrap(),
         WorldStateError::PropertyNotFound(b, "test".to_string())
@@ -526,21 +555,21 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
 
     tx.define_property(
-        a,
-        a,
+        &a,
+        &a,
         Symbol::mk_case_insensitive("test"),
-        NOTHING,
+        &NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
     )
     .unwrap();
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
@@ -548,11 +577,11 @@ where
     assert!(is_clear);
 
     // Set the property on the child to a new value.
-    tx.set_property(b, prop.uuid(), v_int(666)).unwrap();
+    tx.set_property(&b, prop.uuid(), v_int(666)).unwrap();
 
     // Verify the new value is present.
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_int(666));
@@ -560,9 +589,9 @@ where
     assert!(!is_clear);
 
     // Now clear, and we should get the old value, but with clear status.
-    tx.clear_property(b, prop.uuid()).unwrap();
+    tx.clear_property(&b, prop.uuid()).unwrap();
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
@@ -571,15 +600,15 @@ where
 
     // Changing flags or owner should have nothing to do with the clarity of the property value.
     tx.update_property_info(
-        b,
+        &b,
         prop.uuid(),
-        Some(b),
+        Some(b.clone()),
         Some(BitEnum::new_with(PropFlag::Read)),
         None,
     )
     .unwrap();
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
@@ -588,9 +617,9 @@ where
     assert!(is_clear);
 
     // Setting the value again makes it not clear
-    tx.set_property(b, prop.uuid(), v_int(666)).unwrap();
+    tx.set_property(&b, prop.uuid(), v_int(666)).unwrap();
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_int(666));
@@ -617,28 +646,28 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
 
     let uuid = tx
         .define_property(
-            a,
-            a,
+            &a,
+            &a,
             Symbol::mk_case_insensitive("test"),
-            NOTHING,
+            &NOTHING,
             BitEnum::new(),
             Some(v_str("test_value")),
         )
         .unwrap();
 
     // I can update the name on the parent...
-    tx.update_property_info(a, uuid, None, None, Some("a_new_name".to_string()))
+    tx.update_property_info(&a, uuid, None, None, Some("a_new_name".to_string()))
         .unwrap();
 
     // And now resolve that new name on the child.
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("a_new_name"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("a_new_name"))
         .unwrap();
     assert_eq!(prop.name(), "a_new_name");
     assert_eq!(v, v_str("test_value"));
@@ -647,7 +676,7 @@ where
 
     // But it's illegal to try to rename it on the child who doesn't define it.
     assert!(tx
-        .update_property_info(b, uuid, None, None, Some("a_new_name".to_string()))
+        .update_property_info(&b, uuid, None, None, Some("a_new_name".to_string()))
         .is_err())
 }
 
@@ -669,22 +698,22 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
 
     // Define 1 property on parent
     tx.define_property(
-        a,
-        a,
+        &a,
+        &a,
         Symbol::mk_case_insensitive("test"),
-        NOTHING,
+        &NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
     )
     .unwrap();
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
@@ -694,16 +723,16 @@ where
     // And another on child
     let child_prop = tx
         .define_property(
-            b,
-            b,
+            &b,
+            &b,
             Symbol::mk_case_insensitive("test2"),
-            NOTHING,
+            &NOTHING,
             BitEnum::new(),
             Some(v_str("test_value2")),
         )
         .unwrap();
 
-    let props = tx.get_properties(b).unwrap();
+    let props = tx.get_properties(&b).unwrap();
 
     // Our prop should be there
     assert!(props.find(&child_prop).is_some());
@@ -727,8 +756,8 @@ where
         .unwrap();
 
     tx.add_object_verb(
-        a,
-        a,
+        &a,
+        &a,
         vec![Symbol::mk_case_insensitive("test")],
         vec![],
         BinaryType::LambdaMoo18X,
@@ -738,7 +767,7 @@ where
     .unwrap();
 
     assert_eq!(
-        tx.resolve_verb(a, Symbol::mk_case_insensitive("test"), None)
+        tx.resolve_verb(&a, Symbol::mk_case_insensitive("test"), None)
             .unwrap()
             .names(),
         vec!["test"]
@@ -746,7 +775,7 @@ where
 
     assert_eq!(
         tx.resolve_verb(
-            a,
+            &a,
             Symbol::mk_case_insensitive("test"),
             Some(VerbArgsSpec::this_none_this())
         )
@@ -756,15 +785,15 @@ where
     );
 
     let v_uuid = tx
-        .resolve_verb(a, Symbol::mk_case_insensitive("test"), None)
+        .resolve_verb(&a, Symbol::mk_case_insensitive("test"), None)
         .unwrap()
         .uuid();
-    assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);
+    assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![]);
 
     // Add a second verb with a different name
     tx.add_object_verb(
-        a,
-        a,
+        &a,
+        &a,
         vec![Symbol::mk_case_insensitive("test2")],
         vec![],
         BinaryType::LambdaMoo18X,
@@ -775,7 +804,7 @@ where
 
     // Verify we can get it
     assert_eq!(
-        tx.resolve_verb(a, Symbol::mk_case_insensitive("test2"), None)
+        tx.resolve_verb(&a, Symbol::mk_case_insensitive("test2"), None)
             .unwrap()
             .names(),
         vec!["test2"]
@@ -785,13 +814,13 @@ where
     // Verify existence in a new transaction.
     let mut tx = begin_tx();
     assert_eq!(
-        tx.resolve_verb(a, Symbol::mk_case_insensitive("test"), None)
+        tx.resolve_verb(&a, Symbol::mk_case_insensitive("test"), None)
             .unwrap()
             .names(),
         vec!["test"]
     );
     assert_eq!(
-        tx.resolve_verb(a, Symbol::mk_case_insensitive("test2"), None)
+        tx.resolve_verb(&a, Symbol::mk_case_insensitive("test2"), None)
             .unwrap()
             .names(),
         vec!["test2"]
@@ -816,13 +845,13 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
 
     tx.add_object_verb(
-        a,
-        a,
+        &a,
+        &a,
         vec![Symbol::mk_case_insensitive("test")],
         vec![],
         BinaryType::LambdaMoo18X,
@@ -832,7 +861,7 @@ where
     .unwrap();
 
     assert_eq!(
-        tx.resolve_verb(b, Symbol::mk_case_insensitive("test"), None)
+        tx.resolve_verb(&b, Symbol::mk_case_insensitive("test"), None)
             .unwrap()
             .names(),
         vec!["test"]
@@ -840,7 +869,7 @@ where
 
     assert_eq!(
         tx.resolve_verb(
-            b,
+            &b,
             Symbol::mk_case_insensitive("test"),
             Some(VerbArgsSpec::this_none_this())
         )
@@ -850,10 +879,10 @@ where
     );
 
     let v_uuid = tx
-        .resolve_verb(b, Symbol::mk_case_insensitive("test"), None)
+        .resolve_verb(&b, Symbol::mk_case_insensitive("test"), None)
         .unwrap()
         .uuid();
-    assert_eq!(tx.get_verb_binary(a, v_uuid).unwrap(), vec![]);
+    assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![]);
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
@@ -872,8 +901,8 @@ where
 
     let verb_names = vec!["dname*c", "iname*c"];
     tx.add_object_verb(
-        a,
-        a,
+        &a,
+        &a,
         verb_names
             .iter()
             .map(|s| Symbol::mk_case_insensitive(s))
@@ -886,28 +915,28 @@ where
     .unwrap();
 
     assert_eq!(
-        tx.resolve_verb(a, Symbol::mk_case_insensitive("dname"), None)
+        tx.resolve_verb(&a, Symbol::mk_case_insensitive("dname"), None)
             .unwrap()
             .names(),
         verb_names
     );
 
     assert_eq!(
-        tx.resolve_verb(a, Symbol::mk_case_insensitive("dnamec"), None)
+        tx.resolve_verb(&a, Symbol::mk_case_insensitive("dnamec"), None)
             .unwrap()
             .names(),
         verb_names
     );
 
     assert_eq!(
-        tx.resolve_verb(a, Symbol::mk_case_insensitive("iname"), None)
+        tx.resolve_verb(&a, Symbol::mk_case_insensitive("iname"), None)
             .unwrap()
             .names(),
         verb_names
     );
 
     assert_eq!(
-        tx.resolve_verb(a, Symbol::mk_case_insensitive("inamec"), None)
+        tx.resolve_verb(&a, Symbol::mk_case_insensitive("inamec"), None)
             .unwrap()
             .names(),
         verb_names
@@ -930,22 +959,22 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, b, NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(NOTHING, b.clone(), NOTHING, BitEnum::new(), "test3"),
         )
         .unwrap();
 
     // Add a property on A
     tx.define_property(
-        a,
-        a,
+        &a,
+        &a,
         Symbol::mk_case_insensitive("test"),
-        NOTHING,
+        &NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
     )
@@ -953,7 +982,7 @@ where
 
     // Verify it's on B & C
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
@@ -961,7 +990,7 @@ where
     assert!(is_clear);
 
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(c, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&c, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
@@ -976,28 +1005,28 @@ where
         )
         .unwrap();
 
-    tx.set_object_parent(b, d).unwrap();
+    tx.set_object_parent(&b, &d).unwrap();
 
     // Verify the property is no longer on B
-    let result = tx.resolve_property(b, Symbol::mk_case_insensitive("test"));
+    let result = tx.resolve_property(&b, Symbol::mk_case_insensitive("test"));
     assert_eq!(
         result.err().unwrap(),
-        WorldStateError::PropertyNotFound(b, "test".to_string())
+        WorldStateError::PropertyNotFound(b.clone(), "test".to_string())
     );
 
     // Or C.
-    let result = tx.resolve_property(c, Symbol::mk_case_insensitive("test"));
+    let result = tx.resolve_property(&c, Symbol::mk_case_insensitive("test"));
     assert_eq!(
         result.err().unwrap(),
-        WorldStateError::PropertyNotFound(c, "test".to_string())
+        WorldStateError::PropertyNotFound(c.clone(), "test".to_string())
     );
 
     // Now add new property on D
     tx.define_property(
-        d,
-        d,
+        &d,
+        &d,
         Symbol::mk_case_insensitive("test2"),
-        NOTHING,
+        &NOTHING,
         BitEnum::new(),
         Some(v_str("test_value2")),
     )
@@ -1005,7 +1034,7 @@ where
 
     // Verify it's on B and C
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(b, Symbol::mk_case_insensitive("test2"))
+        .resolve_property(&b, Symbol::mk_case_insensitive("test2"))
         .unwrap();
     assert_eq!(prop.name(), "test2");
     assert_eq!(v, v_str("test_value2"));
@@ -1013,7 +1042,7 @@ where
     assert!(is_clear);
 
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(c, Symbol::mk_case_insensitive("test2"))
+        .resolve_property(&c, Symbol::mk_case_insensitive("test2"))
         .unwrap();
     assert_eq!(prop.name(), "test2");
     assert_eq!(v, v_str("test_value2"));
@@ -1021,9 +1050,9 @@ where
     assert!(is_clear);
 
     // And now reparent C to A again, and verify it's back to having the first property.
-    tx.set_object_parent(c, a).unwrap();
+    tx.set_object_parent(&c, &a).unwrap();
     let (prop, v, perms, is_clear) = tx
-        .resolve_property(c, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&c, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
@@ -1045,10 +1074,10 @@ where
         )
         .unwrap();
 
-    tx.recycle_object(tobj).expect("Unable to recycle object");
+    tx.recycle_object(&tobj).expect("Unable to recycle object");
 
     // Verify it's gone.
-    let result = tx.get_object_name(tobj);
+    let result = tx.get_object_name(&tobj);
     assert_eq!(
         result.err().unwrap(),
         WorldStateError::ObjectNotFound(ObjectRef::Id(tobj))
@@ -1064,33 +1093,33 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
 
     // Recycle the child, and verify it's gone.
-    tx.recycle_object(b).expect("Unable to recycle object");
-    let result = tx.get_object_name(b);
+    tx.recycle_object(&b).expect("Unable to recycle object");
+    let result = tx.get_object_name(&b);
     assert_eq!(
         result.err().unwrap(),
         WorldStateError::ObjectNotFound(ObjectRef::Id(b))
     );
 
     // Verify that children list is empty for the parent.
-    assert!(tx.get_object_children(a).unwrap().is_empty());
+    assert!(tx.get_object_children(&a).unwrap().is_empty());
 
     // Create another one, add a property to the root, and then verify we can recycle the child.
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
         )
         .unwrap();
     tx.define_property(
-        a,
-        a,
+        &a,
+        &a,
         Symbol::mk_case_insensitive("test"),
-        NOTHING,
+        &NOTHING,
         BitEnum::new(),
         Some(v_str("test_value")),
     )
@@ -1098,20 +1127,20 @@ where
 
     // Verify root's children list contains our object.
     assert!(tx
-        .get_object_children(a)
+        .get_object_children(&a)
         .unwrap()
-        .is_same(ObjSet::from_items(&[c])));
+        .is_same(ObjSet::from_items(&[c.clone()])));
 
-    tx.recycle_object(c).expect("Unable to recycle object");
-    let result = tx.get_object_name(c);
+    tx.recycle_object(&c).expect("Unable to recycle object");
+    let result = tx.get_object_name(&c);
     assert_eq!(
         result.err().unwrap(),
-        WorldStateError::ObjectNotFound(ObjectRef::Id(c))
+        WorldStateError::ObjectNotFound(ObjectRef::Id(c.clone()))
     );
 
     // Verify the property is still there.
     let (prop, v, perms, _) = tx
-        .resolve_property(a, Symbol::mk_case_insensitive("test"))
+        .resolve_property(&a, Symbol::mk_case_insensitive("test"))
         .unwrap();
     assert_eq!(prop.name(), "test");
     assert_eq!(v, v_str("test_value"));
@@ -1121,35 +1150,35 @@ where
     let d = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test4"),
+            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test4"),
         )
         .unwrap();
     tx.define_property(
-        a,
-        a,
+        &a,
+        &a,
         Symbol::mk_case_insensitive("test2"),
-        NOTHING,
+        &NOTHING,
         BitEnum::new(),
         Some(v_str("test_value2")),
     )
     .unwrap();
 
-    tx.recycle_object(a).expect("Unable to recycle object");
-    let result = tx.get_object_name(a);
+    tx.recycle_object(&a).expect("Unable to recycle object");
+    let result = tx.get_object_name(&a);
     assert_eq!(
         result.err().unwrap(),
-        WorldStateError::ObjectNotFound(ObjectRef::Id(a))
+        WorldStateError::ObjectNotFound(ObjectRef::Id(a.clone()))
     );
 
     // Verify the child object is still there despite its parent being destroyed.
-    let result = tx.get_object_name(d);
+    let result = tx.get_object_name(&d);
     assert_eq!(result.unwrap(), "test4");
 
     // Verify the object's parent is now NOTHING.
-    assert_eq!(tx.get_object_parent(d).unwrap(), NOTHING);
+    assert_eq!(tx.get_object_parent(&d).unwrap(), NOTHING);
 
     // We should not have the property, it came from our parent.
-    let result = tx.resolve_property(d, Symbol::mk_case_insensitive("test2"));
+    let result = tx.resolve_property(&d, Symbol::mk_case_insensitive("test2"));
     assert_eq!(
         result.err().unwrap(),
         WorldStateError::PropertyNotFound(d, "test2".to_string())

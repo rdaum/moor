@@ -75,7 +75,7 @@ impl Session for RpcSession {
         let new_session = self
             .rpc_server
             .clone()
-            .new_session(self.client_id, self.player)?;
+            .new_session(self.client_id, self.player.clone())?;
         Ok(new_session)
     }
 
@@ -102,8 +102,11 @@ impl Session for RpcSession {
             Some(msg) => format!("** Server is shutting down: {} **", msg),
             None => "** Server is shutting down ** ".to_string(),
         };
-        self.rpc_server
-            .send_system_message(self.client_id, self.player, shutdown_msg.clone())?;
+        self.rpc_server.send_system_message(
+            self.client_id,
+            self.player.clone(),
+            shutdown_msg.clone(),
+        )?;
         Ok(())
     }
 
@@ -131,8 +134,8 @@ impl Session for RpcSession {
 impl SessionFactory for RpcServer {
     fn mk_background_session(
         self: Arc<Self>,
-        player: Objid,
+        player: &Objid,
     ) -> Result<Arc<dyn Session>, SessionError> {
-        self.clone().new_session(Uuid::new_v4(), player)
+        self.clone().new_session(Uuid::new_v4(), player.clone())
     }
 }
