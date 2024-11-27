@@ -26,7 +26,7 @@ mod variant;
 pub use error::{Error, ErrorPack};
 pub use list::List;
 pub use map::Map;
-pub use objid::Objid;
+pub use objid::{Objid, AMBIGUOUS, FAILED_MATCH, NOTHING, SYSTEM_OBJECT};
 use std::fmt::Debug;
 pub use string::Str;
 use strum::FromRepr;

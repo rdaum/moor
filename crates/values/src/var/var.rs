@@ -445,7 +445,7 @@ pub fn v_err(e: Error) -> Var {
 }
 
 pub fn v_obj(o: i64) -> Var {
-    Var::mk_object(Objid(o))
+    Var::mk_object(Objid::mk_id(o))
 }
 
 pub fn v_objid(o: Objid) -> Var {

@@ -229,14 +229,14 @@ pub fn moo_frame_execute(
                             v_int(from_i + 1)
                         }
                         (Variant::Obj(to_o), Variant::Obj(from_o)) => {
-                            if from_o.0 > to_o.0 {
+                            if from_o > to_o {
                                 f.pop();
                                 f.pop();
                                 f.jump(end_label);
 
                                 continue;
                             }
-                            v_obj(from_o.0 + 1)
+                            v_obj(from_o.id() + 1)
                         }
                         (_, _) => {
                             f.pop();

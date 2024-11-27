@@ -100,7 +100,7 @@ impl TreeTransformer {
             Rule::object => {
                 let ostr = &pairs.as_str()[1..];
                 let oid = i64::from_str(ostr).unwrap();
-                let objid = Objid(oid);
+                let objid = Objid::mk_id(oid);
                 Ok(Expr::Value(v_objid(objid)))
             }
             Rule::integer => match pairs.as_str().parse::<i64>() {

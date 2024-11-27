@@ -288,7 +288,7 @@ impl ConnectionsDB for ConnectionsWT {
                     // -4 to get the connection object, since they always grow downwards from there.
                     let connection_id = tx.increment_sequence(ConnectionId);
                     let connection_id: i64 = -4 - connection_id;
-                    Objid(connection_id)
+                    Objid::mk_id(connection_id)
                 }
                 Some(player) => player.clone(),
             };
@@ -525,7 +525,7 @@ mod tests {
                     db.connection_object_for_client(client_id),
                     Some(oid.clone())
                 );
-                let connection_object = Objid(x);
+                let connection_object = Objid::mk_id(x);
                 db.update_client_connection(oid, connection_object.clone())
                     .unwrap_or_else(|e| {
                         panic!("Unable to update client connection for {:?}: {:?}", x, e)
@@ -560,7 +560,7 @@ mod tests {
                 let con_oid2 = db
                     .new_connection(client_id2, "localhost".to_string(), None)
                     .unwrap();
-                let new_conn = Objid(x);
+                let new_conn = Objid::mk_id(x);
                 db.update_client_connection(con_oid1, new_conn.clone())
                     .expect("Unable to update client connection");
                 let client_ids = db.client_ids_for(new_conn.clone()).unwrap();

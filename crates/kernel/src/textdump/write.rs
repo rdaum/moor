@@ -40,7 +40,10 @@ impl<W: io::Write> TextdumpWriter<W> {
         writeln!(
             self.writer,
             "{}\n{}\n{}\n{}",
-            verbdef.name, verbdef.owner.0, verbdef.flags, verbdef.prep
+            verbdef.name,
+            verbdef.owner.id(),
+            verbdef.flags,
+            verbdef.prep
         )
     }
 
@@ -54,7 +57,7 @@ impl<W: io::Write> TextdumpWriter<W> {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_INT as i64, i)?;
             }
             Variant::Obj(o) => {
-                writeln!(self.writer, "{}\n{}", VarType::TYPE_OBJ as i64, o.0)?;
+                writeln!(self.writer, "{}\n{}", VarType::TYPE_OBJ as i64, o.id())?;
             }
             Variant::Str(s) => {
                 match self.encoding_mode {
@@ -102,22 +105,22 @@ impl<W: io::Write> TextdumpWriter<W> {
 
     fn write_propval(&mut self, propval: &Propval) -> Result<(), io::Error> {
         self.write_var(&propval.value, propval.is_clear)?;
-        writeln!(self.writer, "{}", propval.owner.0)?;
+        writeln!(self.writer, "{}", propval.owner.id())?;
         writeln!(self.writer, "{}", propval.flags)?;
         Ok(())
     }
 
     fn write_object(&mut self, object: &Object) -> Result<(), io::Error> {
-        writeln!(self.writer, "#{}\n{}\n", object.id.0, &object.name,)?;
+        writeln!(self.writer, "{}\n{}\n", object.id, &object.name)?;
 
         writeln!(self.writer, "{}", object.flags)?;
-        writeln!(self.writer, "{}", object.owner.0)?;
-        writeln!(self.writer, "{}", object.location.0)?;
-        writeln!(self.writer, "{}", object.contents.0)?;
-        writeln!(self.writer, "{}", object.next.0)?;
-        writeln!(self.writer, "{}", object.parent.0)?;
-        writeln!(self.writer, "{}", object.child.0)?;
-        writeln!(self.writer, "{}", object.sibling.0)?;
+        writeln!(self.writer, "{}", object.owner.id())?;
+        writeln!(self.writer, "{}", object.location.id())?;
+        writeln!(self.writer, "{}", object.contents.id())?;
+        writeln!(self.writer, "{}", object.next.id())?;
+        writeln!(self.writer, "{}", object.parent.id())?;
+        writeln!(self.writer, "{}", object.child.id())?;
+        writeln!(self.writer, "{}", object.sibling.id())?;
         writeln!(self.writer, "{}", object.verbdefs.len())?;
         for verbdef in &object.verbdefs {
             self.write_verbdef(verbdef)?;
@@ -141,8 +144,8 @@ impl<W: io::Write> TextdumpWriter<W> {
 
             writeln!(
                 self.writer,
-                "#{}:{}\n{}\n.",
-                verb.objid.0, verb.verbnum, program
+                "{}:{}\n{}\n.",
+                verb.objid, verb.verbnum, program
             )?;
         }
         Ok(())
@@ -165,7 +168,7 @@ impl<W: io::Write> TextdumpWriter<W> {
             textdump.users.len()
         )?;
         for user in &textdump.users {
-            writeln!(self.writer, "{}", user.0)?;
+            writeln!(self.writer, "{}", user.id())?;
         }
         for object in textdump.objects.values() {
             self.write_object(object)?;

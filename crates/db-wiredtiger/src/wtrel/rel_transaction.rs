@@ -632,23 +632,26 @@ mod tests {
         let db = test_db(tmpdir.path());
         let tx = db.clone().start_tx();
 
-        tx.insert_tuple(OneToOne, &Objid(1), &Objid(2)).unwrap();
-        tx.insert_tuple(OneToOne, &Objid(2), &Objid(3)).unwrap();
-        tx.insert_tuple(OneToOne, &Objid(3), &Objid(4)).unwrap();
+        tx.insert_tuple(OneToOne, &Objid::mk_id(1), &Objid::mk_id(2))
+            .unwrap();
+        tx.insert_tuple(OneToOne, &Objid::mk_id(2), &Objid::mk_id(3))
+            .unwrap();
+        tx.insert_tuple(OneToOne, &Objid::mk_id(3), &Objid::mk_id(4))
+            .unwrap();
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid(1))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid::mk_id(1))
                 .unwrap(),
-            Some(Objid(2))
+            Some(Objid::mk_id(2))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid(2))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid::mk_id(2))
                 .unwrap(),
-            Some(Objid(3))
+            Some(Objid::mk_id(3))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid(3))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOne, &Objid::mk_id(3))
                 .unwrap(),
-            Some(Objid(4))
+            Some(Objid::mk_id(4))
         );
     }
 
@@ -657,65 +660,90 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let db = test_db(tmpdir.path());
         let tx = db.clone().start_tx();
-        tx.insert_composite_domain_tuple(CompositeToOne, &Objid(1), &Objid(2), &Objid(3))
-            .unwrap();
-        tx.insert_composite_domain_tuple(CompositeToOne, &Objid(2), &Objid(3), &Objid(4))
-            .unwrap();
-        tx.insert_composite_domain_tuple(CompositeToOne, &Objid(3), &Objid(4), &Objid(5))
-            .unwrap();
+        tx.insert_composite_domain_tuple(
+            CompositeToOne,
+            &Objid::mk_id(1),
+            &Objid::mk_id(2),
+            &Objid::mk_id(3),
+        )
+        .unwrap();
+        tx.insert_composite_domain_tuple(
+            CompositeToOne,
+            &Objid::mk_id(2),
+            &Objid::mk_id(3),
+            &Objid::mk_id(4),
+        )
+        .unwrap();
+        tx.insert_composite_domain_tuple(
+            CompositeToOne,
+            &Objid::mk_id(3),
+            &Objid::mk_id(4),
+            &Objid::mk_id(5),
+        )
+        .unwrap();
 
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                &Objid(1),
-                &Objid(2)
+                &Objid::mk_id(1),
+                &Objid::mk_id(2)
             )
             .unwrap(),
-            Some(Objid(3))
+            Some(Objid::mk_id(3))
         );
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                &Objid(2),
-                &Objid(3)
+                &Objid::mk_id(2),
+                &Objid::mk_id(3)
             )
             .unwrap(),
-            Some(Objid(4))
+            Some(Objid::mk_id(4))
         );
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                &Objid(3),
-                &Objid(4)
+                &Objid::mk_id(3),
+                &Objid::mk_id(4)
             )
             .unwrap(),
-            Some(Objid(5))
+            Some(Objid::mk_id(5))
         );
 
         // Now upsert an existing value...
-        tx.upsert_composite(CompositeToOne, &Objid(1), &Objid(2), &Objid(4))
-            .unwrap();
+        tx.upsert_composite(
+            CompositeToOne,
+            &Objid::mk_id(1),
+            &Objid::mk_id(2),
+            &Objid::mk_id(4),
+        )
+        .unwrap();
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                &Objid(1),
-                &Objid(2)
+                &Objid::mk_id(1),
+                &Objid::mk_id(2)
             )
             .unwrap(),
-            Some(Objid(4))
+            Some(Objid::mk_id(4))
         );
 
         // And insert a new using upsert
-        tx.upsert_composite(CompositeToOne, &Objid(4), &Objid(5), &Objid(6))
-            .unwrap();
+        tx.upsert_composite(
+            CompositeToOne,
+            &Objid::mk_id(4),
+            &Objid::mk_id(5),
+            &Objid::mk_id(6),
+        )
+        .unwrap();
         assert_eq!(
             tx.seek_by_unique_composite_domain::<Objid, Objid, Objid>(
                 CompositeToOne,
-                &Objid(4),
-                &Objid(5)
+                &Objid::mk_id(4),
+                &Objid::mk_id(5)
             )
             .unwrap(),
-            Some(Objid(6))
+            Some(Objid::mk_id(6))
         );
     }
 
@@ -724,66 +752,66 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let db = test_db(tmpdir.path());
         let tx = db.clone().start_tx();
-        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(3), &Objid(2))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid::mk_id(3), &Objid::mk_id(2))
             .unwrap();
-        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(2), &Objid(1))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid::mk_id(2), &Objid::mk_id(1))
             .unwrap();
-        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(1), &Objid(0))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid::mk_id(1), &Objid::mk_id(0))
             .unwrap();
-        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid(4), &Objid(0))
+        tx.insert_tuple(OneToOneSecondaryIndexed, &Objid::mk_id(4), &Objid::mk_id(0))
             .unwrap();
 
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(3))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(3))
                 .unwrap(),
-            Some(Objid(2))
+            Some(Objid::mk_id(2))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(2))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(2))
                 .unwrap(),
-            Some(Objid(1))
+            Some(Objid::mk_id(1))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(1))
                 .unwrap(),
-            Some(Objid(0))
-        );
-
-        assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
-                .unwrap(),
-            ObjSet::from_items(&[Objid(1), Objid(4)])
-        );
-        assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
-                .unwrap(),
-            Objid(2)
-        );
-        assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(2))
-                .unwrap(),
-            Objid(3)
+            Some(Objid::mk_id(0))
         );
 
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(3))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(0))
+                .unwrap(),
+            ObjSet::from_items(&[Objid::mk_id(1), Objid::mk_id(4)])
+        );
+        assert_eq!(
+            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(1))
+                .unwrap(),
+            Objid::mk_id(2)
+        );
+        assert_eq!(
+            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(2))
+                .unwrap(),
+            Objid::mk_id(3)
+        );
+
+        assert_eq!(
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(3))
                 .unwrap(),
             ObjSet::empty()
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(0))
                 .unwrap(),
-            ObjSet::from_items(&[Objid(1), Objid(4)])
+            ObjSet::from_items(&[Objid::mk_id(1), Objid::mk_id(4)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(1))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(1))
                 .unwrap(),
-            ObjSet::from_items(&[Objid(2)])
+            ObjSet::from_items(&[Objid::mk_id(2)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(2))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(2))
                 .unwrap(),
-            ObjSet::from_items(&[Objid(3)])
+            ObjSet::from_items(&[Objid::mk_id(3)])
         );
 
         // Now commit and re-verify.
@@ -791,67 +819,67 @@ mod tests {
         let tx = db.start_tx();
 
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(3))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(3))
                 .unwrap(),
-            Some(Objid(2))
+            Some(Objid::mk_id(2))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(2))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(2))
                 .unwrap(),
-            Some(Objid(1))
+            Some(Objid::mk_id(1))
         );
         assert_eq!(
-            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
+            tx.seek_unique_by_domain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(1))
                 .unwrap(),
-            Some(Objid(0))
+            Some(Objid::mk_id(0))
         );
 
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(3))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(3))
                 .unwrap(),
             ObjSet::empty(),
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(2))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(2))
                 .unwrap(),
-            ObjSet::from_items(&[Objid(3)])
+            ObjSet::from_items(&[Objid::mk_id(3)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(1))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(1))
                 .unwrap(),
-            ObjSet::from_items(&[Objid(2)])
+            ObjSet::from_items(&[Objid::mk_id(2)])
         );
         assert_eq!(
-            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
+            tx.seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(0))
                 .unwrap(),
-            ObjSet::from_items(&[Objid(1), Objid(4)])
+            ObjSet::from_items(&[Objid::mk_id(1), Objid::mk_id(4)])
         );
 
         // And then update a value and verify.
-        tx.upsert::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1), &Objid(2))
+        tx.upsert::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(1), &Objid::mk_id(2))
             .unwrap();
         assert_eq!(
-            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid(1))
+            tx.seek_unique_by_codomain::<Objid, Objid>(OneToOneSecondaryIndexed, &Objid::mk_id(1))
                 .unwrap(),
-            Objid(2)
+            Objid::mk_id(2)
         );
         // Verify that the secondary index is updated... First check for new value.
         let children: ObjSet = tx
-            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(2))
+            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(2))
             .unwrap();
         assert_eq!(children.len(), 2);
         assert!(
-            children.contains(Objid(1)),
+            children.contains(Objid::mk_id(1)),
             "Expected children of 2 to contain 1"
         );
         assert!(
-            !children.contains(Objid(0)),
+            !children.contains(Objid::mk_id(0)),
             "Expected children of 2 to not contain 0"
         );
         // Now check the old value.
         let children = tx
-            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid(0))
+            .seek_by_codomain::<Objid, Objid, ObjSet>(OneToOneSecondaryIndexed, &Objid::mk_id(0))
             .unwrap();
-        assert_eq!(children, ObjSet::from_items(&[Objid(4)]));
+        assert_eq!(children, ObjSet::from_items(&[Objid::mk_id(4)]));
     }
 }

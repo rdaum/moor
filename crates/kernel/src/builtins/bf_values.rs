@@ -64,7 +64,7 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_int(*i))),
         Variant::Float(f) => Ok(Ret(v_int(*f as i64))),
-        Variant::Obj(o) => Ok(Ret(v_int(o.0))),
+        Variant::Obj(o) => Ok(Ret(v_int(o.id()))),
         Variant::Str(s) => {
             let i = s.as_string().as_str().parse::<f64>();
             match i {

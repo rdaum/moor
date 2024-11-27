@@ -92,7 +92,7 @@ impl Var {
     }
 
     pub fn is_sysobj(&self) -> bool {
-        matches!(self.variant(), Variant::Obj(o) if o.0 == 0)
+        matches!(self.variant(), Variant::Obj(o) if o.is_sysobj())
     }
 }
 

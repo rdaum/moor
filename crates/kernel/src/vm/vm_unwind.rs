@@ -99,7 +99,7 @@ impl VMExecState {
                 }
             }
             if a.verb_definer() != a.this {
-                pieces.push(format!(" (this == #{})", a.this.0));
+                pieces.push(format!(" (this == {})", a.this));
             }
             if let Some(line_num) = a.frame.find_line_no() {
                 pieces.push(format!(" (line {})", line_num));

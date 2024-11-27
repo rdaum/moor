@@ -121,7 +121,7 @@ impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
         if let Some(stripped) = object_name.strip_prefix('#') {
             let object_number = stripped.parse::<i64>();
             if let Ok(object_number) = object_number {
-                return Ok(Some(Objid(object_number)));
+                return Ok(Some(Objid::mk_id(object_number)));
             }
         }
 
@@ -168,7 +168,7 @@ mod tests {
         let match_name = "durian";
 
         let result = do_match_object_names(
-            Objid(2),
+            Objid::mk_id(2),
             &mut match_data,
             names.into_iter().map(String::from).collect(),
             match_name,
@@ -196,18 +196,18 @@ mod tests {
         let match_name = "banana";
 
         let result = do_match_object_names(
-            Objid(2),
+            Objid::mk_id(2),
             &mut match_data,
             names.into_iter().map(String::from).collect(),
             match_name,
         );
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Objid(2));
+        assert_eq!(result.unwrap(), Objid::mk_id(2));
         assert_eq!(
             match_data,
             MatchData {
-                exact: Objid(2),
+                exact: Objid::mk_id(2),
                 partial: FAILED_MATCH,
             }
         );
@@ -224,19 +224,19 @@ mod tests {
         let match_name = "b";
 
         let result = do_match_object_names(
-            Objid(2),
+            Objid::mk_id(2),
             &mut match_data,
             names.into_iter().map(String::from).collect(),
             match_name,
         );
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Objid(2));
+        assert_eq!(result.unwrap(), Objid::mk_id(2));
         assert_eq!(
             match_data,
             MatchData {
                 exact: NOTHING,
-                partial: Objid(2),
+                partial: Objid::mk_id(2),
             }
         );
     }
@@ -252,19 +252,19 @@ mod tests {
         let match_name = "b";
 
         let result = do_match_object_names(
-            Objid(2),
+            Objid::mk_id(2),
             &mut match_data,
             names.into_iter().map(String::from).collect(),
             match_name,
         );
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Objid(2));
+        assert_eq!(result.unwrap(), Objid::mk_id(2));
         assert_eq!(
             match_data,
             MatchData {
                 exact: NOTHING,
-                partial: Objid(2),
+                partial: Objid::mk_id(2),
             }
         );
     }

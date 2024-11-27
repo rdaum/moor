@@ -83,7 +83,7 @@ impl WebSocketConnection {
         Self::emit_narrative(
             &mut ws_sender,
             NarrativeOutput {
-                author: self.player.0,
+                author: self.player.id(),
                 system_message: Some(connect_message.to_string()),
                 message: None,
                 content_type: Some("text/plain".to_string()),
@@ -120,7 +120,7 @@ impl WebSocketConnection {
                     match event {
                         ClientEvent::SystemMessage(author, msg) => {
                             Self::emit_narrative(&mut ws_sender, NarrativeOutput {
-                                author: author.0,
+                                author: author.id(),
                                 system_message: Some(msg),
                                 message: None,
                                 content_type: Some("text/plain".to_string()),
@@ -132,7 +132,7 @@ impl WebSocketConnection {
                             let Event::Notify(msg, content_type) = msg;
                             let content_type = content_type.map(|s| s.to_string());
                             Self::emit_narrative(&mut ws_sender, NarrativeOutput {
-                                author: event.author.0,
+                                author: event.author.id(),
                                 system_message: None,
                                 message: Some(var_as_json(&msg)),
                                 content_type,
@@ -144,7 +144,7 @@ impl WebSocketConnection {
                         }
                         ClientEvent::Disconnect() => {
                             Self::emit_narrative(&mut ws_sender, NarrativeOutput {
-                                author: self.player.0,
+                                author: self.player.id(),
                                 system_message: Some("** Disconnected **".to_string()),
                                 message: None,
                                 content_type: Some("text/plain".to_string()),

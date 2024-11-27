@@ -40,7 +40,7 @@ impl Hash for Variant {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             Variant::None => 0.hash(state),
-            Variant::Obj(o) => o.0.hash(state),
+            Variant::Obj(o) => o.hash(state),
             Variant::Int(i) => i.hash(state),
             Variant::Float(f) => f.to_f64().unwrap().to_bits().hash(state),
             Variant::List(l) => l.hash(state),
@@ -95,7 +95,7 @@ impl Debug for Variant {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Variant::None => write!(f, "None"),
-            Variant::Obj(o) => write!(f, "Object({})", o.0),
+            Variant::Obj(o) => write!(f, "Object({})", o),
             Variant::Int(i) => write!(f, "Integer({})", i),
             Variant::Float(fl) => write!(f, "Float({})", fl),
             Variant::List(l) => {

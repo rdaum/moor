@@ -21,12 +21,12 @@ use crate::NOTHING;
 
 use crate::matching::match_env::MatchEnvironment;
 
-pub const MOCK_PLAYER: Objid = Objid(3);
-pub const MOCK_ROOM1: Objid = Objid(1);
-pub const MOCK_ROOM2: Objid = Objid(2);
-pub const MOCK_THING1: Objid = Objid(4);
-pub const MOCK_THING2: Objid = Objid(5);
-pub const MOCK_THING3: Objid = Objid(6);
+pub const MOCK_PLAYER: Objid = Objid::mk_id(3);
+pub const MOCK_ROOM1: Objid = Objid::mk_id(1);
+pub const MOCK_ROOM2: Objid = Objid::mk_id(2);
+pub const MOCK_THING1: Objid = Objid::mk_id(4);
+pub const MOCK_THING2: Objid = Objid::mk_id(5);
+pub const MOCK_THING3: Objid = Objid::mk_id(6);
 
 pub struct MockObject {
     pub location: Objid,

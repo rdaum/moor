@@ -63,7 +63,7 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    if obj.0 < 0 {
+    if !obj.is_positive() {
         return Err(BfErr::Code(E_INVARG));
     }
     let parent = bf_args

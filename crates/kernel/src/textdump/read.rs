@@ -105,7 +105,7 @@ impl<R: Read> TextdumpReader<R> {
                 buf
             )));
         };
-        Ok(Objid(u))
+        Ok(Objid::mk_id(u))
     }
     fn read_float(&mut self) -> Result<f64, TextdumpReaderError> {
         let buf = self.read_next_line()?;
@@ -227,7 +227,7 @@ impl<R: Read> TextdumpReader<R> {
                 oid_str
             )));
         };
-        let oid = Objid(oid);
+        let oid = Objid::mk_id(oid);
         let name = self.read_string()?;
         let _ohandles_string = self.read_string()?;
         let flags = self.read_num()? as u8;
@@ -287,7 +287,7 @@ impl<R: Read> TextdumpReader<R> {
         }
         let program = program_lines.join("\n");
         Ok(Verb {
-            objid: Objid(oid),
+            objid: Objid::mk_id(oid),
             verbnum,
             program: Some(program),
         })

@@ -45,7 +45,7 @@ pub enum ObjectRef {
 impl ObjectRef {
     pub fn to_curie(&self) -> String {
         match self {
-            ObjectRef::Id(oid) => format!("oid:{}", oid.0),
+            ObjectRef::Id(oid) => format!("oid:{}", oid.id()),
             ObjectRef::SysObj(symbols) => {
                 let mut s = String::new();
                 for sym in symbols {
@@ -61,7 +61,7 @@ impl ObjectRef {
     pub fn parse_curie(s: &str) -> Option<ObjectRef> {
         if let Some(s) = s.strip_prefix("oid:") {
             let id: i64 = s.parse().ok()?;
-            Some(ObjectRef::Id(Objid(id)))
+            Some(ObjectRef::Id(Objid::mk_id(id)))
         } else if let Some(s) = s.strip_prefix("sysobj:") {
             let symbols = s.split('.').map(Symbol::mk).collect();
             Some(ObjectRef::SysObj(symbols))

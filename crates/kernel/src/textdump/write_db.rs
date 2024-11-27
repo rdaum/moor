@@ -21,7 +21,6 @@ use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{HasUuid, Named};
 use moor_values::util::BitEnum;
 use moor_values::v_none;
-use moor_values::Objid;
 use moor_values::{AsByteBuffer, NOTHING};
 
 use crate::textdump::{
@@ -118,7 +117,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
                 .expect("Failed to find object in contents of location");
             // If position is at the end, 'next' is -1.
             if position == roommates.len() - 1 {
-                Objid(-1)
+                NOTHING
             } else {
                 roommates[position + 1].clone()
             }
@@ -128,7 +127,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
 
         // To find 'contents' we're looking for the first object whose location is the current object
         let contents = match contents_map.get_mut(db_objid) {
-            Some(contents) => contents.first().unwrap_or(&Objid(-1)).clone(),
+            Some(contents) => contents.first().unwrap_or(&NOTHING).clone(),
             None => NOTHING,
         };
 

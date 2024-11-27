@@ -22,7 +22,6 @@ mod tests {
     use moor_values::model::{WorldState, WorldStateSource};
     use moor_values::util::BitEnum;
     use moor_values::Error::E_DIV;
-    use moor_values::Objid;
     use moor_values::{
         v_bool, v_empty_list, v_err, v_int, v_list, v_map, v_none, v_obj, v_objid, v_str, Var,
     };
@@ -385,11 +384,11 @@ mod tests {
         {
             state
                 .define_property(
-                    &Objid(0),
-                    &Objid(0),
-                    &Objid(0),
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
                     Symbol::mk("test_prop"),
-                    &Objid(0),
+                    &SYSTEM_OBJECT,
                     BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
                     Some(v_int(666)),
                 )

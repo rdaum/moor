@@ -94,7 +94,7 @@ impl Iterator for ObjSetIter {
                 .unwrap(),
         );
         self.position += 8;
-        Some(Objid(oid))
+        Some(Objid::mk_id(oid))
     }
 }
 
@@ -103,7 +103,7 @@ impl FromIterator<Objid> for ObjSet {
         let mut v = Vec::with_capacity(4);
         let mut total = 0usize;
         for item in iter {
-            v.put_i64_le(item.0);
+            v.put_i64_le(item.id());
             total += 1;
         }
         // If after that, total is 0, don't even bother, just throw away the buffer.
@@ -124,7 +124,7 @@ impl ObjSet {
         // Note, we're stupid and don't check for dupes. It's called a 'set' but it ain't.
         let _capacity = self.len();
         let mut new_buf = self.0.as_ref().to_vec();
-        new_buf.put_i64_le(oid.0);
+        new_buf.put_i64_le(oid.id());
         Self(Bytes::from(new_buf))
     }
     #[must_use]
@@ -139,7 +139,7 @@ impl ObjSet {
                 found = true;
                 continue;
             }
-            new_buf.put_i64_le(i.0);
+            new_buf.put_i64_le(i.id());
         }
         if !found {
             return self.clone();
@@ -158,7 +158,7 @@ impl ObjSet {
                 found = true;
                 continue;
             }
-            new_buf.put_i64_le(i.0);
+            new_buf.put_i64_le(i.id());
         }
         if !found {
             return self.clone();
@@ -201,7 +201,7 @@ impl ObjSet {
         );
         new_buf.put_slice(self.0.as_ref());
         for i in values {
-            new_buf.put_i64_le(i.0);
+            new_buf.put_i64_le(i.id());
         }
         Self(Bytes::from(new_buf))
     }
@@ -220,7 +220,7 @@ impl ValSet<Objid> for ObjSet {
         }
         let mut v = Vec::with_capacity(std::mem::size_of_val(oids));
         for i in oids {
-            v.put_i64_le(i.0);
+            v.put_i64_le(i.id());
         }
         Self(Bytes::from(v))
     }

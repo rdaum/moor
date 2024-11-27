@@ -233,8 +233,8 @@ mod tests {
     fn test_reconstitute() {
         let vd = VerbDef::new(
             uuid::Uuid::new_v4(),
-            Objid(0),
-            Objid(1),
+            Objid::mk_id(1),
+            Objid::mk_id(1),
             &["foo", "bar"],
             VerbFlag::rwxd(),
             crate::model::verbs::BinaryType::LambdaMoo18X,
@@ -246,8 +246,8 @@ mod tests {
 
         assert_eq!(vd, vd2);
         assert_eq!(vd.uuid(), vd2.uuid());
-        assert_eq!(vd.location(), Objid(0));
-        assert_eq!(vd.owner(), Objid(1));
+        assert_eq!(vd.location(), Objid::mk_id(1));
+        assert_eq!(vd.owner(), Objid::mk_id(1));
         assert_eq!(vd.names(), vec!["foo".to_string(), "bar".to_string()]);
         assert_eq!(vd.flags(), VerbFlag::rwxd());
         assert_eq!(
@@ -261,8 +261,8 @@ mod tests {
     fn test_reconstitute_in_verbdefs() {
         let vd1 = VerbDef::new(
             uuid::Uuid::new_v4(),
-            Objid(0),
-            Objid(1),
+            Objid::mk_id(1),
+            Objid::mk_id(1),
             &["foo", "bar"],
             VerbFlag::rwxd(),
             crate::model::verbs::BinaryType::None,
@@ -271,8 +271,8 @@ mod tests {
 
         let vd2 = VerbDef::new(
             uuid::Uuid::new_v4(),
-            Objid(10),
-            Objid(20),
+            Objid::mk_id(1),
+            Objid::mk_id(1),
             &["zoinks", "zaps", "chocolates"],
             VerbFlag::rx(),
             crate::model::verbs::BinaryType::LambdaMoo18X,
@@ -288,16 +288,16 @@ mod tests {
         let rvd1 = vds2.find(&vd1_id).unwrap();
         let rvd2 = vds2.find(&vd2_id).unwrap();
         assert_eq!(rvd1.uuid(), vd1_id);
-        assert_eq!(rvd1.location(), Objid(0));
-        assert_eq!(rvd1.owner(), Objid(1));
+        assert_eq!(rvd1.location(), Objid::mk_id(1));
+        assert_eq!(rvd1.owner(), Objid::mk_id(1));
         assert_eq!(rvd1.names(), vec!["foo".to_string(), "bar".to_string()]);
         assert_eq!(rvd1.flags(), VerbFlag::rwxd(),);
         assert_eq!(rvd1.binary_type(), crate::model::verbs::BinaryType::None);
         assert_eq!(rvd1.args(), VerbArgsSpec::this_none_this(),);
 
         assert_eq!(rvd2.uuid(), vd2_id);
-        assert_eq!(rvd2.location(), Objid(10));
-        assert_eq!(rvd2.owner(), Objid(20));
+        assert_eq!(rvd2.location(), Objid::mk_id(1));
+        assert_eq!(rvd2.owner(), Objid::mk_id(1));
         assert_eq!(
             rvd2.names(),
             vec![
@@ -318,8 +318,8 @@ mod tests {
     fn test_empty_names() {
         let vd1 = VerbDef::new(
             uuid::Uuid::new_v4(),
-            Objid(0),
-            Objid(1),
+            Objid::mk_id(1),
+            Objid::mk_id(1),
             &[],
             VerbFlag::rwxd(),
             crate::model::verbs::BinaryType::None,

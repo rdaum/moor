@@ -34,9 +34,9 @@ mod test {
     use moor_values::model::WorldStateSource;
     use moor_values::model::{CommitResult, ValSet};
     use moor_values::model::{HasUuid, Named};
-    use moor_values::Objid;
     use moor_values::Symbol;
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+    use moor_values::{Objid, NOTHING};
 
     fn get_minimal_db() -> File {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -83,7 +83,7 @@ mod test {
         assert_eq!(td.version, "** LambdaMOO Database, Format Version 1 **");
 
         // Minimal DB has 1 user, #3,
-        assert_eq!(td.users, vec![Objid(3)]);
+        assert_eq!(td.users, vec![Objid::mk_id(3)]);
 
         // Minimal DB always has 4 objects in it.
         assert_eq!(td.objects.len(), 4);
@@ -94,36 +94,42 @@ mod test {
             .get(&SYSTEM_OBJECT)
             .expect("System object not found");
         assert_eq!(sysobj.name, "System Object");
-        assert_eq!(sysobj.owner, Objid(3));
-        assert_eq!(sysobj.parent, Objid(1));
-        assert_eq!(sysobj.location, Objid(-1));
+        assert_eq!(sysobj.owner, Objid::mk_id(3));
+        assert_eq!(sysobj.parent, Objid::mk_id(1));
+        assert_eq!(sysobj.location, NOTHING);
         assert_eq!(sysobj.propdefs, Vec::<String>::new());
 
-        let rootobj = td.objects.get(&Objid(1)).expect("Root object not found");
+        let rootobj = td
+            .objects
+            .get(&Objid::mk_id(1))
+            .expect("Root object not found");
         assert_eq!(rootobj.name, "Root Class");
-        assert_eq!(rootobj.owner, Objid(3));
-        assert_eq!(rootobj.parent, Objid(-1));
-        assert_eq!(rootobj.location, Objid(-1));
+        assert_eq!(rootobj.owner, Objid::mk_id(3));
+        assert_eq!(rootobj.parent, NOTHING);
+        assert_eq!(rootobj.location, NOTHING);
         assert_eq!(rootobj.propdefs, Vec::<String>::new());
 
-        let first_room = td.objects.get(&Objid(2)).expect("First room not found");
+        let first_room = td
+            .objects
+            .get(&Objid::mk_id(2))
+            .expect("First room not found");
         assert_eq!(first_room.name, "The First Room");
-        assert_eq!(first_room.owner, Objid(3));
-        assert_eq!(first_room.parent, Objid(1));
-        assert_eq!(first_room.location, Objid(-1));
+        assert_eq!(first_room.owner, Objid::mk_id(3));
+        assert_eq!(first_room.parent, Objid::mk_id(1));
+        assert_eq!(first_room.location, NOTHING);
         assert_eq!(first_room.propdefs, Vec::<String>::new());
 
-        let wizard = td.objects.get(&Objid(3)).expect("Wizard not found");
+        let wizard = td.objects.get(&Objid::mk_id(3)).expect("Wizard not found");
         assert_eq!(wizard.name, "Wizard");
-        assert_eq!(wizard.owner, Objid(3));
-        assert_eq!(wizard.parent, Objid(1));
-        assert_eq!(wizard.location, Objid(2));
+        assert_eq!(wizard.owner, Objid::mk_id(3));
+        assert_eq!(wizard.parent, Objid::mk_id(1));
+        assert_eq!(wizard.location, Objid::mk_id(2));
         assert_eq!(wizard.propdefs, Vec::<String>::new());
 
         assert_eq!(sysobj.verbdefs.len(), 1);
         let do_login_command_verb = &sysobj.verbdefs[0];
         assert_eq!(do_login_command_verb.name, "do_login_command");
-        assert_eq!(do_login_command_verb.owner, Objid(3));
+        assert_eq!(do_login_command_verb.owner, Objid::mk_id(3));
         // this none this
         assert_eq!(do_login_command_verb.flags, 173);
         assert_eq!(do_login_command_verb.prep, -1);
@@ -135,7 +141,7 @@ mod test {
         assert_eq!(first_room.verbdefs.len(), 1);
         let eval_verb = &first_room.verbdefs[0];
         assert_eq!(eval_verb.name, "eval");
-        assert_eq!(eval_verb.owner, Objid(3));
+        assert_eq!(eval_verb.owner, Objid::mk_id(3));
         // any any any
         assert_eq!(eval_verb.flags, 88);
         assert_eq!(eval_verb.prep, -2);
@@ -145,8 +151,8 @@ mod test {
 
         // Look at the verb program
         assert_eq!(td.verbs.len(), 1);
-        let do_login_verb = td.verbs.get(&(Objid(0), 0)).expect("Verb not found");
-        assert_eq!(do_login_verb.objid, Objid(0));
+        let do_login_verb = td.verbs.get(&(Objid::mk_id(0), 0)).expect("Verb not found");
+        assert_eq!(do_login_verb.objid, Objid::mk_id(0));
         assert_eq!(do_login_verb.verbnum, 0);
         assert_eq!(do_login_verb.program.clone().unwrap(), "return #3;");
     }
@@ -200,26 +206,30 @@ mod test {
         // Check a few things in a new transaction.
         let tx = db.new_world_state().unwrap();
         assert_eq!(
-            tx.names_of(&Objid(3), &Objid(1)).unwrap(),
+            tx.names_of(&Objid::mk_id(3), &Objid::mk_id(1)).unwrap(),
             ("Root Class".into(), vec![])
         );
         assert_eq!(
-            tx.names_of(&Objid(3), &Objid(2)).unwrap(),
+            tx.names_of(&Objid::mk_id(3), &Objid::mk_id(2)).unwrap(),
             ("The First Room".into(), vec![])
         );
         assert_eq!(
-            tx.names_of(&Objid(3), &Objid(3)).unwrap(),
+            tx.names_of(&Objid::mk_id(3), &Objid::mk_id(3)).unwrap(),
             ("Wizard".into(), vec![])
         );
         assert_eq!(
-            tx.names_of(&Objid(3), &SYSTEM_OBJECT).unwrap(),
+            tx.names_of(&Objid::mk_id(3), &SYSTEM_OBJECT).unwrap(),
             ("System Object".into(), vec![])
         );
 
         let dlc = tx
-            .get_verb(&Objid(3), &SYSTEM_OBJECT, Symbol::mk("do_login_command"))
+            .get_verb(
+                &Objid::mk_id(3),
+                &SYSTEM_OBJECT,
+                Symbol::mk("do_login_command"),
+            )
             .unwrap();
-        assert_eq!(dlc.owner(), Objid(3));
+        assert_eq!(dlc.owner(), Objid::mk_id(3));
         assert_eq!(dlc.flags(), VerbFlag::rxd());
         assert_eq!(dlc.args(), VerbArgsSpec::this_none_this());
     }

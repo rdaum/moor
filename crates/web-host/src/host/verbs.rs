@@ -147,7 +147,7 @@ pub async fn verb_program_handler(
             objid,
             verb_name,
         ))) => Json(json!({
-            "location": objid.0,
+            "location": objid.id(),
             "name": verb_name,
         }))
         .into_response(),
@@ -229,8 +229,8 @@ pub async fn verb_retrieval_handler(
             },
             code,
         )) => Json(json!({
-            "location": location.0,
-            "owner": owner.0,
+            "location": location.id(),
+            "owner": owner.id(),
             "names": names.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
             "code": code,
             "r": r,
@@ -287,8 +287,8 @@ pub async fn verbs_handler(
                 .iter()
                 .map(|verb| {
                     json!({
-                        "location": verb.location.0,
-                        "owner": verb.owner.0,
+                        "location": verb.location.id(),
+                        "owner": verb.owner.id(),
                         "names": verb.names.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
                         "r": verb.r,
                         "w": verb.w,

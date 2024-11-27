@@ -198,7 +198,7 @@ impl ConnectionsDB for ConnectionsRb {
                 // -4 to get the connection object, since they always grow downwards from there.
                 let connection_id = self.tb.clone().increment_sequence(0);
                 let connection_id: i64 = -4 - (connection_id as i64);
-                Objid(connection_id)
+                Objid::mk_id(connection_id)
             }
             Some(player) => player,
         };
@@ -481,13 +481,13 @@ mod tests {
                 );
                 let last_activity = last_activity.unwrap().elapsed().unwrap().as_secs_f64();
                 assert!(last_activity < 1.0);
-                db.update_client_connection(oid, Objid(x))
+                db.update_client_connection(oid, Objid::mk_id(x))
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(Objid(x)).unwrap();
+                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
                 db.remove_client_connection(client_id).unwrap();
-                let client_ids = db.client_ids_for(Objid(x)).unwrap();
+                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
                 assert!(client_ids.is_empty());
             }));
         }
@@ -512,15 +512,15 @@ mod tests {
                 let con_oid2 = db
                     .new_connection(client_id2, "localhost".to_string(), None)
                     .unwrap();
-                db.update_client_connection(con_oid1, Objid(x))
+                db.update_client_connection(con_oid1, Objid::mk_id(x))
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(Objid(x)).unwrap();
+                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert!(client_ids.contains(&client_id1));
 
-                db.update_client_connection(con_oid2, Objid(x))
+                db.update_client_connection(con_oid2, Objid::mk_id(x))
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(Objid(x)).unwrap();
+                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
                 assert_eq!(
                     client_ids.len(),
                     2,
@@ -529,16 +529,17 @@ mod tests {
                 );
                 assert!(client_ids.contains(&client_id2));
 
-                db.record_client_activity(client_id1, Objid(x)).unwrap();
+                db.record_client_activity(client_id1, Objid::mk_id(x))
+                    .unwrap();
                 let last_activity = db
-                    .last_activity_for(Objid(x))
+                    .last_activity_for(Objid::mk_id(x))
                     .unwrap()
                     .elapsed()
                     .unwrap()
                     .as_secs_f64();
                 assert!(last_activity < 1.0);
                 db.remove_client_connection(client_id1).unwrap();
-                let client_ids = db.client_ids_for(Objid(x)).unwrap();
+                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert!(client_ids.contains(&client_id2));
             }));

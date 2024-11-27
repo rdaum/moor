@@ -151,7 +151,7 @@ pub fn read_textdump<T: io::Read>(
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                trace!(definer = ?objid.0, name = resolved.name, "Defining property");
+                trace!(definer = ?objid, name = resolved.name, "Defining property");
                 let value = Some(resolved.value);
                 loader
                     .define_property(
@@ -172,7 +172,7 @@ pub fn read_textdump<T: io::Read>(
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(p.flags);
-            trace!(objid = ?objid.0, name = resolved.name, flags = ?flags, "Setting property");
+            trace!(objid = ?objid, name = resolved.name, flags = ?flags, "Setting property");
             let value = (!p.is_clear).then(|| p.value.clone());
 
             loader
@@ -216,7 +216,7 @@ pub fn read_textdump<T: io::Read>(
                 )
                 .map_err(|e| {
                     TextdumpReaderError::VerbCompileError(
-                        format!("compiling verb #{}/{} ({:?})", objid.0, vn, names),
+                        format!("compiling verb #{}/{} ({:?})", objid, vn, names),
                         e.clone(),
                     )
                 })?,
@@ -233,11 +233,11 @@ pub fn read_textdump<T: io::Read>(
                 .add_verb(objid, names.clone(), &v.owner, flags, argspec, binary)
                 .map_err(|e| {
                     TextdumpReaderError::LoadError(
-                        format!("adding verb #{}/{} ({:?})", objid.0, vn, names),
+                        format!("adding verb #{}/{} ({:?})", objid, vn, names),
                         e.clone(),
                     )
                 })?;
-            trace!(objid = ?objid.0, name = ?vn, "Added verb");
+            trace!(objid = ?objid, name = ?vn, "Added verb");
         }
     }
     info!("Verbs defined.");

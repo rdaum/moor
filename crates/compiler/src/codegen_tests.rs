@@ -1011,7 +1011,7 @@ mod tests {
             vec![
                 ImmObjid(SYSTEM_OBJECT),
                 Imm(verb_metadata),
-                ImmObjid(Objid(1)),
+                ImmObjid(Objid::mk_id(1)),
                 MakeSingletonList,
                 ImmInt(1),
                 ListAddTail,
@@ -1381,7 +1381,7 @@ mod tests {
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
-                ImmObjid(Objid(0)),
+                ImmObjid(Objid::mk_id(0)),
                 Imm(binary.find_literal("test_verb".into())),
                 ImmEmptyList,
                 CallVerb,

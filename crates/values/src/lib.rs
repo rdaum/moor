@@ -22,7 +22,7 @@ pub use encode::{
 pub use var::{
     v_bool, v_empty_list, v_empty_map, v_empty_str, v_err, v_float, v_int, v_list, v_list_iter,
     v_map, v_none, v_obj, v_objid, v_str, v_string, Associative, ErrorPack, IndexMode, List, Map,
-    Sequence, Str, Var, Variant,
+    Sequence, Str, Var, Variant, AMBIGUOUS, FAILED_MATCH, NOTHING, SYSTEM_OBJECT,
 };
 pub use var::{Error, Objid, Symbol, VarType};
 
@@ -37,15 +37,3 @@ mod var;
 /// When encoding or decoding types to/from data or network, this is a version tag put into headers
 /// for validity / version checking.
 pub const DATA_LAYOUT_VERSION: u8 = 1;
-
-/// The "system" object in MOO is a place where a bunch of basic sys functionality hangs off of, and
-/// from where $name style references hang off of. A bit like the Lobby in Self.
-pub const SYSTEM_OBJECT: Objid = Objid(0);
-
-/// Used throughout to refer to a missing object value.
-pub const NOTHING: Objid = Objid(-1);
-/// Used in matching to indicate that the match was ambiguous on multiple objects in the
-/// environment.
-pub const AMBIGUOUS: Objid = Objid(-2);
-/// Used in matching to indicate that the match failed to find any objects in the environment.
-pub const FAILED_MATCH: Objid = Objid(-3);

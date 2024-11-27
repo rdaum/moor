@@ -30,11 +30,11 @@ use moor_values::Objid;
 use pretty_assertions::assert_eq;
 
 #[allow(dead_code)]
-pub const WIZARD: Objid = Objid(3);
+pub const WIZARD: Objid = Objid::mk_id(3);
 #[allow(dead_code)]
-pub const PROGRAMMER: Objid = Objid(4);
+pub const PROGRAMMER: Objid = Objid::mk_id(4);
 #[allow(dead_code)]
-pub const NONPROGRAMMER: Objid = Objid(5);
+pub const NONPROGRAMMER: Objid = Objid::mk_id(5);
 
 #[allow(dead_code)]
 static LOGGING_INIT: Once = Once::new();

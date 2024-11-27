@@ -13,17 +13,29 @@
 //
 
 use crate::encode::{DecodingError, EncodingError};
-use crate::{AsByteBuffer, NOTHING};
+use crate::AsByteBuffer;
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
+/// The "system" object in MOO is a place where a bunch of basic sys functionality hangs off of, and
+/// from where $name style references hang off of. A bit like the Lobby in Self.
+pub const SYSTEM_OBJECT: Objid = Objid(0);
+
+/// Used throughout to refer to a missing object value.
+pub const NOTHING: Objid = Objid(-1);
+/// Used in matching to indicate that the match was ambiguous on multiple objects in the
+/// environment.
+pub const AMBIGUOUS: Objid = Objid(-2);
+/// Used in matching to indicate that the match failed to find any objects in the environment.
+pub const FAILED_MATCH: Objid = Objid(-3);
+
 #[derive(
     Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode, Serialize, Deserialize,
 )]
-pub struct Objid(pub i64);
+pub struct Objid(i64);
 
 impl LayoutAs<i64> for Objid {
     type ReadError = DecodingError;
@@ -45,6 +57,10 @@ impl Display for Objid {
 }
 
 impl Objid {
+    pub const fn mk_id(id: i64) -> Self {
+        Self(id)
+    }
+
     #[must_use]
     pub fn to_literal(&self) -> String {
         format!("#{}", self.0)
@@ -57,6 +73,14 @@ impl Objid {
 
     pub fn is_nothing(&self) -> bool {
         self.0 == NOTHING.0
+    }
+
+    pub fn is_positive(&self) -> bool {
+        self.0 >= 0
+    }
+
+    pub fn id(&self) -> i64 {
+        self.0
     }
 }
 

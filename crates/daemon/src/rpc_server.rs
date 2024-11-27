@@ -706,7 +706,11 @@ impl RpcServer {
 
     pub(crate) fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
         let connections = self.connections.connections();
-        Ok(connections.iter().filter(|o| o.0 > 0).cloned().collect())
+        Ok(connections
+            .iter()
+            .filter(|o| o > &&SYSTEM_OBJECT)
+            .cloned()
+            .collect())
     }
 
     fn request_sys_prop(
@@ -927,8 +931,7 @@ impl RpcServer {
         };
 
         // Pass this back over to the scheduler to handle.
-        if let Err(e) =
-            scheduler_client.submit_requested_input(connection, input_request_id, input)
+        if let Err(e) = scheduler_client.submit_requested_input(connection, input_request_id, input)
         {
             error!(error = ?e, "Error submitting requested input");
             return Err(RpcMessageError::InternalError(e.to_string()));
@@ -1246,7 +1249,7 @@ impl RpcServer {
             .set_footer(Footer::from(MOOR_AUTH_TOKEN_FOOTER))
             .set_payload(Payload::from(
                 json!({
-                    "player": oid.0,
+                    "player": oid.id(),
                 })
                 .to_string()
                 .as_str(),
@@ -1370,7 +1373,7 @@ impl RpcServer {
             debug!("Token player is not valid");
             return Err(RpcMessageError::PermissionDenied);
         };
-        let token_player = Objid(token_player);
+        let token_player = Objid::mk_id(token_player);
         if let Some(objid) = objid {
             // Does the 'player' match objid? If not, reject it.
             if objid.ne(&token_player) {

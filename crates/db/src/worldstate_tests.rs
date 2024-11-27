@@ -40,7 +40,7 @@ where
             ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
         )
         .unwrap();
-    assert_eq!(oid, Objid(0));
+    assert_eq!(oid, Objid::mk_id(0));
     assert!(tx.object_valid(&oid).unwrap());
     assert_eq!(tx.get_object_owner(&oid).unwrap(), oid);
     assert_eq!(tx.get_object_parent(&oid).unwrap(), NOTHING);
@@ -63,12 +63,12 @@ where
 
     // Force at 1.
     let oid = tx
-        .create_object(Some(Objid(1)), ObjAttrs::default())
+        .create_object(Some(Objid::mk_id(1)), ObjAttrs::default())
         .unwrap();
-    assert_eq!(oid, Objid(1));
+    assert_eq!(oid, Objid::mk_id(1));
     // Now verify the next will be 2.
     let oid2 = tx.create_object(None, ObjAttrs::default()).unwrap();
-    assert_eq!(oid2, Objid(2));
+    assert_eq!(oid2, Objid::mk_id(2));
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
@@ -150,11 +150,11 @@ where
 
     let a = tx
         .create_object(
-            Some(Objid(0)),
+            Some(Objid::mk_id(0)),
             ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
         )
         .unwrap();
-    assert_eq!(a, Objid(0));
+    assert_eq!(a, Objid::mk_id(0));
 
     let b = tx
         .create_object(
@@ -162,7 +162,7 @@ where
             ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
-    assert_eq!(b, Objid(1));
+    assert_eq!(b, Objid::mk_id(1));
 
     let c = tx
         .create_object(
@@ -170,7 +170,7 @@ where
             ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
         )
         .unwrap();
-    assert_eq!(c, Objid(2));
+    assert_eq!(c, Objid::mk_id(2));
 
     let d = tx
         .create_object(
@@ -178,7 +178,7 @@ where
             ObjAttrs::new(NOTHING, c.clone(), NOTHING, BitEnum::new(), "test4"),
         )
         .unwrap();
-    assert_eq!(d, Objid(3));
+    assert_eq!(d, Objid::mk_id(3));
 
     assert!(tx.descendants(&a).unwrap().is_same(ObjSet::from_items(&[
         b.clone(),
@@ -1194,7 +1194,7 @@ where
     let tx = begin_tx();
     // Max object in a virgin DB should return #-1
     let max_obj = tx.get_max_object().unwrap();
-    assert_eq!(max_obj, Objid(-1));
+    assert_eq!(max_obj, NOTHING);
     let obj = tx
         .create_object(
             None,

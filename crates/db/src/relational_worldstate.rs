@@ -121,7 +121,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     }
 
     fn get_max_object(&self) -> Result<Objid, WorldStateError> {
-        Ok(Objid(
+        Ok(Objid::mk_id(
             self.tx
                 .as_ref()
                 .unwrap()
@@ -187,7 +187,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                     .as_ref()
                     .unwrap()
                     .increment_sequence(WorldStateSequence::MaximumObject);
-                Objid(max)
+                Objid::mk_id(max)
             }
         };
 
@@ -227,7 +227,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         self.tx
             .as_ref()
             .unwrap()
-            .update_sequence_max(WorldStateSequence::MaximumObject, id.0);
+            .update_sequence_max(WorldStateSequence::MaximumObject, id.id());
 
         Ok(id)
     }

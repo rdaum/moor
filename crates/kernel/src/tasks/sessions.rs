@@ -18,7 +18,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use moor_values::tasks::NarrativeEvent;
-use moor_values::{Error, Objid};
+use moor_values::{Error, Objid, SYSTEM_OBJECT};
 
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.
@@ -176,7 +176,7 @@ impl Session for NoopClientSession {
     fn request_input(&self, player: Objid, _input_request_id: Uuid) -> Result<(), SessionError> {
         panic!(
             "NoopClientSession::request_input called for player {}",
-            player.0
+            player
         )
     }
 
@@ -193,7 +193,7 @@ impl Session for NoopClientSession {
     }
 
     fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
-        Ok(format!("player-{}", player.0))
+        Ok(format!("player-{}", player))
     }
     fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
         Ok(())
@@ -303,7 +303,7 @@ impl Session for MockClientSession {
     fn request_input(&self, player: Objid, _input_request_id: Uuid) -> Result<(), SessionError> {
         panic!(
             "MockClientSession::request_input called for player {}",
-            player.0
+            player
         )
     }
 
@@ -316,7 +316,7 @@ impl Session for MockClientSession {
         self.system
             .write()
             .unwrap()
-            .push(format!("{}: {}", player.0, msg));
+            .push(format!("{}: {}", player, msg));
         Ok(())
     }
 
@@ -379,6 +379,6 @@ impl SystemControl for MockClientSession {
     }
 
     fn listeners(&self) -> Result<Vec<(Objid, String, u16, bool)>, Error> {
-        Ok(vec![(Objid(0), String::from("tcp"), 8888, true)])
+        Ok(vec![(SYSTEM_OBJECT, String::from("tcp"), 8888, true)])
     }
 }

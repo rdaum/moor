@@ -229,8 +229,8 @@ mod tests {
     impl ParseMatcher for SimpleParseMatcher {
         fn match_object(&self, name: &str) -> Result<Option<Objid>, WorldStateError> {
             Ok(match name {
-                "obj" => Some(Objid(1)),
-                "player" => Some(Objid(2)),
+                "obj" => Some(Objid::mk_id(1)),
+                "player" => Some(Objid::mk_id(2)),
                 _ => None,
             })
         }
@@ -243,7 +243,7 @@ mod tests {
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "look");
         assert_eq!(parsed.dobjstr, Some("obj".to_string()));
-        assert_eq!(parsed.dobj, Some(Objid(1)));
+        assert_eq!(parsed.dobj, Some(Objid::mk_id(1)));
         assert_eq!(parsed.prepstr, None);
         assert_eq!(parsed.iobjstr, None);
         assert_eq!(parsed.iobj, None);
@@ -277,11 +277,11 @@ mod tests {
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "give");
         assert_eq!(parsed.dobjstr, Some("obj".to_string()));
-        assert_eq!(parsed.dobj, Some(Objid(1)));
+        assert_eq!(parsed.dobj, Some(Objid::mk_id(1)));
         assert_eq!(parsed.prepstr, Some("to".to_string()));
         assert_eq!(parsed.prep, PrepSpec::Other(Preposition::AtTo));
         assert_eq!(parsed.iobjstr, Some("player".to_string()));
-        assert_eq!(parsed.iobj, Some(Objid(2)));
+        assert_eq!(parsed.iobj, Some(Objid::mk_id(2)));
         assert_eq!(
             parsed.args,
             vec![v_str("obj"), v_str("to"), v_str("player")]
