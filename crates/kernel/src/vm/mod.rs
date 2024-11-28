@@ -27,7 +27,7 @@ use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
 use moor_values::matching::command_parse::ParsedCommand;
 use moor_values::model::VerbDef;
-use moor_values::{Objid, Var};
+use moor_values::{Obj, Var};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 
@@ -53,9 +53,9 @@ mod vm_test;
 pub struct Fork {
     /// The player. This is in the activation as well, but it's nicer to have it up here and
     /// explicit
-    pub(crate) player: Objid,
+    pub(crate) player: Obj,
     /// The permissions context for the forked task.
-    pub(crate) progr: Objid,
+    pub(crate) progr: Obj,
     /// The task ID of the task that forked us
     pub(crate) parent_task_id: usize,
     /// The time to delay before starting the forked task, if any.
@@ -90,7 +90,7 @@ pub enum ExecutionResult {
     /// Request dispatch to another verb
     ContinueVerb {
         /// The applicable permissions context.
-        permissions: Objid,
+        permissions: Obj,
         /// The requested verb.
         resolved_verb: VerbDef,
         /// And its binary
@@ -119,9 +119,9 @@ pub enum ExecutionResult {
     /// been given the program to execute instead of having to look it up.
     PerformEval {
         /// The permissions context for the eval.
-        permissions: Objid,
+        permissions: Obj,
         /// The player who is performing the eval.
-        player: Objid,
+        player: Obj,
         /// The program to execute.
         program: Program,
     },

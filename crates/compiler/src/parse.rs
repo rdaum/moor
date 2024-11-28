@@ -29,8 +29,8 @@ use moor_values::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
     E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use moor_values::Objid;
-use moor_values::{v_err, v_float, v_int, v_objid, v_str, v_string};
+use moor_values::Obj;
+use moor_values::{v_err, v_float, v_int, v_obj, v_str, v_string};
 
 use crate::ast::Arg::{Normal, Splice};
 use crate::ast::StmtNode::Scope;
@@ -99,9 +99,9 @@ impl TreeTransformer {
             }
             Rule::object => {
                 let ostr = &pairs.as_str()[1..];
-                let oid = i64::from_str(ostr).unwrap();
-                let objid = Objid::mk_id(oid);
-                Ok(Expr::Value(v_objid(objid)))
+                let oid = i32::from_str(ostr).unwrap();
+                let objid = Obj::mk_id(oid);
+                Ok(Expr::Value(v_obj(objid)))
             }
             Rule::integer => match pairs.as_str().parse::<i64>() {
                 Ok(int) => Ok(Expr::Value(v_int(int))),
@@ -266,7 +266,7 @@ impl TreeTransformer {
                     let mut inner = primary.into_inner();
                     let property = inner.next().unwrap().as_str();
                     Ok(Expr::Prop {
-                        location: Box::new(Expr::Value(v_objid(SYSTEM_OBJECT))),
+                        location: Box::new(Expr::Value(v_obj(SYSTEM_OBJECT))),
                         property: Box::new(Expr::Value(v_str(property))),
                     })
                 }
@@ -277,7 +277,7 @@ impl TreeTransformer {
                         .clone()
                         .parse_arglist(inner.next().unwrap().into_inner())?;
                     Ok(Expr::Verb {
-                        location: Box::new(Expr::Value(v_objid(SYSTEM_OBJECT))),
+                        location: Box::new(Expr::Value(v_obj(SYSTEM_OBJECT))),
                         verb: Box::new(Expr::Value(v_string(verb))),
                         args,
                     })
@@ -1190,7 +1190,7 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
 #[cfg(test)]
 mod tests {
     use moor_values::Error::{E_INVARG, E_PROPNF, E_VARNF};
-    use moor_values::{v_err, v_float, v_int, v_obj, v_str};
+    use moor_values::{v_err, v_float, v_int, v_objid, v_str};
     use moor_values::{v_none, Symbol};
 
     use crate::ast::Arg::{Normal, Splice};
@@ -1235,7 +1235,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parsed.stmts),
             vec![StmtNode::Expr(Verb {
-                location: Box::new(Value(v_obj(0))),
+                location: Box::new(Value(v_objid(0))),
                 verb: Box::new(Value(v_str("test_verb"))),
                 args: vec![
                     Normal(Value(v_int(1))),
@@ -1413,7 +1413,7 @@ mod tests {
             StmtNode::Return(Some(Expr::Unary(
                 UnaryOp::Not,
                 Box::new(Verb {
-                    location: Box::new(Value(v_obj(2))),
+                    location: Box::new(Value(v_objid(2))),
                     verb: Box::new(Value(v_str("move"))),
                     args: vec![Normal(Value(v_int(5)))],
                 })
@@ -1440,7 +1440,7 @@ mod tests {
                         UnaryOp::Not,
                         Box::new(Verb {
                             location: Box::new(Prop {
-                                location: Box::new(Value(v_obj(0))),
+                                location: Box::new(Value(v_objid(0))),
                                 property: Box::new(Value(v_str("network"))),
                             }),
                             verb: Box::new(Value(v_str("is_connected"))),
@@ -1664,7 +1664,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Verb {
                 location: Box::new(Prop {
-                    location: Box::new(Value(v_obj(0))),
+                    location: Box::new(Value(v_objid(0))),
                     property: Box::new(Value(v_str("string_utils"))),
                 }),
                 verb: Box::new(Value(v_str("from_list"))),
@@ -2312,7 +2312,7 @@ mod tests {
             vec![StmtNode::Expr(Expr::TryCatch {
                 trye: Box::new(Verb {
                     location: Box::new(Prop {
-                        location: Box::new(Value(v_obj(0))),
+                        location: Box::new(Value(v_objid(0))),
                         property: Box::new(Value(v_str("ftp_client"))),
                     }),
                     verb: Box::new(Value(v_str("finish_get"))),

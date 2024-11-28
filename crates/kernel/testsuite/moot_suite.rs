@@ -38,7 +38,7 @@ use moor_kernel::{
     SchedulerClient,
 };
 use moor_moot::{execute_moot_test, MootRunner};
-use moor_values::{v_none, Objid, Var};
+use moor_values::{v_none, Obj, Var};
 
 mod common;
 
@@ -60,7 +60,7 @@ impl SchedulerMootRunner {
 impl MootRunner for SchedulerMootRunner {
     type Value = Var;
 
-    fn eval<S: Into<String>>(&mut self, player: &Objid, command: S) -> eyre::Result<()> {
+    fn eval<S: Into<String>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command = command.into();
         eprintln!("{player} >> ; {command}");
         self.eval_result = Some(
@@ -78,7 +78,7 @@ impl MootRunner for SchedulerMootRunner {
         Ok(())
     }
 
-    fn command<S: AsRef<str>>(&mut self, player: &Objid, command: S) -> eyre::Result<()> {
+    fn command<S: AsRef<str>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command: &str = command.as_ref();
         eprintln!("{player} >> ; {}", command);
         self.eval_result = Some(
@@ -100,11 +100,11 @@ impl MootRunner for SchedulerMootRunner {
         v_none()
     }
 
-    fn read_line(&mut self, _player: &Objid) -> eyre::Result<Option<String>> {
+    fn read_line(&mut self, _player: &Obj) -> eyre::Result<Option<String>> {
         unimplemented!("Not supported on SchedulerMootRunner");
     }
 
-    fn read_eval_result(&mut self, player: &Objid) -> eyre::Result<Option<Var>> {
+    fn read_eval_result(&mut self, player: &Obj) -> eyre::Result<Option<Var>> {
         Ok(self
             .eval_result
             .take()
@@ -133,7 +133,7 @@ struct NoopSessionFactory {}
 impl SessionFactory for NoopSessionFactory {
     fn mk_background_session(
         self: Arc<Self>,
-        _player: &Objid,
+        _player: &Obj,
     ) -> Result<Arc<dyn Session>, SessionError> {
         Ok(Arc::new(NoopClientSession::new()))
     }

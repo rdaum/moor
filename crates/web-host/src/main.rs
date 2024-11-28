@@ -24,7 +24,7 @@ use axum::Router;
 use clap::Parser;
 use clap_derive::Parser;
 
-use moor_values::{Objid, SYSTEM_OBJECT};
+use moor_values::{Obj, SYSTEM_OBJECT};
 use rpc_async_client::{
     make_host_token, proces_hosts_events, start_host_session, ListenersClient, ListenersMessage,
 };
@@ -188,12 +188,12 @@ impl Listeners {
     }
 }
 pub struct Listener {
-    pub(crate) handler_object: Objid,
+    pub(crate) handler_object: Obj,
     pub(crate) terminate: tokio::sync::watch::Sender<bool>,
 }
 
 impl Listener {
-    pub fn new(terminate: tokio::sync::watch::Sender<bool>, handler_object: Objid) -> Self {
+    pub fn new(terminate: tokio::sync::watch::Sender<bool>, handler_object: Obj) -> Self {
         Self {
             handler_object,
             terminate,

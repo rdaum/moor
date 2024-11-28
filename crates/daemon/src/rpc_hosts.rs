@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::Objid;
+use moor_values::Obj;
 use rpc_common::{HostToken, HostType};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -21,14 +21,14 @@ use tracing::warn;
 
 /// Manages the set of known hosts and the listeners they have registered.
 #[derive(Default)]
-pub struct Hosts(HashMap<HostToken, (SystemTime, HostType, Vec<(Objid, SocketAddr)>)>);
+pub struct Hosts(HashMap<HostToken, (SystemTime, HostType, Vec<(Obj, SocketAddr)>)>);
 
 impl Hosts {
     pub(crate) fn receive_ping(
         &mut self,
         host_token: HostToken,
         host_type: HostType,
-        listeners: Vec<(Objid, SocketAddr)>,
+        listeners: Vec<(Obj, SocketAddr)>,
     ) -> bool {
         let now = SystemTime::now();
         self.0
@@ -54,7 +54,7 @@ impl Hosts {
         }
     }
 
-    pub(crate) fn listeners(&self) -> Vec<(Objid, HostType, SocketAddr)> {
+    pub(crate) fn listeners(&self) -> Vec<(Obj, HostType, SocketAddr)> {
         self.0
             .values()
             .flat_map(|(_, host_type, listeners)| {

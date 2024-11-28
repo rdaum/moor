@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 
 pub use load_db::{read_textdump, textdump_load};
 
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::Var;
 pub use read::TextdumpReader;
 pub use write::TextdumpWriter;
@@ -70,7 +70,7 @@ impl From<&str> for EncodingMode {
 #[derive(Clone)]
 pub struct Verbdef {
     pub name: String,
-    pub owner: Objid,
+    pub owner: Obj,
     pub flags: u16,
     pub prep: i16,
 }
@@ -78,20 +78,20 @@ pub struct Verbdef {
 #[derive(Clone)]
 pub struct Propval {
     pub value: Var,
-    pub owner: Objid,
+    pub owner: Obj,
     pub flags: u8,
     pub is_clear: bool,
 }
 
 pub struct Object {
-    pub id: Objid,
-    pub owner: Objid,
-    pub location: Objid,
-    pub contents: Objid,
-    pub next: Objid,
-    pub parent: Objid,
-    pub child: Objid,
-    pub sibling: Objid,
+    pub id: Obj,
+    pub owner: Obj,
+    pub location: Obj,
+    pub contents: Obj,
+    pub next: Obj,
+    pub parent: Obj,
+    pub child: Obj,
+    pub sibling: Obj,
     pub name: String,
     pub flags: u8,
     pub verbdefs: Vec<Verbdef>,
@@ -101,7 +101,7 @@ pub struct Object {
 
 #[derive(Clone, Debug)]
 pub struct Verb {
-    pub objid: Objid,
+    pub objid: Obj,
     pub verbnum: usize,
     pub program: Option<String>,
 }
@@ -109,10 +109,10 @@ pub struct Verb {
 pub struct Textdump {
     #[allow(dead_code)]
     pub version: String,
-    pub objects: BTreeMap<Objid, Object>,
+    pub objects: BTreeMap<Obj, Object>,
     #[allow(dead_code)]
-    pub users: Vec<Objid>,
-    pub verbs: BTreeMap<(Objid, usize), Verb>,
+    pub users: Vec<Obj>,
+    pub verbs: BTreeMap<(Obj, usize), Verb>,
 }
 
 const PREP_ANY: i16 = -2;

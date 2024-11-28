@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::{Objid, Sequence};
+use moor_values::{Obj, Sequence};
 use moor_values::{Var, VarType, Variant};
 use std::collections::BTreeMap;
 use std::io;
@@ -41,7 +41,7 @@ impl<W: io::Write> TextdumpWriter<W> {
             self.writer,
             "{}\n{}\n{}\n{}",
             verbdef.name,
-            verbdef.owner.id(),
+            verbdef.owner.id().0,
             verbdef.flags,
             verbdef.prep
         )
@@ -57,7 +57,7 @@ impl<W: io::Write> TextdumpWriter<W> {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_INT as i64, i)?;
             }
             Variant::Obj(o) => {
-                writeln!(self.writer, "{}\n{}", VarType::TYPE_OBJ as i64, o.id())?;
+                writeln!(self.writer, "{}\n{}", VarType::TYPE_OBJ as u64, o.id().0)?;
             }
             Variant::Str(s) => {
                 match self.encoding_mode {
@@ -105,7 +105,7 @@ impl<W: io::Write> TextdumpWriter<W> {
 
     fn write_propval(&mut self, propval: &Propval) -> Result<(), io::Error> {
         self.write_var(&propval.value, propval.is_clear)?;
-        writeln!(self.writer, "{}", propval.owner.id())?;
+        writeln!(self.writer, "{}", propval.owner.id().0)?;
         writeln!(self.writer, "{}", propval.flags)?;
         Ok(())
     }
@@ -114,13 +114,13 @@ impl<W: io::Write> TextdumpWriter<W> {
         writeln!(self.writer, "{}\n{}\n", object.id, &object.name)?;
 
         writeln!(self.writer, "{}", object.flags)?;
-        writeln!(self.writer, "{}", object.owner.id())?;
-        writeln!(self.writer, "{}", object.location.id())?;
-        writeln!(self.writer, "{}", object.contents.id())?;
-        writeln!(self.writer, "{}", object.next.id())?;
-        writeln!(self.writer, "{}", object.parent.id())?;
-        writeln!(self.writer, "{}", object.child.id())?;
-        writeln!(self.writer, "{}", object.sibling.id())?;
+        writeln!(self.writer, "{}", object.owner.id().0)?;
+        writeln!(self.writer, "{}", object.location.id().0)?;
+        writeln!(self.writer, "{}", object.contents.id().0)?;
+        writeln!(self.writer, "{}", object.next.id().0)?;
+        writeln!(self.writer, "{}", object.parent.id().0)?;
+        writeln!(self.writer, "{}", object.child.id().0)?;
+        writeln!(self.writer, "{}", object.sibling.id().0)?;
         writeln!(self.writer, "{}", object.verbdefs.len())?;
         for verbdef in &object.verbdefs {
             self.write_verbdef(verbdef)?;
@@ -136,7 +136,7 @@ impl<W: io::Write> TextdumpWriter<W> {
         Ok(())
     }
 
-    fn write_verbs(&mut self, verbs: &BTreeMap<(Objid, usize), Verb>) -> Result<(), io::Error> {
+    fn write_verbs(&mut self, verbs: &BTreeMap<(Obj, usize), Verb>) -> Result<(), io::Error> {
         for verb in verbs.values() {
             let Some(program) = verb.program.clone() else {
                 continue;
@@ -168,7 +168,7 @@ impl<W: io::Write> TextdumpWriter<W> {
             textdump.users.len()
         )?;
         for user in &textdump.users {
-            writeln!(self.writer, "{}", user.id())?;
+            writeln!(self.writer, "{}", user.id().0)?;
         }
         for object in textdump.objects.values() {
             self.write_object(object)?;

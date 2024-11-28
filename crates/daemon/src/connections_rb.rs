@@ -28,7 +28,7 @@ use bytes::Bytes;
 use daumtils::SliceRef;
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::AsByteBuffer;
-use moor_values::Objid;
+use moor_values::Obj;
 use relbox::{relation_info_for, RelBox, RelationId, RelationInfo, Transaction};
 use rpc_common::RpcMessageError;
 
@@ -102,7 +102,7 @@ impl ConnectionsRb {
 impl ConnectionsRb {
     fn most_recent_client_connection(
         tx: &Transaction,
-        connection_obj: Objid,
+        connection_obj: Obj,
     ) -> Result<Vec<(SliceRef, SystemTime)>, SessionError> {
         let clients = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
@@ -154,11 +154,7 @@ fn now_as_sliceref() -> SliceRef {
 }
 
 impl ConnectionsDB for ConnectionsRb {
-    fn update_client_connection(
-        &self,
-        from_connection: Objid,
-        to_player: Objid,
-    ) -> Result<(), Error> {
+    fn update_client_connection(&self, from_connection: Obj, to_player: Obj) -> Result<(), Error> {
         let tx = self.tb.clone().start_tx();
         let client_ids = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
@@ -190,15 +186,21 @@ impl ConnectionsDB for ConnectionsRb {
         &self,
         client_id: Uuid,
         hostname: String,
-        player: Option<Objid>,
-    ) -> Result<Objid, RpcMessageError> {
+        player: Option<Obj>,
+    ) -> Result<Obj, RpcMessageError> {
         let connection_oid = match player {
             None => {
                 // The connection object is pulled from the sequence, then we invert it and subtract from
                 // -4 to get the connection object, since they always grow downwards from there.
                 let connection_id = self.tb.clone().increment_sequence(0);
-                let connection_id: i64 = -4 - (connection_id as i64);
-                Objid::mk_id(connection_id)
+                let connection_id =
+                    if connection_id < i32::MIN as i64 || connection_id > i32::MAX as i64 {
+                        panic!("Connection ID out of range");
+                    } else {
+                        connection_id as i32
+                    };
+                let connection_id = -4 - connection_id;
+                Obj::mk_id(connection_id)
             }
             Some(player) => player,
         };
@@ -235,7 +237,7 @@ impl ConnectionsDB for ConnectionsRb {
         Ok(connection_oid)
     }
 
-    fn record_client_activity(&self, client_id: Uuid, _connobj: Objid) -> Result<(), Error> {
+    fn record_client_activity(&self, client_id: Uuid, _connobj: Obj) -> Result<(), Error> {
         let tx = self.tb.clone().start_tx();
         tx.relation(RelationId(ConnectionRelation::ClientActivity as usize))
             .upsert_by_domain(
@@ -247,7 +249,7 @@ impl ConnectionsDB for ConnectionsRb {
         Ok(())
     }
 
-    fn notify_is_alive(&self, client_id: Uuid, _connection: Objid) -> Result<(), Error> {
+    fn notify_is_alive(&self, client_id: Uuid, _connection: Obj) -> Result<(), Error> {
         let tx = self.tb.clone().start_tx();
         tx.relation(RelationId(ConnectionRelation::ClientPingTime as usize))
             .upsert_by_domain(
@@ -298,7 +300,7 @@ impl ConnectionsDB for ConnectionsRb {
         tx.commit().expect("Unable to commit transaction");
     }
 
-    fn last_activity_for(&self, connection_obj: Objid) -> Result<SystemTime, SessionError> {
+    fn last_activity_for(&self, connection_obj: Obj) -> Result<SystemTime, SessionError> {
         let tx = self.tb.clone().start_tx();
         let mut client_times = Self::most_recent_client_connection(&tx, connection_obj.clone())?;
 
@@ -310,7 +312,7 @@ impl ConnectionsDB for ConnectionsRb {
         Ok(time.1)
     }
 
-    fn connection_name_for(&self, connection_obj: Objid) -> Result<String, SessionError> {
+    fn connection_name_for(&self, connection_obj: Obj) -> Result<String, SessionError> {
         let tx = self.tb.clone().start_tx();
         let mut client_times = Self::most_recent_client_connection(&tx, connection_obj.clone())?;
 
@@ -328,7 +330,7 @@ impl ConnectionsDB for ConnectionsRb {
             .expect("Invalid UTF-8 in client name"))
     }
 
-    fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
+    fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
         let tx = self.tb.clone().start_tx();
         // In this case we need to find the earliest connection time for the player, and then
         // subtract that from the current time.
@@ -361,7 +363,7 @@ impl ConnectionsDB for ConnectionsRb {
         Ok(seconds)
     }
 
-    fn client_ids_for(&self, player: Objid) -> Result<Vec<Uuid>, SessionError> {
+    fn client_ids_for(&self, player: Obj) -> Result<Vec<Uuid>, SessionError> {
         let tx = self.tb.clone().start_tx();
         let Ok(clients) = tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
@@ -381,7 +383,7 @@ impl ConnectionsDB for ConnectionsRb {
         Ok(client_ids)
     }
 
-    fn connections(&self) -> Vec<Objid> {
+    fn connections(&self) -> Vec<Obj> {
         // Full scan from ClientConnection relation to get all connections, and dump them into a
         // hashset (to remove dupes) and return as a vector.
         let tx = self.tb.clone().start_tx();
@@ -392,7 +394,7 @@ impl ConnectionsDB for ConnectionsRb {
             .expect("Unable to scan client connection relation");
 
         for client in clients {
-            let connection = Objid::from_bytes(Bytes::from(client.codomain().as_slice().to_vec()))
+            let connection = Obj::from_bytes(Bytes::from(client.codomain().as_slice().to_vec()))
                 .expect("Invalid connection");
             connections.insert(connection);
         }
@@ -401,7 +403,7 @@ impl ConnectionsDB for ConnectionsRb {
         connections.into_iter().collect()
     }
 
-    fn connection_object_for_client(&self, client_id: Uuid) -> Option<Objid> {
+    fn connection_object_for_client(&self, client_id: Uuid) -> Option<Obj> {
         let tx = self.tb.clone().start_tx();
         let connection = match tx
             .relation(RelationId(ConnectionRelation::ClientConnection as usize))
@@ -409,7 +411,7 @@ impl ConnectionsDB for ConnectionsRb {
         {
             Ok(connection) => {
                 let bytes = Bytes::from(connection.codomain().as_slice().to_vec());
-                Some(Objid::from_bytes(bytes).expect("Invalid connection"))
+                Some(Obj::from_bytes(bytes).expect("Invalid connection"))
             }
             Err(_) => None,
         };
@@ -444,7 +446,7 @@ impl ConnectionsDB for ConnectionsRb {
 mod tests {
     use std::sync::Arc;
 
-    use moor_values::Objid;
+    use moor_values::Obj;
 
     use crate::connections::ConnectionsDB;
     use crate::connections_rb::ConnectionsRb;
@@ -481,13 +483,13 @@ mod tests {
                 );
                 let last_activity = last_activity.unwrap().elapsed().unwrap().as_secs_f64();
                 assert!(last_activity < 1.0);
-                db.update_client_connection(oid, Objid::mk_id(x))
+                db.update_client_connection(oid, Obj::mk_id(x))
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
+                let client_ids = db.client_ids_for(Obj::mk_id(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
                 db.remove_client_connection(client_id).unwrap();
-                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
+                let client_ids = db.client_ids_for(Obj::mk_id(x)).unwrap();
                 assert!(client_ids.is_empty());
             }));
         }
@@ -512,15 +514,15 @@ mod tests {
                 let con_oid2 = db
                     .new_connection(client_id2, "localhost".to_string(), None)
                     .unwrap();
-                db.update_client_connection(con_oid1, Objid::mk_id(x))
+                db.update_client_connection(con_oid1, Obj::mk_id(x))
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
+                let client_ids = db.client_ids_for(Obj::mk_id(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert!(client_ids.contains(&client_id1));
 
-                db.update_client_connection(con_oid2, Objid::mk_id(x))
+                db.update_client_connection(con_oid2, Obj::mk_id(x))
                     .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
+                let client_ids = db.client_ids_for(Obj::mk_id(x)).unwrap();
                 assert_eq!(
                     client_ids.len(),
                     2,
@@ -529,17 +531,17 @@ mod tests {
                 );
                 assert!(client_ids.contains(&client_id2));
 
-                db.record_client_activity(client_id1, Objid::mk_id(x))
+                db.record_client_activity(client_id1, Obj::mk_id(x))
                     .unwrap();
                 let last_activity = db
-                    .last_activity_for(Objid::mk_id(x))
+                    .last_activity_for(Obj::mk_id(x))
                     .unwrap()
                     .elapsed()
                     .unwrap()
                     .as_secs_f64();
                 assert!(last_activity < 1.0);
                 db.remove_client_connection(client_id1).unwrap();
-                let client_ids = db.client_ids_for(Objid::mk_id(x)).unwrap();
+                let client_ids = db.client_ids_for(Obj::mk_id(x)).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert!(client_ids.contains(&client_id2));
             }));

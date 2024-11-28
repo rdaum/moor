@@ -22,7 +22,7 @@ use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
 use moor_values::Variant;
-use moor_values::{v_bool, v_int, v_none, v_objid, v_str};
+use moor_values::{v_bool, v_int, v_none, v_obj, v_str};
 use moor_values::{v_list, Sequence, Symbol};
 use moor_values::{v_list_iter, NOTHING};
 
@@ -70,7 +70,7 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .parent_of(&bf_args.task_perms_who(), obj)
         .map_err(world_state_bf_err)?;
-    Ok(Ret(v_objid(parent)))
+    Ok(Ret(v_obj(parent)))
 }
 bf_declare!(parent, bf_parent);
 
@@ -104,7 +104,7 @@ fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .children_of(&bf_args.task_perms_who(), obj)
         .map_err(world_state_bf_err)?;
 
-    let children = children.iter().map(v_objid).collect::<Vec<_>>();
+    let children = children.iter().map(v_obj).collect::<Vec<_>>();
     Ok(Ret(v_list(&children)))
 }
 bf_declare!(children, bf_children);
@@ -152,12 +152,12 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 &new_obj,
                 *INITIALIZE_SYM,
             ) else {
-                return Ok(Ret(v_objid(new_obj)));
+                return Ok(Ret(v_obj(new_obj)));
             };
 
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
-            bf_frame.bf_trampoline_arg = Some(v_objid(new_obj.clone()));
+            bf_frame.bf_trampoline_arg = Some(v_obj(new_obj.clone()));
             Ok(VmInstr(ContinueVerb {
                 permissions: bf_args.task_perms_who(),
                 resolved_verb,
@@ -249,7 +249,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         *EXITFUNC_SYM,
                     ) {
                         Ok(_) => {
-                            contents.push(v_objid(o));
+                            contents.push(v_obj(o));
                         }
                         Err(WorldStateError::VerbNotFound(_, _)) => {}
                         Err(e) => {
@@ -347,7 +347,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             location: head_obj.clone(),
                             this: head_obj.clone(),
                             player: bf_args.exec_state.top().player.clone(),
-                            args: vec![v_objid(obj)],
+                            args: vec![v_obj(obj)],
                             argstr: "".to_string(),
                             caller: bf_args.exec_state.top().this.clone(),
                         },
@@ -379,7 +379,7 @@ fn bf_max_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .max_object(&bf_args.task_perms_who())
         .map_err(world_state_bf_err)?;
-    Ok(Ret(v_objid(max_obj)))
+    Ok(Ret(v_obj(max_obj)))
 }
 bf_declare!(max_object, bf_max_object);
 
@@ -449,7 +449,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: whereto.clone(),
                                 this: whereto.clone(),
                                 player: bf_args.exec_state.top().player.clone(),
-                                args: vec![v_objid(what)],
+                                args: vec![v_obj(what)],
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             },
@@ -527,7 +527,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: original_location.clone(),
                                 this: original_location,
                                 player: bf_args.exec_state.top().player.clone(),
-                                args: vec![v_objid(what)],
+                                args: vec![v_obj(what)],
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             },
@@ -574,7 +574,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: whereto.clone(),
                                 this: whereto,
                                 player: bf_args.exec_state.top().player.clone(),
-                                args: vec![v_objid(what)],
+                                args: vec![v_obj(what)],
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             },
@@ -698,7 +698,7 @@ fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let players = bf_args.world_state.players().map_err(world_state_bf_err)?;
 
-    Ok(Ret(v_list_iter(players.iter().map(v_objid))))
+    Ok(Ret(v_list_iter(players.iter().map(v_obj))))
 }
 bf_declare!(players, bf_players);
 

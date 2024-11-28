@@ -38,7 +38,7 @@ use moor_values::model::Named;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::WorldStateSource;
 use moor_values::model::{BinaryType, VerbFlag};
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 
@@ -86,10 +86,10 @@ pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
         let binary = program.make_copy_as_vec().unwrap();
         let verb_name = Symbol::mk(verb_name);
         tx.add_verb(
-            &Objid::mk_id(3),
+            &Obj::mk_id(3),
             &SYSTEM_OBJECT,
             vec![verb_name],
-            &Objid::mk_id(3),
+            &Obj::mk_id(3),
             VerbFlag::rx(),
             VerbArgsSpec::this_none_this(),
             binary,
@@ -99,7 +99,7 @@ pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
 
         // Verify it was added.
         let verb = tx
-            .get_verb(&Objid::mk_id(3), &SYSTEM_OBJECT, verb_name)
+            .get_verb(&Obj::mk_id(3), &SYSTEM_OBJECT, verb_name)
             .unwrap();
         assert!(verb.matches_name(verb_name));
     }
@@ -110,7 +110,7 @@ pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
     for (verb_name, _) in verbs {
         let verb_name = Symbol::mk(verb_name);
         let verb = tx
-            .get_verb(&Objid::mk_id(3), &SYSTEM_OBJECT, verb_name)
+            .get_verb(&Obj::mk_id(3), &SYSTEM_OBJECT, verb_name)
             .unwrap();
         assert!(verb.matches_name(verb_name));
     }
@@ -138,7 +138,7 @@ pub fn run_as_verb(db: &dyn Database, expression: &str) -> ExecResult {
 #[allow(dead_code)]
 pub fn eval(
     db: Arc<dyn WorldStateSource>,
-    player: Objid,
+    player: Obj,
     expression: &str,
     session: Arc<dyn Session>,
 ) -> eyre::Result<ExecResult> {

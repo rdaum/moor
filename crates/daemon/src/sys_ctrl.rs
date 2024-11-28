@@ -15,7 +15,7 @@
 use crate::rpc_server::RpcServer;
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::SystemControl;
-use moor_values::Objid;
+use moor_values::Obj;
 use rpc_common::{HostBroadcastEvent, HostType, HOST_BROADCAST_TOPIC};
 use std::sync::atomic::Ordering;
 use tracing::{error, warn};
@@ -29,7 +29,7 @@ impl SystemControl for RpcServer {
 
     fn listen(
         &self,
-        handler_object: Objid,
+        handler_object: Obj,
         host_type: &str,
         port: u16,
         print_messages: bool,
@@ -95,7 +95,7 @@ impl SystemControl for RpcServer {
         Ok(())
     }
 
-    fn listeners(&self) -> Result<Vec<(Objid, String, u16, bool)>, moor_values::Error> {
+    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, moor_values::Error> {
         let hosts = self.hosts.lock().unwrap();
         let listeners = hosts
             .listeners()

@@ -29,7 +29,7 @@ use moor_values::model::VerbFlag;
 use moor_values::model::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_values::model::{ObjAttrs, ObjFlag};
 use moor_values::util::BitEnum;
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::Var;
 use moor_values::{AsByteBuffer, NOTHING};
 
@@ -41,14 +41,14 @@ use crate::textdump::{
 };
 
 struct RProp {
-    definer: Objid,
+    definer: Obj,
     name: String,
-    owner: Objid,
+    owner: Obj,
     flags: u8,
     value: Var,
 }
 
-fn resolve_prop(omap: &BTreeMap<Objid, Object>, offset: usize, o: &Object) -> Option<RProp> {
+fn resolve_prop(omap: &BTreeMap<Obj, Object>, offset: usize, o: &Object) -> Option<RProp> {
     let local_len = o.propdefs.len();
     if offset < local_len {
         let name = o.propdefs[offset].clone();

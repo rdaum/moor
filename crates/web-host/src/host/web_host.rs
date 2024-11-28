@@ -25,7 +25,7 @@ use eyre::eyre;
 
 use moor_values::model::ObjectRef;
 use moor_values::Error::E_INVIND;
-use moor_values::{v_err, Objid, Symbol};
+use moor_values::{v_err, Obj, Symbol};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::AuthToken;
 use rpc_common::HostClientToDaemonMessage::{Attach, ConnectionEstablish};
@@ -51,7 +51,7 @@ pub struct WebHost {
     zmq_context: tmq::Context,
     rpc_addr: String,
     pubsub_addr: String,
-    pub(crate) handler_object: Objid,
+    pub(crate) handler_object: Obj,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -65,7 +65,7 @@ pub enum WsHostError {
 }
 
 impl WebHost {
-    pub fn new(rpc_addr: String, narrative_addr: String, handler_object: Objid) -> Self {
+    pub fn new(rpc_addr: String, narrative_addr: String, handler_object: Obj) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
             zmq_context: tmq_context,
@@ -84,7 +84,7 @@ impl WebHost {
         auth_token: AuthToken,
         connect_type: Option<ConnectType>,
         peer_addr: SocketAddr,
-    ) -> Result<(Objid, Uuid, ClientToken, RpcSendClient), WsHostError> {
+    ) -> Result<(Obj, Uuid, ClientToken, RpcSendClient), WsHostError> {
         let zmq_ctx = self.zmq_context.clone();
         // Establish a connection to the RPC server
         let client_id = Uuid::new_v4();
@@ -145,8 +145,8 @@ impl WebHost {
     /// Actually instantiate the connection now that we've validated the auth token.
     pub async fn start_ws_connection(
         &self,
-        handler_object: &Objid,
-        player: &Objid,
+        handler_object: &Obj,
+        player: &Obj,
         client_id: Uuid,
         client_token: ClientToken,
         auth_token: AuthToken,

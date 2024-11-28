@@ -23,7 +23,7 @@ use moor_values::model::Perms;
 use moor_values::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
 use moor_values::Symbol;
 use moor_values::Var;
-use moor_values::{Error, Objid};
+use moor_values::{Error, Obj};
 
 /// A handle for talking to the scheduler from within a task.
 #[derive(Clone)]
@@ -64,7 +64,7 @@ impl TaskSchedulerClient {
     }
 
     /// Send a message to the scheduler that the verb to be executed was not found.
-    pub fn verb_not_found(&self, objid: Objid, verb: Symbol) {
+    pub fn verb_not_found(&self, objid: Obj, verb: Symbol) {
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::TaskVerbNotFound(objid, verb)))
             .expect("Could not deliver client message -- scheduler shut down?");
@@ -171,7 +171,7 @@ impl TaskSchedulerClient {
     }
 
     /// Request that the scheduler boot a player.
-    pub fn boot_player(&self, player: Objid) {
+    pub fn boot_player(&self, player: Obj) {
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::BootPlayer { player }))
             .expect("Could not deliver client message -- scheduler shut down?");
@@ -185,7 +185,7 @@ impl TaskSchedulerClient {
     }
 
     /// Ask the scheduler to dispatch a session notification to a player.
-    pub fn notify(&self, player: Objid, event: NarrativeEvent) {
+    pub fn notify(&self, player: Obj, event: NarrativeEvent) {
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::Notify { player, event }))
             .expect("Could not deliver client message -- scheduler shut down?");
@@ -193,7 +193,7 @@ impl TaskSchedulerClient {
 
     pub fn listen(
         &self,
-        handler_object: Objid,
+        handler_object: Obj,
         host_type: String,
         port: u16,
         print_messages: bool,
@@ -217,7 +217,7 @@ impl TaskSchedulerClient {
             .expect("Listen message timed out")
     }
 
-    pub fn listeners(&self) -> Vec<(Objid, String, u16, bool)> {
+    pub fn listeners(&self) -> Vec<(Obj, String, u16, bool)> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::GetListeners(reply)))
@@ -270,7 +270,7 @@ pub enum TaskControlMsg {
     /// A 'StartCommandVerb' type task failed to parse or match the command.
     TaskCommandError(CommandError),
     /// The verb to be executed was not found.
-    TaskVerbNotFound(Objid, Symbol),
+    TaskVerbNotFound(Obj, Symbol),
     /// An exception was thrown while executing the verb.
     TaskException(Exception),
     /// The task is requesting that it be forked.
@@ -300,20 +300,20 @@ pub enum TaskControlMsg {
     },
     /// Task is requesting that the scheduler boot a player.
     BootPlayer {
-        player: Objid,
+        player: Obj,
     },
     /// Task is requesting that a textdump checkpoint happen, to the configured file.
     Checkpoint,
     Notify {
-        player: Objid,
+        player: Obj,
         event: NarrativeEvent,
     },
-    GetListeners(oneshot::Sender<Vec<(Objid, String, u16, bool)>>),
+    GetListeners(oneshot::Sender<Vec<(Obj, String, u16, bool)>>),
     /// Ask hosts to listen for connections on `port` and send them to `handler_object`
     /// `print_messages` is a flag to enable or disable printing of connected etc strings
     /// `host_type` is a string identifying the type of host
     Listen {
-        handler_object: Objid,
+        handler_object: Obj,
         host_type: String,
         port: u16,
         print_messages: bool,

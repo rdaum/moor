@@ -41,7 +41,7 @@ use moor_values::tasks::CommandError;
 use moor_values::tasks::CommandError::PermissionDenied;
 use moor_values::tasks::TaskId;
 use moor_values::util::parse_into_words;
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::{v_int, v_str};
 use moor_values::{NOTHING, SYSTEM_OBJECT};
@@ -67,9 +67,9 @@ pub struct Task {
     /// What I was asked to do.
     pub(crate) task_start: Arc<TaskStart>,
     /// The player on behalf of whom this task is running. Who owns this task.
-    pub(crate) player: Objid,
+    pub(crate) player: Obj,
     /// The permissions of the task -- the object on behalf of which all permissions are evaluated.
-    pub(crate) perms: Objid,
+    pub(crate) perms: Obj,
     /// The actual VM host which is managing the execution of this task.
     pub(crate) vm_host: VmHost,
     /// True if the task should die.
@@ -81,9 +81,9 @@ impl Task {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         task_id: TaskId,
-        player: Objid,
+        player: Obj,
         task_start: Arc<TaskStart>,
-        perms: Objid,
+        perms: Obj,
         server_options: &ServerOptions,
         kill_switch: Arc<AtomicBool>,
     ) -> Self {
@@ -428,8 +428,8 @@ impl Task {
 
     fn start_command(
         &mut self,
-        handler_object: &Objid,
-        player: &Objid,
+        handler_object: &Obj,
+        player: &Obj,
         command: &str,
         world_state: &mut dyn WorldState,
     ) -> Result<(), CommandError> {
@@ -488,7 +488,7 @@ impl Task {
 
     fn setup_start_parse_command(
         &mut self,
-        player: &Objid,
+        player: &Obj,
         command: &str,
         world_state: &mut dyn WorldState,
     ) -> Result<(), CommandError> {
@@ -576,11 +576,11 @@ impl Task {
 }
 
 fn find_verb_for_command(
-    player: &Objid,
-    player_location: &Objid,
+    player: &Obj,
+    player_location: &Obj,
     pc: &ParsedCommand,
     ws: &mut dyn WorldState,
-) -> Result<Option<((Bytes, VerbDef), Objid)>, CommandError> {
+) -> Result<Option<((Bytes, VerbDef), Obj)>, CommandError> {
     let targets_to_search = vec![
         player.clone(),
         player_location.clone(),
@@ -628,10 +628,10 @@ impl Encode for Task {
 impl Decode for Task {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let task_id = TaskId::decode(decoder)?;
-        let player = Objid::decode(decoder)?;
+        let player = Obj::decode(decoder)?;
         let task_start = Arc::decode(decoder)?;
         let vm_host = VmHost::decode(decoder)?;
-        let perms = Objid::decode(decoder)?;
+        let perms = Obj::decode(decoder)?;
         let kill_switch = Arc::new(AtomicBool::new(false));
         Ok(Task {
             task_id,
@@ -647,10 +647,10 @@ impl Decode for Task {
 impl<'de> BorrowDecode<'de> for Task {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let task_id = TaskId::borrow_decode(decoder)?;
-        let player = Objid::borrow_decode(decoder)?;
+        let player = Obj::borrow_decode(decoder)?;
         let task_start = Arc::borrow_decode(decoder)?;
         let vm_host = VmHost::borrow_decode(decoder)?;
-        let perms = Objid::borrow_decode(decoder)?;
+        let perms = Obj::borrow_decode(decoder)?;
         let kill_switch = Arc::new(AtomicBool::new(false));
         Ok(Task {
             task_id,

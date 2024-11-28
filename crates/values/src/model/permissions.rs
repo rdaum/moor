@@ -17,20 +17,20 @@ use crate::model::props::PropFlag;
 use crate::model::verbs::VerbFlag;
 use crate::model::{PropPerms, WorldStateError};
 use crate::util::BitEnum;
-use crate::Objid;
+use crate::Obj;
 
 /// Combination of who a set of permissions is for, and what permissions they have.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Perms {
     // "Who" the permissions are for
-    pub who: Objid,
+    pub who: Obj,
     // What flags apply for those permissions.
     pub flags: BitEnum<ObjFlag>,
 }
 
 impl Perms {
     #[must_use]
-    pub fn new(obj: &Objid, flags: BitEnum<ObjFlag>) -> Self {
+    pub fn new(obj: &Obj, flags: BitEnum<ObjFlag>) -> Self {
         Self {
             who: obj.clone(),
             flags,
@@ -56,7 +56,7 @@ impl Perms {
 
     pub fn check_verb_allows(
         &self,
-        verb_owner: &Objid,
+        verb_owner: &Obj,
         verb_flags: BitEnum<VerbFlag>,
         allows: VerbFlag,
     ) -> Result<(), WorldStateError> {
@@ -74,7 +74,7 @@ impl Perms {
 
     pub fn check_object_allows(
         &self,
-        object_owner: &Objid,
+        object_owner: &Obj,
         object_flags: BitEnum<ObjFlag>,
         allows: BitEnum<ObjFlag>,
     ) -> Result<(), WorldStateError> {
@@ -90,7 +90,7 @@ impl Perms {
         Ok(())
     }
 
-    pub fn check_obj_owner_perms(&self, object_owner: &Objid) -> Result<(), WorldStateError> {
+    pub fn check_obj_owner_perms(&self, object_owner: &Obj) -> Result<(), WorldStateError> {
         if self.who.eq(object_owner) {
             return Ok(());
         }

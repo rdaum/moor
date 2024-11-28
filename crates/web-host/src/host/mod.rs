@@ -20,7 +20,7 @@ mod ws_connection;
 
 pub use auth::connect_auth_handler;
 pub use auth::create_auth_handler;
-use moor_values::{v_err, v_float, v_int, v_list, v_map, v_none, v_obj, v_str, Var, Variant};
+use moor_values::{v_err, v_float, v_int, v_list, v_map, v_none, v_objid, v_str, Var, Variant};
 pub use props::properties_handler;
 pub use props::property_retrieval_handler;
 use serde::Serialize;
@@ -62,7 +62,9 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
     match v.variant() {
         Variant::None => serde_json::Value::Null,
         Variant::Str(s) => serde_json::Value::String(s.to_string()),
-        Variant::Obj(o) => json!(Oid { oid: o.id() }),
+        Variant::Obj(o) => json!(Oid {
+            oid: o.id().0 as i64
+        }),
         Variant::Int(i) => serde_json::Value::Number(Number::from(*i)),
         Variant::Float(f) => json!(*f),
         Variant::Err(e) => json!(Error {
@@ -115,7 +117,15 @@ pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
                 let Some(oid) = oid.as_number() else {
                     return Err(JsonParseError::InvalidRepresentation);
                 };
-                return Ok(v_obj(oid.as_i64().unwrap()));
+                let Some(oid) = oid.as_i64() else {
+                    return Err(JsonParseError::InvalidRepresentation);
+                };
+                let oid = if oid < i32::MIN as i64 || oid > i32::MAX as i64 {
+                    return Err(JsonParseError::InvalidRepresentation);
+                } else {
+                    oid as i32
+                };
+                return Ok(v_objid(oid));
             }
 
             if let Some(pairs) = o.get("map_pairs") {
@@ -224,7 +234,7 @@ mod tests {
 
     #[test]
     fn test_obj_to_fro() {
-        let n = moor_values::v_obj(42);
+        let n = moor_values::v_objid(42);
         let j = super::var_as_json(&n);
         let n2 = super::json_as_var(&j).unwrap();
         assert_eq!(n, n2);

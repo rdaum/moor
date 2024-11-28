@@ -14,7 +14,7 @@
 
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
-use crate::Objid;
+use crate::Obj;
 use crate::Symbol;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{binary_layout, Field};
@@ -28,8 +28,8 @@ pub struct PropDef(Bytes);
 binary_layout!(propdef, LittleEndian, {
     data_version: u8,
     uuid: [u8; 16],
-    definer: Objid as i64,
-    location: Objid as i64,
+    definer: Obj as i32,
+    location: Obj as i32,
     name: [u8],
 });
 
@@ -39,7 +39,7 @@ impl PropDef {
     }
 
     #[must_use]
-    pub fn new(uuid: Uuid, definer: Objid, location: Objid, name: &str) -> Self {
+    pub fn new(uuid: Uuid, definer: Obj, location: Obj, name: &str) -> Self {
         let header_size = propdef::name::OFFSET;
         let mut buf = vec![0; header_size + name.len() + 8];
         let mut propdef_view = propdef::View::new(&mut buf);
@@ -73,14 +73,14 @@ impl PropDef {
     }
 
     #[must_use]
-    pub fn definer(&self) -> Objid {
+    pub fn definer(&self) -> Obj {
         self.get_layout_view()
             .definer()
             .try_read()
             .expect("Failed to decode definer")
     }
     #[must_use]
-    pub fn location(&self) -> Objid {
+    pub fn location(&self) -> Obj {
         self.get_layout_view()
             .location()
             .try_read()
@@ -145,7 +145,7 @@ mod tests {
     use crate::model::propdef::{PropDef, PropDefs};
     use crate::model::ValSet;
     use crate::AsByteBuffer;
-    use crate::Objid;
+    use crate::Obj;
     use crate::Symbol;
     use bytes::Bytes;
     use uuid::Uuid;
@@ -153,33 +153,33 @@ mod tests {
     #[test]
     fn test_create_reconstitute() {
         let uuid = Uuid::new_v4();
-        let test_pd = PropDef::new(uuid, Objid::mk_id(1), Objid::mk_id(2), "test");
+        let test_pd = PropDef::new(uuid, Obj::mk_id(1), Obj::mk_id(2), "test");
 
         let re_pd = PropDef::from_bytes(test_pd.0);
         assert_eq!(re_pd.uuid(), uuid);
-        assert_eq!(re_pd.definer(), Objid::mk_id(1));
-        assert_eq!(re_pd.location(), Objid::mk_id(2));
+        assert_eq!(re_pd.definer(), Obj::mk_id(1));
+        assert_eq!(re_pd.location(), Obj::mk_id(2));
         assert_eq!(re_pd.name(), "test");
     }
 
     #[test]
     fn test_create_reconstitute_as_byte_buffer() {
         let uuid = Uuid::new_v4();
-        let test_pd = PropDef::new(uuid, Objid::mk_id(1), Objid::mk_id(2), "test");
+        let test_pd = PropDef::new(uuid, Obj::mk_id(1), Obj::mk_id(2), "test");
 
         let bytes = test_pd.with_byte_buffer(<[u8]>::to_vec).unwrap();
         let re_pd = PropDef::from_bytes(bytes.into());
         assert_eq!(re_pd.uuid(), uuid);
-        assert_eq!(re_pd.definer(), Objid::mk_id(1));
-        assert_eq!(re_pd.location(), Objid::mk_id(2));
+        assert_eq!(re_pd.definer(), Obj::mk_id(1));
+        assert_eq!(re_pd.location(), Obj::mk_id(2));
         assert_eq!(re_pd.name(), "test");
     }
 
     #[test]
     fn test_in_propdefs() {
-        let test_pd1 = PropDef::new(Uuid::new_v4(), Objid::mk_id(1), Objid::mk_id(2), "test");
+        let test_pd1 = PropDef::new(Uuid::new_v4(), Obj::mk_id(1), Obj::mk_id(2), "test");
 
-        let test_pd2 = PropDef::new(Uuid::new_v4(), Objid::mk_id(10), Objid::mk_id(12), "test2");
+        let test_pd2 = PropDef::new(Uuid::new_v4(), Obj::mk_id(10), Obj::mk_id(12), "test2");
 
         let pds = PropDefs::empty().with_all_added(&[test_pd1.clone(), test_pd2.clone()]);
         let pd1 = pds.find_first_named(Symbol::mk("test")).unwrap();
@@ -191,7 +191,7 @@ mod tests {
         assert_eq!(pd2.uuid(), test_pd2.uuid());
 
         assert_eq!(pd2.name(), "test2");
-        assert_eq!(pd2.definer(), Objid::mk_id(10));
-        assert_eq!(pd2.location(), Objid::mk_id(12));
+        assert_eq!(pd2.definer(), Obj::mk_id(10));
+        assert_eq!(pd2.location(), Obj::mk_id(12));
     }
 }

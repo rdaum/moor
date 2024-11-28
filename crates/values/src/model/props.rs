@@ -13,7 +13,7 @@
 //
 
 use crate::util::BitEnum;
-use crate::Objid;
+use crate::Obj;
 use crate::Var;
 use crate::{AsByteBuffer, DecodingError, EncodingError};
 use binary_layout::binary_layout;
@@ -41,8 +41,8 @@ pub enum PropAttr {
 pub struct PropAttrs {
     pub name: Option<String>,
     pub value: Option<Var>,
-    pub location: Option<Objid>,
-    pub owner: Option<Objid>,
+    pub location: Option<Obj>,
+    pub owner: Option<Obj>,
     pub flags: Option<BitEnum<PropFlag>>,
 }
 
@@ -66,7 +66,7 @@ impl Default for PropAttrs {
 }
 
 binary_layout!(prop_perms_buf, LittleEndian, {
-    owner: Objid as i64,
+    owner: Obj as i32,
     flags: BitEnum<PropFlag> as u16,
 });
 
@@ -75,7 +75,7 @@ pub struct PropPerms(Bytes);
 
 impl PropPerms {
     #[must_use]
-    pub fn new(owner: Objid, flags: BitEnum<PropFlag>) -> Self {
+    pub fn new(owner: Obj, flags: BitEnum<PropFlag>) -> Self {
         let mut buf = vec![0; prop_perms_buf::SIZE.unwrap()];
         let mut view = prop_perms_buf::View::new(&mut buf);
         view.owner_mut()
@@ -88,7 +88,7 @@ impl PropPerms {
     }
 
     #[must_use]
-    pub fn owner(&self) -> Objid {
+    pub fn owner(&self) -> Obj {
         let view = prop_perms_buf::View::new(self.0.as_ref());
         view.owner().try_read().expect("Failed to decode owner")
     }
@@ -99,7 +99,7 @@ impl PropPerms {
         view.flags().try_read().expect("Failed to decode flags")
     }
 
-    pub fn with_owner(self, owner: Objid) -> Self {
+    pub fn with_owner(self, owner: Obj) -> Self {
         Self::new(owner, self.flags())
     }
 

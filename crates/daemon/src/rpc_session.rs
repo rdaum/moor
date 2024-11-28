@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
 use moor_values::tasks::NarrativeEvent;
-use moor_values::Objid;
+use moor_values::Obj;
 
 use crate::rpc_server::RpcServer;
 
@@ -28,16 +28,16 @@ use crate::rpc_server::RpcServer;
 pub struct RpcSession {
     client_id: Uuid,
     rpc_server: Arc<RpcServer>,
-    player: Objid,
+    player: Obj,
     // TODO: manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
     //  should be mmap'd to disk or something.
     // TODO: We could also use Boxcar or other append-only lockless container for this, since we only
     //  ever append.
-    session_buffer: Mutex<Vec<(Objid, NarrativeEvent)>>,
+    session_buffer: Mutex<Vec<(Obj, NarrativeEvent)>>,
 }
 
 impl RpcSession {
-    pub fn new(client_id: Uuid, rpc_server: Arc<RpcServer>, player: Objid) -> Self {
+    pub fn new(client_id: Uuid, rpc_server: Arc<RpcServer>, player: Obj) -> Self {
         Self {
             client_id,
             rpc_server,
@@ -79,19 +79,19 @@ impl Session for RpcSession {
         Ok(new_session)
     }
 
-    fn request_input(&self, player: Objid, input_request_id: Uuid) -> Result<(), SessionError> {
+    fn request_input(&self, player: Obj, input_request_id: Uuid) -> Result<(), SessionError> {
         self.rpc_server
             .clone()
             .request_client_input(self.client_id, player, input_request_id)?;
         Ok(())
     }
 
-    fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), SessionError> {
+    fn send_event(&self, player: Obj, event: NarrativeEvent) -> Result<(), SessionError> {
         self.session_buffer.lock().unwrap().push((player, event));
         Ok(())
     }
 
-    fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError> {
+    fn send_system_msg(&self, player: Obj, msg: &str) -> Result<(), SessionError> {
         self.rpc_server
             .send_system_message(self.client_id, player, msg.to_string())?;
         Ok(())
@@ -110,23 +110,23 @@ impl Session for RpcSession {
         Ok(())
     }
 
-    fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
+    fn connection_name(&self, player: Obj) -> Result<String, SessionError> {
         self.rpc_server.connection_name_for(player)
     }
 
-    fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
+    fn disconnect(&self, player: Obj) -> Result<(), SessionError> {
         self.rpc_server.disconnect(player)
     }
 
-    fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
+    fn connected_players(&self) -> Result<Vec<Obj>, SessionError> {
         self.rpc_server.connected_players()
     }
 
-    fn connected_seconds(&self, player: Objid) -> Result<f64, SessionError> {
+    fn connected_seconds(&self, player: Obj) -> Result<f64, SessionError> {
         self.rpc_server.connected_seconds_for(player)
     }
 
-    fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError> {
+    fn idle_seconds(&self, player: Obj) -> Result<f64, SessionError> {
         self.rpc_server.idle_seconds_for(player)
     }
 }
@@ -134,7 +134,7 @@ impl Session for RpcSession {
 impl SessionFactory for RpcServer {
     fn mk_background_session(
         self: Arc<Self>,
-        player: &Objid,
+        player: &Obj,
     ) -> Result<Arc<dyn Session>, SessionError> {
         self.clone().new_session(Uuid::new_v4(), player.clone())
     }

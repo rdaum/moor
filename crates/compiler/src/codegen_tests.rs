@@ -22,7 +22,7 @@ mod tests {
     use crate::CompileOptions;
     use moor_values::model::CompileError;
     use moor_values::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
-    use moor_values::Objid;
+    use moor_values::Obj;
     use moor_values::Symbol;
     use moor_values::SYSTEM_OBJECT;
 
@@ -1011,7 +1011,7 @@ mod tests {
             vec![
                 ImmObjid(SYSTEM_OBJECT),
                 Imm(verb_metadata),
-                ImmObjid(Objid::mk_id(1)),
+                ImmObjid(Obj::mk_id(1)),
                 MakeSingletonList,
                 ImmInt(1),
                 ListAddTail,
@@ -1381,7 +1381,7 @@ mod tests {
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
-                ImmObjid(Objid::mk_id(0)),
+                ImmObjid(Obj::mk_id(0)),
                 Imm(binary.find_literal("test_verb".into())),
                 ImmEmptyList,
                 CallVerb,

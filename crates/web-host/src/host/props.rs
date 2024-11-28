@@ -52,10 +52,10 @@ pub async fn properties_handler(
                 .iter()
                 .map(|prop| {
                     json!({
-                        "definer": prop.definer.id(),
-                        "location": prop.location.id(),
+                        "definer": prop.definer.id().0,
+                        "location": prop.location.id().0,
                         "name": prop.name.to_string(),
-                        "owner": prop.owner.id(),
+                        "owner": prop.owner.id().0,
                         "r": prop.r,
                         "w": prop.w,
                         "chown": prop.chown,
@@ -128,10 +128,10 @@ pub async fn property_retrieval_handler(
         )) => {
             debug!("Property value: {:?}", value);
             Json(json!({
-                "definer": definer.id(),
+                "definer": definer.id().0,
                 "name": name.to_string(),
-                "location": location.id(),
-                "owner": owner.id(),
+                "location": location.id().0,
+                "owner": owner.id().0,
                 "r": r,
                 "w": w,
                 "chown": chown,

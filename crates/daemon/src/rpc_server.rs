@@ -42,8 +42,8 @@ use moor_values::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
 use moor_values::util::parse_into_words;
 use moor_values::Variant;
 use moor_values::SYSTEM_OBJECT;
-use moor_values::{v_objid, v_str, Symbol};
-use moor_values::{Objid, Var};
+use moor_values::{v_obj, v_str, Symbol};
+use moor_values::{Obj, Var};
 use rpc_common::DaemonToClientReply::{LoginResult, NewConnection};
 use rpc_common::{
     AuthToken, ClientEvent, ClientToken, ClientsBroadcastEvent, ConnectType, DaemonToClientReply,
@@ -298,7 +298,7 @@ impl RpcServer {
         Ok(())
     }
 
-    fn client_auth(&self, token: ClientToken, client_id: Uuid) -> Result<Objid, RpcMessageError> {
+    fn client_auth(&self, token: ClientToken, client_id: Uuid) -> Result<Obj, RpcMessageError> {
         let Some(connection) = self.connections.connection_object_for_client(client_id) else {
             return Err(RpcMessageError::NoConnection);
         };
@@ -648,7 +648,7 @@ impl RpcServer {
     pub(crate) fn new_session(
         self: Arc<Self>,
         client_id: Uuid,
-        connection: Objid,
+        connection: Obj,
     ) -> Result<Arc<dyn Session>, SessionError> {
         debug!(?client_id, ?connection, "Started session",);
 
@@ -659,21 +659,21 @@ impl RpcServer {
         )))
     }
 
-    pub(crate) fn connection_name_for(&self, player: Objid) -> Result<String, SessionError> {
+    pub(crate) fn connection_name_for(&self, player: Obj) -> Result<String, SessionError> {
         self.connections.connection_name_for(player)
     }
 
     #[allow(dead_code)]
-    fn last_activity_for(&self, player: Objid) -> Result<SystemTime, SessionError> {
+    fn last_activity_for(&self, player: Obj) -> Result<SystemTime, SessionError> {
         self.connections.last_activity_for(player)
     }
 
-    pub(crate) fn idle_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
+    pub(crate) fn idle_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
         let last_activity = self.connections.last_activity_for(player)?;
         Ok(last_activity.elapsed().unwrap().as_secs_f64())
     }
 
-    pub(crate) fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
+    pub(crate) fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
         self.connections.connected_seconds_for(player)
     }
 
@@ -682,7 +682,7 @@ impl RpcServer {
     //   of @quit and @boot-player working.
     //   in reality players using "@quit" will probably really want to just "sleep", and cores
     //   should be modified to reflect that.
-    pub(crate) fn disconnect(&self, player: Objid) -> Result<(), SessionError> {
+    pub(crate) fn disconnect(&self, player: Obj) -> Result<(), SessionError> {
         warn!("Disconnecting player: {}", player);
         let all_client_ids = self.connections.client_ids_for(player)?;
 
@@ -704,7 +704,7 @@ impl RpcServer {
         Ok(())
     }
 
-    pub(crate) fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
+    pub(crate) fn connected_players(&self) -> Result<Vec<Obj>, SessionError> {
         let connections = self.connections.connections();
         Ok(connections
             .iter()
@@ -716,7 +716,7 @@ impl RpcServer {
     fn request_sys_prop(
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
-        player: Objid,
+        player: Obj,
         object: ObjectRef,
         property: Symbol,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
@@ -738,10 +738,10 @@ impl RpcServer {
 
     fn perform_login(
         self: Arc<Self>,
-        handler_object: &Objid,
+        handler_object: &Obj,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: &Objid,
+        connection: &Obj,
         args: Vec<String>,
         attach: bool,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
@@ -844,10 +844,10 @@ impl RpcServer {
 
     fn submit_connected_task(
         self: Arc<Self>,
-        handler_object: &Objid,
+        handler_object: &Obj,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        player: &Objid,
+        player: &Obj,
         initiation_type: ConnectType,
     ) -> Result<(), eyre::Error> {
         let session = self
@@ -865,7 +865,7 @@ impl RpcServer {
                 player,
                 &ObjectRef::Id(handler_object.clone()),
                 connected_verb,
-                vec![v_objid(player.clone())],
+                vec![v_obj(player.clone())],
                 "".to_string(),
                 &SYSTEM_OBJECT,
                 session,
@@ -878,8 +878,8 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        handler_object: &Objid,
-        connection: &Objid,
+        handler_object: &Obj,
+        connection: &Obj,
         command: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
@@ -919,7 +919,7 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: &Objid,
+        connection: &Obj,
         input_request_id: Uuid,
         input: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
@@ -945,9 +945,9 @@ impl RpcServer {
     fn perform_out_of_band(
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
-        handler_object: &Objid,
+        handler_object: &Obj,
         client_id: Uuid,
-        connection: &Objid,
+        connection: &Obj,
         command: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
@@ -980,7 +980,7 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: &Objid,
+        connection: &Obj,
         expression: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
@@ -1015,7 +1015,7 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: &Objid,
+        connection: &Obj,
         object: &ObjectRef,
         verb: Symbol,
         args: Vec<Var>,
@@ -1050,7 +1050,7 @@ impl RpcServer {
         self: Arc<Self>,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: &Objid,
+        connection: &Obj,
         object: &ObjectRef,
         verb: Symbol,
         code: Vec<String>,
@@ -1114,7 +1114,7 @@ impl RpcServer {
 
     pub(crate) fn publish_narrative_events(
         &self,
-        events: &[(Objid, NarrativeEvent)],
+        events: &[(Obj, NarrativeEvent)],
     ) -> Result<(), Error> {
         let publish = self.events_publish.lock().unwrap();
         for (player, event) in events {
@@ -1135,7 +1135,7 @@ impl RpcServer {
     pub(crate) fn send_system_message(
         &self,
         client_id: Uuid,
-        player: Objid,
+        player: Obj,
         message: String,
     ) -> Result<(), SessionError> {
         let event = ClientEvent::SystemMessage(player, message);
@@ -1158,7 +1158,7 @@ impl RpcServer {
     pub(crate) fn request_client_input(
         &self,
         client_id: Uuid,
-        player: Objid,
+        player: Obj,
         input_request_id: Uuid,
     ) -> Result<(), SessionError> {
         // Mark this client as in `input mode`, which means that instead of dispatching its next
@@ -1243,13 +1243,13 @@ impl RpcServer {
 
     /// Construct a PASETO token for this player login. This token is used to provide credentials
     /// for requests, to allow reconnection with a different client_id.
-    fn make_auth_token(&self, oid: &Objid) -> AuthToken {
+    fn make_auth_token(&self, oid: &Obj) -> AuthToken {
         let privkey = PasetoAsymmetricPrivateKey::from(self.keypair.as_ref());
         let token = Paseto::<V4, Public>::default()
             .set_footer(Footer::from(MOOR_AUTH_TOKEN_FOOTER))
             .set_payload(Payload::from(
                 json!({
-                    "player": oid.id(),
+                    "player": oid.id().0,
                 })
                 .to_string()
                 .as_str(),
@@ -1343,8 +1343,8 @@ impl RpcServer {
     fn validate_auth_token(
         &self,
         token: AuthToken,
-        objid: Option<&Objid>,
-    ) -> Result<Objid, RpcMessageError> {
+        objid: Option<&Obj>,
+    ) -> Result<Obj, RpcMessageError> {
         let key: Key<32> = Key::from(&self.keypair[32..]);
         let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
         let verified_token = Paseto::<V4, Public>::try_verify(
@@ -1373,7 +1373,11 @@ impl RpcServer {
             debug!("Token player is not valid");
             return Err(RpcMessageError::PermissionDenied);
         };
-        let token_player = Objid::mk_id(token_player);
+        if token_player < i32::MIN as i64 || token_player > i32::MAX as i64 {
+            debug!("Token player is not a valid objid");
+            return Err(RpcMessageError::PermissionDenied);
+        }
+        let token_player = Obj::mk_id(token_player as i32);
         if let Some(objid) = objid {
             // Does the 'player' match objid? If not, reject it.
             if objid.ne(&token_player) {

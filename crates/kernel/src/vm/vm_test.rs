@@ -375,7 +375,7 @@ mod tests {
             "test",
             &mk_program(
                 vec![Imm(0.into()), Imm(1.into()), GetProp, Return, Done],
-                vec![v_obj(0), v_str("test_prop")],
+                vec![v_objid(0), v_str("test_prop")],
                 Names::new(64),
             ),
         )
@@ -426,7 +426,7 @@ mod tests {
                 Return,
                 Done,
             ],
-            vec![v_obj(0), v_str("test_return_verb"), v_empty_list()],
+            vec![v_objid(0), v_str("test_return_verb"), v_empty_list()],
             Names::new(64),
         );
         let mut state = test_db_with_verbs(&[
@@ -627,7 +627,7 @@ mod tests {
             session,
             builtin_registry,
             "test",
-            vec![v_objid(SYSTEM_OBJECT), v_obj(32)],
+            vec![v_obj(SYSTEM_OBJECT), v_objid(32)],
         );
 
         assert_eq!(result, Ok(v_int(0)));
@@ -1069,7 +1069,7 @@ mod tests {
           endwhile
           return object;
         "#,
-        v_obj(2);
+        v_objid(2);
         "labelled break"
     )]
     #[test_case(

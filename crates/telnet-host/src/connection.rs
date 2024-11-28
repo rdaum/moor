@@ -26,7 +26,7 @@ use moor_compiler::to_literal;
 use moor_values::model::ObjectRef;
 use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_values::util::parse_into_words;
-use moor_values::{Objid, Symbol, Variant};
+use moor_values::{Obj, Symbol, Variant};
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{
@@ -52,9 +52,9 @@ pub(crate) struct TelnetConnection {
     pub(crate) peer_addr: SocketAddr,
     /// The "handler" object, who is responsible for this connection, defaults to SYSTEM_OBJECT,
     /// but custom listeners can be set up to handle connections differently.
-    pub(crate) handler_object: Objid,
+    pub(crate) handler_object: Obj,
     /// The MOO connection object ID.
-    pub(crate) connection_oid: Objid,
+    pub(crate) connection_oid: Obj,
     pub(crate) client_id: Uuid,
     /// Current PASETO token.
     pub(crate) client_token: ClientToken,
@@ -169,7 +169,7 @@ impl TelnetConnection {
         narrative_sub: &mut Subscribe,
         broadcast_sub: &mut Subscribe,
         rpc_client: &mut RpcSendClient,
-    ) -> Result<(AuthToken, Objid, ConnectType), eyre::Error> {
+    ) -> Result<(AuthToken, Obj, ConnectType), eyre::Error> {
         debug!(client_id = ?self.client_id, "Entering auth loop");
         loop {
             select! {

@@ -19,7 +19,7 @@ use daumtils::PhantomUnsync;
 
 use moor_values::Var;
 use moor_values::NOTHING;
-use moor_values::{Objid, Symbol};
+use moor_values::{Obj, Symbol};
 
 use crate::vm::activation::{Activation, Frame};
 use moor_values::tasks::TaskId;
@@ -27,11 +27,11 @@ use moor_values::tasks::TaskId;
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
 pub struct Caller {
-    pub this: Objid,
+    pub this: Obj,
     pub verb_name: Symbol,
-    pub programmer: Objid,
-    pub definer: Objid,
-    pub player: Objid,
+    pub programmer: Obj,
+    pub definer: Obj,
+    pub player: Obj,
     pub line_number: usize,
 }
 
@@ -115,7 +115,7 @@ impl VMExecState {
     }
 
     /// Return the object that called the current activation.
-    pub(crate) fn caller(&self) -> Objid {
+    pub(crate) fn caller(&self) -> Obj {
         let stack_iter = self.stack.iter().rev();
 
         // Skip builtin-frames (for now?)
@@ -137,7 +137,7 @@ impl VMExecState {
     }
 
     /// Return the permissions of the caller of the current activation.
-    pub(crate) fn caller_perms(&self) -> Objid {
+    pub(crate) fn caller_perms(&self) -> Obj {
         // Filter out builtin frames, and then take the next one.
         let mut stack_iter = self.stack.iter().rev().filter(|a| !a.is_builtin_frame());
         // caller is the frame just before us.
@@ -151,19 +151,19 @@ impl VMExecState {
     /// Return the permissions of the current task, which is the "starting"
     /// permissions of the current task, but note that this can be modified by
     /// the `set_task_perms` built-in function.
-    pub(crate) fn task_perms(&self) -> Objid {
+    pub(crate) fn task_perms(&self) -> Obj {
         let stack_top = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
         stack_top.map(|a| a.permissions.clone()).unwrap_or(NOTHING)
     }
 
-    pub(crate) fn this(&self) -> Objid {
+    pub(crate) fn this(&self) -> Obj {
         let stack_top = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
         stack_top.map(|a| a.this.clone()).unwrap_or(NOTHING)
     }
 
     /// Update the permissions of the current task, as called by the `set_task_perms`
     /// built-in.
-    pub(crate) fn set_task_perms(&mut self, perms: Objid) {
+    pub(crate) fn set_task_perms(&mut self, perms: Obj) {
         // Copy the stack perms up to the last non-builtin. That is, make sure builtin-frames
         // get the permissions update, and the first non-builtin, too.
         for activation in self.stack.iter_mut().rev() {

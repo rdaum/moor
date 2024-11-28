@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use moor_compiler::{compile, Program};
 use moor_values::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
-use moor_values::{Objid, Symbol, Var};
+use moor_values::{Obj, Symbol, Var};
 
 use crate::config::Config;
 use crate::tasks::sessions::Session;
@@ -45,8 +45,8 @@ impl SchedulerClient {
     #[instrument(skip(self, session))]
     pub fn submit_command_task(
         &self,
-        handler_object: &Objid,
-        player: &Objid,
+        handler_object: &Obj,
+        player: &Obj,
         command: &str,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
@@ -75,12 +75,12 @@ impl SchedulerClient {
     #[allow(clippy::too_many_arguments)]
     pub fn submit_verb_task(
         &self,
-        player: &Objid,
+        player: &Obj,
         vloc: &ObjectRef,
         verb: Symbol,
         args: Vec<Var>,
         argstr: String,
-        perms: &Objid,
+        perms: &Obj,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
         trace!(?player, ?verb, ?args, "Verb submitting");
@@ -109,7 +109,7 @@ impl SchedulerClient {
     /// a new transaction.
     pub fn submit_requested_input(
         &self,
-        player: &Objid,
+        player: &Obj,
         input_request_id: Uuid,
         input: String,
     ) -> Result<(), SchedulerError> {
@@ -131,8 +131,8 @@ impl SchedulerClient {
     #[instrument(skip(self, session))]
     pub fn submit_out_of_band_task(
         &self,
-        handler_object: &Objid,
-        player: &Objid,
+        handler_object: &Obj,
+        player: &Obj,
         command: Vec<String>,
         argstr: String,
         session: Arc<dyn Session>,
@@ -159,8 +159,8 @@ impl SchedulerClient {
     #[instrument(skip(self, sessions))]
     pub fn submit_eval_task(
         &self,
-        player: &Objid,
-        perms: &Objid,
+        player: &Obj,
+        perms: &Obj,
         code: String,
         sessions: Arc<dyn Session>,
         config: Arc<Config>,
@@ -201,12 +201,12 @@ impl SchedulerClient {
 
     pub fn submit_verb_program(
         &self,
-        player: &Objid,
-        perms: &Objid,
+        player: &Obj,
+        perms: &Obj,
         obj: &ObjectRef,
         verb_name: Symbol,
         code: Vec<String>,
-    ) -> Result<(Objid, Symbol), SchedulerError> {
+    ) -> Result<(Obj, Symbol), SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitProgramVerb {
@@ -226,7 +226,7 @@ impl SchedulerClient {
 
     pub fn request_system_property(
         &self,
-        player: &Objid,
+        player: &Obj,
         obj: &ObjectRef,
         property: Symbol,
     ) -> Result<Var, SchedulerError> {
@@ -258,8 +258,8 @@ impl SchedulerClient {
 
     pub fn request_verbs(
         &self,
-        player: &Objid,
-        perms: &Objid,
+        player: &Obj,
+        perms: &Obj,
         obj: &ObjectRef,
     ) -> Result<VerbDefs, SchedulerError> {
         let (reply, receive) = oneshot::channel();
@@ -279,8 +279,8 @@ impl SchedulerClient {
 
     pub fn request_verb(
         &self,
-        player: &Objid,
-        perms: &Objid,
+        player: &Obj,
+        perms: &Obj,
         obj: &ObjectRef,
         verb: Symbol,
     ) -> Result<(VerbDef, Vec<String>), SchedulerError> {
@@ -302,8 +302,8 @@ impl SchedulerClient {
 
     pub fn request_properties(
         &self,
-        player: &Objid,
-        perms: &Objid,
+        player: &Obj,
+        perms: &Obj,
         obj: &ObjectRef,
     ) -> Result<Vec<(PropDef, PropPerms)>, SchedulerError> {
         let (reply, receive) = oneshot::channel();
@@ -323,8 +323,8 @@ impl SchedulerClient {
 
     pub fn request_property(
         &self,
-        player: &Objid,
-        perms: &Objid,
+        player: &Obj,
+        perms: &Obj,
         obj: &ObjectRef,
         property: Symbol,
     ) -> Result<(PropDef, PropPerms, Var), SchedulerError> {
@@ -344,7 +344,7 @@ impl SchedulerClient {
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
-    pub fn resolve_object(&self, player: Objid, obj: ObjectRef) -> Result<Var, SchedulerError> {
+    pub fn resolve_object(&self, player: Obj, obj: ObjectRef) -> Result<Var, SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::ResolveObject { player, obj, reply })
@@ -359,34 +359,34 @@ impl SchedulerClient {
 pub enum SchedulerClientMsg {
     /// Submit a command to be executed by the player.
     SubmitCommandTask {
-        handler_object: Objid,
-        player: Objid,
+        handler_object: Obj,
+        player: Obj,
         command: String,
         session: Arc<dyn Session>,
         reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },
     /// Submit a top-level verb (method) invocation to be executed on behalf of the player.
     SubmitVerbTask {
-        player: Objid,
+        player: Obj,
         vloc: ObjectRef,
         verb: Symbol,
         args: Vec<Var>,
         argstr: String,
-        perms: Objid,
+        perms: Obj,
         session: Arc<dyn Session>,
         reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },
     /// Submit input to a task that is waiting for it.
     SubmitTaskInput {
-        player: Objid,
+        player: Obj,
         input_request_id: Uuid,
         input: String,
         reply: oneshot::Sender<Result<(), SchedulerError>>,
     },
     /// Submit an out-of-band task to be executed
     SubmitOobTask {
-        handler_object: Objid,
-        player: Objid,
+        handler_object: Obj,
+        player: Obj,
         command: Vec<String>,
         argstr: String,
         session: Arc<dyn Session>,
@@ -394,62 +394,62 @@ pub enum SchedulerClientMsg {
     },
     /// Submit an eval task
     SubmitEvalTask {
-        player: Objid,
-        perms: Objid,
+        player: Obj,
+        perms: Obj,
         program: Program,
         sessions: Arc<dyn Session>,
         reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },
     /// Submit a request to program a verb
     SubmitProgramVerb {
-        player: Objid,
-        perms: Objid,
+        player: Obj,
+        perms: Obj,
         obj: ObjectRef,
         verb_name: Symbol,
         code: Vec<String>,
-        reply: oneshot::Sender<Result<(Objid, Symbol), SchedulerError>>,
+        reply: oneshot::Sender<Result<(Obj, Symbol), SchedulerError>>,
     },
     /// Request the value of a $property.
     /// (Used by the login process, unauthenticated)
     RequestSystemProperty {
-        player: Objid,
+        player: Obj,
         obj: ObjectRef,
         property: Symbol,
         reply: oneshot::Sender<Result<Var, SchedulerError>>,
     },
     /// Request the list of visible verbs on an object.
     RequestVerbs {
-        player: Objid,
-        perms: Objid,
+        player: Obj,
+        perms: Obj,
         obj: ObjectRef,
         reply: oneshot::Sender<Result<VerbDefs, SchedulerError>>,
     },
     /// Request the decompiled code of a verb along with its definition.
     RequestVerbCode {
-        player: Objid,
-        perms: Objid,
+        player: Obj,
+        perms: Obj,
         obj: ObjectRef,
         verb: Symbol,
         reply: oneshot::Sender<Result<(VerbDef, Vec<String>), SchedulerError>>,
     },
     /// Request the list of visible properties on an object.
     RequestProperties {
-        player: Objid,
-        perms: Objid,
+        player: Obj,
+        perms: Obj,
         obj: ObjectRef,
         reply: oneshot::Sender<Result<Vec<(PropDef, PropPerms)>, SchedulerError>>,
     },
     /// Request the description and contents of a property.
     RequestProperty {
-        player: Objid,
-        perms: Objid,
+        player: Obj,
+        perms: Obj,
         obj: ObjectRef,
         property: Symbol,
         reply: oneshot::Sender<Result<(PropDef, PropPerms, Var), SchedulerError>>,
     },
     /// Resolve an ObjectRef into a Var
     ResolveObject {
-        player: Objid,
+        player: Obj,
         obj: ObjectRef,
         reply: oneshot::Sender<Result<Var, SchedulerError>>,
     },

@@ -16,7 +16,7 @@ use binary_layout::{binary_layout, Field};
 use std::fmt::{Display, Formatter};
 
 use crate::util::BitEnum;
-use crate::var::{Objid, Symbol};
+use crate::var::{Obj, Symbol};
 use crate::{AsByteBuffer, DecodingError, EncodingError, NOTHING};
 use bincode::{Decode, Encode};
 use bytes::Bytes;
@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Serialize, Deserialize)]
 pub enum ObjectRef {
     /// An absolute numeric object reference (e.g. #1234)
-    Id(Objid),
+    Id(Obj),
     /// A system object reference (e.g. $foo) or $foo.bar.baz
     SysObj(Vec<Symbol>),
     /// A string to use with the match facilities to find an object in the player's environment
@@ -60,8 +60,8 @@ impl ObjectRef {
 
     pub fn parse_curie(s: &str) -> Option<ObjectRef> {
         if let Some(s) = s.strip_prefix("oid:") {
-            let id: i64 = s.parse().ok()?;
-            Some(ObjectRef::Id(Objid::mk_id(id)))
+            let id: i32 = s.parse().ok()?;
+            Some(ObjectRef::Id(Obj::mk_id(id)))
         } else if let Some(s) = s.strip_prefix("sysobj:") {
             let symbols = s.split('.').map(Symbol::mk).collect();
             Some(ObjectRef::SysObj(symbols))
@@ -125,9 +125,9 @@ impl Display for ObjAttr {
 }
 
 binary_layout!(objattrs_buf, LittleEndian, {
-    owner: Objid as i64,
-    parent: Objid as i64,
-    location: Objid as i64,
+    owner: Obj as i32,
+    parent: Obj as i32,
+    location: Obj as i32,
     flags: BitEnum<ObjFlag> as u16,
     name: [u8],
 });
@@ -161,9 +161,9 @@ impl ObjAttrs {
     }
 
     pub fn new(
-        owner: Objid,
-        parent: Objid,
-        location: Objid,
+        owner: Obj,
+        parent: Obj,
+        location: Obj,
         flags: BitEnum<ObjFlag>,
         name: &str,
     ) -> Self {
@@ -193,7 +193,7 @@ impl ObjAttrs {
         Self(Bytes::from(buf))
     }
 
-    pub fn owner(&self) -> Option<Objid> {
+    pub fn owner(&self) -> Option<Obj> {
         let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
         let oid = objattrs_view.owner().try_read().unwrap();
         if oid == NOTHING {
@@ -203,7 +203,7 @@ impl ObjAttrs {
         }
     }
 
-    pub fn set_owner(&mut self, o: Objid) -> &mut Self {
+    pub fn set_owner(&mut self, o: Obj) -> &mut Self {
         let mut buffer_as_vec = self.0.as_ref().to_vec();
         let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
         objattrs_view
@@ -214,7 +214,7 @@ impl ObjAttrs {
         self
     }
 
-    pub fn location(&self) -> Option<Objid> {
+    pub fn location(&self) -> Option<Obj> {
         let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
         let oid = objattrs_view.location().try_read().unwrap();
         if oid == NOTHING {
@@ -224,7 +224,7 @@ impl ObjAttrs {
         }
     }
 
-    pub fn set_location(&mut self, o: Objid) -> &mut Self {
+    pub fn set_location(&mut self, o: Obj) -> &mut Self {
         let mut buffer_as_vec = self.0.as_ref().to_vec();
         let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
         objattrs_view
@@ -235,7 +235,7 @@ impl ObjAttrs {
         self
     }
 
-    pub fn parent(&self) -> Option<Objid> {
+    pub fn parent(&self) -> Option<Obj> {
         let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
         let oid = objattrs_view.parent().try_read().unwrap();
         if oid == NOTHING {
@@ -245,7 +245,7 @@ impl ObjAttrs {
         }
     }
 
-    pub fn set_parent(&mut self, o: Objid) -> &mut Self {
+    pub fn set_parent(&mut self, o: Obj) -> &mut Self {
         let mut buffer_as_vec = self.0.as_ref().to_vec();
         let mut objattrs_view = objattrs_buf::View::new(&mut buffer_as_vec);
         objattrs_view

@@ -17,7 +17,7 @@ use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::Variant;
-use moor_values::{v_bool, v_list, v_none, v_objid, v_string};
+use moor_values::{v_bool, v_list, v_none, v_obj, v_string};
 use moor_values::{v_empty_list, List};
 use moor_values::{Sequence, Symbol};
 
@@ -61,7 +61,7 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         perms.push('c');
     }
 
-    Ok(Ret(v_list(&[v_objid(owner), v_string(perms)])))
+    Ok(Ret(v_list(&[v_obj(owner), v_string(perms)])))
 }
 bf_declare!(property_info, bf_property_info);
 

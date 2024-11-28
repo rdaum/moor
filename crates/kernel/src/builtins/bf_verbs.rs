@@ -34,10 +34,10 @@ use moor_values::model::{HasUuid, Named};
 use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_values::List;
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::Variant;
-use moor_values::{v_empty_list, v_list, v_none, v_objid, v_str, v_string, Var};
+use moor_values::{v_empty_list, v_list, v_none, v_obj, v_str, v_string, Var};
 use moor_values::{v_list_iter, Error};
 use moor_values::{AsByteBuffer, Sequence};
 
@@ -102,12 +102,12 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Join names into a single string, this is how MOO presents it.
     let verb_names = names.join(" ");
 
-    let result = v_list(&[v_objid(owner), v_string(perms_string), v_string(verb_names)]);
+    let result = v_list(&[v_obj(owner), v_string(perms_string), v_string(verb_names)]);
     Ok(Ret(result))
 }
 bf_declare!(verb_info, bf_verb_info);
 
-fn get_verbdef(obj: &Objid, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<VerbDef, BfErr> {
+fn get_verbdef(obj: &Obj, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<VerbDef, BfErr> {
     let verbspec_result = match verbspec.variant() {
         Variant::Str(verb_desc) => {
             let verb_desc = Symbol::mk_case_insensitive(verb_desc.as_string());

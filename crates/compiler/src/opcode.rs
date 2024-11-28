@@ -17,7 +17,7 @@ use crate::labels::{Label, Offset};
 use crate::names::Name;
 use bincode::{Decode, Encode};
 use moor_values::Error;
-use moor_values::Objid;
+use moor_values::Obj;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
 pub enum Op {
@@ -66,7 +66,7 @@ pub enum Op {
     ImmErr(Error),
     ImmInt(i32),
     ImmNone,
-    ImmObjid(Objid),
+    ImmObjid(Obj),
     In,
     IndexSet,
     Jump {

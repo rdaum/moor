@@ -25,16 +25,16 @@ use std::{
 };
 
 use eyre::{eyre, ContextCompat, WrapErr};
-use moor_values::Objid;
+use moor_values::Obj;
 
 use pretty_assertions::assert_eq;
 
 #[allow(dead_code)]
-pub const WIZARD: Objid = Objid::mk_id(3);
+pub const WIZARD: Obj = Obj::mk_id(3);
 #[allow(dead_code)]
-pub const PROGRAMMER: Objid = Objid::mk_id(4);
+pub const PROGRAMMER: Obj = Obj::mk_id(4);
 #[allow(dead_code)]
-pub const NONPROGRAMMER: Objid = Objid::mk_id(5);
+pub const NONPROGRAMMER: Obj = Obj::mk_id(5);
 
 #[allow(dead_code)]
 static LOGGING_INIT: Once = Once::new();
@@ -62,11 +62,11 @@ pub fn test_db_path() -> PathBuf {
 pub trait MootRunner {
     type Value: PartialEq + std::fmt::Debug;
 
-    fn eval<S: Into<String>>(&mut self, player: &Objid, command: S) -> eyre::Result<()>;
-    fn command<S: AsRef<str>>(&mut self, player: &Objid, command: S) -> eyre::Result<()>;
+    fn eval<S: Into<String>>(&mut self, player: &Obj, command: S) -> eyre::Result<()>;
+    fn command<S: AsRef<str>>(&mut self, player: &Obj, command: S) -> eyre::Result<()>;
 
-    fn read_line(&mut self, player: &Objid) -> eyre::Result<Option<String>>;
-    fn read_eval_result(&mut self, player: &Objid) -> eyre::Result<Option<Self::Value>>;
+    fn read_line(&mut self, player: &Obj) -> eyre::Result<Option<String>>;
+    fn read_eval_result(&mut self, player: &Obj) -> eyre::Result<Option<Self::Value>>;
 
     fn none(&self) -> Self::Value;
 }
@@ -89,24 +89,24 @@ impl From<char> for CommandKind {
 pub enum MootState<R: MootRunner> {
     Ready {
         runner: R,
-        player: Objid,
+        player: Obj,
     },
     ReadingCommand {
         runner: R,
-        player: Objid,
+        player: Obj,
         line_no: usize,
         command: String,
         command_kind: CommandKind,
     },
     ReadingEvalAssertion {
         runner: R,
-        player: Objid,
+        player: Obj,
         line_no: usize,
         expectation: String,
     },
 }
 impl<R: MootRunner> MootState<R> {
-    pub fn new(runner: R, player: Objid) -> Self {
+    pub fn new(runner: R, player: Obj) -> Self {
         MootState::Ready { runner, player }
     }
 
@@ -231,7 +231,7 @@ impl<R: MootRunner> MootState<R> {
         }
     }
 
-    fn player(s: &str) -> eyre::Result<Objid> {
+    fn player(s: &str) -> eyre::Result<Obj> {
         match s {
             "wizard" => Ok(WIZARD),
             "programmer" => Ok(PROGRAMMER),
@@ -242,7 +242,7 @@ impl<R: MootRunner> MootState<R> {
 
     fn execute_command(
         runner: &mut R,
-        player: &Objid,
+        player: &Obj,
         command: &str,
         command_kind: CommandKind,
         line_no: usize,
@@ -256,7 +256,7 @@ impl<R: MootRunner> MootState<R> {
 
     fn assert_eval_result(
         runner: &mut R,
-        player: &Objid,
+        player: &Obj,
         expectation: Option<&str>,
         line_no: usize, // for the assertion message
     ) -> eyre::Result<()> {
@@ -293,7 +293,7 @@ impl<R: MootRunner> MootState<R> {
 
     fn assert_raw_line(
         runner: &mut R,
-        player: Objid,
+        player: Obj,
         expectation: Option<&str>,
         line_no: usize,
     ) -> eyre::Result<()> {
@@ -410,7 +410,7 @@ impl MootClient {
 
 pub struct TelnetMootRunner {
     port: u16,
-    clients: HashMap<Objid, MootClient>,
+    clients: HashMap<Obj, MootClient>,
 }
 impl TelnetMootRunner {
     pub fn new(port: u16) -> Self {
@@ -420,7 +420,7 @@ impl TelnetMootRunner {
         }
     }
 
-    fn client(&mut self, player: &Objid) -> &mut MootClient {
+    fn client(&mut self, player: &Obj) -> &mut MootClient {
         self.clients.entry(player.clone()).or_insert_with(|| {
             let start = Instant::now();
             loop {
@@ -442,7 +442,7 @@ impl TelnetMootRunner {
         })
     }
 
-    fn resolve_response(&mut self, player: &Objid, response: String) -> eyre::Result<String> {
+    fn resolve_response(&mut self, player: &Obj, response: String) -> eyre::Result<String> {
         let client = self.client(player);
         // Resolve the response; for example, the test assertion may be `$object`; resolve it to the object's specific number.
         client.write_line(format!(
@@ -457,14 +457,14 @@ impl TelnetMootRunner {
 impl MootRunner for TelnetMootRunner {
     type Value = String;
 
-    fn eval<S: Into<String>>(&mut self, player: &Objid, command: S) -> eyre::Result<()> {
+    fn eval<S: Into<String>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command: String = command.into();
         self.client(player)
             .write_line(format!("; {} \"TelnetMootRunner::eval\";", command))
             .with_context(|| format!("TelnetMootRunner::eval({player}, {:?})", command))
     }
 
-    fn command<S: AsRef<str>>(&mut self, player: &Objid, command: S) -> eyre::Result<()> {
+    fn command<S: AsRef<str>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command: &str = command.as_ref();
         self.client(player)
             .write_line(command)
@@ -475,13 +475,13 @@ impl MootRunner for TelnetMootRunner {
         "0".to_string()
     }
 
-    fn read_line(&mut self, player: &Objid) -> eyre::Result<Option<String>> {
+    fn read_line(&mut self, player: &Obj) -> eyre::Result<Option<String>> {
         self.client(player)
             .read_line()
             .with_context(|| format!("TelnetMootRunner::read_line({player})"))
     }
 
-    fn read_eval_result(&mut self, player: &Objid) -> eyre::Result<Option<Self::Value>> {
+    fn read_eval_result(&mut self, player: &Obj) -> eyre::Result<Option<Self::Value>> {
         let raw = self
             .client(player)
             .read_line()

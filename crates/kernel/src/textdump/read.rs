@@ -21,8 +21,8 @@ use tracing::info;
 use moor_compiler::Label;
 use moor_values::model::CompileError;
 use moor_values::model::WorldStateError;
-use moor_values::Objid;
-use moor_values::{v_err, v_float, v_int, v_none, v_objid, v_str, Var, VarType};
+use moor_values::Obj;
+use moor_values::{v_err, v_float, v_int, v_none, v_obj, v_str, Var, VarType};
 use moor_values::{v_list, v_map, Error};
 
 use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
@@ -97,7 +97,7 @@ impl<R: Read> TextdumpReader<R> {
         };
         Ok(i)
     }
-    fn read_objid(&mut self) -> Result<Objid, TextdumpReaderError> {
+    fn read_objid(&mut self) -> Result<Obj, TextdumpReaderError> {
         let buf = self.read_next_line()?;
         let Ok(u) = buf.trim().parse() else {
             return Err(TextdumpReaderError::ParseError(format!(
@@ -105,7 +105,7 @@ impl<R: Read> TextdumpReader<R> {
                 buf
             )));
         };
-        Ok(Objid::mk_id(u))
+        Ok(Obj::mk_id(u))
     }
     fn read_float(&mut self) -> Result<f64, TextdumpReaderError> {
         let buf = self.read_next_line()?;
@@ -138,7 +138,7 @@ impl<R: Read> TextdumpReader<R> {
         let vtype: VarType = VarType::from_repr(t_num as u8).expect("Invalid var type");
         let v = match vtype {
             VarType::TYPE_INT => v_int(self.read_num()?),
-            VarType::TYPE_OBJ => v_objid(self.read_objid()?),
+            VarType::TYPE_OBJ => v_obj(self.read_objid()?),
             VarType::TYPE_STR => v_str(&self.read_string()?),
             VarType::TYPE_ERR => {
                 let e_num = self.read_num()?;
@@ -227,7 +227,7 @@ impl<R: Read> TextdumpReader<R> {
                 oid_str
             )));
         };
-        let oid = Objid::mk_id(oid);
+        let oid = Obj::mk_id(oid);
         let name = self.read_string()?;
         let _ohandles_string = self.read_string()?;
         let flags = self.read_num()? as u8;
@@ -273,7 +273,7 @@ impl<R: Read> TextdumpReader<R> {
 
     fn read_verb(&mut self) -> Result<Verb, TextdumpReaderError> {
         let header = self.read_string()?;
-        let (oid, verbnum): (i64, usize);
+        let (oid, verbnum): (i32, usize);
         scan!(header.bytes() => "#{}:{}", oid, verbnum);
 
         // Collect lines
@@ -287,7 +287,7 @@ impl<R: Read> TextdumpReader<R> {
         }
         let program = program_lines.join("\n");
         Ok(Verb {
-            objid: Objid::mk_id(oid),
+            objid: Obj::mk_id(oid),
             verbnum,
             program: Some(program),
         })

@@ -14,9 +14,9 @@
 
 use md5::Digest;
 use moor_compiler::{offset_for_builtin, to_literal};
-use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_values::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
 use moor_values::Variant;
-use moor_values::{v_bool, v_float, v_int, v_obj, v_str};
+use moor_values::{v_bool, v_float, v_int, v_objid, v_str};
 use moor_values::{AsByteBuffer, Sequence};
 
 use crate::bf_declare;
@@ -64,7 +64,7 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_int(*i))),
         Variant::Float(f) => Ok(Ret(v_int(*f as i64))),
-        Variant::Obj(o) => Ok(Ret(v_int(o.id()))),
+        Variant::Obj(o) => Ok(Ret(v_int(o.id().0 as i64))),
         Variant::Str(s) => {
             let i = s.as_string().as_str().parse::<f64>();
             match i {
@@ -83,20 +83,34 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
     match bf_args.args[0].variant() {
-        Variant::Int(i) => Ok(Ret(v_obj(*i))),
-        Variant::Float(f) => Ok(Ret(v_obj(*f as i64))),
+        Variant::Int(i) => {
+            let i = if *i < i32::MIN as i64 || *i > i32::MAX as i64 {
+                return Err(BfErr::Code(E_RANGE));
+            } else {
+                *i as i32
+            };
+            Ok(Ret(v_objid(i)))
+        }
+        Variant::Float(f) => {
+            let f = if *f < i32::MIN as f64 || *f > i32::MAX as f64 {
+                return Err(BfErr::Code(E_RANGE));
+            } else {
+                *f as i32
+            };
+            Ok(Ret(v_objid(f)))
+        }
         Variant::Str(s) if s.as_string().as_str().starts_with('#') => {
-            let i = s.as_string().as_str()[1..].parse::<i64>();
+            let i = s.as_string().as_str()[1..].parse::<i32>();
             match i {
-                Ok(i) => Ok(Ret(v_obj(i))),
-                Err(_) => Ok(Ret(v_obj(0))),
+                Ok(i) => Ok(Ret(v_objid(i))),
+                Err(_) => Ok(Ret(v_objid(0))),
             }
         }
         Variant::Str(s) => {
-            let i = s.as_string().as_str().parse::<i64>();
+            let i = s.as_string().as_str().parse::<i32>();
             match i {
-                Ok(i) => Ok(Ret(v_obj(i))),
-                Err(_) => Ok(Ret(v_obj(0))),
+                Ok(i) => Ok(Ret(v_objid(i))),
+                Err(_) => Ok(Ret(v_objid(0))),
             }
         }
         _ => Err(BfErr::Code(E_INVARG)),

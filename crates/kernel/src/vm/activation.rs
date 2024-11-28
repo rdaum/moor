@@ -28,9 +28,9 @@ use moor_values::model::VerbDef;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::util::BitEnum;
 use moor_values::NOTHING;
-use moor_values::{v_empty_list, v_int, v_objid, v_str, v_string, Var, VarType};
+use moor_values::{v_empty_list, v_int, v_obj, v_str, v_string, Var, VarType};
 use moor_values::{v_empty_str, Error};
-use moor_values::{v_list, Objid};
+use moor_values::{v_list, Obj};
 use moor_values::{AsByteBuffer, Symbol};
 
 use crate::vm::moo_frame::MooStackFrame;
@@ -50,9 +50,9 @@ pub(crate) struct Activation {
     /// running this activation.
     pub(crate) frame: Frame,
     /// The object that is the receiver of the current verb call.
-    pub(crate) this: Objid,
+    pub(crate) this: Obj,
     /// The object that is the 'player' role; that is, the active user of this task.
-    pub(crate) player: Objid,
+    pub(crate) player: Obj,
     /// The arguments to the verb or bf being called.
     pub(crate) args: Vec<Var>,
     /// The name of the verb that is currently being executed.
@@ -63,7 +63,7 @@ pub(crate) struct Activation {
     /// behalf-of in terms of permissions in the world.
     /// Set initially to verb owner ('programmer'). It is what set_task_perms() can override,
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
-    pub(crate) permissions: Objid,
+    pub(crate) permissions: Obj,
     /// The command that triggered this verb call, if any.
     pub(crate) command: Option<ParsedCommand>,
 }
@@ -89,11 +89,11 @@ impl Encode for Activation {
 impl Decode for Activation {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let frame = Frame::decode(decoder)?;
-        let this = Objid::decode(decoder)?;
-        let player = Objid::decode(decoder)?;
+        let this = Obj::decode(decoder)?;
+        let player = Obj::decode(decoder)?;
         let args = Vec::<Var>::decode(decoder)?;
         let verb_name = Symbol::decode(decoder)?;
-        let permissions = Objid::decode(decoder)?;
+        let permissions = Obj::decode(decoder)?;
         let command = Option::<ParsedCommand>::decode(decoder)?;
 
         let verbdef_bytes = Vec::<u8>::decode(decoder)?;
@@ -116,11 +116,11 @@ impl Decode for Activation {
 impl<'de> BorrowDecode<'de> for Activation {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let frame = Frame::decode(decoder)?;
-        let this = Objid::decode(decoder)?;
-        let player = Objid::decode(decoder)?;
+        let this = Obj::decode(decoder)?;
+        let player = Obj::decode(decoder)?;
         let args = Vec::<Var>::decode(decoder)?;
         let verb_name = Symbol::decode(decoder)?;
-        let permissions = Objid::decode(decoder)?;
+        let permissions = Obj::decode(decoder)?;
         let command = Option::<ParsedCommand>::decode(decoder)?;
 
         let verbdef_bytes = Vec::<u8>::decode(decoder)?;
@@ -235,17 +235,14 @@ impl Activation {
         let frame = MooStackFrame::new(program);
         let mut frame = Frame::Moo(frame);
         set_constants(&mut frame);
-        frame.set_global_variable(
-            GlobalName::this,
-            v_objid(verb_call_request.call.this.clone()),
-        );
+        frame.set_global_variable(GlobalName::this, v_obj(verb_call_request.call.this.clone()));
         frame.set_global_variable(
             GlobalName::player,
-            v_objid(verb_call_request.call.player.clone()),
+            v_obj(verb_call_request.call.player.clone()),
         );
         frame.set_global_variable(
             GlobalName::caller,
-            v_objid(verb_call_request.call.caller.clone()),
+            v_obj(verb_call_request.call.caller.clone()),
         );
         frame.set_global_variable(
             GlobalName::verb,
@@ -258,7 +255,7 @@ impl Activation {
             frame.set_global_variable(GlobalName::argstr, v_string(command.argstr.clone()));
             frame.set_global_variable(
                 GlobalName::dobj,
-                v_objid(command.dobj.clone().unwrap_or(NOTHING)),
+                v_obj(command.dobj.clone().unwrap_or(NOTHING)),
             );
             frame.set_global_variable(
                 GlobalName::dobjstr,
@@ -276,7 +273,7 @@ impl Activation {
             );
             frame.set_global_variable(
                 GlobalName::iobj,
-                v_objid(command.iobj.clone().unwrap_or(NOTHING)),
+                v_obj(command.iobj.clone().unwrap_or(NOTHING)),
             );
             frame.set_global_variable(
                 GlobalName::iobjstr,
@@ -290,10 +287,10 @@ impl Activation {
                 GlobalName::argstr,
                 v_string(verb_call_request.call.argstr.clone()),
             );
-            frame.set_global_variable(GlobalName::dobj, v_objid(NOTHING));
+            frame.set_global_variable(GlobalName::dobj, v_obj(NOTHING));
             frame.set_global_variable(GlobalName::dobjstr, v_str(""));
             frame.set_global_variable(GlobalName::prepstr, v_str(""));
-            frame.set_global_variable(GlobalName::iobj, v_objid(NOTHING));
+            frame.set_global_variable(GlobalName::iobj, v_obj(NOTHING));
             frame.set_global_variable(GlobalName::iobjstr, v_str(""));
         }
 
@@ -309,7 +306,7 @@ impl Activation {
         }
     }
 
-    pub fn for_eval(permissions: Objid, player: &Objid, program: Program) -> Self {
+    pub fn for_eval(permissions: Obj, player: &Obj, program: Program) -> Self {
         let verbdef = VerbDef::new(
             Uuid::new_v4(),
             NOTHING,
@@ -324,16 +321,16 @@ impl Activation {
         let mut frame = Frame::Moo(frame);
 
         set_constants(&mut frame);
-        frame.set_global_variable(GlobalName::this, v_objid(NOTHING));
-        frame.set_global_variable(GlobalName::player, v_objid(player.clone()));
-        frame.set_global_variable(GlobalName::caller, v_objid(player.clone()));
+        frame.set_global_variable(GlobalName::this, v_obj(NOTHING));
+        frame.set_global_variable(GlobalName::player, v_obj(player.clone()));
+        frame.set_global_variable(GlobalName::caller, v_obj(player.clone()));
         frame.set_global_variable(GlobalName::verb, v_empty_str());
         frame.set_global_variable(GlobalName::args, v_empty_list());
         frame.set_global_variable(GlobalName::argstr, v_empty_str());
-        frame.set_global_variable(GlobalName::dobj, v_objid(NOTHING));
+        frame.set_global_variable(GlobalName::dobj, v_obj(NOTHING));
         frame.set_global_variable(GlobalName::dobjstr, v_empty_str());
         frame.set_global_variable(GlobalName::prepstr, v_empty_str());
-        frame.set_global_variable(GlobalName::iobj, v_objid(NOTHING));
+        frame.set_global_variable(GlobalName::iobj, v_obj(NOTHING));
         frame.set_global_variable(GlobalName::iobjstr, v_empty_str());
 
         Self {
@@ -353,7 +350,7 @@ impl Activation {
         bf_name: Symbol,
         args: Vec<Var>,
         _verb_flags: BitEnum<VerbFlag>,
-        player: Objid,
+        player: Obj,
     ) -> Self {
         let verbdef = VerbDef::new(
             Uuid::new_v4(),
@@ -384,14 +381,14 @@ impl Activation {
         }
     }
 
-    pub fn verb_definer(&self) -> Objid {
+    pub fn verb_definer(&self) -> Obj {
         match self.frame {
             Frame::Bf(_) => NOTHING,
             _ => self.verbdef.location(),
         }
     }
 
-    pub fn verb_owner(&self) -> Objid {
+    pub fn verb_owner(&self) -> Obj {
         self.verbdef.owner()
     }
 }

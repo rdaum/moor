@@ -12,13 +12,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::Objid;
+use moor_values::Obj;
 use std::net::SocketAddr;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ListenersError {
     #[error("Failed to add listener {0:?} at {1}")]
-    AddListenerFailed(Objid, SocketAddr),
+    AddListenerFailed(Obj, SocketAddr),
     #[error("Failed to remove listener at {0}")]
     RemoveListenerFailed(SocketAddr),
     #[error("Failed to get listeners")]
@@ -32,9 +32,9 @@ pub struct ListenersClient {
 }
 
 pub enum ListenersMessage {
-    AddListener(Objid, SocketAddr),
+    AddListener(Obj, SocketAddr),
     RemoveListener(SocketAddr),
-    GetListeners(tokio::sync::oneshot::Sender<Vec<(Objid, SocketAddr)>>),
+    GetListeners(tokio::sync::oneshot::Sender<Vec<(Obj, SocketAddr)>>),
 }
 
 impl ListenersClient {
@@ -44,7 +44,7 @@ impl ListenersClient {
 
     pub async fn add_listener(
         &self,
-        handler: &Objid,
+        handler: &Obj,
         addr: SocketAddr,
     ) -> Result<(), ListenersError> {
         self.listeners_channel
@@ -62,7 +62,7 @@ impl ListenersClient {
         Ok(())
     }
 
-    pub async fn get_listeners(&self) -> Result<Vec<(Objid, SocketAddr)>, ListenersError> {
+    pub async fn get_listeners(&self) -> Result<Vec<(Obj, SocketAddr)>, ListenersError> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.listeners_channel
             .send(ListenersMessage::GetListeners(tx))

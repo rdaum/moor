@@ -27,7 +27,7 @@ use moor_values::tasks::NarrativeEvent;
 use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_values::Symbol;
 use moor_values::Variant;
-use moor_values::{v_bool, v_int, v_list, v_none, v_objid, v_str, v_string, Var};
+use moor_values::{v_bool, v_int, v_list, v_none, v_obj, v_str, v_string, Var};
 use moor_values::{v_list_iter, Error};
 
 use crate::bf_declare;
@@ -110,7 +110,7 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .connected_players()
             .unwrap()
             .iter()
-            .map(|p| v_objid(p.clone())),
+            .map(|p| v_obj(p.clone())),
     )))
 }
 bf_declare!(connected_players, bf_connected_players);
@@ -138,7 +138,7 @@ fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    Ok(Ret(v_objid(bf_args.caller_perms())))
+    Ok(Ret(v_obj(bf_args.caller_perms())))
 }
 bf_declare!(caller_perms, bf_caller_perms);
 
@@ -171,15 +171,15 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(callers.iter().map(|c| {
         let callers = vec![
             // this
-            v_objid(c.this.clone()),
+            v_obj(c.this.clone()),
             // verb name
             v_string(c.verb_name.to_string()),
             // 'programmer'
-            v_objid(c.programmer.clone()),
+            v_obj(c.programmer.clone()),
             // verb location
-            v_objid(c.definer.clone()),
+            v_obj(c.definer.clone()),
             // player
-            v_objid(c.player.clone()),
+            v_obj(c.player.clone()),
             // line number
             v_int(c.line_number as i64),
         ];
@@ -455,11 +455,11 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         };
         let x = v_none();
         let y = v_none();
-        let programmer = v_objid(task.permissions.clone());
-        let verb_loc = v_objid(task.verb_definer.clone());
+        let programmer = v_obj(task.permissions.clone());
+        let verb_loc = v_obj(task.verb_definer.clone());
         let verb_name = v_str(task.verb_name.as_str());
         let line = v_int(task.line_number as i64);
-        let this = v_objid(task.this.clone());
+        let this = v_obj(task.this.clone());
         v_list(&[
             task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this,
         ])
@@ -807,7 +807,7 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let listeners = listeners.iter().map(|listener| {
         let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
         v_list(&[
-            v_objid(listener.0.clone()),
+            v_obj(listener.0.clone()),
             v_int(listener.2 as i64),
             print_messages,
         ])

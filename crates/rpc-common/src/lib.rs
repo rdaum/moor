@@ -15,7 +15,7 @@
 use bincode::{Decode, Encode};
 use moor_values::model::ObjectRef;
 use moor_values::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
-use moor_values::{Objid, Symbol, Var};
+use moor_values::{Obj, Symbol, Var};
 use pem::PemError;
 use rusty_paseto::prelude::Key;
 use std::net::SocketAddr;
@@ -98,11 +98,11 @@ pub enum HostToDaemonMessage {
     /// Register the presence of this host's listeners with the daemon.
     /// Lets the daemon know about the listeners, and then respond to the host with any additional
     /// listeners that the daemon expects the host to start listening on.
-    RegisterHost(SystemTime, HostType, Vec<(Objid, SocketAddr)>),
+    RegisterHost(SystemTime, HostType, Vec<(Obj, SocketAddr)>),
     /// Unregister the presence of this host's listeners with the daemon.
     DetachHost(),
     /// Respond to a host ping request.
-    HostPong(SystemTime, HostType, Vec<(Objid, SocketAddr)>),
+    HostPong(SystemTime, HostType, Vec<(Obj, SocketAddr)>),
 }
 
 /// An RPC message sent from a host to the daemon on behalf of a client.
@@ -114,13 +114,13 @@ pub enum HostClientToDaemonMessage {
     RequestSysProp(ClientToken, ObjectRef, Symbol),
     /// Login using the words (e.g. "create player bob" or "connect player bob") and return an
     /// auth token and the object id of the player. None if the login failed.
-    LoginCommand(ClientToken, Objid, Vec<String>, bool /* attach? */),
+    LoginCommand(ClientToken, Obj, Vec<String>, bool /* attach? */),
     /// Attach to a previously-authenticated user, returning the object id of the player,
     /// and a client token -- or None if the auth token is not valid.
     /// If a ConnectType is specified, the user_connected verb will be called.
-    Attach(AuthToken, Option<ConnectType>, Objid, String),
+    Attach(AuthToken, Option<ConnectType>, Obj, String),
     /// Send a command to be executed.
-    Command(ClientToken, AuthToken, Objid, String),
+    Command(ClientToken, AuthToken, Obj, String),
     /// Return the (visible) verbs on the given object.
     Verbs(ClientToken, AuthToken, ObjectRef),
     /// Invoke the given verb on the given object.
@@ -134,13 +134,13 @@ pub enum HostClientToDaemonMessage {
     /// Respond to a request for input.
     RequestedInput(ClientToken, AuthToken, u128, String),
     /// Send an "out of band" command to be executed.
-    OutOfBand(ClientToken, AuthToken, Objid, String),
+    OutOfBand(ClientToken, AuthToken, Obj, String),
     /// Evaluate a MOO expression.
     Eval(ClientToken, AuthToken, String),
     /// Resolve an object reference into a Var
     Resolve(ClientToken, AuthToken, ObjectRef),
     /// Respond to a client ping request.
-    ClientPong(ClientToken, SystemTime, Objid, HostType, SocketAddr),
+    ClientPong(ClientToken, SystemTime, Obj, HostType, SocketAddr),
     /// We're done with this connection, buh-bye.
     Detach(ClientToken),
 }
@@ -168,14 +168,14 @@ pub enum ReplyResult {
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum VerbProgramResponse {
-    Success(Objid, String),
+    Success(Obj, String),
     Failure(VerbProgramError),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct VerbInfo {
-    pub location: Objid,
-    pub owner: Objid,
+    pub location: Obj,
+    pub owner: Obj,
     pub names: Vec<Symbol>,
     pub r: bool,
     pub w: bool,
@@ -186,10 +186,10 @@ pub struct VerbInfo {
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct PropInfo {
-    pub definer: Objid,
-    pub location: Objid,
+    pub definer: Obj,
+    pub location: Obj,
     pub name: Symbol,
-    pub owner: Objid,
+    pub owner: Obj,
     pub r: bool,
     pub w: bool,
     pub chown: bool,
@@ -208,10 +208,10 @@ pub enum DaemonToHostReply {
 /// HostClientToDaemonMessage.
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub enum DaemonToClientReply {
-    NewConnection(ClientToken, Objid),
+    NewConnection(ClientToken, Obj),
     SysPropValue(Option<Var>),
-    LoginResult(Option<(AuthToken, ConnectType, Objid)>),
-    AttachResult(Option<(ClientToken, Objid)>),
+    LoginResult(Option<(AuthToken, ConnectType, Obj)>),
+    AttachResult(Option<(ClientToken, Obj)>),
     CommandSubmitted(usize /* task id */),
     InputThanks,
     EvalResult(Var),
@@ -256,13 +256,13 @@ pub enum RpcMessageError {
 pub enum ClientEvent {
     /// An event has occurred in the narrative that the connections for the given object are
     /// expected to see.
-    Narrative(Objid, NarrativeEvent),
+    Narrative(Obj, NarrativeEvent),
     /// The server wants the client to prompt the user for input, and the task this session is
     /// attached to will suspend until the client sends an RPC with a `RequestedInput` message and
     /// the attached request id.
     RequestInput(u128),
     /// The system wants to send a message to the given object on its current active connections.
-    SystemMessage(Objid, String),
+    SystemMessage(Obj, String),
     /// The system wants to disconnect the given object from all its current active connections.
     Disconnect(),
     /// Task errors that should be sent to the client.
@@ -278,7 +278,7 @@ pub enum HostBroadcastEvent {
     /// the given port.
     /// Triggered from the `listen` builtin.
     Listen {
-        handler_object: Objid,
+        handler_object: Obj,
         host_type: HostType,
         port: u16,
         print_messages: bool,

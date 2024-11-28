@@ -18,7 +18,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use moor_values::tasks::NarrativeEvent;
-use moor_values::{Error, Objid, SYSTEM_OBJECT};
+use moor_values::{Error, Obj, SYSTEM_OBJECT};
 
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.
@@ -68,19 +68,19 @@ pub trait Session: Send + Sync {
     /// The task is committed and suspended until the client sends input to `submit_requested_input`
     /// with the given `input_request_id` argument, at which time the task is resumed in a new
     /// transaction.
-    fn request_input(&self, player: Objid, input_request_id: Uuid) -> Result<(), SessionError>;
+    fn request_input(&self, player: Obj, input_request_id: Uuid) -> Result<(), SessionError>;
 
     /// Spool output to the given player's connection.
     /// The actual output will not be sent until the task commits, and will be thrown out on
     /// rollback.
-    fn send_event(&self, player: Objid, event: NarrativeEvent) -> Result<(), SessionError>;
+    fn send_event(&self, player: Obj, event: NarrativeEvent) -> Result<(), SessionError>;
 
     /// Send non-spooled output to the given player's connection
     /// Examples of the kinds of messages that would be sent here are state-independent messages
     /// like login/logout messages, system error messages ("task aborted") or messages that are not
     /// generally co-incident with the mutable state of the world and that need not be logged
     /// across multiple connections, etc.
-    fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError>;
+    fn send_system_msg(&self, player: Obj, msg: &str) -> Result<(), SessionError>;
 
     /// Let the player know that the server is shutting down, with an optional message.
     fn notify_shutdown(&self, msg: Option<String>) -> Result<(), SessionError>;
@@ -88,19 +88,19 @@ pub trait Session: Send + Sync {
     /// The 'name' of the *most recent* connection associated with the player.
     /// In a networked environment this is the hostname.
     /// LambdaMOO cores tend to expect this to be a resolved DNS hostname.
-    fn connection_name(&self, player: Objid) -> Result<String, SessionError>;
+    fn connection_name(&self, player: Obj) -> Result<String, SessionError>;
 
     /// Disconnect the given player's connection.
-    fn disconnect(&self, player: Objid) -> Result<(), SessionError>;
+    fn disconnect(&self, player: Obj) -> Result<(), SessionError>;
 
     /// Return the list of other currently-connected players.
-    fn connected_players(&self) -> Result<Vec<Objid>, SessionError>;
+    fn connected_players(&self) -> Result<Vec<Obj>, SessionError>;
 
     /// Return how many seconds the given player has been connected.
-    fn connected_seconds(&self, player: Objid) -> Result<f64, SessionError>;
+    fn connected_seconds(&self, player: Obj) -> Result<f64, SessionError>;
 
     /// Return how many seconds the given player has been idle (no tasks submitted).
-    fn idle_seconds(&self, player: Objid) -> Result<f64, SessionError>;
+    fn idle_seconds(&self, player: Obj) -> Result<f64, SessionError>;
 }
 
 /// A handle back to the controlling process (e.g. RpcServer) for handling system level events,
@@ -113,7 +113,7 @@ pub trait SystemControl: Send + Sync {
     /// Ask hosts of `host_type` to listen on the given port, with the given handler object.
     fn listen(
         &self,
-        handler_object: Objid,
+        handler_object: Obj,
         host_type: &str,
         port: u16,
         print_messages: bool,
@@ -123,21 +123,21 @@ pub trait SystemControl: Send + Sync {
     fn unlisten(&self, port: u16, host_type: &str) -> Result<(), Error>;
 
     /// Return the set of listeners, their type, and the port they are listening on.
-    fn listeners(&self) -> Result<Vec<(Objid, String, u16, bool)>, Error>;
+    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error>;
 }
 
 /// A factory for creating background sessions, usually on task resumption on server restart.
 pub trait SessionFactory {
     fn mk_background_session(
         self: Arc<Self>,
-        player: &Objid,
+        player: &Obj,
     ) -> Result<Arc<dyn Session>, SessionError>;
 }
 
 #[derive(Debug, Error)]
 pub enum SessionError {
     #[error("No connection for player {0}")]
-    NoConnectionForPlayer(Objid),
+    NoConnectionForPlayer(Obj),
     #[error("Could not deliver session message")]
     DeliveryError,
     #[error("Could not commit session: {0}")]
@@ -173,18 +173,18 @@ impl Session for NoopClientSession {
         Ok(self.clone())
     }
 
-    fn request_input(&self, player: Objid, _input_request_id: Uuid) -> Result<(), SessionError> {
+    fn request_input(&self, player: Obj, _input_request_id: Uuid) -> Result<(), SessionError> {
         panic!(
             "NoopClientSession::request_input called for player {}",
             player
         )
     }
 
-    fn send_event(&self, _player: Objid, _msg: NarrativeEvent) -> Result<(), SessionError> {
+    fn send_event(&self, _player: Obj, _msg: NarrativeEvent) -> Result<(), SessionError> {
         Ok(())
     }
 
-    fn send_system_msg(&self, _player: Objid, _msg: &str) -> Result<(), SessionError> {
+    fn send_system_msg(&self, _player: Obj, _msg: &str) -> Result<(), SessionError> {
         Ok(())
     }
 
@@ -192,21 +192,21 @@ impl Session for NoopClientSession {
         Ok(())
     }
 
-    fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
+    fn connection_name(&self, player: Obj) -> Result<String, SessionError> {
         Ok(format!("player-{}", player))
     }
-    fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
+    fn disconnect(&self, _player: Obj) -> Result<(), SessionError> {
         Ok(())
     }
-    fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
+    fn connected_players(&self) -> Result<Vec<Obj>, SessionError> {
         Ok(vec![])
     }
 
-    fn connected_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
+    fn connected_seconds(&self, _player: Obj) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 
-    fn idle_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
+    fn idle_seconds(&self, _player: Obj) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 }
@@ -221,7 +221,7 @@ impl SystemControl for NoopSystemControl {
 
     fn listen(
         &self,
-        _handler_object: Objid,
+        _handler_object: Obj,
         _host_type: &str,
         _port: u16,
         _print_messages: bool,
@@ -233,7 +233,7 @@ impl SystemControl for NoopSystemControl {
         Ok(())
     }
 
-    fn listeners(&self) -> Result<Vec<(Objid, String, u16, bool)>, Error> {
+    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error> {
         Ok(vec![])
     }
 }
@@ -300,19 +300,19 @@ impl Session for MockClientSession {
         }))
     }
 
-    fn request_input(&self, player: Objid, _input_request_id: Uuid) -> Result<(), SessionError> {
+    fn request_input(&self, player: Obj, _input_request_id: Uuid) -> Result<(), SessionError> {
         panic!(
             "MockClientSession::request_input called for player {}",
             player
         )
     }
 
-    fn send_event(&self, _player: Objid, msg: NarrativeEvent) -> Result<(), SessionError> {
+    fn send_event(&self, _player: Obj, msg: NarrativeEvent) -> Result<(), SessionError> {
         self.inner.write().unwrap().received.push(msg);
         Ok(())
     }
 
-    fn send_system_msg(&self, player: Objid, msg: &str) -> Result<(), SessionError> {
+    fn send_system_msg(&self, player: Obj, msg: &str) -> Result<(), SessionError> {
         self.system
             .write()
             .unwrap()
@@ -330,25 +330,25 @@ impl Session for MockClientSession {
         Ok(())
     }
 
-    fn connection_name(&self, player: Objid) -> Result<String, SessionError> {
+    fn connection_name(&self, player: Obj) -> Result<String, SessionError> {
         Ok(format!("player-{}", player))
     }
 
-    fn disconnect(&self, _player: Objid) -> Result<(), SessionError> {
+    fn disconnect(&self, _player: Obj) -> Result<(), SessionError> {
         let mut system = self.system.write().unwrap();
         system.push(String::from("disconnect"));
         Ok(())
     }
 
-    fn connected_players(&self) -> Result<Vec<Objid>, SessionError> {
+    fn connected_players(&self) -> Result<Vec<Obj>, SessionError> {
         Ok(vec![])
     }
 
-    fn connected_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
+    fn connected_seconds(&self, _player: Obj) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 
-    fn idle_seconds(&self, _player: Objid) -> Result<f64, SessionError> {
+    fn idle_seconds(&self, _player: Obj) -> Result<f64, SessionError> {
         Ok(0.0)
     }
 }
@@ -362,7 +362,7 @@ impl SystemControl for MockClientSession {
 
     fn listen(
         &self,
-        _handler_object: Objid,
+        _handler_object: Obj,
         _host_type: &str,
         _port: u16,
         _print_messages: bool,
@@ -378,7 +378,7 @@ impl SystemControl for MockClientSession {
         Ok(())
     }
 
-    fn listeners(&self) -> Result<Vec<(Objid, String, u16, bool)>, Error> {
+    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error> {
         Ok(vec![(SYSTEM_OBJECT, String::from("tcp"), 8888, true)])
     }
 }

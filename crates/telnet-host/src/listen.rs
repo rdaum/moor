@@ -16,7 +16,7 @@ use crate::connection::TelnetConnection;
 use eyre::bail;
 use futures_util::stream::SplitSink;
 use futures_util::StreamExt;
-use moor_values::Objid;
+use moor_values::Obj;
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{ListenersClient, ListenersMessage};
 use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
@@ -160,12 +160,12 @@ impl Listeners {
 }
 
 pub struct Listener {
-    pub(crate) handler_object: Objid,
+    pub(crate) handler_object: Obj,
     pub(crate) terminate: tokio::sync::watch::Sender<bool>,
 }
 
 impl Listener {
-    pub fn new(terminate: tokio::sync::watch::Sender<bool>, handler_object: Objid) -> Self {
+    pub fn new(terminate: tokio::sync::watch::Sender<bool>, handler_object: Obj) -> Self {
         Self {
             handler_object,
             terminate,
@@ -176,7 +176,7 @@ impl Listener {
         zmq_ctx: tmq::Context,
         rpc_address: String,
         events_address: String,
-        handler_object: Objid,
+        handler_object: Obj,
         kill_switch: Arc<AtomicBool>,
         listener_port: u16,
         stream: TcpStream,

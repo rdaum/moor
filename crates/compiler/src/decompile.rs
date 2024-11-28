@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::{v_err, v_int, v_none, v_objid, Var};
+use moor_values::{v_err, v_int, v_none, v_obj, Var};
 use moor_values::{v_float, Variant};
 use std::collections::{HashMap, VecDeque};
 
@@ -920,7 +920,7 @@ impl Decompile {
                 self.push_expr(Expr::Value(v_err(e)));
             }
             Op::ImmObjid(oid) => {
-                self.push_expr(Expr::Value(v_objid(oid)));
+                self.push_expr(Expr::Value(v_obj(oid)));
             }
             Op::BeginScope {
                 num_bindings,

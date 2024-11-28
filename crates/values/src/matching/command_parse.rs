@@ -19,7 +19,7 @@ use bincode::{Decode, Encode};
 use crate::model::WorldStateError;
 use crate::model::{PrepSpec, Preposition};
 use crate::util;
-use crate::Objid;
+use crate::Obj;
 use crate::{v_str, Var};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
@@ -29,13 +29,13 @@ pub struct ParsedCommand {
     pub args: Vec<Var>,
 
     pub dobjstr: Option<String>,
-    pub dobj: Option<Objid>,
+    pub dobj: Option<Obj>,
 
     pub prepstr: Option<String>,
     pub prep: PrepSpec,
 
     pub iobjstr: Option<String>,
-    pub iobj: Option<Objid>,
+    pub iobj: Option<Obj>,
 }
 
 /// Match a preposition for the form used by set_verb_args and friends, which means it must support
@@ -81,7 +81,7 @@ fn seek_preposition(words: &[String]) -> (Option<(usize, String)>, PrepSpec) {
 }
 
 pub trait ParseMatcher {
-    fn match_object(&self, name: &str) -> Result<Option<Objid>, WorldStateError>;
+    fn match_object(&self, name: &str) -> Result<Option<Obj>, WorldStateError>;
 }
 
 #[derive(thiserror::Error, Debug, Clone, Decode, Encode)]
@@ -227,10 +227,10 @@ mod tests {
 
     struct SimpleParseMatcher {}
     impl ParseMatcher for SimpleParseMatcher {
-        fn match_object(&self, name: &str) -> Result<Option<Objid>, WorldStateError> {
+        fn match_object(&self, name: &str) -> Result<Option<Obj>, WorldStateError> {
             Ok(match name {
-                "obj" => Some(Objid::mk_id(1)),
-                "player" => Some(Objid::mk_id(2)),
+                "obj" => Some(Obj::mk_id(1)),
+                "player" => Some(Obj::mk_id(2)),
                 _ => None,
             })
         }
@@ -243,7 +243,7 @@ mod tests {
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "look");
         assert_eq!(parsed.dobjstr, Some("obj".to_string()));
-        assert_eq!(parsed.dobj, Some(Objid::mk_id(1)));
+        assert_eq!(parsed.dobj, Some(Obj::mk_id(1)));
         assert_eq!(parsed.prepstr, None);
         assert_eq!(parsed.iobjstr, None);
         assert_eq!(parsed.iobj, None);
@@ -277,11 +277,11 @@ mod tests {
         let parsed = parse_command(command, SimpleParseMatcher {}).unwrap();
         assert_eq!(parsed.verb, "give");
         assert_eq!(parsed.dobjstr, Some("obj".to_string()));
-        assert_eq!(parsed.dobj, Some(Objid::mk_id(1)));
+        assert_eq!(parsed.dobj, Some(Obj::mk_id(1)));
         assert_eq!(parsed.prepstr, Some("to".to_string()));
         assert_eq!(parsed.prep, PrepSpec::Other(Preposition::AtTo));
         assert_eq!(parsed.iobjstr, Some("player".to_string()));
-        assert_eq!(parsed.iobj, Some(Objid::mk_id(2)));
+        assert_eq!(parsed.iobj, Some(Obj::mk_id(2)));
         assert_eq!(
             parsed.args,
             vec![v_str("obj"), v_str("to"), v_str("player")]

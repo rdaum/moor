@@ -24,7 +24,7 @@ pub use var::{
     v_map, v_none, v_obj, v_objid, v_str, v_string, Associative, ErrorPack, IndexMode, List, Map,
     Sequence, Str, Var, Variant, AMBIGUOUS, FAILED_MATCH, NOTHING, SYSTEM_OBJECT,
 };
-pub use var::{Error, Objid, Symbol, VarType};
+pub use var::{Error, Obj, Symbol, VarType};
 
 mod encode;
 pub mod matching;

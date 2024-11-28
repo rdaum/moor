@@ -16,48 +16,48 @@ use std::collections::{HashMap, HashSet};
 
 use crate::model::{ObjSet, ValSet};
 use crate::model::{ObjectRef, WorldStateError};
-use crate::Objid;
+use crate::Obj;
 use crate::NOTHING;
 
 use crate::matching::match_env::MatchEnvironment;
 
-pub const MOCK_PLAYER: Objid = Objid::mk_id(3);
-pub const MOCK_ROOM1: Objid = Objid::mk_id(1);
-pub const MOCK_ROOM2: Objid = Objid::mk_id(2);
-pub const MOCK_THING1: Objid = Objid::mk_id(4);
-pub const MOCK_THING2: Objid = Objid::mk_id(5);
-pub const MOCK_THING3: Objid = Objid::mk_id(6);
+pub const MOCK_PLAYER: Obj = Obj::mk_id(3);
+pub const MOCK_ROOM1: Obj = Obj::mk_id(1);
+pub const MOCK_ROOM2: Obj = Obj::mk_id(2);
+pub const MOCK_THING1: Obj = Obj::mk_id(4);
+pub const MOCK_THING2: Obj = Obj::mk_id(5);
+pub const MOCK_THING3: Obj = Obj::mk_id(6);
 
 pub struct MockObject {
-    pub location: Objid,
-    pub contents: HashSet<Objid>,
+    pub location: Obj,
+    pub contents: HashSet<Obj>,
     pub names: Vec<String>,
 }
 
 #[derive(Default)]
 pub struct MockMatchEnv {
-    objects: HashMap<Objid, MockObject>,
+    objects: HashMap<Obj, MockObject>,
 }
 
 impl MockMatchEnv {
-    pub fn new(objects: HashMap<Objid, MockObject>) -> Self {
+    pub fn new(objects: HashMap<Obj, MockObject>) -> Self {
         MockMatchEnv { objects }
     }
 }
 
 impl MatchEnvironment for MockMatchEnv {
-    fn obj_valid(&self, oid: &Objid) -> Result<bool, WorldStateError> {
+    fn obj_valid(&self, oid: &Obj) -> Result<bool, WorldStateError> {
         Ok(self.objects.contains_key(oid))
     }
 
-    fn get_names(&self, oid: &Objid) -> Result<Vec<String>, WorldStateError> {
+    fn get_names(&self, oid: &Obj) -> Result<Vec<String>, WorldStateError> {
         Ok(self
             .objects
             .get(oid)
             .map_or_else(Vec::new, |o| o.names.clone()))
     }
 
-    fn get_surroundings(&self, player: &Objid) -> Result<ObjSet, WorldStateError> {
+    fn get_surroundings(&self, player: &Obj) -> Result<ObjSet, WorldStateError> {
         let mut result = Vec::new();
         if let Some(player_obj) = self.objects.get(player) {
             result.push(MOCK_PLAYER);
@@ -71,7 +71,7 @@ impl MatchEnvironment for MockMatchEnv {
         Ok(ObjSet::from_items(&result))
     }
 
-    fn location_of(&self, oid: &Objid) -> Result<Objid, WorldStateError> {
+    fn location_of(&self, oid: &Obj) -> Result<Obj, WorldStateError> {
         self.objects
             .get(oid)
             .map(|o| o.location.clone())
@@ -81,8 +81,8 @@ impl MatchEnvironment for MockMatchEnv {
 
 fn create_mock_object(
     env: &mut MockMatchEnv,
-    oid: Objid,
-    location: Objid,
+    oid: Obj,
+    location: Obj,
     contents: ObjSet,
     names: Vec<String>,
 ) {

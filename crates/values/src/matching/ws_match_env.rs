@@ -15,34 +15,34 @@
 use crate::model::ObjSet;
 use crate::model::WorldState;
 use crate::model::WorldStateError;
-use crate::Objid;
+use crate::Obj;
 
 use crate::matching::match_env::MatchEnvironment;
 
 /// A "match environment" which matches out of the current DB world state.
 pub struct WsMatchEnv<'a> {
     pub(crate) ws: &'a dyn WorldState,
-    pub(crate) perms: Objid,
+    pub(crate) perms: Obj,
 }
 
 impl<'a> WsMatchEnv<'a> {
-    pub fn new(ws: &'a dyn WorldState, perms: Objid) -> Self {
+    pub fn new(ws: &'a dyn WorldState, perms: Obj) -> Self {
         Self { ws, perms }
     }
 }
 impl<'a> MatchEnvironment for WsMatchEnv<'a> {
-    fn obj_valid(&self, oid: &Objid) -> Result<bool, WorldStateError> {
+    fn obj_valid(&self, oid: &Obj) -> Result<bool, WorldStateError> {
         self.ws.valid(oid)
     }
 
-    fn get_names(&self, oid: &Objid) -> Result<Vec<String>, WorldStateError> {
+    fn get_names(&self, oid: &Obj) -> Result<Vec<String>, WorldStateError> {
         let mut names = self.ws.names_of(&self.perms, oid)?;
         let mut object_names = vec![names.0];
         object_names.append(&mut names.1);
         Ok(object_names)
     }
 
-    fn get_surroundings(&self, player: &Objid) -> Result<ObjSet, WorldStateError> {
+    fn get_surroundings(&self, player: &Obj) -> Result<ObjSet, WorldStateError> {
         let location = self.ws.location_of(&self.perms, player)?;
         let surroundings = self
             .ws
@@ -52,7 +52,7 @@ impl<'a> MatchEnvironment for WsMatchEnv<'a> {
         Ok(surroundings)
     }
 
-    fn location_of(&self, player: &Objid) -> Result<Objid, WorldStateError> {
+    fn location_of(&self, player: &Obj) -> Result<Obj, WorldStateError> {
         self.ws.location_of(&self.perms, player)
     }
 }

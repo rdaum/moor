@@ -13,6 +13,7 @@
 //
 
 use lazy_static::lazy_static;
+use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::debug;
@@ -28,8 +29,8 @@ use moor_values::model::WorldStateError;
 
 use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_TYPE, E_VARNF};
 use moor_values::{
-    v_bool, v_empty_list, v_empty_map, v_err, v_float, v_int, v_list, v_none, v_obj, v_objid,
-    IndexMode, Sequence,
+    v_bool, v_empty_list, v_empty_map, v_err, v_float, v_int, v_list, v_none, v_obj, IndexMode,
+    Obj, Sequence,
 };
 use moor_values::{Symbol, VarType};
 use moor_values::{Variant, SYSTEM_OBJECT};
@@ -236,7 +237,7 @@ pub fn moo_frame_execute(
 
                                 continue;
                             }
-                            v_obj(from_o.id() + 1)
+                            v_obj(from_o.clone().add(Obj::mk_id(1)))
                         }
                         (_, _) => {
                             f.pop();
@@ -270,7 +271,7 @@ pub fn moo_frame_execute(
                 f.push(v_int(*val as i64));
             }
             Op::ImmObjid(val) => {
-                f.push(v_objid(val.clone()));
+                f.push(v_obj(val.clone()));
             }
             Op::ImmErr(val) => {
                 f.push(v_err(*val));

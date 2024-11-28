@@ -98,7 +98,7 @@ impl Var {
 
 #[cfg(test)]
 mod tests {
-    use crate::var::var::{v_err, v_float, v_int, v_list, v_obj, v_str};
+    use crate::var::var::{v_err, v_float, v_int, v_list, v_objid, v_str};
     use crate::var::Error;
     use crate::var::Error::{E_RANGE, E_TYPE};
 
@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(v_str("a"), v_str("a"));
         assert_eq!(v_str("a"), v_str("A"));
         assert_eq!(v_list(&[v_int(1), v_int(2)]), v_list(&[v_int(1), v_int(2)]));
-        assert_eq!(v_obj(1), v_obj(1));
+        assert_eq!(v_objid(1), v_objid(1));
         assert_eq!(v_err(E_TYPE), v_err(E_TYPE));
     }
 
@@ -179,7 +179,7 @@ mod tests {
         assert_ne!(v_float(1.), v_float(2.));
         assert_ne!(v_str("a"), v_str("b"));
         assert_ne!(v_list(&[v_int(1), v_int(2)]), v_list(&[v_int(1), v_int(3)]));
-        assert_ne!(v_obj(1), v_obj(2));
+        assert_ne!(v_objid(1), v_objid(2));
         assert_ne!(v_err(E_TYPE), v_err(E_RANGE));
     }
 
@@ -188,7 +188,7 @@ mod tests {
         assert!(v_int(1) < v_int(2));
         assert!(v_float(1.) < v_float(2.));
         assert!(v_str("a") < v_str("b"));
-        assert!(v_obj(1) < v_obj(2));
+        assert!(v_objid(1) < v_objid(2));
         assert!(v_err(E_TYPE) < v_err(E_RANGE));
     }
 
@@ -197,7 +197,7 @@ mod tests {
         assert!(v_int(1) <= v_int(2));
         assert!(v_float(1.) <= v_float(2.));
         assert!(v_str("a") <= v_str("b"));
-        assert!(v_obj(1) <= v_obj(2));
+        assert!(v_objid(1) <= v_objid(2));
         assert!(v_err(E_TYPE) <= v_err(E_RANGE));
     }
 
@@ -206,7 +206,7 @@ mod tests {
         assert!(v_int(2) > v_int(1));
         assert!(v_float(2.) > v_float(1.));
         assert!(v_str("b") > v_str("a"));
-        assert!(v_obj(2) > v_obj(1));
+        assert!(v_objid(2) > v_objid(1));
         assert!(v_err(E_RANGE) > v_err(E_TYPE));
     }
 
@@ -215,7 +215,7 @@ mod tests {
         assert!(v_int(2) >= v_int(1));
         assert!(v_float(2.) >= v_float(1.));
         assert!(v_str("b") >= v_str("a"));
-        assert!(v_obj(2) >= v_obj(1));
+        assert!(v_objid(2) >= v_objid(1));
         assert!(v_err(E_RANGE) >= v_err(E_TYPE));
     }
 }

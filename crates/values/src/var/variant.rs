@@ -15,7 +15,7 @@
 use crate::var::list::List;
 use crate::var::Associative;
 use crate::var::{map, string, Sequence};
-use crate::var::{Error, Objid};
+use crate::var::{Error, Obj};
 use bincode::{Decode, Encode};
 use decorum::R64;
 use num_traits::ToPrimitive;
@@ -27,7 +27,7 @@ use std::hash::{Hash, Hasher};
 #[derive(Clone, Encode, Decode)]
 pub enum Variant {
     None,
-    Obj(Objid),
+    Obj(Obj),
     Int(i64),
     Float(f64),
     List(List),

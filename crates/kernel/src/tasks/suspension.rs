@@ -23,7 +23,7 @@ use bincode::{BorrowDecode, Decode, Encode};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use moor_values::{Objid, Var};
+use moor_values::{Obj, Var};
 
 use crate::tasks::sessions::{NoopClientSession, Session, SessionFactory};
 use crate::tasks::task::Task;
@@ -176,7 +176,7 @@ impl SuspensionQ {
     pub(crate) fn pull_task_for_input(
         &mut self,
         input_request_id: Uuid,
-        player: &Objid,
+        player: &Obj,
     ) -> Option<SuspendedTask> {
         let (task_id, perms) = self.tasks.iter().find_map(|(task_id, sr)| {
             if let WakeCondition::Input(request_id) = &sr.wake_condition {
@@ -233,7 +233,7 @@ impl SuspensionQ {
 
     /// Check if the task is suspended, and if so, return its permissions.
     /// If `filter_input` is true, filter out WaitingInput tasks.
-    pub(crate) fn perms_check(&self, task_id: TaskId, filter_input: bool) -> Option<Objid> {
+    pub(crate) fn perms_check(&self, task_id: TaskId, filter_input: bool) -> Option<Obj> {
         let sr = self.tasks.get(&task_id)?;
         if filter_input {
             if let WakeCondition::Input(_) = sr.wake_condition {
@@ -244,7 +244,7 @@ impl SuspensionQ {
     }
 
     /// Remove all non-background tasks for the given player.
-    pub(crate) fn prune_foreground_tasks(&mut self, player: &Objid) {
+    pub(crate) fn prune_foreground_tasks(&mut self, player: &Obj) {
         let to_remove = self
             .tasks
             .iter()

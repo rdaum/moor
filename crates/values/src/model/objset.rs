@@ -15,7 +15,7 @@
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::ValSet;
 use crate::AsByteBuffer;
-use crate::Objid;
+use crate::Obj;
 use bytes::BufMut;
 use bytes::Bytes;
 use itertools::Itertools;
@@ -23,6 +23,8 @@ use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};
+
+// TODO: this won't work for non-objid objects
 
 lazy_static! {
     static ref EMPTY_OBJSET: ObjSet = ObjSet(Bytes::new());
@@ -78,7 +80,7 @@ pub struct ObjSetIter {
 }
 
 impl Iterator for ObjSetIter {
-    type Item = Objid;
+    type Item = Obj;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.buffer.is_empty() {
@@ -88,22 +90,22 @@ impl Iterator for ObjSetIter {
             return None;
         }
 
-        let oid = i64::from_le_bytes(
-            self.buffer[self.position..self.position + 8]
+        let oid = i32::from_le_bytes(
+            self.buffer[self.position..self.position + 4]
                 .try_into()
                 .unwrap(),
         );
-        self.position += 8;
-        Some(Objid::mk_id(oid))
+        self.position += 4;
+        Some(Obj::mk_id(oid))
     }
 }
 
-impl FromIterator<Objid> for ObjSet {
-    fn from_iter<T: IntoIterator<Item = Objid>>(iter: T) -> Self {
+impl FromIterator<Obj> for ObjSet {
+    fn from_iter<T: IntoIterator<Item = Obj>>(iter: T) -> Self {
         let mut v = Vec::with_capacity(4);
         let mut total = 0usize;
         for item in iter {
-            v.put_i64_le(item.id());
+            v.put_i32_le(item.id().0);
             total += 1;
         }
         // If after that, total is 0, don't even bother, just throw away the buffer.
@@ -117,18 +119,18 @@ impl FromIterator<Objid> for ObjSet {
 
 impl ObjSet {
     #[must_use]
-    pub fn with_inserted(&self, oid: Objid) -> Self {
+    pub fn with_inserted(&self, oid: Obj) -> Self {
         if self.0.is_empty() {
             return Self::from_items(&[oid]);
         }
         // Note, we're stupid and don't check for dupes. It's called a 'set' but it ain't.
         let _capacity = self.len();
         let mut new_buf = self.0.as_ref().to_vec();
-        new_buf.put_i64_le(oid.id());
+        new_buf.put_i32_le(oid.id().0);
         Self(Bytes::from(new_buf))
     }
     #[must_use]
-    pub fn with_removed(&self, oid: Objid) -> Self {
+    pub fn with_removed(&self, oid: Obj) -> Self {
         if self.0.is_empty() {
             return EMPTY_OBJSET.clone();
         }
@@ -139,7 +141,7 @@ impl ObjSet {
                 found = true;
                 continue;
             }
-            new_buf.put_i64_le(i.id());
+            new_buf.put_i32_le(i.id().0);
         }
         if !found {
             return self.clone();
@@ -147,7 +149,7 @@ impl ObjSet {
         Self(Bytes::from(new_buf))
     }
     #[must_use]
-    pub fn with_all_removed(&self, oids: &[Objid]) -> Self {
+    pub fn with_all_removed(&self, oids: &[Obj]) -> Self {
         if self.0.is_empty() {
             return EMPTY_OBJSET.clone();
         }
@@ -158,7 +160,7 @@ impl ObjSet {
                 found = true;
                 continue;
             }
-            new_buf.put_i64_le(i.id());
+            new_buf.put_i32_le(i.id().0);
         }
         if !found {
             return self.clone();
@@ -166,7 +168,7 @@ impl ObjSet {
         Self(Bytes::from(new_buf))
     }
     #[must_use]
-    pub fn contains(&self, oid: Objid) -> bool {
+    pub fn contains(&self, oid: Obj) -> bool {
         // O(N) operation. Which we're fine with, really. We're a vector.
         self.iter().any(|o| o == oid)
     }
@@ -184,47 +186,46 @@ impl ObjSet {
             return other;
         }
         let new_len = other.len() + self.len();
-        let mut new_buf = Vec::with_capacity(std::mem::size_of::<Objid>() * new_len);
+        let mut new_buf = Vec::with_capacity(std::mem::size_of::<i32>() * new_len);
         new_buf.put_slice(self.0.as_ref());
         new_buf.put_slice(other.0.as_ref());
         Self(Bytes::from(new_buf))
     }
 
     #[must_use]
-    pub fn with_appended(&self, values: &[Objid]) -> Self {
+    pub fn with_appended(&self, values: &[Obj]) -> Self {
         if self.0.is_empty() {
             return Self::from_items(values);
         }
         let new_len = self.len() + values.len();
-        let mut new_buf = Vec::with_capacity(
-            std::mem::size_of::<u32>() + (std::mem::size_of::<Objid>() * new_len),
-        );
+        let mut new_buf =
+            Vec::with_capacity(std::mem::size_of::<u32>() + (std::mem::size_of::<i32>() * new_len));
         new_buf.put_slice(self.0.as_ref());
         for i in values {
-            new_buf.put_i64_le(i.id());
+            new_buf.put_i32_le(i.id().0);
         }
         Self(Bytes::from(new_buf))
     }
 }
 
-impl ValSet<Objid> for ObjSet {
+impl ValSet<Obj> for ObjSet {
     #[must_use]
     fn empty() -> Self {
         EMPTY_OBJSET.clone()
     }
 
     #[must_use]
-    fn from_items(oids: &[Objid]) -> Self {
+    fn from_items(oids: &[Obj]) -> Self {
         if oids.is_empty() {
             return EMPTY_OBJSET.clone();
         }
-        let mut v = Vec::with_capacity(std::mem::size_of_val(oids));
+        let mut v = Vec::with_capacity(std::mem::size_of::<i32>() * oids.len());
         for i in oids {
-            v.put_i64_le(i.id());
+            v.put_i32_le(i.id().0);
         }
         Self(Bytes::from(v))
     }
-    fn iter(&self) -> impl Iterator<Item = Objid> {
+    fn iter(&self) -> impl Iterator<Item = Obj> {
         ObjSetIter {
             position: 0,
             buffer: self.0.clone(),
@@ -236,7 +237,7 @@ impl ValSet<Objid> for ObjSet {
         if self.0.is_empty() {
             return 0;
         }
-        self.0.len() / std::mem::size_of::<Objid>()
+        self.0.len() / std::mem::size_of::<i32>()
     }
 
     #[must_use]
@@ -248,5 +249,63 @@ impl ValSet<Objid> for ObjSet {
 impl Default for ObjSet {
     fn default() -> Self {
         Self::empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::AsByteBuffer;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_objset_empty() {
+        let objset = ObjSet::empty();
+        assert!(objset.is_empty());
+        assert_eq!(objset.len(), 0);
+        assert_eq!(objset.as_bytes().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_objset_from_items() {
+        let objset = ObjSet::from_items(&[Obj::mk_id(1), Obj::mk_id(2), Obj::mk_id(3)]);
+        assert!(!objset.is_empty());
+        assert_eq!(objset.len(), 3);
+        assert_eq!(objset.as_bytes().unwrap().len(), 12);
+    }
+
+    #[test]
+    fn test_objset_iter() {
+        let objset = ObjSet::from_items(&[Obj::mk_id(1), Obj::mk_id(2), Obj::mk_id(3)]);
+        let mut iter = objset.iter();
+        assert_eq!(iter.next().unwrap(), Obj::mk_id(1));
+        assert_eq!(iter.next().unwrap(), Obj::mk_id(2));
+        assert_eq!(iter.next().unwrap(), Obj::mk_id(3));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_objset_with_inserted() {
+        let objset = ObjSet::from_items(&[Obj::mk_id(1), Obj::mk_id(2), Obj::mk_id(3)]);
+        let objset = objset.with_inserted(Obj::mk_id(4));
+        assert_eq!(objset.len(), 4);
+        assert_eq!(
+            objset.iter().collect::<HashSet<_>>(),
+            [Obj::mk_id(1), Obj::mk_id(2), Obj::mk_id(3), Obj::mk_id(4)]
+                .iter()
+                .cloned()
+                .collect()
+        );
+    }
+
+    #[test]
+    fn test_objset_with_removed() {
+        let objset = ObjSet::from_items(&[Obj::mk_id(1), Obj::mk_id(2), Obj::mk_id(3)]);
+        let objset = objset.with_removed(Obj::mk_id(2));
+        assert_eq!(objset.len(), 2);
+        assert_eq!(
+            objset.iter().collect::<HashSet<_>>(),
+            [Obj::mk_id(1), Obj::mk_id(3)].iter().cloned().collect()
+        );
     }
 }

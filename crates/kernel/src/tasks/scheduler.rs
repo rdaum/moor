@@ -56,9 +56,9 @@ use moor_values::tasks::{
     AbortLimitReason, CommandError, SchedulerError, TaskId, VerbProgramError,
 };
 use moor_values::Error::{E_INVARG, E_INVIND, E_PERM};
-use moor_values::{v_err, v_int, v_none, v_objid, v_string, Symbol, Var};
+use moor_values::{v_err, v_int, v_none, v_obj, v_string, Symbol, Var};
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
-use moor_values::{Objid, Variant};
+use moor_values::{Obj, Variant};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 
@@ -108,7 +108,7 @@ pub struct Scheduler {
 /// (When suspended it is moved into a `SuspendedTask` in the `.suspended` list)
 struct RunningTaskControl {
     /// For which player this task is running on behalf of.
-    player: Objid,
+    player: Obj,
     /// A kill switch to signal the task to stop. True means the VM execution thread should stop
     /// as soon as it can.
     kill_switch: Arc<AtomicBool>,
@@ -130,7 +130,7 @@ struct TaskQ {
     suspended: SuspensionQ,
 }
 
-fn load_int_sysprop(server_options_obj: &Objid, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
+fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
     let Ok(value) = tx.retrieve_property(&SYSTEM_OBJECT, server_options_obj, name) else {
         return None;
     };
@@ -282,12 +282,12 @@ impl Scheduler {
     #[instrument(skip(self))]
     fn program_verb(
         &self,
-        player: &Objid,
-        perms: &Objid,
+        player: &Obj,
+        perms: &Obj,
         obj: &ObjectRef,
         verb_name: Symbol,
         code: Vec<String>,
-    ) -> Result<(Objid, Symbol), SchedulerError> {
+    ) -> Result<(Obj, Symbol), SchedulerError> {
         // TODO: User must be a programmer...
 
         for _ in 0..NUM_VERB_PROGRAM_ATTEMPTS {
@@ -860,7 +860,7 @@ impl Scheduler {
 
                 // Value is the resolved object or E_INVIND
                 let omatch = match match_object_ref(&player, &player, &obj, world_state.as_mut()) {
-                    Ok(oid) => v_objid(oid),
+                    Ok(oid) => v_obj(oid),
                     Err(WorldStateError::ObjectNotFound(_)) => v_err(E_INVIND),
                     Err(e) => {
                         reply
@@ -1329,10 +1329,10 @@ impl TaskQ {
         &mut self,
         task_id: TaskId,
         task_start: Arc<TaskStart>,
-        player: &Objid,
+        player: &Obj,
         session: Arc<dyn Session>,
         delay_start: Option<Duration>,
-        perms: &Objid,
+        perms: &Obj,
         server_options: &ServerOptions,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
@@ -1679,7 +1679,7 @@ impl TaskQ {
     }
 
     #[instrument(skip(self))]
-    fn disconnect_task(&mut self, disconnect_task_id: TaskId, player: &Objid) {
+    fn disconnect_task(&mut self, disconnect_task_id: TaskId, player: &Obj) {
         let Some(task) = self.tasks.get_mut(&disconnect_task_id) else {
             warn!(task = disconnect_task_id, "Disconnecting task not found");
             return;
@@ -1712,11 +1712,11 @@ impl TaskQ {
 }
 
 fn match_object_ref(
-    player: &Objid,
-    perms: &Objid,
+    player: &Obj,
+    perms: &Obj,
     obj_ref: &ObjectRef,
     tx: &mut dyn WorldState,
-) -> Result<Objid, WorldStateError> {
+) -> Result<Obj, WorldStateError> {
     match &obj_ref {
         ObjectRef::Id(obj) => {
             if !tx.valid(obj)? {

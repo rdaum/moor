@@ -18,7 +18,7 @@ use std::time::SystemTime;
 use bincode::{Decode, Encode};
 
 use moor_compiler::Program;
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::{Symbol, Var};
 
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
@@ -71,12 +71,12 @@ impl TaskHandle {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VerbCall {
     pub verb_name: Symbol,
-    pub location: Objid,
-    pub this: Objid,
-    pub player: Objid,
+    pub location: Obj,
+    pub this: Obj,
+    pub player: Obj,
     pub args: Vec<Var>,
     pub argstr: String,
-    pub caller: Objid,
+    pub caller: Obj,
 }
 
 /// External interface description of a task, for purpose of e.g. the queued_tasks() builtin.
@@ -84,11 +84,11 @@ pub struct VerbCall {
 pub struct TaskDescription {
     pub task_id: TaskId,
     pub start_time: Option<SystemTime>,
-    pub permissions: Objid,
+    pub permissions: Obj,
     pub verb_name: Symbol,
-    pub verb_definer: Objid,
+    pub verb_definer: Obj,
     pub line_number: usize,
-    pub this: Objid,
+    pub this: Obj,
 }
 
 /// The set of options that can be configured for the server via core $server_options.
@@ -125,7 +125,7 @@ pub mod vm_test_utils {
     use moor_values::model::WorldState;
     use moor_values::Symbol;
     use moor_values::SYSTEM_OBJECT;
-    use moor_values::{Objid, Var};
+    use moor_values::{Obj, Var};
 
     use crate::builtins::BuiltinRegistry;
     use crate::config::Config;
@@ -229,7 +229,7 @@ pub mod vm_test_utils {
         session: Arc<dyn Session>,
         builtins: Arc<BuiltinRegistry>,
 
-        player: Objid,
+        player: Obj,
         program: Program,
     ) -> ExecResult {
         execute(world_state, session, builtins, |world_state, vm_host| {
@@ -243,7 +243,7 @@ pub mod scheduler_test_utils {
     use std::time::Duration;
 
     use moor_values::tasks::{CommandError, SchedulerError};
-    use moor_values::{Error::E_VERBNF, Objid, Var, SYSTEM_OBJECT};
+    use moor_values::{Error::E_VERBNF, Obj, Var, SYSTEM_OBJECT};
 
     use super::TaskHandle;
     use crate::config::Config;
@@ -282,7 +282,7 @@ pub mod scheduler_test_utils {
     pub fn call_command(
         scheduler: SchedulerClient,
         session: Arc<dyn Session>,
-        player: &Objid,
+        player: &Obj,
         command: &str,
     ) -> Result<Var, SchedulerError> {
         execute(|| scheduler.submit_command_task(&SYSTEM_OBJECT, player, command, session))
@@ -291,7 +291,7 @@ pub mod scheduler_test_utils {
     pub fn call_eval(
         scheduler: SchedulerClient,
         session: Arc<dyn Session>,
-        player: &Objid,
+        player: &Obj,
         code: String,
     ) -> Result<Var, SchedulerError> {
         execute(|| {
@@ -307,8 +307,8 @@ pub enum TaskStart {
     StartCommandVerb {
         /// The object that will handle the command, usually #0 (the system object), but can
         /// be a connection handler passed from `listen()`.
-        handler_object: Objid,
-        player: Objid,
+        handler_object: Obj,
+        player: Obj,
         command: String,
     },
     /// The task start has been turned into an invocation to $do_command, which is a verb on the
@@ -318,14 +318,14 @@ pub enum TaskStart {
     StartDoCommand {
         /// The object that will handle the command, usually #0 (the system object), but can
         /// be a connection handler passed from `listen()`.
-        handler_object: Objid,
-        player: Objid,
+        handler_object: Obj,
+        player: Obj,
         command: String,
     },
     /// The scheduler is telling the task to run a (method) verb.
     StartVerb {
-        player: Objid,
-        vloc: Objid,
+        player: Obj,
+        vloc: Obj,
         verb: Symbol,
         args: Vec<Var>,
         argstr: String,
@@ -340,7 +340,7 @@ pub enum TaskStart {
         suspended: bool,
     },
     /// The scheduler is telling the task to evaluate a specific (MOO) program.
-    StartEval { player: Objid, program: Program },
+    StartEval { player: Obj, program: Program },
 }
 
 impl TaskStart {

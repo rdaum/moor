@@ -21,7 +21,7 @@ use moor_values::model::Perms;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
 use moor_values::Error;
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::Var;
 
@@ -107,11 +107,11 @@ pub struct BfCallState<'a> {
 }
 
 impl BfCallState<'_> {
-    pub fn caller_perms(&self) -> Objid {
+    pub fn caller_perms(&self) -> Obj {
         self.exec_state.caller_perms()
     }
 
-    pub fn task_perms_who(&self) -> Objid {
+    pub fn task_perms_who(&self) -> Obj {
         self.exec_state.task_perms()
     }
     pub fn task_perms(&self) -> Result<Perms, WorldStateError> {

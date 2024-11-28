@@ -18,7 +18,7 @@ use moor_values::model::Named;
 use moor_values::model::VerbFlag;
 use moor_values::tasks::Exception;
 use moor_values::NOTHING;
-use moor_values::{v_err, v_int, v_list, v_none, v_objid, v_str, Var};
+use moor_values::{v_err, v_int, v_list, v_none, v_obj, v_str, Var};
 use moor_values::{Error, ErrorPack};
 use tracing::trace;
 
@@ -52,22 +52,22 @@ impl VMExecState {
             let traceback_entry = match &a.frame {
                 Frame::Moo(_) => {
                     vec![
-                        v_objid(a.this.clone()),
+                        v_obj(a.this.clone()),
                         v_str(a.verbdef.names().join(" ").as_str()),
-                        v_objid(a.verb_definer()),
-                        v_objid(a.verb_owner()),
-                        v_objid(a.player.clone()),
+                        v_obj(a.verb_definer()),
+                        v_obj(a.verb_owner()),
+                        v_obj(a.player.clone()),
                         line_no,
                     ]
                 }
                 Frame::Bf(bf_frame) => {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
                     vec![
-                        v_objid(a.this.clone()),
+                        v_obj(a.this.clone()),
                         v_str(bf_name.as_str()),
-                        v_objid(NOTHING),
-                        v_objid(NOTHING),
-                        v_objid(a.player.clone()),
+                        v_obj(NOTHING),
+                        v_obj(NOTHING),
+                        v_obj(a.player.clone()),
                         v_none(),
                     ]
                 }

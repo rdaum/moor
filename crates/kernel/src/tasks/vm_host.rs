@@ -32,7 +32,7 @@ use moor_values::model::{VerbDef, WorldState};
 use moor_values::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_values::AsByteBuffer;
 use moor_values::Error::E_MAXREC;
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::Var;
 use moor_values::{v_none, Symbol};
 
@@ -128,7 +128,7 @@ impl VmHost {
         verb: (Bytes, VerbDef),
         verb_call: VerbCall,
         command: ParsedCommand,
-        permissions: &Objid,
+        permissions: &Obj,
     ) {
         let program = Self::decode_program(verb.1.binary_type(), verb.0);
         let call_request = VerbExecutionRequest {
@@ -146,7 +146,7 @@ impl VmHost {
     pub fn start_call_method_verb(
         &mut self,
         task_id: TaskId,
-        perms: &Objid,
+        perms: &Obj,
         verb_info: (Bytes, VerbDef),
         verb_call: VerbCall,
     ) {
@@ -191,7 +191,7 @@ impl VmHost {
     pub fn start_eval(
         &mut self,
         task_id: TaskId,
-        player: &Objid,
+        player: &Obj,
         program: Program,
         world_state: &dyn WorldState,
     ) {
@@ -433,16 +433,16 @@ impl VmHost {
             .expect("Could not set forked task id");
     }
 
-    pub fn permissions(&self) -> Objid {
+    pub fn permissions(&self) -> Obj {
         self.vm_exec_state.top().permissions.clone()
     }
     pub fn verb_name(&self) -> Symbol {
         self.vm_exec_state.top().verb_name
     }
-    pub fn verb_definer(&self) -> Objid {
+    pub fn verb_definer(&self) -> Obj {
         self.vm_exec_state.top().verb_definer()
     }
-    pub fn this(&self) -> Objid {
+    pub fn this(&self) -> Obj {
         self.vm_exec_state.top().this.clone()
     }
     pub fn line_number(&self) -> usize {

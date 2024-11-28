@@ -18,7 +18,7 @@ use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{BinaryType, VerbFlag};
 use crate::util::verbname_cmp;
 use crate::util::BitEnum;
-use crate::Objid;
+use crate::Obj;
 use crate::Symbol;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{binary_layout, Field};
@@ -32,8 +32,8 @@ pub struct VerbDef(Bytes);
 binary_layout!(verbdef, LittleEndian, {
     data_version: u8,
     uuid: [u8; 16],
-    location: Objid as i64,
-    owner: Objid as i64,
+    location: Obj as i32,
+    owner: Obj as i32,
     flags: BitEnum::<VerbFlag> as u16,
     binary_type: BinaryType as u8,
     args: VerbArgsSpec as u32,
@@ -49,8 +49,8 @@ impl VerbDef {
     #[must_use]
     pub fn new(
         uuid: Uuid,
-        location: Objid,
-        owner: Objid,
+        location: Obj,
+        owner: Obj,
         names: &[&str],
         flags: BitEnum<VerbFlag>,
         binary_type: BinaryType,
@@ -110,14 +110,14 @@ impl VerbDef {
     }
 
     #[must_use]
-    pub fn location(&self) -> Objid {
+    pub fn location(&self) -> Obj {
         let view = self.get_header_view();
         view.location()
             .try_read()
             .expect("Failed to decode location")
     }
     #[must_use]
-    pub fn owner(&self) -> Objid {
+    pub fn owner(&self) -> Obj {
         let view = self.get_header_view();
         view.owner().try_read().expect("Failed to decode owner")
     }
@@ -209,7 +209,7 @@ mod tests {
     use crate::model::ValSet;
     use crate::util::BitEnum;
     use crate::AsByteBuffer;
-    use crate::Objid;
+    use crate::Obj;
     use bytes::Bytes;
 
     #[test]
@@ -233,8 +233,8 @@ mod tests {
     fn test_reconstitute() {
         let vd = VerbDef::new(
             uuid::Uuid::new_v4(),
-            Objid::mk_id(1),
-            Objid::mk_id(1),
+            Obj::mk_id(1),
+            Obj::mk_id(1),
             &["foo", "bar"],
             VerbFlag::rwxd(),
             crate::model::verbs::BinaryType::LambdaMoo18X,
@@ -246,8 +246,8 @@ mod tests {
 
         assert_eq!(vd, vd2);
         assert_eq!(vd.uuid(), vd2.uuid());
-        assert_eq!(vd.location(), Objid::mk_id(1));
-        assert_eq!(vd.owner(), Objid::mk_id(1));
+        assert_eq!(vd.location(), Obj::mk_id(1));
+        assert_eq!(vd.owner(), Obj::mk_id(1));
         assert_eq!(vd.names(), vec!["foo".to_string(), "bar".to_string()]);
         assert_eq!(vd.flags(), VerbFlag::rwxd());
         assert_eq!(
@@ -261,8 +261,8 @@ mod tests {
     fn test_reconstitute_in_verbdefs() {
         let vd1 = VerbDef::new(
             uuid::Uuid::new_v4(),
-            Objid::mk_id(1),
-            Objid::mk_id(1),
+            Obj::mk_id(1),
+            Obj::mk_id(1),
             &["foo", "bar"],
             VerbFlag::rwxd(),
             crate::model::verbs::BinaryType::None,
@@ -271,8 +271,8 @@ mod tests {
 
         let vd2 = VerbDef::new(
             uuid::Uuid::new_v4(),
-            Objid::mk_id(1),
-            Objid::mk_id(1),
+            Obj::mk_id(1),
+            Obj::mk_id(1),
             &["zoinks", "zaps", "chocolates"],
             VerbFlag::rx(),
             crate::model::verbs::BinaryType::LambdaMoo18X,
@@ -288,16 +288,16 @@ mod tests {
         let rvd1 = vds2.find(&vd1_id).unwrap();
         let rvd2 = vds2.find(&vd2_id).unwrap();
         assert_eq!(rvd1.uuid(), vd1_id);
-        assert_eq!(rvd1.location(), Objid::mk_id(1));
-        assert_eq!(rvd1.owner(), Objid::mk_id(1));
+        assert_eq!(rvd1.location(), Obj::mk_id(1));
+        assert_eq!(rvd1.owner(), Obj::mk_id(1));
         assert_eq!(rvd1.names(), vec!["foo".to_string(), "bar".to_string()]);
         assert_eq!(rvd1.flags(), VerbFlag::rwxd(),);
         assert_eq!(rvd1.binary_type(), crate::model::verbs::BinaryType::None);
         assert_eq!(rvd1.args(), VerbArgsSpec::this_none_this(),);
 
         assert_eq!(rvd2.uuid(), vd2_id);
-        assert_eq!(rvd2.location(), Objid::mk_id(1));
-        assert_eq!(rvd2.owner(), Objid::mk_id(1));
+        assert_eq!(rvd2.location(), Obj::mk_id(1));
+        assert_eq!(rvd2.owner(), Obj::mk_id(1));
         assert_eq!(
             rvd2.names(),
             vec![
@@ -318,8 +318,8 @@ mod tests {
     fn test_empty_names() {
         let vd1 = VerbDef::new(
             uuid::Uuid::new_v4(),
-            Objid::mk_id(1),
-            Objid::mk_id(1),
+            Obj::mk_id(1),
+            Obj::mk_id(1),
             &[],
             VerbFlag::rwxd(),
             crate::model::verbs::BinaryType::None,

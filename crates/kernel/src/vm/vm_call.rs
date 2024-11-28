@@ -23,7 +23,7 @@ use moor_values::model::WorldStateError;
 use moor_values::Error::{E_INVIND, E_PERM, E_VERBNF};
 use moor_values::Symbol;
 use moor_values::{v_int, Var};
-use moor_values::{List, Objid};
+use moor_values::{List, Obj};
 
 use crate::builtins::{BfCallState, BfErr, BfRet};
 use crate::tasks::sessions::Session;
@@ -45,7 +45,7 @@ pub(crate) fn args_literal(args: &[Var]) -> String {
 #[derive(Debug, Clone, PartialEq)]
 pub struct VerbExecutionRequest {
     /// The applicable permissions.
-    pub permissions: Objid,
+    pub permissions: Obj,
     /// The resolved verb.
     pub resolved_verb: VerbDef,
     /// The call parameters that were used to resolve the verb.
@@ -70,7 +70,7 @@ impl VMExecState {
     pub(crate) fn prepare_call_verb(
         &mut self,
         world_state: &mut dyn WorldState,
-        this: &Objid,
+        this: &Obj,
         verb_name: Symbol,
         args: List,
     ) -> ExecutionResult {
@@ -187,7 +187,7 @@ impl VMExecState {
         self.stack.push(a);
     }
 
-    pub fn exec_eval_request(&mut self, permissions: &Objid, player: &Objid, program: Program) {
+    pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Program) {
         let a = Activation::for_eval(permissions.clone(), player, program);
 
         self.stack.push(a);

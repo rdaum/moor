@@ -31,7 +31,7 @@ use bytes::Bytes;
 use moor_db_wiredtiger::{WiredTigerRelDb, WiredTigerRelTransaction, WiredTigerRelation};
 use moor_kernel::tasks::sessions::SessionError;
 use moor_values::model::{CommitResult, ValSet};
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::{AsByteBuffer, DecodingError, EncodingError};
 use rpc_common::RpcMessageError;
 
@@ -121,10 +121,10 @@ impl ConnectionsWT {
 impl ConnectionsWT {
     fn most_recent_client_connection(
         tx: &WiredTigerRelTransaction<ConnectionRelation>,
-        connection_obj: Objid,
+        connection_obj: Obj,
     ) -> Result<Vec<(ClientId, SystemTime)>, RelationalError> {
         let clients: ClientSet =
-            tx.seek_by_codomain::<ClientId, Objid, ClientSet>(ClientConnection, &connection_obj)?;
+            tx.seek_by_codomain::<ClientId, Obj, ClientSet>(ClientConnection, &connection_obj)?;
 
         // Seek the most recent activity for the connection, so pull in the activity relation for
         // each client.
@@ -253,16 +253,10 @@ impl FromIterator<ClientId> for ClientSet {
 }
 
 impl ConnectionsDB for ConnectionsWT {
-    fn update_client_connection(
-        &self,
-        from_connection: Objid,
-        to_player: Objid,
-    ) -> Result<(), Error> {
+    fn update_client_connection(&self, from_connection: Obj, to_player: Obj) -> Result<(), Error> {
         Ok(retry_tx_action(&self.db, |tx| {
-            let client_ids = tx.seek_by_codomain::<ClientId, Objid, ClientSet>(
-                ClientConnection,
-                &from_connection,
-            )?;
+            let client_ids = tx
+                .seek_by_codomain::<ClientId, Obj, ClientSet>(ClientConnection, &from_connection)?;
             if client_ids.is_empty() {
                 error!(?from_connection, ?to_player, "No client ids for connection");
                 return Err(RelationalError::NotFound);
@@ -279,16 +273,22 @@ impl ConnectionsDB for ConnectionsWT {
         &self,
         client_id: Uuid,
         hostname: String,
-        player: Option<Objid>,
-    ) -> Result<Objid, RpcMessageError> {
+        player: Option<Obj>,
+    ) -> Result<Obj, RpcMessageError> {
         retry_tx_action(&self.db, |tx| {
             let connection_oid = match &player {
                 None => {
                     // The connection object is pulled from the sequence, then we invert it and subtract from
                     // -4 to get the connection object, since they always grow downwards from there.
                     let connection_id = tx.increment_sequence(ConnectionId);
-                    let connection_id: i64 = -4 - connection_id;
-                    Objid::mk_id(connection_id)
+                    let connection_id =
+                        if connection_id < i32::MIN as i64 || connection_id > i32::MAX as i64 {
+                            panic!("Connection ID out of range");
+                        } else {
+                            connection_id as i32
+                        };
+                    let connection_id = -4 - connection_id;
+                    Obj::mk_id(connection_id)
                 }
                 Some(player) => player.clone(),
             };
@@ -307,7 +307,7 @@ impl ConnectionsDB for ConnectionsWT {
         .map_err(|e| RpcMessageError::InternalError(e.to_string()))
     }
 
-    fn record_client_activity(&self, client_id: Uuid, _connobj: Objid) -> Result<(), Error> {
+    fn record_client_activity(&self, client_id: Uuid, _connobj: Obj) -> Result<(), Error> {
         Ok(retry_tx_action(&self.db, |tx| {
             let client_id = ClientId(client_id);
             tx.upsert(
@@ -319,7 +319,7 @@ impl ConnectionsDB for ConnectionsWT {
         })?)
     }
 
-    fn notify_is_alive(&self, client_id: Uuid, _connection: Objid) -> Result<(), Error> {
+    fn notify_is_alive(&self, client_id: Uuid, _connection: Obj) -> Result<(), Error> {
         Ok(retry_tx_action(&self.db, |tx| {
             let client_id = ClientId(client_id);
             tx.upsert(
@@ -358,7 +358,7 @@ impl ConnectionsDB for ConnectionsWT {
         .expect("Unable to commit transaction");
     }
 
-    fn last_activity_for(&self, connection_obj: Objid) -> Result<SystemTime, SessionError> {
+    fn last_activity_for(&self, connection_obj: Obj) -> Result<SystemTime, SessionError> {
         let result = retry_tx_action(&self.db, |tx| {
             let mut client_times = Self::most_recent_client_connection(tx, connection_obj.clone())?;
             let Some(time) = client_times.pop() else {
@@ -375,7 +375,7 @@ impl ConnectionsDB for ConnectionsWT {
         }
     }
 
-    fn connection_name_for(&self, connection_obj: Objid) -> Result<String, SessionError> {
+    fn connection_name_for(&self, connection_obj: Obj) -> Result<String, SessionError> {
         let result = retry_tx_action(&self.db, |tx| {
             let mut client_times = Self::most_recent_client_connection(tx, connection_obj.clone())?;
             let Some(most_recent) = client_times.pop() else {
@@ -398,12 +398,12 @@ impl ConnectionsDB for ConnectionsWT {
         }
     }
 
-    fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError> {
+    fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
         retry_tx_action(&self.db, |tx| {
             // In this case we need to find the earliest connection time for the player, and then
             // subtract that from the current time.
             let clients =
-                tx.seek_by_codomain::<ClientId, Objid, ClientSet>(ClientConnection, &player)?;
+                tx.seek_by_codomain::<ClientId, Obj, ClientSet>(ClientConnection, &player)?;
             if clients.is_empty() {
                 return Err(RelationalError::NotFound);
             }
@@ -432,10 +432,10 @@ impl ConnectionsDB for ConnectionsWT {
         })
     }
 
-    fn client_ids_for(&self, player: Objid) -> Result<Vec<Uuid>, SessionError> {
+    fn client_ids_for(&self, player: Obj) -> Result<Vec<Uuid>, SessionError> {
         retry_tx_action(&self.db, |tx| {
             let clients =
-                tx.seek_by_codomain::<ClientId, Objid, ClientSet>(ClientConnection, &player)?;
+                tx.seek_by_codomain::<ClientId, Obj, ClientSet>(ClientConnection, &player)?;
             Ok(clients.iter().map(|c| c.0).collect())
         })
         .map_err(|e| match e {
@@ -444,24 +444,24 @@ impl ConnectionsDB for ConnectionsWT {
         })
     }
 
-    fn connections(&self) -> Vec<Objid> {
+    fn connections(&self) -> Vec<Obj> {
         // Full scan from ClientConnection relation to get all connections, and dump them into a
         // hashset (to remove dupes) and return as a vector.
         retry_tx_action(&self.db, |tx| {
             let mut connections = HashSet::new();
             let clients =
-                tx.scan_with_predicate::<_, ClientId, Objid>(ClientConnection, |_, _| true)?;
+                tx.scan_with_predicate::<_, ClientId, Obj>(ClientConnection, |_, _| true)?;
 
             for entry in clients.iter() {
                 let oid = entry.1.clone();
                 connections.insert(oid);
             }
-            Ok::<Vec<Objid>, RelationalError>(connections.into_iter().collect())
+            Ok::<Vec<Obj>, RelationalError>(connections.into_iter().collect())
         })
         .expect("Unable to commit transaction")
     }
 
-    fn connection_object_for_client(&self, client_id: Uuid) -> Option<Objid> {
+    fn connection_object_for_client(&self, client_id: Uuid) -> Option<Obj> {
         retry_tx_action(&self.db, |tx| {
             tx.seek_unique_by_domain(ClientConnection, &ClientId(client_id))
         })
@@ -484,7 +484,7 @@ impl ConnectionsDB for ConnectionsWT {
 mod tests {
     use std::sync::Arc;
 
-    use moor_values::Objid;
+    use moor_values::Obj;
 
     use crate::connections::ConnectionsDB;
     use crate::connections_wt::ConnectionsWT;
@@ -525,7 +525,7 @@ mod tests {
                     db.connection_object_for_client(client_id),
                     Some(oid.clone())
                 );
-                let connection_object = Objid::mk_id(x);
+                let connection_object = Obj::mk_id(x);
                 db.update_client_connection(oid, connection_object.clone())
                     .unwrap_or_else(|e| {
                         panic!("Unable to update client connection for {:?}: {:?}", x, e)
@@ -560,7 +560,7 @@ mod tests {
                 let con_oid2 = db
                     .new_connection(client_id2, "localhost".to_string(), None)
                     .unwrap();
-                let new_conn = Objid::mk_id(x);
+                let new_conn = Obj::mk_id(x);
                 db.update_client_connection(con_oid1, new_conn.clone())
                     .expect("Unable to update client connection");
                 let client_ids = db.client_ids_for(new_conn.clone()).unwrap();

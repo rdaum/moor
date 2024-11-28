@@ -23,7 +23,7 @@ use moor_values::model::{HasUuid, Named};
 use moor_values::model::{ObjAttrs, PropFlag, ValSet};
 use moor_values::model::{ObjSet, ObjectRef};
 use moor_values::util::BitEnum;
-use moor_values::Objid;
+use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::NOTHING;
 use moor_values::{v_int, v_str};
@@ -40,7 +40,7 @@ where
             ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
         )
         .unwrap();
-    assert_eq!(oid, Objid::mk_id(0));
+    assert_eq!(oid, Obj::mk_id(0));
     assert!(tx.object_valid(&oid).unwrap());
     assert_eq!(tx.get_object_owner(&oid).unwrap(), oid);
     assert_eq!(tx.get_object_parent(&oid).unwrap(), NOTHING);
@@ -63,12 +63,12 @@ where
 
     // Force at 1.
     let oid = tx
-        .create_object(Some(Objid::mk_id(1)), ObjAttrs::default())
+        .create_object(Some(Obj::mk_id(1)), ObjAttrs::default())
         .unwrap();
-    assert_eq!(oid, Objid::mk_id(1));
+    assert_eq!(oid, Obj::mk_id(1));
     // Now verify the next will be 2.
     let oid2 = tx.create_object(None, ObjAttrs::default()).unwrap();
-    assert_eq!(oid2, Objid::mk_id(2));
+    assert_eq!(oid2, Obj::mk_id(2));
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
@@ -150,11 +150,11 @@ where
 
     let a = tx
         .create_object(
-            Some(Objid::mk_id(0)),
+            Some(Obj::mk_id(0)),
             ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
         )
         .unwrap();
-    assert_eq!(a, Objid::mk_id(0));
+    assert_eq!(a, Obj::mk_id(0));
 
     let b = tx
         .create_object(
@@ -162,7 +162,7 @@ where
             ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
         )
         .unwrap();
-    assert_eq!(b, Objid::mk_id(1));
+    assert_eq!(b, Obj::mk_id(1));
 
     let c = tx
         .create_object(
@@ -170,7 +170,7 @@ where
             ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
         )
         .unwrap();
-    assert_eq!(c, Objid::mk_id(2));
+    assert_eq!(c, Obj::mk_id(2));
 
     let d = tx
         .create_object(
@@ -178,7 +178,7 @@ where
             ObjAttrs::new(NOTHING, c.clone(), NOTHING, BitEnum::new(), "test4"),
         )
         .unwrap();
-    assert_eq!(d, Objid::mk_id(3));
+    assert_eq!(d, Obj::mk_id(3));
 
     assert!(tx.descendants(&a).unwrap().is_same(ObjSet::from_items(&[
         b.clone(),

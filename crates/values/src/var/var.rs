@@ -17,7 +17,7 @@ use crate::var::variant::Variant;
 use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::{map, IndexMode, Sequence, TypeClass};
 use crate::var::{string, Associative};
-use crate::var::{Error, Objid, VarType};
+use crate::var::{Error, Obj, VarType};
 use crate::BincodeAsByteBufferExt;
 use bincode::{Decode, Encode};
 use std::cmp::{min, Ordering};
@@ -61,7 +61,7 @@ impl Var {
         Var(Variant::Err(e))
     }
 
-    pub fn mk_object(o: Objid) -> Self {
+    pub fn mk_object(o: Obj) -> Self {
         Var(Variant::Obj(o))
     }
 
@@ -444,11 +444,11 @@ pub fn v_err(e: Error) -> Var {
     Var::mk_error(e)
 }
 
-pub fn v_obj(o: i64) -> Var {
-    Var::mk_object(Objid::mk_id(o))
+pub fn v_objid(o: i32) -> Var {
+    Var::mk_object(Obj::mk_id(o))
 }
 
-pub fn v_objid(o: Objid) -> Var {
+pub fn v_obj(o: Obj) -> Var {
     Var::mk_object(o)
 }
 
@@ -485,8 +485,8 @@ impl From<String> for Var {
     }
 }
 
-impl From<Objid> for Var {
-    fn from(o: Objid) -> Self {
+impl From<Obj> for Var {
+    fn from(o: Obj) -> Self {
         Var::mk_object(o)
     }
 }

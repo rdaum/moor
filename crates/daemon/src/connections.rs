@@ -17,7 +17,7 @@ use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 use moor_kernel::tasks::sessions::SessionError;
-use moor_values::Objid;
+use moor_values::Obj;
 use rpc_common::RpcMessageError;
 
 pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);
@@ -27,8 +27,8 @@ pub trait ConnectionsDB {
     /// This is used when a player logs in.
     fn update_client_connection(
         &self,
-        from_connection: Objid,
-        to_player: Objid,
+        from_connection: Obj,
+        to_player: Obj,
     ) -> Result<(), eyre::Error>;
 
     /// Create a new connection object for the given client.
@@ -36,31 +36,31 @@ pub trait ConnectionsDB {
         &self,
         client_id: Uuid,
         hostname: String,
-        player: Option<Objid>,
-    ) -> Result<Objid, RpcMessageError>;
+        player: Option<Obj>,
+    ) -> Result<Obj, RpcMessageError>;
 
     /// Record activity for the given client.
-    fn record_client_activity(&self, client_id: Uuid, connobj: Objid) -> Result<(), eyre::Error>;
+    fn record_client_activity(&self, client_id: Uuid, connobj: Obj) -> Result<(), eyre::Error>;
 
     /// Update the last ping time for a client / connection.
-    fn notify_is_alive(&self, client_id: Uuid, connection: Objid) -> Result<(), eyre::Error>;
+    fn notify_is_alive(&self, client_id: Uuid, connection: Obj) -> Result<(), eyre::Error>;
 
     /// Prune any connections that have not been active for longer than the required duration.
     fn ping_check(&self);
 
-    fn last_activity_for(&self, connection: Objid) -> Result<SystemTime, SessionError>;
+    fn last_activity_for(&self, connection: Obj) -> Result<SystemTime, SessionError>;
 
-    fn connection_name_for(&self, player: Objid) -> Result<String, SessionError>;
+    fn connection_name_for(&self, player: Obj) -> Result<String, SessionError>;
 
-    fn connected_seconds_for(&self, player: Objid) -> Result<f64, SessionError>;
+    fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError>;
 
-    fn client_ids_for(&self, player: Objid) -> Result<Vec<Uuid>, SessionError>;
+    fn client_ids_for(&self, player: Obj) -> Result<Vec<Uuid>, SessionError>;
 
     /// Return all connection objects (player or not)
-    fn connections(&self) -> Vec<Objid>;
+    fn connections(&self) -> Vec<Obj>;
 
     /// Retrieve the connection object for the given client.
-    fn connection_object_for_client(&self, client_id: Uuid) -> Option<Objid>;
+    fn connection_object_for_client(&self, client_id: Uuid) -> Option<Obj>;
 
     /// Remove the given client from the connection database.
     fn remove_client_connection(&self, client_id: Uuid) -> Result<(), eyre::Error>;

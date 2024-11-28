@@ -15,37 +15,37 @@
 use crate::matching::command_parse::ParseMatcher;
 use crate::model::WorldStateError;
 use crate::model::{ObjSet, ValSet};
-use crate::Objid;
+use crate::Obj;
 use crate::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.
 pub trait MatchEnvironment {
     // Test whether a given object is valid in this environment.
-    fn obj_valid(&self, oid: &Objid) -> Result<bool, WorldStateError>;
+    fn obj_valid(&self, oid: &Obj) -> Result<bool, WorldStateError>;
 
     // Return all match names & aliases for an object.
-    fn get_names(&self, oid: &Objid) -> Result<Vec<String>, WorldStateError>;
+    fn get_names(&self, oid: &Obj) -> Result<Vec<String>, WorldStateError>;
 
     // Returns location, contents, and player, all the things we'd search for matches on.
-    fn get_surroundings(&self, player: &Objid) -> Result<ObjSet, WorldStateError>;
+    fn get_surroundings(&self, player: &Obj) -> Result<ObjSet, WorldStateError>;
 
     // Return the location of a given object.
-    fn location_of(&self, player: &Objid) -> Result<Objid, WorldStateError>;
+    fn location_of(&self, player: &Obj) -> Result<Obj, WorldStateError>;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 struct MatchData {
-    exact: Objid,
-    partial: Objid,
+    exact: Obj,
+    partial: Obj,
 }
 
 fn do_match_object_names(
-    oid: Objid,
+    oid: Obj,
     match_data: &mut MatchData,
     names: Vec<String>,
     match_name: &str,
-) -> Result<Objid, WorldStateError> {
+) -> Result<Obj, WorldStateError> {
     let match_name = match_name.to_lowercase();
 
     for object_name in names {
@@ -78,9 +78,9 @@ fn do_match_object_names(
 
 pub fn match_contents<M: MatchEnvironment>(
     env: &M,
-    player: &Objid,
+    player: &Obj,
     object_name: &str,
-) -> Result<Option<Objid>, WorldStateError> {
+) -> Result<Option<Obj>, WorldStateError> {
     let mut match_data = MatchData {
         exact: NOTHING,
         partial: FAILED_MATCH,
@@ -107,11 +107,11 @@ pub fn match_contents<M: MatchEnvironment>(
 
 pub struct MatchEnvironmentParseMatcher<M: MatchEnvironment> {
     pub env: M,
-    pub player: Objid,
+    pub player: Obj,
 }
 
 impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
-    fn match_object(&self, object_name: &str) -> Result<Option<Objid>, WorldStateError> {
+    fn match_object(&self, object_name: &str) -> Result<Option<Obj>, WorldStateError> {
         if object_name.is_empty() {
             return Ok(None);
         }
@@ -119,9 +119,9 @@ impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
         // If if's an object number (is prefixed with # and is followed by a valid integer), return
         // an Objid directly.
         if let Some(stripped) = object_name.strip_prefix('#') {
-            let object_number = stripped.parse::<i64>();
+            let object_number = stripped.parse::<i32>();
             if let Ok(object_number) = object_number {
-                return Ok(Some(Objid::mk_id(object_number)));
+                return Ok(Some(Obj::mk_id(object_number)));
             }
         }
 
@@ -154,7 +154,7 @@ mod tests {
     use crate::matching::mock_matching_env::{
         setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
     };
-    use crate::Objid;
+    use crate::Obj;
     use crate::{FAILED_MATCH, NOTHING};
 
     #[test]
@@ -168,7 +168,7 @@ mod tests {
         let match_name = "durian";
 
         let result = do_match_object_names(
-            Objid::mk_id(2),
+            Obj::mk_id(2),
             &mut match_data,
             names.into_iter().map(String::from).collect(),
             match_name,
@@ -196,18 +196,18 @@ mod tests {
         let match_name = "banana";
 
         let result = do_match_object_names(
-            Objid::mk_id(2),
+            Obj::mk_id(2),
             &mut match_data,
             names.into_iter().map(String::from).collect(),
             match_name,
         );
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Objid::mk_id(2));
+        assert_eq!(result.unwrap(), Obj::mk_id(2));
         assert_eq!(
             match_data,
             MatchData {
-                exact: Objid::mk_id(2),
+                exact: Obj::mk_id(2),
                 partial: FAILED_MATCH,
             }
         );
@@ -224,19 +224,19 @@ mod tests {
         let match_name = "b";
 
         let result = do_match_object_names(
-            Objid::mk_id(2),
+            Obj::mk_id(2),
             &mut match_data,
             names.into_iter().map(String::from).collect(),
             match_name,
         );
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Objid::mk_id(2));
+        assert_eq!(result.unwrap(), Obj::mk_id(2));
         assert_eq!(
             match_data,
             MatchData {
                 exact: NOTHING,
-                partial: Objid::mk_id(2),
+                partial: Obj::mk_id(2),
             }
         );
     }
@@ -252,19 +252,19 @@ mod tests {
         let match_name = "b";
 
         let result = do_match_object_names(
-            Objid::mk_id(2),
+            Obj::mk_id(2),
             &mut match_data,
             names.into_iter().map(String::from).collect(),
             match_name,
         );
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Objid::mk_id(2));
+        assert_eq!(result.unwrap(), Obj::mk_id(2));
         assert_eq!(
             match_data,
             MatchData {
                 exact: NOTHING,
-                partial: Objid::mk_id(2),
+                partial: Obj::mk_id(2),
             }
         );
     }
