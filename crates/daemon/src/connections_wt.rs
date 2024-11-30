@@ -304,7 +304,17 @@ impl ConnectionsDB for ConnectionsWT {
 
             Ok(connection_oid)
         })
-        .map_err(|e| RpcMessageError::InternalError(e.to_string()))
+        .map_err(|e| match e {
+            RelationalError::ConflictRetry => {
+                panic!("Conflict retry on new connection");
+            }
+            RelationalError::Duplicate(_d) => {
+                return RpcMessageError::AlreadyConnected;
+            }
+            RelationalError::NotFound => {
+                return RpcMessageError::CreateSessionFailed;
+            }
+        })
     }
 
     fn record_client_activity(&self, client_id: Uuid, _connobj: Obj) -> Result<(), Error> {
