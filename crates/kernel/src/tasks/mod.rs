@@ -42,7 +42,17 @@ pub const DEFAULT_BG_SECONDS: u64 = 3;
 pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 
 /// Just a handle to a task, with a receiver for the result.
-pub struct TaskHandle(TaskId, oneshot::Receiver<Result<Var, SchedulerError>>);
+pub struct TaskHandle(
+    TaskId,
+    oneshot::Receiver<Result<TaskResult, SchedulerError>>,
+);
+
+// Results from a task which are either a value or a notification to the task Q to restart the
+// task.
+pub enum TaskResult {
+    Result(Var),
+    Restarted(TaskHandle),
+}
 
 impl Debug for TaskHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -58,11 +68,11 @@ impl TaskHandle {
     }
 
     /// Dissolve the handle into a receiver for the result.
-    pub fn into_receiver(self) -> oneshot::Receiver<Result<Var, SchedulerError>> {
+    pub fn into_receiver(self) -> oneshot::Receiver<Result<TaskResult, SchedulerError>> {
         self.1
     }
 
-    pub fn receiver(&self) -> &oneshot::Receiver<Result<Var, SchedulerError>> {
+    pub fn receiver(&self) -> &oneshot::Receiver<Result<TaskResult, SchedulerError>> {
         &self.1
     }
 }
@@ -245,7 +255,7 @@ pub mod scheduler_test_utils {
     use moor_values::tasks::{CommandError, SchedulerError};
     use moor_values::{Error::E_VERBNF, Obj, Var, SYSTEM_OBJECT};
 
-    use super::TaskHandle;
+    use super::{TaskHandle, TaskResult};
     use crate::config::Config;
     use crate::tasks::scheduler_client::SchedulerClient;
     use crate::tasks::sessions::Session;
@@ -275,7 +285,8 @@ pub mod scheduler_test_utils {
             Err(TaskAbortedException(Exception { code, .. })) => Ok(code.into()),
             Err(CommandExecutionError(CommandError::NoCommandMatch)) => Ok(E_VERBNF.into()),
             Err(err) => Err(err),
-            Ok(var) => Ok(var),
+            Ok(TaskResult::Result(var)) => Ok(var),
+            Ok(TaskResult::Restarted(_)) => panic!("Unexpected task restart"),
         }
     }
 

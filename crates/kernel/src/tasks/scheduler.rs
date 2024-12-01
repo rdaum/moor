@@ -40,8 +40,8 @@ use crate::tasks::task::Task;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::{
-    ServerOptions, TaskHandle, TaskStart, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS,
-    DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
+    ServerOptions, TaskHandle, TaskResult, TaskStart, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS,
+    DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
 };
 use crate::textdump::{make_textdump, TextdumpWriter};
 use crate::vm::Fork;
@@ -115,7 +115,7 @@ struct RunningTaskControl {
     /// The connection-session for this task.
     session: Arc<dyn Session>,
     /// A mailbox to deliver the result of the task to a waiting party with a subscription, if any.
-    result_sender: Option<oneshot::Sender<Result<Var, SchedulerError>>>,
+    result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
 }
 
 /// The internal state of the task queue.
@@ -1452,7 +1452,7 @@ impl TaskQ {
         mut task: Task,
         resume_val: Var,
         session: Arc<dyn Session>,
-        result_sender: Option<oneshot::Sender<Result<Var, SchedulerError>>>,
+        result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         builtin_registry: Arc<BuiltinRegistry>,
@@ -1522,7 +1522,8 @@ impl TaskQ {
         if result_sender.is_closed() {
             return;
         }
-        if result_sender.send(result.clone()).is_err() {
+        let result = result.map(|v| TaskResult::Result(v.clone()));
+        if result_sender.send(result).is_err() {
             error!("Notify to task {} failed", task_id);
         }
     }
@@ -1548,12 +1549,11 @@ impl TaskQ {
             .remove(&task.task_id)
             .expect("Task not found for retry");
 
-        info!("Retrying task {}", task.task_id);
-
         // Grab the "task start" record from the (now dead) task, and submit this again with the same
         // task_id.
         let task_start = task.task_start.clone();
-        if let Err(e) = self.start_task_thread(
+
+        match self.start_task_thread(
             task.task_id,
             task_start,
             &old_tc.player,
@@ -1566,8 +1566,19 @@ impl TaskQ {
             builtin_registry,
             config,
         ) {
-            error!(?e, "Could not restart task");
-        }
+            Ok(th) => {
+                // Replacement task handle now exists, we need to send a message to the daemon to
+                // let it know that, otherwise it will sit hanging waiting on the old one forever.
+                old_tc
+                    .result_sender
+                    .expect("No result sender for retry")
+                    .send(Ok(TaskResult::Restarted(th)))
+                    .expect("Could not send retry result");
+            }
+            Err(e) => {
+                error!(error = ?e, "Could not retry task: {:?}", e);
+            }
+        };
     }
 
     #[instrument(skip(self))]

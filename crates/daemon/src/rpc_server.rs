@@ -33,7 +33,7 @@ use moor_db::DatabaseFlavour;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
-use moor_kernel::tasks::TaskHandle;
+use moor_kernel::tasks::{TaskHandle, TaskResult};
 use moor_kernel::SchedulerClient;
 use moor_values::matching::command_parse::preposition_to_string;
 use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag};
@@ -758,7 +758,7 @@ impl RpcServer {
         let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
             return Err(RpcMessageError::CreateSessionFailed);
         };
-        let task_handle = match scheduler_client.submit_verb_task(
+        let mut task_handle = match scheduler_client.submit_verb_task(
             connection,
             &ObjectRef::Id(handler_object.clone()),
             Symbol::mk("do_login_command"),
@@ -774,29 +774,35 @@ impl RpcServer {
                 return Err(RpcMessageError::InternalError(e.to_string()));
             }
         };
-        let receiver = task_handle.into_receiver();
-        let player = match receiver.recv() {
-            Ok(Ok(v)) => {
-                // If v is an objid, we have a successful login and we need to rewrite this
-                // client id to use the player objid and then return a result to the client.
-                // with its new player objid and login result.
-                // If it's not an objid, that's considered an auth failure.
-                match v.variant() {
-                    Variant::Obj(o) => o.clone(),
-                    _ => {
-                        return Ok(LoginResult(None));
+        let player = loop {
+            let receiver = task_handle.into_receiver();
+            match receiver.recv() {
+                Ok(Ok(TaskResult::Restarted(th))) => {
+                    task_handle = th;
+                    continue;
+                }
+                Ok(Ok(TaskResult::Result(v))) => {
+                    // If v is an objid, we have a successful login and we need to rewrite this
+                    // client id to use the player objid and then return a result to the client.
+                    // with its new player objid and login result.
+                    // If it's not an objid, that's considered an auth failure.
+                    match v.variant() {
+                        Variant::Obj(o) => break o.clone(),
+                        _ => {
+                            return Ok(LoginResult(None));
+                        }
                     }
                 }
-            }
-            Ok(Err(e)) => {
-                error!(error = ?e, "Error waiting for login results");
+                Ok(Err(e)) => {
+                    error!(error = ?e, "Error waiting for login results");
 
-                return Err(RpcMessageError::LoginTaskFailed);
-            }
-            Err(e) => {
-                error!(error = ?e, "Error waiting for login results");
+                    return Err(RpcMessageError::LoginTaskFailed);
+                }
+                Err(e) => {
+                    error!(error = ?e, "Error waiting for login results");
 
-                return Err(RpcMessageError::InternalError(e.to_string()));
+                    return Err(RpcMessageError::InternalError(e.to_string()));
+                }
             }
         };
 
@@ -985,7 +991,7 @@ impl RpcServer {
             return Err(RpcMessageError::CreateSessionFailed);
         };
 
-        let task_handle = match scheduler_client.submit_eval_task(
+        let mut task_handle = match scheduler_client.submit_eval_task(
             connection,
             connection,
             expression,
@@ -998,13 +1004,19 @@ impl RpcServer {
                 return Err(RpcMessageError::InternalError(e.to_string()));
             }
         };
-        match task_handle.into_receiver().recv() {
-            Ok(Ok(v)) => Ok(DaemonToClientReply::EvalResult(v)),
-            Ok(Err(e)) => Err(RpcMessageError::TaskError(e)),
-            Err(e) => {
-                error!(error = ?e, "Error processing eval");
+        loop {
+            match task_handle.into_receiver().recv() {
+                Ok(Ok(TaskResult::Restarted(th))) => {
+                    task_handle = th;
+                    continue;
+                }
+                Ok(Ok(TaskResult::Result(v))) => break Ok(DaemonToClientReply::EvalResult(v)),
+                Ok(Err(e)) => break Err(RpcMessageError::TaskError(e)),
+                Err(e) => {
+                    error!(error = ?e, "Error processing eval");
 
-                Err(RpcMessageError::InternalError(e.to_string()))
+                    break Err(RpcMessageError::InternalError(e.to_string()));
+                }
             }
         }
     }
@@ -1095,7 +1107,12 @@ impl RpcServer {
             let publish = self.events_publish.lock().unwrap();
             for (task_id, client_id, result) in completed {
                 let result = match result {
-                    Ok(v) => ClientEvent::TaskSuccess(task_id, v),
+                    Ok(TaskResult::Result(v)) => ClientEvent::TaskSuccess(task_id, v),
+                    Ok(TaskResult::Restarted(th)) => {
+                        info!(?client_id, ?task_id, "Task restarted");
+                        th_q.insert(task_id, (client_id, th));
+                        continue;
+                    }
                     Err(e) => ClientEvent::TaskError(task_id, e),
                 };
                 debug!(?client_id, ?task_id, ?result, "Task completed");
