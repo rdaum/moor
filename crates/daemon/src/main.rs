@@ -286,7 +286,10 @@ fn main() -> Result<(), Report> {
         }
     };
 
-    info!("Daemon starting...");
+    info!(
+        "Daemon starting. Using {:?} database at {:?}",
+        args.db_flavour, args.db
+    );
     let (database, freshly_made) = match args.db_flavour {
         DatabaseFlavour::WiredTiger => {
             let db_source_builder = WiredTigerDatabaseBuilder::new().with_path(args.db.clone());
