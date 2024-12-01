@@ -191,7 +191,7 @@ struct Args {
         long,
         value_name = "checkpoint-interval-seconds",
         help = "Interval in seconds between database checkpoints",
-        default_value = "10"
+        default_value = "240"
     )]
     checkpoint_interval_seconds: u16,
 
