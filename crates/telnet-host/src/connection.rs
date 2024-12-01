@@ -198,10 +198,10 @@ impl TelnetConnection {
                             self.write.close().await?;
                             bail!("Disconnect before login");
                         }
-                        ClientEvent::TaskError(te) => {
+                        ClientEvent::TaskError(_ti, te) => {
                             self.handle_task_error(te).await?;
                         }
-                        ClientEvent::TaskSuccess(result) => {
+                        ClientEvent::TaskSuccess(_ti, result) => {
                             trace!(?result, "TaskSuccess")
                             // We don't need to do anything with successes.
                         }
@@ -319,7 +319,7 @@ impl TelnetConnection {
                     };
 
                     match response {
-                        ReplyResult::ClientSuccess(DaemonToClientReply::CommandSubmitted(_)) |
+                        ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(_)) |
                         ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
                             // Nothing to do
                         }
@@ -382,13 +382,11 @@ impl TelnetConnection {
                             self.write.close().await.expect("Unable to close connection");
                             return Ok(())
                         }
-                        ClientEvent::TaskError(te) => {
+                        ClientEvent::TaskError(_ti, te) => {
                             self.handle_task_error(te).await?;
                         }
-                        ClientEvent::TaskSuccess(result) => {
-                            trace!(?result, "TaskSuccess")
+                        ClientEvent::TaskSuccess(_ti, _result) => {
                             // We don't need to do anything with successes.
-
                         }
                     }
                 }

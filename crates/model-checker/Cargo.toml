@@ -1,0 +1,42 @@
+[package]
+name = "moor-model-checker"
+version = "0.1.0"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Checks transactional consistency of the moor runtime"
+
+[dependencies]
+moor-values = { path = "../values" }
+rpc-async-client = { path = "../rpc-async-client" }
+rpc-common = { path = "../rpc-common" }
+
+color-eyre.workspace = true
+eyre.workspace = true
+pretty_assertions.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+clap_derive.workspace = true
+
+# Auth/Auth
+ed25519-dalek.workspace = true
+pem.workspace = true
+rusty_paseto.workspace = true
+
+## ZMQ / RPC
+tmq.workspace = true
+uuid.workspace = true
+
+## Asynchronous transaction processing & networking
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+
+edn-format.workspace = true
+rand.workspace = true

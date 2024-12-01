@@ -308,6 +308,7 @@ impl Scheduler {
 
             let program = compile(code.join("\n").as_str(), self.config.compile_options())
                 .map_err(|e| {
+                    // TODO: just dumping a string here sucks.
                     VerbProgramFailed(VerbProgramError::CompilationError(vec![format!("{:?}", e)]))
                 })?;
 
@@ -1546,6 +1547,8 @@ impl TaskQ {
             .tasks
             .remove(&task.task_id)
             .expect("Task not found for retry");
+
+        info!("Retrying task {}", task.task_id);
 
         // Grab the "task start" record from the (now dead) task, and submit this again with the same
         // task_id.

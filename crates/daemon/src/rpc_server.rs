@@ -156,8 +156,6 @@ impl RpcServer {
                 t_rpc_server.ping_pong().expect("Unable to play ping-pong");
             })?;
 
-        // We need to bind a generic publisher to the narrative endpoint, so that subsequent sessions
-        // are visible...
         let rpc_socket = self.zmq_context.socket(zmq::REP)?;
         rpc_socket.bind(&rpc_endpoint)?;
 
@@ -912,7 +910,7 @@ impl RpcServer {
         let task_id = parse_command_task_handle.task_id();
         let mut th_q = self.task_handles.lock().unwrap();
         th_q.insert(task_id, (client_id, parse_command_task_handle));
-        Ok(DaemonToClientReply::CommandSubmitted(task_id))
+        Ok(DaemonToClientReply::TaskSubmitted(task_id))
     }
 
     fn respond_input(
@@ -973,7 +971,7 @@ impl RpcServer {
         // let the session run to completion on its own and output back to the client.
         // Maybe we should be returning a value from this for the future, but the way clients are
         // written right now, there's little point.
-        Ok(DaemonToClientReply::CommandSubmitted(task_handle.task_id()))
+        Ok(DaemonToClientReply::TaskSubmitted(task_handle.task_id()))
     }
 
     fn eval(
@@ -1043,7 +1041,7 @@ impl RpcServer {
         let task_id = task_handle.task_id();
         let mut th_q = self.task_handles.lock().unwrap();
         th_q.insert(task_id, (client_id, task_handle));
-        Ok(DaemonToClientReply::CommandSubmitted(task_id))
+        Ok(DaemonToClientReply::TaskSubmitted(task_id))
     }
 
     fn program_verb(
@@ -1097,8 +1095,8 @@ impl RpcServer {
             let publish = self.events_publish.lock().unwrap();
             for (task_id, client_id, result) in completed {
                 let result = match result {
-                    Ok(v) => ClientEvent::TaskSuccess(v),
-                    Err(e) => ClientEvent::TaskError(e),
+                    Ok(v) => ClientEvent::TaskSuccess(task_id, v),
+                    Err(e) => ClientEvent::TaskError(task_id, e),
                 };
                 debug!(?client_id, ?task_id, ?result, "Task completed");
                 let payload = bincode::encode_to_vec(&result, bincode::config::standard())

@@ -153,10 +153,10 @@ impl WebSocketConnection {
                             ws_sender.close().await.expect("Unable to close connection");
                             return ;
                         }
-                        ClientEvent::TaskError(te) => {
+                        ClientEvent::TaskError(_ti, te) => {
                             self.handle_task_error(&mut ws_sender, te).await.expect("Unable to handle task error");
                         }
-                        ClientEvent::TaskSuccess(s) => {
+                        ClientEvent::TaskSuccess(_ti, s) => {
                             Self::emit_value(&mut ws_sender, ValueResult(s)).await;
                         }
                     }
@@ -204,7 +204,7 @@ impl WebSocketConnection {
         };
 
         match response {
-            ReplyResult::ClientSuccess(DaemonToClientReply::CommandSubmitted(_))
+            ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(_))
             | ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
                 // Nothing to do
             }

@@ -309,10 +309,10 @@ impl ConnectionsDB for ConnectionsWT {
                 panic!("Conflict retry on new connection");
             }
             RelationalError::Duplicate(_d) => {
-                return RpcMessageError::AlreadyConnected;
+                RpcMessageError::AlreadyConnected
             }
             RelationalError::NotFound => {
-                return RpcMessageError::CreateSessionFailed;
+                RpcMessageError::CreateSessionFailed
             }
         })
     }

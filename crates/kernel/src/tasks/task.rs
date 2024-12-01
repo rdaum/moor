@@ -296,7 +296,7 @@ impl Task {
 
                 let CommitResult::Success = world_state.commit().expect("Could not attempt commit")
                 else {
-                    warn!("Conflict during commit before complete, asking scheduler to retry task");
+                    warn!("Conflict during commit before complete, asking scheduler to retry task ({})", self.task_id);
                     task_scheduler_client.conflict_retry(self);
                     return None;
                 };

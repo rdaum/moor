@@ -16,6 +16,7 @@ members = [
     "crates/telnet-host",
     "crates/values",
     "crates/web-host",
+    "crates/model-checker",
 ]
 default-members = [
     "crates/values",
@@ -158,3 +159,6 @@ signal-hook = "0.3"
 
 # For the telnet host
 termimad = "0.31"
+
+# For the consistency checker in `model-checker`
+edn-format = "3.3.0"

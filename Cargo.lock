@@ -230,6 +230,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
+name = "bigdecimal"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6773ddc0eafc0e509fb60e48dff7f450f8e674a0686ae8605e8d9901bd5eefa"
+dependencies = [
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "binary-layout"
 version = "4.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -985,6 +996,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "edn-format"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22313f5794126f6d36a04f468ab167514161d9e1915152392e2e6a6ca2adece4"
+dependencies = [
+ "bigdecimal",
+ "chrono",
+ "internship",
+ "itertools 0.10.5",
+ "num-bigint",
+ "ordered-float",
+ "thiserror 1.0.69",
+ "uuid 0.8.2",
+]
+
+[[package]]
 name = "either"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1479,6 +1506,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "internship"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b75b80c06d9124692b2927086ed75c8721d4061f9c159d9675d3f6d63729b597"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "inventory"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1814,7 +1850,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "tracing-subscriber",
- "uuid",
+ "uuid 1.11.0",
  "zmq",
 ]
 
@@ -1831,7 +1867,7 @@ dependencies = [
  "thiserror 2.0.3",
  "tracing",
  "tracing-test",
- "uuid",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -1845,7 +1881,7 @@ dependencies = [
  "strum",
  "tempfile",
  "tracing",
- "uuid",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -1860,7 +1896,7 @@ dependencies = [
  "strum",
  "tempfile",
  "tracing",
- "uuid",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -1877,7 +1913,7 @@ dependencies = [
  "strum",
  "tempfile",
  "tracing",
- "uuid",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -1923,7 +1959,33 @@ dependencies = [
  "tracing-subscriber",
  "tracing-test",
  "unindent",
- "uuid",
+ "uuid 1.11.0",
+]
+
+[[package]]
+name = "moor-model-checker"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "clap_derive",
+ "color-eyre",
+ "ed25519-dalek",
+ "edn-format",
+ "eyre",
+ "futures",
+ "moor-values",
+ "pem",
+ "pretty_assertions",
+ "rand",
+ "rpc-async-client",
+ "rpc-common",
+ "rusty_paseto",
+ "tmq",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -1963,7 +2025,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
- "uuid",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -1985,7 +2047,7 @@ dependencies = [
  "strum",
  "thiserror 2.0.3",
  "ustr",
- "uuid",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -2009,7 +2071,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "uuid",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -2042,10 +2104,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
+
+[[package]]
+name = "num-integer"
+version = "0.1.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "num-traits"
@@ -2121,6 +2202,15 @@ name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+
+[[package]]
+name = "ordered-float"
+version = "2.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68f19d67e5a2795c94e73e0bb1cc1a7edeb2e28efd39e2e1c9b7a40c1108b11c"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "overload"
@@ -2585,7 +2675,7 @@ dependencies = [
  "tmq",
  "tokio",
  "tracing",
- "uuid",
+ "uuid 1.11.0",
 ]
 
 [[package]]
@@ -2607,7 +2697,7 @@ dependencies = [
  "bincode",
  "rpc-common",
  "tracing",
- "uuid",
+ "uuid 1.11.0",
  "zmq",
 ]
 
@@ -3603,6 +3693,15 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
+
+[[package]]
+name = "uuid"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "getrandom",
+]
 
 [[package]]
 name = "uuid"

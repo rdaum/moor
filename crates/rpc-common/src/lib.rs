@@ -212,7 +212,7 @@ pub enum DaemonToClientReply {
     SysPropValue(Option<Var>),
     LoginResult(Option<(AuthToken, ConnectType, Obj)>),
     AttachResult(Option<(ClientToken, Obj)>),
-    CommandSubmitted(usize /* task id */),
+    TaskSubmitted(usize /* task id */),
     InputThanks,
     EvalResult(Var),
     ThanksPong(SystemTime),
@@ -223,7 +223,6 @@ pub enum DaemonToClientReply {
     PropertyValue(PropInfo, Var),
     VerbValue(VerbInfo, Vec<String>),
     ResolveResult(Var),
-    InvokeResult(Result<Var, SchedulerError>),
 }
 
 /// Errors at the message passing level.
@@ -266,9 +265,9 @@ pub enum ClientEvent {
     /// The system wants to disconnect the given object from all its current active connections.
     Disconnect(),
     /// Task errors that should be sent to the client.
-    TaskError(SchedulerError),
+    TaskError(usize, SchedulerError),
     /// Task return values on success that the client can get.
-    TaskSuccess(Var),
+    TaskSuccess(usize, Var),
 }
 
 /// Events which occur over the pubsub endpoint, but are for all the hosts.
