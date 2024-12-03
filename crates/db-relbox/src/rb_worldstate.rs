@@ -58,7 +58,7 @@ impl WorldStateSource for RelBoxWorldState {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = self.db.clone().start_tx();
         let tx = RelboxTransaction::new(tx);
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
+        let rel_tx = RelationalWorldStateTransaction { tx };
         Ok(Box::new(DbTxWorldState { tx: rel_tx }))
     }
 
@@ -72,7 +72,7 @@ impl Database for RelBoxWorldState {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = self.db.clone().start_tx();
         let tx = RelboxTransaction::new(tx);
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
+        let rel_tx = RelationalWorldStateTransaction { tx };
         Ok(Box::new(DbTxWorldState { tx: rel_tx }))
     }
 }
@@ -109,7 +109,7 @@ mod tests {
         db: &Arc<RelBox>,
     ) -> RelationalWorldStateTransaction<RelboxTransaction<WorldStateTable>> {
         let tx = RelboxTransaction::new(db.clone().start_tx());
-        RelationalWorldStateTransaction { tx: Some(tx) }
+        RelationalWorldStateTransaction { tx }
     }
 
     #[test]

@@ -32,11 +32,7 @@ use moor_values::Var;
 
 pub trait LoaderInterface: Send {
     /// For reading textdumps...
-    fn create_object(
-        &self,
-        objid: Option<Obj>,
-        attrs: &ObjAttrs,
-    ) -> Result<Obj, WorldStateError>;
+    fn create_object(&self, objid: Option<Obj>, attrs: &ObjAttrs) -> Result<Obj, WorldStateError>;
     fn set_object_parent(&self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError>;
 
     fn set_object_location(&self, o: &Obj, location: &Obj) -> Result<(), WorldStateError>;
@@ -71,7 +67,7 @@ pub trait LoaderInterface: Send {
         value: Option<Var>,
     ) -> Result<(), WorldStateError>;
 
-    fn commit(&mut self) -> Result<CommitResult, WorldStateError>;
+    fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
 
     // For writing textdumps...
 

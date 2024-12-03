@@ -52,11 +52,18 @@ lazy_static! {
     static ref ALIASES_SYM: Symbol = Symbol::mk("aliases");
 }
 
-pub struct DbTxWorldState {
-    pub tx: Box<dyn WorldStateTransaction>,
+pub struct DbTxWorldState<TX: WorldStateTransaction> {
+    pub tx: TX,
 }
 
-impl DbTxWorldState {
+impl<TX> DbTxWorldState<TX>
+where
+    TX: WorldStateTransaction,
+{
+    pub(crate) fn get_tx(&self) -> &dyn WorldStateTransaction {
+        &self.tx
+    }
+
     fn perms(&self, who: &Obj) -> Result<Perms, WorldStateError> {
         let flags = self.flags_of(who)?;
         Ok(Perms {
@@ -83,7 +90,7 @@ impl DbTxWorldState {
             return Err(WorldStateError::VerbPermissionDenied);
         }
 
-        self.tx.update_verb(obj, verbdef.uuid(), verb_attrs)?;
+        self.get_tx().update_verb(obj, verbdef.uuid(), verb_attrs)?;
         Ok(())
     }
 
@@ -104,14 +111,14 @@ impl DbTxWorldState {
     }
 }
 
-impl WorldState for DbTxWorldState {
+impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
     fn players(&self) -> Result<ObjSet, WorldStateError> {
-        self.tx.get_players()
+        self.get_tx().get_players()
     }
 
     #[tracing::instrument(skip(self))]
     fn owner_of(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
-        self.tx.get_object_owner(obj)
+        self.get_tx().get_object_owner(obj)
     }
 
     #[tracing::instrument(skip(self))]
@@ -132,7 +139,7 @@ impl WorldState for DbTxWorldState {
 
     #[tracing::instrument(skip(self))]
     fn flags_of(&self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
-        self.tx.get_object_flags(obj)
+        self.get_tx().get_object_flags(obj)
     }
 
     fn set_flags_of(
@@ -145,18 +152,18 @@ impl WorldState for DbTxWorldState {
         let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Write.into())?;
-        self.tx.set_object_flags(obj, new_flags)
+        self.get_tx().set_object_flags(obj, new_flags)
     }
 
     #[tracing::instrument(skip(self))]
     fn location_of(&self, _perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {
         // MOO permits location query even if the object is unreadable!
-        self.tx.get_object_location(obj)
+        self.get_tx().get_object_location(obj)
     }
 
     fn object_bytes(&self, perms: &Obj, obj: &Obj) -> Result<usize, WorldStateError> {
         self.perms(perms)?.check_wizard()?;
-        self.tx.get_object_size_bytes(obj)
+        self.get_tx().get_object_size_bytes(obj)
     }
 
     #[tracing::instrument(skip(self))]
@@ -174,7 +181,7 @@ impl WorldState for DbTxWorldState {
         //    as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
         //    object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
         let attrs = ObjAttrs::new(owner.clone(), parent.clone(), NOTHING, flags, "");
-        self.tx.create_object(None, attrs)
+        self.get_tx().create_object(None, attrs)
     }
 
     fn recycle_object(&mut self, perms: &Obj, obj: &Obj) -> Result<(), WorldStateError> {
@@ -182,11 +189,11 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Write.into())?;
 
-        self.tx.recycle_object(obj)
+        self.get_tx().recycle_object(obj)
     }
 
     fn max_object(&self, _perms: &Obj) -> Result<Obj, WorldStateError> {
-        self.tx.get_max_object()
+        self.get_tx().get_max_object()
     }
 
     fn move_object(
@@ -199,14 +206,14 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Write.into())?;
 
-        self.tx.set_object_location(obj, new_loc)
+        self.get_tx().set_object_location(obj, new_loc)
     }
 
     #[tracing::instrument(skip(self))]
     fn contents_of(&self, _perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
         // MOO does not do any perms checks on contents, pretty sure:
         // https://github.com/wrog/lambdamoo/blob/master/db_properties.c#L351
-        self.tx.get_object_contents(obj)
+        self.get_tx().get_object_contents(obj)
     }
 
     #[tracing::instrument(skip(self))]
@@ -215,7 +222,7 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Read.into())?;
 
-        self.tx.get_verbs(obj)
+        self.get_tx().get_verbs(obj)
     }
 
     #[tracing::instrument(skip(self))]
@@ -224,7 +231,7 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Read.into())?;
 
-        let properties = self.tx.get_properties(obj)?;
+        let properties = self.get_tx().get_properties(obj)?;
         Ok(properties)
     }
 
@@ -281,7 +288,7 @@ impl WorldState for DbTxWorldState {
                 .unwrap_or(v_bool(false)));
         }
 
-        let (_, value, propperms, _) = self.tx.resolve_property(obj, pname)?;
+        let (_, value, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
         Ok(value)
@@ -293,14 +300,16 @@ impl WorldState for DbTxWorldState {
         obj: &Obj,
         pname: Symbol,
     ) -> Result<(PropDef, PropPerms), WorldStateError> {
-        let properties = self.tx.get_properties(obj)?;
+        let properties = self.get_tx().get_properties(obj)?;
         let pdef = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(
                 obj.clone(),
                 pname.to_string(),
             ))?;
-        let propperms = self.tx.retrieve_property_permissions(obj, pdef.uuid())?;
+        let propperms = self
+            .get_tx()
+            .retrieve_property_permissions(obj, pdef.uuid())?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
 
@@ -314,7 +323,7 @@ impl WorldState for DbTxWorldState {
         pname: Symbol,
         attrs: PropAttrs,
     ) -> Result<(), WorldStateError> {
-        let properties = self.tx.get_properties(obj)?;
+        let properties = self.get_tx().get_properties(obj)?;
         let pdef = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(
@@ -322,7 +331,9 @@ impl WorldState for DbTxWorldState {
                 pname.to_string(),
             ))?;
 
-        let propperms = self.tx.retrieve_property_permissions(obj, pdef.uuid())?;
+        let propperms = self
+            .get_tx()
+            .retrieve_property_permissions(obj, pdef.uuid())?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
 
@@ -331,8 +342,13 @@ impl WorldState for DbTxWorldState {
         //   <prop-name>, as opposed to an inheritor of the property, then `clear_property()' raises
         //   `E_INVARG'
 
-        self.tx
-            .update_property_info(obj, pdef.uuid(), attrs.owner, attrs.flags, attrs.name)?;
+        self.get_tx().update_property_info(
+            obj,
+            pdef.uuid(),
+            attrs.owner,
+            attrs.flags,
+            attrs.name,
+        )?;
         Ok(())
     }
 
@@ -368,7 +384,8 @@ impl WorldState for DbTxWorldState {
                 let Variant::Str(name) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.tx.set_object_name(obj, name.as_string().clone())?;
+                self.get_tx()
+                    .set_object_name(obj, name.as_string().clone())?;
                 return Ok(());
             }
 
@@ -376,7 +393,7 @@ impl WorldState for DbTxWorldState {
                 let Variant::Obj(owner) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.tx.set_object_owner(obj, owner)?;
+                self.get_tx().set_object_owner(obj, owner)?;
                 return Ok(());
             }
 
@@ -389,7 +406,7 @@ impl WorldState for DbTxWorldState {
                 } else {
                     flags.clear(ObjFlag::Read);
                 }
-                self.tx.set_object_flags(obj, flags)?;
+                self.get_tx().set_object_flags(obj, flags)?;
                 return Ok(());
             }
 
@@ -402,7 +419,7 @@ impl WorldState for DbTxWorldState {
                 } else {
                     flags.clear(ObjFlag::Write);
                 }
-                self.tx.set_object_flags(obj, flags)?;
+                self.get_tx().set_object_flags(obj, flags)?;
                 return Ok(());
             }
 
@@ -415,7 +432,7 @@ impl WorldState for DbTxWorldState {
                 } else {
                     flags.clear(ObjFlag::Fertile);
                 }
-                self.tx.set_object_flags(obj, flags)?;
+                self.get_tx().set_object_flags(obj, flags)?;
                 return Ok(());
             }
         }
@@ -440,15 +457,16 @@ impl WorldState for DbTxWorldState {
                 }
             }
 
-            self.tx.set_object_flags(obj, flags)?;
+            self.get_tx().set_object_flags(obj, flags)?;
             return Ok(());
         }
 
-        let (pdef, _, propperms, _) = self.tx.resolve_property(obj, pname)?;
+        let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
 
-        self.tx.set_property(obj, pdef.uuid(), value.clone())?;
+        self.get_tx()
+            .set_property(obj, pdef.uuid(), value.clone())?;
         Ok(())
     }
 
@@ -458,7 +476,7 @@ impl WorldState for DbTxWorldState {
         obj: &Obj,
         pname: Symbol,
     ) -> Result<bool, WorldStateError> {
-        let (_, _, propperms, clear) = self.tx.resolve_property(obj, pname)?;
+        let (_, _, propperms, clear) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
         Ok(clear)
@@ -472,10 +490,10 @@ impl WorldState for DbTxWorldState {
     ) -> Result<(), WorldStateError> {
         // This is just deleting the local *value* portion of the property.
         // First seek the property handle.
-        let (pdef, _, propperms, _) = self.tx.resolve_property(obj, pname)?;
+        let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
-        self.tx.clear_property(obj, pdef.uuid())?;
+        self.get_tx().clear_property(obj, pdef.uuid())?;
         Ok(())
     }
 
@@ -497,7 +515,7 @@ impl WorldState for DbTxWorldState {
             .check_object_allows(&objowner, flags, ObjFlag::Write.into())?;
         self.perms(perms)?.check_obj_owner_perms(propowner)?;
 
-        self.tx.define_property(
+        self.get_tx().define_property(
             definer,
             location,
             pname,
@@ -515,18 +533,20 @@ impl WorldState for DbTxWorldState {
         obj: &Obj,
         pname: Symbol,
     ) -> Result<(), WorldStateError> {
-        let properties = self.tx.get_properties(obj)?;
+        let properties = self.get_tx().get_properties(obj)?;
         let pdef = properties
             .find_first_named(pname)
             .ok_or(WorldStateError::PropertyNotFound(
                 obj.clone(),
                 pname.to_string(),
             ))?;
-        let propperms = self.tx.retrieve_property_permissions(obj, pdef.uuid())?;
+        let propperms = self
+            .get_tx()
+            .retrieve_property_permissions(obj, pdef.uuid())?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
 
-        self.tx.delete_property(obj, pdef.uuid())
+        self.get_tx().delete_property(obj, pdef.uuid())
     }
 
     #[tracing::instrument(skip(self))]
@@ -545,21 +565,21 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_object_allows(&obj_owner, objflags, ObjFlag::Write.into())?;
 
-        self.tx
+        self.get_tx()
             .add_object_verb(obj, owner, names, binary, binary_type, flags, args)?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self))]
     fn remove_verb(&mut self, perms: &Obj, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
-        let verbs = self.tx.get_verbs(obj)?;
+        let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
             .ok_or(WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Write)?;
 
-        self.tx.delete_verb(obj, vh.uuid())?;
+        self.get_tx().delete_verb(obj, vh.uuid())?;
         Ok(())
     }
 
@@ -571,7 +591,7 @@ impl WorldState for DbTxWorldState {
         vname: Symbol,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let vh = self.tx.get_verb_by_name(obj, vname)?;
+        let vh = self.get_tx().get_verb_by_name(obj, vname)?;
         self.do_update_verb(obj, perms, &vh, verb_attrs)
     }
 
@@ -582,7 +602,7 @@ impl WorldState for DbTxWorldState {
         vidx: usize,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let vh = self.tx.get_verb_by_index(obj, vidx)?;
+        let vh = self.get_tx().get_verb_by_index(obj, vidx)?;
         self.do_update_verb(obj, perms, &vh, verb_attrs)
     }
 
@@ -593,7 +613,7 @@ impl WorldState for DbTxWorldState {
         uuid: Uuid,
         verb_attrs: VerbAttrs,
     ) -> Result<(), WorldStateError> {
-        let verbs = self.tx.get_verbs(obj)?;
+        let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
             .ok_or(WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
@@ -602,11 +622,11 @@ impl WorldState for DbTxWorldState {
 
     #[tracing::instrument(skip(self))]
     fn get_verb(&self, perms: &Obj, obj: &Obj, vname: Symbol) -> Result<VerbDef, WorldStateError> {
-        if !self.tx.object_valid(obj)? {
+        if !self.get_tx().object_valid(obj)? {
             return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(obj.clone())));
         }
 
-        let vh = self.tx.get_verb_by_name(obj, vname)?;
+        let vh = self.get_tx().get_verb_by_name(obj, vname)?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
 
@@ -619,7 +639,7 @@ impl WorldState for DbTxWorldState {
         obj: &Obj,
         vidx: usize,
     ) -> Result<VerbDef, WorldStateError> {
-        let vh = self.tx.get_verb_by_index(obj, vidx)?;
+        let vh = self.get_tx().get_verb_by_index(obj, vidx)?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
         Ok(vh)
@@ -631,13 +651,13 @@ impl WorldState for DbTxWorldState {
         obj: &Obj,
         uuid: Uuid,
     ) -> Result<(Bytes, VerbDef), WorldStateError> {
-        let verbs = self.tx.get_verbs(obj)?;
+        let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
             .ok_or(WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-        let binary = self.tx.get_verb_binary(&vh.location(), vh.uuid())?;
+        let binary = self.get_tx().get_verb_binary(&vh.location(), vh.uuid())?;
         Ok((binary, vh))
     }
 
@@ -648,11 +668,11 @@ impl WorldState for DbTxWorldState {
         obj: &Obj,
         vname: Symbol,
     ) -> Result<(Bytes, VerbDef), WorldStateError> {
-        let vh = self.tx.resolve_verb(obj, vname, None)?;
+        let vh = self.get_tx().resolve_verb(obj, vname, None)?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
 
-        let binary = self.tx.get_verb_binary(&vh.location(), vh.uuid())?;
+        let binary = self.get_tx().get_verb_binary(&vh.location(), vh.uuid())?;
         Ok((binary, vh))
     }
 
@@ -688,7 +708,7 @@ impl WorldState for DbTxWorldState {
         let iobj = spec_for_fn(obj, iobj);
         let argspec = VerbArgsSpec { dobj, prep, iobj };
 
-        let vh = self.tx.resolve_verb(obj, command_verb, Some(argspec));
+        let vh = self.get_tx().resolve_verb(obj, command_verb, Some(argspec));
         let vh = match vh {
             Ok(vh) => vh,
             Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -702,13 +722,13 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
 
-        let binary = self.tx.get_verb_binary(&vh.location(), vh.uuid())?;
+        let binary = self.get_tx().get_verb_binary(&vh.location(), vh.uuid())?;
         Ok(Some((binary, vh)))
     }
 
     #[tracing::instrument(skip(self))]
     fn parent_of(&self, _perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {
-        self.tx.get_object_parent(obj)
+        self.get_tx().get_object_parent(obj)
     }
 
     fn change_parent(
@@ -730,7 +750,7 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_object_allows(&owner, objflags, ObjFlag::Write.into())?;
 
-        self.tx.set_object_parent(obj, new_parent)
+        self.get_tx().set_object_parent(obj, new_parent)
     }
 
     #[tracing::instrument(skip(self))]
@@ -739,19 +759,19 @@ impl WorldState for DbTxWorldState {
         self.perms(perms)?
             .check_object_allows(&owner, objflags, ObjFlag::Read.into())?;
 
-        self.tx.get_object_children(obj)
+        self.get_tx().get_object_children(obj)
     }
 
     #[tracing::instrument(skip(self))]
     fn valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
-        self.tx.object_valid(obj)
+        self.get_tx().object_valid(obj)
     }
 
     #[tracing::instrument(skip(self))]
     fn names_of(&self, perms: &Obj, obj: &Obj) -> Result<(String, Vec<String>), WorldStateError> {
         // Another thing that MOO allows lookup of without permissions.
         // First get name
-        let name = self.tx.get_object_name(obj)?;
+        let name = self.get_tx().get_object_name(obj)?;
 
         // Then grab aliases property.
         let aliases = match self.retrieve_property(perms, obj, *ALIASES_SYM) {
@@ -776,16 +796,16 @@ impl WorldState for DbTxWorldState {
     }
 
     fn db_usage(&self) -> Result<usize, WorldStateError> {
-        self.tx.db_usage()
+        self.get_tx().db_usage()
     }
 
     #[tracing::instrument(skip(self))]
-    fn commit(&mut self) -> Result<CommitResult, WorldStateError> {
+    fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError> {
         self.tx.commit()
     }
 
     #[tracing::instrument(skip(self))]
-    fn rollback(&mut self) -> Result<(), WorldStateError> {
+    fn rollback(self: Box<Self>) -> Result<(), WorldStateError> {
         self.tx.rollback()
     }
 }

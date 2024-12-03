@@ -22,8 +22,8 @@ use moor_values::model::{WorldState, WorldStateError, WorldStateSource};
 impl WorldStateSource for FjallDb<WorldStateTable> {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = self.new_transaction();
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
-        Ok(Box::new(DbTxWorldState { tx: rel_tx }))
+        let tx = RelationalWorldStateTransaction { tx };
+        Ok(Box::new(DbTxWorldState { tx }))
     }
 
     fn checkpoint(&self) -> Result<(), WorldStateError> {
@@ -35,8 +35,8 @@ impl WorldStateSource for FjallDb<WorldStateTable> {
 impl Database for FjallDb<WorldStateTable> {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = self.new_transaction();
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
-        Ok(Box::new(DbTxWorldState { tx: rel_tx }))
+        let tx = RelationalWorldStateTransaction { tx };
+        Ok(Box::new(DbTxWorldState { tx }))
     }
 }
 
@@ -55,7 +55,6 @@ mod tests {
         perform_test_verb_resolve, perform_test_verb_resolve_inherited,
         perform_test_verb_resolve_wildcard, RelationalWorldStateTransaction, WorldStateTable,
     };
-    use std::path::Path;
 
     fn test_db() -> super::FjallDb<WorldStateTable> {
         let (db, _) = super::FjallDb::open(None);
@@ -65,7 +64,7 @@ mod tests {
         db: &FjallDb<WorldStateTable>,
     ) -> RelationalWorldStateTransaction<FjallTransaction<WorldStateTable>> {
         RelationalWorldStateTransaction {
-            tx: Some(db.new_transaction()),
+            tx: db.new_transaction(),
         }
     }
 

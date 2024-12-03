@@ -128,11 +128,11 @@ impl Task {
             if let Some(continuation_task) = task.vm_dispatch(
                 task_scheduler_client,
                 session.clone(),
-                world_state.as_mut(),
+                world_state,
                 builtin_registry.clone(),
                 config.clone(),
             ) {
-                task = continuation_task;
+                (task, world_state) = continuation_task;
             } else {
                 break;
             }
@@ -151,14 +151,14 @@ impl Task {
         mut self,
         task_scheduler_client: &TaskSchedulerClient,
         session: Arc<dyn Session>,
-        world_state: &mut dyn WorldState,
+        mut world_state: Box<dyn WorldState>,
         builtin_registry: Arc<BuiltinRegistry>,
         config: Arc<Config>,
-    ) -> Option<Self> {
+    ) -> Option<(Self, Box<dyn WorldState>)> {
         // Call the VM
         let vm_exec_result = self.vm_host.exec_interpreter(
             self.task_id,
-            world_state,
+            world_state.as_mut(),
             task_scheduler_client.clone(),
             session,
             builtin_registry,
@@ -179,7 +179,7 @@ impl Task {
                     self.vm_host
                         .set_variable(&task_id_var, v_int(task_id as i64));
                 }
-                Some(self)
+                Some((self, world_state))
             }
             VMHostResponse::Suspend(delay) => {
                 trace!(task_id = self.task_id, delay = ?delay, "Task suspend");
@@ -229,7 +229,8 @@ impl Task {
                 task_scheduler_client.request_input(self);
                 None
             }
-            VMHostResponse::ContinueOk => Some(self),
+            VMHostResponse::ContinueOk => Some((self, world_state)),
+
             VMHostResponse::CompleteSuccess(result) => {
                 trace!(task_id = self.task_id, result = ?result, "Task complete, success");
 
@@ -252,11 +253,11 @@ impl Task {
                         });
 
                         if let Err(e) =
-                            self.setup_start_parse_command(player, &command, world_state)
+                            self.setup_start_parse_command(player, &command, world_state.as_mut())
                         {
                             task_scheduler_client.command_error(e);
                         }
-                        return Some(self);
+                        return Some((self, world_state));
                     }
                 }
 
@@ -270,7 +271,7 @@ impl Task {
                 self.vm_host.stop();
 
                 task_scheduler_client.success(result);
-                Some(self)
+                None
             }
             VMHostResponse::CompleteAbort => {
                 error!(task_id = self.task_id, "Task aborted");
@@ -282,7 +283,7 @@ impl Task {
                 self.vm_host.stop();
 
                 task_scheduler_client.abort_cancelled();
-                Some(self)
+                None
             }
             VMHostResponse::CompleteException(exception) => {
                 // Commands that end in exceptions are still expected to be committed, to
@@ -305,7 +306,7 @@ impl Task {
                 self.vm_host.stop();
 
                 task_scheduler_client.exception(exception);
-                Some(self)
+                None
             }
             VMHostResponse::AbortLimit(reason) => {
                 warn!(task_id = self.task_id, "Task abort limit reached");
@@ -315,7 +316,7 @@ impl Task {
                     .rollback()
                     .expect("Could not rollback world state");
                 task_scheduler_client.abort_limits_reached(reason);
-                Some(self)
+                None
             }
             VMHostResponse::RollbackRetry => {
                 warn!(task_id = self.task_id, "Task rollback requested, retrying");
@@ -998,7 +999,7 @@ mod tests {
     /// Trigger a task-fork
     #[test]
     fn test_simple_run_fork() {
-        let (_kill_switch, task, db, mut tx, task_scheduler_client, control_receiver) =
+        let (_kill_switch, task, db, tx, task_scheduler_client, control_receiver) =
             setup_test_env_eval("fork (1) return 1 + 1; endfork return 123;");
         tx.commit().unwrap();
 

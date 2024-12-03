@@ -27,6 +27,8 @@ strum.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+im.workspace = true
+fjall.workspace = true
 
 [features]
 relbox = []

@@ -57,8 +57,7 @@ pub trait WorldStateTransaction: Send {
     fn set_object_owner(&self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError>;
 
     /// Set the flags of an object.
-    fn set_object_flags(&self, obj: &Obj, flags: BitEnum<ObjFlag>)
-                        -> Result<(), WorldStateError>;
+    fn set_object_flags(&self, obj: &Obj, flags: BitEnum<ObjFlag>) -> Result<(), WorldStateError>;
 
     /// Get the name of the given object.
     fn get_object_name(&self, obj: &Obj) -> Result<String, WorldStateError>;
@@ -203,8 +202,8 @@ pub trait WorldStateTransaction: Send {
     fn db_usage(&self) -> Result<usize, WorldStateError>;
 
     /// Attempt to commit the transaction, returning the result of the commit.
-    fn commit(&mut self) -> Result<CommitResult, WorldStateError>;
+    fn commit(self) -> Result<CommitResult, WorldStateError>;
 
     /// Throw away all local mutations.
-    fn rollback(&mut self) -> Result<(), WorldStateError>;
+    fn rollback(self) -> Result<(), WorldStateError>;
 }

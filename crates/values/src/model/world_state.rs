@@ -375,10 +375,10 @@ pub trait WorldState: Send {
     fn db_usage(&self) -> Result<usize, WorldStateError>;
 
     /// Commit all modifications made to the state of this world since the start of its transaction.
-    fn commit(&mut self) -> Result<CommitResult, WorldStateError>;
+    fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
 
     /// Rollback all modifications made to the state of this world since the start of its transaction.
-    fn rollback(&mut self) -> Result<(), WorldStateError>;
+    fn rollback(self: Box<Self>) -> Result<(), WorldStateError>;
 }
 
 pub trait WorldStateSource: Send {

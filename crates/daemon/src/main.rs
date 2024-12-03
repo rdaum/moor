@@ -330,7 +330,7 @@ fn main() -> Result<(), Report> {
         } else {
             info!("Loading textdump...");
             let start = std::time::Instant::now();
-            let mut loader_interface = database
+            let loader_interface = database
                 .loader_client()
                 .expect("Unable to get loader interface from database");
             textdump_load(

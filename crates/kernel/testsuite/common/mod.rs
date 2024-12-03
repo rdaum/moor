@@ -51,7 +51,7 @@ pub fn testsuite_dir() -> PathBuf {
 /// Create a minimal Db to support the test harness.
 #[allow(dead_code)]
 pub fn load_textdump(db: &dyn Database) {
-    let mut tx = db.loader_client().unwrap();
+    let tx = db.loader_client().unwrap();
     textdump_load(tx.as_ref(), test_db_path(), UTF8, CompileOptions::default())
         .expect("Could not load textdump");
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
@@ -106,7 +106,7 @@ pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 
     // And then verify that again in a new transaction.
-    let mut tx = db.new_world_state().unwrap();
+    let tx = db.new_world_state().unwrap();
     for (verb_name, _) in verbs {
         let verb_name = Symbol::mk(verb_name);
         let verb = tx

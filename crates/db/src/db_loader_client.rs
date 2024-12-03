@@ -31,24 +31,21 @@ use moor_values::Var;
 
 use crate::db_worldstate::DbTxWorldState;
 use crate::loader::LoaderInterface;
+use crate::worldstate_transaction::WorldStateTransaction;
 
 /// A loader client which uses a database transaction to load the world state.
-impl LoaderInterface for DbTxWorldState {
-    fn create_object(
-        &self,
-        objid: Option<Obj>,
-        attrs: &ObjAttrs,
-    ) -> Result<Obj, WorldStateError> {
-        self.tx.create_object(objid, attrs.clone())
+impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
+    fn create_object(&self, objid: Option<Obj>, attrs: &ObjAttrs) -> Result<Obj, WorldStateError> {
+        self.get_tx().create_object(objid, attrs.clone())
     }
     fn set_object_parent(&self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError> {
-        self.tx.set_object_parent(obj, parent)
+        self.get_tx().set_object_parent(obj, parent)
     }
     fn set_object_location(&self, o: &Obj, location: &Obj) -> Result<(), WorldStateError> {
-        self.tx.set_object_location(o, location)
+        self.get_tx().set_object_location(o, location)
     }
     fn set_object_owner(&self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
-        self.tx.set_object_owner(obj, owner)
+        self.get_tx().set_object_owner(obj, owner)
     }
     fn add_verb(
         &self,
@@ -59,7 +56,7 @@ impl LoaderInterface for DbTxWorldState {
         args: VerbArgsSpec,
         binary: Vec<u8>,
     ) -> Result<(), WorldStateError> {
-        self.tx.add_object_verb(
+        self.get_tx().add_object_verb(
             obj,
             owner,
             names
@@ -83,7 +80,7 @@ impl LoaderInterface for DbTxWorldState {
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
-        self.tx.define_property(
+        self.get_tx().define_property(
             definer,
             objid,
             Symbol::mk_case_insensitive(propname),
@@ -103,16 +100,16 @@ impl LoaderInterface for DbTxWorldState {
     ) -> Result<(), WorldStateError> {
         // First find the property.
         let (propdef, _, _, _) = self
-            .tx
+            .get_tx()
             .resolve_property(objid, Symbol::mk_case_insensitive(propname))?;
 
         // Now set the value if provided.
         if let Some(value) = value {
-            self.tx.set_property(objid, propdef.uuid(), value)?;
+            self.get_tx().set_property(objid, propdef.uuid(), value)?;
         }
 
         // And then set the flags and owner the child had.
-        self.tx.update_property_info(
+        self.get_tx().update_property_info(
             objid,
             propdef.uuid(),
             Some(owner.clone()),
@@ -122,39 +119,38 @@ impl LoaderInterface for DbTxWorldState {
         Ok(())
     }
 
-    fn commit(&mut self) -> Result<CommitResult, WorldStateError> {
-        let cr = self.tx.commit()?;
-        Ok(cr)
+    fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError> {
+        self.tx.commit()
     }
 
     fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
-        self.tx.get_objects()
+        self.get_tx().get_objects()
     }
 
     fn get_players(&self) -> Result<ObjSet, WorldStateError> {
-        self.tx.get_players()
+        self.get_tx().get_players()
     }
 
     fn get_object(&self, objid: &Obj) -> Result<ObjAttrs, WorldStateError> {
         Ok(ObjAttrs::new(
-            self.tx.get_object_owner(objid)?,
-            self.tx.get_object_parent(objid)?,
-            self.tx.get_object_location(objid)?,
-            self.tx.get_object_flags(objid)?,
-            &self.tx.get_object_name(objid)?,
+            self.get_tx().get_object_owner(objid)?,
+            self.get_tx().get_object_parent(objid)?,
+            self.get_tx().get_object_location(objid)?,
+            self.get_tx().get_object_flags(objid)?,
+            &self.get_tx().get_object_name(objid)?,
         ))
     }
 
     fn get_object_verbs(&self, objid: &Obj) -> Result<VerbDefs, WorldStateError> {
-        self.tx.get_verbs(objid)
+        self.get_tx().get_verbs(objid)
     }
 
     fn get_verb_binary(&self, objid: &Obj, uuid: Uuid) -> Result<Bytes, WorldStateError> {
-        self.tx.get_verb_binary(objid, uuid)
+        self.get_tx().get_verb_binary(objid, uuid)
     }
 
     fn get_object_properties(&self, objid: &Obj) -> Result<PropDefs, WorldStateError> {
-        self.tx.get_properties(objid)
+        self.get_tx().get_properties(objid)
     }
 
     fn get_property_value(
@@ -162,7 +158,7 @@ impl LoaderInterface for DbTxWorldState {
         obj: &Obj,
         uuid: Uuid,
     ) -> Result<(Option<Var>, PropPerms), WorldStateError> {
-        self.tx.retrieve_property(obj, uuid)
+        self.get_tx().retrieve_property(obj, uuid)
     }
 
     #[allow(clippy::type_complexity)]
@@ -171,19 +167,19 @@ impl LoaderInterface for DbTxWorldState {
         this: &Obj,
     ) -> Result<Vec<(PropDef, (Option<Var>, PropPerms))>, WorldStateError> {
         // First get the entire inheritance hierarchy.
-        let hierarchy = self.tx.ancestors(this)?;
+        let hierarchy = self.get_tx().ancestors(this)?;
 
         // Now get the property values for each of those objects, but only for the props which
         // are defined by that object.
         // At the same time, get the values.
         let mut properties = vec![];
         for obj in hierarchy.iter() {
-            let obj_propdefs = self.tx.get_properties(&obj)?;
+            let obj_propdefs = self.get_tx().get_properties(&obj)?;
             for p in obj_propdefs.iter() {
                 if p.definer() != obj {
                     continue;
                 }
-                let value = self.tx.retrieve_property(this, p.uuid())?;
+                let value = self.get_tx().retrieve_property(this, p.uuid())?;
                 properties.push((p.clone(), value));
             }
         }

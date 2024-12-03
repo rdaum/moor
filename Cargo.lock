@@ -1860,6 +1860,8 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "daumtils",
+ "fjall",
+ "im",
  "lazy_static",
  "moor-values",
  "strum",

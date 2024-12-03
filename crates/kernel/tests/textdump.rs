@@ -44,9 +44,9 @@ mod test {
         File::open(minimal_db.clone()).unwrap()
     }
 
-    fn load_textdump_file(tx: &mut dyn LoaderInterface, path: &str) {
+    fn load_textdump_file(mut tx: Box<dyn LoaderInterface>, path: &str) {
         textdump_load(
-            tx,
+            tx.as_mut(),
             PathBuf::from(path),
             EncodingMode::UTF8,
             CompileOptions::default(),
@@ -56,7 +56,7 @@ mod test {
     }
 
     fn write_textdump(db: Arc<WiredTigerDB>, version: &str) -> String {
-        let mut tx = db.clone().loader_client().unwrap();
+        let tx = db.clone().loader_client().unwrap();
         let mut output = Vec::new();
         let textdump = make_textdump(tx.as_ref(), Some(version));
 
@@ -243,7 +243,7 @@ mod test {
         let (db, _) = WiredTigerDB::open(None);
         let db = Arc::new(db);
         load_textdump_file(
-            db.clone().loader_client().unwrap().as_mut(),
+            db.clone().loader_client().unwrap(),
             minimal_db.to_str().unwrap(),
         );
 
@@ -267,7 +267,7 @@ mod test {
         let (db1, _) = WiredTigerDB::open(None);
         let db1 = Arc::new(db1);
         load_textdump_file(
-            db1.clone().loader_client().unwrap().as_mut(),
+            db1.clone().loader_client().unwrap(),
             minimal_db.to_str().unwrap(),
         );
     }
@@ -284,7 +284,7 @@ mod test {
         let (db1, _) = WiredTigerDB::open(None);
         let db1 = Arc::new(db1);
         load_textdump_file(
-            db1.clone().loader_client().unwrap().as_mut(),
+            db1.clone().loader_client().unwrap(),
             minimal_db.to_str().unwrap(),
         );
 

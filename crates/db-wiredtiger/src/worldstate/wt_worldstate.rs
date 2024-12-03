@@ -83,8 +83,8 @@ impl WiredTigerDB {
 impl WorldStateSource for WiredTigerDB {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = self.db.start_tx();
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
-        Ok(Box::new(DbTxWorldState { tx: rel_tx }))
+        let tx = RelationalWorldStateTransaction { tx };
+        Ok(Box::new(DbTxWorldState { tx }))
     }
 
     fn checkpoint(&self) -> Result<(), WorldStateError> {
@@ -96,8 +96,8 @@ impl WorldStateSource for WiredTigerDB {
 impl Database for WiredTigerDB {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = self.db.start_tx();
-        let rel_tx = Box::new(RelationalWorldStateTransaction { tx: Some(tx) });
-        Ok(Box::new(DbTxWorldState { tx: rel_tx }))
+        let tx = RelationalWorldStateTransaction { tx };
+        Ok(Box::new(DbTxWorldState { tx }))
     }
 }
 
@@ -129,7 +129,7 @@ mod tests {
         db: &WiredTigerDB,
     ) -> RelationalWorldStateTransaction<WiredTigerRelTransaction<WorldStateTable>> {
         RelationalWorldStateTransaction {
-            tx: Some(db.db.start_tx()),
+            tx: db.db.start_tx(),
         }
     }
 

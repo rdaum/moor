@@ -22,19 +22,6 @@ use std::path::Path;
 use strum::{EnumProperty, IntoEnumIterator};
 use tempfile::TempDir;
 
-#[cfg(test)]
-mod tests {
-    use crate::fjall_db::FjallDb;
-    use moor_values::model::WorldStateSource;
-
-    #[test]
-    fn test_fjall_db_open_close() {
-        let (db, fresh) = FjallDb::open(None);
-        assert!(fresh);
-        db.checkpoint().unwrap();
-    }
-}
-
 pub struct FjallDb<Relation>
 where
     Relation: Send + Sync + Display + Into<usize> + Copy,
@@ -107,5 +94,18 @@ where
     pub fn new_transaction(&self) -> FjallTransaction<Relation> {
         let tx = self.keyspace.write_tx().unwrap();
         FjallTransaction::new(tx, &self.sequences_partition, &self.relations_partitions)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::fjall_db::FjallDb;
+    use moor_values::model::WorldStateSource;
+
+    #[test]
+    fn test_fjall_db_open_close() {
+        let (db, fresh) = FjallDb::open(None);
+        assert!(fresh);
+        db.checkpoint().unwrap();
     }
 }

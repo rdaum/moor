@@ -228,7 +228,7 @@ impl Scheduler {
 
     pub fn reload_server_options(&mut self) {
         // Load the server options from the database, if possible.
-        let mut tx = self
+        let tx = self
             .database
             .new_world_state()
             .expect("Could not open transaction to read server properties");
@@ -1763,7 +1763,6 @@ fn match_object_ref(
                 player: player.clone(),
             };
             let Ok(Some(o)) = matcher.match_object(object_name) else {
-                let _ = tx.rollback();
                 return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
             };
             if !tx.valid(&o)? {

@@ -33,7 +33,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
     let oid = tx
         .create_object(
             None,
@@ -59,7 +59,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     // Force at 1.
     let oid = tx
@@ -77,7 +77,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     // Single parent/child relationship.
     let a = tx
@@ -146,7 +146,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -220,7 +220,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -308,7 +308,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -344,7 +344,7 @@ where
 
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
-    let mut tx = begin_tx();
+    let tx = begin_tx();
     assert_eq!(tx.get_object_location(&b).unwrap(), a);
     assert_eq!(tx.get_object_location(&c).unwrap(), a);
     let contents = tx.get_object_contents(&a).expect("Unable to get contents");
@@ -390,7 +390,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     let oid = tx
         .create_object(
@@ -424,7 +424,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
     let oid = tx
         .create_object(
             None,
@@ -473,7 +473,7 @@ where
 
     // Now commit, and try to resolve again.
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
-    let mut tx = begin_tx();
+    let tx = begin_tx();
     let vh = tx
         .resolve_verb(&oid, Symbol::mk_case_insensitive("test2"), None)
         .unwrap();
@@ -486,7 +486,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -543,7 +543,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -746,7 +746,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -812,7 +812,7 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
     // Verify existence in a new transaction.
-    let mut tx = begin_tx();
+    let tx = begin_tx();
     assert_eq!(
         tx.resolve_verb(&a, Symbol::mk_case_insensitive("test"), None)
             .unwrap()
@@ -833,7 +833,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -891,7 +891,7 @@ where
     F: Fn() -> RelationalWorldStateTransaction<TX>,
     TX: RelationalTransaction<WorldStateTable>,
 {
-    let mut tx = begin_tx();
+    let tx = begin_tx();
     let a = tx
         .create_object(
             None,

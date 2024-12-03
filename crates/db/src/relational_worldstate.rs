@@ -38,15 +38,7 @@ fn err_map(e: RelationalError) -> WorldStateError {
 }
 
 pub struct RelationalWorldStateTransaction<RTX: RelationalTransaction<WorldStateTable>> {
-    pub tx: Option<RTX>,
-}
-
-impl<RTX: RelationalTransaction<WorldStateTable>> Drop for RelationalWorldStateTransaction<RTX> {
-    fn drop(&mut self) {
-        if let Some(tx) = self.tx.take() {
-            tx.rollback();
-        }
-    }
+    pub tx: RTX,
 }
 
 impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
@@ -55,8 +47,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn object_valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
         let ov: Option<Obj> = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectOwner, obj)
             .map_err(err_map)?;
         Ok(ov.is_some())
@@ -72,8 +62,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             ancestors.push(search.clone());
             let parent = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain(WorldStateTable::ObjectParent, &search)
                 .map_err(err_map)?
                 .unwrap_or(NOTHING);
@@ -85,8 +73,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
         let objs = self
             .tx
-            .as_ref()
-            .unwrap()
             .scan_with_predicate(
                 WorldStateTable::ObjectFlags,
                 |&_: &Obj, _: &BitEnum<ObjFlag>| true,
@@ -97,8 +83,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
     fn get_object_flags(&self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectFlags, obj)
             .map_err(err_map)?
             .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(obj.clone())))
@@ -110,8 +94,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         //   cache this or index it better
         let players = self
             .tx
-            .as_ref()
-            .unwrap()
             .scan_with_predicate(
                 WorldStateTable::ObjectFlags,
                 |_: &Obj, flags: &BitEnum<ObjFlag>| flags.contains(ObjFlag::User),
@@ -123,8 +105,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn get_max_object(&self) -> Result<Obj, WorldStateError> {
         let seq_max = self
             .tx
-            .as_ref()
-            .unwrap()
             .get_sequence(WorldStateSequence::MaximumObject)
             .unwrap_or(-1);
         // Turn to i32, but check bounds against MAX_INT
@@ -142,8 +122,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
     fn get_object_owner(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectOwner, obj)
             .map_err(err_map)?
             .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(obj.clone())))
@@ -151,16 +129,12 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
     fn set_object_owner(&self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectOwner, obj, owner)
             .map_err(err_map)
     }
 
     fn set_object_flags(&self, obj: &Obj, flags: BitEnum<ObjFlag>) -> Result<(), WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectFlags, obj, &flags)
             .map_err(err_map)
     }
@@ -168,8 +142,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn get_object_name(&self, obj: &Obj) -> Result<String, WorldStateError> {
         let sh: StringHolder = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectName, obj)
             .map_err(err_map)?
             .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(obj.clone())))?;
@@ -178,8 +150,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
     fn set_object_name(&self, obj: &Obj, name: String) -> Result<(), WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectName, obj, &StringHolder(name))
             .map_err(err_map)
     }
@@ -190,8 +160,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             None => {
                 let max = self
                     .tx
-                    .as_ref()
-                    .unwrap()
                     .increment_sequence(WorldStateSequence::MaximumObject);
                 let max = if max < i32::MIN as i64 || max > i32::MAX as i64 {
                     return Err(WorldStateError::DatabaseError(format!(
@@ -207,16 +175,12 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
         let owner = attrs.owner().unwrap_or(id.clone());
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectOwner, &id, &owner)
             .expect("Unable to insert initial owner");
 
         // Set initial name
         let name = attrs.name().unwrap_or_default();
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectName, &id, &StringHolder(name))
             .expect("Unable to insert initial name");
 
@@ -231,16 +195,12 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         }
 
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectFlags, &id, &attrs.flags())
             .expect("Unable to insert initial flags");
 
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
         self.tx
-            .as_ref()
-            .unwrap()
             .update_sequence_max(WorldStateSequence::MaximumObject, id.id().0 as i64);
 
         Ok(id)
@@ -277,7 +237,7 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         for rel in oid_relations.iter() {
             // It's ok to get NotFound here, since we're deleting anyways.
             // In particular for ObjectParent, we may not have a tuple.
-            match self.tx.as_ref().unwrap().remove_by_domain(*rel, obj) {
+            match self.tx.remove_by_domain(*rel, obj) {
                 Ok(_) => {}
                 Err(RelationalError::NotFound) => {}
                 Err(e) => return Err(err_map(e)),
@@ -287,8 +247,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         let propdefs = self.get_properties(obj)?;
         for p in propdefs.iter() {
             self.tx
-                .as_ref()
-                .unwrap()
                 .delete_composite_if_exists(
                     WorldStateTable::ObjectPropertyValue,
                     obj,
@@ -300,8 +258,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         // We may or may not have propdefs yet...
         match self
             .tx
-            .as_ref()
-            .unwrap()
             .remove_by_domain(WorldStateTable::ObjectPropDefs, obj)
         {
             Ok(_) => {}
@@ -315,8 +271,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn get_object_parent(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
         Ok(self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectParent, obj)
             .map_err(err_map)?
             .unwrap_or(NOTHING))
@@ -343,8 +297,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         // Remove from _me_ any of the properties defined by any of my ancestors
         if let Some(old_props) = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain::<Obj, PropDefs>(WorldStateTable::ObjectPropDefs, o)
             .map_err(err_map)?
         {
@@ -354,8 +306,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                     delort_props.push(p.uuid());
 
                     self.tx
-                        .as_ref()
-                        .unwrap()
                         .delete_composite_if_exists(
                             WorldStateTable::ObjectPropertyValue,
                             o,
@@ -366,8 +316,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             }
             let new_props = old_props.with_all_removed(&delort_props);
             self.tx
-                .as_ref()
-                .unwrap()
                 .upsert(WorldStateTable::ObjectPropDefs, o, &new_props)
                 .expect("Unable to update propdefs");
         }
@@ -382,8 +330,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             // Remove the set values.
             if let Some(old_props) = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain::<Obj, PropDefs>(WorldStateTable::ObjectPropDefs, o)
                 .map_err(err_map)?
             {
@@ -391,8 +337,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                     if old_ancestors.contains(&p.definer()) {
                         inherited_props.push(p.uuid());
                         self.tx
-                            .as_ref()
-                            .unwrap()
                             .delete_composite_if_exists(
                                 WorldStateTable::ObjectPropertyValue,
                                 &c,
@@ -413,8 +357,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         // and if that's the case we can ignore that.
         if let Some(old_parent) = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain::<Obj, Obj>(WorldStateTable::ObjectParent, o)
             .map_err(err_map)?
         {
@@ -424,8 +366,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         };
 
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectParent, o, new_parent)
             .expect("Unable to update parent");
 
@@ -442,8 +382,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         for a in new_ancestors {
             if let Some(props) = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain::<Obj, PropDefs>(WorldStateTable::ObjectPropDefs, &a)
                 .map_err(err_map)?
             {
@@ -451,8 +389,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                     if p.definer().eq(&a) {
                         let propperms = self
                             .tx
-                            .as_ref()
-                            .unwrap()
                             .seek_by_unique_composite_domain::<_, _, PropPerms>(
                                 WorldStateTable::ObjectPropertyPermissions,
                                 &a,
@@ -471,8 +407,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         for c in descendants.iter().chain(std::iter::once(o.clone())) {
             for (p, propperms) in new_props.iter() {
                 self.tx
-                    .as_ref()
-                    .unwrap()
                     .upsert_composite(
                         WorldStateTable::ObjectPropertyPermissions,
                         &c,
@@ -487,8 +421,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
     fn get_object_children(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .seek_by_codomain::<Obj, Obj, ObjSet>(WorldStateTable::ObjectParent, obj)
             .map_err(err_map)
     }
@@ -496,8 +428,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn get_object_location(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
         Ok(self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectLocation, obj)
             .map_err(err_map)?
             .unwrap_or(NOTHING))
@@ -505,8 +435,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
     fn get_object_contents(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .seek_by_codomain::<Obj, Obj, ObjSet>(WorldStateTable::ObjectLocation, obj)
             .map_err(err_map)
     }
@@ -515,59 +443,43 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         let mut size = 0;
         size += self
             .tx
-            .as_ref()
-            .unwrap()
             .tuple_size_for_unique_domain(WorldStateTable::ObjectOwner, obj)
             .map_err(err_map)?
             .unwrap_or(0);
         size += self
             .tx
-            .as_ref()
-            .unwrap()
             .tuple_size_for_unique_domain(WorldStateTable::ObjectFlags, obj)
             .map_err(err_map)?
             .unwrap_or(0);
         size += self
             .tx
-            .as_ref()
-            .unwrap()
             .tuple_size_for_unique_domain(WorldStateTable::ObjectName, obj)
             .map_err(err_map)?
             .unwrap_or(0);
         size += self
             .tx
-            .as_ref()
-            .unwrap()
             .tuple_size_for_unique_domain(WorldStateTable::ObjectParent, obj)
             .map_err(err_map)?
             .unwrap_or(0);
         size += self
             .tx
-            .as_ref()
-            .unwrap()
             .tuple_size_for_unique_domain(WorldStateTable::ObjectLocation, obj)
             .map_err(err_map)?
             .unwrap_or(0);
 
         if let Some(verbs) = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain::<Obj, VerbDefs>(WorldStateTable::ObjectVerbs, obj)
             .map_err(err_map)?
         {
             size += self
                 .tx
-                .as_ref()
-                .unwrap()
                 .tuple_size_for_unique_domain(WorldStateTable::ObjectVerbs, obj)
                 .map_err(err_map)?
                 .unwrap_or(0);
             for v in verbs.iter() {
                 size += self
                     .tx
-                    .as_ref()
-                    .unwrap()
                     .tuple_size_by_composite_domain(
                         WorldStateTable::VerbProgram,
                         obj,
@@ -580,23 +492,17 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
         if let Some(props) = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain::<Obj, PropDefs>(WorldStateTable::ObjectPropDefs, obj)
             .map_err(err_map)?
         {
             size += self
                 .tx
-                .as_ref()
-                .unwrap()
                 .tuple_size_for_unique_domain(WorldStateTable::ObjectPropDefs, obj)
                 .map_err(err_map)?
                 .unwrap_or(0);
             for p in props.iter() {
                 size += self
                     .tx
-                    .as_ref()
-                    .unwrap()
                     .tuple_size_by_composite_domain(
                         WorldStateTable::ObjectPropertyValue,
                         obj,
@@ -625,8 +531,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             }
             let Some(location) = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain(WorldStateTable::ObjectLocation, &oid)
                 .map_err(err_map)?
             else {
@@ -641,8 +545,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         // Get and remove from contents of old location, if we had any.
         if let Some(old_location) = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain::<Obj, Obj>(WorldStateTable::ObjectLocation, what)
             .map_err(err_map)?
         {
@@ -653,8 +555,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
         // Set new location.
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectLocation, what, new_location)
             .map_err(err_map)?;
 
@@ -668,8 +568,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn get_verbs(&self, obj: &Obj) -> Result<VerbDefs, WorldStateError> {
         Ok(self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectVerbs, obj)
             .map_err(err_map)?
             .unwrap_or(VerbDefs::empty()))
@@ -678,8 +576,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn get_verb_binary(&self, obj: &Obj, uuid: Uuid) -> Result<Bytes, WorldStateError> {
         let bh: BytesHolder = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_by_unique_composite_domain(WorldStateTable::VerbProgram, obj, &UUIDHolder(uuid))
             .map_err(err_map)?
             .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), format!("{}", uuid)))?;
@@ -689,8 +585,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError> {
         let verbdefs: VerbDefs = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectVerbs, obj)
             .map_err(err_map)?
             .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), name.to_string()))?;
@@ -726,8 +620,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         loop {
             if let Some(verbdefs) = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain::<Obj, VerbDefs>(WorldStateTable::ObjectVerbs, &search_o)
                 .map_err(err_map)?
             {
@@ -750,8 +642,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             // hit the end of the chain.
             search_o = match self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain::<Obj, Obj>(WorldStateTable::ObjectParent, &search_o)
                 .map_err(err_map)?
             {
@@ -772,8 +662,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     ) -> Result<(), WorldStateError> {
         let Some(verbdefs): Option<VerbDefs> = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectVerbs, obj)
             .map_err(err_map)?
         else {
@@ -805,15 +693,11 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         };
 
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectVerbs, obj, &verbdefs)
             .map_err(err_map)?;
 
         if verb_attrs.binary.is_some() {
             self.tx
-                .as_ref()
-                .unwrap()
                 .upsert_composite(
                     WorldStateTable::VerbProgram,
                     obj,
@@ -837,8 +721,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     ) -> Result<(), WorldStateError> {
         let verbdefs = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectVerbs, oid)
             .map_err(err_map)?
             .unwrap_or(VerbDefs::empty());
@@ -857,14 +739,10 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         let verbdefs = verbdefs.with_added(verbdef);
 
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectVerbs, oid, &verbdefs)
             .map_err(err_map)?;
 
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert_composite(
                 WorldStateTable::VerbProgram,
                 oid,
@@ -879,8 +757,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn delete_verb(&self, location: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         let verbdefs: VerbDefs = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectVerbs, location)
             .map_err(err_map)?
             .ok_or_else(|| WorldStateError::VerbNotFound(location.clone(), format!("{}", uuid)))?;
@@ -890,14 +766,10 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             .ok_or_else(|| WorldStateError::VerbNotFound(location.clone(), format!("{}", uuid)))?;
 
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(WorldStateTable::ObjectVerbs, location, &verbdefs)
             .map_err(err_map)?;
 
         self.tx
-            .as_ref()
-            .unwrap()
             .remove_by_composite_domain(WorldStateTable::VerbProgram, location, &UUIDHolder(uuid))
             .map_err(err_map)?;
 
@@ -907,8 +779,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     fn get_properties(&self, obj: &Obj) -> Result<PropDefs, WorldStateError> {
         Ok(self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain(WorldStateTable::ObjectPropDefs, obj)
             .map_err(err_map)?
             .unwrap_or(PropDefs::empty()))
@@ -916,8 +786,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
     fn set_property(&self, obj: &Obj, uuid: Uuid, value: Var) -> Result<(), WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert_composite(
                 WorldStateTable::ObjectPropertyValue,
                 obj,
@@ -941,8 +809,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         // If the property is already defined at us or above or below us, that's a failure.
         let props = match self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_unique_by_domain::<Obj, PropDefs>(WorldStateTable::ObjectPropDefs, location)
             .map_err(err_map)?
         {
@@ -962,8 +828,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         for location in check_locations.iter() {
             if let Some(descendant_props) = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain::<Obj, PropDefs>(WorldStateTable::ObjectPropDefs, &location)
                 .map_err(err_map)?
             {
@@ -983,8 +847,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
         let prop = PropDef::new(u, definer.clone(), location.clone(), name.as_str());
         self.tx
-            .as_ref()
-            .unwrap()
             .upsert(
                 WorldStateTable::ObjectPropDefs,
                 location,
@@ -995,8 +857,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         // If we have an initial value, set it, but just on ourselves. Descendants start out clear.
         if let Some(value) = value {
             self.tx
-                .as_ref()
-                .unwrap()
                 .upsert_composite(
                     WorldStateTable::ObjectPropertyValue,
                     location,
@@ -1011,8 +871,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             ObjSet::from_items(&[location.clone()]).with_concatenated(descendants);
         for location in value_locations.iter() {
             self.tx
-                .as_ref()
-                .unwrap()
                 .upsert_composite(
                     WorldStateTable::ObjectPropertyPermissions,
                     &location,
@@ -1041,8 +899,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         if let Some(new_name) = new_name {
             let props = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain(WorldStateTable::ObjectPropDefs, obj)
                 .map_err(err_map)?
                 .unwrap_or(PropDefs::empty());
@@ -1057,8 +913,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             };
 
             self.tx
-                .as_ref()
-                .unwrap()
                 .upsert(WorldStateTable::ObjectPropDefs, obj, &props)
                 .map_err(err_map)?;
         }
@@ -1067,8 +921,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         if new_flags.is_some() || new_owner.is_some() {
             let mut perms: PropPerms = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_by_unique_composite_domain(
                     WorldStateTable::ObjectPropertyPermissions,
                     obj,
@@ -1086,8 +938,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
             }
 
             self.tx
-                .as_ref()
-                .unwrap()
                 .upsert_composite(
                     WorldStateTable::ObjectPropertyPermissions,
                     obj,
@@ -1102,8 +952,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
     fn clear_property(&self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .delete_composite_if_exists(
                 WorldStateTable::ObjectPropertyValue,
                 obj,
@@ -1120,8 +968,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         for location in locations.iter() {
             let props: PropDefs = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain(WorldStateTable::ObjectPropDefs, &location)
                 .map_err(err_map)?
                 .expect("Unable to find property for object, invalid object");
@@ -1131,8 +977,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 .expect("Unable to remove property definition");
 
             self.tx
-                .as_ref()
-                .unwrap()
                 .upsert(WorldStateTable::ObjectPropDefs, &location, &props)
                 .map_err(err_map)?;
         }
@@ -1146,8 +990,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
     ) -> Result<(Option<Var>, PropPerms), WorldStateError> {
         let value = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_by_unique_composite_domain(
                 WorldStateTable::ObjectPropertyValue,
                 obj,
@@ -1164,8 +1006,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         uuid: Uuid,
     ) -> Result<PropPerms, WorldStateError> {
         self.tx
-            .as_ref()
-            .unwrap()
             .seek_by_unique_composite_domain::<_, _, PropPerms>(
                 WorldStateTable::ObjectPropertyPermissions,
                 obj,
@@ -1194,8 +1034,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
             if let Some(parent) = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_unique_by_domain(WorldStateTable::ObjectParent, &search_obj)
                 .map_err(err_map)?
             {
@@ -1214,8 +1052,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         // But value could be 'clear' in which case we need to look in the parent.
         let perms = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_by_unique_composite_domain::<_, _, PropPerms>(
                 WorldStateTable::ObjectPropertyPermissions,
                 obj,
@@ -1226,8 +1062,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
         match self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_by_unique_composite_domain::<_, _, Var>(
                 WorldStateTable::ObjectPropertyValue,
                 obj,
@@ -1241,8 +1075,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
                 loop {
                     let Some(parent): Option<Obj> = self
                         .tx
-                        .as_ref()
-                        .unwrap()
                         .seek_unique_by_domain(WorldStateTable::ObjectParent, &search_obj)
                         .map_err(err_map)?
                     else {
@@ -1255,8 +1087,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
 
                     let value = self
                         .tx
-                        .as_ref()
-                        .unwrap()
                         .seek_by_unique_composite_domain(
                             WorldStateTable::ObjectPropertyValue,
                             &search_obj,
@@ -1275,12 +1105,12 @@ impl<RTX: RelationalTransaction<WorldStateTable>> WorldStateTransaction
         todo!("Implement db_usage")
     }
 
-    fn commit(&mut self) -> Result<CommitResult, WorldStateError> {
-        Ok(self.tx.take().unwrap().commit())
+    fn commit(self) -> Result<CommitResult, WorldStateError> {
+        Ok(self.tx.commit())
     }
 
-    fn rollback(&mut self) -> Result<(), WorldStateError> {
-        self.tx.take().unwrap().rollback();
+    fn rollback(self) -> Result<(), WorldStateError> {
+        self.tx.rollback();
         Ok(())
     }
 }
@@ -1289,8 +1119,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> RelationalWorldStateTransactio
     pub fn descendants(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
         let children = self
             .tx
-            .as_ref()
-            .unwrap()
             .seek_by_codomain::<Obj, Obj, ObjSet>(WorldStateTable::ObjectParent, obj)
             .map_err(err_map)?;
 
@@ -1300,8 +1128,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> RelationalWorldStateTransactio
             descendants.push(o.clone());
             let children = self
                 .tx
-                .as_ref()
-                .unwrap()
                 .seek_by_codomain::<Obj, Obj, ObjSet>(WorldStateTable::ObjectParent, &o)
                 .map_err(err_map)?;
             queue.extend(children.iter());
@@ -1339,8 +1165,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> RelationalWorldStateTransactio
                 ancestors_a.insert(search_a.clone());
                 let parent = self
                     .tx
-                    .as_ref()
-                    .unwrap()
                     .seek_unique_by_domain(WorldStateTable::ObjectParent, &search_a)
                     .map_err(err_map)?
                     .unwrap_or(NOTHING);
@@ -1351,8 +1175,6 @@ impl<RTX: RelationalTransaction<WorldStateTable>> RelationalWorldStateTransactio
                 ancestors_b.insert(search_b.clone());
                 let parent = self
                     .tx
-                    .as_ref()
-                    .unwrap()
                     .seek_unique_by_domain(WorldStateTable::ObjectParent, &search_b)
                     .map_err(err_map)?
                     .unwrap_or(NOTHING);
