@@ -190,7 +190,7 @@ impl TreeTransformer {
             panic!("Unimplemented arglist: {:?}", first);
         };
 
-        return self.parse_exprlist(first.into_inner());
+        self.parse_exprlist(first.into_inner())
     }
 
     fn parse_except_codes(

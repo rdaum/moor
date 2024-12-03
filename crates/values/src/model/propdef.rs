@@ -93,7 +93,7 @@ impl PropDef {
         let mut names_buf = &self.0.as_ref()[names_offset..];
         let name_len = names_buf.get_u8() as usize;
         let name_slice = names_buf.get(..name_len).unwrap();
-        return std::str::from_utf8(name_slice).unwrap();
+        std::str::from_utf8(name_slice).unwrap()
     }
 }
 

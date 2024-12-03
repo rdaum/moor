@@ -30,7 +30,7 @@ impl<'a> WsMatchEnv<'a> {
         Self { ws, perms }
     }
 }
-impl<'a> MatchEnvironment for WsMatchEnv<'a> {
+impl MatchEnvironment for WsMatchEnv<'_> {
     fn obj_valid(&self, oid: &Obj) -> Result<bool, WorldStateError> {
         self.ws.valid(oid)
     }

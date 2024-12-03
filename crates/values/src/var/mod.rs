@@ -98,7 +98,7 @@ pub enum TypeClass<'a> {
     Scalar,
 }
 
-impl<'a> TypeClass<'a> {
+impl TypeClass<'_> {
     fn is_sequence(&self) -> bool {
         matches!(self, TypeClass::Sequence(_))
     }

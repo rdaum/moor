@@ -892,11 +892,11 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             bf_frame.bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
             // Now we have to construct things to set up for eval. Which means tramping through with a
             // setup-for-eval result here.
-            return Ok(VmInstr(ExecutionResult::PerformEval {
+            Ok(VmInstr(ExecutionResult::PerformEval {
                 permissions: bf_args.task_perms_who(),
                 player: bf_args.exec_state.top().player.clone(),
                 program,
-            }));
+            }))
         }
         BF_SERVER_EVAL_TRAMPOLINE_RESUME => {
             // Value must be on in our activation's "return value"
