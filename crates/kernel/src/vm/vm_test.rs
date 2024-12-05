@@ -37,7 +37,7 @@ mod tests {
     use moor_compiler::Program;
     use moor_compiler::{compile, UnboundNames};
     use moor_compiler::{CompileOptions, Names};
-    use moor_db_wiredtiger::WiredTigerDB;
+    use moor_db::TxDB;
     use moor_values::Symbol;
     use test_case::test_case;
 
@@ -53,8 +53,8 @@ mod tests {
     }
 
     // Create an in memory db with a single object (#0) containing a single provided verb.
-    fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> WiredTigerDB {
-        let (state, _) = WiredTigerDB::open(None);
+    fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> TxDB {
+        let (state, _) = TxDB::open(None);
         let mut tx = state.new_world_state().unwrap();
         let sysobj = tx
             .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::all())
@@ -101,7 +101,7 @@ mod tests {
         state
     }
 
-    fn test_db_with_verb(verb_name: &str, program: &Program) -> WiredTigerDB {
+    fn test_db_with_verb(verb_name: &str, program: &Program) -> TxDB {
         test_db_with_verbs(&[(verb_name, program)])
     }
 

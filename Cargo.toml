@@ -5,10 +5,8 @@ members = [
     "crates/compiler",
     "crates/daemon",
     "crates/db",
-    "crates/db-fjall",
-    "crates/db-relbox",
-    "crates/db-wiredtiger",
     "crates/kernel",
+    "crates/model-checker",
     "crates/moot",
     "crates/rpc-async-client",
     "crates/rpc-common",
@@ -16,14 +14,12 @@ members = [
     "crates/telnet-host",
     "crates/values",
     "crates/web-host",
-    "crates/model-checker",
 ]
 default-members = [
     "crates/values",
     "crates/compiler",
     "crates/kernel",
     "crates/db",
-    "crates/db-wiredtiger",
     "crates/rpc-common",
     "crates/rpc-sync-client",
     "crates/rpc-async-client",
@@ -137,7 +133,6 @@ paste = "1.0"
 # For the DB & values layer.
 fjall = { version = "2.3.2", default-features = false, features = ["ssi_tx", "bytes"] }
 libc = "0.2"
-relbox = { git = "https://github.com/rdaum/Relbox.git", version = "0.2.0" }
 text_io = "0.1" # Used for reading text dumps.
 
 # Dev dependencies

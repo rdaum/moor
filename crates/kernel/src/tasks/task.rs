@@ -235,7 +235,7 @@ impl Task {
                 trace!(task_id = self.task_id, result = ?result, "Task complete, success");
 
                 // Special case: in case of return from $do_command @ top-level, we need to look at the results:
-                //      non-true value? => parse_command and restart.
+                //      non-true value? => parse_command and restart (in same transaction)
                 //      true value? => commit and return success.
                 if let TaskStart::StartDoCommand {
                     handler_object,
@@ -674,7 +674,7 @@ mod tests {
     use crossbeam_channel::{unbounded, Receiver};
 
     use moor_compiler::{compile, CompileOptions, Program};
-    use moor_db_wiredtiger::WiredTigerDB;
+    use moor_db::TxDB;
     use moor_values::model::{
         ArgSpec, BinaryType, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
     };
@@ -706,7 +706,7 @@ mod tests {
     ) -> (
         Arc<AtomicBool>,
         Task,
-        WiredTigerDB,
+        TxDB,
         Box<dyn WorldState>,
         TaskSchedulerClient,
         Receiver<(TaskId, TaskControlMsg)>,
@@ -729,7 +729,7 @@ mod tests {
             &server_options,
             kill_switch.clone(),
         );
-        let (db, _) = WiredTigerDB::open(None);
+        let (db, _) = TxDB::open(None);
         let mut tx = db.new_world_state().unwrap();
 
         let sysobj = tx
@@ -785,7 +785,7 @@ mod tests {
     ) -> (
         Arc<AtomicBool>,
         Task,
-        WiredTigerDB,
+        TxDB,
         Box<dyn WorldState>,
         TaskSchedulerClient,
         Receiver<(TaskId, TaskControlMsg)>,
@@ -805,7 +805,7 @@ mod tests {
     ) -> (
         Arc<AtomicBool>,
         Task,
-        WiredTigerDB,
+        TxDB,
         Box<dyn WorldState>,
         TaskSchedulerClient,
         Receiver<(TaskId, TaskControlMsg)>,

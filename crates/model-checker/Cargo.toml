@@ -16,13 +16,13 @@ moor-values = { path = "../values" }
 rpc-async-client = { path = "../rpc-async-client" }
 rpc-common = { path = "../rpc-common" }
 
+clap.workspace = true
+clap_derive.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
 pretty_assertions.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-clap.workspace = true
-clap_derive.workspace = true
 
 # Auth/Auth
 ed25519-dalek.workspace = true
@@ -34,9 +34,9 @@ tmq.workspace = true
 uuid.workspace = true
 
 ## Asynchronous transaction processing & networking
+futures.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
-futures.workspace = true
 
 edn-format.workspace = true
 rand.workspace = true

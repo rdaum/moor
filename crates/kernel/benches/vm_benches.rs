@@ -22,7 +22,7 @@ use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use moor_compiler::{compile, CompileOptions};
-use moor_db_wiredtiger::WiredTigerDB;
+use moor_db::TxDB;
 use moor_kernel::builtins::BuiltinRegistry;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
@@ -38,8 +38,8 @@ use moor_values::util::BitEnum;
 use moor_values::Symbol;
 use moor_values::{AsByteBuffer, Var, NOTHING, SYSTEM_OBJECT};
 
-fn create_worldstate() -> WiredTigerDB {
-    let (ws_source, _) = WiredTigerDB::open(None);
+fn create_worldstate() -> TxDB {
+    let (ws_source, _) = TxDB::open(None);
     let mut tx = ws_source.new_world_state().unwrap();
     let _sysobj = tx
         .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::all())

@@ -12,33 +12,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::common::create_fjall_db;
-#[cfg(feature = "relbox")]
-use crate::common::create_relbox_db;
-use common::{create_wiredtiger_db, AssertRunAsVerb};
+use crate::common::create_db;
+use crate::common::AssertRunAsVerb;
 
 mod common;
 
-#[cfg(feature = "relbox")]
 #[test]
-fn test_testhelper_verb_redefinition_relbox() {
-    let db = create_relbox_db();
-    db.assert_run_as_verb("return 42;", Ok(42.into()));
-    db.assert_run_as_verb("return create(#2).name;", Ok("".into()));
-    db.assert_run_as_verb("return 200;", Ok(200.into()));
-}
-
-#[test]
-fn test_testhelper_verb_redefinition_wiredtiger() {
-    let db = create_wiredtiger_db();
-    db.assert_run_as_verb("return 42;", Ok(42.into()));
-    db.assert_run_as_verb("return create(#2).name;", Ok("".into()));
-    db.assert_run_as_verb("return 200;", Ok(200.into()));
-}
-
-#[test]
-fn test_testhelper_verb_redefinition_fjall() {
-    let db = create_fjall_db();
+fn test_testhelper_verb_redefinition() {
+    let db = create_db();
     db.assert_run_as_verb("return 42;", Ok(42.into()));
     db.assert_run_as_verb("return create(#2).name;", Ok("".into()));
     db.assert_run_as_verb("return 200;", Ok(200.into()));

@@ -22,13 +22,6 @@ use std::{
 };
 use uuid::Uuid;
 
-/// The current DB implementation reserves this much RAM. Default is 1TB, and
-/// we rely on `vm.overcommit_memory` to allow this to be allocated. Instead of
-/// trying to set `vm.overcommit_memory` on GitHub Actions test envs,
-/// limit the DB size. This is plenty for the tests and, unlike the default,
-/// allocation succeeds.
-const MAX_BUFFER_POOL_BYTES: usize = 1 << 24;
-
 static DAEMON_HOST_BIN: OnceLock<PathBuf> = OnceLock::new();
 fn daemon_host_bin() -> &'static PathBuf {
     DAEMON_HOST_BIN.get_or_init(|| {
@@ -59,8 +52,6 @@ fn start_daemon(workdir: &Path, uuid: Uuid) -> ManagedChild {
             .arg(format!("{}{}", NARRATIVE_PATH_ROOT, uuid))
             .arg("--rpc-listen")
             .arg(format!("{}{}", RPC_PATH_ROOT, uuid))
-            .arg("--max-buffer-pool-bytes")
-            .arg(MAX_BUFFER_POOL_BYTES.to_string())
             .arg("test.db")
             .current_dir(workdir)
             .stdout(Stdio::piped())

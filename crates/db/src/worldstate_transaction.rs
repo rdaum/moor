@@ -206,4 +206,6 @@ pub trait WorldStateTransaction: Send {
 
     /// Throw away all local mutations.
     fn rollback(self) -> Result<(), WorldStateError>;
+
+    fn descendants(&self, obj: &Obj) -> Result<ObjSet, WorldStateError>;
 }

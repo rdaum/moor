@@ -20,10 +20,7 @@ use std::{path::Path, sync::Arc};
 
 use eyre::Context;
 
-use crate::common::create_fjall_db;
-#[cfg(feature = "relbox")]
-use common::create_relbox_db;
-use common::{create_wiredtiger_db, testsuite_dir};
+use common::{create_db, testsuite_dir};
 use moor_compiler::to_literal;
 use moor_db::Database;
 use moor_kernel::tasks::sessions::{NoopSystemControl, SessionError, SessionFactory};
@@ -112,22 +109,10 @@ impl MootRunner for SchedulerMootRunner {
     }
 }
 
-#[cfg(feature = "relbox")]
-fn test_relbox(path: &Path) {
-    test(create_relbox_db(), path);
+fn test_with_db(path: &Path) {
+    test(create_db(), path);
 }
-#[cfg(feature = "relbox")]
-test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as relbox => test_relbox }
-
-fn test_wiredtiger(path: &Path) {
-    test(create_wiredtiger_db(), path);
-}
-test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as wiredtiger => test_wiredtiger }
-
-fn test_fjall(path: &Path) {
-    test(create_fjall_db(), path);
-}
-test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as fjall => test_fjall }
+test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as txdb => test_with_db }
 
 struct NoopSessionFactory {}
 impl SessionFactory for NoopSessionFactory {
@@ -176,5 +161,5 @@ fn test(db: Box<dyn Database>, path: &Path) {
 fn test_single() {
     // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
     // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    test_fjall(&testsuite_dir().join("moot/truthiness.moot"));
+    test_with_db(&testsuite_dir().join("moot/truthiness.moot"));
 }

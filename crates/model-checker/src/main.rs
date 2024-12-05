@@ -106,7 +106,7 @@ struct Args {
         long,
         value_name = "num-concurrent-workloads",
         help = "Number of concurrent workloads to run",
-        default_value = "100"
+        default_value = "20"
     )]
     num_concurrent_workloads: usize,
 
@@ -294,12 +294,16 @@ for i in [1..num_props]
     except e (ANY)
         player.(prop) = {};
     endtry
+    player:tell("Added property " + prop);
 endfor
 try
     add_verb(player, {player, "rx", "write_workload"}, {"this", "none", "this"});
     add_verb(player, {player, "rx", "read_workload"}, {"this", "none", "this"});
 except e (ANY)
 endtry
+player:tell("Added verbs: " + tostr(player) + ":" + toliteral(verbs(player)));
+suspend(1);
+return 1;
 "#;
 
 /// Verb code for writing to the properties. Returns the pre-write values and the written values
@@ -350,6 +354,26 @@ async fn compile(
     verb_name: Symbol,
     verb_contents: Vec<String>,
 ) {
+    let response = rpc_client
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Verbs(
+                client_token.clone(),
+                auth_token.clone(),
+                ObjectRef::Id(oid.clone()),
+            ),
+        )
+        .await
+        .expect("Unable to send verbs request to RPC server");
+    match response {
+        ReplyResult::ClientSuccess(DaemonToClientReply::Verbs(verbs)) => {
+            info!("Got verbs: {:?}", verbs);
+        }
+        _ => {
+            panic!("RPC failure in verbs");
+        }
+    }
+
     let response = rpc_client
         .make_client_rpc_call(
             client_id,
@@ -426,7 +450,10 @@ async fn initialization_session(
         }
     }
 
-    info!("Created/cleared {} properties", args.num_props);
+    info!(
+        "Created/cleared {} properties & workload verbs",
+        args.num_props
+    );
 
     compile(
         &mut rpc_client,

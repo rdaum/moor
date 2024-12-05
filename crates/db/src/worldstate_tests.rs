@@ -15,7 +15,6 @@
 //! A set of common tests for any world state implementation.
 
 use crate::worldstate_transaction::WorldStateTransaction;
-use crate::{RelationalTransaction, RelationalWorldStateTransaction, WorldStateTable};
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbAttrs};
 use moor_values::model::{CommitResult, WorldStateError};
@@ -30,8 +29,8 @@ use moor_values::{v_int, v_str};
 
 pub fn perform_test_create_object<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
     let oid = tx
@@ -52,12 +51,14 @@ where
     let tx = begin_tx();
     assert!(tx.object_valid(&oid).unwrap());
     assert_eq!(tx.get_object_owner(&oid).unwrap(), oid);
+
+    assert_eq!(tx.get_objects().unwrap(), ObjSet::from_items(&[oid]));
 }
 
 pub fn perform_test_create_object_fixed_id<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -74,8 +75,8 @@ where
 
 pub fn perform_test_parent_children<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -138,13 +139,22 @@ where
         .get_object_children(&d)
         .unwrap()
         .is_same(ObjSet::from_items(&[b.clone()])));
+
+    let objects = tx.get_objects().unwrap();
+    assert!(objects.is_same(ObjSet::from_items(&[
+        a.clone(),
+        b.clone(),
+        c.clone(),
+        d.clone()
+    ])));
+
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
 pub fn perform_test_descendants<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -180,11 +190,13 @@ where
         .unwrap();
     assert_eq!(d, Obj::mk_id(3));
 
-    assert!(tx.descendants(&a).unwrap().is_same(ObjSet::from_items(&[
-        b.clone(),
-        c.clone(),
-        d.clone()
-    ])));
+    let desc = tx.descendants(&a).expect("Could not retrieve descendants");
+    assert!(
+        desc.is_same(ObjSet::from_items(&[b.clone(), c.clone(), d.clone()])),
+        "Descendants doesn't match expected is {:?}",
+        desc
+    );
+
     assert_eq!(tx.descendants(&b).unwrap(), ObjSet::empty());
     assert_eq!(
         tx.descendants(&c).unwrap(),
@@ -217,8 +229,8 @@ where
 
 pub fn perform_test_location_contents<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -305,8 +317,8 @@ where
 /// Test data integrity of object moves between commits.
 pub fn perform_test_object_move_commits<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -387,8 +399,8 @@ where
 
 pub fn perform_test_simple_property<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -421,8 +433,8 @@ where
 /// Regression test for updating-verbs failing.
 pub fn perform_test_verb_add_update<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
     let oid = tx
@@ -483,8 +495,8 @@ where
 
 pub fn perform_test_transitive_property_resolution<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -540,8 +552,8 @@ where
 
 pub fn perform_test_transitive_property_resolution_clear_property<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -632,8 +644,8 @@ where
 
 pub fn perform_test_rename_property<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
     let a = tx
@@ -683,8 +695,8 @@ where
 /// Test regression where parent properties were present via `properties()` on children.
 pub fn perform_test_regression_properties<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -743,8 +755,8 @@ where
 
 pub fn perform_test_verb_resolve<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -830,8 +842,8 @@ where
 
 pub fn perform_test_verb_resolve_inherited<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
 
@@ -888,8 +900,8 @@ where
 
 pub fn perform_test_verb_resolve_wildcard<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
     let a = tx
@@ -946,8 +958,8 @@ where
 
 pub fn perform_reparent_props<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
     let a = tx
@@ -1062,8 +1074,8 @@ where
 
 pub fn perform_test_recycle_object<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     // Simple: property-less, #-1 located, #-1 parented object.
     let tx = begin_tx();
@@ -1106,7 +1118,12 @@ where
     );
 
     // Verify that children list is empty for the parent.
-    assert!(tx.get_object_children(&a).unwrap().is_empty());
+    let children = tx.get_object_children(&a).unwrap();
+    assert!(
+        children.is_empty(),
+        "Children list is not empty: {:?}",
+        children
+    );
 
     // Create another one, add a property to the root, and then verify we can recycle the child.
     let c = tx
@@ -1188,8 +1205,8 @@ where
 // Verify that 'max_object' is the highest object id in the database, not one higher.
 pub fn perform_test_max_object<F, TX>(begin_tx: F)
 where
-    F: Fn() -> RelationalWorldStateTransaction<TX>,
-    TX: RelationalTransaction<WorldStateTable>,
+    F: Fn() -> TX,
+    TX: WorldStateTransaction,
 {
     let tx = begin_tx();
     // Max object in a virgin DB should return #-1

@@ -21,14 +21,17 @@ moor-values = { path = "../values" }
 
 ## Error declaration/ handling
 bytes.workspace = true
+crossbeam-channel.workspace = true
 daumtils.workspace = true
+fjall.workspace = true
+im.workspace = true
 lazy_static.workspace = true
+oneshot.workspace = true
 strum.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-im.workspace = true
-fjall.workspace = true
 
 [features]
 relbox = []

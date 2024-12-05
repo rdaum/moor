@@ -18,18 +18,14 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use eyre::{Context, Error};
 
 use crate::connections::ConnectionsDB;
 use crate::connections_fjall::ConnectionsFjall;
-#[cfg(feature = "relbox")]
-use crate::connections_rb::ConnectionsRb;
-use crate::connections_wt::ConnectionsWT;
 use crate::rpc_hosts::Hosts;
 use crate::rpc_session::RpcSession;
-use moor_db::DatabaseFlavour;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
@@ -70,6 +66,10 @@ pub struct RpcServer {
     config: Arc<Config>,
     pub(crate) kill_switch: Arc<AtomicBool>,
     pub(crate) hosts: Arc<Mutex<Hosts>>,
+
+    pub(crate) host_token_cache: Arc<Mutex<HashMap<HostToken, (Instant, HostType)>>>,
+    pub(crate) auth_token_cache: Arc<Mutex<HashMap<AuthToken, (Instant, Obj)>>>,
+    pub(crate) client_token_cache: Arc<Mutex<HashMap<ClientToken, Instant>>>,
 }
 
 /// If we don't hear from a host in this time, we consider it dead and its listeners gone.
@@ -100,7 +100,6 @@ impl RpcServer {
         zmq_context: zmq::Context,
         narrative_endpoint: &str,
         // For determining the flavor for the connections database.
-        db_flavor: DatabaseFlavour,
         config: Arc<Config>,
     ) -> Self {
         info!(
@@ -115,12 +114,7 @@ impl RpcServer {
         publish
             .bind(narrative_endpoint)
             .expect("Unable to bind ZMQ PUB socket");
-        let connections: Arc<dyn ConnectionsDB + Send + Sync> = match db_flavor {
-            DatabaseFlavour::WiredTiger => Arc::new(ConnectionsWT::new(Some(connections_db_path))),
-            DatabaseFlavour::Fjall => Arc::new(ConnectionsFjall::new(Some(connections_db_path))),
-            #[cfg(feature = "relbox")]
-            DatabaseFlavour::RelBox => Arc::new(ConnectionsRb::new(Some(connections_db_path))),
-        };
+        let connections = Arc::new(ConnectionsFjall::open(Some(&connections_db_path)));
         info!(
             "Created connections list, with {} initial known connections",
             connections.connections().len()
@@ -135,6 +129,9 @@ impl RpcServer {
             config,
             kill_switch,
             hosts: Default::default(),
+            host_token_cache: Arc::new(Mutex::new(Default::default())),
+            auth_token_cache: Arc::new(Mutex::new(Default::default())),
+            client_token_cache: Arc::new(Mutex::new(Default::default())),
         }
     }
 
@@ -1277,6 +1274,16 @@ impl RpcServer {
     /// Validate a provided PASTEO host token.  Just verifying that it is a valid token signed
     /// with our same keypair.
     fn validate_host_token(&self, token: &HostToken) -> Result<HostType, RpcMessageError> {
+        // Check cache first.
+        {
+            let host_tokens = self.host_token_cache.lock().unwrap();
+
+            if let Some((t, host_type)) = host_tokens.get(token) {
+                if t.elapsed().as_secs() <= 60 {
+                    return Ok(*host_type);
+                }
+            }
+        }
         let key: Key<32> = Key::from(&self.keypair[32..]);
         let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
         let host_type = Paseto::<V4, Public>::try_verify(
@@ -1295,6 +1302,10 @@ impl RpcServer {
             return Err(RpcMessageError::PermissionDenied);
         };
 
+        // Cache the result.
+        let mut host_tokens = self.host_token_cache.lock().unwrap();
+        host_tokens.insert(token.clone(), (Instant::now(), host_type));
+
         Ok(host_type)
     }
 
@@ -1305,6 +1316,15 @@ impl RpcServer {
         token: ClientToken,
         client_id: Uuid,
     ) -> Result<(), RpcMessageError> {
+        {
+            let client_tokens = self.client_token_cache.lock().unwrap();
+            if let Some(t) = client_tokens.get(&token) {
+                if t.elapsed().as_secs() <= 60 {
+                    return Ok(());
+                }
+            }
+        }
+
         let key: Key<32> = Key::from(&self.keypair[32..]);
         let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
         let verified_token = Paseto::<V4, Public>::try_verify(
@@ -1346,6 +1366,9 @@ impl RpcServer {
             return Err(RpcMessageError::PermissionDenied);
         }
 
+        let mut client_tokens = self.client_token_cache.lock().unwrap();
+        client_tokens.insert(token.clone(), Instant::now());
+
         Ok(())
     }
 
@@ -1360,6 +1383,14 @@ impl RpcServer {
         token: AuthToken,
         objid: Option<&Obj>,
     ) -> Result<Obj, RpcMessageError> {
+        {
+            let auth_tokens = self.auth_token_cache.lock().unwrap();
+            if let Some((t, o)) = auth_tokens.get(&token) {
+                if t.elapsed().as_secs() <= 60 {
+                    return Ok(o.clone());
+                }
+            }
+        }
         let key: Key<32> = Key::from(&self.keypair[32..]);
         let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
         let verified_token = Paseto::<V4, Public>::try_verify(
@@ -1407,6 +1438,8 @@ impl RpcServer {
         //   code with checks to make sure that the player objid is valid before letting it go
         //   forwards.
 
+        let mut auth_tokens = self.auth_token_cache.lock().unwrap();
+        auth_tokens.insert(token.clone(), (Instant::now(), token_player.clone()));
         Ok(token_player)
     }
 }

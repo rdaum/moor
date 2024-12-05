@@ -12,228 +12,154 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! An implementation of the connections db that uses relbox.
-
-use std::collections::HashSet;
-use std::fmt::{Debug, Display, Formatter};
-use std::path::PathBuf;
-use std::thread::sleep;
-use std::time::{Duration, SystemTime};
-
-use eyre::Error;
-use moor_db::{RelationalError, RelationalTransaction, StringHolder, SystemTimeHolder};
-use strum::{AsRefStr, Display, EnumCount, EnumIter, EnumProperty};
-use tracing::{error, warn};
+use crate::connections::{ConnectionsDB, CONNECTION_TIMEOUT_DURATION};
+use bincode::{Decode, Encode};
+use bytes::Bytes;
+use eyre::{bail, Error};
+use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
+use moor_kernel::tasks::sessions::SessionError;
+use moor_values::{AsByteBuffer, Obj, BINCODE_CONFIG};
+use rpc_common::RpcMessageError;
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
+use tracing::info;
 use uuid::Uuid;
 
-use bytes::Bytes;
-use moor_db_fjall::{FjallDb, FjallTransaction};
-use moor_kernel::tasks::sessions::SessionError;
-use moor_values::model::{CommitResult, ValSet};
-use moor_values::Obj;
-use moor_values::{AsByteBuffer, DecodingError, EncodingError};
-use rpc_common::RpcMessageError;
-
-use crate::connections::{ConnectionsDB, CONNECTION_TIMEOUT_DURATION};
-use crate::connections_fjall::ConnectionRelation::{
-    ClientActivity, ClientConnectTime, ClientConnection, ClientName, ClientPingTime,
-};
-use crate::connections_fjall::Sequences::ConnectionId;
-
-#[repr(usize)]
-// Don't warn about same-prefix, "I did that on purpose"
-#[allow(clippy::enum_variant_names)]
-#[derive(
-    Copy, Clone, Debug, Eq, PartialEq, EnumIter, EnumCount, Display, EnumProperty, AsRefStr,
-)]
-enum ConnectionRelation {
-    // One to many, client id <-> connection/player object. Secondary index will seek on object id.
-    #[strum(props(SecondaryIndexed = "true",))]
-    ClientConnection = 0,
-    /// Client -> SystemTime of last activity
-    ClientActivity = 1,
-    /// Client connect time.
-    ClientConnectTime = 2,
-    /// Client last ping time.
-    ClientPingTime = 3,
-    /// Client hostname / connection "name"
-    ClientName = 4,
+#[derive(Debug, Clone, Encode, Decode)]
+struct ConnectionRecord {
+    client_id: u128,
+    connected_time: SystemTime,
+    last_activity: SystemTime,
+    last_ping: SystemTime,
+    hostname: String,
 }
 
-#[repr(u8)]
-enum Sequences {
-    ConnectionId = 0,
-}
-
-impl From<Sequences> for u8 {
-    fn from(val: Sequences) -> Self {
-        val as u8
-    }
-}
-impl From<ConnectionRelation> for usize {
-    fn from(val: ConnectionRelation) -> Self {
-        val as usize
-    }
+#[derive(Debug, Clone, Encode, Decode)]
+struct ConnectionsRecords {
+    connections: Vec<ConnectionRecord>,
 }
 
 pub struct ConnectionsFjall {
-    db: FjallDb<ConnectionRelation>,
+    inner: Arc<Mutex<Inner>>,
+}
+struct Inner {
+    _tmpdir: Option<tempfile::TempDir>,
+    _keyspace: Keyspace,
+    /// From ClientId -> Obj
+    client_player_table: PartitionHandle,
+    /// From Objid -> Connectionsrecord
+    player_clients_table: PartitionHandle,
+
+    connection_id_sequence: i32,
+    connection_id_sequence_table: PartitionHandle,
+
+    client_players: HashMap<Uuid, Obj>,
+    player_clients: HashMap<Obj, ConnectionsRecords>,
 }
 
 impl ConnectionsFjall {
-    pub fn new(path: Option<PathBuf>) -> Self {
-        let (db, _) = FjallDb::open(path.as_deref());
-
-        Self { db }
-    }
-}
-
-impl ConnectionsFjall {
-    fn most_recent_client_connection(
-        tx: &FjallTransaction<ConnectionRelation>,
-        connection_obj: Obj,
-    ) -> Result<Vec<(ClientId, SystemTime)>, RelationalError> {
-        let clients: ClientSet =
-            tx.seek_by_codomain::<ClientId, Obj, ClientSet>(ClientConnection, &connection_obj)?;
-
-        // Seek the most recent activity for the connection, so pull in the activity relation for
-        // each client.
-        let mut times = Vec::new();
-        for client in clients.iter() {
-            if let Some(last_activity) =
-                tx.seek_unique_by_domain::<ClientId, SystemTimeHolder>(ClientActivity, &client)?
-            {
-                times.push((client, last_activity.0));
-            } else {
-                warn!(
-                    ?client,
-                    ?connection_obj,
-                    "Unable to find last activity for client"
-                );
-            }
-        }
-        times.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
-        Ok(times)
-    }
-}
-
-fn retry_tx_action<
-    R,
-    F: FnMut(&FjallTransaction<ConnectionRelation>) -> Result<R, RelationalError>,
->(
-    db: &FjallDb<ConnectionRelation>,
-    mut f: F,
-) -> Result<R, RelationalError> {
-    for _try_num in 0..50 {
-        let tx = db.new_transaction();
-        let r = f(&tx);
-
-        let r = match r {
-            Ok(r) => r,
-            Err(RelationalError::ConflictRetry) => {
-                tx.rollback();
-                sleep(Duration::from_millis(100));
-                continue;
-            }
-            Err(e) => {
-                return Err(e);
-            }
+    pub fn open(path: Option<&Path>) -> Self {
+        let (tmpdir, path) = if path.is_none() {
+            let tmpdir = tempfile::TempDir::new().unwrap();
+            let path = tmpdir.path().to_path_buf();
+            (Some(tmpdir), path)
+        } else {
+            (None, path.unwrap().to_path_buf())
         };
-        // Commit the transaction.
-        if let CommitResult::Success = tx.commit() {
-            return Ok(r);
+        info!("Opening connections database at {:?}", path);
+        let keyspace = Config::new(&path).open().unwrap();
+        let sequences_partition = keyspace
+            .open_partition("connection_sequences", PartitionCreateOptions::default())
+            .unwrap();
+
+        let client_player_table = keyspace
+            .open_partition("client_player", PartitionCreateOptions::default())
+            .unwrap();
+
+        let player_clients_table = keyspace
+            .open_partition("player_clients", PartitionCreateOptions::default())
+            .unwrap();
+
+        // Fill in the connection_id_sequence.
+        let connection_id_sequence = match sequences_partition.get("connection_id_sequence") {
+            Ok(Some(bytes)) => i32::from_le_bytes(bytes[0..size_of::<i32>()].try_into().unwrap()),
+            _ => -3,
+        };
+
+        // Fill in all the caches.
+        let mut client_players = HashMap::new();
+        let mut player_clients = HashMap::new();
+        for entry in client_player_table.iter() {
+            let (key, value) = entry.unwrap();
+            let client_id = Uuid::from_u128(u128::from_le_bytes(
+                key[0..size_of::<u128>()].try_into().unwrap(),
+            ));
+            let oid = Obj::from_bytes(Bytes::from(value)).unwrap();
+            client_players.insert(client_id, oid);
         }
-        sleep(Duration::from_millis(100))
-    }
-    panic!("Unable to commit transaction after 50 tries");
-}
+        for entry in player_clients_table.iter() {
+            let (key, value) = entry.unwrap();
+            let oid = Obj::from_bytes(Bytes::from(key)).unwrap();
+            let (connections_record, _) =
+                bincode::decode_from_slice(&value, *BINCODE_CONFIG).unwrap();
+            player_clients.insert(oid, connections_record);
+        }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-struct ClientId(Uuid);
-
-impl AsByteBuffer for ClientId {
-    fn size_bytes(&self) -> usize {
-        16
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        let mut bytes = [0u8; 16];
-        bytes.copy_from_slice(self.0.as_bytes());
-        Ok(f(&bytes))
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.as_bytes().to_vec())
-    }
-
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
-    where
-        Self: Sized,
-    {
-        let bytes = bytes.as_ref();
-        assert_eq!(bytes.len(), 16, "Decode client id: Invalid UUID length");
-        let mut uuid_bytes = [0u8; 16];
-        uuid_bytes.copy_from_slice(bytes);
-        Ok(ClientId(Uuid::from_bytes(uuid_bytes)))
-    }
-
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        let buf = self.0.as_bytes();
-        assert_eq!(buf.len(), 16, "Encode client id: Invalid UUID length");
-        Ok(Bytes::copy_from_slice(buf))
-    }
-}
-impl Display for ClientId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ClientId({})", self.0)
-    }
-}
-
-#[derive(Debug)]
-struct ClientSet(Vec<ClientId>);
-impl ValSet<ClientId> for ClientSet {
-    fn empty() -> Self {
-        Self(Vec::new())
-    }
-
-    fn from_items(items: &[ClientId]) -> Self {
-        Self(items.to_vec())
-    }
-
-    fn iter(&self) -> impl Iterator<Item = ClientId> {
-        self.0.iter().cloned()
-    }
-
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl FromIterator<ClientId> for ClientSet {
-    fn from_iter<T: IntoIterator<Item = ClientId>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
+        Self {
+            inner: Arc::new(Mutex::new(Inner {
+                _tmpdir: tmpdir,
+                _keyspace: keyspace,
+                client_player_table,
+                player_clients_table,
+                connection_id_sequence,
+                connection_id_sequence_table: sequences_partition,
+                client_players,
+                player_clients,
+            })),
+        }
     }
 }
 
 impl ConnectionsDB for ConnectionsFjall {
     fn update_client_connection(&self, from_connection: Obj, to_player: Obj) -> Result<(), Error> {
-        Ok(retry_tx_action(&self.db, |tx| {
-            let client_ids = tx
-                .seek_by_codomain::<ClientId, Obj, ClientSet>(ClientConnection, &from_connection)?;
-            if client_ids.is_empty() {
-                error!(?from_connection, ?to_player, "No client ids for connection");
-                return Err(RelationalError::NotFound);
-            }
-            // TODO use join once it's implemented
-            for client_id in client_ids.iter() {
-                tx.upsert(ClientConnection, &client_id, &to_player)?;
-            }
-            Ok(())
-        })?)
+        let mut inner = self.inner.lock().unwrap();
+
+        let Some(mut crs) = inner.player_clients.remove(&from_connection) else {
+            bail!("No connection found for {:?}", from_connection);
+        };
+
+        for cr in &mut crs.connections {
+            let client_id = cr.client_id;
+            // Associate the client with the new player id.
+            inner
+                .client_players
+                .insert(Uuid::from_u128(client_id), to_player.clone());
+
+            let to_oid_bytes = to_player.as_bytes().unwrap();
+            inner
+                .client_player_table
+                .insert(
+                    Uuid::from_u128(client_id).as_u128().to_le_bytes(),
+                    &to_oid_bytes,
+                )
+                .expect("Unable to update client player table");
+        }
+
+        // If `to_player` already had a connection record, merge the two.
+        if let Some(mut to_player_connections) = inner.player_clients.remove(&to_player) {
+            crs.connections
+                .append(&mut to_player_connections.connections);
+        }
+
+        inner.player_clients.insert(to_player.clone(), crs.clone());
+        let encoded_cr = bincode::encode_to_vec(crs, *BINCODE_CONFIG).unwrap();
+        inner
+            .player_clients_table
+            .insert(to_player.as_bytes().unwrap(), &encoded_cr)
+            .expect("Unable to update player clients table");
+        Ok(())
     }
 
     fn new_connection(
@@ -242,218 +168,240 @@ impl ConnectionsDB for ConnectionsFjall {
         hostname: String,
         player: Option<Obj>,
     ) -> Result<Obj, RpcMessageError> {
-        retry_tx_action(&self.db, |tx| {
-            let connection_oid = match &player {
-                None => {
-                    // The connection object is pulled from the sequence, then we invert it and subtract from
-                    // -4 to get the connection object, since they always grow downwards from there.
-                    let connection_id = tx.increment_sequence(ConnectionId);
-                    let connection_id =
-                        if connection_id < i32::MIN as i64 || connection_id > i32::MAX as i64 {
-                            panic!("Connection ID out of range");
-                        } else {
-                            connection_id as i32
-                        };
-                    let connection_id = -4 - connection_id;
-                    Obj::mk_id(connection_id)
-                }
-                Some(player) => player.clone(),
-            };
+        // Increment sequence.
+        let mut inner = self.inner.lock().unwrap();
 
-            // Insert the initial tuples for the connection.
-            let client_id = ClientId(client_id);
-            let now = SystemTimeHolder(SystemTime::now());
-            tx.insert_tuple(ClientConnection, &client_id, &connection_oid)?;
-            tx.insert_tuple(ClientActivity, &client_id, &now)?;
-            tx.insert_tuple(ClientConnectTime, &client_id, &now)?;
-            tx.insert_tuple(ClientPingTime, &client_id, &now)?;
-            tx.insert_tuple(ClientName, &client_id, &StringHolder(hostname.clone()))?;
+        let player_id = match player {
+            None => {
+                let id = inner.connection_id_sequence;
+                inner.connection_id_sequence -= 1;
+                inner
+                    .connection_id_sequence_table
+                    .insert(
+                        "connection_id_sequence",
+                        inner.connection_id_sequence.to_le_bytes(),
+                    )
+                    .unwrap();
+                Obj::mk_id(id)
+            }
+            Some(id) => id,
+        };
 
-            Ok(connection_oid)
-        })
-        .map_err(|e| match e {
-            RelationalError::ConflictRetry => {
-                panic!("Conflict retry on new connection");
-            }
-            RelationalError::Duplicate(_d) => {
-                RpcMessageError::AlreadyConnected
-            }
-            RelationalError::NotFound => {
-                RpcMessageError::CreateSessionFailed
-            }
-        })
+        inner.client_players.insert(client_id, player_id.clone());
+        let oid_bytes = player_id.as_bytes().unwrap();
+        inner
+            .client_player_table
+            .insert(client_id.as_u128().to_le_bytes(), &oid_bytes)
+            .unwrap();
+
+        let now = SystemTime::now();
+        let cr = ConnectionRecord {
+            client_id: client_id.as_u128(),
+            connected_time: now,
+            last_activity: now,
+            last_ping: now,
+            hostname,
+        };
+        inner
+            .player_clients
+            .entry(player_id.clone())
+            .or_insert(ConnectionsRecords {
+                connections: vec![],
+            })
+            .connections
+            .push(cr);
+
+        let connections_record = inner.player_clients.get(&player_id).unwrap();
+
+        let encoded_connected =
+            bincode::encode_to_vec(connections_record, *BINCODE_CONFIG).unwrap();
+        inner
+            .player_clients_table
+            .insert(&oid_bytes, &encoded_connected)
+            .unwrap();
+
+        Ok(player_id)
     }
 
-    fn record_client_activity(&self, client_id: Uuid, _connobj: Obj) -> Result<(), Error> {
-        Ok(retry_tx_action(&self.db, |tx| {
-            let client_id = ClientId(client_id);
-            tx.upsert(
-                ClientActivity,
-                &client_id,
-                &SystemTimeHolder(SystemTime::now()),
-            )?;
-            Ok(())
-        })?)
+    fn record_client_activity(&self, client_id: Uuid, connobj: Obj) -> Result<(), Error> {
+        let mut inner = self.inner.lock().unwrap();
+        let Some(connections_record) = inner.player_clients.get_mut(&connobj) else {
+            bail!("No connection found for {:?}", connobj);
+        };
+        let now = SystemTime::now();
+        let Some(client) = connections_record
+            .connections
+            .iter_mut()
+            .find(|cr| cr.client_id == client_id.as_u128())
+        else {
+            bail!("No client found for {:?}", client_id);
+        };
+        client.last_activity = now;
+
+        let oid_bytes = connobj.as_bytes()?;
+        let encoded_connected =
+            bincode::encode_to_vec(connections_record.clone(), *BINCODE_CONFIG).unwrap();
+        inner
+            .player_clients_table
+            .insert(&oid_bytes, &encoded_connected)
+            .unwrap();
+
+        Ok(())
     }
 
-    fn notify_is_alive(&self, client_id: Uuid, _connection: Obj) -> Result<(), Error> {
-        Ok(retry_tx_action(&self.db, |tx| {
-            let client_id = ClientId(client_id);
-            tx.upsert(
-                ClientPingTime,
-                &client_id,
-                &SystemTimeHolder(SystemTime::now()),
-            )?;
-            Ok(())
-        })?)
+    fn notify_is_alive(&self, client_id: Uuid, connection: Obj) -> Result<(), Error> {
+        let mut inner = self.inner.lock().unwrap();
+        let Some(connections_record) = inner.player_clients.get_mut(&connection) else {
+            bail!("No connection found for {:?}", connection);
+        };
+        let now = SystemTime::now();
+        let Some(cr) = connections_record
+            .connections
+            .iter_mut()
+            .find(|cr| cr.client_id == client_id.as_u128())
+        else {
+            return Ok(());
+        };
+        cr.last_ping = now;
+
+        let oid_bytes = connection.as_bytes()?;
+        let encoded_connected =
+            bincode::encode_to_vec(connections_record.clone(), *BINCODE_CONFIG).unwrap();
+        inner
+            .player_clients_table
+            .insert(&oid_bytes, &encoded_connected)
+            .unwrap();
+
+        Ok(())
     }
 
     fn ping_check(&self) {
-        let now = SystemTime::now();
-        let timeout_threshold = now - CONNECTION_TIMEOUT_DURATION;
-
-        retry_tx_action::<(), _>(&self.db, |tx| {
-            // Full scan the last ping relation, and compare the last ping time to the current time.
-            // If the difference is greater than the timeout duration, then we need to remove the
-            // connection from all the relations.
-
-            let expired = tx.scan_with_predicate::<_, ClientId, SystemTimeHolder>(
-                ClientPingTime,
-                |_, ping| ping.0 < timeout_threshold,
-            )?;
-
-            for expired_ping in expired.iter() {
-                let client_id = expired_ping.0;
-                tx.remove_by_domain(ClientConnection, &client_id)?;
-                tx.remove_by_domain(ClientActivity, &client_id)?;
-                tx.remove_by_domain(ClientConnectTime, &client_id)?;
-                tx.remove_by_domain(ClientPingTime, &client_id)?;
-                tx.remove_by_domain(ClientName, &client_id)?;
+        // Scan all connections and if ping time is older than CONNECTION_TIMEOUT_DURATION,
+        // turf.
+        let mut inner = self.inner.lock().unwrap();
+        let mut to_remove = vec![];
+        for (player_id, connections_record) in inner.player_clients.iter_mut() {
+            for cr in &connections_record.connections {
+                if cr.last_ping.elapsed().unwrap() > CONNECTION_TIMEOUT_DURATION {
+                    to_remove.push((player_id.clone(), cr.client_id));
+                }
             }
-            Ok::<(), RelationalError>(())
-        })
-        .expect("Unable to commit transaction");
-    }
+        }
 
-    fn last_activity_for(&self, connection_obj: Obj) -> Result<SystemTime, SessionError> {
-        let result = retry_tx_action(&self.db, |tx| {
-            let mut client_times = Self::most_recent_client_connection(tx, connection_obj.clone())?;
-            let Some(time) = client_times.pop() else {
-                return Err(RelationalError::NotFound);
-            };
-            Ok(time.1)
-        });
-        match result {
-            Ok(time) => Ok(time),
-            Err(RelationalError::NotFound) => {
-                Err(SessionError::NoConnectionForPlayer(connection_obj))
-            }
-            Err(e) => panic!("Unexpected error: {:?}", e),
+        for (player_id, client_id) in to_remove {
+            let oid_bytes = player_id.as_bytes().unwrap();
+            let mut connections_record = inner.player_clients.get(&player_id).unwrap().clone();
+            connections_record
+                .connections
+                .retain(|cr| cr.client_id != client_id);
+            let encoded_connected =
+                bincode::encode_to_vec(&connections_record, *BINCODE_CONFIG).unwrap();
+            inner
+                .player_clients_table
+                .insert(&oid_bytes, &encoded_connected)
+                .unwrap();
         }
     }
 
-    fn connection_name_for(&self, connection_obj: Obj) -> Result<String, SessionError> {
-        let result = retry_tx_action(&self.db, |tx| {
-            let mut client_times = Self::most_recent_client_connection(tx, connection_obj.clone())?;
-            let Some(most_recent) = client_times.pop() else {
-                return Err(RelationalError::NotFound);
-            };
-            let client_id = most_recent.0;
-            let Some(name) =
-                tx.seek_unique_by_domain::<ClientId, StringHolder>(ClientName, &client_id)?
-            else {
-                return Err(RelationalError::NotFound);
-            };
-            Ok(name)
-        });
-        match result {
-            Ok(name) => Ok(name.0),
-            Err(RelationalError::NotFound) => {
-                Err(SessionError::NoConnectionForPlayer(connection_obj))
-            }
-            Err(e) => panic!("Unexpected error: {:?}", e),
-        }
+    fn last_activity_for(&self, connection: Obj) -> Result<SystemTime, SessionError> {
+        let inner = self.inner.lock().unwrap();
+        let Some(connections_record) = inner.player_clients.get(&connection) else {
+            return Err(SessionError::NoConnectionForPlayer(connection));
+        };
+        let connections_record = connections_record.clone();
+        let last_activity = connections_record
+            .connections
+            .iter()
+            .map(|cr| cr.last_activity)
+            .max()
+            .unwrap();
+        Ok(last_activity)
+    }
+
+    fn connection_name_for(&self, player: Obj) -> Result<String, SessionError> {
+        let inner = self.inner.lock().unwrap();
+        let connections_records = inner
+            .player_clients
+            .get(&player)
+            .expect("no record")
+            .clone();
+        let name = connections_records
+            .connections
+            .iter()
+            .map(|cr| cr.hostname.clone())
+            .next()
+            .unwrap();
+        Ok(name)
     }
 
     fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
-        retry_tx_action(&self.db, |tx| {
-            // In this case we need to find the earliest connection time for the player, and then
-            // subtract that from the current time.
-            let clients =
-                tx.seek_by_codomain::<ClientId, Obj, ClientSet>(ClientConnection, &player)?;
-            if clients.is_empty() {
-                return Err(RelationalError::NotFound);
-            }
-
-            let mut times: Vec<(ClientId, SystemTime)> = vec![];
-            for client in clients.iter() {
-                if let Some(connect_time) =
-                    tx.seek_unique_by_domain::<_, SystemTimeHolder>(ClientConnectTime, &client)?
-                {
-                    {
-                        times.push((client, connect_time.0));
-                    }
-                }
-            }
-
-            times.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
-            let earliest = times.pop().expect("No connection for player");
-            let earliest = earliest.1;
-            let now = SystemTime::now();
-            let duration = now.duration_since(earliest).expect("Invalid duration");
-            Ok(duration.as_secs_f64())
-        })
-        .map_err(|e| match e {
-            RelationalError::NotFound => SessionError::NoConnectionForPlayer(player),
-            _ => panic!("Unexpected error: {:?}", e),
-        })
+        let inner = self.inner.lock().unwrap();
+        let connections_record = inner
+            .player_clients
+            .get(&player)
+            .expect("no record")
+            .clone();
+        let connected_seconds = connections_record
+            .connections
+            .iter()
+            .map(|cr| cr.connected_time.elapsed().unwrap().as_secs_f64())
+            .sum::<f64>();
+        Ok(connected_seconds)
     }
 
     fn client_ids_for(&self, player: Obj) -> Result<Vec<Uuid>, SessionError> {
-        retry_tx_action(&self.db, |tx| {
-            let clients =
-                tx.seek_by_codomain::<ClientId, Obj, ClientSet>(ClientConnection, &player)?;
-            Ok(clients.iter().map(|c| c.0).collect())
-        })
-        .map_err(|e| match e {
-            RelationalError::NotFound => SessionError::NoConnectionForPlayer(player),
-            _ => panic!("Unexpected error: {:?}", e),
-        })
+        let inner = self.inner.lock().unwrap();
+        let connections_record = inner
+            .player_clients
+            .get(&player)
+            .unwrap_or(&ConnectionsRecords {
+                connections: vec![],
+            })
+            .clone();
+        let client_ids = connections_record
+            .connections
+            .iter()
+            .map(|cr| Uuid::from_u128(cr.client_id))
+            .collect();
+        Ok(client_ids)
     }
 
     fn connections(&self) -> Vec<Obj> {
-        // Full scan from ClientConnection relation to get all connections, and dump them into a
-        // hashset (to remove dupes) and return as a vector.
-        retry_tx_action(&self.db, |tx| {
-            let mut connections = HashSet::new();
-            let clients =
-                tx.scan_with_predicate::<_, ClientId, Obj>(ClientConnection, |_, _| true)?;
-
-            for entry in clients.iter() {
-                let oid = entry.1.clone();
-                connections.insert(oid);
-            }
-            Ok::<Vec<Obj>, RelationalError>(connections.into_iter().collect())
-        })
-        .expect("Unable to commit transaction")
+        let inner = self.inner.lock().unwrap();
+        inner.player_clients.keys().cloned().collect()
     }
 
     fn connection_object_for_client(&self, client_id: Uuid) -> Option<Obj> {
-        retry_tx_action(&self.db, |tx| {
-            tx.seek_unique_by_domain(ClientConnection, &ClientId(client_id))
-        })
-        .unwrap()
+        let inner = self.inner.lock().unwrap();
+        inner.client_players.get(&client_id).cloned()
     }
 
     fn remove_client_connection(&self, client_id: Uuid) -> Result<(), Error> {
-        Ok(retry_tx_action(&self.db, |tx| {
-            tx.remove_by_domain(ClientConnection, &ClientId(client_id))?;
-            tx.remove_by_domain(ClientActivity, &ClientId(client_id))?;
-            tx.remove_by_domain(ClientConnectTime, &ClientId(client_id))?;
-            tx.remove_by_domain(ClientPingTime, &ClientId(client_id))?;
-            tx.remove_by_domain(ClientName, &ClientId(client_id))?;
-            Ok(())
-        })?)
+        let mut inner = self.inner.lock().unwrap();
+        let Some(player_id) = inner.client_players.remove(&client_id) else {
+            bail!("No connection to prune found for {:?}", client_id);
+        };
+        inner
+            .client_player_table
+            .remove(client_id.as_u128().to_le_bytes())
+            .ok();
+
+        let Some(connections_record) = inner.player_clients.get_mut(&player_id) else {
+            return Ok(());
+        };
+        connections_record
+            .connections
+            .retain(|cr| cr.client_id != client_id.as_u128());
+
+        let oid_bytes = player_id.as_bytes().unwrap();
+        let encoded_connected =
+            bincode::encode_to_vec(connections_record.clone(), *BINCODE_CONFIG).unwrap();
+        inner
+            .player_clients_table
+            .insert(&oid_bytes, &encoded_connected)
+            .unwrap();
+
+        Ok(())
     }
 }
 
@@ -476,7 +424,7 @@ mod tests {
     ///     * Verify the connection has no clients
     #[test]
     fn test_single_connection() {
-        let db = Arc::new(ConnectionsFjall::new(None));
+        let db = Arc::new(ConnectionsFjall::open(None));
         let mut jh = vec![];
 
         for x in 1..10 {
@@ -521,64 +469,37 @@ mod tests {
         }
     }
 
-    /// Test that a given player can have multiple clients connected to it.
     #[test]
-    fn test_multiple_connections() {
-        let db = Arc::new(ConnectionsFjall::new(None));
-        let mut jh = vec![];
-        for x in 1..50 {
-            let db = db.clone();
-            jh.push(std::thread::spawn(move || {
-                let client_id1 = uuid::Uuid::new_v4();
-                let client_id2 = uuid::Uuid::new_v4();
-                let con_oid1 = db
-                    .new_connection(client_id1, "localhost".to_string(), None)
-                    .unwrap();
-                let con_oid2 = db
-                    .new_connection(client_id2, "localhost".to_string(), None)
-                    .unwrap();
-                let new_conn = Obj::mk_id(x);
-                db.update_client_connection(con_oid1, new_conn.clone())
-                    .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(new_conn.clone()).unwrap();
-                assert_eq!(client_ids.len(), 1);
-                assert!(client_ids.contains(&client_id1));
+    fn open_close() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let db = Arc::new(ConnectionsFjall::open(Some(tmp_dir.path())));
+        let client_id1 = uuid::Uuid::new_v4();
+        let ob = db
+            .new_connection(client_id1, "localhost".to_string(), None)
+            .unwrap();
+        db.ping_check();
+        let client_ids = db.connections();
+        assert_eq!(client_ids.len(), 1);
+        assert_eq!(
+            db.connection_object_for_client(client_id1),
+            Some(ob.clone())
+        );
 
-                db.update_client_connection(con_oid2, new_conn.clone())
-                    .expect("Unable to update client connection");
-                let client_ids = db.client_ids_for(new_conn.clone()).unwrap();
-                assert_eq!(
-                    client_ids.len(),
-                    2,
-                    "Client ids: {:?}, should be ({client_id1}, {client_id2}) in {x}th oid",
-                    client_ids
-                );
-                assert!(client_ids.contains(&client_id2));
+        let client_ids = db.client_ids_for(ob.clone()).unwrap();
+        assert_eq!(client_ids.len(), 1);
+        assert_eq!(client_ids[0], client_id1);
 
-                db.record_client_activity(client_id1, new_conn.clone())
-                    .unwrap();
-                let last_activity = db
-                    .last_activity_for(new_conn.clone())
-                    .unwrap()
-                    .elapsed()
-                    .unwrap()
-                    .as_secs_f64();
-                assert!(last_activity < 1.0);
-                db.remove_client_connection(client_id1).unwrap();
-                let client_ids = db.client_ids_for(new_conn.clone()).unwrap();
-                assert_eq!(client_ids.len(), 1);
-                assert!(client_ids.contains(&client_id2));
-            }));
-        }
-        for j in jh {
-            j.join().unwrap();
-        }
+        drop(db);
+        let db = Arc::new(ConnectionsFjall::open(Some(tmp_dir.path())));
+        let client_ids = db.connections();
+        assert_eq!(client_ids.len(), 1);
+        assert_eq!(db.connection_object_for_client(client_id1), Some(ob));
     }
 
     // Validate that ping check works.
     #[test]
     fn ping_test() {
-        let db = Arc::new(ConnectionsFjall::new(None));
+        let db = Arc::new(ConnectionsFjall::open(None));
         let client_id1 = uuid::Uuid::new_v4();
         let ob = db
             .new_connection(client_id1, "localhost".to_string(), None)

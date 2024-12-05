@@ -12,12 +12,7 @@ rust-version.workspace = true
 description = "The actual moor binary that runs as an RPC-accessible daemon that various frontends can connect to."
 
 [dependencies]
-moor-db-relbox = { path = "../db-relbox", optional = true }
-relbox = { workspace = true, optional = true }
-
 moor-db = { path = "../db" }
-moor-db-fjall = { path = "../db-fjall" }
-moor-db-wiredtiger = { path = "../db-wiredtiger" }
 moor-kernel = { path = "../kernel" }
 moor-values = { path = "../values" }
 rpc-common = { path = "../rpc-common" }
@@ -52,6 +47,3 @@ ed25519-dalek.workspace = true
 pem.workspace = true
 rand.workspace = true
 rusty_paseto.workspace = true
-
-[features]
-relbox = ["dep:moor-db-relbox", "dep:relbox", "moor-db/relbox"]

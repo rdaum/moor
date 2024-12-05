@@ -1,3 +1,0 @@
-[submodule "crates/db-wiredtiger/third-party/wiredtiger"]
-	path = crates/db-wiredtiger/third-party/wiredtiger
-	url = https://github.com/wiredtiger/wiredtiger.git

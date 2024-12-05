@@ -13,60 +13,69 @@
 //
 
 use bytes::Bytes;
-use moor_values::{AsByteBuffer, DecodingError, EncodingError};
+use moor_values::{AsByteBuffer, DecodingError, EncodingError, Obj};
+use std::path::Path;
+use std::sync::Arc;
 use uuid::Uuid;
 
-use moor_values::model::WorldStateError;
 use moor_values::model::WorldStateSource;
+use moor_values::model::{WorldState, WorldStateError};
 
 use crate::loader::LoaderInterface;
 
 mod db_loader_client;
 pub mod db_worldstate;
 pub mod loader;
-mod relational_transaction;
-mod relational_worldstate;
-mod worldstate_tables;
 pub mod worldstate_transaction;
 
+mod db_transaction;
+mod fjall_provider;
+pub(crate) mod worldstate_db;
 mod worldstate_tests;
 
-pub use relational_transaction::{RelationalError, RelationalTransaction};
-pub use relational_worldstate::RelationalWorldStateTransaction;
-pub use worldstate_tables::{WorldStateSequence, WorldStateTable};
+use crate::db_worldstate::DbTxWorldState;
+use crate::worldstate_db::WorldStateDB;
 pub use worldstate_tests::*;
+
+mod tx;
 
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
 }
 
-/// Possible backend storage engines.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum DatabaseFlavour {
-    /// WiredTiger, a high-performance, scalable, transactional storage engine, also used in MongoDB.
-    /// Adaptation still under development.
-    WiredTiger,
-    /// Fjall, and LSM-based storage engine (https://github.com/fjall-rs/fjall)
-    Fjall,
-    /// In-house in-memory MVCC transactional store based on copy-on-write hashes and trees and
-    /// custom buffer pool management. Consider experimental.
-    #[cfg(feature = "relbox")]
-    RelBox,
+pub struct TxDB {
+    storage: Arc<WorldStateDB>,
 }
 
-impl From<&str> for DatabaseFlavour {
-    fn from(s: &str) -> Self {
-        match s {
-            "wiredtiger" => DatabaseFlavour::WiredTiger,
-            #[cfg(feature = "relbox")]
-            "relbox" => DatabaseFlavour::RelBox,
-            "fjall" => DatabaseFlavour::Fjall,
-            _ => panic!("Unknown database flavour: {}", s),
-        }
+impl TxDB {
+    pub fn open(path: Option<&Path>) -> (Self, bool) {
+        let (storage, fresh) = WorldStateDB::open(path);
+        (Self { storage }, fresh)
+    }
+}
+impl WorldStateSource for TxDB {
+    fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
+        let tx = self.storage.start_transaction();
+        let tx = DbTxWorldState { tx };
+        Ok(Box::new(tx))
+    }
+
+    fn checkpoint(&self) -> Result<(), WorldStateError> {
+        // TODO: noop for now... but this should probably do a sync of sequences to disk and make
+        //   sure all data is durable.
+        Ok(())
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl Database for TxDB {
+    fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
+        let tx = self.storage.start_transaction();
+        let tx = DbTxWorldState { tx };
+        Ok(Box::new(tx))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StringHolder(pub String);
 
 impl AsByteBuffer for StringHolder {
@@ -93,7 +102,7 @@ impl AsByteBuffer for StringHolder {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UUIDHolder(Uuid);
 
 impl AsByteBuffer for UUIDHolder {
@@ -191,5 +200,61 @@ impl AsByteBuffer for SystemTimeHolder {
         })?;
         let micros = dur.as_micros();
         Ok(Bytes::from(micros.to_le_bytes().to_vec()))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ObjAndUUIDHolder {
+    pub obj: Obj,
+    pub uuid: Uuid,
+}
+
+impl ObjAndUUIDHolder {
+    pub fn new(obj: &Obj, uuid: Uuid) -> Self {
+        Self {
+            obj: obj.clone(),
+            uuid,
+        }
+    }
+}
+impl AsByteBuffer for ObjAndUUIDHolder {
+    fn size_bytes(&self) -> usize {
+        self.obj.size_bytes() + 16
+    }
+
+    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
+        let mut bytes = Vec::with_capacity(self.size_bytes());
+        bytes.extend_from_slice(self.uuid.as_bytes());
+        bytes.extend_from_slice(&self.obj.as_bytes()?);
+        Ok(f(&bytes))
+    }
+
+    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
+        let mut bytes = Vec::with_capacity(self.size_bytes());
+        bytes.extend_from_slice(self.uuid.as_bytes());
+        bytes.extend_from_slice(&self.obj.as_bytes()?);
+        Ok(bytes)
+    }
+
+    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+        let bytes = bytes.as_ref();
+        let uuid_bytes = bytes.get(..16).ok_or(DecodingError::CouldNotDecode(
+            "Expected 16 bytes for UUID".to_string(),
+        ))?;
+        let obj_bytes = bytes.get(16..).ok_or(DecodingError::CouldNotDecode(
+            "Expected 16 bytes for UUID".to_string(),
+        ))?;
+        let uuid = Uuid::from_bytes(uuid_bytes.try_into().map_err(|_| {
+            DecodingError::CouldNotDecode("Expected 16 bytes for UUID".to_string())
+        })?);
+        let obj = Obj::from_bytes(Bytes::from(obj_bytes.to_vec()))?;
+        Ok(Self { obj, uuid })
+    }
+
+    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+        let mut bytes = Vec::with_capacity(self.size_bytes());
+        bytes.extend_from_slice(self.uuid.as_bytes());
+        bytes.extend_from_slice(&self.obj.as_bytes()?);
+        Ok(Bytes::from(bytes))
     }
 }

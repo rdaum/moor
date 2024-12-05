@@ -56,11 +56,11 @@ pub struct HostToken(pub String);
 
 /// PASETO public token for a connection, used for the validation of RPC requests after the initial
 /// connection is established.
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
 pub struct ClientToken(pub String);
 
 /// PASTEO public token for an authenticated player, encoding the player's identity.
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
 pub struct AuthToken(pub String);
 
 #[derive(Debug, Eq, PartialEq, Clone, Decode, Encode)]

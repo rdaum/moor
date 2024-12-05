@@ -21,9 +21,8 @@ use clap_derive::Parser;
 use ed25519_dalek::SigningKey;
 use eyre::Report;
 
-use moor_db::DatabaseFlavour;
-use moor_db_fjall::FjallDbWorldStateSource;
-use moor_db_wiredtiger::WiredTigerDatabaseBuilder;
+use crate::rpc_server::RpcServer;
+use moor_db::{Database, TxDB};
 use moor_kernel::config::Config;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::textdump::{textdump_load, EncodingMode};
@@ -32,27 +31,16 @@ use rand::rngs::OsRng;
 use rusty_paseto::core::Key;
 use tracing::{info, warn};
 
-use crate::rpc_server::RpcServer;
-
-#[cfg(feature = "relbox")]
-use moor_db_relbox::RelBoxDatabaseBuilder;
-#[cfg(feature = "relbox")]
-use moor_kernel::tasks::NoopTasksDb;
-use moor_kernel::tasks::TasksDb;
 use rpc_common::load_keypair;
 
 mod connections;
 
 mod connections_fjall;
-#[cfg(feature = "relbox")]
-mod connections_rb;
-mod connections_wt;
 mod rpc_hosts;
 mod rpc_server;
 mod rpc_session;
 mod sys_ctrl;
 mod tasks_fjall;
-mod tasks_wt;
 
 #[macro_export]
 macro_rules! clap_enum_variants {
@@ -166,29 +154,6 @@ struct Args {
 
     #[arg(
         long,
-        value_name = "max_buffer_pool_bytes",
-        help = "Maximum size of the database buffer pool in bytes when using the `relbox` database. \
-                Note that the system will mmap this quantity of memory via mmap, but the actual \
-                memory usage (in RSS) will be less than this value. Further, the quantity of memory \
-                requested is actually divided up into multiple different mmap regions for different \
-                buffer 'size classes'. \
-                The default very large number requires vm_overcommit to be set to enabled.",
-        default_value = "1099511627776" // 1TB
-    )]
-    max_buffer_pool_bytes: usize,
-
-    #[arg(
-        long,
-        value_name = "db-flavour",
-        // For those that don't appreciate proper English.
-        alias = "db-flavor",
-        help = "The database flavour to use",
-        default_value = "fjall"
-    )]
-    db_flavour: DatabaseFlavour,
-
-    #[arg(
-        long,
         value_name = "checkpoint-interval-seconds",
         help = "Interval in seconds between database checkpoints",
         default_value = "240"
@@ -286,32 +251,9 @@ fn main() -> Result<(), Report> {
         }
     };
 
-    info!(
-        "Daemon starting. Using {:?} database at {:?}",
-        args.db_flavour, args.db
-    );
-    let (database, freshly_made) = match args.db_flavour {
-        DatabaseFlavour::WiredTiger => {
-            let db_source_builder = WiredTigerDatabaseBuilder::new().with_path(args.db.clone());
-            let (db_source, freshly_made) = db_source_builder.open_db().unwrap();
-            info!(path = ?args.db, "Opened database");
-            (db_source, freshly_made)
-        }
-        DatabaseFlavour::Fjall => {
-            let (db, fresh) = FjallDbWorldStateSource::open(Some(&args.db));
-            let boxed_db: Box<dyn moor_db::Database> = Box::new(db);
-            (boxed_db, fresh)
-        }
-        #[cfg(feature = "relbox")]
-        DatabaseFlavour::RelBox => {
-            let db_source_builder = RelBoxDatabaseBuilder::new()
-                .with_path(args.db.clone())
-                .with_memory_size(args.max_buffer_pool_bytes);
-            let (db_source, freshly_made) = db_source_builder.open_db().unwrap();
-            info!(path = ?args.db, "Opened database");
-            (db_source, freshly_made)
-        }
-    };
+    info!("Daemon starting. Using database at {:?}", args.db);
+    let (database, freshly_made) = TxDB::open(Some(&args.db));
+    let database = Box::new(database);
     info!(path = ?args.db, "Opened database");
 
     let config = Arc::new(Config {
@@ -348,21 +290,7 @@ fn main() -> Result<(), Report> {
         }
     }
 
-    let tasks_db: Box<dyn TasksDb> = match args.db_flavour {
-        DatabaseFlavour::WiredTiger => {
-            let (tasks_db, _) = tasks_wt::WiredTigerTasksDb::open(Some(&args.tasks_db));
-            Box::new(tasks_db)
-        }
-        DatabaseFlavour::Fjall => {
-            let (tasks_db, _) = tasks_fjall::FjallTasksDB::open(&args.tasks_db);
-            Box::new(tasks_db)
-        }
-        #[cfg(feature = "relbox")]
-        DatabaseFlavour::RelBox => {
-            warn!("RelBox does not support tasks persistence yet. Using a no-op tasks database. Suspended tasks will not resume on restart.");
-            Box::new(NoopTasksDb {})
-        }
-    };
+    let (tasks_db, _) = tasks_fjall::FjallTasksDB::open(&args.tasks_db);
 
     // We have to create the RpcServer before starting the scheduler because we need to pass it in
     // as a parameter to the scheduler for background session construction.
@@ -376,7 +304,6 @@ fn main() -> Result<(), Report> {
         args.connections_file,
         zmq_ctx.clone(),
         args.events_listen.as_str(),
-        args.db_flavour,
         config.clone(),
     ));
     let kill_switch = rpc_server.kill_switch();
@@ -384,7 +311,7 @@ fn main() -> Result<(), Report> {
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let scheduler = Scheduler::new(database, tasks_db, config, rpc_server.clone());
+    let scheduler = Scheduler::new(database, Box::new(tasks_db), config, rpc_server.clone());
     let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
     // The scheduler thread:

@@ -13,8 +13,7 @@ rust-version.workspace = true
 description = "The actual implementation of most of the moor system; virtual machine, scheduler, and builtins."
 
 [dev-dependencies]
-moor-db-wiredtiger = { path = "../db-wiredtiger" }
-moor-db-fjall = { path = "../db-fjall" }
+moor-db = { path = "../db" }
 
 criterion.workspace = true
 eyre.workspace = true
@@ -47,9 +46,6 @@ moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
 moor-moot = { path = "../moot" }
 moor-values = { path = "../values" }
-
-## Should be dev-dependencies, but cargo won't allow optional dev-deps
-moor-db-relbox = { path = "../db-relbox", optional = true }
 
 ## General usefulness
 bytes.workspace = true
@@ -84,6 +80,3 @@ tracing.workspace = true
 
 # For the DB layer.
 bincode.workspace = true
-
-[features]
-relbox = ["dep:moor-db-relbox"]

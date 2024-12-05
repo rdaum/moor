@@ -21,11 +21,7 @@ use EncodingMode::UTF8;
 
 use moor_compiler::Program;
 use moor_compiler::{compile, CompileOptions};
-use moor_db::Database;
-use moor_db_fjall::FjallDb;
-#[cfg(feature = "relbox")]
-use moor_db_relbox::RelBoxWorldState;
-use moor_db_wiredtiger::WiredTigerDB;
+use moor_db::{Database, TxDB};
 use moor_kernel::builtins::BuiltinRegistry;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
@@ -57,23 +53,8 @@ pub fn load_textdump(db: &dyn Database) {
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 }
 
-#[cfg(feature = "relbox")]
-pub fn create_relbox_db() -> Box<dyn Database> {
-    let (db, _) = RelBoxWorldState::open(None, 1 << 30);
-    let db = Box::new(db);
-    load_textdump(db.as_ref());
-    db
-}
-
-pub fn create_wiredtiger_db() -> Box<dyn Database> {
-    let (db, _) = WiredTigerDB::open(None);
-    let db = Box::new(db);
-    load_textdump(db.as_ref());
-    db
-}
-
-pub fn create_fjall_db() -> Box<dyn Database> {
-    let (db, _) = FjallDb::open(None);
+pub fn create_db() -> Box<dyn Database> {
+    let (db, _) = TxDB::open(None);
     let db = Box::new(db);
     load_textdump(db.as_ref());
     db
