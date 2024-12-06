@@ -35,7 +35,6 @@ jobs:
       - name: Run tests
         run: cargo test --verbose --all-features --all-targets
 
-  # Build "all" features not a thing on MacOS since Relbox won't compile and run on it.
   build_default_macos:
     runs-on: macos-latest
     steps:
@@ -46,9 +45,9 @@ jobs:
         with:
           submodules: 'true'
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --verbose --all-features --all-targets
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --verbose --all-features --all-targets
 
   clippy_check:
     runs-on: ubuntu-latest
