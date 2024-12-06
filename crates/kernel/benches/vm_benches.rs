@@ -38,7 +38,7 @@ use moor_values::util::BitEnum;
 use moor_values::Symbol;
 use moor_values::{AsByteBuffer, Var, NOTHING, SYSTEM_OBJECT};
 
-fn create_worldstate() -> TxDB {
+fn create_db() -> TxDB {
     let (ws_source, _) = TxDB::open(None);
     let mut tx = ws_source.new_world_state().unwrap();
     let _sysobj = tx
@@ -78,7 +78,7 @@ pub fn prepare_call_verb(
 }
 
 fn prepare_vm_execution(
-    ws_source: &mut dyn WorldStateSource,
+    ws_source: &dyn WorldStateSource,
     program: &str,
     max_ticks: usize,
 ) -> VmHost {
@@ -156,11 +156,10 @@ fn execute(
     }
 }
 
-fn do_program(program: &str, max_ticks: usize, iters: u64) -> Duration {
+fn do_program(state_source: TxDB, program: &str, max_ticks: usize, iters: u64) -> Duration {
     let mut cumulative = Duration::new(0, 0);
 
-    let mut state_source = create_worldstate();
-    let mut vm_host = prepare_vm_execution(&mut state_source, program, max_ticks);
+    let mut vm_host = prepare_vm_execution(&state_source, program, max_ticks);
     let mut tx = state_source.new_world_state().unwrap();
     let session = Arc::new(NoopClientSession::new());
     let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
@@ -184,21 +183,31 @@ fn do_program(program: &str, max_ticks: usize, iters: u64) -> Duration {
 }
 
 fn opcode_throughput(c: &mut Criterion) {
+    let db = create_db();
+
     let mut group = c.benchmark_group("opcode_throughput");
-    group.sample_size(300);
+    group.sample_size(50);
     group.measurement_time(Duration::from_secs(10));
 
     let num_ticks = 300000;
     group.throughput(criterion::Throughput::Elements(num_ticks as u64));
     group.bench_function("while_loop", |b| {
-        b.iter_custom(|iters| do_program("while (1) endwhile", num_ticks, iters));
+        b.iter_custom(|iters| do_program(db.clone(), "while (1) endwhile", num_ticks, iters));
     });
     group.bench_function("while_increment_var_loop", |b| {
-        b.iter_custom(|iters| do_program("i = 0; while(1) i=i+1; endwhile", num_ticks, iters));
+        b.iter_custom(|iters| {
+            do_program(
+                db.clone(),
+                "i = 0; while(1) i=i+1; endwhile",
+                num_ticks,
+                iters,
+            )
+        });
     });
     group.bench_function("for_in_range_loop", |b| {
         b.iter_custom(|iters| {
             do_program(
+                db.clone(),
                 "while(1) for i in [1..1000000] endfor endwhile",
                 num_ticks,
                 iters,
@@ -206,10 +215,11 @@ fn opcode_throughput(c: &mut Criterion) {
         });
     });
     // Measure range iteration over a static list
+
     group.bench_function("for_in_static_list_loop", |b| {
         b.iter_custom(|iters| {
-            do_program(
-                r#"while(1)
+            do_program(db.clone(),
+                       r#"while(1)
                             for i in ({1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10})
                             endfor
                           endwhile"#,
@@ -222,6 +232,7 @@ fn opcode_throughput(c: &mut Criterion) {
     group.bench_function("list_append_loop", |b| {
         b.iter_custom(|iters| {
             do_program(
+                db.clone(),
                 r#"while(1)
                             base_list = {};
                             for i in [0..1000]
@@ -237,7 +248,8 @@ fn opcode_throughput(c: &mut Criterion) {
     group.bench_function("list_set", |b| {
         b.iter_custom(|iters| {
             do_program(
-                r#"while(1) 
+                db.clone(),
+                r#"while(1)
                             list = {1};
                             for i in [0..10000] 
                                 list[1] = i;

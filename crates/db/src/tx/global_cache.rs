@@ -169,9 +169,7 @@ where
                         },
                     );
 
-                    self.source
-                        .put(op.write_ts, domain.clone(), codomain)
-                        .unwrap();
+                    self.source.put(op.write_ts, domain.clone(), codomain).ok();
                 }
                 OpType::Delete => {
                     inner.index.insert(

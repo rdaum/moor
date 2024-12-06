@@ -61,18 +61,15 @@ clap_derive = "4.5"
 
 ## HTTP/websockets front-end
 axum = { version = "0.7", features = ["ws"] }
-axum-extra = "0.9"
 serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0"
 serde_json = "1.0"
-tower-http = { version = "0.5.2", features = ["add-extension", "auth", "compression-full", "trace"] }
 
 ## Asynchronous transaction processing & networking, used in web-host and telnet-host.
 ## the daemon itself uses its own threading
 futures = "0.3"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 tokio = { version = "1.37", features = ["full"] }
-tokio-test = "0.4"
 tokio-util = { version = "0.7", features = ["full"] }
 
 # Used for RPC daemon/client
@@ -82,29 +79,21 @@ zmq = "0.10"
 ## Logging & tracing
 tracing = "0.1"
 tracing-subscriber = "0.3"
-tracing-test = "0.2"
 
 # General usefulness
 binary-layout = "4.0"
 bincode = "2.0.0-rc.3"
-bindgen = "0.70"
 bytes = "1.7"
 chrono = "0.4"
-cmake = "0.1"
 criterion = { version = "0.5", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
-daumtils = { git = "https://github.com/rdaum/daumtils.git", version = "0.2.0" }
-decorum = "0.3" # For ordering & comparing our floats
 encoding_rs = "0.8.34"
 enum-primitive-derive = "0.3"
 im = "15.1"
-inventory = "0.3"
 itertools = "0.13"
 lazy_static = "1.5"
 num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
-owo-colors = "3.5"
-rustyline = "14.0"
 strum = { version = "0.26", features = ["derive"] }
 text-diff = "0.4"
 ustr = "1.0"
@@ -131,7 +120,7 @@ thiserror = "2.0"
 paste = "1.0"
 
 # For the DB & values layer.
-fjall = { version = "2.3.2", default-features = false, features = ["ssi_tx", "bytes"] }
+fjall = { version = "2.4", default-features = false, features = ["ssi_tx", "bytes"] }
 libc = "0.2"
 text_io = "0.1" # Used for reading text dumps.
 

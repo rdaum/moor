@@ -43,6 +43,7 @@ pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
 }
 
+#[derive(Clone)]
 pub struct TxDB {
     storage: Arc<WorldStateDB>,
 }

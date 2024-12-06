@@ -17,8 +17,6 @@ use crate::var::Associative;
 use crate::var::{map, string, Sequence};
 use crate::var::{Error, Obj};
 use bincode::{Decode, Encode};
-use decorum::R64;
-use num_traits::ToPrimitive;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
@@ -42,7 +40,7 @@ impl Hash for Variant {
             Variant::None => 0.hash(state),
             Variant::Obj(o) => o.hash(state),
             Variant::Int(i) => i.hash(state),
-            Variant::Float(f) => f.to_f64().unwrap().to_bits().hash(state),
+            Variant::Float(f) => f.to_bits().hash(state),
             Variant::List(l) => l.hash(state),
             Variant::Str(s) => s.hash(state),
             Variant::Map(m) => m.hash(state),
@@ -57,12 +55,7 @@ impl Ord for Variant {
             (Variant::None, Variant::None) => Ordering::Equal,
             (Variant::Obj(l), Variant::Obj(r)) => l.cmp(r),
             (Variant::Int(l), Variant::Int(r)) => l.cmp(r),
-            (Variant::Float(l), Variant::Float(r)) => {
-                // For floats, we wrap in decorum first.
-                let l = R64::from(l.to_f64().unwrap());
-                let r = R64::from(r.to_f64().unwrap());
-                l.cmp(&r)
-            }
+            (Variant::Float(l), Variant::Float(r)) => l.total_cmp(r),
             (Variant::List(l), Variant::List(r)) => l.cmp(r),
             (Variant::Str(l), Variant::Str(r)) => l.cmp(r),
             (Variant::Map(l), Variant::Map(r)) => l.cmp(r),

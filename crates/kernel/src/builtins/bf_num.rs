@@ -12,7 +12,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use decorum::R64;
 use rand::Rng;
 
 use moor_compiler::offset_for_builtin;
@@ -45,8 +44,8 @@ fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match (&bf_args.args[0].variant(), &bf_args.args[1].variant()) {
         (Variant::Int(a), Variant::Int(b)) => Ok(Ret(v_int(*a.min(b)))),
         (Variant::Float(a), Variant::Float(b)) => {
-            let m = R64::from(*a).min(R64::from(*b));
-            Ok(Ret(v_float(m.into())))
+            let m = a.min(*b);
+            Ok(Ret(v_float(m)))
         }
         _ => Err(BfErr::Code(E_TYPE)),
     }
@@ -61,8 +60,8 @@ fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match (&bf_args.args[0].variant(), &bf_args.args[1].variant()) {
         (Variant::Int(a), Variant::Int(b)) => Ok(Ret(v_int(*a.max(b)))),
         (Variant::Float(a), Variant::Float(b)) => {
-            let m = R64::from(*a).max(R64::from(*b));
-            Ok(Ret(v_float(m.into())))
+            let m = a.max(*b);
+            Ok(Ret(v_float(m)))
         }
         _ => Err(BfErr::Code(E_TYPE)),
     }

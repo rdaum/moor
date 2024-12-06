@@ -17,16 +17,11 @@ moor-db = { path = "../db" }
 
 criterion.workspace = true
 eyre.workspace = true
-inventory.workspace = true
 pretty_assertions.workspace = true
-tempfile.workspace = true
 test-case.workspace = true
 test_each_file.workspace = true
 text-diff.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
-tracing-test.workspace = true
-unindent.workspace = true
 
 [[test]]
 name = "regression-suite"
@@ -51,8 +46,6 @@ moor-values = { path = "../values" }
 bytes.workspace = true
 chrono.workspace = true
 crossbeam-channel.workspace = true
-daumtils.workspace = true
-decorum.workspace = true
 encoding_rs.workspace = true
 lazy_static.workspace = true
 libc.workspace = true

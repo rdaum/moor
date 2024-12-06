@@ -20,14 +20,8 @@ clap.workspace = true
 clap_derive.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
-pretty_assertions.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-
-# Auth/Auth
-ed25519-dalek.workspace = true
-pem.workspace = true
-rusty_paseto.workspace = true
 
 ## ZMQ / RPC
 tmq.workspace = true
@@ -36,7 +30,6 @@ uuid.workspace = true
 ## Asynchronous transaction processing & networking
 futures.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
 
 edn-format.workspace = true
 rand.workspace = true

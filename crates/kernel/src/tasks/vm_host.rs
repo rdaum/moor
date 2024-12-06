@@ -21,7 +21,6 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use bytes::Bytes;
-use daumtils::PhantomUnsync;
 use tracing::{debug, error, trace, warn};
 
 use moor_compiler::Name;
@@ -48,6 +47,7 @@ use crate::vm::vm_call::VerbProgram;
 use crate::vm::VmExecParams;
 use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest};
 use crate::vm::{FinallyReason, VMExecState};
+use crate::PhantomUnsync;
 use moor_values::matching::command_parse::ParsedCommand;
 
 /// Return values from exec_interpreter back to the Task scheduler loop
