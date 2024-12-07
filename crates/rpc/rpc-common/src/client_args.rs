@@ -16,7 +16,7 @@ use clap_derive::Parser;
 use std::path::PathBuf;
 
 /// Common command line arguments for hosts / clients
-#[derive(Parser, Debug)] // requires `derive` feature
+#[derive(Clone, Parser, Debug)] // requires `derive` feature
 pub struct RpcClientArgs {
     #[arg(
         long,

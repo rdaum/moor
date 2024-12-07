@@ -26,19 +26,16 @@ use crate::setup::{
 use clap::Parser;
 use clap_derive::Parser;
 use edn_format::{Keyword, Value};
-use eyre::anyhow;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use moor_values::model::ObjectRef;
 use moor_values::{v_int, v_list, List, Obj, Sequence, Symbol, Var, Variant};
-use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{make_host_token, start_host_session};
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::DaemonToClientReply::TaskSubmitted;
 use rpc_common::{
-    load_keypair, AuthToken, ClientEvent, ClientToken, HostClientToDaemonMessage, HostType,
-    ReplyResult,
+    load_keypair, AuthToken, ClientToken, HostClientToDaemonMessage, HostType, ReplyResult,
 };
 use setup::ExecutionContext;
 use std::collections::{BTreeMap, HashMap};
@@ -53,6 +50,9 @@ use uuid::Uuid;
 
 #[derive(Clone, Parser, Debug)]
 struct Args {
+    #[command(flatten)]
+    client_args: RpcClientArgs,
+
     #[arg(
         long,
         value_name = "num-users",
@@ -356,7 +356,6 @@ async fn workload(
 
 async fn list_append_workload(
     args: Args,
-    client_args: RpcClientArgs,
     ExecutionContext {
         zmq_ctx,
         kill_switch,
@@ -368,19 +367,19 @@ async fn list_append_workload(
         client_token,
         client_id,
         rpc_client,
-        mut events_sub,
+        events_sub,
         broadcast_sub,
     ) = create_user_session(
         zmq_ctx.clone(),
-        client_args.rpc_address.clone(),
-        client_args.events_address.clone(),
+        args.client_args.rpc_address.clone(),
+        args.client_args.events_address.clone(),
     )
     .await?;
 
     {
         let kill_switch = kill_switch.clone();
         let zmq_ctx = zmq_ctx.clone();
-        let rpc_address = client_args.rpc_address.clone();
+        let rpc_address = args.client_args.rpc_address.clone();
         let client_id = client_id.clone();
         let client_token = client_token.clone();
         let connection_oid = connection_oid.clone();
@@ -440,7 +439,7 @@ async fn list_append_workload(
         let connection_oid = connection_oid.clone();
         let auth_token = auth_token.clone();
         let client_token = client_token.clone();
-        let rpc_address = client_args.rpc_address.clone();
+        let rpc_address = args.client_args.rpc_address.clone();
         let args = args.clone();
         let task_results = task_results.clone();
         workload_futures.push(workload(
@@ -613,7 +612,6 @@ async fn list_append_workload(
 async fn main() -> Result<(), eyre::Error> {
     color_eyre::install().expect("Unable to install color_eyre");
     let args: Args = Args::parse();
-    let client_args: RpcClientArgs = RpcClientArgs::parse();
 
     let main_subscriber = tracing_subscriber::fmt()
         .compact()
@@ -633,7 +631,7 @@ async fn main() -> Result<(), eyre::Error> {
     let zmq_ctx = tmq::Context::new();
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let keypair = load_keypair(&client_args.public_key, &client_args.private_key)
+    let keypair = load_keypair(&args.client_args.public_key, &args.client_args.private_key)
         .expect("Unable to load keypair from public and private key files");
     let host_token = make_host_token(&keypair, HostType::TCP);
 
@@ -642,7 +640,7 @@ async fn main() -> Result<(), eyre::Error> {
     let _rpc_client = start_host_session(
         host_token.clone(),
         zmq_ctx.clone(),
-        client_args.rpc_address.clone(),
+        args.client_args.rpc_address.clone(),
         kill_switch.clone(),
         listeners.clone(),
     )
@@ -653,7 +651,7 @@ async fn main() -> Result<(), eyre::Error> {
         zmq_ctx,
         kill_switch: kill_switch.clone(),
     };
-    list_append_workload(args, client_args, exec_context).await?;
+    list_append_workload(args, exec_context).await?;
 
     kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(())

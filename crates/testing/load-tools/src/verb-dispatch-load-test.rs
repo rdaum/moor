@@ -44,6 +44,9 @@ use uuid::Uuid;
 
 #[derive(Clone, Parser, Debug)]
 struct Args {
+    #[command(flatten)]
+    client_args: RpcClientArgs,
+
     #[arg(
         long,
         value_name = "num-concurrent-workloads",
@@ -173,7 +176,6 @@ async fn workload(
 
 async fn load_test_workload(
     args: Args,
-    client_args: RpcClientArgs,
     ExecutionContext {
         zmq_ctx,
         kill_switch,
@@ -189,15 +191,15 @@ async fn load_test_workload(
         broadcast_sub,
     ) = create_user_session(
         zmq_ctx.clone(),
-        client_args.rpc_address.clone(),
-        client_args.events_address.clone(),
+        args.client_args.rpc_address.clone(),
+        args.client_args.events_address.clone(),
     )
     .await?;
 
     {
         let kill_switch = kill_switch.clone();
         let zmq_ctx = zmq_ctx.clone();
-        let rpc_address = client_args.rpc_address.clone();
+        let rpc_address = args.client_args.rpc_address.clone();
         let client_id = client_id.clone();
         let client_token = client_token.clone();
         let connection_oid = connection_oid.clone();
@@ -261,7 +263,7 @@ async fn load_test_workload(
         let connection_oid = connection_oid.clone();
         let auth_token = auth_token.clone();
         let client_token = client_token.clone();
-        let rpc_address = client_args.rpc_address.clone();
+        let rpc_address = args.client_args.rpc_address.clone();
         let args = args.clone();
         let task_results = task_results.clone();
         workload_futures.push(workload(
@@ -309,7 +311,6 @@ async fn load_test_workload(
 async fn main() -> Result<(), eyre::Error> {
     color_eyre::install().expect("Unable to install color_eyre");
     let args: Args = Args::parse();
-    let client_args: RpcClientArgs = RpcClientArgs::parse();
 
     let main_subscriber = tracing_subscriber::fmt()
         .compact()
@@ -329,7 +330,7 @@ async fn main() -> Result<(), eyre::Error> {
     let zmq_ctx = tmq::Context::new();
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let keypair = load_keypair(&client_args.public_key, &client_args.private_key)
+    let keypair = load_keypair(&args.client_args.public_key, &args.client_args.private_key)
         .expect("Unable to load keypair from public and private key files");
     let host_token = make_host_token(&keypair, HostType::TCP);
 
@@ -338,7 +339,7 @@ async fn main() -> Result<(), eyre::Error> {
     let _rpc_client = start_host_session(
         host_token.clone(),
         zmq_ctx.clone(),
-        client_args.rpc_address.clone(),
+        args.client_args.rpc_address.clone(),
         kill_switch.clone(),
         listeners.clone(),
     )
@@ -350,7 +351,7 @@ async fn main() -> Result<(), eyre::Error> {
         kill_switch: kill_switch.clone(),
     };
 
-    load_test_workload(args, client_args, exec_context).await?;
+    load_test_workload(args, exec_context).await?;
 
     kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(())
