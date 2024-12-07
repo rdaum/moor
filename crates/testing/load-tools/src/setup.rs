@@ -12,24 +12,26 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use eyre::bail;
+use eyre::{anyhow, bail};
 use moor_values::model::ObjectRef;
 use moor_values::tasks::VerbProgramError;
-use moor_values::{Obj, Symbol, SYSTEM_OBJECT};
-use rpc_async_client::pubsub_client::broadcast_recv;
+use moor_values::{Obj, Symbol, Var, SYSTEM_OBJECT};
+use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{ListenersClient, ListenersMessage};
 use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
 use rpc_common::{
-    AuthToken, ClientToken, ClientsBroadcastEvent, DaemonToClientReply, HostClientToDaemonMessage,
-    HostType, ReplyResult, VerbProgramResponse, CLIENT_BROADCAST_TOPIC,
+    AuthToken, ClientEvent, ClientToken, ClientsBroadcastEvent, DaemonToClientReply,
+    HostClientToDaemonMessage, HostType, ReplyResult, VerbProgramResponse, CLIENT_BROADCAST_TOPIC,
 };
+use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 use tmq::subscribe::Subscribe;
 use tmq::{request, subscribe};
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -301,6 +303,7 @@ pub async fn initialization_session(
     info!("Initialization script executed successfully");
 
     for (verb_name, verb_code) in verbs {
+        info!("Compiling {} verb", verb_name);
         compile(
             &mut rpc_client,
             client_id,
@@ -321,6 +324,47 @@ pub async fn initialization_session(
 }
 
 pub struct ExecutionContext {
-    pub(crate) zmq_ctx: tmq::Context,
-    pub(crate) kill_switch: Arc<std::sync::atomic::AtomicBool>,
+    pub zmq_ctx: tmq::Context,
+    pub kill_switch: Arc<std::sync::atomic::AtomicBool>,
+}
+
+pub async fn listen_responses(
+    client_id: Uuid,
+    mut events_sub: Subscribe,
+    ks: Arc<AtomicBool>,
+    event_listen_task_results: Arc<Mutex<HashMap<usize, Result<Var, eyre::Error>>>>,
+) {
+    tokio::spawn(async move {
+        let start_time = Instant::now();
+        info!("Waiting for events...");
+        loop {
+            if ks.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+            let msg = events_recv(client_id, &mut events_sub).await;
+            match msg {
+                Ok(ClientEvent::TaskSuccess(tid, v)) => {
+                    let mut tasks = event_listen_task_results.lock().await;
+                    tasks.insert(tid, Ok(v));
+                }
+                Ok(ClientEvent::TaskError(tid, e)) => {
+                    let mut tasks = event_listen_task_results.lock().await;
+                    tasks.insert(tid, Err(anyhow!("Task error: {:?}", e)));
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    panic!("Error in event recv: {}", e);
+                }
+            }
+        }
+        let seconds_since_start = start_time.elapsed().as_secs();
+        if seconds_since_start % 5 == 0 {
+            let tasks = event_listen_task_results.lock().await;
+            info!(
+                "Event listener running for {} seconds with {} tasks",
+                seconds_since_start,
+                tasks.len()
+            );
+        }
+    });
 }

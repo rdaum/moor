@@ -20,7 +20,9 @@
 
 mod setup;
 
-use crate::setup::{broadcast_handle, create_user_session, initialization_session};
+use crate::setup::{
+    broadcast_handle, create_user_session, initialization_session, listen_responses,
+};
 use clap::Parser;
 use clap_derive::Parser;
 use edn_format::{Keyword, Value};
@@ -423,42 +425,13 @@ async fn list_append_workload(
     .await?;
 
     let task_results = Arc::new(Mutex::new(HashMap::new()));
-
-    let event_listen_task_results = task_results.clone();
-    let ks = kill_switch.clone();
-    tokio::spawn(async move {
-        let start_time = Instant::now();
-        info!("Waiting for events...");
-        loop {
-            if ks.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
-            let msg = events_recv(client_id, &mut events_sub).await;
-            match msg {
-                Ok(ClientEvent::TaskSuccess(tid, v)) => {
-                    let mut tasks = event_listen_task_results.lock().await;
-                    tasks.insert(tid, Ok(v));
-                }
-                Ok(ClientEvent::TaskError(tid, e)) => {
-                    let mut tasks = event_listen_task_results.lock().await;
-                    tasks.insert(tid, Err(anyhow!("Task error: {:?}", e)));
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    panic!("Error in event recv: {}", e);
-                }
-            }
-        }
-        let seconds_since_start = start_time.elapsed().as_secs();
-        if seconds_since_start % 5 == 0 {
-            let tasks = event_listen_task_results.lock().await;
-            info!(
-                "Event listener running for {} seconds with {} tasks",
-                seconds_since_start,
-                tasks.len()
-            );
-        }
-    });
+    listen_responses(
+        client_id,
+        events_sub,
+        kill_switch.clone(),
+        task_results.clone(),
+    )
+    .await;
 
     info!("Starting {} workloads", args.num_concurrent_workloads);
     let mut workload_futures = FuturesUnordered::new();

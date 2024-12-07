@@ -15,6 +15,10 @@ description = "Load testing and transaction model checking"
 name = "moor-model-checker"
 path = "src/tx-list-append.rs"
 
+[[bin]]
+name = "load-test"
+path = "src/verb-dispatch-load-test.rs"
+
 [dependencies]
 moor-values = { path = "../../common" }
 rpc-async-client = { path = "../../rpc/rpc-async-client" }
