@@ -28,9 +28,9 @@ use moor_values::{Obj, SYSTEM_OBJECT};
 use rpc_async_client::{
     make_host_token, proces_hosts_events, start_host_session, ListenersClient, ListenersMessage,
 };
+use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{load_keypair, HostType};
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -47,38 +47,6 @@ struct Args {
         default_value = "0.0.0.0:8080"
     )]
     listen_address: String,
-
-    #[arg(
-        long,
-        value_name = "rpc-address",
-        help = "RPC server address",
-        default_value = "ipc:///tmp/moor_rpc.sock"
-    )]
-    rpc_address: String,
-
-    #[arg(
-        long,
-        value_name = "events-address",
-        help = "Events server address",
-        default_value = "ipc:///tmp/moor_events.sock"
-    )]
-    events_address: String,
-
-    #[arg(
-        long,
-        value_name = "public_key",
-        help = "file containing the pkcs8 ed25519 public key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "public_key.pem"
-    )]
-    public_key: PathBuf,
-
-    #[arg(
-        long,
-        value_name = "private_key",
-        help = "file containing a pkcs8 ed25519 private key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "private_key.pem"
-    )]
-    private_key: PathBuf,
 }
 
 struct Listeners {
@@ -251,6 +219,7 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
 async fn main() -> Result<(), eyre::Error> {
     color_eyre::install()?;
     let args: Args = Args::parse();
+    let client_args: RpcClientArgs = RpcClientArgs::parse();
 
     let main_subscriber = tracing_subscriber::fmt()
         .compact()
@@ -270,7 +239,7 @@ async fn main() -> Result<(), eyre::Error> {
 
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let keypair = load_keypair(&args.public_key, &args.private_key)
+    let keypair = load_keypair(&client_args.public_key, &client_args.private_key)
         .expect("Unable to load keypair from public and private key files");
     let host_token = make_host_token(&keypair, HostType::TCP);
 
@@ -278,8 +247,8 @@ async fn main() -> Result<(), eyre::Error> {
 
     let (mut listeners_server, listeners_channel, listeners) = Listeners::new(
         zmq_ctx.clone(),
-        args.rpc_address.clone(),
-        args.events_address.clone(),
+        client_args.rpc_address.clone(),
+        client_args.events_address.clone(),
         kill_switch.clone(),
     );
     let listeners_thread = tokio::spawn(async move {
@@ -289,7 +258,7 @@ async fn main() -> Result<(), eyre::Error> {
     let rpc_client = start_host_session(
         host_token.clone(),
         zmq_ctx.clone(),
-        args.rpc_address.clone(),
+        client_args.rpc_address.clone(),
         kill_switch.clone(),
         listeners.clone(),
     )
@@ -305,7 +274,7 @@ async fn main() -> Result<(), eyre::Error> {
         rpc_client,
         host_token,
         zmq_ctx.clone(),
-        args.events_address.clone(),
+        client_args.events_address.clone(),
         args.listen_address.clone(),
         kill_switch.clone(),
         listeners.clone(),

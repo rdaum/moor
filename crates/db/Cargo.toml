@@ -16,7 +16,7 @@ tempfile.workspace = true
 
 [dependencies]
 ## Own
-moor-values = { path = "../values" }
+moor-values = { path = "../common" }
 
 ## Error declaration/ handling
 bytes.workspace = true

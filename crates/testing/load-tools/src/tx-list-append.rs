@@ -18,35 +18,35 @@
 //! The results are written to a file in the EDN format that `elle-cli` can consume.
 //! See: https://github.com/ligurio/elle-cli
 
+mod setup;
+
+use crate::setup::{broadcast_handle, create_user_session, initialization_session};
 use clap::Parser;
 use clap_derive::Parser;
 use edn_format::{Keyword, Value};
-use eyre::{anyhow, bail};
+use eyre::anyhow;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use moor_values::model::ObjectRef;
-use moor_values::tasks::VerbProgramError;
-use moor_values::{v_int, v_list, List, Obj, Sequence, Symbol, Var, Variant, SYSTEM_OBJECT};
-use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
+use moor_values::{v_int, v_list, List, Obj, Sequence, Symbol, Var, Variant};
+use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_async_client::{make_host_token, start_host_session, ListenersClient, ListenersMessage};
+use rpc_async_client::{make_host_token, start_host_session};
+use rpc_common::client_args::RpcClientArgs;
 use rpc_common::DaemonToClientReply::TaskSubmitted;
-use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
 use rpc_common::{
-    load_keypair, AuthToken, ClientEvent, ClientToken, ClientsBroadcastEvent, DaemonToClientReply,
-    HostClientToDaemonMessage, HostType, ReplyResult, VerbProgramResponse, CLIENT_BROADCAST_TOPIC,
+    load_keypair, AuthToken, ClientEvent, ClientToken, HostClientToDaemonMessage, HostType,
+    ReplyResult,
 };
+use setup::ExecutionContext;
 use std::collections::{BTreeMap, HashMap};
-use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::{Instant, SystemTime};
-use tmq::subscribe::Subscribe;
-use tmq::{request, subscribe};
+use std::time::Instant;
+use tmq::request;
 use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 #[derive(Clone, Parser, Debug)]
@@ -58,38 +58,6 @@ struct Args {
         default_value = "8"
     )]
     num_users: usize,
-
-    #[arg(
-        long,
-        value_name = "rpc-address",
-        help = "RPC ZMQ req-reply socket address",
-        default_value = "ipc:///tmp/moor_rpc.sock"
-    )]
-    rpc_address: String,
-
-    #[arg(
-        long,
-        value_name = "events-address",
-        help = "Events ZMQ pub-sub address",
-        default_value = "ipc:///tmp/moor_events.sock"
-    )]
-    events_address: String,
-
-    #[arg(
-        long,
-        value_name = "public_key",
-        help = "file containing the pkcs8 ed25519 public key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "public_key.pem"
-    )]
-    public_key: PathBuf,
-
-    #[arg(
-        long,
-        value_name = "private_key",
-        help = "file containing a pkcs8 ed25519 private key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "private_key.pem"
-    )]
-    private_key: PathBuf,
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
@@ -127,166 +95,8 @@ struct Args {
     output_file: PathBuf,
 }
 
-async fn noop_listeners_loop() -> (ListenersClient, JoinHandle<()>) {
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    let t = tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            match msg {
-                ListenersMessage::AddListener(_, _) => {}
-                ListenersMessage::RemoveListener(_) => {}
-                ListenersMessage::GetListeners(r) => {
-                    let _ = r.send(vec![]);
-                }
-            }
-        }
-    });
-
-    (ListenersClient::new(tx), t)
-}
-
-async fn broadcast_handle(
-    zmq_ctx: tmq::Context,
-    rpc_address: String,
-    mut broadcast_sub: Subscribe,
-    client_id: Uuid,
-    client_token: ClientToken,
-    connection_oid: Obj,
-    kill_switch: Arc<AtomicBool>,
-) {
-    let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(100)
-        .set_sndtimeo(100)
-        .connect(rpc_address.as_str())
-        .expect("Unable to bind RPC server for connection");
-
-    let mut rpc_client = RpcSendClient::new(rpc_request_sock);
-    // Process ping-pongs on the broadcast topic.
-    tokio::spawn(async move {
-        loop {
-            if kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
-            if let Ok(event) = broadcast_recv(&mut broadcast_sub).await {
-                match event {
-                    ClientsBroadcastEvent::PingPong(_) => {
-                        let _ = rpc_client
-                            .make_client_rpc_call(
-                                client_id,
-                                HostClientToDaemonMessage::ClientPong(
-                                    client_token.clone(),
-                                    SystemTime::now(),
-                                    connection_oid.clone(),
-                                    HostType::TCP,
-                                    SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0),
-                                ),
-                            )
-                            .await;
-                    }
-                }
-            }
-        }
-    });
-}
-async fn create_user_session(
-    zmq_ctx: tmq::Context,
-    rpc_address: String,
-    events_address: String,
-) -> Result<
-    (
-        Obj,
-        AuthToken,
-        ClientToken,
-        Uuid,
-        RpcSendClient,
-        Subscribe,
-        Subscribe,
-    ),
-    eyre::Error,
-> {
-    let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(100)
-        .set_sndtimeo(100)
-        .connect(rpc_address.as_str())
-        .expect("Unable to bind RPC server for connection");
-
-    // And let the RPC server know we're here, and it should start sending events on the
-    // narrative subscription.
-    debug!(rpc_address, "Contacting RPC server to establish connection");
-    let mut rpc_client = RpcSendClient::new(rpc_request_sock);
-    let client_id = uuid::Uuid::new_v4();
-    let peer_addr = format!("{}.test", Uuid::new_v4());
-    let (client_token, connection_oid) = match rpc_client
-        .make_client_rpc_call(client_id, ConnectionEstablish(peer_addr.to_string()))
-        .await
-    {
-        Ok(ReplyResult::ClientSuccess(DaemonToClientReply::NewConnection(token, objid))) => {
-            (token, objid)
-        }
-        Ok(ReplyResult::Failure(f)) => {
-            bail!("RPC failure in connection establishment: {}", f);
-        }
-        Ok(_) => {
-            bail!("Unexpected response from RPC server");
-        }
-        Err(e) => {
-            bail!("Unable to establish connection: {}", e);
-        }
-    };
-    debug!(client_id = ?client_id, connection = ?connection_oid, "Connection established");
-
-    let events_sub = subscribe(&zmq_ctx)
-        .connect(events_address.as_str())
-        .expect("Unable to connect narrative subscriber ");
-    let events_sub = events_sub
-        .subscribe(&client_id.as_bytes()[..])
-        .expect("Unable to subscribe to narrative messages for client connection");
-    let broadcast_sub = subscribe(&zmq_ctx)
-        .connect(events_address.as_str())
-        .expect("Unable to connect broadcast subscriber ");
-    let broadcast_sub = broadcast_sub
-        .subscribe(CLIENT_BROADCAST_TOPIC)
-        .expect("Unable to subscribe to broadcast messages for client connection");
-
-    info!(
-        "Subscribed on pubsub events socket for {:?}, socket addr {}",
-        client_id, events_address
-    );
-
-    // Now "connect wizard"
-    let response = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::LoginCommand(
-                client_token.clone(),
-                SYSTEM_OBJECT,
-                vec!["connect".to_string(), "wizard".to_string()],
-                false,
-            ),
-        )
-        .await
-        .expect("Unable to send login request to RPC server");
-    let (connection_oid, auth_token) = if let ReplyResult::ClientSuccess(
-        DaemonToClientReply::LoginResult(Some((auth_token, _connect_type, player))),
-    ) = response
-    {
-        (player.clone(), auth_token.clone())
-    } else {
-        panic!("Unexpected response from RPC server");
-    };
-
-    Ok((
-        connection_oid,
-        auth_token,
-        client_token,
-        client_id,
-        rpc_client,
-        events_sub,
-        broadcast_sub,
-    ))
-}
-
 // Script for creating the set of properties we want to use
-const ADD_PROPS_SCRIPT: &str = r#"
+const LIST_APPEND_INITIALIZATION_SCRIPT: &str = r#"
 for i in [1..num_props]
     let prop = "prop_" + tostr(i);
     try
@@ -306,8 +116,8 @@ suspend(1);
 return 1;
 "#;
 
-/// Verb code for writing to the properties. Returns the pre-write values and the written values
-const WRITE_WORKLOAD_VERB: &str = r#"
+/// Verb code for writing to the properties. Returns the pre-write common and the written common
+const LIST_APPEND_WRITE_WORKLOAD_VERB: &str = r#"
 append_props = args[1];
 let read_log = {};
 let write_log = {};
@@ -332,8 +142,8 @@ endfor
 return {read_log, write_log};
 "#;
 
-/// Verb code for a read workload. Just reads from random properties and returns the values
-const READ_WORKLOAD_VERB: &str = r#"
+/// Verb code for a read workload. Just reads from random properties and returns the common
+const LIST_APPEND_READ_WORKLOAD_VERB: &str = r#"
 read_props = args[1];
 let read_log = {};
 for i in [1..length(read_props)]
@@ -344,149 +154,6 @@ for i in [1..length(read_props)]
 endfor
 return {read_log};
 "#;
-
-async fn compile(
-    rpc_client: &mut RpcSendClient,
-    client_id: Uuid,
-    oid: Obj,
-    auth_token: AuthToken,
-    client_token: ClientToken,
-    verb_name: Symbol,
-    verb_contents: Vec<String>,
-) {
-    let response = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Verbs(
-                client_token.clone(),
-                auth_token.clone(),
-                ObjectRef::Id(oid.clone()),
-            ),
-        )
-        .await
-        .expect("Unable to send verbs request to RPC server");
-    match response {
-        ReplyResult::ClientSuccess(DaemonToClientReply::Verbs(verbs)) => {
-            info!("Got verbs: {:?}", verbs);
-        }
-        _ => {
-            panic!("RPC failure in verbs");
-        }
-    }
-
-    let response = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Program(
-                client_token.clone(),
-                auth_token.clone(),
-                ObjectRef::Id(oid.clone()),
-                verb_name,
-                verb_contents,
-            ),
-        )
-        .await
-        .expect("Unable to send program request to RPC server");
-
-    match response {
-        ReplyResult::ClientSuccess(DaemonToClientReply::ProgramResponse(
-            VerbProgramResponse::Success(_, _),
-        )) => {
-            info!("Programmed {}:{} successfully", oid, verb_name);
-        }
-        ReplyResult::ClientSuccess(DaemonToClientReply::ProgramResponse(
-            VerbProgramResponse::Failure(e),
-        )) => match e {
-            VerbProgramError::NoVerbToProgram => {
-                panic!("No verb to program");
-            }
-            VerbProgramError::CompilationError(e) => {
-                error!("Compilation error in {}:{}", oid, verb_name);
-                for e in e {
-                    error!("{}", e);
-                }
-                panic!("Compilation error");
-            }
-            VerbProgramError::DatabaseError => {
-                panic!("Database error");
-            }
-        },
-        _ => {
-            panic!("RPC failure in program");
-        }
-    }
-}
-
-async fn initialization_session(
-    args: &Args,
-    connection_oid: Obj,
-    auth_token: AuthToken,
-    client_token: ClientToken,
-    client_id: Uuid,
-    mut rpc_client: RpcSendClient,
-) -> Result<(), eyre::Error> {
-    let num_props_script = format!("let num_props = {};{}", args.num_props, ADD_PROPS_SCRIPT);
-    let response = rpc_client
-        .make_client_rpc_call(
-            client_id,
-            HostClientToDaemonMessage::Eval(
-                client_token.clone(),
-                auth_token.clone(),
-                num_props_script,
-            ),
-        )
-        .await
-        .expect("Unable to send eval request to RPC server");
-
-    match response {
-        ReplyResult::HostSuccess(hs) => {
-            info!("Evaluated successfully: {:?}", hs);
-        }
-        ReplyResult::ClientSuccess(cs) => {
-            info!("Evaluated successfully: {:?}", cs);
-        }
-        ReplyResult::Failure(f) => {
-            panic!("RPC failure in eval: {}", f);
-        }
-    }
-
-    info!(
-        "Created/cleared {} properties & workload verbs",
-        args.num_props
-    );
-
-    compile(
-        &mut rpc_client,
-        client_id,
-        connection_oid.clone(),
-        auth_token.clone(),
-        client_token.clone(),
-        Symbol::mk("write_workload"),
-        WRITE_WORKLOAD_VERB
-            .split('\n')
-            .map(|s| s.to_string())
-            .collect(),
-    )
-    .await;
-
-    info!("Compiled write_workload verb");
-    compile(
-        &mut rpc_client,
-        client_id,
-        connection_oid.clone(),
-        auth_token.clone(),
-        client_token.clone(),
-        Symbol::mk("read_workload"),
-        READ_WORKLOAD_VERB
-            .split('\n')
-            .map(|s| s.to_string())
-            .collect(),
-    )
-    .await;
-    info!("Compiled read_workload verb");
-
-    Ok(())
-}
 
 #[derive(Debug, Clone)]
 enum WorkItem {
@@ -512,7 +179,7 @@ fn process_reads(read_log: &List) -> Vec<(usize, Vec<i64>)> {
 
             let Variant::List(values) = prop_entry[1].variant() else {
                 panic!(
-                    "Unexpected prop values for prop_num {}: {:?}",
+                    "Unexpected prop common for prop_num {}: {:?}",
                     prop_num, prop_entry[1]
                 );
             };
@@ -538,7 +205,7 @@ fn process_writes(write_log: &List) -> Vec<(usize, Vec<i64>)> {
             panic!("Unexpected write log entry: {:?}", prop_entry);
         };
         let prop_entry: Vec<_> = l.iter().collect();
-        // first item should be the prop num, second should be the written values
+        // first item should be the prop num, second should be the written common
         let (prop, values) = {
             let Variant::Int(prop_num) = prop_entry[0].variant() else {
                 panic!("Unexpected prop num value: {:?}", prop_entry[0]);
@@ -546,7 +213,7 @@ fn process_writes(write_log: &List) -> Vec<(usize, Vec<i64>)> {
 
             let Variant::List(values) = prop_entry[1].variant() else {
                 panic!(
-                    "Unexpected prop values for prop_num {}: {:?}",
+                    "Unexpected prop common for prop_num {}: {:?}",
                     prop_num, prop_entry[1]
                 );
             };
@@ -685,47 +352,14 @@ async fn workload(
     Ok(workload)
 }
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() -> Result<(), eyre::Error> {
-    color_eyre::install().expect("Unable to install color_eyre");
-    let args: Args = Args::parse();
-
-    let main_subscriber = tracing_subscriber::fmt()
-        .compact()
-        .with_ansi(true)
-        .with_file(true)
-        .with_line_number(true)
-        .with_thread_names(true)
-        .with_max_level(if args.debug {
-            tracing::Level::DEBUG
-        } else {
-            tracing::Level::INFO
-        })
-        .finish();
-    tracing::subscriber::set_global_default(main_subscriber)
-        .expect("Unable to set configure logging");
-
-    let zmq_ctx = tmq::Context::new();
-    let kill_switch = Arc::new(AtomicBool::new(false));
-
-    let keypair = load_keypair(&args.public_key, &args.private_key)
-        .expect("Unable to load keypair from public and private key files");
-    let host_token = make_host_token(&keypair, HostType::TCP);
-
-    let (listeners, _ljh) = noop_listeners_loop().await;
-
-    let _rpc_client = start_host_session(
-        host_token.clone(),
-        zmq_ctx.clone(),
-        args.rpc_address.clone(),
-        kill_switch.clone(),
-        listeners.clone(),
-    )
-    .await
-    .expect("Unable to establish initial host session");
-
-    // Create the initialization user session
-    // which will be used to make sure the properties we want to use are set up
+async fn list_append_workload(
+    args: Args,
+    client_args: RpcClientArgs,
+    ExecutionContext {
+        zmq_ctx,
+        kill_switch,
+    }: ExecutionContext,
+) -> Result<(), eyre::Error> {
     let (
         connection_oid,
         auth_token,
@@ -736,15 +370,15 @@ async fn main() -> Result<(), eyre::Error> {
         broadcast_sub,
     ) = create_user_session(
         zmq_ctx.clone(),
-        args.rpc_address.clone(),
-        args.events_address.clone(),
+        client_args.rpc_address.clone(),
+        client_args.events_address.clone(),
     )
     .await?;
 
     {
         let kill_switch = kill_switch.clone();
         let zmq_ctx = zmq_ctx.clone();
-        let rpc_address = args.rpc_address.clone();
+        let rpc_address = client_args.rpc_address.clone();
         let client_id = client_id.clone();
         let client_token = client_token.clone();
         let connection_oid = connection_oid.clone();
@@ -763,13 +397,28 @@ async fn main() -> Result<(), eyre::Error> {
     }
 
     info!("Initializing workload session (creating properties & verbs)");
+    let num_props_script = format!(
+        "let num_props = {};{}",
+        args.num_props, LIST_APPEND_INITIALIZATION_SCRIPT
+    );
+
     initialization_session(
-        &args,
         connection_oid.clone(),
         auth_token.clone(),
         client_token.clone(),
         client_id,
         rpc_client,
+        &num_props_script,
+        &[
+            (
+                Symbol::mk("write_workload"),
+                LIST_APPEND_WRITE_WORKLOAD_VERB.to_string(),
+            ),
+            (
+                Symbol::mk("read_workload"),
+                LIST_APPEND_READ_WORKLOAD_VERB.to_string(),
+            ),
+        ],
     )
     .await?;
 
@@ -818,7 +467,7 @@ async fn main() -> Result<(), eyre::Error> {
         let connection_oid = connection_oid.clone();
         let auth_token = auth_token.clone();
         let client_token = client_token.clone();
-        let rpc_address = args.rpc_address.clone();
+        let rpc_address = client_args.rpc_address.clone();
         let args = args.clone();
         let task_results = task_results.clone();
         workload_futures.push(workload(
@@ -983,6 +632,55 @@ async fn main() -> Result<(), eyre::Error> {
     }
     std::fs::write(&args.output_file, output_document)?;
     info!("Workload written to {}", args.output_file.display());
+
+    Ok(())
+}
+
+#[tokio::main(flavor = "multi_thread")]
+async fn main() -> Result<(), eyre::Error> {
+    color_eyre::install().expect("Unable to install color_eyre");
+    let args: Args = Args::parse();
+    let client_args: RpcClientArgs = RpcClientArgs::parse();
+
+    let main_subscriber = tracing_subscriber::fmt()
+        .compact()
+        .with_ansi(true)
+        .with_file(true)
+        .with_line_number(true)
+        .with_thread_names(true)
+        .with_max_level(if args.debug {
+            tracing::Level::DEBUG
+        } else {
+            tracing::Level::INFO
+        })
+        .finish();
+    tracing::subscriber::set_global_default(main_subscriber)
+        .expect("Unable to set configure logging");
+
+    let zmq_ctx = tmq::Context::new();
+    let kill_switch = Arc::new(AtomicBool::new(false));
+
+    let keypair = load_keypair(&client_args.public_key, &client_args.private_key)
+        .expect("Unable to load keypair from public and private key files");
+    let host_token = make_host_token(&keypair, HostType::TCP);
+
+    let (listeners, _ljh) = setup::noop_listeners_loop().await;
+
+    let _rpc_client = start_host_session(
+        host_token.clone(),
+        zmq_ctx.clone(),
+        client_args.rpc_address.clone(),
+        kill_switch.clone(),
+        listeners.clone(),
+    )
+    .await
+    .expect("Unable to establish initial host session");
+
+    let exec_context = ExecutionContext {
+        zmq_ctx,
+        kill_switch: kill_switch.clone(),
+    };
+    list_append_workload(args, client_args, exec_context).await?;
 
     kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(())

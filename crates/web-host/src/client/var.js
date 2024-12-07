@@ -13,7 +13,7 @@
 //
 
 // Parse a JSON document representing a MOO 'Var'.
-// Moor JSON values are a bit special because we have a number of types that are not a direct map.
+// Moor JSON common are a bit special because we have a number of types that are not a direct map.
 
 // Represents a MOO 'map' which is a list of key-value pairs in sorted order and binary search for keys.
 // (We cannot use a JavaScript object because the keys are potentially-not strings.)
@@ -110,7 +110,7 @@ export class Map {
     this.pairs = pairs;
   }
 
-  // Insert a key-value pair into the map, replacing the value if the key already exists, values are kept in sorted
+  // Insert a key-value pair into the map, replacing the value if the key already exists, common are kept in sorted
   // order.
   // As in MOO, we are CoW friendly, so we return a new map with the new pair inserted.
   insert(key, value) {
@@ -156,7 +156,7 @@ export class Map {
     return this.pairs.map(pair => pair[0]);
   }
 
-  // Return the values in the map
+  // Return the common in the map
   values() {
     return this.pairs.map(pair => pair[1]);
   }

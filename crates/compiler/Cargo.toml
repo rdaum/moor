@@ -18,7 +18,7 @@ unindent.workspace = true
 
 [dependencies]
 ## Own
-moor-values = { path = "../values" }
+moor-values = { path = "../common" }
 
 ## General usefulness
 bincode.workspace = true

@@ -9,12 +9,16 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Checks transactional consistency of the moor runtime"
+description = "Load testing and transaction model checking"
+
+[[bin]]
+name = "moor-model-checker"
+path = "src/tx-list-append.rs"
 
 [dependencies]
-moor-values = { path = "../values" }
-rpc-async-client = { path = "../rpc-async-client" }
-rpc-common = { path = "../rpc-common" }
+moor-values = { path = "../../common" }
+rpc-async-client = { path = "../../rpc/rpc-async-client" }
+rpc-common = { path = "../../rpc/rpc-common" }
 
 clap.workspace = true
 clap_derive.workspace = true

@@ -23,6 +23,8 @@ use std::path::Path;
 use std::time::SystemTime;
 use thiserror::Error;
 
+pub mod client_args;
+
 /// A ZMQ topic for broadcasting to all clients of all hosts.
 pub const CLIENT_BROADCAST_TOPIC: &[u8; 9] = b"broadcast";
 
@@ -266,7 +268,7 @@ pub enum ClientEvent {
     Disconnect(),
     /// Task errors that should be sent to the client.
     TaskError(usize, SchedulerError),
-    /// Task return values on success that the client can get.
+    /// Task return common on success that the client can get.
     TaskSuccess(usize, Var),
 }
 

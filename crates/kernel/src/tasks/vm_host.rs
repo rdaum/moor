@@ -50,7 +50,7 @@ use crate::vm::{FinallyReason, VMExecState};
 use crate::PhantomUnsync;
 use moor_values::matching::command_parse::ParsedCommand;
 
-/// Return values from exec_interpreter back to the Task scheduler loop
+/// Return common from exec_interpreter back to the Task scheduler loop
 pub enum VMHostResponse {
     /// Tell the task to just keep on letting us do what we're doing.
     ContinueOk,

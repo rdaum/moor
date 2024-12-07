@@ -145,7 +145,7 @@ pub fn read_textdump<T: io::Read>(
 
     // Define props. This means going through and just adding at the very root, which will create
     // initially-clear state in all the descendants. A second pass will then go through and update
-    // flags and values for the children.
+    // flags and common for the children.
     for (objid, o) in &td.objects {
         for (pnum, _p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
@@ -167,7 +167,7 @@ pub fn read_textdump<T: io::Read>(
         }
     }
 
-    info!("Setting property values & info");
+    info!("Setting property common & info");
     for (objid, o) in &td.objects {
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();

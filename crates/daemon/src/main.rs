@@ -163,13 +163,13 @@ struct Args {
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
 
-    /// Whether to allow notify() to send arbitrary MOO values to players. The interpretation of
-    /// the values varies depending on host/client.
+    /// Whether to allow notify() to send arbitrary MOO common to players. The interpretation of
+    /// the common varies depending on host/client.
     /// If this is false, only strings are allowed, as in LambdaMOO.
     #[arg(
         long,
-        help = "Enable rich_notify, allowing notify() to send arbitrary MOO values to players. \
-                The interpretation of the values varies depending on host/client. \
+        help = "Enable rich_notify, allowing notify() to send arbitrary MOO common to players. \
+                The interpretation of the common varies depending on host/client. \
                 If this is false, only strings are allowed, as in LambdaMOO.",
         default_value = "true"
     )]

@@ -2,31 +2,32 @@
 resolver = "2"
 
 members = [
+    "crates/common",
     "crates/compiler",
     "crates/daemon",
     "crates/db",
     "crates/kernel",
-    "crates/model-checker",
-    "crates/moot",
-    "crates/rpc-async-client",
-    "crates/rpc-common",
-    "crates/rpc-sync-client",
+    "crates/rpc/rpc-async-client",
+    "crates/rpc/rpc-common",
+    "crates/rpc/rpc-sync-client",
     "crates/telnet-host",
-    "crates/values",
+    "crates/testing/load-tools",
+    "crates/testing/moot",
     "crates/web-host",
 ]
 default-members = [
-    "crates/values",
+    "crates/common",
     "crates/compiler",
     "crates/kernel",
     "crates/db",
-    "crates/rpc-common",
-    "crates/rpc-sync-client",
-    "crates/rpc-async-client",
+    "crates/rpc/rpc-common",
+    "crates/rpc/rpc-sync-client",
+    "crates/rpc/rpc-async-client",
     "crates/daemon",
     "crates/telnet-host",
     "crates/web-host",
-    "crates/moot",
+    "crates/testing/moot",
+    "crates/testing/load-tools",
 ]
 
 [workspace.package]
@@ -119,7 +120,7 @@ thiserror = "2.0"
 ## For macro-ing
 paste = "1.0"
 
-# For the DB & values layer.
+# For the DB & common layer.
 fjall = { version = "2.4", default-features = false, features = ["ssi_tx", "bytes"] }
 libc = "0.2"
 text_io = "0.1" # Used for reading text dumps.
@@ -144,5 +145,5 @@ signal-hook = "0.3"
 # For the telnet host
 termimad = "0.31"
 
-# For the consistency checker in `model-checker`
+# For the consistency checker in `load-tools`
 edn-format = "3.3.0"

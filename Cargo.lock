@@ -2346,6 +2346,8 @@ name = "rpc-common"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "clap",
+ "clap_derive",
  "moor-values",
  "pem",
  "rusty_paseto",

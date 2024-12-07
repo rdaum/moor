@@ -37,7 +37,7 @@ pub use var::{
 };
 pub use variant::Variant;
 
-/// Integer encoding of values as represented in a `LambdaMOO` textdump, and by `bf_typeof`
+/// Integer encoding of common as represented in a `LambdaMOO` textdump, and by `bf_typeof`
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr)]
 #[allow(non_camel_case_types)]
@@ -134,7 +134,7 @@ pub trait Sequence {
     /// Return a sequence which is a subset of this sequence where the indices lay between `from`
     /// and `to`, inclusive.
     fn range(&self, from: isize, to: isize) -> Result<Var, Error>;
-    /// Assign new values to the sequence where the indices lay between `from` and `to`, inclusive.
+    /// Assign new common to the sequence where the indices lay between `from` and `to`, inclusive.
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error>;
     /// Append the given sequence to this sequence.
     fn append(&self, other: &Var) -> Result<Var, Error>;
@@ -158,11 +158,11 @@ pub trait Associative {
     fn index_set(&self, key: &Var, value: &Var) -> Result<Var, Error>;
     /// Return the key-value pairs in the associative container between the given `from` and `to`
     fn range(&self, from: &Var, to: &Var) -> Result<Var, Error>;
-    /// Assign new values to the key-value pairs in the associative container between the given `from` and `to`
+    /// Assign new common to the key-value pairs in the associative container between the given `from` and `to`
     fn range_set(&self, from: &Var, to: &Var, with: &Var) -> Result<Var, Error>;
     /// Return the keys in the associative container.
     fn keys(&self) -> Vec<Var>;
-    /// Return the values in the associative container.
+    /// Return the common in the associative container.
     fn values(&self) -> Vec<Var>;
     /// Check if the associative container contains the key, returning true if it does.
     fn contains_key(&self, key: &Var, case_sensitive: bool) -> Result<bool, Error>;

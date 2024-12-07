@@ -97,7 +97,7 @@ impl<T: ToPrimitive> BitEnum<T> {
     }
 
     pub fn contains_all(&self, values: BitEnum<T>) -> bool {
-        // Verify that all bits from values are in self.value
+        // Verify that all bits from common are in self.value
         values.value & self.value == values.value
     }
 }

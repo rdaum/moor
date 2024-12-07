@@ -216,7 +216,7 @@ pub fn moo_frame_execute(
 
                     // TODO: Handling for MAXINT/MAXOBJ in various opcodes
                     //   Given we're 64-bit this is highly unlikely to ever be a concern for us, but
-                    //   we also don't want to *crash* on obscene values, so impl that here.
+                    //   we also don't want to *crash* on obscene common, so impl that here.
 
                     let next_val = match (to.variant(), from.variant()) {
                         (Variant::Int(to_i), Variant::Int(from_i)) => {

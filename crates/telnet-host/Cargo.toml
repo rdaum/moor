@@ -13,10 +13,10 @@ description = "A server which presents a classic LambdaMOO-style line-based TCP 
 
 [dependencies]
 moor-compiler = { path = "../compiler" }
-moor-moot = { path = "../moot" }
-moor-values = { path = "../values" }
-rpc-async-client = { path = "../rpc-async-client" }
-rpc-common = { path = "../rpc-common" }
+moor-moot = { path = "../testing/moot" }
+moor-values = { path = "../common" }
+rpc-async-client = { path = "../rpc/rpc-async-client" }
+rpc-common = { path = "../rpc/rpc-common" }
 
 ## Command line arguments parsing.
 clap.workspace = true

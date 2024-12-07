@@ -210,7 +210,7 @@ impl VMExecState {
     /// which makes its way back up to the scheduler.
     /// Contains all the logic for handling the various reasons for exiting a verb execution:
     ///     * Error raises of various kinds
-    ///     * Return values
+    ///     * Return common
     pub(crate) fn unwind_stack(&mut self, why: FinallyReason) -> ExecutionResult {
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {

@@ -169,9 +169,9 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
         // First get the entire inheritance hierarchy.
         let hierarchy = self.get_tx().ancestors(this)?;
 
-        // Now get the property values for each of those objects, but only for the props which
+        // Now get the property common for each of those objects, but only for the props which
         // are defined by that object.
-        // At the same time, get the values.
+        // At the same time, get the common.
         let mut properties = vec![];
         for obj in hierarchy.iter() {
             let obj_propdefs = self.get_tx().get_properties(&obj)?;

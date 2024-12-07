@@ -92,7 +92,7 @@ impl Associative for Map {
     }
 
     fn index_in(&self, key: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
-        // Check the values in the key-value pairs and return the index of the first match.
+        // Check the common in the key-value pairs and return the index of the first match.
         // Linear O(N) operation.
         let pos = self.iter().position(|(_, v)| {
             if case_sensitive {

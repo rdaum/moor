@@ -13,9 +13,11 @@ description = "Common entities used for 0MQ based RPC communication with the dae
 
 [dependencies]
 # Own
-moor-values = { path = "../values" }
+moor-values = { path = "../../common" }
 
 bincode.workspace = true
+clap.workspace = true
+clap_derive.workspace = true
 thiserror.workspace = true
 
 # Auth/Auth

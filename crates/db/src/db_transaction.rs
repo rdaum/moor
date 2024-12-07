@@ -348,7 +348,7 @@ impl WorldStateTransaction for DbTransaction {
         let mut descendant_props = HashMap::new();
         for c in descendants.iter() {
             let mut inherited_props = vec![];
-            // Remove the set values.
+            // Remove the set common.
             let old_props = self.get_properties(o)?;
             if !old_props.is_empty() {
                 for p in old_props.iter() {
@@ -458,7 +458,7 @@ impl WorldStateTransaction for DbTransaction {
     }
 
     fn get_object_size_bytes(&self, obj: &Obj) -> Result<usize, WorldStateError> {
-        // Means retrieving the values for all of the objects attributes, and then summing their sizes.
+        // Means retrieving the common for all of the objects attributes, and then summing their sizes.
         // This is remarkably inefficient.
 
         let flags = self.get_object_flags(obj)?;

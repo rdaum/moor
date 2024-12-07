@@ -39,8 +39,8 @@ harness = false
 ## Own
 moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
-moor-moot = { path = "../moot" }
-moor-values = { path = "../values" }
+moor-moot = { path = "../testing/moot" }
+moor-values = { path = "../common" }
 
 ## General usefulness
 bytes.workspace = true

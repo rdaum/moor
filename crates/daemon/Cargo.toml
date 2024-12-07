@@ -14,8 +14,8 @@ description = "The actual moor binary that runs as an RPC-accessible daemon that
 [dependencies]
 moor-db = { path = "../db" }
 moor-kernel = { path = "../kernel" }
-moor-values = { path = "../values" }
-rpc-common = { path = "../rpc-common" }
+moor-values = { path = "../common" }
+rpc-common = { path = "../rpc/rpc-common" }
 
 ## Command line arguments parsing.
 clap.workspace = true

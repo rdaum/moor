@@ -370,7 +370,7 @@ where
         let mut index = self.index.borrow_mut();
 
         // This is basically like going a `get` on each entry, we're filling our cache with
-        // all the upstream values.
+        // all the upstream common.
         for (ts, d, c) in upstream {
             let entry = index.get_mut(&d);
             match entry {
@@ -594,7 +594,7 @@ mod tests {
             Entry::NotPresent(Timestamp(1))
         );
 
-        // Inserting brand new values...
+        // Inserting brand new common...
         let result = cache.insert(6, 6);
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -609,7 +609,7 @@ mod tests {
             })
         );
 
-        // Upsert should work for new values and old...
+        // Upsert should work for new common and old...
 
         // Not present local or upstream.
         let old_value = cache.upsert(7, 7).unwrap();

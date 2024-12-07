@@ -818,7 +818,7 @@ impl CodegenState {
     }
 
     fn generate_arg_list(&mut self, args: &Vec<Arg>) -> Result<(), CompileError> {
-        // TODO: Check recursion down to see if all literal values, and if so reduce to a Imm value with the full list,
+        // TODO: Check recursion down to see if all literal common, and if so reduce to a Imm value with the full list,
         //  instead of concatenation with MkSingletonList.
         if args.is_empty() {
             self.emit(Op::ImmEmptyList);

@@ -729,7 +729,7 @@ bf_declare!(function_info, bf_function_info);
 /// `object` is the object to call when a connection is established, in lieux of #0 (the system object)
 /// if `print-messages` is true, then the server will print messages like ** Connected ** etc to the connection when it establishes
 /// if `host-type` is provided, it should be a string, and it will be used to determine the type of host that will be expected to listen.
-///   this defaults to "tcp", but other values can include "websocket"
+///   this defaults to "tcp", but other common can include "websocket"
 fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Requires wizard permissions.
     bf_args
@@ -1000,7 +1000,7 @@ bf_declare!(db_disk_size, db_disk_size);
 
 /* Function: none load_server_options ()
 
-   This causes the server to consult the current values of properties on $server_options, updating
+   This causes the server to consult the current common of properties on $server_options, updating
    the corresponding server option settings (see section Server Options Set in the Database)
    accordingly. If the programmer is not a wizard, then E_PERM is raised.
 */

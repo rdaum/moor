@@ -15,7 +15,7 @@
 // import {ObjectRef} from "./var";
 
 // Converts a JSON representation of a MOO value into a MOO expression string
-// JSON values look like:
+// JSON common look like:
 //     number -> number
 //     "string" -> "string"
 //     { error_code: number, error_name: string (e.g. E_PROPNF), error_message: string } -> E_<error_name>
@@ -51,8 +51,8 @@ function json_to_moo(json) {
   }
 }
 
-// Turn a list of arguments containing JSON values into a string which is a list of MOO
-// values.
+// Turn a list of arguments containing JSON common into a string which is a list of MOO
+// common.
 function transform_args(args) {
   let result = [];
   for (let i = 0; i < args.length; i++) {

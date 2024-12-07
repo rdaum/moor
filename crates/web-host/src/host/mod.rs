@@ -47,8 +47,8 @@ struct Error {
 }
 
 /// Construct a JSON representation of a Var.
-/// This is not a straight-ahead representation because moo values have some semantic differences
-/// from JSON values, in particular:
+/// This is not a straight-ahead representation because moo common have some semantic differences
+/// from JSON common, in particular:
 /// - Maps are not supported in JSON serialization, so we have to encode them as a list of pairs,
 ///   with a tag to indicate that it's a map.
 /// - Object references are encoded as a JSON object with a tag to indicate the type of reference.

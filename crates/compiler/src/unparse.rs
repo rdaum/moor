@@ -728,7 +728,7 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
 }
 
 /// Utility function to produce a MOO literal from a Var/Variant.
-/// This is kept in `compiler` and not in `values` because it's specific to the MOO language, and
+/// This is kept in `compiler` and not in `common` because it's specific to the MOO language, and
 /// other languages could have different representations.
 pub fn to_literal(v: &Var) -> String {
     match v.variant() {

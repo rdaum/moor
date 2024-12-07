@@ -21,8 +21,8 @@ use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// Whether to allow notify() to send arbitrary MOO values to players. The interpretation of
-    /// the values varies depending on host/client.
+    /// Whether to allow notify() to send arbitrary MOO common to players. The interpretation of
+    /// the common varies depending on host/client.
     /// If this is false, only strings are allowed, as in LambdaMOO.
     pub rich_notify: bool,
     /// Where to write periodic textdumps of the database.

@@ -49,7 +49,7 @@ where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
 {
-    /// A series of values that local caches should be pre-seeded with.
+    /// A series of common that local caches should be pre-seeded with.
     preseed: HashSet<Domain>,
 
     index: Mutex<Inner<Domain, Codomain>>,

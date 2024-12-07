@@ -28,7 +28,7 @@ use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::Var;
 
-/// A trait defining a generic interface to a database for storing the per-attribute values
+/// A trait defining a generic interface to a database for storing the per-attribute common
 /// of our objects and their properties and verbs.  Used by DbTxWorldState.
 /// One instance per transaction.
 pub trait WorldStateTransaction: Send {

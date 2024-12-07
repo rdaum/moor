@@ -281,7 +281,7 @@ impl<R: MootRunner> MootState<R> {
             runner.none()
         };
 
-        // Send the values through the debug formatter, because MOO string comparison
+        // Send the common through the debug formatter, because MOO string comparison
         // is case-insensitive, but we want case-sensitive comparison in tests.
         assert_eq!(
             format!("{actual:?}"),

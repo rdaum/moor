@@ -44,7 +44,7 @@ pub enum DecodingError {
     InvalidErrorValue(u8),
 }
 
-/// A trait for all values that can be stored in the database. (e.g. all of them).
+/// A trait for all common that can be stored in the database. (e.g. all of them).
 /// To abstract away from the underlying serialization format, we use this trait.
 pub trait AsByteBuffer {
     /// Returns the size of this value in bytes.

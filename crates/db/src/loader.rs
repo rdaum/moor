@@ -95,7 +95,7 @@ pub trait LoaderInterface: Send {
         uuid: Uuid,
     ) -> Result<(Option<Var>, PropPerms), WorldStateError>;
 
-    /// Returns all the property values from the root of the inheritance hierarchy down to the
+    /// Returns all the property common from the root of the inheritance hierarchy down to the
     /// bottom, for the given object.
     #[allow(clippy::type_complexity)]
     fn get_all_property_values(
