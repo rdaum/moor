@@ -99,6 +99,29 @@ impl<W: io::Write> TextdumpWriter<W> {
                 // 	sprintf(buffer, "%%.%dg\n", DBL_DIG + 4);
                 writeln!(self.writer, "{}\n{:+e}", VarType::TYPE_FLOAT as i64, f)?;
             }
+            Variant::Flyweight(flyweight) => {
+                // delegate, slots (len, [key, value, ...]), contents (len, ...), seal (1/0, string)
+                writeln!(self.writer, "{}", VarType::TYPE_FLYWEIGHT as i64)?;
+                writeln!(self.writer, "{}", flyweight.delegate().id().0)?;
+                writeln!(self.writer, "{}", flyweight.slots().len())?;
+                for (k, v) in flyweight.slots().iter() {
+                    writeln!(self.writer, "{}", k)?;
+                    self.write_var(v, false)?;
+                }
+                writeln!(self.writer, "{}", flyweight.contents().len())?;
+                for v in flyweight.contents().iter() {
+                    self.write_var(&v, false)?;
+                }
+                match flyweight.seal() {
+                    Some(s) => {
+                        writeln!(self.writer, "1")?;
+                        writeln!(self.writer, "{}", s)?;
+                    }
+                    None => {
+                        writeln!(self.writer, "0")?;
+                    }
+                }
+            }
         }
         Ok(())
     }

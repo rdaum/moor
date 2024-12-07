@@ -21,8 +21,8 @@ use tracing::info;
 use moor_compiler::Label;
 use moor_values::model::CompileError;
 use moor_values::model::WorldStateError;
-use moor_values::Obj;
-use moor_values::{v_err, v_float, v_int, v_none, v_obj, v_str, Var, VarType};
+use moor_values::{v_err, v_float, v_int, v_none, v_obj, v_str, List, Symbol, Var, VarType};
+use moor_values::{v_flyweight, Obj};
 use moor_values::{v_list, v_map, Error};
 
 use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
@@ -167,6 +167,31 @@ impl<R: Read> TextdumpReader<R> {
                 let l_num = self.read_num()?;
                 let l = Label(l_num as u16);
                 v_int(l.0 as i64)
+            }
+            VarType::TYPE_FLYWEIGHT => {
+                let delegate = self.read_objid()?;
+                let num_slots = self.read_num()?;
+                let mut slots = Vec::with_capacity(num_slots as usize);
+                for _ in 0..num_slots {
+                    let key = self.read_string().unwrap();
+                    let key = Symbol::mk(&key);
+                    let value = self.read_var().unwrap();
+                    slots.push((key, value));
+                }
+                let c_size = self.read_num()?;
+                let contents: Vec<Var> = (0..c_size).map(|_i| self.read_var().unwrap()).collect();
+                let seal = if self.read_num()? == 1 {
+                    Some(self.read_string()?)
+                } else {
+                    None
+                };
+
+                v_flyweight(
+                    delegate,
+                    &slots,
+                    List::from_iter(contents),
+                    seal,
+                )
             }
         };
         Ok(v)

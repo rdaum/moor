@@ -13,6 +13,7 @@
 //
 
 mod error;
+mod flyweight;
 mod list;
 mod map;
 mod obj;
@@ -24,6 +25,7 @@ mod var;
 mod variant;
 
 pub use error::{Error, ErrorPack};
+pub use flyweight::Flyweight;
 pub use list::List;
 pub use map::Map;
 pub use obj::{Obj, AMBIGUOUS, FAILED_MATCH, NOTHING, SYSTEM_OBJECT};
@@ -32,8 +34,8 @@ pub use string::Str;
 use strum::FromRepr;
 pub use symbol::Symbol;
 pub use var::{
-    v_bool, v_empty_list, v_empty_map, v_empty_str, v_err, v_float, v_int, v_list, v_list_iter,
-    v_map, v_none, v_obj, v_objid, v_str, v_string, Var,
+    v_bool, v_empty_list, v_empty_map, v_empty_str, v_err, v_float, v_flyweight, v_int, v_list,
+    v_list_iter, v_map, v_map_iter, v_none, v_obj, v_objid, v_str, v_string, Var,
 };
 pub use variant::Variant;
 
@@ -51,6 +53,7 @@ pub enum VarType {
     TYPE_LABEL = 7, // present only in textdump */
     TYPE_FLOAT = 9,
     TYPE_MAP = 10,
+    TYPE_FLYWEIGHT = 11,
 }
 
 /// Sequence index modes: 0 or 1 indexed.

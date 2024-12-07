@@ -37,6 +37,8 @@ pub struct Config {
     /// Whether to support primitive-type verb dispatching. E.g. "test":reverse() becomes
     ///   $string:reverse("test")
     pub type_dispatch: bool,
+    /// Whether to support flyweight types. Flyweights are a lightweight, non-persistent thingy
+    pub flyweight_type: bool,
 }
 
 impl Default for Config {
@@ -48,6 +50,7 @@ impl Default for Config {
             lexical_scopes: true,
             map_type: true,
             type_dispatch: true,
+            flyweight_type: true,
         }
     }
 }
@@ -57,6 +60,7 @@ impl Config {
         CompileOptions {
             lexical_scopes: self.lexical_scopes,
             map_type: self.map_type,
+            flyweight_type: self.flyweight_type,
         }
     }
 }

@@ -24,6 +24,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use num_traits::ToPrimitive;
 use std::cmp::max;
+use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 
 #[derive(Clone)]
@@ -33,6 +34,11 @@ impl List {
     pub fn build(values: &[Var]) -> Var {
         let l = im::Vector::from(values.to_vec());
         Var::from_variant(Variant::List(List(Box::new(l))))
+    }
+
+    pub fn mk_list(values: &[Var]) -> List {
+        let l = im::Vector::from(values.to_vec());
+        List(Box::new(l))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Var> + '_ {
@@ -73,6 +79,11 @@ impl List {
     }
 }
 
+impl Debug for List {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
 impl Sequence for List {
     fn is_empty(&self) -> bool {
         self.0.is_empty()

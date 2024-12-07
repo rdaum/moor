@@ -13,7 +13,7 @@
 //
 
 use bincode::{Decode, Encode};
-use moor_compiler::{Label, Offset, BUILTINS};
+use moor_compiler::{to_literal, Label, Offset, BUILTINS};
 use moor_values::model::Named;
 use moor_values::model::VerbFlag;
 use moor_values::tasks::Exception;
@@ -52,7 +52,7 @@ impl VMExecState {
             let traceback_entry = match &a.frame {
                 Frame::Moo(_) => {
                     vec![
-                        v_obj(a.this.clone()),
+                        a.this.clone(),
                         v_str(a.verbdef.names().join(" ").as_str()),
                         v_obj(a.verb_definer()),
                         v_obj(a.verb_owner()),
@@ -63,7 +63,7 @@ impl VMExecState {
                 Frame::Bf(bf_frame) => {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
                     vec![
-                        v_obj(a.this.clone()),
+                        a.this.clone(),
                         v_str(bf_name.as_str()),
                         v_obj(NOTHING),
                         v_obj(NOTHING),
@@ -98,8 +98,8 @@ impl VMExecState {
                     pieces.push(format!("builtin {bf_name}",));
                 }
             }
-            if a.verb_definer() != a.this {
-                pieces.push(format!(" (this == {})", a.this));
+            if v_obj(a.verb_definer()) != a.this {
+                pieces.push(format!(" (this == {})", to_literal(&a.this)));
             }
             if let Some(line_num) = a.frame.find_line_no() {
                 pieces.push(format!(" (line {})", line_num));

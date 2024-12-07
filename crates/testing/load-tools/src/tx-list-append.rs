@@ -380,7 +380,6 @@ async fn list_append_workload(
         let kill_switch = kill_switch.clone();
         let zmq_ctx = zmq_ctx.clone();
         let rpc_address = args.client_args.rpc_address.clone();
-        let client_id = client_id.clone();
         let client_token = client_token.clone();
         let connection_oid = connection_oid.clone();
         tokio::spawn(async move {
@@ -500,7 +499,7 @@ async fn list_append_workload(
                         append_ops.push(Value::Vector(vec![
                             Value::Keyword(Keyword::from_name("append")),
                             Value::Integer(*property as i64),
-                            Value::Integer(*value as i64),
+                            Value::Integer(*value),
                         ]));
                     }
                 }
@@ -531,7 +530,7 @@ async fn list_append_workload(
                     read_ops.push(Value::Vector(vec![
                         Value::Keyword(Keyword::from_name("r")),
                         Value::Integer(*property as i64),
-                        Value::Vector(values.iter().map(|v| Value::Integer(*v as i64)).collect()),
+                        Value::Vector(values.iter().map(|v| Value::Integer(*v)).collect()),
                     ]));
                 }
                 map.insert(
@@ -559,7 +558,7 @@ async fn list_append_workload(
                         append_ops.push(Value::Vector(vec![
                             Value::Keyword(Keyword::from_name("append")),
                             Value::Integer(*property as i64),
-                            Value::Integer(*value as i64),
+                            Value::Integer(*value),
                         ]));
                     }
                 }
@@ -586,7 +585,7 @@ async fn list_append_workload(
                     read_ops.push(Value::Vector(vec![
                         Value::Keyword(Keyword::from_name("r")),
                         Value::Integer(*property as i64),
-                        Value::Vector(values.iter().map(|v| Value::Integer(*v as i64)).collect()),
+                        Value::Vector(values.iter().map(|v| Value::Integer(*v)).collect()),
                     ]));
                 }
                 map.insert(

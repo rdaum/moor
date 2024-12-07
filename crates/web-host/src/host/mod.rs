@@ -86,6 +86,19 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             }
             json!({ "map_pairs": v })
         }
+        Variant::Flyweight(f) => {
+            if f.is_sealed() {
+                json!("sealed_flyweight")
+            } else {
+                let mut slotmap = serde_json::Map::new();
+                for s in f.slots() {
+                    slotmap.insert(s.0.to_string(), var_as_json(&s.1));
+                }
+
+                let json_map = serde_json::Value::Object(slotmap);
+                json!({"flyweight": json_map})
+            }
+        }
     }
 }
 

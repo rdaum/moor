@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::{v_err, v_int, v_none, v_obj, Var};
+use moor_values::{v_err, v_int, v_none, v_obj, Symbol, Var};
 use moor_values::{v_float, Variant};
 use std::collections::{HashMap, VecDeque};
 
@@ -617,6 +617,35 @@ impl Decompile {
                 list.push(arg);
                 self.push_expr(Expr::List(list));
             }
+            Op::MakeFlyweight(num_slots) => {
+                let mut slots = Vec::with_capacity(num_slots);
+                let contents = self.pop_expr()?;
+                let Expr::List(contents) = contents else {
+                    return Err(MalformedProgram("expected list for contents".to_string()));
+                };
+                for _ in 0..num_slots {
+                    let k = self.pop_expr()?;
+                    let v = self.pop_expr()?;
+                    let k = match k {
+                        Expr::Value(s) => match s.variant() {
+                            Variant::Str(s) => Symbol::mk(s.as_string().as_str()),
+                            _ => {
+                                return Err(MalformedProgram(
+                                    "expected string for flyweight slot name".to_string(),
+                                ));
+                            }
+                        },
+                        _ => {
+                            return Err(MalformedProgram(
+                                "expected string for flyweight slot name".to_string(),
+                            ));
+                        }
+                    };
+                    slots.push((k, v));
+                }
+                let delegate = self.pop_expr()?;
+                self.push_expr(Expr::Flyweight(Box::new(delegate), slots, contents));
+            }
             Op::Pass => {
                 let args = self.pop_expr()?;
                 let Expr::List(args) = args else {
@@ -1198,6 +1227,13 @@ return 0 && "Automatically Added Return";
         let program = r#"begin
             let {things, ?nothingstr = "nothing", ?andstr = " and ", ?commastr = ", ", ?finalcommastr = ","} = args;
         end"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn test_flyweight() {
+        let program = r#"let flywt = < #1, [ colour -> "orange", z -> 5 ], {#2, #4, "a"}>;"#;
         let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }

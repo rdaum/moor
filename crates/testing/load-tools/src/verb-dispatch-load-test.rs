@@ -200,7 +200,7 @@ async fn load_test_workload(
         let kill_switch = kill_switch.clone();
         let zmq_ctx = zmq_ctx.clone();
         let rpc_address = args.client_args.rpc_address.clone();
-        let client_id = client_id.clone();
+        let client_id = client_id;
         let client_token = client_token.clone();
         let connection_oid = connection_oid.clone();
         tokio::spawn(async move {

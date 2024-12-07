@@ -64,9 +64,9 @@ impl TaskSchedulerClient {
     }
 
     /// Send a message to the scheduler that the verb to be executed was not found.
-    pub fn verb_not_found(&self, objid: Obj, verb: Symbol) {
+    pub fn verb_not_found(&self, what: Var, verb: Symbol) {
         self.scheduler_sender
-            .send((self.task_id, TaskControlMsg::TaskVerbNotFound(objid, verb)))
+            .send((self.task_id, TaskControlMsg::TaskVerbNotFound(what, verb)))
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 
@@ -270,7 +270,7 @@ pub enum TaskControlMsg {
     /// A 'StartCommandVerb' type task failed to parse or match the command.
     TaskCommandError(CommandError),
     /// The verb to be executed was not found.
-    TaskVerbNotFound(Obj, Symbol),
+    TaskVerbNotFound(Var, Symbol),
     /// An exception was thrown while executing the verb.
     TaskException(Exception),
     /// The task is requesting that it be forked.

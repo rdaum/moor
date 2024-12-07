@@ -198,6 +198,13 @@ struct Args {
         default_value = "true"
     )]
     type_dispatch: bool,
+
+    #[arg(
+        long,
+        help = "Enable flyweight types. Flyweights are a lightweight, object delegate",
+        default_value = "true"
+    )]
+    flyweight_type: bool,
 }
 
 fn main() -> Result<(), Report> {
@@ -263,6 +270,7 @@ fn main() -> Result<(), Report> {
         lexical_scopes: args.lexical_scopes,
         map_type: args.map_type,
         type_dispatch: args.type_dispatch,
+        flyweight_type: args.flyweight_type,
     });
 
     // If the database already existed, do not try to import the textdump...

@@ -171,7 +171,7 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(callers.iter().map(|c| {
         let callers = vec![
             // this
-            v_obj(c.this.clone()),
+            c.this.clone(),
             // verb name
             v_string(c.verb_name.to_string()),
             // 'programmer'
@@ -459,7 +459,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let verb_loc = v_obj(task.verb_definer.clone());
         let verb_name = v_str(task.verb_name.as_str());
         let line = v_int(task.line_number as i64);
-        let this = v_obj(task.this.clone());
+        let this = task.this.clone();
         v_list(&[
             task_id, start_time, x, y, programmer, verb_loc, verb_name, line, this,
         ])

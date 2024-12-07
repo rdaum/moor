@@ -13,7 +13,7 @@
 //
 
 use moor_values::util::quote_str;
-use moor_values::{Var, Variant};
+use moor_values::{Sequence, Var, Variant};
 
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
@@ -71,6 +71,7 @@ impl Expr {
             Expr::Id(_) => 1,
             Expr::List(_) => 1,
             Expr::Map(_) => 1,
+            Expr::Flyweight(..) => 1,
             Expr::Pass { .. } => 1,
             Expr::Call { .. } => 1,
             Expr::Length => 1,
@@ -338,6 +339,36 @@ impl<'a> Unparse<'a> {
                 Ok(buffer)
             }
             Expr::Length => Ok(String::from("$")),
+            Expr::Flyweight(delegate, slots, contents) => {
+                // "< #1, [ slot -> value, ...], {1, 2, 3} >"
+                let mut buffer = String::new();
+                buffer.push('<');
+                buffer.push_str(self.unparse_expr(delegate)?.as_str());
+                if !slots.is_empty() {
+                    buffer.push_str(", [");
+                    for (slot, value) in slots {
+                        buffer.push_str(slot.as_str());
+                        buffer.push_str(" -> ");
+                        buffer.push_str(self.unparse_expr(value)?.as_str());
+                        buffer.push_str(", ");
+                    }
+                    buffer.pop();
+                    buffer.pop();
+                    buffer.push(']');
+                }
+                if !contents.is_empty() {
+                    buffer.push_str(", {");
+                    for value in contents {
+                        buffer.push_str(self.unparse_arg(value)?.as_str());
+                        buffer.push_str(", ");
+                    }
+                    buffer.pop();
+                    buffer.pop();
+                    buffer.push('}');
+                }
+                buffer.push('>');
+                Ok(buffer)
+            }
         }
     }
 
@@ -768,6 +799,44 @@ pub fn to_literal(v: &Var) -> String {
             result
         }
         Variant::Err(e) => e.name().to_string(),
+        Variant::Flyweight(fl) => {
+            // If sealed, just return <sealed flyweight>
+            if fl.seal().is_some() {
+                return "<sealed flyweight>".to_string();
+            }
+
+            // Syntax:
+            // < delegate, [ s -> v, ... ], v, v, v ... >
+            let mut result = String::new();
+            result.push('<');
+            result.push_str(fl.delegate().to_literal().as_str());
+            if !fl.slots().is_empty() {
+                result.push_str(", [");
+                for (i, (k, v)) in fl.slots().iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(k.as_str());
+                    result.push_str(" -> ");
+                    result.push_str(to_literal(v).as_str());
+                }
+                result.push(']');
+            }
+            let v = fl.contents();
+            if !v.is_empty() {
+                result.push_str(", {");
+                for (i, v) in v.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(to_literal(&v).as_str());
+                }
+                result.push('}');
+            }
+
+            result.push('>');
+            result
+        }
     }
 }
 
@@ -958,6 +1027,14 @@ mod tests {
         let program = r#"begin
           const {things, ?nothingstr = "nothing", ?andstr = " and ", ?commastr = ", ", ?finalcommastr = ","} = args;
         end"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_flyweight() {
+        let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>;"#;
         let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());

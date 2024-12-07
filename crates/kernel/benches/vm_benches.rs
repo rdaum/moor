@@ -35,7 +35,7 @@ use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::tasks::AbortLimitReason;
 use moor_values::util::BitEnum;
-use moor_values::Symbol;
+use moor_values::{v_obj, Symbol};
 use moor_values::{AsByteBuffer, Var, NOTHING, SYSTEM_OBJECT};
 
 fn create_db() -> TxDB {
@@ -66,12 +66,12 @@ pub fn prepare_call_verb(
         vi,
         VerbCall {
             verb_name,
-            location: SYSTEM_OBJECT,
-            this: SYSTEM_OBJECT,
+            location: v_obj(SYSTEM_OBJECT),
+            this: v_obj(SYSTEM_OBJECT),
             player: SYSTEM_OBJECT,
             args,
             argstr: "".to_string(),
-            caller: SYSTEM_OBJECT,
+            caller: v_obj(SYSTEM_OBJECT),
         },
     );
     vm_host

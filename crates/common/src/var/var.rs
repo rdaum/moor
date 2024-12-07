@@ -15,10 +15,10 @@
 use crate::var::list::List;
 use crate::var::variant::Variant;
 use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
-use crate::var::{map, IndexMode, Sequence, TypeClass};
+use crate::var::{map, Flyweight, IndexMode, Sequence, TypeClass};
 use crate::var::{string, Associative};
 use crate::var::{Error, Obj, VarType};
-use crate::BincodeAsByteBufferExt;
+use crate::{BincodeAsByteBufferExt, Symbol};
 use bincode::{Decode, Encode};
 use std::cmp::{min, Ordering};
 use std::fmt::{Debug, Formatter};
@@ -75,6 +75,7 @@ impl Var {
             Variant::None => VarType::TYPE_NONE,
             Variant::Float(_) => VarType::TYPE_FLOAT,
             Variant::Map(_) => VarType::TYPE_MAP,
+            Variant::Flyweight(_) => VarType::TYPE_FLYWEIGHT,
         }
     }
 
@@ -88,6 +89,10 @@ impl Var {
 
     pub fn mk_map(pairs: &[(Var, Var)]) -> Self {
         map::Map::build(pairs.iter())
+    }
+
+    pub fn mk_map_iter<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Self {
+        map::Map::build(pairs)
     }
 
     pub fn variant(&self) -> &Variant {
@@ -104,6 +109,7 @@ impl Var {
             Variant::Str(s) => !s.is_empty(),
             Variant::Map(m) => !m.is_empty(),
             Variant::Err(_) => false,
+            Variant::Flyweight(f) => !f.is_empty(),
         }
     }
 
@@ -392,6 +398,7 @@ impl Var {
     pub fn type_class(&self) -> TypeClass {
         match self.variant() {
             Variant::List(s) => TypeClass::Sequence(s),
+            Variant::Flyweight(f) => TypeClass::Sequence(f),
             Variant::Str(s) => TypeClass::Sequence(s),
             Variant::Map(m) => TypeClass::Associative(m),
             _ => TypeClass::Scalar,
@@ -436,6 +443,10 @@ pub fn v_map(pairs: &[(Var, Var)]) -> Var {
     Var::mk_map(pairs)
 }
 
+pub fn v_map_iter<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
+    Var::mk_map_iter(pairs)
+}
+
 pub fn v_float(f: f64) -> Var {
     Var::mk_float(f)
 }
@@ -450,6 +461,16 @@ pub fn v_objid(o: i32) -> Var {
 
 pub fn v_obj(o: Obj) -> Var {
     Var::mk_object(o)
+}
+
+pub fn v_flyweight(
+    delegate: Obj,
+    slots: &[(Symbol, Var)],
+    contents: List,
+    seal: Option<String>,
+) -> Var {
+    let fl = Flyweight::mk_flyweight(delegate, slots, contents, seal);
+    Var::from_variant(Variant::Flyweight(fl))
 }
 
 pub fn v_empty_list() -> Var {

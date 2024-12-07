@@ -12,17 +12,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use lazy_static::lazy_static;
 use std::sync::Arc;
-
 use tracing::trace;
 
 use moor_compiler::{to_literal, BuiltinId, Program, BUILTINS};
 use moor_values::model::VerbDef;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::Error::{E_INVIND, E_PERM, E_VERBNF};
-use moor_values::Symbol;
-use moor_values::{v_int, Var};
+use moor_values::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
+use moor_values::{v_int, v_obj, Var};
+use moor_values::{Error, Sequence, Symbol, Variant, SYSTEM_OBJECT};
 use moor_values::{List, Obj};
 
 use crate::builtins::{BfCallState, BfErr, BfRet};
@@ -33,6 +33,15 @@ use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork};
 use crate::vm::{VMExecState, VmExecParams};
 use moor_values::matching::command_parse::ParsedCommand;
+
+lazy_static! {
+    static ref LIST_SYM: Symbol = Symbol::mk("list");
+    static ref MAP_SYM: Symbol = Symbol::mk("map");
+    static ref STRING_SYM: Symbol = Symbol::mk("string");
+    static ref INTEGER_SYM: Symbol = Symbol::mk("integer");
+    static ref FLOAT_SYM: Symbol = Symbol::mk("float");
+    static ref ERROR_SYM: Symbol = Symbol::mk("error");
+}
 
 pub(crate) fn args_literal(args: &[Var]) -> String {
     args.iter()
@@ -62,21 +71,73 @@ pub enum VerbProgram {
 }
 
 impl VMExecState {
-    /// Entry point for preparing a verb call for execution, invoked from the CallVerb opcode
-    /// Seek the verb and prepare the call parameters.
-    /// All parameters for player, caller, etc. are pulled off the stack.
-    /// The call params will be returned back to the task in the scheduler, which will then dispatch
-    /// back through to `do_method_call`
-    pub(crate) fn prepare_call_verb(
+    /// Entry point for dispatching a verb (method) call.
+    /// Called from the VM execution loop for CallVerb opcodes.
+    pub(crate) fn verb_dispatch(
+        &mut self,
+        exec_params: &VmExecParams,
+        world_state: &mut dyn WorldState,
+        target: Var,
+        verb: Symbol,
+        args: List,
+    ) -> Result<ExecutionResult, Error> {
+        let (args, this, location) = match target.variant() {
+            Variant::Obj(o) => (args, target.clone(), o.clone()),
+            Variant::Flyweight(f) => (args, target.clone(), f.delegate().clone()),
+            non_obj => {
+                if !exec_params.config.type_dispatch {
+                    return Err(E_TYPE);
+                }
+                // If the object is not an object of frob, it's a primitive.
+                // For primitives, we look at its type, and look for a
+                // sysprop that corresponds, then dispatch to that, with the object as the
+                // first argument.
+                // e.g. "blah":reverse() becomes $string:reverse("blah")
+                let sysprop_sym = match non_obj {
+                    Variant::Int(_) => *INTEGER_SYM,
+                    Variant::Float(_) => *FLOAT_SYM,
+                    Variant::Str(_) => *STRING_SYM,
+                    Variant::List(_) => *LIST_SYM,
+                    Variant::Map(_) => *MAP_SYM,
+                    Variant::Err(_) => *ERROR_SYM,
+                    _ => {
+                        return Err(E_TYPE);
+                    }
+                };
+                let perms = self.top().permissions.clone();
+                let prop_val =
+                    match world_state.retrieve_property(&perms, &SYSTEM_OBJECT, sysprop_sym) {
+                        Ok(prop_val) => prop_val,
+                        Err(e) => {
+                            return Err(e.to_error_code());
+                        }
+                    };
+                let Variant::Obj(prop_val) = prop_val.variant() else {
+                    return Err(E_TYPE);
+                };
+                let arguments = args
+                    .insert(0, &target)
+                    .expect("Failed to insert object for dispatch");
+                let Variant::List(arguments) = arguments.variant() else {
+                    return Err(E_TYPE);
+                };
+                (arguments.clone(), v_obj(prop_val.clone()), prop_val.clone())
+            }
+        };
+        Ok(self.prepare_call_verb(world_state, location, this, verb, args.clone()))
+    }
+
+    fn prepare_call_verb(
         &mut self,
         world_state: &mut dyn WorldState,
-        this: &Obj,
+        location: Obj,
+        this: Var,
         verb_name: Symbol,
         args: List,
     ) -> ExecutionResult {
         let call = VerbCall {
             verb_name,
-            location: this.clone(),
+            location: v_obj(location.clone()),
             this: this.clone(),
             player: self.top().player.clone(),
             args: args.iter().collect(),
@@ -87,14 +148,14 @@ impl VMExecState {
         };
 
         let self_valid = world_state
-            .valid(this)
+            .valid(&location)
             .expect("Error checking object validity");
         if !self_valid {
             return self.push_error(E_INVIND);
         }
         // Find the callable verb ...
         let (binary, resolved_verb) =
-            match world_state.find_method_verb_on(&self.top().permissions, this, verb_name) {
+            match world_state.find_method_verb_on(&self.top().permissions, &location, verb_name) {
                 Ok(vi) => vi,
                 Err(WorldStateError::ObjectPermissionDenied) => {
                     return self.push_error(E_PERM);
@@ -162,7 +223,7 @@ impl VMExecState {
         let caller = self.caller();
         let call = VerbCall {
             verb_name: verb,
-            location: parent,
+            location: v_obj(parent),
             this: self.top().this.clone(),
             player: self.top().player.clone(),
             args: args.iter().collect(),

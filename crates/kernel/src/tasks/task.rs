@@ -41,9 +41,9 @@ use moor_values::tasks::CommandError;
 use moor_values::tasks::CommandError::PermissionDenied;
 use moor_values::tasks::TaskId;
 use moor_values::util::parse_into_words;
-use moor_values::Obj;
-use moor_values::Symbol;
 use moor_values::{v_int, v_str};
+use moor_values::{v_obj, Obj};
+use moor_values::{Symbol, Variant};
 use moor_values::{NOTHING, SYSTEM_OBJECT};
 
 use crate::builtins::BuiltinRegistry;
@@ -370,12 +370,29 @@ impl Task {
                     player: player.clone(),
                     args: args.clone(),
                     argstr: argstr.clone(),
-                    caller: NOTHING,
+                    caller: v_obj(NOTHING),
                 };
                 // Find the callable verb ...
+                // Obj or flyweight?
+                let object_location = match &verb_call.this.variant() {
+                    Variant::Flyweight(f) => f.delegate().clone(),
+                    Variant::Obj(o) => o.clone(),
+                    _ => {
+                        control_sender
+                            .send((
+                                self.task_id,
+                                TaskControlMsg::TaskVerbNotFound(
+                                    verb_call.this,
+                                    verb_call.verb_name,
+                                ),
+                            ))
+                            .expect("Could not send start response");
+                        return false;
+                    }
+                };
                 match world_state.find_method_verb_on(
                     &self.perms,
-                    &verb_call.this,
+                    &object_location,
                     verb_call.verb_name,
                 ) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -461,12 +478,12 @@ impl Task {
                 let args = arguments.iter().map(|s| v_str(s)).collect::<Vec<_>>();
                 let verb_call = VerbCall {
                     verb_name: Symbol::mk("do_command"),
-                    location: handler_object.clone(),
-                    this: handler_object.clone(),
+                    location: v_obj(handler_object.clone()),
+                    this: v_obj(handler_object.clone()),
                     player: player.clone(),
                     args,
                     argstr: command.to_string(),
-                    caller: handler_object.clone(),
+                    caller: v_obj(handler_object.clone()),
                 };
                 self.vm_host.start_call_method_verb(
                     self.task_id,
@@ -558,12 +575,12 @@ impl Task {
         };
         let verb_call = VerbCall {
             verb_name: Symbol::mk_case_insensitive(parsed_command.verb.as_str()),
-            location: target.clone(),
-            this: target,
+            location: v_obj(target.clone()),
+            this: v_obj(target),
             player: player.clone(),
             args: parsed_command.args.clone(),
             argstr: parsed_command.argstr.clone(),
-            caller: player.clone(),
+            caller: v_obj(player.clone()),
         };
         self.vm_host.start_call_command_verb(
             self.task_id,
@@ -681,8 +698,8 @@ mod tests {
     use moor_values::tasks::{CommandError, Event, TaskId};
     use moor_values::util::BitEnum;
     use moor_values::Error::E_DIV;
-    use moor_values::Symbol;
     use moor_values::{v_int, v_str};
+    use moor_values::{v_obj, Symbol};
     use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
     use crate::builtins::BuiltinRegistry;
@@ -892,7 +909,7 @@ mod tests {
             panic!("Expected Notify, got {:?}", msg);
         };
         assert_eq!(player, SYSTEM_OBJECT);
-        assert_eq!(event.author(), &SYSTEM_OBJECT);
+        assert_eq!(event.author(), &v_obj(SYSTEM_OBJECT));
         assert_eq!(event.event, Event::Notify(v_str("12345"), None));
 
         // Also scheduler should have received a TaskSuccess message.

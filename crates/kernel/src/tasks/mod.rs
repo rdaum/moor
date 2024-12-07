@@ -81,12 +81,12 @@ impl TaskHandle {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VerbCall {
     pub verb_name: Symbol,
-    pub location: Obj,
-    pub this: Obj,
+    pub location: Var,
+    pub this: Var,
     pub player: Obj,
     pub args: Vec<Var>,
     pub argstr: String,
-    pub caller: Obj,
+    pub caller: Var,
 }
 
 /// External interface description of a task, for purpose of e.g. the queued_tasks() builtin.
@@ -98,7 +98,7 @@ pub struct TaskDescription {
     pub verb_name: Symbol,
     pub verb_definer: Obj,
     pub line_number: usize,
-    pub this: Obj,
+    pub this: Var,
 }
 
 /// The set of options that can be configured for the server via core $server_options.
@@ -133,8 +133,8 @@ pub mod vm_test_utils {
 
     use moor_compiler::Program;
     use moor_values::model::WorldState;
-    use moor_values::Symbol;
     use moor_values::SYSTEM_OBJECT;
+    use moor_values::{v_obj, Symbol};
     use moor_values::{Obj, Var};
 
     use crate::builtins::BuiltinRegistry;
@@ -223,12 +223,12 @@ pub mod vm_test_utils {
                 vi,
                 VerbCall {
                     verb_name,
-                    location: SYSTEM_OBJECT,
-                    this: SYSTEM_OBJECT,
+                    location: v_obj(SYSTEM_OBJECT),
+                    this: v_obj(SYSTEM_OBJECT),
                     player: SYSTEM_OBJECT,
                     args,
                     argstr: "".to_string(),
-                    caller: SYSTEM_OBJECT,
+                    caller: v_obj(SYSTEM_OBJECT),
                 },
             );
         })
@@ -336,7 +336,7 @@ pub enum TaskStart {
     /// The scheduler is telling the task to run a (method) verb.
     StartVerb {
         player: Obj,
-        vloc: Obj,
+        vloc: Var,
         verb: Symbol,
         args: Vec<Var>,
         argstr: String,

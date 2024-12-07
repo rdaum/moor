@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::var::flyweight::Flyweight;
 use crate::var::list::List;
 use crate::var::Associative;
 use crate::var::{map, string, Sequence};
@@ -32,6 +33,7 @@ pub enum Variant {
     Str(string::Str),
     Map(map::Map),
     Err(Error),
+    Flyweight(Flyweight),
 }
 
 impl Hash for Variant {
@@ -45,6 +47,7 @@ impl Hash for Variant {
             Variant::Str(s) => s.hash(state),
             Variant::Map(m) => m.hash(state),
             Variant::Err(e) => e.hash(state),
+            Variant::Flyweight(f) => f.hash(state),
         }
     }
 }
@@ -60,6 +63,8 @@ impl Ord for Variant {
             (Variant::Str(l), Variant::Str(r)) => l.cmp(r),
             (Variant::Map(l), Variant::Map(r)) => l.cmp(r),
             (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
+            (Variant::Flyweight(l), Variant::Flyweight(r)) => l.cmp(r),
+
             (Variant::None, _) => Ordering::Less,
             (_, Variant::None) => Ordering::Greater,
             (Variant::Obj(_), _) => Ordering::Less,
@@ -74,6 +79,9 @@ impl Ord for Variant {
             (_, Variant::Str(_)) => Ordering::Greater,
             (Variant::Map(_), _) => Ordering::Less,
             (_, Variant::Map(_)) => Ordering::Greater,
+
+            (Variant::Flyweight(_), _) => Ordering::Less,
+            (_, Variant::Flyweight(_)) => Ordering::Greater,
         }
     }
 }
@@ -105,6 +113,7 @@ impl Debug for Variant {
                 write!(f, "Map([size = {}, items = {:?}])", m.len(), i)
             }
             Variant::Err(e) => write!(f, "Error({:?})", e),
+            Variant::Flyweight(fl) => write!(f, "Flyweight({:?})", fl),
         }
     }
 }
@@ -120,6 +129,7 @@ impl PartialEq<Self> for Variant {
             (Variant::List(s), Variant::List(o)) => s == o,
             (Variant::Map(s), Variant::Map(o)) => s == o,
             (Variant::Err(s), Variant::Err(o)) => s == o,
+            (Variant::Flyweight(s), Variant::Flyweight(o)) => s == o,
             (Variant::None, Variant::None) => true,
             _ => false,
         }

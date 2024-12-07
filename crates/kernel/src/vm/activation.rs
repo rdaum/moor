@@ -50,7 +50,7 @@ pub(crate) struct Activation {
     /// running this activation.
     pub(crate) frame: Frame,
     /// The object that is the receiver of the current verb call.
-    pub(crate) this: Obj,
+    pub(crate) this: Var,
     /// The object that is the 'player' role; that is, the active user of this task.
     pub(crate) player: Obj,
     /// The arguments to the verb or bf being called.
@@ -89,7 +89,7 @@ impl Encode for Activation {
 impl Decode for Activation {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let frame = Frame::decode(decoder)?;
-        let this = Obj::decode(decoder)?;
+        let this = Var::decode(decoder)?;
         let player = Obj::decode(decoder)?;
         let args = Vec::<Var>::decode(decoder)?;
         let verb_name = Symbol::decode(decoder)?;
@@ -116,7 +116,7 @@ impl Decode for Activation {
 impl<'de> BorrowDecode<'de> for Activation {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let frame = Frame::decode(decoder)?;
-        let this = Obj::decode(decoder)?;
+        let this = Var::decode(decoder)?;
         let player = Obj::decode(decoder)?;
         let args = Vec::<Var>::decode(decoder)?;
         let verb_name = Symbol::decode(decoder)?;
@@ -235,15 +235,12 @@ impl Activation {
         let frame = MooStackFrame::new(program);
         let mut frame = Frame::Moo(frame);
         set_constants(&mut frame);
-        frame.set_global_variable(GlobalName::this, v_obj(verb_call_request.call.this.clone()));
+        frame.set_global_variable(GlobalName::this, verb_call_request.call.this.clone());
         frame.set_global_variable(
             GlobalName::player,
             v_obj(verb_call_request.call.player.clone()),
         );
-        frame.set_global_variable(
-            GlobalName::caller,
-            v_obj(verb_call_request.call.caller.clone()),
-        );
+        frame.set_global_variable(GlobalName::caller, verb_call_request.call.caller.clone());
         frame.set_global_variable(
             GlobalName::verb,
             v_str(verb_call_request.call.verb_name.as_str()),
@@ -335,7 +332,7 @@ impl Activation {
 
         Self {
             frame,
-            this: player.clone(),
+            this: v_obj(player.clone()),
             player: player.clone(),
             verbdef,
             verb_name: *EVAL_SYMBOL,
@@ -371,7 +368,7 @@ impl Activation {
         let frame = Frame::Bf(bf_frame);
         Self {
             frame,
-            this: NOTHING,
+            this: v_obj(NOTHING),
             player,
             verbdef,
             verb_name: bf_name,

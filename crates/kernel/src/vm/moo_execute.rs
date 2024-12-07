@@ -12,37 +12,24 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use lazy_static::lazy_static;
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::debug;
 
 use crate::tasks::sessions::Session;
 use crate::vm::activation::Frame;
 use crate::vm::moo_frame::{CatchType, ScopeType};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VMExecState, VmExecParams};
-use moor_compiler::{Op, ScatterLabel};
+use moor_compiler::{to_literal, Op, ScatterLabel};
 use moor_values::model::WorldState;
-use moor_values::model::WorldStateError;
 
 use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_TYPE, E_VARNF};
 use moor_values::{
-    v_bool, v_empty_list, v_empty_map, v_err, v_float, v_int, v_list, v_none, v_obj, IndexMode,
-    Obj, Sequence,
+    v_bool, v_empty_list, v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none,
+    v_obj, v_str, Error, IndexMode, Obj, Sequence, Str, Var, Variant,
 };
 use moor_values::{Symbol, VarType};
-use moor_values::{Variant, SYSTEM_OBJECT};
-
-lazy_static! {
-    static ref LIST_SYM: Symbol = Symbol::mk("list");
-    static ref MAP_SYM: Symbol = Symbol::mk("map");
-    static ref STRING_SYM: Symbol = Symbol::mk("string");
-    static ref INTEGER_SYM: Symbol = Symbol::mk("integer");
-    static ref FLOAT_SYM: Symbol = Symbol::mk("float");
-    static ref ERROR_SYM: Symbol = Symbol::mk("error");
-}
 
 macro_rules! binary_bool_op {
     ( $f:ident, $op:tt ) => {
@@ -298,7 +285,7 @@ pub fn moo_frame_execute(
             Op::ImmEmptyList => f.push(v_empty_list()),
             Op::ListAddTail => {
                 let (tail, list) = (f.pop(), f.peek_top_mut());
-                if list.type_code() != VarType::TYPE_LIST {
+                if !list.is_sequence() || list.type_code() == VarType::TYPE_STR {
                     f.pop();
                     return state.push_error(E_TYPE);
                 }
@@ -318,7 +305,12 @@ pub fn moo_frame_execute(
                 let (tail, list) = (f.pop(), f.peek_top_mut());
 
                 // Don't allow strings here.
-                if tail.type_code() != list.type_code() || list.type_code() != VarType::TYPE_LIST {
+                if list.type_code() == VarType::TYPE_STR {
+                    f.pop();
+                    return state.push_error(E_TYPE);
+                }
+
+                if !tail.is_sequence() || !list.is_sequence() {
                     f.pop();
                     return state.push_error(E_TYPE);
                 }
@@ -365,6 +357,31 @@ pub fn moo_frame_execute(
                         return state.push_error(e);
                     }
                 }
+            }
+            Op::MakeFlyweight(num_slots) => {
+                // Stack should be: contents, slots, delegate
+                let contents = f.pop();
+                // Contents must be a list
+                let Variant::List(contents) = contents.variant() else {
+                    return state.push_error(E_TYPE);
+                };
+                let mut slots = Vec::with_capacity(*num_slots);
+                for _ in 0..*num_slots {
+                    let (k, v) = (f.pop(), f.pop());
+                    let Variant::Str(k) = k.variant() else {
+                        return state.push_error(E_TYPE);
+                    };
+                    let sym = Symbol::mk_case_insensitive(k.as_string());
+                    slots.push((sym, v));
+                }
+                let delegate = f.pop();
+                let Variant::Obj(delegate) = delegate.variant() else {
+                    return state.push_error(E_TYPE);
+                };
+                // Slots should be v_str -> value, num_slots times
+
+                let flyweight = v_flyweight(delegate.clone(), &slots, contents.clone(), None);
+                f.push(flyweight);
             }
             Op::PutTemp => {
                 f.temp = f.peek_top().clone();
@@ -529,22 +546,15 @@ pub fn moo_frame_execute(
                     return state.push_error(E_TYPE);
                 };
 
-                let Variant::Obj(obj) = obj.variant() else {
-                    return state.push_error(E_INVIND);
-                };
-                let propname = Symbol::mk_case_insensitive(propname.as_string());
-                let result = world_state.retrieve_property(&a.permissions, obj, propname);
-                match result {
+                let value = get_property(world_state, &a.permissions, obj, propname);
+                match value {
                     Ok(v) => {
                         f.poke(0, v);
                     }
-                    Err(WorldStateError::RollbackRetry) => {
-                        return ExecutionResult::RollbackRestart;
-                    }
                     Err(e) => {
-                        return state.push_error(e.to_error_code());
+                        return state.push_error(e);
                     }
-                };
+                }
             }
             Op::PushGetProp => {
                 let (propname, obj) = f.peek2();
@@ -553,23 +563,15 @@ pub fn moo_frame_execute(
                     return state.push_error(E_TYPE);
                 };
 
-                let Variant::Obj(obj) = obj.variant() else {
-                    return state.push_error(E_INVIND);
-                };
-                let propname = Symbol::mk_case_insensitive(propname.as_string());
-                let result = world_state.retrieve_property(&a.permissions, obj, propname);
-                match result {
+                let value = get_property(world_state, &a.permissions, obj, propname);
+                match value {
                     Ok(v) => {
                         f.push(v);
                     }
-                    Err(WorldStateError::RollbackRetry) => {
-                        return ExecutionResult::RollbackRestart;
-                    }
                     Err(e) => {
-                        debug!(obj = ?obj, propname = propname.as_str(), "Error resolving property");
-                        return state.push_error(e.to_error_code());
+                        return state.push_error(e);
                     }
-                };
+                }
             }
             Op::PutProp => {
                 let (rhs, propname, obj) = (f.pop(), f.pop(), f.peek_top());
@@ -589,7 +591,6 @@ pub fn moo_frame_execute(
                     Ok(()) => {
                         f.poke(0, rhs);
                     }
-                    Err(WorldStateError::RollbackRetry) => return ExecutionResult::RollbackRestart,
                     Err(e) => {
                         return state.push_error(e.to_error_code());
                     }
@@ -632,56 +633,17 @@ pub fn moo_frame_execute(
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
-                let (args, verb, obj) = match (args.variant(), verb.variant(), obj.variant()) {
-                    (Variant::List(l), Variant::Str(s), Variant::Obj(o)) => {
-                        (l.clone(), s, o.clone())
-                    }
-                    (Variant::List(l), Variant::Str(s), non_obj) => {
-                        if !exec_params.config.type_dispatch {
-                            return state.push_error(E_TYPE);
-                        }
-                        // If the object is not an object, we look at its type, and look for a
-                        // sysprop that corresponds, then dispatch to that, with the object as the
-                        // first argument.
-                        // e.g. "blah":reverse() becomes $string:reverse("blah")
-                        let sysprop_sym = match non_obj {
-                            Variant::Int(_) => *INTEGER_SYM,
-                            Variant::Float(_) => *FLOAT_SYM,
-                            Variant::Str(_) => *STRING_SYM,
-                            Variant::List(_) => *LIST_SYM,
-                            Variant::Map(_) => *MAP_SYM,
-                            Variant::Err(_) => *ERROR_SYM,
-                            _ => {
-                                return state.push_error(E_TYPE);
-                            }
-                        };
-                        let prop_val = match world_state.retrieve_property(
-                            &a.permissions,
-                            &SYSTEM_OBJECT,
-                            sysprop_sym,
-                        ) {
-                            Ok(prop_val) => prop_val,
-                            Err(e) => {
-                                return state.push_error(e.to_error_code());
-                            }
-                        };
-                        let Variant::Obj(prop_val) = prop_val.variant() else {
-                            return state.push_error(E_TYPE);
-                        };
-                        let arguments = l
-                            .insert(0, &obj)
-                            .expect("Failed to insert object for dispatch");
-                        let Variant::List(arguments) = arguments.variant() else {
-                            return state.push_error(E_TYPE);
-                        };
-                        (arguments.clone(), s, prop_val.clone())
-                    }
-                    _ => {
-                        return state.push_error(E_TYPE);
-                    }
+                let (Variant::List(l), Variant::Str(s)) = (args.variant(), verb.variant()) else {
+                    return state.push_error(E_TYPE);
                 };
-                let verb = Symbol::mk_case_insensitive(verb.as_string());
-                return state.prepare_call_verb(world_state, &obj, verb, args);
+                let verb = Symbol::mk_case_insensitive(s.as_string());
+                let result = state.verb_dispatch(exec_params, world_state, obj, verb, l.clone());
+                match result {
+                    Ok(r) => return r,
+                    Err(e) => {
+                        return state.push_error(e);
+                    }
+                }
             }
             Op::Return => {
                 let ret_val = f.pop();
@@ -763,7 +725,7 @@ pub fn moo_frame_execute(
                 let ScopeType::TryCatch(..) = handler.scope_type else {
                     panic!(
                         "Handler is not a catch handler; {}:{} line {}",
-                        a.this,
+                        to_literal(&a.this),
                         a.verb_name,
                         f.find_line_no(f.pc - 1).unwrap()
                     );
@@ -894,10 +856,10 @@ pub fn moo_frame_execute(
                 }
             }
             Op::CheckListForSplice => {
-                let Variant::List(_) = f.peek_top().variant() else {
+                if !f.peek_top().is_sequence() {
                     f.pop();
                     return state.push_error(E_TYPE);
-                };
+                }
             }
         }
     }
@@ -905,4 +867,56 @@ pub fn moo_frame_execute(
     // the loop. But if we do, we need to return More so the scheduler knows to keep feeding
     // us.
     ExecutionResult::More
+}
+
+fn get_property(
+    world_state: &mut dyn WorldState,
+    permissions: &Obj,
+    obj: &Var,
+    propname: &Str,
+) -> Result<Var, Error> {
+    match obj.variant() {
+        Variant::Obj(obj) => {
+            let propname = Symbol::mk_case_insensitive(propname.as_string());
+            let result = world_state.retrieve_property(permissions, obj, propname);
+            match result {
+                Ok(v) => Ok(v),
+                Err(e) => Err(e.to_error_code()),
+            }
+        }
+        Variant::Flyweight(flyweight) => {
+            let propname = Symbol::mk_case_insensitive(propname.as_string());
+
+            // If propname is `delegate`, return the delegate object.
+            // If the propname is `slots`, return the slots list.
+            // Otherwise, return the value from the slots list.
+            let value = match propname.as_str() {
+                "delegate" => v_obj(flyweight.delegate().clone()),
+                "slots" => {
+                    let slots: Vec<_> = flyweight
+                        .slots()
+                        .iter()
+                        .map(|(k, v)| (v_str(k.as_str()), v.clone()))
+                        .collect();
+
+                    v_map(&slots)
+                }
+                _ => {
+                    if let Some(result) = flyweight.get_slot(&propname) {
+                        result.clone()
+                    } else {
+                        // Now check the delegate
+                        let delegate = flyweight.delegate();
+                        let result = world_state.retrieve_property(permissions, delegate, propname);
+                        match result {
+                            Ok(v) => v,
+                            Err(e) => return Err(e.to_error_code()),
+                        }
+                    }
+                }
+            };
+            Ok(value)
+        }
+        _ => Err(E_INVIND),
+    }
 }

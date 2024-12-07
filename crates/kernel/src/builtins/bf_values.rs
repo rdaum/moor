@@ -42,6 +42,13 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::List(_) => result.push_str("{list}"),
             Variant::Map(_) => result.push_str("[map]"),
             Variant::Err(e) => result.push_str(e.name()),
+            Variant::Flyweight(fl) => {
+                if fl.is_sealed() {
+                    result.push_str("<sealed flyweight>")
+                } else {
+                    result.push_str("<flyweight>")
+                }
+            }
         }
     }
     Ok(Ret(v_str(result.as_str())))

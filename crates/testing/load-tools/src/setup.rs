@@ -310,7 +310,7 @@ pub async fn initialization_session(
             connection_oid.clone(),
             auth_token.clone(),
             client_token.clone(),
-            verb_name.clone(),
+            *verb_name,
             verb_code.split('\n').map(|s| s.to_string()).collect(),
         )
         .await;

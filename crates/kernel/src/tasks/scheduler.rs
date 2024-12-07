@@ -399,10 +399,10 @@ impl Scheduler {
                             .expect("Could not send task handle reply");
                         return;
                     };
-                    vloc
+                    v_obj(vloc)
                 } else {
                     match vloc {
-                        ObjectRef::Id(id) => id,
+                        ObjectRef::Id(id) => v_obj(id),
                         _ => panic!("Unexpected object reference in vloc"),
                     }
                 };
@@ -479,7 +479,7 @@ impl Scheduler {
                 let args = command.into_iter().map(v_string).collect::<Vec<Var>>();
                 let task_start = Arc::new(TaskStart::StartVerb {
                     player: player.clone(),
-                    vloc: handler_object,
+                    vloc: v_obj(handler_object),
                     verb: *DO_OUT_OF_BAND_COMMAND,
                     args,
                     argstr,

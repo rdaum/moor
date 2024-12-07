@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
 
+use itertools::Itertools;
 use moor_values::SYSTEM_OBJECT;
 use moor_values::{v_none, Symbol};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
@@ -56,9 +57,10 @@ pub struct CompileOptions {
     pub lexical_scopes: bool,
     /// Whether to support a Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt
     pub map_type: bool,
-    // TODO: future options:
-    //      - symbol types
-    //      - disable "#" style object references (obscure_references)
+    /// Whether to support the flyweight type (a delegate object with slots and contents)
+    pub flyweight_type: bool, // TODO: future options:
+                              //      - symbol types
+                              //      - disable "#" style object references (obscure_references)
 }
 
 impl Default for CompileOptions {
@@ -66,6 +68,7 @@ impl Default for CompileOptions {
         Self {
             lexical_scopes: true,
             map_type: true,
+            flyweight_type: true,
         }
     }
 }
@@ -311,6 +314,63 @@ impl TreeTransformer {
                         })
                         .collect();
                     Ok(Expr::Map(pairs))
+                }
+                Rule::flyweight => {
+                    if !self.options.flyweight_type {
+                        return Err(CompileError::DisabledFeature("Maps".to_string()));
+                    }
+                    let mut parts = primary.into_inner();
+
+                    // Three components:
+                    // 1. The delegate object
+                    // 2. The slots
+                    // 3. The contents
+                    let delegate = primary_self
+                        .clone()
+                        .parse_expr(parts.next().unwrap().into_inner())?;
+
+                    let mut slots = vec![];
+                    let mut contents = vec![];
+
+                    // If the next is `flyweight_slots`, parse the pairs inside it
+                    for next in parts {
+                        match next.as_rule() {
+                            Rule::flyweight_slots => {
+                                // Parse the slots, they're a sequence of ident, expr pairs.
+                                // Collect them into two iterators,
+                                let slot_pairs = next.into_inner().chunks(2);
+                                for mut pair in &slot_pairs {
+                                    let slot_name =
+                                        Symbol::mk_case_insensitive(pair.next().unwrap().as_str());
+
+                                    // "delegate" and "slots" are forbidden slot names.
+                                    if slot_name == Symbol::mk_case_insensitive("delegate")
+                                        || slot_name == Symbol::mk_case_insensitive("slots")
+                                    {
+                                        return Err(CompileError::ParseError(format!(
+                                            "Invalid slot name: {} for flyweight",
+                                            slot_name
+                                        )));
+                                    }
+
+                                    let slot_expr = primary_self
+                                        .clone()
+                                        .parse_expr(pair.next().unwrap().into_inner())?;
+                                    slots.push((slot_name, slot_expr));
+                                }
+                            }
+                            Rule::flyweight_contents => {
+                                if let Some(exprlist) = next.into_inner().next() {
+                                    let exprlist = exprlist.into_inner();
+                                    contents = primary_self.clone().parse_exprlist(exprlist)?;
+                                }
+                            }
+                            _ => {
+                                panic!("Unexpected rule: {:?}", next.as_rule());
+                            }
+                        };
+                    }
+                    Ok(Expr::Flyweight(Box::new(delegate), slots, contents))
                 }
                 Rule::builtin_call => {
                     let mut inner = primary.into_inner();
@@ -1194,7 +1254,7 @@ mod tests {
     use moor_values::{v_none, Symbol};
 
     use crate::ast::Arg::{Normal, Splice};
-    use crate::ast::Expr::{Call, Id, Prop, Value, Verb};
+    use crate::ast::Expr::{Call, Flyweight, Id, Prop, Value, Verb};
     use crate::ast::{
         BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
         StmtNode, UnaryOp,
@@ -2691,5 +2751,50 @@ mod tests {
         "#;
         let parse = parse_program(program, CompileOptions::default());
         assert!(matches!(parse, Err(CompileError::DuplicateVariable(_))));
+    }
+
+    #[test]
+    fn test_empty_flyweight() {
+        let program = r#"<#1>;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Flyweight(
+                Box::new(Value(v_objid(1))),
+                vec![],
+                vec![],
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_flyweight_no_slots_just_contents() {
+        let program = r#"<#1, {2}>;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Flyweight(
+                Box::new(Value(v_objid(1))),
+                vec![],
+                vec![Normal(Value(v_int(2)))],
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_flyweight_only_slots() {
+        let program = r#"<#1, [a->1 , b->2]>;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Flyweight(
+                Box::new(Value(v_objid(1))),
+                vec![
+                    (Symbol::mk("a"), Value(v_int(1))),
+                    (Symbol::mk("b"), Value(v_int(2)))
+                ],
+                vec![],
+            ))]
+        );
     }
 }

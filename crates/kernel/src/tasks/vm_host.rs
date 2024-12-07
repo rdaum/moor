@@ -442,7 +442,7 @@ impl VmHost {
     pub fn verb_definer(&self) -> Obj {
         self.vm_exec_state.top().verb_definer()
     }
-    pub fn this(&self) -> Obj {
+    pub fn this(&self) -> Var {
         self.vm_exec_state.top().this.clone()
     }
     pub fn line_number(&self) -> usize {

@@ -17,7 +17,7 @@ use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
-use moor_values::{Obj, Var};
+use moor_values::{v_obj, Obj, Var};
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;
@@ -50,7 +50,7 @@ pub struct WebSocketConnection {
 /// The JSON output of a narrative event.
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NarrativeOutput {
-    author: i32,
+    author: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     system_message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -83,7 +83,7 @@ impl WebSocketConnection {
         Self::emit_narrative(
             &mut ws_sender,
             NarrativeOutput {
-                author: self.player.id().0,
+                author: var_as_json(&v_obj(self.player.clone())),
                 system_message: Some(connect_message.to_string()),
                 message: None,
                 content_type: Some("text/plain".to_string()),
@@ -120,7 +120,7 @@ impl WebSocketConnection {
                     match event {
                         ClientEvent::SystemMessage(author, msg) => {
                             Self::emit_narrative(&mut ws_sender, NarrativeOutput {
-                                author: author.id().0,
+                                author: var_as_json(&v_obj(author)),
                                 system_message: Some(msg),
                                 message: None,
                                 content_type: Some("text/plain".to_string()),
@@ -132,7 +132,7 @@ impl WebSocketConnection {
                             let Event::Notify(msg, content_type) = msg;
                             let content_type = content_type.map(|s| s.to_string());
                             Self::emit_narrative(&mut ws_sender, NarrativeOutput {
-                                author: event.author.id().0,
+                                author: var_as_json(event.author()),
                                 system_message: None,
                                 message: Some(var_as_json(&msg)),
                                 content_type,
@@ -144,7 +144,7 @@ impl WebSocketConnection {
                         }
                         ClientEvent::Disconnect() => {
                             Self::emit_narrative(&mut ws_sender, NarrativeOutput {
-                                author: self.player.id().0,
+                                author: var_as_json(&v_obj(self.player.clone())),
                                 system_message: Some("** Disconnected **".to_string()),
                                 message: None,
                                 content_type: Some("text/plain".to_string()),

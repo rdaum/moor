@@ -141,6 +141,7 @@ primary    = _{
   | sysprop_call
   | sysprop
   | try_expr
+  | flyweight
   | map
   | list
   | atom
@@ -157,6 +158,12 @@ sysprop_call = { sysprop ~ arglist }
 atom     = { integer | float | string | object | err | ident }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
+
+// flyweight is < parent, [ prop -> value, ... ], { contents, ... } >
+flyweight     = { "<" ~ expr ~ ("," ~ flyweight_slots)? ~ ("," ~ flyweight_contents)? ~ ">" }
+flyweight_slots    = { "[" ~ (ident ~ "->" ~ expr) ~ ("," ~ ident ~ "->" ~ expr)* ~ "]"}
+flyweight_contents = { "{" ~ exprlist?  ~ "}" }
+
 exprlist = { argument ~ ("," ~ argument)* }
 argument = { expr | "@" ~ expr }
 map      = { ("[" ~ (expr ~ "->" ~ expr) ~ ("," ~ expr ~ "->" ~ expr)* ~ "]") | "[]" }

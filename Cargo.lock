@@ -1609,6 +1609,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "bytes",
+ "itertools 0.13.0",
  "lazy_static",
  "moor-values",
  "pest",

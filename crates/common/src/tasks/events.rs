@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::{Obj, Symbol, Var};
+use crate::{Symbol, Var};
 use bincode::{Decode, Encode};
 use std::time::SystemTime;
 
@@ -23,7 +23,7 @@ pub struct NarrativeEvent {
     /// When the event happened, in the server's system time.
     pub timestamp: SystemTime,
     /// The object that authored or caused the event.
-    pub author: Obj,
+    pub author: Var,
     /// The event itself.
     pub event: Event,
 }
@@ -41,7 +41,7 @@ pub enum Event {
 
 impl NarrativeEvent {
     #[must_use]
-    pub fn notify(author: Obj, value: Var, content_type: Option<Symbol>) -> Self {
+    pub fn notify(author: Var, value: Var, content_type: Option<Symbol>) -> Self {
         Self {
             timestamp: SystemTime::now(),
             author,
@@ -54,7 +54,7 @@ impl NarrativeEvent {
         self.timestamp
     }
     #[must_use]
-    pub fn author(&self) -> &Obj {
+    pub fn author(&self) -> &Var {
         &self.author
     }
     #[must_use]

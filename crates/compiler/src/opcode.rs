@@ -80,6 +80,7 @@ pub enum Op {
     MakeSingletonList,
     MakeMap,
     MapInsert,
+    MakeFlyweight(usize),
     Mod,
     Mul,
     Ne,

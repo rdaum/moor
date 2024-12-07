@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 use tracing::error;
 
-use moor_values::Var;
 use moor_values::Variant;
+use moor_values::{v_str, Var};
 
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
@@ -498,6 +498,19 @@ impl CodegenState {
                     self.emit(Op::MapInsert);
                 }
                 self.push_stack(1);
+            }
+            Expr::Flyweight(delegate, slots, contents) => {
+                // push delegate, slots, contents. op is # of slots.
+                self.generate_expr(delegate.as_ref())?;
+                for (k, v) in slots {
+                    self.generate_expr(v)?;
+                    self.pop_stack(1);
+                    self.generate_expr(&Expr::Value(v_str(k.as_str())))?;
+                    self.pop_stack(1);
+                }
+                self.generate_arg_list(contents)?;
+                self.emit(Op::MakeFlyweight(slots.len()));
+                self.pop_stack(1);
             }
             Expr::Scatter(scatter, right) => self.generate_scatter_assign(scatter, right)?,
             Expr::Assign { left, right } => self.generate_assign(left, right)?,

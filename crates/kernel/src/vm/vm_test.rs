@@ -23,7 +23,8 @@ mod tests {
     use moor_values::util::BitEnum;
     use moor_values::Error::E_DIV;
     use moor_values::{
-        v_bool, v_empty_list, v_err, v_int, v_list, v_map, v_none, v_obj, v_objid, v_str, Var,
+        v_bool, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_objid,
+        v_str, List, Obj, Var,
     };
 
     use moor_values::NOTHING;
@@ -1166,5 +1167,58 @@ mod tests {
             result,
             Ok(v_list(&[v_int(1), v_int(6), v_int(7), v_int(8), v_int(9)]))
         );
+    }
+
+    #[test]
+    fn test_make_flyweight() {
+        let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>;"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            vec![],
+        );
+        assert_eq!(
+            result.unwrap(),
+            v_flyweight(
+                Obj::mk_id(1),
+                &[(Symbol::mk("slot"), v_str("123"))],
+                List::mk_list(&[v_int(1), v_int(2), v_int(3)]),
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn test_flyweight_slot() {
+        let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>.slot;"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            vec![],
+        );
+        assert_eq!(result.unwrap(), v_str("123"));
+    }
+
+    #[test]
+    fn test_flyweight_sequence() {
+        let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>[2];"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            vec![],
+        );
+        assert_eq!(result.unwrap(), v_int(2));
     }
 }

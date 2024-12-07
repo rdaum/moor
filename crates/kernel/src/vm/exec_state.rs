@@ -16,8 +16,8 @@ use std::time::{Duration, SystemTime};
 
 use bincode::{Decode, Encode};
 
-use moor_values::Var;
 use moor_values::NOTHING;
+use moor_values::{v_obj, Var};
 use moor_values::{Obj, Symbol};
 
 use crate::vm::activation::{Activation, Frame};
@@ -27,7 +27,7 @@ use moor_values::tasks::TaskId;
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
 pub struct Caller {
-    pub this: Obj,
+    pub this: Var,
     pub verb_name: Symbol,
     pub programmer: Obj,
     pub definer: Obj,
@@ -115,7 +115,7 @@ impl VMExecState {
     }
 
     /// Return the object that called the current activation.
-    pub(crate) fn caller(&self) -> Obj {
+    pub(crate) fn caller(&self) -> Var {
         let stack_iter = self.stack.iter().rev();
 
         // Skip builtin-frames (for now?)
@@ -125,7 +125,7 @@ impl VMExecState {
             }
             return activation.this.clone();
         }
-        NOTHING
+        v_obj(NOTHING)
     }
 
     /// Return the activation record of the caller of the current activation.
@@ -156,9 +156,9 @@ impl VMExecState {
         stack_top.map(|a| a.permissions.clone()).unwrap_or(NOTHING)
     }
 
-    pub(crate) fn this(&self) -> Obj {
+    pub(crate) fn this(&self) -> Var {
         let stack_top = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
-        stack_top.map(|a| a.this.clone()).unwrap_or(NOTHING)
+        stack_top.map(|a| a.this.clone()).unwrap_or(v_obj(NOTHING))
     }
 
     /// Update the permissions of the current task, as called by the `set_task_perms`
