@@ -16,7 +16,7 @@ use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_values::Symbol;
 use moor_values::VarType;
-use moor_values::VarType::TYPE_MAP;
+use moor_values::VarType::{TYPE_FLYWEIGHT, TYPE_MAP};
 /// Global registry of built-in function names.
 use std::collections::HashMap;
 use ArgCount::{Q, U};
@@ -975,6 +975,20 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(2),
             max_args: Q(2),
             types: vec![Typed(TYPE_MAP), Any],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("xml_parse"),
+            min_args: Q(1),
+            max_args: Q(2),
+            types: vec![Typed(TYPE_STR), Typed(TYPE_MAP)],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("to_xml"),
+            min_args: Q(1),
+            max_args: Q(2),
+            types: vec![Typed(TYPE_FLYWEIGHT), Typed(TYPE_MAP)],
             implemented: true,
         },
     ]

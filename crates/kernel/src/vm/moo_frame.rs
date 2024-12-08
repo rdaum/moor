@@ -31,7 +31,7 @@ pub(crate) struct MooStackFrame {
     pub(crate) program: Program,
     /// The program counter.
     pub(crate) pc: usize,
-    /// The common of the variables currently in scope, by their offset.
+    /// The values of the variables currently in scope, by their offset.
     pub(crate) environment: BitArray<Var, 256, Bitset16<16>>,
     /// The current used scope size, used when entering and exiting local scopes.
     pub(crate) environment_width: usize,

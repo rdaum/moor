@@ -61,6 +61,7 @@ md-5.workspace = true
 onig.workspace = true
 pwhash.workspace = true
 rand.workspace = true
+xml-rs.workspace = true
 
 ## Error declaration/ handling
 thiserror.workspace = true

@@ -99,6 +99,7 @@ strum = { version = "0.26", features = ["derive"] }
 text-diff = "0.4"
 ustr = "1.0"
 uuid = { version = "1.11", features = ["v4"] }
+xml-rs = "0.8.24"
 
 ## Required for MOO builtins.
 chrono-tz = "0.10"
