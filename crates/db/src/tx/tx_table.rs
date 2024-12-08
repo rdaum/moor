@@ -430,11 +430,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     struct TestBackingStore {
-        store: RefCell<HashMap<u64, u64>>,
+        store: Arc<Mutex<HashMap<u64, u64>>>,
     }
 
     impl TestBackingStore {
@@ -444,27 +443,22 @@ mod tests {
                 store.insert(*k, *v);
             }
             TestBackingStore {
-                store: RefCell::new(store),
+                store: Arc::new(Mutex::new(store)),
             }
         }
     }
     impl Canonical<u64, u64> for TestBackingStore {
         fn get(&self, domain: &u64) -> Result<Option<(Timestamp, u64)>, Error> {
-            Ok(self
-                .store
-                .borrow()
-                .get(domain)
-                .cloned()
-                .map(|v| (Timestamp(0), v)))
+            let store = self.store.lock().unwrap();
+            Ok(store.get(domain).cloned().map(|v| (Timestamp(0), v)))
         }
 
         fn scan<F: Fn(&u64, &u64) -> bool>(
             &self,
             predicate: &F,
         ) -> Result<Vec<(Timestamp, u64, u64)>, Error> {
-            Ok(self
-                .store
-                .borrow()
+            let store = self.store.lock().unwrap();
+            Ok(store
                 .iter()
                 .filter(|(k, v)| predicate(k, v))
                 .map(|(k, v)| (Timestamp(0), *k, *v))
@@ -474,7 +468,7 @@ mod tests {
 
     impl TestBackingStore {
         fn apply(&self, working_set: Vec<(u64, Op<u64>)>) {
-            let mut store = self.store.borrow_mut();
+            let mut store = self.store.lock().unwrap();
             for op in working_set {
                 match op.1.to_type {
                     OpType::Insert => {
@@ -662,7 +656,7 @@ mod tests {
         backing_store.apply(ws);
 
         // And verify the contents of the backing store
-        let store = backing_store.store.borrow();
+        let store = backing_store.store.lock().unwrap();
         assert_eq!(store.get(&1), Some(&456));
         assert_eq!(store.get(&2), Some(&3));
         assert_eq!(store.get(&3), Some(&3));

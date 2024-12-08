@@ -18,20 +18,8 @@ mod tx_table;
 pub use global_cache::{GlobalCache, Provider};
 pub use tx_table::{TransactionalTable, WorkingSet};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Timestamp(pub u64);
-
-impl PartialOrd for Timestamp {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
-}
-
-impl Ord for Timestamp {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0)
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Tx {
@@ -45,9 +33,9 @@ pub enum Error {
     #[error("Conflict detected")]
     Conflict,
     #[error("Retrieval error")]
-    RetrieveError,
+    RetrievalFailure,
     #[error("Store error")]
-    StoreError,
+    StorageFailure,
     #[error("Encoding error")]
-    EncodingError,
+    EncodingFailure,
 }

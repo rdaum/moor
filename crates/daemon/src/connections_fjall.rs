@@ -61,13 +61,15 @@ struct Inner {
 
 impl ConnectionsFjall {
     pub fn open(path: Option<&Path>) -> Self {
-        let (tmpdir, path) = if path.is_none() {
-            let tmpdir = tempfile::TempDir::new().unwrap();
-            let path = tmpdir.path().to_path_buf();
-            (Some(tmpdir), path)
-        } else {
-            (None, path.unwrap().to_path_buf())
+        let (tmpdir, path) = match path {
+            Some(path) => (None, path.to_path_buf()),
+            None => {
+                let tmpdir = tempfile::TempDir::new().unwrap();
+                let path = tmpdir.path().to_path_buf();
+                (Some(tmpdir), path)
+            }
         };
+
         info!("Opening connections database at {:?}", path);
         let keyspace = Config::new(&path).open().unwrap();
         let sequences_partition = keyspace

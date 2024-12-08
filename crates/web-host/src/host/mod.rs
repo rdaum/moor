@@ -102,6 +102,8 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
     }
 }
 
+// Not used yet
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum JsonParseError {
     #[error("Unknown type")]
@@ -112,6 +114,7 @@ pub enum JsonParseError {
     InvalidRepresentation,
 }
 
+#[allow(dead_code)]
 pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
     match j {
         serde_json::Value::Null => Ok(v_none()),

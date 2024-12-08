@@ -29,7 +29,6 @@ use moor_values::Var;
 
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what
 /// WorldState could provide, but potentially different constraints/semantics (e.g. no perms checks)
-
 pub trait LoaderInterface: Send {
     /// For reading textdumps...
     fn create_object(&self, objid: Option<Obj>, attrs: &ObjAttrs) -> Result<Obj, WorldStateError>;

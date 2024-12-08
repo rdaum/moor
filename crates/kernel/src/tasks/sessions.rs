@@ -32,7 +32,6 @@ use moor_values::{Error, Obj, SYSTEM_OBJECT};
 /// memory mapped file, a full database, or a simple in-memory buffer.
 ///
 /// Implementations would live in the 'server' host (e.g. websocket connections or repl loop)
-///
 // TODO: Fix up connected/reconnected/discconnected handling.
 //  Will probably deprecate MOO's concept of 'disconnected' and 'connected' players in the long
 //  run and emulate slack, discord, skype, etc which have a concept of 'presence' (online, offline,
@@ -40,7 +39,6 @@ use moor_values::{Error, Obj, SYSTEM_OBJECT};
 //  nicely with existing MOO code.
 //  Right now the same user can connect multiple times and we output and input on all connections,
 //  which is different from MOO's "reconnected" handling, but probably preferable.
-
 pub trait Session: Send + Sync {
     /// Commit for current activity, called by the scheduler when a task commits and *after* the world
     /// state has successfully been committed. This is the point at which the session should send

@@ -20,8 +20,14 @@ use std::time::SystemTime;
 use tracing::warn;
 
 /// Manages the set of known hosts and the listeners they have registered.
+struct HostRecord {
+    last_seen: SystemTime,
+    host_type: HostType,
+    listeners: Vec<(Obj, SocketAddr)>,
+}
+
 #[derive(Default)]
-pub struct Hosts(HashMap<HostToken, (SystemTime, HostType, Vec<(Obj, SocketAddr)>)>);
+pub struct Hosts(HashMap<HostToken, HostRecord>);
 
 impl Hosts {
     pub(crate) fn receive_ping(
@@ -32,14 +38,21 @@ impl Hosts {
     ) -> bool {
         let now = SystemTime::now();
         self.0
-            .insert(host_token, (now, host_type, listeners))
+            .insert(
+                host_token,
+                HostRecord {
+                    last_seen: now,
+                    host_type,
+                    listeners,
+                },
+            )
             .is_none()
     }
 
     pub(crate) fn ping_check(&mut self, timeout: std::time::Duration) {
         let now = SystemTime::now();
         let mut expired = vec![];
-        for (host_token, (last_seen, _, _)) in self.0.iter() {
+        for (host_token, HostRecord { last_seen, .. }) in self.0.iter() {
             if now.duration_since(*last_seen).unwrap() > timeout {
                 warn!(
                     "Host {} has not responded in time: {:?}, removing its listeners from the list",
@@ -57,11 +70,17 @@ impl Hosts {
     pub(crate) fn listeners(&self) -> Vec<(Obj, HostType, SocketAddr)> {
         self.0
             .values()
-            .flat_map(|(_, host_type, listeners)| {
-                listeners
-                    .iter()
-                    .map(move |(oid, addr)| (oid.clone(), *host_type, *addr))
-            })
+            .flat_map(
+                |HostRecord {
+                     host_type,
+                     listeners,
+                     ..
+                 }| {
+                    listeners
+                        .iter()
+                        .map(move |(oid, addr)| (oid.clone(), *host_type, *addr))
+                },
+            )
             .collect()
     }
 

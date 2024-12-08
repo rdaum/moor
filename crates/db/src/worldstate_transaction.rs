@@ -71,8 +71,8 @@ pub trait WorldStateTransaction: Send {
 
     /// Destroy the given object, and restructure the property inheritance accordingly.
     fn recycle_object(&self, obj: &Obj) -> Result<(), WorldStateError>;
-    /// Get the parent of the given object.
 
+    /// Get the parent of the given object.
     fn get_object_parent(&self, obj: &Obj) -> Result<Obj, WorldStateError>;
 
     /// Set the parent of the given object, and restructure the property inheritance accordingly.
@@ -123,7 +123,6 @@ pub trait WorldStateTransaction: Send {
     ) -> Result<(), WorldStateError>;
 
     /// Define a new verb on the given object.
-    // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
     #[allow(clippy::too_many_arguments)]
     fn add_object_verb(
         &self,

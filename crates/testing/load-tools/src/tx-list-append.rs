@@ -234,6 +234,7 @@ fn process_writes(write_log: &List) -> Vec<(usize, Vec<i64>)> {
     appends
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn workload(
     args: Args,
     zmq_ctx: tmq::Context,

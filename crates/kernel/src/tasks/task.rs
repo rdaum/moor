@@ -593,6 +593,7 @@ impl Task {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn find_verb_for_command(
     player: &Obj,
     player_location: &Obj,
