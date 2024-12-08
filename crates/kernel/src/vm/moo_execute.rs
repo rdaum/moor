@@ -12,17 +12,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::ops::Add;
-use std::sync::Arc;
-use std::time::Duration;
-
 use crate::tasks::sessions::Session;
 use crate::vm::activation::Frame;
 use crate::vm::moo_frame::{CatchType, ScopeType};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork, VMExecState, VmExecParams};
+use lazy_static::lazy_static;
 use moor_compiler::{to_literal, Op, ScatterLabel};
 use moor_values::model::WorldState;
+use std::ops::Add;
+use std::sync::Arc;
+use std::time::Duration;
 
 use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_TYPE, E_VARNF};
 use moor_values::{
@@ -30,6 +30,11 @@ use moor_values::{
     v_obj, v_str, Error, IndexMode, Obj, Sequence, Str, Var, Variant,
 };
 use moor_values::{Symbol, VarType};
+
+lazy_static! {
+    static ref DELEGATE_SYM: Symbol = Symbol::mk("delegate");
+    static ref SLOTS_SYM: Symbol = Symbol::mk("slots");
+}
 
 macro_rules! binary_bool_op {
     ( $f:ident, $op:tt ) => {
@@ -890,29 +895,24 @@ fn get_property(
             // If propname is `delegate`, return the delegate object.
             // If the propname is `slots`, return the slots list.
             // Otherwise, return the value from the slots list.
-            let value = match propname.as_str() {
-                "delegate" => v_obj(flyweight.delegate().clone()),
-                "slots" => {
-                    let slots: Vec<_> = flyweight
-                        .slots()
-                        .iter()
-                        .map(|(k, v)| (v_str(k.as_str()), v.clone()))
-                        .collect();
-
-                    v_map(&slots)
-                }
-                _ => {
-                    if let Some(result) = flyweight.get_slot(&propname) {
-                        result.clone()
-                    } else {
-                        // Now check the delegate
-                        let delegate = flyweight.delegate();
-                        let result = world_state.retrieve_property(permissions, delegate, propname);
-                        match result {
-                            Ok(v) => v,
-                            Err(e) => return Err(e.to_error_code()),
-                        }
-                    }
+            let value = if propname == *DELEGATE_SYM {
+                v_obj(flyweight.delegate().clone())
+            } else if propname == *SLOTS_SYM {
+                let slots: Vec<_> = flyweight
+                    .slots()
+                    .iter()
+                    .map(|(k, v)| (v_str(k.as_str()), v.clone()))
+                    .collect();
+                v_map(&slots)
+            } else if let Some(result) = flyweight.get_slot(&propname) {
+                result.clone()
+            } else {
+                // Now check the delegate
+                let delegate = flyweight.delegate();
+                let result = world_state.retrieve_property(permissions, delegate, propname);
+                match result {
+                    Ok(v) => v,
+                    Err(e) => return Err(e.to_error_code()),
                 }
             };
             Ok(value)
