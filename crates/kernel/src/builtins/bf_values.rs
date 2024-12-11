@@ -412,7 +412,7 @@ fn flyweight_to_xml_tag(
 /// Turn a tree of flyweights into an XML document.
 /// Valid flyweights must have:
 ///  - delegate object with a tag property OR there's a second map argument that maps object ids to tags
-///  - attributes property that is a map of strings to string or numbers (which we call tostr on)
+///  - attributes property that is a map of strings to string or numbers
 ///  - any children must be either other valid flyweights, or string values.
 fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.flyweight_type {
@@ -440,9 +440,8 @@ fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .perform_indent(true)
             .create_writer(&mut output_buf);
 
-        // Root needs to be a flyweight
+        // Element needs to be a flyweight
         let Variant::Flyweight(fl) = root.variant() else {
-            error!("Root must be a flyweight");
             return Err(BfErr::Code(E_INVARG));
         };
 
@@ -490,6 +489,8 @@ pub(crate) fn register_bf_values(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("object_bytes")] = Box::new(BfObjectBytes {});
     builtins[offset_for_builtin("value_hash")] = Box::new(BfValueHash {});
     builtins[offset_for_builtin("length")] = Box::new(BfLength {});
+
+    // Extensions...
     builtins[offset_for_builtin("xml_parse")] = Box::new(BfXmlParse {});
     builtins[offset_for_builtin("to_xml")] = Box::new(BfToXml {});
 }
