@@ -18,7 +18,7 @@ use std::time::{Duration, SystemTime};
 use chrono::{DateTime, Local, TimeZone};
 use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTINS};
@@ -438,7 +438,6 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     // Ask the scheduler (through its mailbox) to describe all the queued tasks.
-    debug!("sending DescribeOtherTasks to scheduler");
     let tasks = bf_args.task_scheduler_client.request_queued_tasks();
 
     // return in form:
@@ -468,6 +467,58 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(tasks)))
 }
 bf_declare!(queued_tasks, bf_queued_tasks);
+
+/// Function: list queue_info ([obj player])
+/// If player is omitted, returns a list of object numbers naming all players that currently have active task
+/// queues inside the server. If player is provided, returns the number of background tasks currently queued for that user.
+/// It is guaranteed that queue_info(X) will return zero for any X not in the result of queue_info().
+fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() > 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let player = if bf_args.args.is_empty() {
+        None
+    } else {
+        let Variant::Obj(player) = bf_args.args[0].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        Some(player)
+    };
+
+    let tasks = bf_args.task_scheduler_client.request_queued_tasks();
+    // Two modes: if player is None, we return a list of all players with queued tasks, but we
+    // expect wiz perms.
+    // If player is set, we return the number of tasks queued for that player.
+    match player {
+        None => {
+            // Check wiz perms
+            bf_args
+                .task_perms()
+                .map_err(world_state_bf_err)?
+                .check_wizard()
+                .map_err(world_state_bf_err)?;
+
+            // Now we can get the list of players with queued tasks.
+            let players = tasks
+                .iter()
+                .map(|task| task.permissions.clone())
+                .collect::<Vec<_>>();
+
+            Ok(Ret(v_list_iter(players.iter().map(|p| v_obj(p.clone())))))
+        }
+        Some(p) => {
+            // Player must be either a wizard, or the player themselves.
+            let perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+            if !perms.check_is_wizard().map_err(world_state_bf_err)? && !p.eq(&perms.who) {
+                return Err(BfErr::Code(E_PERM));
+            }
+            let queued_tasks = tasks.iter().filter(|t| &t.permissions == p).count();
+            Ok(Ret(v_int(queued_tasks as i64)))
+        }
+    }
+}
+bf_declare!(queue_info, bf_queue_info);
 
 fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  kill_task(<task-id>)   => none
@@ -1039,6 +1090,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("shutdown")] = Box::new(BfShutdown {});
     builtins[offset_for_builtin("suspend")] = Box::new(BfSuspend {});
     builtins[offset_for_builtin("queued_tasks")] = Box::new(BfQueuedTasks {});
+    builtins[offset_for_builtin("queue_info")] = Box::new(BfQueueInfo {});
     builtins[offset_for_builtin("kill_task")] = Box::new(BfKillTask {});
     builtins[offset_for_builtin("resume")] = Box::new(BfResume {});
     builtins[offset_for_builtin("ticks_left")] = Box::new(BfTicksLeft {});
