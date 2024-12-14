@@ -12,11 +12,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+pub use load_db::{read_textdump, textdump_load};
+use serde::{Deserialize, Serialize};
 /// Representation of the structure of objects verbs etc as read from a LambdaMOO textdump'd db
 /// file.
 use std::collections::BTreeMap;
-
-pub use load_db::{read_textdump, textdump_load};
 
 use moor_values::Obj;
 use moor_values::Var;
@@ -47,7 +47,7 @@ const VF_ASPEC_THIS: u16 = 2;
 /// Note that LambdaMOO imports are always in ISO-8859-1, but exports can be in UTF-8.
 /// To make things backwards compatible to LambdaMOO servers, choose ISO-8859-1.
 /// The default is UTF-8.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum EncodingMode {
     // windows-1252 / ISO-8859-1
     ISO8859_1,

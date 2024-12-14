@@ -22,9 +22,9 @@ use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use moor_compiler::{compile, CompileOptions};
-use moor_db::TxDB;
+use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::builtins::BuiltinRegistry;
-use moor_kernel::config::Config;
+use moor_kernel::config::FeaturesConfig;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_kernel::tasks::task_scheduler_client::TaskSchedulerClient;
 use moor_kernel::tasks::vm_host::{VMHostResponse, VmHost};
@@ -39,7 +39,7 @@ use moor_values::{v_obj, Symbol};
 use moor_values::{AsByteBuffer, Var, NOTHING, SYSTEM_OBJECT};
 
 fn create_db() -> TxDB {
-    let (ws_source, _) = TxDB::open(None);
+    let (ws_source, _) = TxDB::open(None, DatabaseConfig::default());
     let mut tx = ws_source.new_world_state().unwrap();
     let _sysobj = tx
         .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::all())
@@ -110,7 +110,7 @@ fn execute(
     vm_host.reset_ticks();
     vm_host.reset_time();
 
-    let config = Arc::new(Config::default());
+    let config = FeaturesConfig::default();
 
     // Call repeatedly into exec until we ge either an error or Complete.
     loop {

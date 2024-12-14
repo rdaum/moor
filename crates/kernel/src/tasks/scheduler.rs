@@ -306,11 +306,14 @@ impl Scheduler {
                 return Err(VerbProgramFailed(VerbProgramError::NoVerbToProgram));
             }
 
-            let program = compile(code.join("\n").as_str(), self.config.compile_options())
-                .map_err(|e| {
-                    // TODO: just dumping a string here sucks.
-                    VerbProgramFailed(VerbProgramError::CompilationError(vec![format!("{:?}", e)]))
-                })?;
+            let program = compile(
+                code.join("\n").as_str(),
+                self.config.features_config.compile_options(),
+            )
+            .map_err(|e| {
+                // TODO: just dumping a string here sucks.
+                VerbProgramFailed(VerbProgramError::CompilationError(vec![format!("{:?}", e)]))
+            })?;
 
             // Now we have a program, we need to encode it.
             let binary = program
@@ -1190,12 +1193,12 @@ impl Scheduler {
     }
 
     fn checkpoint(&self) -> Result<(), SchedulerError> {
-        let Some(textdump_path) = self.config.textdump_output.clone() else {
+        let Some(textdump_path) = self.config.textdump_config.output_path.clone() else {
             error!("Cannot textdump as textdump_file not configured");
             return Err(SchedulerError::CouldNotStartTask);
         };
 
-        let encoding_mode = self.config.textdump_encoding;
+        let encoding_mode = self.config.textdump_config.encoding;
 
         let loader_client = {
             match self.database.loader_client() {

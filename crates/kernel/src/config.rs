@@ -17,18 +17,24 @@
 
 use crate::textdump::EncodingMode;
 use moor_compiler::CompileOptions;
+use moor_db::DatabaseConfig;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::time::Duration;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Config {
+    pub database_config: DatabaseConfig,
+    pub features_config: FeaturesConfig,
+    pub textdump_config: TextdumpConfig,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FeaturesConfig {
     /// Whether to allow notify() to send arbitrary MOO common to players. The interpretation of
     /// the common varies depending on host/client.
     /// If this is false, only strings are allowed, as in LambdaMOO.
     pub rich_notify: bool,
-    /// Where to write periodic textdumps of the database.
-    pub textdump_output: Option<PathBuf>,
-    /// What encoding to use for textdumps (ISO-8859-1 or UTF-8).
-    pub textdump_encoding: EncodingMode,
     /// Whether to support block-level lexical scoping, and the 'begin', 'let' and 'global'
     /// keywords.
     pub lexical_scopes: bool,
@@ -41,12 +47,10 @@ pub struct Config {
     pub flyweight_type: bool,
 }
 
-impl Default for Config {
+impl Default for FeaturesConfig {
     fn default() -> Self {
         Self {
             rich_notify: true,
-            textdump_output: None,
-            textdump_encoding: EncodingMode::UTF8,
             lexical_scopes: true,
             map_type: true,
             type_dispatch: true,
@@ -55,7 +59,7 @@ impl Default for Config {
     }
 }
 
-impl Config {
+impl FeaturesConfig {
     pub fn compile_options(&self) -> CompileOptions {
         CompileOptions {
             lexical_scopes: self.lexical_scopes,
@@ -63,4 +67,17 @@ impl Config {
             flyweight_type: self.flyweight_type,
         }
     }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TextdumpConfig {
+    /// Where to read the initial textdump from, if any.
+    pub input_path: Option<PathBuf>,
+    /// Where to write periodic textdumps of the database, if any.
+    pub output_path: Option<PathBuf>,
+    /// What encoding to use for textdumps (ISO-8859-1 or UTF-8).
+    pub encoding: EncodingMode,
+    /// Interval between database checkpoints.
+    /// If None, no checkpoints will be made.
+    pub checkpoint_interval: Option<Duration>,
 }

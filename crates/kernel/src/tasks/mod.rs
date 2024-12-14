@@ -138,7 +138,7 @@ pub mod vm_test_utils {
     use moor_values::{Obj, Var};
 
     use crate::builtins::BuiltinRegistry;
-    use crate::config::Config;
+    use crate::config::FeaturesConfig;
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::{VMHostResponse, VmHost};
     use crate::tasks::VerbCall;
@@ -162,7 +162,7 @@ pub mod vm_test_utils {
 
         fun(world_state, &mut vm_host);
 
-        let config = Arc::new(Config::default());
+        let config = FeaturesConfig::default();
 
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
@@ -256,7 +256,7 @@ pub mod scheduler_test_utils {
     use moor_values::{Error::E_VERBNF, Obj, Var, SYSTEM_OBJECT};
 
     use super::{TaskHandle, TaskResult};
-    use crate::config::Config;
+    use crate::config::FeaturesConfig;
     use crate::tasks::scheduler_client::SchedulerClient;
     use crate::tasks::sessions::Session;
     use moor_values::tasks::Exception;
@@ -306,7 +306,7 @@ pub mod scheduler_test_utils {
         code: String,
     ) -> Result<Var, SchedulerError> {
         execute(|| {
-            scheduler.submit_eval_task(player, player, code, session, Arc::new(Config::default()))
+            scheduler.submit_eval_task(player, player, code, session, FeaturesConfig::default())
         })
     }
 }

@@ -74,3 +74,4 @@ tracing.workspace = true
 
 # For the DB layer.
 bincode.workspace = true
+serde = { version = "1.0.215", features = ["derive"] }

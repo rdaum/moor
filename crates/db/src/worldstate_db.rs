@@ -12,6 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::config::DatabaseConfig;
 use crate::db_transaction::DbTransaction;
 use crate::fjall_provider::FjallProvider;
 use crate::tx::{GlobalCache, SizedCache, Timestamp, Tx, WorkingSet};
@@ -75,13 +76,8 @@ pub struct WorldStateDB {
     usage_send: crossbeam_channel::Sender<oneshot::Sender<usize>>,
 }
 
-/// The default cache eviction threshold, which is _per_ cache, not global.
-/// This is really about memory usage, and tricky to get a reasonable default on.
-const DEFAULT_CACHE_EVICTION_TRESHOLD: usize = 1 << 20;
-const DEFAULT_CACHE_EVICTION_INTERVAL: Duration = Duration::from_secs(20);
-
 impl WorldStateDB {
-    pub fn open(path: Option<&Path>) -> (Arc<Self>, bool) {
+    pub fn open(path: Option<&Path>, config: DatabaseConfig) -> (Arc<Self>, bool) {
         let tmpdir = if path.is_none() {
             Some(TempDir::new().unwrap())
         } else {
@@ -110,40 +106,61 @@ impl WorldStateDB {
             .unwrap_or(1);
 
         let object_location = keyspace
-            .open_partition("object_location", PartitionCreateOptions::default())
+            .open_partition(
+                "object_location",
+                config.object_location.partition_options(),
+            )
             .unwrap();
         let object_contents = keyspace
-            .open_partition("object_contents", PartitionCreateOptions::default())
+            .open_partition(
+                "object_contents",
+                config.object_contents.partition_options(),
+            )
             .unwrap();
         let object_flags = keyspace
-            .open_partition("object_flags", PartitionCreateOptions::default())
+            .open_partition("object_flags", config.object_flags.partition_options())
             .unwrap();
         let object_parent = keyspace
-            .open_partition("object_parent", PartitionCreateOptions::default())
+            .open_partition("object_parent", config.object_parent.partition_options())
             .unwrap();
         let object_children = keyspace
-            .open_partition("object_children", PartitionCreateOptions::default())
+            .open_partition(
+                "object_children",
+                config.object_children.partition_options(),
+            )
             .unwrap();
         let object_owner = keyspace
-            .open_partition("object_owner", PartitionCreateOptions::default())
+            .open_partition("object_owner", config.object_owner.partition_options())
             .unwrap();
         let object_name = keyspace
-            .open_partition("object_name", PartitionCreateOptions::default())
+            .open_partition("object_name", config.object_name.partition_options())
             .unwrap();
         let object_verbdefs = keyspace
-            .open_partition("object_verbdefs", PartitionCreateOptions::default())
+            .open_partition(
+                "object_verbdefs",
+                config.object_verbdefs.partition_options(),
+            )
             .unwrap();
         let object_verbs = keyspace
-            .open_partition("object_verbs", PartitionCreateOptions::default())
+            .open_partition("object_verbs", config.object_verbs.partition_options())
             .unwrap();
         let object_propdefs = keyspace
-            .open_partition("object_propdefs", PartitionCreateOptions::default())
+            .open_partition(
+                "object_propdefs",
+                config.object_propdefs.partition_options(),
+            )
             .unwrap();
         let object_propvalues = keyspace
-            .open_partition("object_propvalues", PartitionCreateOptions::default())
+            .open_partition(
+                "object_propvalues",
+                config.object_propvalues.partition_options(),
+            )
             .unwrap();
         let object_propflags = keyspace
-            .open_partition("object_propflags", PartitionCreateOptions::default())
+            .open_partition(
+                "object_propflags",
+                config.object_propflags.partition_options(),
+            )
             .unwrap();
 
         let object_location = FjallProvider::new(object_location);
@@ -159,53 +176,90 @@ impl WorldStateDB {
         let object_propvalues = FjallProvider::new(object_propvalues);
         let object_propflags = FjallProvider::new(object_propflags);
 
+        let default_cache_eviction_threshold = config.default_eviction_threshold;
         let object_location = Arc::new(GlobalCache::new(
             Arc::new(object_location),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_location
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_contents = Arc::new(GlobalCache::new(
             Arc::new(object_contents),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_contents
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_flags = Arc::new(GlobalCache::new(
             Arc::new(object_flags),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_flags
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_parent = Arc::new(GlobalCache::new(
             Arc::new(object_parent),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_parent
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_children = Arc::new(GlobalCache::new(
             Arc::new(object_children),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_children
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_owner = Arc::new(GlobalCache::new(
             Arc::new(object_owner),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_owner
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_name = Arc::new(GlobalCache::new(
             Arc::new(object_name),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_name
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_verbdefs = Arc::new(GlobalCache::new(
             Arc::new(object_verbdefs),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_verbdefs
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_verbs = Arc::new(GlobalCache::new(
             Arc::new(object_verbs),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_verbs
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_propdefs = Arc::new(GlobalCache::new(
             Arc::new(object_propdefs),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_propdefs
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_propvalues = Arc::new(GlobalCache::new(
             Arc::new(object_propvalues),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_propvalues
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_propflags = Arc::new(GlobalCache::new(
             Arc::new(object_propflags),
-            DEFAULT_CACHE_EVICTION_TRESHOLD,
+            config
+                .object_propflags
+                .cache_eviction_threshold
+                .unwrap_or(default_cache_eviction_threshold),
         ));
 
         let (commit_channel, commit_receiver) = crossbeam_channel::unbounded();
@@ -234,7 +288,7 @@ impl WorldStateDB {
         });
 
         s.clone()
-            .start_processing_thread(commit_receiver, usage_recv, kill_switch);
+            .start_processing_thread(commit_receiver, usage_recv, kill_switch, config);
 
         (s, fresh)
     }
@@ -307,6 +361,7 @@ impl WorldStateDB {
         receiver: crossbeam_channel::Receiver<(WorkingSets, oneshot::Sender<CommitResult>)>,
         usage_recv: crossbeam_channel::Receiver<oneshot::Sender<usize>>,
         kill_switch: Arc<AtomicBool>,
+        config: DatabaseConfig,
     ) {
         let this = self.clone();
 
@@ -326,7 +381,7 @@ impl WorldStateDB {
                     }
 
                     // If eviction processing interval has passed, check for evictions.
-                    if last_eviction_check.elapsed() > DEFAULT_CACHE_EVICTION_INTERVAL {
+                    if last_eviction_check.elapsed() > config.cache_eviction_interval {
                         let mut total_evicted_entries = 0;
                         let mut total_evicted_bytes = 0;
                         for cache in this.caches() {
@@ -570,10 +625,11 @@ mod tests {
     };
     use std::sync::Arc;
 
+    use crate::config::DatabaseConfig;
     use crate::db_transaction::DbTransaction;
 
     fn test_db() -> Arc<super::WorldStateDB> {
-        super::WorldStateDB::open(None).0
+        super::WorldStateDB::open(None, DatabaseConfig::default()).0
     }
 
     fn begin_tx(db: &Arc<super::WorldStateDB>) -> DbTransaction {

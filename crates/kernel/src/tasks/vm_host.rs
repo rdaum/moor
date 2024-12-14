@@ -36,7 +36,7 @@ use moor_values::Var;
 use moor_values::{v_none, Symbol};
 
 use crate::builtins::BuiltinRegistry;
-use crate::config::Config;
+use crate::config::FeaturesConfig;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
@@ -223,7 +223,7 @@ impl VmHost {
         task_scheduler_client: TaskSchedulerClient,
         session: Arc<dyn Session>,
         builtin_registry: Arc<BuiltinRegistry>,
-        config: Arc<Config>,
+        config: FeaturesConfig,
     ) -> VMHostResponse {
         self.vm_exec_state.task_id = task_id;
 

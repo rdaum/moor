@@ -38,7 +38,7 @@ mod tests {
     use moor_compiler::Program;
     use moor_compiler::{compile, UnboundNames};
     use moor_compiler::{CompileOptions, Names};
-    use moor_db::TxDB;
+    use moor_db::{DatabaseConfig, TxDB};
     use moor_values::Symbol;
     use test_case::test_case;
 
@@ -55,7 +55,7 @@ mod tests {
 
     // Create an in memory db with a single object (#0) containing a single provided verb.
     fn test_db_with_verbs(verbs: &[(&str, &Program)]) -> TxDB {
-        let (state, _) = TxDB::open(None);
+        let (state, _) = TxDB::open(None, DatabaseConfig::default());
         let mut tx = state.new_world_state().unwrap();
         let sysobj = tx
             .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::all())

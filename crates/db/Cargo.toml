@@ -30,6 +30,7 @@ tempfile.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+serde = { version = "1.0.215", features = ["derive"] }
 
 [features]
 relbox = []

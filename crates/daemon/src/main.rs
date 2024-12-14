@@ -12,29 +12,25 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use clap::builder::ValueHint;
+use crate::args::Args;
+use crate::rpc_server::RpcServer;
 use clap::Parser;
-use clap_derive::Parser;
 use ed25519_dalek::SigningKey;
 use eyre::Report;
-
-use crate::rpc_server::RpcServer;
 use moor_db::{Database, TxDB};
-use moor_kernel::config::Config;
 use moor_kernel::tasks::scheduler::Scheduler;
-use moor_kernel::textdump::{textdump_load, EncodingMode};
+use moor_kernel::textdump::textdump_load;
 use pem::Pem;
 use rand::rngs::OsRng;
-use rusty_paseto::core::Key;
-use tracing::{info, warn};
-
 use rpc_common::load_keypair;
+use rusty_paseto::core::Key;
+use tracing::{debug, info, warn};
 
 mod connections;
 
+mod args;
 mod connections_fjall;
 mod rpc_hosts;
 mod rpc_server;
@@ -42,171 +38,10 @@ mod rpc_session;
 mod sys_ctrl;
 mod tasks_fjall;
 
-#[macro_export]
-macro_rules! clap_enum_variants {
-    ($e: ty) => {{
-        use clap::builder::TypedValueParser;
-        clap::builder::PossibleValuesParser::new(<$e>::VARIANTS).map(|s| s.parse::<$e>().unwrap())
-    }};
-}
-
 /// Host for the moor runtime.
 ///   * Brings up the database
 ///   * Instantiates a scheduler
 ///   * Exposes RPC interface for session/connection management.
-
-#[derive(Parser, Debug)] // requires `derive` feature
-struct Args {
-    #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath
-    )]
-    db: PathBuf,
-
-    #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath
-    )]
-    textdump: Option<PathBuf>,
-
-    #[arg(
-        long,
-        value_name = "textdump-output",
-        help = "Path to textdump file to write on `dump_database()`, if any"
-    )]
-    textdump_out: Option<PathBuf>,
-
-    #[arg(
-        long,
-        value_name = "textdump-encoding",
-        help = "Encoding to use for reading and writing textdump files. utf8 or iso8859-1. \
-          LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so for full compatibility, \
-          choose iso8859-1.
-          If you know your textdump contains no such strings, or if your textdump is from moor choose utf8,
-          which is faster to read.",
-        default_value = "utf8"
-    )]
-    textdump_encoding: EncodingMode,
-
-    #[arg(
-        short,
-        long,
-        value_name = "connections-db",
-        help = "Path to connections database to use or create",
-        value_hint = ValueHint::FilePath,
-        default_value = "connections.db"
-    )]
-    connections_file: PathBuf,
-
-    #[arg(
-        short = 'x',
-        long,
-        value_name = "tasks-db",
-        help = "Path to persistent tasks database to use or create",
-        value_hint = ValueHint::FilePath,
-        default_value = "tasks.db"
-    )]
-    tasks_db: PathBuf,
-
-    #[arg(
-        long,
-        value_name = "rpc-listen",
-        help = "RPC server address",
-        default_value = "ipc:///tmp/moor_rpc.sock"
-    )]
-    rpc_listen: String,
-
-    #[arg(
-        long,
-        value_name = "events-listen",
-        help = "Events publisher listen address",
-        default_value = "ipc:///tmp/moor_events.sock"
-    )]
-    events_listen: String,
-
-    #[arg(
-        long,
-        value_name = "public_key",
-        help = "file containing a pkcs8 ed25519 public key, used for authenticating client & host connections",
-        default_value = "public_key.pem"
-    )]
-    public_key: PathBuf,
-
-    #[arg(
-        long,
-        value_name = "private_key",
-        help = "file containing a pkcs8 ed25519 private key, used for authenticating client & host connections",
-        default_value = "private_key.pem"
-    )]
-    private_key: PathBuf,
-
-    #[arg(
-        long,
-        value_name = "generate-keypair",
-        help = "Generate a new keypair and save it to the keypair files, if they don't exist already",
-        default_value = "false"
-    )]
-    generate_keypair: bool,
-
-    #[arg(
-        long,
-        value_name = "num-io-threads",
-        help = "Number of ZeroMQ IO threads to use",
-        default_value = "8"
-    )]
-    num_io_threads: i32,
-
-    #[arg(
-        long,
-        value_name = "checkpoint-interval-seconds",
-        help = "Interval in seconds between database checkpoints",
-        default_value = "240"
-    )]
-    checkpoint_interval_seconds: u16,
-
-    #[arg(long, help = "Enable debug logging", default_value = "false")]
-    debug: bool,
-
-    /// Whether to allow notify() to send arbitrary MOO common to players. The interpretation of
-    /// the common varies depending on host/client.
-    /// If this is false, only strings are allowed, as in LambdaMOO.
-    #[arg(
-        long,
-        help = "Enable rich_notify, allowing notify() to send arbitrary MOO common to players. \
-                The interpretation of the common varies depending on host/client. \
-                If this is false, only strings are allowed, as in LambdaMOO.",
-        default_value = "true"
-    )]
-    rich_notify: bool,
-
-    #[arg(
-        long,
-        help = "Enable block-level lexical scoping in programs. \
-                Adds the `begin`/`end` syntax for creating lexical scopes, and `let` and `global`
-                for declaring variables. \
-                This is a feature that is not present in LambdaMOO, so if you need backwards compatibility, turn this off.",
-        default_value = "true"
-    )]
-    lexical_scopes: bool,
-
-    #[arg(
-        long,
-        help = "Enable the Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt",
-        default_value = "true"
-    )]
-    map_type: bool,
-
-    #[arg(
-        long,
-        help = "Enable primitive-type verb dispatching. E.g. \"test\":reverse() becomes $string:reverse(\"test\")",
-        default_value = "true"
-    )]
-    type_dispatch: bool,
-
-    #[arg(
-        long,
-        help = "Enable flyweight types. Flyweights are a lightweight, object delegate",
-        default_value = "true"
-    )]
-    flyweight_type: bool,
-}
-
 fn main() -> Result<(), Report> {
     color_eyre::install()?;
 
@@ -244,9 +79,9 @@ fn main() -> Result<(), Report> {
             let pubkey_pem = Pem::new("PUBLIC KEY", signing_key.verifying_key().to_bytes());
 
             // And write to the files...
-            std::fs::write(args.private_key, pem::encode(&privkey_pem))
+            std::fs::write(args.private_key.clone(), pem::encode(&privkey_pem))
                 .expect("Unable to write private key");
-            std::fs::write(args.public_key, pem::encode(&pubkey_pem))
+            std::fs::write(args.public_key.clone(), pem::encode(&pubkey_pem))
                 .expect("Unable to write public key");
 
             keypair
@@ -258,36 +93,45 @@ fn main() -> Result<(), Report> {
         }
     };
 
-    info!("Daemon starting. Using database at {:?}", args.db);
-    let (database, freshly_made) = TxDB::open(Some(&args.db));
-    let database = Box::new(database);
-    info!(path = ?args.db, "Opened database");
+    let config = args
+        .config_file
+        .as_ref()
+        .map(|path| {
+            let file = std::fs::File::open(path).expect("Unable to open config file");
 
-    let config = Arc::new(Config {
-        textdump_output: args.textdump_out,
-        textdump_encoding: args.textdump_encoding,
-        rich_notify: args.rich_notify,
-        lexical_scopes: args.lexical_scopes,
-        map_type: args.map_type,
-        type_dispatch: args.type_dispatch,
-        flyweight_type: args.flyweight_type,
-    });
+            serde_json::from_reader(file).expect("Unable to parse config file")
+        })
+        .unwrap_or_default();
+    let config = Arc::new(args.merge_config(config));
+
+    if let Some(write_config) = args.write_merged_config.as_ref() {
+        let merged_config_json =
+            serde_json::to_string_pretty(config.as_ref()).expect("Unable to serialize config");
+        debug!("Merged config: {}", merged_config_json);
+        std::fs::write(write_config, merged_config_json).expect("Unable to write merged config");
+    }
+
+    info!("Daemon starting. Using database at {:?}", args.db_args.db);
+    let (database, freshly_made) =
+        TxDB::open(Some(&args.db_args.db), config.database_config.clone());
+    let database = Box::new(database);
+    info!(path = ?args.db_args.db, "Opened database");
 
     // If the database already existed, do not try to import the textdump...
-    if let Some(textdump) = args.textdump {
+    if let Some(textdump) = config.textdump_config.input_path.as_ref() {
         if !freshly_made {
             info!("Database already exists, skipping textdump import");
         } else {
-            info!("Loading textdump...");
+            info!("Loading textdump from {:?}", textdump);
             let start = std::time::Instant::now();
             let loader_interface = database
                 .loader_client()
                 .expect("Unable to get loader interface from database");
             textdump_load(
                 loader_interface.as_ref(),
-                textdump,
-                args.textdump_encoding,
-                config.compile_options(),
+                textdump.clone(),
+                config.textdump_config.encoding,
+                config.features_config.compile_options(),
             )
             .unwrap();
             let duration = start.elapsed();
@@ -319,7 +163,12 @@ fn main() -> Result<(), Report> {
     // The pieces from core we're going to use:
     //   Our DB.
     //   Our scheduler.
-    let scheduler = Scheduler::new(database, Box::new(tasks_db), config, rpc_server.clone());
+    let scheduler = Scheduler::new(
+        database,
+        Box::new(tasks_db),
+        config.clone(),
+        rpc_server.clone(),
+    );
     let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 
     // The scheduler thread:
@@ -331,19 +180,23 @@ fn main() -> Result<(), Report> {
     // Background DB checkpoint thread.
     let checkpoint_kill_switch = kill_switch.clone();
     let checkpoint_scheduler_client = scheduler_client.clone();
-    let _checkpoint_thread = std::thread::Builder::new()
-        .name("moor-checkpoint".to_string())
-        .spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(
-                args.checkpoint_interval_seconds as u64,
-            ));
-            if checkpoint_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
-            checkpoint_scheduler_client
-                .request_checkpoint()
-                .expect("Failed to submit checkpoint");
-        })?;
+
+    if let Some(checkpoint_interval) = config.textdump_config.checkpoint_interval {
+        info!("Checkpointing enabled. Interval: {:?}", checkpoint_interval);
+        std::thread::Builder::new()
+            .name("moor-checkpoint".to_string())
+            .spawn(move || loop {
+                std::thread::sleep(checkpoint_interval);
+                if checkpoint_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+                checkpoint_scheduler_client
+                    .request_checkpoint()
+                    .expect("Failed to submit checkpoint");
+            })?;
+    } else {
+        info!("Checkpointing disabled.");
+    }
 
     let rpc_loop_scheduler_client = scheduler_client.clone();
     let rpc_listen = args.rpc_listen.clone();

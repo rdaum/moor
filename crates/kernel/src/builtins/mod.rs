@@ -34,7 +34,7 @@ use crate::builtins::bf_server::{register_bf_server, BfNoop};
 use crate::builtins::bf_strings::register_bf_strings;
 use crate::builtins::bf_values::register_bf_values;
 use crate::builtins::bf_verbs::register_bf_verbs;
-use crate::config::Config;
+use crate::config::FeaturesConfig;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::activation::{BfFrame, Frame};
@@ -103,7 +103,7 @@ pub struct BfCallState<'a> {
     /// For sending messages up to the scheduler
     pub(crate) task_scheduler_client: TaskSchedulerClient,
     /// Config
-    pub(crate) config: Arc<Config>,
+    pub(crate) config: FeaturesConfig,
 }
 
 impl BfCallState<'_> {

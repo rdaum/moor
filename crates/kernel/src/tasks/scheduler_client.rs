@@ -22,7 +22,7 @@ use moor_compiler::{compile, Program};
 use moor_values::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_values::{Obj, Symbol, Var};
 
-use crate::config::Config;
+use crate::config::FeaturesConfig;
 use crate::tasks::sessions::Session;
 use crate::tasks::TaskHandle;
 use moor_values::tasks::SchedulerError;
@@ -163,7 +163,7 @@ impl SchedulerClient {
         perms: &Obj,
         code: String,
         sessions: Arc<dyn Session>,
-        config: Arc<Config>,
+        config: FeaturesConfig,
     ) -> Result<TaskHandle, SchedulerError> {
         // Compile the text into a verb.
         let program = match compile(code.as_str(), config.compile_options()) {

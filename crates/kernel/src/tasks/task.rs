@@ -47,7 +47,7 @@ use moor_values::{Symbol, Variant};
 use moor_values::{NOTHING, SYSTEM_OBJECT};
 
 use crate::builtins::BuiltinRegistry;
-use crate::config::Config;
+use crate::config::{Config, FeaturesConfig};
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::{VMHostResponse, VmHost};
@@ -130,7 +130,7 @@ impl Task {
                 session.clone(),
                 world_state,
                 builtin_registry.clone(),
-                config.clone(),
+                config.features_config.clone(),
             ) {
                 (task, world_state) = continuation_task;
             } else {
@@ -153,7 +153,7 @@ impl Task {
         session: Arc<dyn Session>,
         mut world_state: Box<dyn WorldState>,
         builtin_registry: Arc<BuiltinRegistry>,
-        config: Arc<Config>,
+        config: FeaturesConfig,
     ) -> Option<(Self, Box<dyn WorldState>)> {
         // Call the VM
         let vm_exec_result = self.vm_host.exec_interpreter(
@@ -692,7 +692,7 @@ mod tests {
     use crossbeam_channel::{unbounded, Receiver};
 
     use moor_compiler::{compile, CompileOptions, Program};
-    use moor_db::TxDB;
+    use moor_db::{DatabaseConfig, TxDB};
     use moor_values::model::{
         ArgSpec, BinaryType, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
     };
@@ -747,7 +747,7 @@ mod tests {
             &server_options,
             kill_switch.clone(),
         );
-        let (db, _) = TxDB::open(None);
+        let (db, _) = TxDB::open(None, DatabaseConfig::default());
         let mut tx = db.new_world_state().unwrap();
 
         let sysobj = tx

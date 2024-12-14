@@ -23,10 +23,10 @@ use eyre::Context;
 use common::{create_db, testsuite_dir};
 use moor_compiler::to_literal;
 use moor_db::Database;
+use moor_kernel::config::Config;
 use moor_kernel::tasks::sessions::{NoopSystemControl, SessionError, SessionFactory};
 use moor_kernel::tasks::NoopTasksDb;
 use moor_kernel::{
-    config::Config,
     tasks::{
         scheduler::Scheduler,
         scheduler_test_utils,

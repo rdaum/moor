@@ -13,13 +13,12 @@
 //
 
 use bytes::Bytes;
+use moor_values::model::WorldStateSource;
+use moor_values::model::{WorldState, WorldStateError};
 use moor_values::{AsByteBuffer, DecodingError, EncodingError, Obj};
 use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
-
-use moor_values::model::WorldStateSource;
-use moor_values::model::{WorldState, WorldStateError};
 
 use crate::loader::LoaderInterface;
 
@@ -35,8 +34,9 @@ mod worldstate_tests;
 
 use crate::db_worldstate::DbTxWorldState;
 use crate::worldstate_db::WorldStateDB;
+pub use config::{DatabaseConfig, TableConfig};
 pub use worldstate_tests::*;
-
+mod config;
 mod tx;
 
 pub trait Database: Send + WorldStateSource {
@@ -49,8 +49,8 @@ pub struct TxDB {
 }
 
 impl TxDB {
-    pub fn open(path: Option<&Path>) -> (Self, bool) {
-        let (storage, fresh) = WorldStateDB::open(path);
+    pub fn open(path: Option<&Path>, database_config: DatabaseConfig) -> (Self, bool) {
+        let (storage, fresh) = WorldStateDB::open(path, database_config);
         (Self { storage }, fresh)
     }
 }

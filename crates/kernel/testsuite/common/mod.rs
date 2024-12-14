@@ -21,7 +21,7 @@ use EncodingMode::UTF8;
 
 use moor_compiler::Program;
 use moor_compiler::{compile, CompileOptions};
-use moor_db::{Database, TxDB};
+use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::builtins::BuiltinRegistry;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
@@ -54,7 +54,7 @@ pub fn load_textdump(db: &dyn Database) {
 }
 
 pub fn create_db() -> Box<dyn Database> {
-    let (db, _) = TxDB::open(None);
+    let (db, _) = TxDB::open(None, DatabaseConfig::default());
     let db = Box::new(db);
     load_textdump(db.as_ref());
     db

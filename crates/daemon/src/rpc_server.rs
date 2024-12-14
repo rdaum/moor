@@ -993,7 +993,7 @@ impl RpcServer {
             connection,
             expression,
             session,
-            self.config.clone(),
+            self.config.features_config.clone(),
         ) {
             Ok(t) => t,
             Err(e) => {

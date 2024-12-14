@@ -33,7 +33,7 @@ pub use vm_unwind::FinallyReason;
 
 // Exports to the rest of the kernel
 use crate::builtins::BuiltinRegistry;
-use crate::config::Config;
+use crate::config::FeaturesConfig;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;
@@ -76,7 +76,7 @@ pub struct VmExecParams {
     pub task_scheduler_client: TaskSchedulerClient,
     pub builtin_registry: Arc<BuiltinRegistry>,
     pub max_stack_depth: usize,
-    pub config: Arc<Config>,
+    pub config: FeaturesConfig,
 }
 
 #[derive(Debug, Clone)]
