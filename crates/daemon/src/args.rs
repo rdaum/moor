@@ -40,7 +40,6 @@ pub struct Args {
     feature_args: Option<FeatureArgs>,
 
     #[arg(
-        short,
         long,
         value_name = "write-merged-config",
         help = "If set, this is a path to write the current configuration (with merged values from command line arguments), in JSON format",
@@ -49,7 +48,6 @@ pub struct Args {
     pub write_merged_config: Option<PathBuf>,
 
     #[arg(
-        short,
         long,
         value_name = "config",
         help = "Path to configuration (json) file to use, if any. If not specified, defaults are used.\
@@ -212,13 +210,21 @@ pub struct TextdumpArgs {
     #[arg(
         long,
         value_name = "textdump-encoding",
-        help = "Encoding to use for reading and writing textdump files. utf8 or iso8859-1. \
-          LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so for full compatibility, \
-          choose iso8859-1.
+        help = "Encoding to use for reading textdump files. utf8 or iso8859-1. \
+          LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so if you're importing a LambdaMOO textdump, choose iso8859-1. \
           If you know your textdump contains no such strings, or if your textdump is from moor choose utf8,
           which is faster to read."
     )]
-    pub textdump_encoding: Option<EncodingMode>,
+    pub textdump_input_encoding: Option<EncodingMode>,
+
+    #[arg(
+        long,
+        value_name = "textdump-output-encoding",
+        help = "Encoding to use for writing textdump files. utf8 or iso8859-1. \
+          LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so if you want to write a LambdaMOO-compatible textdump, choose iso8859-1. \
+          (But make sure your features are set to match LambdaMOO's capabilities!)"
+    )]
+    pub textdump_output_encoding: Option<EncodingMode>,
 }
 
 impl TextdumpArgs {
@@ -229,8 +235,11 @@ impl TextdumpArgs {
         if let Some(args) = self.textdump_out.as_ref() {
             config.output_path = Some(args.clone());
         }
-        if let Some(args) = self.textdump_encoding {
-            config.encoding = args;
+        if let Some(args) = self.textdump_input_encoding {
+            config.input_encoding = args;
+        }
+        if let Some(args) = self.textdump_output_encoding {
+            config.output_encoding = args;
         }
         if let Some(args) = self.checkpoint_interval_seconds {
             config.checkpoint_interval = Some(std::time::Duration::from_secs(u64::from(args)));

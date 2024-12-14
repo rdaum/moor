@@ -67,6 +67,11 @@ impl FeaturesConfig {
             flyweight_type: self.flyweight_type,
         }
     }
+
+    /// Returns true if the configuration is backwards compatible with LambdaMOO 1.8 features.
+    pub fn is_lambdammoo_compatible(&self) -> bool {
+        !self.lexical_scopes && !self.map_type && !self.type_dispatch && !self.flyweight_type
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -75,8 +80,10 @@ pub struct TextdumpConfig {
     pub input_path: Option<PathBuf>,
     /// Where to write periodic textdumps of the database, if any.
     pub output_path: Option<PathBuf>,
-    /// What encoding to use for textdumps (ISO-8859-1 or UTF-8).
-    pub encoding: EncodingMode,
+    /// What encoding to use for reading textdumps (ISO-8859-1 or UTF-8).
+    pub input_encoding: EncodingMode,
+    /// What encoding to use for writing textdumps (ISO-8859-1 or UTF-8).
+    pub output_encoding: EncodingMode,
     /// Interval between database checkpoints.
     /// If None, no checkpoints will be made.
     pub checkpoint_interval: Option<Duration>,

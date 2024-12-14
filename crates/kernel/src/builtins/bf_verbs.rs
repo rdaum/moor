@@ -50,11 +50,7 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    if !bf_args
-        .world_state
-        .valid(obj)
-        .map_err(world_state_bf_err)?
-    {
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
 
@@ -194,11 +190,7 @@ fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let update_attrs = parse_verb_info(info).map_err(BfErr::Code)?;
 
-    if !bf_args
-        .world_state
-        .valid(obj)
-        .map_err(world_state_bf_err)?
-    {
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
 
@@ -238,11 +230,7 @@ fn bf_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    if !bf_args
-        .world_state
-        .valid(obj)
-        .map_err(world_state_bf_err)?
-    {
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
 
@@ -299,11 +287,7 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if verbinfo.len() != 3 {
         return Err(BfErr::Code(E_INVARG));
     }
-    if !bf_args
-        .world_state
-        .valid(obj)
-        .map_err(world_state_bf_err)?
-    {
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
 
@@ -354,11 +338,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    if !bf_args
-        .world_state
-        .valid(obj)
-        .map_err(world_state_bf_err)?
-    {
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
 
@@ -433,11 +413,7 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    if !bf_args
-        .world_state
-        .valid(obj)
-        .map_err(world_state_bf_err)?
-    {
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
 
@@ -520,11 +496,7 @@ fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::List(args) = bf_args.args[2].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    if !bf_args
-        .world_state
-        .valid(obj)
-        .map_err(world_state_bf_err)?
-    {
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
 
@@ -566,11 +538,7 @@ fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    if !bf_args
-        .world_state
-        .valid(obj)
-        .map_err(world_state_bf_err)?
-    {
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
 
@@ -610,11 +578,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    if !bf_args
-        .world_state
-        .valid(obj)
-        .map_err(world_state_bf_err)?
-    {
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
 

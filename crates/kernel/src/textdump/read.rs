@@ -186,12 +186,7 @@ impl<R: Read> TextdumpReader<R> {
                     None
                 };
 
-                v_flyweight(
-                    delegate,
-                    &slots,
-                    List::from_iter(contents),
-                    seal,
-                )
+                v_flyweight(delegate, &slots, List::from_iter(contents), seal)
             }
         };
         Ok(v)

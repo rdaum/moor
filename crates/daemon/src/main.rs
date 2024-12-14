@@ -130,7 +130,7 @@ fn main() -> Result<(), Report> {
             textdump_load(
                 loader_interface.as_ref(),
                 textdump.clone(),
-                config.textdump_config.encoding,
+                config.textdump_config.input_encoding,
                 config.features_config.compile_options(),
             )
             .unwrap();
@@ -178,10 +178,13 @@ fn main() -> Result<(), Report> {
         .spawn(move || scheduler.run(scheduler_rpc_server))?;
 
     // Background DB checkpoint thread.
-    let checkpoint_kill_switch = kill_switch.clone();
-    let checkpoint_scheduler_client = scheduler_client.clone();
-
     if let Some(checkpoint_interval) = config.textdump_config.checkpoint_interval {
+        if config.textdump_config.output_path.is_none() {
+            warn!("Checkpointing interval specified, but no output path specified. Checkpointing will be disabled.");
+        }
+
+        let checkpoint_kill_switch = kill_switch.clone();
+        let checkpoint_scheduler_client = scheduler_client.clone();
         info!("Checkpointing enabled. Interval: {:?}", checkpoint_interval);
         std::thread::Builder::new()
             .name("moor-checkpoint".to_string())

@@ -1198,7 +1198,7 @@ impl Scheduler {
             return Err(SchedulerError::CouldNotStartTask);
         };
 
-        let encoding_mode = self.config.textdump_config.encoding;
+        let encoding_mode = self.config.textdump_config.output_encoding;
 
         let loader_client = {
             match self.database.loader_client() {
