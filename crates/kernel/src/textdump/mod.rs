@@ -13,14 +13,14 @@
 //
 
 pub use load_textdump::{read_textdump, textdump_load};
+use moor_values::Obj;
+use moor_values::Var;
+pub use read::TextdumpReader;
 use serde::{Deserialize, Serialize};
 /// Representation of the structure of objects verbs etc as read from a LambdaMOO textdump'd db
 /// file.
 use std::collections::BTreeMap;
-
-use moor_values::Obj;
-use moor_values::Var;
-pub use read::TextdumpReader;
+use std::str::FromStr;
 pub use write::TextdumpWriter;
 pub use write_textdump::make_textdump;
 
@@ -55,15 +55,23 @@ pub enum EncodingMode {
     UTF8,
 }
 
-impl From<&str> for EncodingMode {
-    fn from(s: &str) -> Self {
+impl TryFrom<&str> for EncodingMode {
+    type Error = &'static str;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "ISO-8859-1" | "iso-8859-1" | "iso8859-1" => EncodingMode::ISO8859_1,
-            "UTF-8" | "utf8" | "utf-8" => EncodingMode::UTF8,
-            _ => {
-                panic!("Invalid encoding mode: {}", s);
-            }
+            "ISO-8859-1" | "iso-8859-1" | "iso8859-1" => Ok(EncodingMode::ISO8859_1),
+            "UTF8" | "UTF-8" | "utf8" | "utf-8" => Ok(EncodingMode::UTF8),
+            _ => Err("Invalid encoding mode"),
         }
+    }
+}
+
+impl FromStr for EncodingMode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        EncodingMode::try_from(s)
     }
 }
 
@@ -107,7 +115,6 @@ pub struct Verb {
 }
 
 pub struct Textdump {
-    #[allow(dead_code)]
     pub version: String,
     pub objects: BTreeMap<Obj, Object>,
     #[allow(dead_code)]

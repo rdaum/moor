@@ -1217,7 +1217,7 @@ impl Scheduler {
         let version_string = self
             .config
             .textdump_config
-            .version_string(&self.version.to_string(), &self.config.features_config);
+            .version_string(&self.version, &self.config.features_config);
 
         let tr = std::thread::Builder::new()
             .name("textdump-thread".to_string())

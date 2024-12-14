@@ -18,6 +18,7 @@
 use crate::textdump::EncodingMode;
 use moor_compiler::CompileOptions;
 use moor_db::DatabaseConfig;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -29,7 +30,7 @@ pub struct Config {
     pub textdump_config: TextdumpConfig,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct FeaturesConfig {
     /// Whether to allow notify() to send arbitrary MOO common to players. The interpretation of
     /// the common varies depending on host/client.
@@ -72,6 +73,17 @@ impl FeaturesConfig {
     pub fn is_lambdammoo_compatible(&self) -> bool {
         !self.lexical_scopes && !self.map_type && !self.type_dispatch && !self.flyweight_type
     }
+
+    /// Returns true if the configuration is compatible with another configuration.
+    /// Which means that if the other configuration has a feature enabled, this configuration
+    /// must also have it enabled.
+    /// The other way around is fine.
+    pub fn is_compatible(&self, other: &FeaturesConfig) -> bool {
+        (!other.lexical_scopes || self.lexical_scopes)
+            && (!other.map_type || self.map_type)
+            && (!other.type_dispatch || self.type_dispatch)
+            && (!other.flyweight_type || self.flyweight_type)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -80,8 +92,6 @@ pub struct TextdumpConfig {
     pub input_path: Option<PathBuf>,
     /// Where to write periodic textdumps of the database, if any.
     pub output_path: Option<PathBuf>,
-    /// What encoding to use for reading textdumps (ISO-8859-1 or UTF-8).
-    pub input_encoding: EncodingMode,
     /// What encoding to use for writing textdumps (ISO-8859-1 or UTF-8).
     pub output_encoding: EncodingMode,
     /// Interval between database checkpoints.
@@ -100,7 +110,6 @@ impl Default for TextdumpConfig {
         Self {
             input_path: None,
             output_path: None,
-            input_encoding: EncodingMode::UTF8,
             output_encoding: EncodingMode::UTF8,
             checkpoint_interval: Some(Duration::from_secs(60)),
             version_override: None,
@@ -109,21 +118,106 @@ impl Default for TextdumpConfig {
 }
 
 impl TextdumpConfig {
-    pub fn version_string(&self, moor_version: &str, features_config: &FeaturesConfig) -> String {
+    pub fn version_string(
+        &self,
+        moor_version: &Version,
+        features_config: &FeaturesConfig,
+    ) -> String {
+        //    //      Moor 0.1.0, features: "flyweight_type=true lexical_scopes=true map_type=true", encoding: UTF8
         self.version_override.clone().unwrap_or_else(|| {
-            // Set of features enabled:
-            //   flyweight_type=yes/no, lexical_scopes=yes/no, map_type=yes/no, etc.
-            let features_string = format!(
-                "flyweight_type={}, lexical_scopes={}, map_type={}",
-                features_config.flyweight_type,
-                features_config.lexical_scopes,
-                features_config.map_type
+            let tv = TextdumpVersion::Moor(
+                moor_version.clone(),
+                features_config.clone(),
+                self.output_encoding,
             );
-
-            format!(
-                "Moor {} (features: {:?}, encoding: {:?})",
-                moor_version, features_string, self.output_encoding
-            )
+            tv.to_version_string()
         })
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum TextdumpVersion {
+    LambdaMOO(u16),
+    Moor(Version, FeaturesConfig, EncodingMode),
+}
+
+impl TextdumpVersion {
+    pub fn parse(s: &str) -> Option<TextdumpVersion> {
+        if s.starts_with("** LambdaMOO Database, Format Version ") {
+            let version = s
+                .trim_start_matches("** LambdaMOO Database, Format Version ")
+                .trim_end_matches(" **");
+            let version = version.parse::<u16>().ok()?;
+            return Some(TextdumpVersion::LambdaMOO(version));
+        } else if s.starts_with("Moor ") {
+            let parts = s.split(", ").collect::<Vec<_>>();
+            let version = parts.iter().find(|s| s.starts_with("Moor "))?;
+            let version = version.trim_start_matches("Moor ");
+            // "Moor 0.1.0, features: "flyweight_type=true lexical_scopes=true map_type=true", encoding: UTF8"
+            let semver = version.split(' ').next()?;
+            let semver = semver::Version::parse(semver).ok()?;
+            let features = parts.iter().find(|s| s.starts_with("features: "))?;
+            let features = features
+                .trim_start_matches("features: \"")
+                .trim_end_matches("\"");
+            let features = features.split(' ').collect::<Vec<_>>();
+            let features = FeaturesConfig {
+                flyweight_type: features.iter().any(|s| s == &"flyweight_type=true"),
+                lexical_scopes: features.iter().any(|s| s == &"lexical_scopes=true"),
+                map_type: features.iter().any(|s| s == &"map_type=true"),
+                ..Default::default()
+            };
+            let encoding = parts.iter().find(|s| s.starts_with("encoding: "))?;
+            let encoding = encoding.trim_start_matches("encoding: ");
+            let encoding = EncodingMode::try_from(encoding).ok()?;
+            return Some(TextdumpVersion::Moor(semver, features, encoding));
+        }
+        None
+    }
+
+    pub fn to_version_string(&self) -> String {
+        match self {
+            TextdumpVersion::LambdaMOO(v) => {
+                format!("** LambdaMOO Database, Format Version {} **", v)
+            }
+            TextdumpVersion::Moor(v, features, encoding) => {
+                let features = format!(
+                    "flyweight_type={} lexical_scopes={} map_type={}",
+                    features.flyweight_type, features.lexical_scopes, features.map_type
+                );
+                format!(
+                    "Moor {}, features: \"{}\", encoding: {:?}",
+                    v, features, encoding
+                )
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::TextdumpVersion;
+
+    #[test]
+    fn parse_textdump_version_lambda() {
+        let version = super::TextdumpVersion::parse("** LambdaMOO Database, Format Version 4 **");
+        assert_eq!(version, Some(super::TextdumpVersion::LambdaMOO(4)));
+    }
+
+    #[test]
+    fn parse_textdump_version_moor() {
+        let td = TextdumpVersion::Moor(
+            semver::Version::parse("0.1.0").unwrap(),
+            super::FeaturesConfig {
+                flyweight_type: true,
+                lexical_scopes: true,
+                map_type: true,
+                ..Default::default()
+            },
+            super::EncodingMode::UTF8,
+        );
+        let version = td.to_version_string();
+        let parsed = TextdumpVersion::parse(&version);
+        assert_eq!(parsed, Some(td));
     }
 }

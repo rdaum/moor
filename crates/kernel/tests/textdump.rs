@@ -14,17 +14,18 @@
 
 #[cfg(test)]
 mod test {
+    use semver::Version;
     use std::collections::BTreeSet;
     use std::fs::File;
     use std::io::{BufReader, Read};
     use std::path::PathBuf;
     use std::sync::Arc;
-
     use text_diff::assert_diff;
 
-    use moor_compiler::{CompileOptions, Program};
+    use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::{Database, DatabaseConfig, TxDB};
+    use moor_kernel::config::{FeaturesConfig, TextdumpVersion};
     use moor_kernel::textdump::{
         make_textdump, read_textdump, textdump_load, EncodingMode, TextdumpReader,
     };
@@ -47,8 +48,8 @@ mod test {
         textdump_load(
             tx.as_mut(),
             PathBuf::from(path),
-            EncodingMode::UTF8,
-            CompileOptions::default(),
+            Version::new(0, 1, 0),
+            FeaturesConfig::default(),
         )
         .expect("Could not load textdump");
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
@@ -75,11 +76,12 @@ mod test {
         let corefile = get_minimal_db();
 
         let br = BufReader::new(corefile);
-        let mut tdr = TextdumpReader::new(br, EncodingMode::UTF8);
-        let td = tdr.read_textdump().expect("Failed to read textdump");
+        let mut tdr = TextdumpReader::new(br);
+        let (td, parsed_version) = tdr.read_textdump().expect("Failed to read textdump");
 
         // Version spec
         assert_eq!(td.version, "** LambdaMOO Database, Format Version 1 **");
+        assert_eq!(parsed_version, TextdumpVersion::LambdaMOO(1));
 
         // Minimal DB has 1 user, #3,
         assert_eq!(td.users, vec![Obj::mk_id(3)]);
@@ -163,8 +165,8 @@ mod test {
         let minimal_db = manifest_dir.join("tests/Minimal.db");
         let corefile = File::open(minimal_db.clone()).unwrap();
         let br = BufReader::new(corefile);
-        let mut tdr = TextdumpReader::new(br, EncodingMode::UTF8);
-        let td = tdr.read_textdump().expect("Failed to read textdump");
+        let mut tdr = TextdumpReader::new(br);
+        let (td, _) = tdr.read_textdump().expect("Failed to read textdump");
 
         let mut output = Vec::new();
         let mut writer =
@@ -196,8 +198,8 @@ mod test {
         textdump_load(
             tx.as_mut(),
             minimal_db,
-            EncodingMode::UTF8,
-            CompileOptions::default(),
+            Version::new(0, 1, 0),
+            FeaturesConfig::default(),
         )
         .unwrap();
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
@@ -297,8 +299,8 @@ mod test {
         read_textdump(
             lc.as_mut(),
             buffered_string_reader,
-            EncodingMode::UTF8,
-            CompileOptions::default(),
+            Version::new(0, 1, 0),
+            FeaturesConfig::default(),
         )
         .unwrap();
         assert_eq!(lc.commit().unwrap(), CommitResult::Success);

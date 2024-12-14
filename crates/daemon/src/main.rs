@@ -137,8 +137,8 @@ fn main() -> Result<(), Report> {
             textdump_load(
                 loader_interface.as_ref(),
                 textdump.clone(),
-                config.textdump_config.input_encoding,
-                config.features_config.compile_options(),
+                version.clone(),
+                config.features_config.clone(),
             )
             .unwrap();
             let duration = start.elapsed();

@@ -20,14 +20,6 @@ use moor_kernel::textdump::EncodingMode;
 use std::path::PathBuf;
 use std::time::Duration;
 
-#[macro_export]
-macro_rules! clap_enum_variants {
-    ($e: ty) => {{
-        use clap::builder::TypedValueParser;
-        clap::builder::PossibleValuesParser::new(<$e>::VARIANTS).map(|s| s.parse::<$e>().unwrap())
-    }};
-}
-
 #[derive(Parser, Debug)] // requires `derive` feature
 pub struct Args {
     #[command(flatten)]
@@ -209,16 +201,6 @@ pub struct TextdumpArgs {
 
     #[arg(
         long,
-        value_name = "textdump-encoding",
-        help = "Encoding to use for reading textdump files. utf8 or iso8859-1. \
-          LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so if you're importing a LambdaMOO textdump, choose iso8859-1. \
-          If you know your textdump contains no such strings, or if your textdump is from moor choose utf8,
-          which is faster to read."
-    )]
-    pub textdump_input_encoding: Option<EncodingMode>,
-
-    #[arg(
-        long,
         value_name = "textdump-output-encoding",
         help = "Encoding to use for writing textdump files. utf8 or iso8859-1. \
           LambdaMOO textdumps that contain 8-bit strings are written using iso8859-1, so if you want to write a LambdaMOO-compatible textdump, choose iso8859-1. \
@@ -245,9 +227,6 @@ impl TextdumpArgs {
         }
         if let Some(args) = self.textdump_out.as_ref() {
             config.output_path = Some(args.clone());
-        }
-        if let Some(args) = self.textdump_input_encoding {
-            config.input_encoding = args;
         }
         if let Some(args) = self.textdump_output_encoding {
             config.output_encoding = args;

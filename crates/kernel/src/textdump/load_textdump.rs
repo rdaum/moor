@@ -12,16 +12,22 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use semver::Version;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::path::PathBuf;
-
 use tracing::{info, span, trace};
 
+use crate::config::{FeaturesConfig, TextdumpVersion};
+use crate::textdump::read::TextdumpReaderError;
+use crate::textdump::{
+    Object, TextdumpReader, PREP_ANY, PREP_NONE, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS,
+    VF_DEBUG, VF_DOBJSHIFT, VF_EXEC, VF_IOBJSHIFT, VF_OBJMASK, VF_PERMMASK, VF_READ, VF_WRITE,
+};
+use moor_compiler::compile;
 use moor_compiler::Program;
-use moor_compiler::{compile, CompileOptions};
 use moor_db::loader::LoaderInterface;
 use moor_values::model::Preposition;
 use moor_values::model::PropFlag;
@@ -32,13 +38,6 @@ use moor_values::util::BitEnum;
 use moor_values::Obj;
 use moor_values::Var;
 use moor_values::{AsByteBuffer, NOTHING};
-
-use crate::textdump::read::TextdumpReaderError;
-use crate::textdump::{
-    EncodingMode, Object, TextdumpReader, PREP_ANY, PREP_NONE, VF_ASPEC_ANY, VF_ASPEC_NONE,
-    VF_ASPEC_THIS, VF_DEBUG, VF_DOBJSHIFT, VF_EXEC, VF_IOBJSHIFT, VF_OBJMASK, VF_PERMMASK, VF_READ,
-    VF_WRITE,
-};
 
 struct RProp {
     definer: Obj,
@@ -91,8 +90,8 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 pub fn textdump_load(
     ldr: &dyn LoaderInterface,
     path: PathBuf,
-    encoding_mode: EncodingMode,
-    compile_options: CompileOptions,
+    moor_version: Version,
+    features_config: FeaturesConfig,
 ) -> Result<(), TextdumpReaderError> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
@@ -102,23 +101,47 @@ pub fn textdump_load(
 
     let br = BufReader::new(corefile);
 
-    read_textdump(ldr, br, encoding_mode, compile_options)
+    read_textdump(ldr, br, moor_version, features_config)
 }
 
 pub fn read_textdump<T: io::Read>(
     loader: &dyn LoaderInterface,
     reader: BufReader<T>,
-    encoding_mode: EncodingMode,
-    compile_options: CompileOptions,
+    moo_version: Version,
+    features_config: FeaturesConfig,
 ) -> Result<(), TextdumpReaderError> {
-    let mut tdr = TextdumpReader::new(reader, encoding_mode);
-    let td = tdr.read_textdump()?;
+    let mut tdr = TextdumpReader::new(reader);
+    let (td, version) = tdr.read_textdump()?;
 
-    // TODO: parse version string and validate.
-    //   format is either: "** LambdaMOO Database, Format Version XXX **" or
-    //   the moor format, see TextdumpConfig:
-    //      Moor 0.1.0 (features: "flyweight_type=true, lexical_scopes=true, map_type=true", encoding: UTF8)
-    //   then we can use this to validate the textdump format.
+    // Validate the textdumps' version string against the configuration of the server.
+    match &version {
+        TextdumpVersion::LambdaMOO(u) => {
+            if *u > 4 {
+                return Err(TextdumpReaderError::VersionError(
+                    "Unsupported LambdaMOO textdump version".to_string(),
+                ));
+            }
+        }
+        TextdumpVersion::Moor(v, features, _encoding) => {
+            // Semver major versions must match.
+            // TODO: We will let minor and patch versions slide, but may need to get stricter
+            //   about minor in the future.
+            if v.major != moo_version.major {
+                return Err(TextdumpReaderError::VersionError(
+                    "Incompatible major moor version".to_string(),
+                ));
+            }
+
+            // Features mut be compatible
+            if !features_config.is_compatible(features) {
+                return Err(TextdumpReaderError::VersionError(
+                    "Incompatible features".to_string(),
+                ));
+            }
+        }
+    }
+
+    let compile_options = features_config.compile_options();
 
     info!("Instantiating objects");
     for (objid, o) in &td.objects {

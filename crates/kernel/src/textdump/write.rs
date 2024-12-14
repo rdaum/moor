@@ -175,7 +175,7 @@ impl<W: io::Write> TextdumpWriter<W> {
     }
 
     pub fn write_textdump(&mut self, textdump: &Textdump) -> Result<(), io::Error> {
-        writeln!(self.writer, "{}", &textdump.version)?;
+        writeln!(self.writer, "{}", &textdump.version.to_string())?;
 
         // We only count the existence of programs, not verbs, here.
         let nprogs = textdump

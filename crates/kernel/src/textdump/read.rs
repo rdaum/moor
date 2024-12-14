@@ -18,14 +18,14 @@ use std::io::{BufRead, BufReader, Read};
 use text_io::scan;
 use tracing::info;
 
+use crate::config::TextdumpVersion;
+use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_compiler::Label;
 use moor_values::model::CompileError;
 use moor_values::model::WorldStateError;
 use moor_values::{v_err, v_float, v_int, v_none, v_obj, v_str, List, Symbol, Var, VarType};
 use moor_values::{v_flyweight, Obj};
 use moor_values::{v_list, v_map, Error};
-
-use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 
 pub const TYPE_CLEAR: i64 = 5;
 
@@ -36,11 +36,11 @@ pub struct TextdumpReader<R: Read> {
 }
 
 impl<R: Read> TextdumpReader<R> {
-    pub fn new(reader: BufReader<R>, encoding_mode: EncodingMode) -> Self {
+    pub fn new(reader: BufReader<R>) -> Self {
         Self {
             reader,
             line_num: 0,
-            encoding_mode,
+            encoding_mode: EncodingMode::UTF8,
         }
     }
 }
@@ -56,6 +56,8 @@ pub enum TextdumpReaderError {
     LoadError(String, WorldStateError),
     #[error("compile error while {0}: {1}")]
     VerbCompileError(String, CompileError),
+    #[error("textdump version error: {0}")]
+    VersionError(String),
 }
 
 impl<R: Read> TextdumpReader<R> {
@@ -313,9 +315,19 @@ impl<R: Read> TextdumpReader<R> {
         })
     }
 
-    pub fn read_textdump(&mut self) -> Result<Textdump, TextdumpReaderError> {
-        let version = self.read_string()?;
-        info!("version {}", version);
+    pub fn read_textdump(&mut self) -> Result<(Textdump, TextdumpVersion), TextdumpReaderError> {
+        let version_string = self.read_string()?;
+        info!("version {}", version_string);
+
+        // Parse the version, and we will use that to determine the encoding mode.
+        let version = TextdumpVersion::parse(&version_string)
+            .ok_or_else(|| TextdumpReaderError::ParseError("parsing version string".to_string()))?;
+
+        self.encoding_mode = match version {
+            TextdumpVersion::LambdaMOO(_) => EncodingMode::ISO8859_1,
+            TextdumpVersion::Moor(_, _, encoding) => encoding,
+        };
+
         let nobjs = self.read_num()? as usize;
         info!("# objs: {}", nobjs);
         let nprogs = self.read_num()? as usize;
@@ -344,11 +356,14 @@ impl<R: Read> TextdumpReader<R> {
             verbs.insert((verb.objid.clone(), verb.verbnum), verb);
         }
 
-        Ok(Textdump {
+        Ok((
+            Textdump {
+                version: version_string,
+                objects,
+                users,
+                verbs,
+            },
             version,
-            objects,
-            users,
-            verbs,
-        })
+        ))
     }
 }

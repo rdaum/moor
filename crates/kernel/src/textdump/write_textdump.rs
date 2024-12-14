@@ -14,6 +14,10 @@
 
 use std::collections::BTreeMap;
 
+use crate::textdump::{
+    Object, Propval, Textdump, Verb, Verbdef, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS,
+    VF_DOBJSHIFT, VF_IOBJSHIFT,
+};
 use moor_compiler::Program;
 use moor_db::loader::LoaderInterface;
 use moor_values::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
@@ -22,11 +26,6 @@ use moor_values::model::{HasUuid, Named};
 use moor_values::util::BitEnum;
 use moor_values::v_none;
 use moor_values::{AsByteBuffer, NOTHING};
-
-use crate::textdump::{
-    Object, Propval, Textdump, Verb, Verbdef, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS,
-    VF_DOBJSHIFT, VF_IOBJSHIFT,
-};
 
 /// Convert verbargs spec to flags & preps accordingly
 fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
