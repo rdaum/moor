@@ -50,6 +50,7 @@ encoding_rs.workspace = true
 lazy_static.workspace = true
 libc.workspace = true
 oneshot.workspace = true
+semver.workspace = true
 strum.workspace = true
 text_io.workspace = true
 uuid.workspace = true

@@ -77,6 +77,8 @@ lazy_static! {
 /// Responsible for the dispatching, control, and accounting of tasks in the system.
 /// There should be only one scheduler per server.
 pub struct Scheduler {
+    version: semver::Version,
+
     task_control_sender: Sender<(TaskId, TaskControlMsg)>,
     task_control_receiver: Receiver<(TaskId, TaskControlMsg)>,
 
@@ -145,6 +147,7 @@ fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState)
 
 impl Scheduler {
     pub fn new(
+        version: semver::Version,
         database: Box<dyn Database>,
         tasks_database: Box<dyn TasksDb>,
         config: Arc<Config>,
@@ -166,6 +169,7 @@ impl Scheduler {
         };
         let builtin_registry = Arc::new(BuiltinRegistry::new());
         Self {
+            version,
             running: false,
             database,
             next_task_id: Default::default(),
@@ -1210,6 +1214,11 @@ impl Scheduler {
             }
         };
 
+        let version_string = self
+            .config
+            .textdump_config
+            .version_string(&self.version.to_string(), &self.config.features_config);
+
         let tr = std::thread::Builder::new()
             .name("textdump-thread".to_string())
             .spawn(move || {
@@ -1219,11 +1228,7 @@ impl Scheduler {
                 };
 
                 trace!("Creating textdump...");
-                let textdump = make_textdump(
-                    loader_client.as_ref(),
-                    // just to be compatible with LambdaMOO import for now, hopefully.
-                    Some("** LambdaMOO Database, Format Version 4 **"),
-                );
+                let textdump = make_textdump(loader_client.as_ref(), version_string);
 
                 debug!(?textdump_path, "Writing textdump..");
                 let mut writer = TextdumpWriter::new(&mut output, encoding_mode);

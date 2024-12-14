@@ -38,12 +38,16 @@ mod rpc_session;
 mod sys_ctrl;
 mod tasks_fjall;
 
+pub const MOOR_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Host for the moor runtime.
 ///   * Brings up the database
 ///   * Instantiates a scheduler
 ///   * Exposes RPC interface for session/connection management.
 fn main() -> Result<(), Report> {
     color_eyre::install()?;
+
+    let version = semver::Version::parse(MOOR_VERSION).expect("Invalid moor version");
 
     let args: Args = Args::parse();
 
@@ -111,7 +115,10 @@ fn main() -> Result<(), Report> {
         std::fs::write(write_config, merged_config_json).expect("Unable to write merged config");
     }
 
-    info!("Daemon starting. Using database at {:?}", args.db_args.db);
+    info!(
+        "moor {} daemon starting. Using database at {:?}",
+        version, args.db_args.db
+    );
     let (database, freshly_made) =
         TxDB::open(Some(&args.db_args.db), config.database_config.clone());
     let database = Box::new(database);
@@ -164,6 +171,7 @@ fn main() -> Result<(), Report> {
     //   Our DB.
     //   Our scheduler.
     let scheduler = Scheduler::new(
+        version,
         database,
         Box::new(tasks_db),
         config.clone(),
@@ -178,14 +186,17 @@ fn main() -> Result<(), Report> {
         .spawn(move || scheduler.run(scheduler_rpc_server))?;
 
     // Background DB checkpoint thread.
-    if let Some(checkpoint_interval) = config.textdump_config.checkpoint_interval {
-        if config.textdump_config.output_path.is_none() {
-            warn!("Checkpointing interval specified, but no output path specified. Checkpointing will be disabled.");
-        }
-
+    if let (Some(checkpoint_interval), Some(output_path)) = (
+        config.textdump_config.checkpoint_interval,
+        config.textdump_config.output_path.clone(),
+    ) {
         let checkpoint_kill_switch = kill_switch.clone();
         let checkpoint_scheduler_client = scheduler_client.clone();
-        info!("Checkpointing enabled. Interval: {:?}", checkpoint_interval);
+        info!(
+            "Checkpointing enabled to {}. Interval: {:?}",
+            output_path.as_path().display(),
+            checkpoint_interval
+        );
         std::thread::Builder::new()
             .name("moor-checkpoint".to_string())
             .spawn(move || loop {

@@ -28,6 +28,7 @@ color-eyre.workspace = true
 eyre.workspace = true
 fjall.workspace = true
 oneshot.workspace = true
+semver.workspace = true
 signal-hook.workspace = true
 tempfile.workspace = true
 

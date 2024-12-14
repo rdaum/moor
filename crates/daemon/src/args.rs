@@ -225,6 +225,17 @@ pub struct TextdumpArgs {
           (But make sure your features are set to match LambdaMOO's capabilities!)"
     )]
     pub textdump_output_encoding: Option<EncodingMode>,
+
+    #[arg(
+        long,
+        value_name = "textdump-version-override",
+        help = "Version override string to put into the textdump. \
+          If None, the moor version + a serialization of the features config is used + the encoding. \
+          If set, this string will be used instead. \
+          This is useful for producing textdumps that are compatible with other servers, but be \
+          careful to not lie about the features (and encoding) you support."
+    )]
+    pub version_override: Option<String>,
 }
 
 impl TextdumpArgs {
@@ -243,6 +254,9 @@ impl TextdumpArgs {
         }
         if let Some(args) = self.checkpoint_interval_seconds {
             config.checkpoint_interval = Some(std::time::Duration::from_secs(u64::from(args)));
+        }
+        if let Some(args) = self.version_override.as_ref() {
+            config.version_override = Some(args.clone());
         }
     }
 }

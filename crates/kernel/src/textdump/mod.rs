@@ -12,7 +12,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub use load_db::{read_textdump, textdump_load};
+pub use load_textdump::{read_textdump, textdump_load};
 use serde::{Deserialize, Serialize};
 /// Representation of the structure of objects verbs etc as read from a LambdaMOO textdump'd db
 /// file.
@@ -22,12 +22,12 @@ use moor_values::Obj;
 use moor_values::Var;
 pub use read::TextdumpReader;
 pub use write::TextdumpWriter;
-pub use write_db::make_textdump;
+pub use write_textdump::make_textdump;
 
-mod load_db;
+mod load_textdump;
 mod read;
 mod write;
-mod write_db;
+mod write_textdump;
 
 const VF_READ: u16 = 1;
 const VF_WRITE: u16 = 2;

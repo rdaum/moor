@@ -57,7 +57,7 @@ mod test {
     fn write_textdump(db: Arc<TxDB>, version: &str) -> String {
         let tx = db.clone().loader_client().unwrap();
         let mut output = Vec::new();
-        let textdump = make_textdump(tx.as_ref(), Some(version));
+        let textdump = make_textdump(tx.as_ref(), version.to_string());
 
         let mut writer =
             moor_kernel::textdump::TextdumpWriter::new(&mut output, EncodingMode::UTF8);

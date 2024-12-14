@@ -74,7 +74,7 @@ impl FeaturesConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TextdumpConfig {
     /// Where to read the initial textdump from, if any.
     pub input_path: Option<PathBuf>,
@@ -87,4 +87,43 @@ pub struct TextdumpConfig {
     /// Interval between database checkpoints.
     /// If None, no checkpoints will be made.
     pub checkpoint_interval: Option<Duration>,
+    /// Version override string to put into the textdump.
+    /// If None, the moor version + a serialization of the features config is used + the encoding.
+    /// If set, this string will be used instead.
+    /// This is useful for producing textdumps that are compatible with other servers, but be
+    /// careful to not lie about the features (and encoding) you support.
+    pub version_override: Option<String>,
+}
+
+impl Default for TextdumpConfig {
+    fn default() -> Self {
+        Self {
+            input_path: None,
+            output_path: None,
+            input_encoding: EncodingMode::UTF8,
+            output_encoding: EncodingMode::UTF8,
+            checkpoint_interval: Some(Duration::from_secs(60)),
+            version_override: None,
+        }
+    }
+}
+
+impl TextdumpConfig {
+    pub fn version_string(&self, moor_version: &str, features_config: &FeaturesConfig) -> String {
+        self.version_override.clone().unwrap_or_else(|| {
+            // Set of features enabled:
+            //   flyweight_type=yes/no, lexical_scopes=yes/no, map_type=yes/no, etc.
+            let features_string = format!(
+                "flyweight_type={}, lexical_scopes={}, map_type={}",
+                features_config.flyweight_type,
+                features_config.lexical_scopes,
+                features_config.map_type
+            );
+
+            format!(
+                "Moor {} (features: {:?}, encoding: {:?})",
+                moor_version, features_string, self.output_encoding
+            )
+        })
+    }
 }

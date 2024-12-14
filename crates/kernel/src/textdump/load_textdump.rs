@@ -114,6 +114,12 @@ pub fn read_textdump<T: io::Read>(
     let mut tdr = TextdumpReader::new(reader, encoding_mode);
     let td = tdr.read_textdump()?;
 
+    // TODO: parse version string and validate.
+    //   format is either: "** LambdaMOO Database, Format Version XXX **" or
+    //   the moor format, see TextdumpConfig:
+    //      Moor 0.1.0 (features: "flyweight_type=true, lexical_scopes=true, map_type=true", encoding: UTF8)
+    //   then we can use this to validate the textdump format.
+
     info!("Instantiating objects");
     for (objid, o) in &td.objects {
         let flags: BitEnum<ObjFlag> = BitEnum::from_u8(o.flags);

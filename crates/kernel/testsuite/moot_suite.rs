@@ -129,7 +129,9 @@ fn test(db: Box<dyn Database>, path: &Path) {
         return;
     }
     let tasks_db = Box::new(NoopTasksDb {});
+    let moot_version = semver::Version::new(0, 1, 0);
     let scheduler = Scheduler::new(
+        moot_version,
         db,
         tasks_db,
         Arc::new(Config::default()),

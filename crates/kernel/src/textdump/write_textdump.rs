@@ -28,9 +28,6 @@ use crate::textdump::{
     VF_DOBJSHIFT, VF_IOBJSHIFT,
 };
 
-/// What we use if the passed-in format at write time is None
-pub const MOOR_TEXTDUMP_DB_VERSION: &str = "** moor Textdump DB Version 1 **";
-
 /// Convert verbargs spec to flags & preps accordingly
 fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
     let flags = flags.to_u16();
@@ -56,7 +53,7 @@ fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
 
 /// Take a transaction, and scan the relations and build a Textdump representing a snapshot of the world as it
 /// exists in the transaction.
-pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdump {
+pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
     // To create the objects list, we need to scan all objects.
     // For now, the expectation would be we can simply iterate from 0 to max object, checking validity of each
     // object, and then adding it to the list.
@@ -260,7 +257,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: Option<&str>) -> Textdum
         .collect();
 
     Textdump {
-        version: version.unwrap_or(MOOR_TEXTDUMP_DB_VERSION).to_string(),
+        version,
         objects,
         users,
         verbs,
