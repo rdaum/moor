@@ -13,14 +13,14 @@
 //
 
 use crate::tx::{Error, Timestamp, Tx};
+use indexmap::IndexMap;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::Arc;
 
 pub(crate) trait Canonical<Domain, Codomain> {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error>;
-    fn scan<F>(&self, f: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
+    fn scan<F>(&self, f: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool;
 }
@@ -65,7 +65,7 @@ where
     Codomain: Clone,
 {
     tx: Tx,
-    index: RefCell<HashMap<Domain, Entry<Codomain>>>,
+    index: RefCell<IndexMap<Domain, Entry<Codomain>>>,
 
     backing_source: Arc<Source>,
 }
@@ -82,7 +82,7 @@ where
     ) -> TransactionalTable<Domain, Codomain, Source> {
         TransactionalTable {
             tx,
-            index: RefCell::new(HashMap::new()),
+            index: RefCell::new(IndexMap::new()),
             backing_source,
         }
     }
@@ -371,7 +371,7 @@ where
 
         // This is basically like going a `get` on each entry, we're filling our cache with
         // all the upstream common.
-        for (ts, d, c) in upstream {
+        for (ts, d, c, _) in upstream {
             let entry = index.get_mut(&d);
             match entry {
                 Some(_) => continue,
@@ -430,6 +430,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
     struct TestBackingStore {
@@ -456,12 +457,12 @@ mod tests {
         fn scan<F: Fn(&u64, &u64) -> bool>(
             &self,
             predicate: &F,
-        ) -> Result<Vec<(Timestamp, u64, u64)>, Error> {
+        ) -> Result<Vec<(Timestamp, u64, u64, usize)>, Error> {
             let store = self.store.lock().unwrap();
             Ok(store
                 .iter()
                 .filter(|(k, v)| predicate(k, v))
-                .map(|(k, v)| (Timestamp(0), *k, *v))
+                .map(|(k, v)| (Timestamp(0), *k, *v, 16))
                 .collect())
         }
     }

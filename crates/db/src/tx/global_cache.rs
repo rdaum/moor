@@ -16,31 +16,34 @@
 
 use crate::tx::tx_table::{Canonical, OpType, TransactionalTable, WorkingSet};
 use crate::tx::{Error, Timestamp, Tx};
-use std::collections::{HashMap, HashSet};
+use indexmap::IndexMap;
+use std::collections::HashSet;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 pub trait Provider<Domain, Codomain> {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error>;
+    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error>;
     fn put(&self, timestamp: Timestamp, domain: Domain, codomain: Codomain) -> Result<(), Error>;
     fn del(&self, timestamp: Timestamp, domain: &Domain) -> Result<(), Error>;
 
     /// Scan the database for all keys match the given predicate
-    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
+    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool;
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Datum<T: Clone + PartialEq> {
-    Entry(T),
+    Value(T),
     Tombstone,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 struct Entry<T: Clone + PartialEq> {
     ts: Timestamp,
+    hits: usize,
     datum: Datum<T>,
+    size_bytes: usize,
 }
 
 pub struct GlobalCache<Domain, Codomain, Source>
@@ -63,15 +66,23 @@ where
     Codomain: Clone + PartialEq + Eq,
     MyProvider: Provider<Domain, Codomain>,
 {
-    pub(crate) fn new(provider: Arc<MyProvider>) -> Self {
+    pub(crate) fn new(provider: Arc<MyProvider>, threshold_bytes: usize) -> Self {
         Self {
             preseed: HashSet::new(),
             index: Mutex::new(Inner {
-                index: HashMap::new(),
+                index: IndexMap::new(),
+                evict_q: vec![],
+                used_bytes: 0,
+                threshold_bytes,
             }),
             source: provider,
         }
     }
+}
+
+pub trait SizedCache {
+    fn process_cache_evictions(&self) -> (usize, usize);
+    fn cache_usage_bytes(&self) -> usize;
 }
 
 pub struct Inner<Domain, Codomain>
@@ -79,7 +90,19 @@ where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
 {
-    index: HashMap<Domain, Entry<Codomain>>,
+    /// Internal index of the cache.
+    index: IndexMap<Domain, Entry<Codomain>>,
+
+    /// Eviction queue, a place where entries go to die, unless they are given a second chance.
+    /// Entry is Domain, hits & time of insertion. If hits during eviction is the same as hits
+    /// during insertion, it's evicted.
+    evict_q: Vec<(Domain, usize)>,
+
+    /// Total bytes used by the cache.
+    used_bytes: usize,
+
+    /// Threshold for eviction.
+    threshold_bytes: usize,
 }
 
 impl<Domain, Codomain, Source> GlobalCache<Domain, Codomain, Source>
@@ -95,7 +118,7 @@ where
         for d in &self.preseed {
             if let Some(e) = lock.index.get(d) {
                 match &e.datum {
-                    Datum::Entry(c) => {
+                    Datum::Value(c) => {
                         preseed_tuples.push((e.ts, d.clone(), c.clone()));
                     }
                     Datum::Tombstone => continue,
@@ -125,14 +148,8 @@ where
             }
 
             // Otherwise, pull from upstream and fetch to cache and check for conflict.
-            if let Some((ts, codomain)) = self.source.get(domain)? {
-                inner.index.insert(
-                    domain.clone(),
-                    Entry {
-                        ts,
-                        datum: Datum::Entry(codomain),
-                    },
-                );
+            if let Some((ts, codomain, size_bytes)) = self.source.get(domain)? {
+                inner.insert_entry(ts, domain.clone(), codomain.clone(), size_bytes);
                 if ts > op.read_ts {
                     return Err(Error::Conflict);
                 }
@@ -151,6 +168,11 @@ where
         self.index.lock().unwrap()
     }
 
+    #[allow(dead_code)]
+    pub fn cache_usage_bytes(&self) -> usize {
+        self.index.lock().unwrap().used_bytes
+    }
+
     pub fn apply<'a>(
         &self,
         mut inner: MutexGuard<'a, Inner<Domain, Codomain>>,
@@ -161,31 +183,121 @@ where
             match op.to_type {
                 OpType::Insert | OpType::Update => {
                     let codomain = op.value.unwrap();
-                    inner.index.insert(
-                        domain.clone(),
-                        Entry {
-                            ts: op.write_ts,
-                            datum: Datum::Entry(codomain.clone()),
-                        },
-                    );
-
+                    inner.insert_entry(op.write_ts, domain.clone(), codomain.clone(), 0);
                     self.source.put(op.write_ts, domain.clone(), codomain).ok();
                 }
                 OpType::Delete => {
-                    inner.index.insert(
-                        domain.clone(),
-                        Entry {
-                            ts: op.write_ts,
-                            datum: Datum::Tombstone,
-                        },
-                    );
-
+                    inner.insert_tombstone(op.write_ts, domain.clone());
                     self.source.del(op.write_ts, &domain).unwrap();
                 }
                 _ => continue,
             }
         }
         Ok(inner)
+    }
+
+    pub fn process_cache_evictions(&self) -> (usize, usize) {
+        let mut inner = self.lock();
+        inner.process_evictions()
+    }
+}
+
+impl<Domain, Codomain> Inner<Domain, Codomain>
+where
+    Domain: Hash + PartialEq + Eq + Clone,
+    Codomain: Clone + PartialEq + Eq,
+{
+    fn insert_entry(
+        &mut self,
+        ts: Timestamp,
+        domain: Domain,
+        codomain: Codomain,
+        entry_size_bytes: usize,
+    ) {
+        match self.index.insert(
+            domain.clone(),
+            Entry {
+                ts,
+                hits: 0,
+                datum: Datum::Value(codomain),
+                size_bytes: entry_size_bytes,
+            },
+        ) {
+            None => {
+                self.used_bytes += entry_size_bytes;
+            }
+            Some(oe) => {
+                self.used_bytes -= oe.size_bytes;
+                self.used_bytes += entry_size_bytes;
+            }
+        }
+
+        self.select_victims();
+    }
+
+    fn insert_tombstone(&mut self, ts: Timestamp, domain: Domain) {
+        match self.index.insert(
+            domain.clone(),
+            Entry {
+                ts,
+                hits: 0,
+                datum: Datum::Tombstone,
+                // TODO: this really should be a constant size of what a zero-size entry is, which
+                //  is actually a few bytes
+                size_bytes: 0,
+            },
+        ) {
+            None => {}
+            Some(oe) => {
+                self.used_bytes -= oe.size_bytes;
+            }
+        }
+        self.select_victims();
+    }
+
+    fn index_lookup(&mut self, domain: &Domain) -> Option<&mut Entry<Codomain>> {
+        let mut entry = self.index.get_mut(domain);
+        if let Some(e) = &mut entry {
+            e.hits += 1;
+        }
+        entry
+    }
+
+    fn select_victims(&mut self) {
+        // If we've hit a bytes threshold, we pick some entries at random to put into an eviction
+        // victims list. It can then be given a second chance, or if still seen in the next
+        // eviction round, it will be evicted.
+        if self.used_bytes > self.threshold_bytes {
+            let mut total_candidate_bytes = 0;
+            let eviction_bytes_needed = self.used_bytes - self.threshold_bytes;
+            while total_candidate_bytes < eviction_bytes_needed {
+                let random_index = rand::random::<usize>() % self.index.len();
+                let entry = self.index.get_index(random_index).unwrap();
+                total_candidate_bytes += entry.1.size_bytes;
+                self.evict_q.push((entry.0.clone(), entry.1.hits));
+            }
+        }
+    }
+
+    fn process_evictions(&mut self) -> (usize, usize) {
+        // Go through the eviction queue and evict entries that haven't been hit in the last round.
+        let mut num_evicted = 0;
+        let before_eviction = self.used_bytes;
+        let evict_q = std::mem::take(&mut self.evict_q);
+        let mut victims = Vec::new();
+        for (domain, hits) in evict_q {
+            if let Some(e) = self.index.get(&domain) {
+                if e.hits == hits {
+                    victims.push(domain);
+                    self.used_bytes -= e.size_bytes;
+                    num_evicted += 1;
+                }
+            }
+        }
+        for v in victims {
+            self.index.swap_remove(&v);
+        }
+        (num_evicted, before_eviction - self.used_bytes)
     }
 }
 
@@ -196,22 +308,16 @@ where
     Source: Provider<Domain, Codomain>,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
-        let mut index = self.index.lock().unwrap();
-        if let Some(entry) = index.index.get(domain) {
+        let mut inner = self.index.lock().unwrap();
+        if let Some(entry) = inner.index_lookup(domain) {
             match &entry.datum {
-                Datum::Entry(codomain) => Ok(Some((entry.ts, codomain.clone()))),
+                Datum::Value(codomain) => Ok(Some((entry.ts, codomain.clone()))),
                 Datum::Tombstone => Ok(None),
             }
         } else {
             // Pull from backing store.
-            if let Some((ts, codomain)) = self.source.get(domain)? {
-                index.index.insert(
-                    domain.clone(),
-                    Entry {
-                        ts,
-                        datum: Datum::Entry(codomain.clone()),
-                    },
-                );
+            if let Some((ts, codomain, bytes)) = self.source.get(domain)? {
+                inner.insert_entry(ts, domain.clone(), codomain.clone(), bytes);
                 Ok(Some((ts, codomain)))
             } else {
                 Ok(None)
@@ -219,23 +325,32 @@ where
         }
     }
 
-    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
+    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool,
     {
         let results = self.source.scan(&predicate)?;
-        for (ts, domain, codomain) in &results {
+        for (ts, domain, codomain, size) in &results {
             let mut index = self.index.lock().unwrap();
-            index.index.insert(
-                domain.clone(),
-                Entry {
-                    ts: *ts,
-                    datum: Datum::Entry(codomain.clone()),
-                },
-            );
+            index.insert_entry(*ts, domain.clone(), codomain.clone(), *size);
         }
 
         Ok(results)
+    }
+}
+
+impl<Domain, Codomain, Source> SizedCache for GlobalCache<Domain, Codomain, Source>
+where
+    Domain: Hash + PartialEq + Eq + Clone,
+    Codomain: Clone + PartialEq + Eq,
+    Source: Provider<Domain, Codomain>,
+{
+    fn process_cache_evictions(&self) -> (usize, usize) {
+        self.process_cache_evictions()
+    }
+
+    fn cache_usage_bytes(&self) -> usize {
+        self.cache_usage_bytes()
     }
 }
 
@@ -258,10 +373,13 @@ mod tests {
     }
 
     impl Provider<TestDomain, TestCodomain> for TestProvider {
-        fn get(&self, domain: &TestDomain) -> Result<Option<(Timestamp, TestCodomain)>, Error> {
+        fn get(
+            &self,
+            domain: &TestDomain,
+        ) -> Result<Option<(Timestamp, TestCodomain, usize)>, Error> {
             let data = self.data.lock().unwrap();
             if let Some(codomain) = data.get(domain) {
-                Ok(Some((Timestamp(0), codomain.clone())))
+                Ok(Some((Timestamp(0), codomain.clone(), 8)))
             } else {
                 Ok(None)
             }
@@ -287,7 +405,7 @@ mod tests {
         fn scan<F>(
             &self,
             predicate: &F,
-        ) -> Result<Vec<(Timestamp, TestDomain, TestCodomain)>, Error>
+        ) -> Result<Vec<(Timestamp, TestDomain, TestCodomain, usize)>, Error>
         where
             F: Fn(&TestDomain, &TestCodomain) -> bool,
         {
@@ -295,7 +413,7 @@ mod tests {
             Ok(data
                 .iter()
                 .filter(|(k, v)| predicate(k, v))
-                .map(|(k, v)| (Timestamp(0), k.clone(), v.clone()))
+                .map(|(k, v)| (Timestamp(0), k.clone(), v.clone(), 16))
                 .collect())
         }
     }
@@ -309,7 +427,10 @@ mod tests {
         let global_cache = Arc::new(GlobalCache {
             preseed: HashSet::new(),
             index: Mutex::new(Inner {
-                index: HashMap::new(),
+                index: IndexMap::new(),
+                evict_q: vec![],
+                used_bytes: 0,
+                threshold_bytes: 2048,
             }),
             source: provider,
         });
@@ -329,7 +450,7 @@ mod tests {
         let lock = global_cache.apply(lock, ws).unwrap();
         assert_eq!(
             lock.index.get(&domain).unwrap().datum,
-            Datum::Entry(codomain.clone())
+            Datum::Value(codomain.clone())
         );
     }
 }

@@ -15,7 +15,7 @@
 mod global_cache;
 mod tx_table;
 
-pub use global_cache::{GlobalCache, Provider};
+pub use global_cache::{GlobalCache, Provider, SizedCache};
 pub use tx_table::{TransactionalTable, WorkingSet};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]

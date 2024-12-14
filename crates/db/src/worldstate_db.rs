@@ -14,13 +14,14 @@
 
 use crate::db_transaction::DbTransaction;
 use crate::fjall_provider::FjallProvider;
-use crate::tx::{GlobalCache, Timestamp, Tx, WorkingSet};
+use crate::tx::{GlobalCache, SizedCache, Timestamp, Tx, WorkingSet};
 use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use moor_values::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
 use moor_values::util::BitEnum;
 use moor_values::{Obj, Var};
+use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
 use std::sync::Arc;
@@ -73,6 +74,11 @@ pub struct WorldStateDB {
     commit_channel: Sender<(WorkingSets, oneshot::Sender<CommitResult>)>,
     usage_send: crossbeam_channel::Sender<oneshot::Sender<usize>>,
 }
+
+/// The default cache eviction threshold, which is _per_ cache, not global.
+/// This is really about memory usage, and tricky to get a reasonable default on.
+const DEFAULT_CACHE_EVICTION_TRESHOLD: usize = 1 << 20;
+const DEFAULT_CACHE_EVICTION_INTERVAL: Duration = Duration::from_secs(20);
 
 impl WorldStateDB {
     pub fn open(path: Option<&Path>) -> (Arc<Self>, bool) {
@@ -153,18 +159,54 @@ impl WorldStateDB {
         let object_propvalues = FjallProvider::new(object_propvalues);
         let object_propflags = FjallProvider::new(object_propflags);
 
-        let object_location = Arc::new(GlobalCache::new(Arc::new(object_location)));
-        let object_contents = Arc::new(GlobalCache::new(Arc::new(object_contents)));
-        let object_flags = Arc::new(GlobalCache::new(Arc::new(object_flags)));
-        let object_parent = Arc::new(GlobalCache::new(Arc::new(object_parent)));
-        let object_children = Arc::new(GlobalCache::new(Arc::new(object_children)));
-        let object_owner = Arc::new(GlobalCache::new(Arc::new(object_owner)));
-        let object_name = Arc::new(GlobalCache::new(Arc::new(object_name)));
-        let object_verbdefs = Arc::new(GlobalCache::new(Arc::new(object_verbdefs)));
-        let object_verbs = Arc::new(GlobalCache::new(Arc::new(object_verbs)));
-        let object_propdefs = Arc::new(GlobalCache::new(Arc::new(object_propdefs)));
-        let object_propvalues = Arc::new(GlobalCache::new(Arc::new(object_propvalues)));
-        let object_propflags = Arc::new(GlobalCache::new(Arc::new(object_propflags)));
+        let object_location = Arc::new(GlobalCache::new(
+            Arc::new(object_location),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_contents = Arc::new(GlobalCache::new(
+            Arc::new(object_contents),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_flags = Arc::new(GlobalCache::new(
+            Arc::new(object_flags),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_parent = Arc::new(GlobalCache::new(
+            Arc::new(object_parent),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_children = Arc::new(GlobalCache::new(
+            Arc::new(object_children),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_owner = Arc::new(GlobalCache::new(
+            Arc::new(object_owner),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_name = Arc::new(GlobalCache::new(
+            Arc::new(object_name),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_verbdefs = Arc::new(GlobalCache::new(
+            Arc::new(object_verbdefs),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_verbs = Arc::new(GlobalCache::new(
+            Arc::new(object_verbs),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_propdefs = Arc::new(GlobalCache::new(
+            Arc::new(object_propdefs),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_propvalues = Arc::new(GlobalCache::new(
+            Arc::new(object_propvalues),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
+        let object_propflags = Arc::new(GlobalCache::new(
+            Arc::new(object_propflags),
+            DEFAULT_CACHE_EVICTION_TRESHOLD,
+        ));
 
         let (commit_channel, commit_receiver) = crossbeam_channel::unbounded();
         let (usage_send, usage_recv) = crossbeam_channel::unbounded();
@@ -225,8 +267,34 @@ impl WorldStateDB {
         }
     }
 
+    fn caches(&self) -> Vec<&dyn SizedCache> {
+        vec![
+            self.object_location.deref(),
+            self.object_contents.deref(),
+            self.object_flags.deref(),
+            self.object_parent.deref(),
+            self.object_children.deref(),
+            self.object_owner.deref(),
+            self.object_name.deref(),
+            self.object_verbdefs.deref(),
+            self.object_verbs.deref(),
+            self.object_propdefs.deref(),
+            self.object_propvalues.deref(),
+            self.object_propflags.deref(),
+        ]
+    }
+
     pub fn usage_bytes(&self) -> usize {
         self.keyspace.disk_space() as usize
+    }
+
+    /// Provide a rough estimate of memory usage in bytes.
+    #[allow(dead_code)]
+    pub fn cache_usage_bytes(&self) -> usize {
+        self.caches()
+            .iter()
+            .map(|c| c.cache_usage_bytes())
+            .sum::<usize>()
     }
 
     pub fn stop(&self) {
@@ -241,208 +309,243 @@ impl WorldStateDB {
         kill_switch: Arc<AtomicBool>,
     ) {
         let this = self.clone();
-        std::thread::spawn(move || {
-            loop {
-                if kill_switch.load(std::sync::atomic::Ordering::SeqCst) {
-                    break;
-                }
 
-                if let Ok(msg) = usage_recv.try_recv() {
-                    msg.send(this.usage_bytes())
-                        .map_err(|e| warn!("{}", e))
-                        .ok();
-                }
-
-                let msg = receiver.recv_timeout(Duration::from_millis(100));
-                let (ws, reply) = match msg {
-                    Ok(msg) => msg,
-                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                        continue;
-                    }
-                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+        let thread_builder = std::thread::Builder::new().name("moor-db-process".to_string());
+        thread_builder
+            .spawn(move || {
+                let mut last_eviction_check = std::time::Instant::now();
+                loop {
+                    if kill_switch.load(std::sync::atomic::Ordering::SeqCst) {
                         break;
                     }
-                };
 
-                let object_flags = this.object_flags.lock();
-                let object_parent = this.object_parent.lock();
-                let object_children = this.object_children.lock();
-                let object_owner = this.object_owner.lock();
-                let object_location = this.object_location.lock();
-                let object_contents = this.object_contents.lock();
-                let object_name = this.object_name.lock();
-                let object_verbdefs = this.object_verbdefs.lock();
-                let object_verbs = this.object_verbs.lock();
-                let object_propdefs = this.object_propdefs.lock();
-                let object_propvalues = this.object_propvalues.lock();
-                let object_propflags = this.object_propflags.lock();
+                    if let Ok(msg) = usage_recv.try_recv() {
+                        msg.send(this.usage_bytes())
+                            .map_err(|e| warn!("{}", e))
+                            .ok();
+                    }
 
-                let Ok(ol_lock) = this.object_flags.check(object_flags, &ws.object_flags) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
+                    // If eviction processing interval has passed, check for evictions.
+                    if last_eviction_check.elapsed() > DEFAULT_CACHE_EVICTION_INTERVAL {
+                        let mut total_evicted_entries = 0;
+                        let mut total_evicted_bytes = 0;
+                        for cache in this.caches() {
+                            let (evicted_entries, evicted_bytes) = cache.process_cache_evictions();
+                            total_evicted_entries += evicted_entries;
+                            total_evicted_bytes += evicted_bytes;
+                        }
 
-                    continue;
-                };
+                        if total_evicted_entries > 0 {
+                            warn!(
+                                "Evicted {} entries, freeing {} bytes",
+                                total_evicted_entries, total_evicted_bytes
+                            );
+                        }
 
-                let Ok(op_lock) = this.object_parent.check(object_parent, &ws.object_parent) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
+                        last_eviction_check = std::time::Instant::now();
+                    }
 
-                    continue;
-                };
+                    let msg = receiver.recv_timeout(Duration::from_millis(100));
+                    let (ws, reply) = match msg {
+                        Ok(msg) => msg,
+                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                            continue;
+                        }
+                        Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                            break;
+                        }
+                    };
 
-                let Ok(oc_lock) = this
-                    .object_children
-                    .check(object_children, &ws.object_children)
-                else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let object_flags = this.object_flags.lock();
+                    let object_parent = this.object_parent.lock();
+                    let object_children = this.object_children.lock();
+                    let object_owner = this.object_owner.lock();
+                    let object_location = this.object_location.lock();
+                    let object_contents = this.object_contents.lock();
+                    let object_name = this.object_name.lock();
+                    let object_verbdefs = this.object_verbdefs.lock();
+                    let object_verbs = this.object_verbs.lock();
+                    let object_propdefs = this.object_propdefs.lock();
+                    let object_propvalues = this.object_propvalues.lock();
+                    let object_propflags = this.object_propflags.lock();
 
-                let Ok(oo_lock) = this.object_owner.check(object_owner, &ws.object_owner) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(ol_lock) = this.object_flags.check(object_flags, &ws.object_flags)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
 
-                let Ok(oloc_lock) = this
-                    .object_location
-                    .check(object_location, &ws.object_location)
-                else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                        continue;
+                    };
 
-                let Ok(ocont_lock) = this
-                    .object_contents
-                    .check(object_contents, &ws.object_contents)
-                else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(op_lock) = this.object_parent.check(object_parent, &ws.object_parent)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
 
-                let Ok(on_lock) = this.object_name.check(object_name, &ws.object_name) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                        continue;
+                    };
 
-                let Ok(ovd_lock) = this
-                    .object_verbdefs
-                    .check(object_verbdefs, &ws.object_verbdefs)
-                else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(oc_lock) = this
+                        .object_children
+                        .check(object_children, &ws.object_children)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(ov_lock) = this.object_verbs.check(object_verbs, &ws.object_verbs) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(oo_lock) = this.object_owner.check(object_owner, &ws.object_owner)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(opd_lock) = this
-                    .object_propdefs
-                    .check(object_propdefs, &ws.object_propdefs)
-                else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(oloc_lock) = this
+                        .object_location
+                        .check(object_location, &ws.object_location)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(opv_lock) = this
-                    .object_propvalues
-                    .check(object_propvalues, &ws.object_propvalues)
-                else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(ocont_lock) = this
+                        .object_contents
+                        .check(object_contents, &ws.object_contents)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(opf_lock) = this
-                    .object_propflags
-                    .check(object_propflags, &ws.object_propflags)
-                else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
-                //
-                let Ok(_unused) = this.object_flags.apply(ol_lock, ws.object_flags) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(on_lock) = this.object_name.check(object_name, &ws.object_name) else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_parent.apply(op_lock, ws.object_parent) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(ovd_lock) = this
+                        .object_verbdefs
+                        .check(object_verbdefs, &ws.object_verbdefs)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_children.apply(oc_lock, ws.object_children) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(ov_lock) = this.object_verbs.check(object_verbs, &ws.object_verbs)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_owner.apply(oo_lock, ws.object_owner) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(opd_lock) = this
+                        .object_propdefs
+                        .check(object_propdefs, &ws.object_propdefs)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_location.apply(oloc_lock, ws.object_location) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(opv_lock) = this
+                        .object_propvalues
+                        .check(object_propvalues, &ws.object_propvalues)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_contents.apply(ocont_lock, ws.object_contents) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(opf_lock) = this
+                        .object_propflags
+                        .check(object_propflags, &ws.object_propflags)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
+                    //
+                    let Ok(_unused) = this.object_flags.apply(ol_lock, ws.object_flags) else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_name.apply(on_lock, ws.object_name) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(_unused) = this.object_parent.apply(op_lock, ws.object_parent) else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_verbdefs.apply(ovd_lock, ws.object_verbdefs) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(_unused) = this.object_children.apply(oc_lock, ws.object_children)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_verbs.apply(ov_lock, ws.object_verbs) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(_unused) = this.object_owner.apply(oo_lock, ws.object_owner) else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_propdefs.apply(opd_lock, ws.object_propdefs) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(_unused) = this.object_location.apply(oloc_lock, ws.object_location)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_propvalues.apply(opv_lock, ws.object_propvalues)
-                else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(_unused) = this.object_contents.apply(ocont_lock, ws.object_contents)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                let Ok(_unused) = this.object_propflags.apply(opf_lock, ws.object_propflags) else {
-                    reply.send(CommitResult::ConflictRetry).unwrap();
-                    continue;
-                };
+                    let Ok(_unused) = this.object_name.apply(on_lock, ws.object_name) else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
 
-                // Now write out the current state of the sequences to the seq partition.
-                // Start by making sure that the monotonic sequence is written out.
-                self.sequences[15].store(
-                    self.monotonic.load(std::sync::atomic::Ordering::SeqCst) as i64,
-                    std::sync::atomic::Ordering::Relaxed,
-                );
-                for (i, seq) in this.sequences.iter().enumerate() {
-                    this.sequences_partition
-                        .insert(
-                            i.to_le_bytes(),
-                            seq.load(std::sync::atomic::Ordering::SeqCst).to_le_bytes(),
-                        )
-                        .unwrap();
+                    let Ok(_unused) = this.object_verbdefs.apply(ovd_lock, ws.object_verbdefs)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
+
+                    let Ok(_unused) = this.object_verbs.apply(ov_lock, ws.object_verbs) else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
+
+                    let Ok(_unused) = this.object_propdefs.apply(opd_lock, ws.object_propdefs)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
+
+                    let Ok(_unused) = this.object_propvalues.apply(opv_lock, ws.object_propvalues)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
+
+                    let Ok(_unused) = this.object_propflags.apply(opf_lock, ws.object_propflags)
+                    else {
+                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        continue;
+                    };
+
+                    // Now write out the current state of the sequences to the seq partition.
+                    // Start by making sure that the monotonic sequence is written out.
+                    self.sequences[15].store(
+                        self.monotonic.load(std::sync::atomic::Ordering::SeqCst) as i64,
+                        std::sync::atomic::Ordering::Relaxed,
+                    );
+                    for (i, seq) in this.sequences.iter().enumerate() {
+                        this.sequences_partition
+                            .insert(
+                                i.to_le_bytes(),
+                                seq.load(std::sync::atomic::Ordering::SeqCst).to_le_bytes(),
+                            )
+                            .unwrap();
+                    }
+
+                    self.keyspace
+                        .persist(PersistMode::SyncAll)
+                        .expect("persist failed");
+
+                    reply.send(CommitResult::Success).unwrap();
                 }
-
-                self.keyspace
-                    .persist(PersistMode::SyncAll)
-                    .expect("persist failed");
-
-                reply.send(CommitResult::Success).unwrap();
-            }
-        });
+            })
+            .expect("failed to start DB processing thread");
     }
 }
 
