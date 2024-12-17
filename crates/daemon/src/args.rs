@@ -159,6 +159,13 @@ pub struct FeatureArgs {
         help = "Enable flyweight types. Flyweights are a lightweight, object delegate"
     )]
     pub flyweight_type: Option<bool>,
+
+    #[arg(
+        long,
+        help = "Enable persistent tasks, which persist the state of suspended/forked tasks between restarts. \
+                Note that this is the default behaviour in LambdaMOO."
+    )]
+    pub persistent_tasks: Option<bool>,
 }
 
 impl FeatureArgs {
@@ -177,6 +184,9 @@ impl FeatureArgs {
         }
         if let Some(args) = self.flyweight_type {
             config.flyweight_type = args;
+        }
+        if let Some(args) = self.persistent_tasks {
+            config.persistent_tasks = args;
         }
     }
 }

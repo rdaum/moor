@@ -32,6 +32,9 @@ pub struct Config {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct FeaturesConfig {
+    /// Whether to host a tasks DB and persist the state of suspended/forked tasks between restarts.
+    /// Note that this is the default behaviour in LambdaMOO.
+    pub persistent_tasks: bool,
     /// Whether to allow notify() to send arbitrary MOO common to players. The interpretation of
     /// the common varies depending on host/client.
     /// If this is false, only strings are allowed, as in LambdaMOO.
@@ -51,6 +54,7 @@ pub struct FeaturesConfig {
 impl Default for FeaturesConfig {
     fn default() -> Self {
         Self {
+            persistent_tasks: true,
             rich_notify: true,
             lexical_scopes: true,
             map_type: true,
@@ -69,16 +73,24 @@ impl FeaturesConfig {
         }
     }
 
-    /// Returns true if the configuration is backwards compatible with LambdaMOO 1.8 features.
+    /// Returns true if the configuration is backwards compatible with LambdaMOO 1.8 features
     pub fn is_lambdammoo_compatible(&self) -> bool {
-        !self.lexical_scopes && !self.map_type && !self.type_dispatch && !self.flyweight_type
+        !self.lexical_scopes
+            && !self.map_type
+            && !self.type_dispatch
+            && !self.flyweight_type
+            && !self.rich_notify
+            && self.persistent_tasks
     }
 
-    /// Returns true if the configuration is compatible with another configuration.
+    /// Returns true if the configuration is compatible with another configuration, for the pur
+    /// poses of textdump loading
     /// Which means that if the other configuration has a feature enabled, this configuration
     /// must also have it enabled.
     /// The other way around is fine.
-    pub fn is_compatible(&self, other: &FeaturesConfig) -> bool {
+    pub fn is_textdump_compatible(&self, other: &FeaturesConfig) -> bool {
+        // Note that tasks/rich_notify are not included in this check, as they do not affect
+        // the database format.
         (!other.lexical_scopes || self.lexical_scopes)
             && (!other.map_type || self.map_type)
             && (!other.type_dispatch || self.type_dispatch)

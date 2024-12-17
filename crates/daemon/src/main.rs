@@ -21,6 +21,7 @@ use ed25519_dalek::SigningKey;
 use eyre::Report;
 use moor_db::{Database, TxDB};
 use moor_kernel::tasks::scheduler::Scheduler;
+use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_kernel::textdump::textdump_load;
 use pem::Pem;
 use rand::rngs::OsRng;
@@ -149,7 +150,11 @@ fn main() -> Result<(), Report> {
         }
     }
 
-    let (tasks_db, _) = tasks_fjall::FjallTasksDB::open(&args.tasks_db);
+    let tasks_db: Box<dyn TasksDb> = if config.features_config.persistent_tasks {
+        Box::new(tasks_fjall::FjallTasksDB::open(&args.tasks_db).0)
+    } else {
+        Box::new(NoopTasksDb {})
+    };
 
     // We have to create the RpcServer before starting the scheduler because we need to pass it in
     // as a parameter to the scheduler for background session construction.
@@ -173,7 +178,7 @@ fn main() -> Result<(), Report> {
     let scheduler = Scheduler::new(
         version,
         database,
-        Box::new(tasks_db),
+        tasks_db,
         config.clone(),
         rpc_server.clone(),
     );

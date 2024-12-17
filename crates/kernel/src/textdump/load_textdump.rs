@@ -133,7 +133,7 @@ pub fn read_textdump<T: io::Read>(
             }
 
             // Features mut be compatible
-            if !features_config.is_compatible(features) {
+            if !features_config.is_textdump_compatible(features) {
                 return Err(TextdumpReaderError::VersionError(
                     "Incompatible features".to_string(),
                 ));
