@@ -176,12 +176,12 @@ impl MooStackFrame {
             program,
             environment,
             environment_width,
-            valstack: vec![],
-            scope_stack: vec![],
             pc: 0,
             temp: v_none(),
-            catch_stack: vec![],
-            finally_stack: vec![],
+            valstack: Default::default(),
+            scope_stack: Default::default(),
+            catch_stack: Default::default(),
+            finally_stack: Default::default(),
         }
     }
 
@@ -306,7 +306,6 @@ impl MooStackFrame {
         // If this is a lexical scope, expand the environment to accommodate the new variables.
         // (This is just updating environment_width)
         let environment_width = environment_width as usize;
-        assert!(environment_width <= self.environment.len());
         self.environment_width += environment_width;
 
         let end_pos = self.program.jump_labels[end_label.0 as usize].position.0 as usize;

@@ -30,7 +30,7 @@ use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::tasks::VerbCall;
-use crate::vm::ExecutionResult::ContinueVerb;
+use crate::vm::ExecutionResult::DispatchVerb;
 
 lazy_static! {
     static ref INITIALIZE_SYM: Symbol = Symbol::mk("initialize");
@@ -158,7 +158,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
             bf_frame.bf_trampoline_arg = Some(v_obj(new_obj.clone()));
-            Ok(VmInstr(ContinueVerb {
+            Ok(VmInstr(DispatchVerb {
                 permissions: bf_args.task_perms_who(),
                 resolved_verb,
                 binary,
@@ -269,7 +269,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = Some(contents);
 
-                        return Ok(VmInstr(ContinueVerb {
+                        return Ok(VmInstr(DispatchVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
                             binary,
@@ -338,7 +338,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
 
                     // Call :exitfunc on the head object.
-                    return Ok(VmInstr(ContinueVerb {
+                    return Ok(VmInstr(DispatchVerb {
                         permissions: bf_args.task_perms_who(),
                         resolved_verb,
                         binary,
@@ -440,7 +440,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = None;
-                        return Ok(VmInstr(ContinueVerb {
+                        return Ok(VmInstr(DispatchVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
                             binary,
@@ -518,7 +518,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC);
                         bf_frame.bf_trampoline_arg = None;
 
-                        let continuation = ContinueVerb {
+                        let continuation = DispatchVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
                             binary,
@@ -565,7 +565,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_DONE);
                         bf_frame.bf_trampoline_arg = None;
 
-                        return Ok(VmInstr(ContinueVerb {
+                        return Ok(VmInstr(DispatchVerb {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
                             binary,

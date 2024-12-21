@@ -27,7 +27,7 @@ use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
 use moor_values::matching::command_parse::ParsedCommand;
 use moor_values::model::VerbDef;
-use moor_values::{Obj, Var};
+use moor_values::{Error, List, Obj, Symbol, Var};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 
@@ -83,12 +83,30 @@ pub struct VmExecParams {
 pub enum ExecutionResult {
     /// Execution of this call stack is complete.
     Complete(Var),
+    /// An error occurred during execution, that we might need to push to the stack and
+    /// potentially resume or unwind, depending on the context.
+    PushError(Error),
+    /// An error occurred during execution, that should definitely be treated as a proper "raise"
+    /// and unwind event unless there's a catch handler in place
+    RaiseError(Error),
+    /// An explicit stack unwind (for a reason other than a return.
+    Unwind(FinallyReason),
+    /// Explicit return, unwind stack
+    Return(Var),
+    /// Create the frames necessary to perform a `pass` up the inheritance chain.
+    Pass(List),
     /// All is well. The task should let the VM continue executing.
     More,
     /// An exception was raised during execution.
     Exception(FinallyReason),
-    /// Request dispatch to another verb
-    ContinueVerb {
+    /// Begin preparing to call a verb, by looking up the verb and preparing the dispatch.
+    PrepareVerbDispatch {
+        this: Var,
+        verb_name: Symbol,
+        args: List,
+    },
+    /// Perform the verb dispatch, building the stack frame and executing it.
+    DispatchVerb {
         /// The applicable permissions context.
         permissions: Obj,
         /// The requested verb.
@@ -101,7 +119,7 @@ pub enum ExecutionResult {
         command: Option<ParsedCommand>,
     },
     /// Request dispatch of a new task as a fork
-    DispatchFork(Fork),
+    DispatchFork(Option<Duration>, Option<Name>, Offset),
     /// Request dispatch of a builtin function with the given arguments.
     ContinueBuiltin {
         builtin: BuiltinId,

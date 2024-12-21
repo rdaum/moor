@@ -248,22 +248,47 @@ impl VmHost {
         // Grant the loop its next tick slice.
         self.vm_exec_state.tick_slice = self.max_ticks - self.vm_exec_state.tick_count;
 
-        let pre_exec_tick_count = self.vm_exec_state.tick_count;
-
         // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
         let mut result = self.run_interpreter(&exec_params, world_state, session.clone());
-
-        let post_exec_tick_count = self.vm_exec_state.tick_count;
-        trace!(
-            task_id,
-            executed_ticks = post_exec_tick_count - pre_exec_tick_count,
-            ?result,
-            "Executed ticks",
-        );
         while self.is_running() {
             match result {
                 ExecutionResult::More => return ContinueOk,
-                ExecutionResult::ContinueVerb {
+                ExecutionResult::PushError(e) => {
+                    result = self.vm_exec_state.push_error(e);
+                    continue;
+                }
+                ExecutionResult::RaiseError(e) => {
+                    result = self.vm_exec_state.raise_error(e);
+                    continue;
+                }
+                ExecutionResult::Return(value) => {
+                    result = self
+                        .vm_exec_state
+                        .unwind_stack(FinallyReason::Return(value));
+                    continue;
+                }
+                ExecutionResult::Unwind(fr) => {
+                    result = self.vm_exec_state.unwind_stack(fr);
+                    continue;
+                }
+                ExecutionResult::Pass(pass_args) => {
+                    result = self
+                        .vm_exec_state
+                        .prepare_pass_verb(world_state, &pass_args);
+                    continue;
+                }
+                ExecutionResult::PrepareVerbDispatch {
+                    this,
+                    verb_name,
+                    args,
+                } => {
+                    result = self
+                        .vm_exec_state
+                        .verb_dispatch(&exec_params, world_state, this, verb_name, args)
+                        .unwrap_or_else(|e| ExecutionResult::PushError(e));
+                    continue;
+                }
+                ExecutionResult::DispatchVerb {
                     permissions,
                     resolved_verb,
                     binary,
@@ -310,7 +335,19 @@ impl VmHost {
                     );
                     continue;
                 }
-                ExecutionResult::DispatchFork(fork_request) => {
+                ExecutionResult::DispatchFork(delay, task_id, fv_offset) => {
+                    let a = self.vm_exec_state.top().clone();
+                    let parent_task_id = self.vm_exec_state.task_id;
+                    let new_activation = a.clone();
+                    let fork_request = Fork {
+                        player: a.player.clone(),
+                        progr: a.permissions.clone(),
+                        parent_task_id,
+                        delay,
+                        activation: new_activation,
+                        fork_vector_offset: fv_offset,
+                        task_id,
+                    };
                     return DispatchFork(fork_request);
                 }
                 ExecutionResult::Suspend(delay) => {
@@ -371,23 +408,31 @@ impl VmHost {
         }
 
         // Pick the right kind of execution flow depending on the activation -- builtin or MOO?
-        // (To avoid borrow issues on the exec state, we won't actually pull the frame out, just look
-        // at its type and execute the right function which will have to unpack the frame itself.
-        // this is a bit not-ideal but it's the best I can do right now.)
-        let result = match &self.vm_exec_state.top().frame {
-            Frame::Moo(_) => {
-                return moo_frame_execute(
-                    vm_exec_params,
-                    &mut self.vm_exec_state,
+        let mut tick_count = self.vm_exec_state.tick_count;
+        let tick_slice = self.vm_exec_state.tick_slice;
+        let activation = self.vm_exec_state.top_mut();
+
+        let (result, new_tick_count) = match &mut activation.frame {
+            Frame::Moo(fr) => {
+                let result = moo_frame_execute(
+                    tick_slice,
+                    &mut tick_count,
+                    activation.permissions.clone(),
+                    fr,
                     world_state,
-                    session.clone(),
                 );
+                (result, tick_count)
             }
             Frame::Bf(_) => {
-                self.vm_exec_state
-                    .reenter_builtin_function(vm_exec_params, world_state, session)
+                let result = self.vm_exec_state.reenter_builtin_function(
+                    vm_exec_params,
+                    world_state,
+                    session,
+                );
+                (result, tick_count)
             }
         };
+        self.vm_exec_state.tick_count = new_tick_count;
 
         result
     }

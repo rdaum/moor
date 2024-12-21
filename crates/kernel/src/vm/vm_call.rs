@@ -178,7 +178,7 @@ impl VMExecState {
         // Permissions for the activation are the verb's owner.
         let permissions = resolved_verb.owner();
 
-        ExecutionResult::ContinueVerb {
+        ExecutionResult::DispatchVerb {
             permissions,
             resolved_verb,
             binary,
@@ -231,7 +231,7 @@ impl VMExecState {
             caller,
         };
 
-        ExecutionResult::ContinueVerb {
+        ExecutionResult::DispatchVerb {
             permissions: permissions.clone(),
             resolved_verb,
             binary,

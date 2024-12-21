@@ -12,16 +12,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tasks::sessions::Session;
-use crate::vm::activation::Frame;
-use crate::vm::moo_frame::{CatchType, ScopeType};
+use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::{ExecutionResult, Fork, VMExecState, VmExecParams};
+use crate::vm::ExecutionResult;
 use lazy_static::lazy_static;
-use moor_compiler::{to_literal, Op, ScatterLabel};
+use moor_compiler::{Op, ScatterLabel};
 use moor_values::model::WorldState;
 use std::ops::Add;
-use std::sync::Arc;
 use std::time::Duration;
 
 use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_TYPE, E_VARNF};
@@ -54,7 +51,7 @@ macro_rules! binary_var_op {
             Ok(result) => $f.poke(0, result),
             Err(err_code) => {
                 $f.pop();
-                return $state.push_error(err_code);
+                return ExecutionResult::PushError(err_code);
             }
         }
     };
@@ -62,22 +59,14 @@ macro_rules! binary_var_op {
 
 /// Main VM opcode execution for MOO stack frames. The actual meat of the MOO virtual machine.
 pub fn moo_frame_execute(
-    exec_params: &VmExecParams,
-    state: &mut VMExecState,
+    tick_slice: usize,
+    tick_count: &mut usize,
+    permissions: Obj,
+    f: &mut MooStackFrame,
     world_state: &mut dyn WorldState,
-    session: Arc<dyn Session>,
 ) -> ExecutionResult {
-    let opcodes = {
-        // Check the frame type to verify it's MOO, before doing anything else
-        let a = state.top_mut();
-        let Frame::Moo(ref mut f) = a.frame else {
-            panic!("Unsupported VM stack frame type");
-        };
-
-        // We clone the main vector here to avoid borrowing issues with the frame later, as we
-        // need to modify the program counter.
-        f.program.main_vector.clone()
-    };
+    // To avoid borrowing issues when mutating the frame elsewhere...
+    let opcodes = f.program.main_vector.clone();
 
     // Special case for empty opcodes set, just return v_none() immediately.
     if opcodes.is_empty() {
@@ -95,15 +84,9 @@ pub fn moo_frame_execute(
     //   and the variable `tick_slice_count` that slice's progress.
     //  `max_ticks` on the task is the total limit which is checked above us, outside this loop.
     let mut tick_slice_count = 0;
-    while tick_slice_count < state.tick_slice {
+    while tick_slice_count < tick_slice {
         tick_slice_count += 1;
-        state.tick_count += 1;
-
-        // Borrow the top of the activation stack for the lifetime of this execution.
-        let a = state.top_mut();
-        let Frame::Moo(ref mut f) = a.frame else {
-            panic!("Unsupported VM stack frame type");
-        };
+        *tick_count += 1;
 
         // Otherwise, start poppin' opcodes.
         // We panic here if we run out of opcodes, as that means there's a bug in either the
@@ -169,7 +152,7 @@ pub fn moo_frame_execute(
                     // didn't 'throw' and unwind the stack -- we need to get out of the loop.
                     // So we preemptively jump (here and below for List) and then raise the error.
                     f.jump(end_label);
-                    return state.raise_error(E_TYPE);
+                    return ExecutionResult::RaiseError(E_TYPE);
                 };
                 let count = *count as usize;
                 let Variant::List(l) = list.variant() else {
@@ -177,7 +160,7 @@ pub fn moo_frame_execute(
                     f.pop();
 
                     f.jump(end_label);
-                    return state.raise_error(E_TYPE);
+                    return ExecutionResult::RaiseError(E_TYPE);
                 };
 
                 // If we've exhausted the list, pop the count and list and jump out.
@@ -239,7 +222,7 @@ pub fn moo_frame_execute(
                             // the loop (with a messed up stack) otherwise.
                             f.jump(end_label);
 
-                            return state.raise_error(E_TYPE);
+                            return ExecutionResult::RaiseError(E_TYPE);
                         }
                     };
                     (from.clone(), next_val)
@@ -292,7 +275,7 @@ pub fn moo_frame_execute(
                 let (tail, list) = (f.pop(), f.peek_top_mut());
                 if !list.is_sequence() || list.type_code() == VarType::TYPE_STR {
                     f.pop();
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 }
                 // TODO: quota check SVO_MAX_LIST_CONCAT -> E_QUOTA in list add and append
                 let result = list.push(&tail);
@@ -302,7 +285,7 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -312,12 +295,12 @@ pub fn moo_frame_execute(
                 // Don't allow strings here.
                 if list.type_code() == VarType::TYPE_STR {
                     f.pop();
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 }
 
                 if !tail.is_sequence() || !list.is_sequence() {
                     f.pop();
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 }
                 let new_list = list.append(&tail);
                 match new_list {
@@ -326,7 +309,7 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -339,7 +322,7 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -359,7 +342,7 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -368,20 +351,20 @@ pub fn moo_frame_execute(
                 let contents = f.pop();
                 // Contents must be a list
                 let Variant::List(contents) = contents.variant() else {
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 };
                 let mut slots = Vec::with_capacity(*num_slots);
                 for _ in 0..*num_slots {
                     let (k, v) = (f.pop(), f.pop());
                     let Variant::Str(k) = k.variant() else {
-                        return state.push_error(E_TYPE);
+                        return ExecutionResult::PushError(E_TYPE);
                     };
                     let sym = Symbol::mk_case_insensitive(k.as_string());
                     slots.push((sym, v));
                 }
                 let delegate = f.pop();
                 let Variant::Obj(delegate) = delegate.variant() else {
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 };
                 // Slots should be v_str -> value, num_slots times
 
@@ -423,7 +406,7 @@ pub fn moo_frame_execute(
                     }
                     Err(e) => {
                         f.pop();
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -439,7 +422,7 @@ pub fn moo_frame_execute(
                 // `inf`.
                 let divargs = f.peek_range(2);
                 if matches!(divargs[1].variant(), Variant::Int(0) | Variant::Float(0.0)) {
-                    return state.push_error(E_DIV);
+                    return ExecutionResult::PushError(E_DIV);
                 };
                 binary_var_op!(self, f, state, div);
             }
@@ -452,7 +435,7 @@ pub fn moo_frame_execute(
             Op::Mod => {
                 let divargs = f.peek_range(2);
                 if matches!(divargs[1].variant(), Variant::Int(0) | Variant::Float(0.0)) {
-                    return state.push_error(E_DIV);
+                    return ExecutionResult::PushError(E_DIV);
                 };
                 binary_var_op!(self, f, state, modulus);
             }
@@ -481,14 +464,14 @@ pub fn moo_frame_execute(
                 match v.negative() {
                     Err(e) => {
                         f.pop();
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                     Ok(v) => f.poke(0, v),
                 }
             }
             Op::Push(ident) => {
                 let Some(v) = f.get_env(ident) else {
-                    return state.push_error(E_VARNF);
+                    return ExecutionResult::PushError(E_VARNF);
                 };
                 f.push(v.clone());
             }
@@ -503,7 +486,7 @@ pub fn moo_frame_execute(
                     Ok(v) => f.push(v),
                     Err(e) => {
                         f.pop();
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -515,7 +498,7 @@ pub fn moo_frame_execute(
                     Ok(v) => f.poke(0, v),
                     Err(e) => {
                         f.pop();
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -524,7 +507,7 @@ pub fn moo_frame_execute(
                 let result = base.range(&from, &to, IndexMode::OneBased);
                 if let Err(e) = result {
                     f.pop();
-                    return state.push_error(e);
+                    return ExecutionResult::PushError(e);
                 }
                 f.poke(0, result.unwrap());
             }
@@ -533,7 +516,7 @@ pub fn moo_frame_execute(
                 let result = base.range_set(&from, &to, &value, IndexMode::OneBased);
                 if let Err(e) = result {
                     f.pop();
-                    return state.push_error(e);
+                    return ExecutionResult::PushError(e);
                 }
                 f.poke(0, result.unwrap());
             }
@@ -541,23 +524,23 @@ pub fn moo_frame_execute(
                 let v = f.peek_abs(offset.0 as usize);
                 match v.len() {
                     Ok(l) => f.push(v_int(l as i64)),
-                    Err(e) => return state.push_error(e),
+                    Err(e) => return ExecutionResult::PushError(e),
                 }
             }
             Op::GetProp => {
                 let (propname, obj) = (f.pop(), f.peek_top());
 
                 let Variant::Str(propname) = propname.variant() else {
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 };
 
-                let value = get_property(world_state, &a.permissions, obj, propname);
+                let value = get_property(world_state, &permissions, obj, propname);
                 match value {
                     Ok(v) => {
                         f.poke(0, v);
                     }
                     Err(e) => {
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -565,16 +548,16 @@ pub fn moo_frame_execute(
                 let (propname, obj) = f.peek2();
 
                 let Variant::Str(propname) = propname.variant() else {
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 };
 
-                let value = get_property(world_state, &a.permissions, obj, propname);
+                let value = get_property(world_state, &permissions, obj, propname);
                 match value {
                     Ok(v) => {
                         f.push(v);
                     }
                     Err(e) => {
-                        return state.push_error(e);
+                        return ExecutionResult::PushError(e);
                     }
                 }
             }
@@ -584,20 +567,20 @@ pub fn moo_frame_execute(
                 let (propname, obj) = match (propname.variant(), obj.variant()) {
                     (Variant::Str(propname), Variant::Obj(obj)) => (propname, obj),
                     (_, _) => {
-                        return state.push_error(E_TYPE);
+                        return ExecutionResult::PushError(E_TYPE);
                     }
                 };
 
                 let propname = Symbol::mk_case_insensitive(propname.as_string());
                 let update_result =
-                    world_state.update_property(&a.permissions, obj, propname, &rhs.clone());
+                    world_state.update_property(&permissions, obj, propname, &rhs.clone());
 
                 match update_result {
                     Ok(()) => {
                         f.poke(0, rhs);
                     }
                     Err(e) => {
-                        return state.push_error(e.to_error_code());
+                        return ExecutionResult::PushError(e.to_error_code());
                     }
                 }
             }
@@ -609,70 +592,56 @@ pub fn moo_frame_execute(
                     Variant::Int(time) => *time as f64,
                     Variant::Float(time) => *time,
                     _ => {
-                        return state.push_error(E_TYPE);
+                        return ExecutionResult::PushError(E_TYPE);
                     }
                 };
 
                 if time < 0.0 {
-                    return state.push_error(E_INVARG);
+                    return ExecutionResult::PushError(E_INVARG);
                 }
                 let delay = (time != 0.0).then(|| Duration::from_secs_f64(time));
-                let new_activation = a.clone();
-                let fork = Fork {
-                    player: a.player.clone(),
-                    progr: a.permissions.clone(),
-                    parent_task_id: state.task_id,
-                    delay,
-                    activation: new_activation,
-                    fork_vector_offset: *fv_offset,
-                    task_id: *id,
-                };
-                return ExecutionResult::DispatchFork(fork);
+
+                return ExecutionResult::DispatchFork(delay, *id, *fv_offset);
             }
             Op::Pass => {
                 let args = f.pop();
                 let Variant::List(args) = args.variant() else {
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 };
-                return state.prepare_pass_verb(world_state, args);
+                return ExecutionResult::Pass(args.clone());
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
                 let (Variant::List(l), Variant::Str(s)) = (args.variant(), verb.variant()) else {
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 };
                 let verb = Symbol::mk_case_insensitive(s.as_string());
-                let result = state.verb_dispatch(exec_params, world_state, obj, verb, l.clone());
-                match result {
-                    Ok(r) => return r,
-                    Err(e) => {
-                        return state.push_error(e);
-                    }
-                }
+                return ExecutionResult::PrepareVerbDispatch {
+                    this: obj,
+                    verb_name: verb,
+                    args: l.clone(),
+                };
             }
             Op::Return => {
                 let ret_val = f.pop();
-                return state.unwind_stack(FinallyReason::Return(ret_val));
+                return ExecutionResult::Return(ret_val);
             }
             Op::Return0 => {
-                return state.unwind_stack(FinallyReason::Return(v_int(0)));
+                return ExecutionResult::Return(v_int(0));
             }
             Op::Done => {
-                return state.unwind_stack(FinallyReason::Return(v_none()));
+                return ExecutionResult::Return(v_none());
             }
             Op::FuncCall { id } => {
                 // Pop arguments, should be a list.
                 let args = f.pop();
                 let Variant::List(args) = args.variant() else {
-                    return state.push_error(E_ARGS);
+                    return ExecutionResult::PushError(E_ARGS);
                 };
-                return state.call_builtin_function(
-                    *id,
-                    args.iter().collect(),
-                    exec_params,
-                    world_state,
-                    session,
-                );
+                return ExecutionResult::ContinueBuiltin {
+                    builtin: *id,
+                    arguments: args.iter().collect(),
+                };
             }
             Op::PushCatchLabel(label) => {
                 // Get the error codes, which is either a list of error codes or Any.
@@ -728,12 +697,7 @@ pub fn moo_frame_execute(
 
                 let handler = f.pop_scope().expect("Missing handler for try/catch/except");
                 let ScopeType::TryCatch(..) = handler.scope_type else {
-                    panic!(
-                        "Handler is not a catch handler; {}:{} line {}",
-                        to_literal(&a.this),
-                        a.verb_name,
-                        f.find_line_no(f.pc - 1).unwrap()
-                    );
+                    panic!("Handler is not a catch handler",);
                 };
 
                 if is_catch {
@@ -757,7 +721,7 @@ pub fn moo_frame_execute(
                     FinallyReason::Raise(_)
                     | FinallyReason::Return(_)
                     | FinallyReason::Exit { .. } => {
-                        return state.unwind_stack(why);
+                        return ExecutionResult::Unwind(why);
                     }
                 }
             }
@@ -775,7 +739,7 @@ pub fn moo_frame_execute(
                 continue;
             }
             Op::Exit { stack, label } => {
-                return state.unwind_stack(FinallyReason::Exit {
+                return ExecutionResult::Unwind(FinallyReason::Exit {
                     stack: *stack,
                     label: *label,
                 });
@@ -803,7 +767,7 @@ pub fn moo_frame_execute(
                     let rhs = f.peek_top();
                     let Variant::List(rhs_values) = rhs.variant() else {
                         f.pop();
-                        return state.push_error(E_TYPE);
+                        return ExecutionResult::PushError(E_TYPE);
                     };
                     rhs_values.clone()
                 };
@@ -811,7 +775,7 @@ pub fn moo_frame_execute(
                 let len = rhs_values.len();
                 if len < nreq || !have_rest && len > nargs {
                     f.pop();
-                    return state.push_error(E_ARGS);
+                    return ExecutionResult::PushError(E_ARGS);
                 }
                 let mut nopt_avail = len - nreq;
                 let nrest = if have_rest && len >= nargs {
@@ -837,7 +801,7 @@ pub fn moo_frame_execute(
                         }
                         ScatterLabel::Required(id) => {
                             let Some(arg) = args_iter.next() else {
-                                return state.push_error(E_ARGS);
+                                return ExecutionResult::PushError(E_ARGS);
                             };
 
                             f.set_env(id, arg.clone());
@@ -846,7 +810,7 @@ pub fn moo_frame_execute(
                             if nopt_avail > 0 {
                                 nopt_avail -= 1;
                                 let Some(arg) = args_iter.next() else {
-                                    return state.push_error(E_ARGS);
+                                    return ExecutionResult::PushError(E_ARGS);
                                 };
                                 f.set_env(id, arg.clone());
                             } else if jump_where.is_none() && jump_to.is_some() {
@@ -863,7 +827,7 @@ pub fn moo_frame_execute(
             Op::CheckListForSplice => {
                 if !f.peek_top().is_sequence() {
                     f.pop();
-                    return state.push_error(E_TYPE);
+                    return ExecutionResult::PushError(E_TYPE);
                 }
             }
         }
