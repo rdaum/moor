@@ -234,10 +234,7 @@ fn bf_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_INVARG));
     }
 
-    let verbdef = match get_verbdef(obj, bf_args.args[1].clone(), bf_args) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
+    let verbdef = get_verbdef(obj, bf_args.args[1].clone(), bf_args)?;
     let args = verbdef.args();
 
     // Output is {dobj, prep, iobj} as strings
@@ -351,10 +348,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     {
         return Err(BfErr::Code(E_PERM));
     }
-    let verbdef = match get_verbdef(obj, bf_args.args[1].clone(), bf_args) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
+    let verbdef = get_verbdef(obj, bf_args.args[1].clone(), bf_args)?;
 
     // If the verb is not binary type MOO, we don't support decompilation or listing
     // of it yet.
@@ -427,10 +421,7 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_PERM));
     }
 
-    let verbdef = match get_verbdef(obj, bf_args.args[1].clone(), bf_args) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
+    let verbdef = get_verbdef(obj, bf_args.args[1].clone(), bf_args)?;
 
     // Right now set_verb_code is going to always compile to LambdaMOO 1.8.x. binary type.
     let binary_type = BinaryType::LambdaMoo18X;
@@ -552,10 +543,7 @@ fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_PERM));
     }
 
-    let verbdef = match get_verbdef(obj, bf_args.args[1].clone(), bf_args) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
+    let verbdef = get_verbdef(obj, bf_args.args[1].clone(), bf_args)?;
 
     bf_args
         .world_state
@@ -582,10 +570,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_INVARG));
     }
 
-    let verbdef = match get_verbdef(obj, bf_args.args[1].clone(), bf_args) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
+    let verbdef = get_verbdef(obj, bf_args.args[1].clone(), bf_args)?;
 
     if verbdef.binary_type() != BinaryType::LambdaMoo18X {
         warn!(object=?bf_args.args[0], verb=?bf_args.args[1], binary_type=?verbdef.binary_type(),

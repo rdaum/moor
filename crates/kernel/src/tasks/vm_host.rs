@@ -285,7 +285,7 @@ impl VmHost {
                     result = self
                         .vm_exec_state
                         .verb_dispatch(&exec_params, world_state, this, verb_name, args)
-                        .unwrap_or_else(|e| ExecutionResult::PushError(e));
+                        .unwrap_or_else(ExecutionResult::PushError);
                     continue;
                 }
                 ExecutionResult::DispatchVerb {
