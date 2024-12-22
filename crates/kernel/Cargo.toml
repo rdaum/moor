@@ -20,7 +20,8 @@ eyre.workspace = true
 pretty_assertions.workspace = true
 test-case.workspace = true
 test_each_file.workspace = true
-text-diff.workspace = true
+similar.workspace = true
+similar-asserts.workspace = true
 tracing.workspace = true
 
 [[test]]

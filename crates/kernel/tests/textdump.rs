@@ -20,7 +20,7 @@ mod test {
     use std::io::{BufReader, Read};
     use std::path::PathBuf;
     use std::sync::Arc;
-    use text_diff::assert_diff;
+    use similar_asserts;
 
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
@@ -183,7 +183,7 @@ mod test {
         let input = String::from_utf8(br.bytes().map(|b| b.unwrap()).collect())
             .expect("Failed to convert input to string");
 
-        assert_diff(&input, &output, "", 0);
+        similar_asserts::assert_eq!(&input, &output, "");
     }
 
     /// Actually load a textdump into an actual *database* and confirm that it has the expected contents.
@@ -256,7 +256,7 @@ mod test {
 
         let output = write_textdump(db, "** LambdaMOO Database, Format Version 1 **");
 
-        assert_diff(&input, &output, "", 0);
+        similar_asserts::assert_eq!(&input, &output,"");
     }
 
     #[test]
