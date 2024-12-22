@@ -35,8 +35,9 @@ pub mod pubsub_client;
 pub mod rpc_client;
 
 /// Construct a PASETO token for this host, to authenticate the host itself to the daemon.
-pub fn make_host_token(keypair: &Key<64>, host_type: HostType) -> HostToken {
-    let privkey: PasetoAsymmetricPrivateKey<V4, Public> = PasetoAsymmetricPrivateKey::from(keypair);
+pub fn make_host_token(private_key: &Key<64>, host_type: HostType) -> HostToken {
+    let privkey: PasetoAsymmetricPrivateKey<V4, Public> =
+        PasetoAsymmetricPrivateKey::from(private_key.as_ref());
     let token = Paseto::<V4, Public>::default()
         .set_footer(Footer::from(MOOR_HOST_TOKEN_FOOTER))
         .set_payload(Payload::from(host_type.id_str()))

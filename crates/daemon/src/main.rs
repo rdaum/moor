@@ -17,16 +17,12 @@ use std::sync::Arc;
 use crate::args::Args;
 use crate::rpc_server::RpcServer;
 use clap::Parser;
-use ed25519_dalek::SigningKey;
 use eyre::Report;
 use moor_db::{Database, TxDB};
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_kernel::textdump::textdump_load;
-use pem::Pem;
-use rand::rngs::OsRng;
 use rpc_common::load_keypair;
-use rusty_paseto::core::Key;
 use tracing::{debug, info, warn};
 
 mod connections;
@@ -69,33 +65,14 @@ fn main() -> Result<(), Report> {
 
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
     // the keypair from it...
-    let keypair = if args.public_key.exists() && args.private_key.exists() {
+    let (private_key, public_key) = if args.public_key.exists() && args.private_key.exists() {
         load_keypair(&args.public_key, &args.private_key)
             .expect("Unable to load keypair from public and private key files")
     } else {
-        // Otherwise, check to see if --generate-keypair was passed. If it was, generate a new
-        // keypair and save it to the file; otherwise, error out.
-        if args.generate_keypair {
-            let mut csprng = OsRng;
-            let signing_key: SigningKey = SigningKey::generate(&mut csprng);
-            let keypair: Key<64> = Key::from(signing_key.to_keypair_bytes());
-
-            let privkey_pem = Pem::new("PRIVATE KEY", signing_key.to_bytes());
-            let pubkey_pem = Pem::new("PUBLIC KEY", signing_key.verifying_key().to_bytes());
-
-            // And write to the files...
-            std::fs::write(args.private_key.clone(), pem::encode(&privkey_pem))
-                .expect("Unable to write private key");
-            std::fs::write(args.public_key.clone(), pem::encode(&pubkey_pem))
-                .expect("Unable to write public key");
-
-            keypair
-        // Write
-        } else {
-            panic!(
-                "Public/private keypair files do not exist, and --generate-keypair was not passed"
-            );
-        }
+        panic!(
+            "Public ({:?}) and/or private ({:?}) key files must exist",
+            args.public_key, args.private_key
+        );
     };
 
     let config = args
@@ -164,7 +141,8 @@ fn main() -> Result<(), Report> {
         .set_io_threads(args.num_io_threads)
         .expect("Failed to set number of IO threads");
     let rpc_server = Arc::new(RpcServer::new(
-        keypair,
+        public_key,
+        private_key,
         args.connections_file,
         zmq_ctx.clone(),
         args.events_listen.as_str(),

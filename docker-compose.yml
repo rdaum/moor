@@ -20,7 +20,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "./target/release/moor-daemon development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --generate-keypair --textdump-out=out.db"
+      sh -c "./target/release/moor-daemon development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --textdump-out=out.db"
     ports:
       # ZMQ ports
       - "7899:7899"

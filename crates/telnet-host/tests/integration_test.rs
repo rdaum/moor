@@ -47,7 +47,6 @@ fn start_daemon(workdir: &Path, uuid: Uuid) -> ManagedChild {
         Command::new(daemon_host_bin())
             .arg("--textdump")
             .arg(test_db_path())
-            .arg("--generate-keypair")
             .arg("--events-listen")
             .arg(format!("{}{}", NARRATIVE_PATH_ROOT, uuid))
             .arg("--rpc-listen")
@@ -96,6 +95,18 @@ fn start_telnet_host(workdir: &Path, uuid: Uuid, port: u16) -> ManagedChild {
     )
 }
 
+// Just a keypair generated with openssl to satisfy the daemon for running unit tests...
+
+const SIGNING_KEY: &str = r#"-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEILrkKmddHFUDZqRCnbQsPoW/Wsp0fLqhnv5KNYbcQXtk
+-----END PRIVATE KEY-----
+"#;
+
+const VERIFYING_KEY: &str = r#"-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
+-----END PUBLIC KEY-----
+"#;
+
 // These tests all listen on the same port, so we need to make sure
 // only one runs at a time.
 
@@ -106,20 +117,15 @@ fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
     let uuid = Uuid::new_v4();
 
     let test_workdir = tempfile::TempDir::new().expect("Failed to create temporary directory");
+
+    // Write the private and public key files in the test workdir
+    let signing_key_file = test_workdir.path().join("moor-signing-key.pem");
+    std::fs::write(&signing_key_file, SIGNING_KEY).expect("Failed to write signing key file");
+    let verifying_key_file = test_workdir.path().join("moor-verifying-key.pem");
+    std::fs::write(&verifying_key_file, VERIFYING_KEY).expect("Failed to write verifying key file");
+
     let daemon = Arc::new(Mutex::new(start_daemon(test_workdir.path(), uuid)));
     daemon.lock().unwrap().assert_running().unwrap();
-
-    // Spin until the generated keypair is available (private_key.pem, public_key.pem in test_workdir)
-    let start = std::time::Instant::now();
-    loop {
-        if test_workdir.path().join("private_key.pem").exists() {
-            break;
-        }
-        if start.elapsed() > std::time::Duration::from_secs(5) {
-            panic!("Daemon failed to generate keypair in time for the test");
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
 
     // Ask the OS for a random unused port. Then immediately drop the listener and use the port
     // for the telnet host.

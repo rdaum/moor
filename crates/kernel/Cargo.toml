@@ -18,10 +18,10 @@ moor-db = { path = "../db" }
 criterion.workspace = true
 eyre.workspace = true
 pretty_assertions.workspace = true
-test-case.workspace = true
-test_each_file.workspace = true
 similar.workspace = true
 similar-asserts.workspace = true
+test-case.workspace = true
+test_each_file.workspace = true
 tracing.workspace = true
 
 [[test]]

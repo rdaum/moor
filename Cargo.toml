@@ -97,9 +97,9 @@ lazy_static = "1.5"
 num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
 semver = "1.0.24"
-strum = { version = "0.26", features = ["derive"] }
 similar = "*"
 similar-asserts = "*"
+strum = { version = "0.26", features = ["derive"] }
 ustr = "1.0"
 uuid = { version = "1.11", features = ["v4"] }
 xml-rs = "0.8.24"
@@ -141,8 +141,7 @@ test_each_file = "0.3"
 unindent = "0.2"
 
 # Auth/Auth
-ed25519-dalek = { version = "2.1", features = ["zeroize", "pkcs8", "rand_core"] }
-pem = "3.0"
+ed25519-dalek = { version = "2.0", features = ["pkcs8", "pem", "signature"] }
 rusty_paseto = { version = "0.7" }
 signal-hook = "0.3"
 

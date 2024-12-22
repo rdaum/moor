@@ -37,16 +37,16 @@ pub struct RpcClientArgs {
     #[arg(
         long,
         value_name = "public_key",
-        help = "file containing the pkcs8 ed25519 public key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "public_key.pem"
+        help = "file containing the PEM encoded public key (shared with the daemon), used for authenticating client & host connections",
+        default_value = "moor-verifying-key.pem"
     )]
     pub public_key: PathBuf,
 
     #[arg(
         long,
         value_name = "private_key",
-        help = "file containing a pkcs8 ed25519 private key (shared with the daemon), used for authenticating client & host connections",
-        default_value = "private_key.pem"
+        help = "file containing an openssh generated ed25519 format private key (shared with the daemon), used for authenticating client & host connections",
+        default_value = "moor-signing-key.pem"
     )]
     pub private_key: PathBuf,
 }

@@ -42,7 +42,4 @@ uuid.workspace = true
 zmq.workspace = true
 
 # Auth/Auth
-ed25519-dalek.workspace = true
-pem.workspace = true
-rand.workspace = true
 rusty_paseto.workspace = true

@@ -330,9 +330,10 @@ async fn main() -> Result<(), eyre::Error> {
     let zmq_ctx = tmq::Context::new();
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let keypair = load_keypair(&args.client_args.public_key, &args.client_args.private_key)
-        .expect("Unable to load keypair from public and private key files");
-    let host_token = make_host_token(&keypair, HostType::TCP);
+    let (private, _public) =
+        load_keypair(&args.client_args.public_key, &args.client_args.private_key)
+            .expect("Unable to load keypair from public and private key files");
+    let host_token = make_host_token(&private, HostType::TCP);
 
     let (listeners, _ljh) = setup::noop_listeners_loop().await;
 

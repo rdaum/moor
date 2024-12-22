@@ -813,6 +813,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f55bf8e7b65898637379c1b74eb1551107c8294ed26d855ceb9fd1a09cfc9bc0"
 dependencies = [
  "const-oid",
+ "pem-rfc7468",
  "zeroize",
 ]
 
@@ -892,9 +893,9 @@ checksum = "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
- "rand_core",
  "serde",
  "sha2 0.10.8",
+ "signature",
  "subtle",
  "zeroize",
 ]
@@ -1641,15 +1642,12 @@ dependencies = [
  "clap",
  "clap_derive",
  "color-eyre",
- "ed25519-dalek",
  "eyre",
  "fjall",
  "moor-db",
  "moor-kernel",
  "moor-values",
  "oneshot",
- "pem",
- "rand",
  "rpc-common",
  "rusty_paseto",
  "semver",
@@ -1760,6 +1758,7 @@ dependencies = [
  "clap",
  "clap_derive",
  "color-eyre",
+ "ed25519-dalek",
  "escargot",
  "eyre",
  "futures-util",
@@ -2010,13 +2009,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pem"
-version = "3.0.4"
+name = "pem-rfc7468"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e459365e590736a54c3fa561947c84837534b8e9af6fc5bf781307e82658fae"
+checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
 dependencies = [
- "base64",
- "serde",
+ "base64ct",
 ]
 
 [[package]]
@@ -2367,8 +2365,8 @@ dependencies = [
  "bincode",
  "clap",
  "clap_derive",
+ "ed25519-dalek",
  "moor-values",
- "pem",
  "rusty_paseto",
  "thiserror 2.0.8",
 ]

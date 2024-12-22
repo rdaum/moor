@@ -13,10 +13,11 @@
 //
 
 use bincode::{Decode, Encode};
+use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey};
+use ed25519_dalek::{SigningKey, VerifyingKey};
 use moor_values::model::ObjectRef;
 use moor_values::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
 use moor_values::{Obj, Symbol, Var};
-use pem::PemError;
 use rusty_paseto::prelude::Key;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -310,17 +311,19 @@ pub enum ClientsBroadcastEvent {
 
 #[derive(Error, Debug)]
 pub enum KeyError {
-    #[error("Could not read key from file: {0}")]
-    ParseError(PemError),
+    #[error("Could not read PEM-encoded key from file")]
+    KeyParseError,
+    #[error("Incorrect key format for key: {0}")]
+    IncorrectKeyFormat(String),
     #[error("Could not read key from file: {0}")]
     ReadError(std::io::Error),
 }
 
 /// Load a keypair from the given public and private key (PEM) files.
-pub fn load_keypair(public_key: &Path, private_key: &Path) -> Result<Key<64>, KeyError> {
+pub fn load_keypair(public_key: &Path, private_key: &Path) -> Result<(Key<64>, Key<32>), KeyError> {
     let (Some(pubkey_pem), Some(privkey_pem)) = (
-        std::fs::read(public_key).ok(),
-        std::fs::read(private_key).ok(),
+        std::fs::read_to_string(public_key).ok(),
+        std::fs::read_to_string(private_key).ok(),
     ) else {
         return Err(KeyError::ReadError(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -328,11 +331,14 @@ pub fn load_keypair(public_key: &Path, private_key: &Path) -> Result<Key<64>, Ke
         )));
     };
 
-    let privkey_pem = pem::parse(privkey_pem).map_err(KeyError::ParseError)?;
-    let pubkey_pem = pem::parse(pubkey_pem).map_err(KeyError::ParseError)?;
+    let private_key =
+        SigningKey::from_pkcs8_pem(&privkey_pem).map_err(|_| KeyError::KeyParseError)?;
+    let public_key =
+        VerifyingKey::from_public_key_pem(&pubkey_pem).map_err(|_| KeyError::KeyParseError)?;
 
-    let mut key_bytes = privkey_pem.contents().to_vec();
-    key_bytes.extend_from_slice(pubkey_pem.contents());
-
-    Ok(Key::from(&key_bytes[0..64]))
+    let priv_key: Key<64> = Key::try_from(private_key.to_keypair_bytes())
+        .map_err(|_| KeyError::IncorrectKeyFormat("private".to_string()))?;
+    let pub_key: Key<32> = Key::try_from(public_key.to_bytes())
+        .map_err(|_| KeyError::IncorrectKeyFormat("public".to_string()))?;
+    Ok((priv_key, pub_key))
 }

@@ -44,6 +44,7 @@ termimad.workspace = true
 
 # Testing
 [dev-dependencies]
+ed25519-dalek.workspace = true
 escargot.workspace = true
 serial_test.workspace = true
 tempfile.workspace = true

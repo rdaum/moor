@@ -59,7 +59,8 @@ use zmq::{Socket, SocketType};
 
 pub struct RpcServer {
     zmq_context: zmq::Context,
-    keypair: Key<64>,
+    public_key: Key<32>,
+    private_key: Key<64>,
     pub(crate) events_publish: Arc<Mutex<Socket>>,
     connections: Arc<dyn ConnectionsDB + Send + Sync>,
     task_handles: Mutex<HashMap<TaskId, (Uuid, TaskHandle)>>,
@@ -95,7 +96,8 @@ pub(crate) fn pack_host_response(result: Result<DaemonToHostReply, RpcMessageErr
 
 impl RpcServer {
     pub fn new(
-        keypair: Key<64>,
+        public_key: Key<32>,
+        private_key: Key<64>,
         connections_db_path: PathBuf,
         zmq_context: zmq::Context,
         narrative_endpoint: &str,
@@ -121,7 +123,8 @@ impl RpcServer {
         );
         let kill_switch = Arc::new(AtomicBool::new(false));
         Self {
-            keypair,
+            public_key,
+            private_key,
             connections,
             events_publish: Arc::new(Mutex::new(publish)),
             zmq_context,
@@ -1235,7 +1238,7 @@ impl RpcServer {
     /// validate the client connection to the daemon for future requests.
     fn make_client_token(&self, client_id: Uuid) -> ClientToken {
         let privkey: PasetoAsymmetricPrivateKey<V4, Public> =
-            PasetoAsymmetricPrivateKey::from(self.keypair.as_ref());
+            PasetoAsymmetricPrivateKey::from(self.private_key.as_ref());
         let token = Paseto::<V4, Public>::default()
             .set_footer(Footer::from(MOOR_SESSION_TOKEN_FOOTER))
             .set_payload(Payload::from(
@@ -1256,7 +1259,7 @@ impl RpcServer {
     /// Construct a PASETO token for this player login. This token is used to provide credentials
     /// for requests, to allow reconnection with a different client_id.
     fn make_auth_token(&self, oid: &Obj) -> AuthToken {
-        let privkey = PasetoAsymmetricPrivateKey::from(self.keypair.as_ref());
+        let privkey = PasetoAsymmetricPrivateKey::from(self.private_key.as_ref());
         let token = Paseto::<V4, Public>::default()
             .set_footer(Footer::from(MOOR_AUTH_TOKEN_FOOTER))
             .set_payload(Payload::from(
@@ -1284,8 +1287,8 @@ impl RpcServer {
                 }
             }
         }
-        let key: Key<32> = Key::from(&self.keypair[32..]);
-        let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
+        let pk: PasetoAsymmetricPublicKey<V4, Public> =
+            PasetoAsymmetricPublicKey::from(&self.public_key);
         let host_type = Paseto::<V4, Public>::try_verify(
             token.0.as_str(),
             &pk,
@@ -1325,8 +1328,8 @@ impl RpcServer {
             }
         }
 
-        let key: Key<32> = Key::from(&self.keypair[32..]);
-        let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
+        let pk: PasetoAsymmetricPublicKey<V4, Public> =
+            PasetoAsymmetricPublicKey::from(&self.public_key);
         let verified_token = Paseto::<V4, Public>::try_verify(
             token.0.as_str(),
             &pk,
@@ -1391,8 +1394,8 @@ impl RpcServer {
                 }
             }
         }
-        let key: Key<32> = Key::from(&self.keypair[32..]);
-        let pk: PasetoAsymmetricPublicKey<V4, Public> = PasetoAsymmetricPublicKey::from(&key);
+        let pk: PasetoAsymmetricPublicKey<V4, Public> =
+            PasetoAsymmetricPublicKey::from(&self.public_key);
         let verified_token = Paseto::<V4, Public>::try_verify(
             token.0.as_str(),
             &pk,
