@@ -29,11 +29,11 @@ use moor_compiler::{compile, CompileOptions};
 use moor_values::model::{BinaryType, ObjFlag};
 use moor_values::model::{VerbDef, WorldState};
 use moor_values::tasks::{AbortLimitReason, Exception, TaskId};
-use moor_values::AsByteBuffer;
 use moor_values::Error::E_MAXREC;
 use moor_values::Obj;
 use moor_values::Var;
 use moor_values::{v_none, Symbol};
+use moor_values::{AsByteBuffer, List};
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::FeaturesConfig;
@@ -500,7 +500,7 @@ impl VmHost {
     pub fn reset_time(&mut self) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
     }
-    pub fn args(&self) -> &Vec<Var> {
+    pub fn args(&self) -> &List {
         &self.vm_exec_state.top().args
     }
 }

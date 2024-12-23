@@ -35,9 +35,9 @@ use moor_values::model::Named;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::WorldStateSource;
 use moor_values::model::{BinaryType, VerbFlag};
-use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+use moor_values::{List, Obj};
 
 #[allow(dead_code)]
 pub fn testsuite_dir() -> PathBuf {
@@ -116,7 +116,7 @@ pub fn run_as_verb(db: &dyn Database, expression: &str) -> ExecResult {
         Arc::new(NoopClientSession::new()),
         builtin_registry,
         &verb_uuid,
-        vec![],
+        List::mk_list(&[]),
     );
     state.commit().unwrap();
     result

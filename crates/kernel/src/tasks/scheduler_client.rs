@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use moor_compiler::{compile, Program};
 use moor_values::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
-use moor_values::{Obj, Symbol, Var};
+use moor_values::{List, Obj, Symbol, Var};
 
 use crate::config::FeaturesConfig;
 use crate::tasks::sessions::Session;
@@ -78,7 +78,7 @@ impl SchedulerClient {
         player: &Obj,
         vloc: &ObjectRef,
         verb: Symbol,
-        args: Vec<Var>,
+        args: List,
         argstr: String,
         perms: &Obj,
         session: Arc<dyn Session>,
@@ -370,7 +370,7 @@ pub enum SchedulerClientMsg {
         player: Obj,
         vloc: ObjectRef,
         verb: Symbol,
-        args: Vec<Var>,
+        args: List,
         argstr: String,
         perms: Obj,
         session: Arc<dyn Session>,

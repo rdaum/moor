@@ -18,7 +18,7 @@ use std::time::SystemTime;
 use bincode::{Decode, Encode};
 
 use moor_compiler::Program;
-use moor_values::Obj;
+use moor_values::{List, Obj};
 use moor_values::{Symbol, Var};
 
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
@@ -84,7 +84,7 @@ pub struct VerbCall {
     pub location: Var,
     pub this: Var,
     pub player: Obj,
-    pub args: Vec<Var>,
+    pub args: List,
     pub argstr: String,
     pub caller: Var,
 }
@@ -133,8 +133,8 @@ pub mod vm_test_utils {
 
     use moor_compiler::Program;
     use moor_values::model::WorldState;
-    use moor_values::SYSTEM_OBJECT;
     use moor_values::{v_obj, Symbol};
+    use moor_values::{List, SYSTEM_OBJECT};
     use moor_values::{Obj, Var};
 
     use crate::builtins::BuiltinRegistry;
@@ -210,7 +210,7 @@ pub mod vm_test_utils {
         session: Arc<dyn Session>,
         builtins: Arc<BuiltinRegistry>,
         verb_name: &str,
-        args: Vec<Var>,
+        args: List,
     ) -> ExecResult {
         execute(world_state, session, builtins, |world_state, vm_host| {
             let verb_name = Symbol::mk_case_insensitive(verb_name);
@@ -338,7 +338,7 @@ pub enum TaskStart {
         player: Obj,
         vloc: Var,
         verb: Symbol,
-        args: Vec<Var>,
+        args: List,
         argstr: String,
     },
     /// The scheduler is telling the task to run a task that was forked from another task.

@@ -41,7 +41,7 @@ use moor_values::tasks::CommandError;
 use moor_values::tasks::CommandError::PermissionDenied;
 use moor_values::tasks::TaskId;
 use moor_values::util::parse_into_words;
-use moor_values::{v_int, v_str};
+use moor_values::{v_int, v_str, List};
 use moor_values::{v_obj, Obj};
 use moor_values::{Symbol, Variant};
 use moor_values::{NOTHING, SYSTEM_OBJECT};
@@ -475,7 +475,7 @@ impl Task {
             }
             Ok(verb_info) => {
                 let arguments = parse_into_words(command);
-                let args = arguments.iter().map(|s| v_str(s)).collect::<Vec<_>>();
+                let args = List::from_iter(arguments.iter().map(|s| v_str(s)));
                 let verb_call = VerbCall {
                     verb_name: Symbol::mk("do_command"),
                     location: v_obj(handler_object.clone()),
@@ -578,7 +578,7 @@ impl Task {
             location: v_obj(target.clone()),
             this: v_obj(target),
             player: player.clone(),
-            args: parsed_command.args.clone(),
+            args: List::mk_list(&parsed_command.args),
             argstr: parsed_command.argstr.clone(),
             caller: v_obj(player.clone()),
         };

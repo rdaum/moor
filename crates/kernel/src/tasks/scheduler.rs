@@ -56,7 +56,7 @@ use moor_values::tasks::{
     AbortLimitReason, CommandError, SchedulerError, TaskId, VerbProgramError,
 };
 use moor_values::Error::{E_INVARG, E_INVIND, E_PERM};
-use moor_values::{v_err, v_int, v_none, v_obj, v_string, Symbol, Var};
+use moor_values::{v_err, v_int, v_none, v_obj, v_string, List, Symbol, Var};
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 use moor_values::{Obj, Variant};
 
@@ -483,7 +483,8 @@ impl Scheduler {
                 session,
                 reply,
             } => {
-                let args = command.into_iter().map(v_string).collect::<Vec<Var>>();
+                let args = command.into_iter().map(v_string);
+                let args = List::from_iter(args);
                 let task_start = Arc::new(TaskStart::StartVerb {
                     player: player.clone(),
                     vloc: v_obj(handler_object),

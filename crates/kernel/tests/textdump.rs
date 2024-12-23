@@ -15,12 +15,12 @@
 #[cfg(test)]
 mod test {
     use semver::Version;
+    use similar_asserts;
     use std::collections::BTreeSet;
     use std::fs::File;
     use std::io::{BufReader, Read};
     use std::path::PathBuf;
     use std::sync::Arc;
-    use similar_asserts;
 
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
@@ -256,7 +256,7 @@ mod test {
 
         let output = write_textdump(db, "** LambdaMOO Database, Format Version 1 **");
 
-        similar_asserts::assert_eq!(&input, &output,"");
+        similar_asserts::assert_eq!(&input, &output, "");
     }
 
     #[test]

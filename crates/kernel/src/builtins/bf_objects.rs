@@ -21,10 +21,10 @@ use moor_values::model::WorldStateError;
 use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
-use moor_values::Variant;
 use moor_values::{v_bool, v_int, v_none, v_obj, v_str};
 use moor_values::{v_list, Sequence, Symbol};
 use moor_values::{v_list_iter, NOTHING};
+use moor_values::{List, Variant};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
@@ -167,7 +167,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     location: v_obj(new_obj.clone()),
                     this: v_obj(new_obj),
                     player: bf_args.exec_state.top().player.clone(),
-                    args: vec![],
+                    args: List::mk_list(&[]),
                     argstr: "".to_string(),
                     caller: bf_args.exec_state.top().this.clone(),
                 },
@@ -278,7 +278,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: v_obj(obj.clone()),
                                 this: v_obj(obj),
                                 player: bf_args.exec_state.top().player.clone(),
-                                args: Vec::new(),
+                                args: List::mk_list(&[]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             },
@@ -347,7 +347,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             location: v_obj(head_obj.clone()),
                             this: v_obj(head_obj.clone()),
                             player: bf_args.exec_state.top().player.clone(),
-                            args: vec![v_obj(obj)],
+                            args: List::mk_list(&[v_obj(obj)]),
                             argstr: "".to_string(),
                             caller: bf_args.exec_state.top().this.clone(),
                         },
@@ -449,7 +449,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: v_obj(whereto.clone()),
                                 this: v_obj(whereto.clone()),
                                 player: bf_args.exec_state.top().player.clone(),
-                                args: vec![v_obj(what)],
+                                args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             },
@@ -527,7 +527,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: v_obj(original_location.clone()),
                                 this: v_obj(original_location),
                                 player: bf_args.exec_state.top().player.clone(),
-                                args: vec![v_obj(what)],
+                                args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             },
@@ -574,7 +574,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 location: v_obj(whereto.clone()),
                                 this: v_obj(whereto),
                                 player: bf_args.exec_state.top().player.clone(),
-                                args: vec![v_obj(what)],
+                                args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
                             },

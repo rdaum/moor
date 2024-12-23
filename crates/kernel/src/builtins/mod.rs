@@ -20,10 +20,10 @@ use moor_compiler::{BuiltinId, BUILTINS};
 use moor_values::model::Perms;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::Error;
 use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::Var;
+use moor_values::{Error, List};
 
 use crate::builtins::bf_list_sets::register_bf_list_sets;
 use crate::builtins::bf_maps::register_bf_maps;
@@ -92,7 +92,7 @@ pub struct BfCallState<'a> {
     /// The name of the invoked function.
     pub(crate) name: Symbol,
     /// Arguments passed to the function.
-    pub(crate) args: Vec<Var>,
+    pub(crate) args: List,
     /// The current execution state of this task in this VM, including the stack
     /// so that BFs can inspect and manipulate it.
     pub(crate) exec_state: &'a mut VMExecState,

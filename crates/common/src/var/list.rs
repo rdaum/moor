@@ -26,6 +26,7 @@ use num_traits::ToPrimitive;
 use std::cmp::max;
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
+use std::ops::Index;
 
 #[derive(Clone)]
 pub struct List(Box<im::Vector<Var>>);
@@ -42,7 +43,7 @@ impl List {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Var> + '_ {
-        (0..self.len()).map(move |i| self.index(i).unwrap())
+        self.0.iter().cloned()
     }
 
     /// Remove the first found instance of `item` from the list.
@@ -225,6 +226,19 @@ impl Sequence for List {
     }
 }
 
+impl Into<Var> for List {
+    fn into(self) -> Var {
+        Var::from_variant(Variant::List(self))
+    }
+}
+
+impl Index<usize> for List {
+    type Output = Var;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
 impl PartialEq for List {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
@@ -233,8 +247,8 @@ impl PartialEq for List {
 
         // elements comparison
         for i in 0..self.len() {
-            let a = self.index(i).unwrap();
-            let b = other.index(i).unwrap();
+            let a = Sequence::index(self, i).unwrap();
+            let b = Sequence::index(other, i).unwrap();
             if a != b {
                 return false;
             }
@@ -260,8 +274,8 @@ impl Ord for List {
 
         // elements comparison
         for i in 0..self.len() {
-            let a = self.index(i).unwrap();
-            let b = other.index(i).unwrap();
+            let a = Sequence::index(self, i).unwrap();
+            let b = Sequence::index(other, i).unwrap();
             match a.cmp(&b) {
                 std::cmp::Ordering::Equal => continue,
                 x => return x,

@@ -109,7 +109,7 @@ fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let index = bf_args.args[2].clone();
     let value = bf_args.args[1].clone();
-    let list = &mut bf_args.args[0];
+    let list = bf_args.args[0].clone();
     if list.type_code() != VarType::TYPE_LIST {
         return Err(BfErr::Code(E_TYPE));
     }
@@ -124,7 +124,7 @@ fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
     let value = bf_args.args[1].clone();
-    let list = &mut bf_args.args[0];
+    let list = bf_args.args[0].clone();
     let Variant::List(list) = list.variant() else {
         return Err(BfErr::Code(E_TYPE));
     };

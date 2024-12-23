@@ -121,7 +121,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_none()));
     }
@@ -143,7 +143,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
 
         assert_eq!(result, Ok(v_str("e")));
@@ -174,7 +174,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
 
         assert_eq!(result, Ok(v_str("ell")));
@@ -198,7 +198,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
 
         assert_eq!(result, Ok(v_int(222)));
@@ -233,7 +233,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[222.into(), 333.into()])));
     }
@@ -282,7 +282,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[111.into(), 321.into(), 123.into()])));
     }
@@ -300,7 +300,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[2.into(), 3.into(), 4.into()])));
     }
@@ -320,7 +320,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(1)));
     }
@@ -365,7 +365,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_str("manbozorian")));
     }
@@ -401,7 +401,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(666)));
     }
@@ -442,7 +442,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test_call_verb",
-            vec![],
+            List::mk_list(&[]),
         );
 
         assert_eq!(result, Ok(v_int(666)));
@@ -469,7 +469,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(3)));
     }
@@ -485,7 +485,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(75)));
     }
@@ -501,7 +501,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
 
         assert_eq!(result, Ok(v_int(50)));
@@ -517,7 +517,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
 
         assert_eq!(result, Ok(v_int(50)));
@@ -546,7 +546,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
 
         assert_eq!(result, Ok(v_int(50)));
@@ -574,7 +574,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
 
         assert_eq!(result, Ok(v_list(&[v_int(3), v_int(2), v_int(1)])));
@@ -600,7 +600,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
 
         assert_eq!(result, Ok(v_int(6)));
@@ -628,7 +628,7 @@ mod tests {
             session,
             builtin_registry,
             "test",
-            vec![v_obj(SYSTEM_OBJECT), v_objid(32)],
+            List::mk_list(&[v_obj(SYSTEM_OBJECT), v_objid(32)]),
         );
 
         assert_eq!(result, Ok(v_int(0)));
@@ -648,7 +648,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(5)));
     }
@@ -667,7 +667,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_str("ello world")));
     }
@@ -685,7 +685,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(666)));
     }
@@ -705,7 +705,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_none()));
     }
@@ -745,7 +745,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_str("should reach here")));
     }
@@ -766,7 +766,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_str("ello world")));
     }
@@ -783,7 +783,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(333)));
     }
@@ -808,7 +808,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(42)));
     }
@@ -834,7 +834,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(52)));
     }
@@ -860,7 +860,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[v_int(42), v_int(66)])));
     }
@@ -890,7 +890,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[v_int(42), v_int(13), v_int(99)])));
     }
@@ -917,7 +917,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[v_int(5), v_int(3)])));
     }
@@ -941,7 +941,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[v_int(5), v_int(3)])));
     }
@@ -965,7 +965,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[v_int(5), v_int(3)])));
     }
@@ -991,7 +991,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[v_int(5), v_int(3)])));
     }
@@ -1011,7 +1011,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(42)));
     }
@@ -1033,7 +1033,7 @@ mod tests {
             session.clone(),
             builtin_registry,
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_list(&[v_int(2), v_int(3)])));
     }
@@ -1146,7 +1146,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result, Ok(expected_result));
     }
@@ -1161,7 +1161,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(
             result,
@@ -1179,7 +1179,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(
             result.unwrap(),
@@ -1202,7 +1202,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result.unwrap(), v_str("123"));
     }
@@ -1217,7 +1217,7 @@ mod tests {
             session,
             Arc::new(BuiltinRegistry::new()),
             "test",
-            vec![],
+            List::mk_list(&[]),
         );
         assert_eq!(result.unwrap(), v_int(2));
     }

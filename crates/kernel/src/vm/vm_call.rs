@@ -43,9 +43,9 @@ lazy_static! {
     static ref ERROR_SYM: Symbol = Symbol::mk("error");
 }
 
-pub(crate) fn args_literal(args: &[Var]) -> String {
+pub(crate) fn args_literal(args: &List) -> String {
     args.iter()
-        .map(to_literal)
+        .map(|v| to_literal(&v))
         .collect::<Vec<String>>()
         .join(", ")
 }
@@ -287,7 +287,7 @@ impl VMExecState {
     pub(crate) fn call_builtin_function(
         &mut self,
         bf_id: BuiltinId,
-        args: Vec<Var>,
+        args: List,
         exec_args: &VmExecParams,
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,

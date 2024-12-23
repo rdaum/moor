@@ -16,8 +16,8 @@ use rand::Rng;
 
 use moor_compiler::offset_for_builtin;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_values::Variant;
 use moor_values::{v_float, v_int, v_str};
+use moor_values::{Sequence, Variant};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
@@ -74,12 +74,15 @@ fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     let mut rng = rand::thread_rng();
-    match &bf_args.args.first().map(|var| var.variant()) {
-        Some(Variant::Int(i)) if *i > 0 => Ok(Ret(v_int(rng.gen_range(1..=*i)))),
-        Some(Variant::Int(_)) => Err(BfErr::Code(E_INVARG)),
-        None => Ok(Ret(v_int(rng.gen_range(1..=2147483647)))),
-        _ => Err(BfErr::Code(E_TYPE)),
-    }
+    bf_args
+        .args
+        .is_empty()
+        .then_some(Ok(Ret(v_int(rng.gen_range(1..=2147483647)))))
+        .unwrap_or_else(|| match &bf_args.args[0].variant() {
+            Variant::Int(i) if *i > 0 => Ok(Ret(v_int(rng.gen_range(1..=*i)))),
+            Variant::Int(_) => Err(BfErr::Code(E_INVARG)),
+            _ => Err(BfErr::Code(E_TYPE)),
+        })
 }
 bf_declare!(random, bf_random);
 

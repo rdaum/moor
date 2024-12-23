@@ -25,10 +25,10 @@ use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTINS};
 use moor_values::model::{ObjFlag, WorldStateError};
 use moor_values::tasks::NarrativeEvent;
 use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
-use moor_values::Symbol;
 use moor_values::Variant;
 use moor_values::{v_bool, v_int, v_list, v_none, v_obj, v_str, v_string, Var};
 use moor_values::{v_list_iter, Error};
+use moor_values::{Sequence, Symbol};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
@@ -657,7 +657,10 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     // Arguments are everything left, if any.
-    let args = &bf_args.args[1..];
+    let (_, args) = bf_args.args.pop_front().map_err(|_| BfErr::Code(E_ARGS))?;
+    let Variant::List(arguments) = args.variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
 
     // Find the function id for the given function name.
     let func_name = Symbol::mk_case_insensitive(func_name.as_string().as_str());
@@ -668,7 +671,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
     Ok(VmInstr(ExecutionResult::ContinueBuiltin {
         builtin,
-        arguments: args[..].to_vec(),
+        arguments: arguments.clone(),
     }))
 }
 bf_declare!(call_function, bf_call_function);

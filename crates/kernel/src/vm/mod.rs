@@ -121,10 +121,7 @@ pub enum ExecutionResult {
     /// Request dispatch of a new task as a fork
     DispatchFork(Option<Duration>, Option<Name>, Offset),
     /// Request dispatch of a builtin function with the given arguments.
-    ContinueBuiltin {
-        builtin: BuiltinId,
-        arguments: Vec<Var>,
-    },
+    ContinueBuiltin { builtin: BuiltinId, arguments: List },
     /// Request that this task be suspended for a duration of time.
     /// This leads to the task performing a commit, being suspended for a delay, and then being
     /// resumed under a new transaction.

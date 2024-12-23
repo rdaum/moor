@@ -36,9 +36,9 @@ use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag};
 use moor_values::tasks::SchedulerError::CommandExecutionError;
 use moor_values::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
 use moor_values::util::parse_into_words;
-use moor_values::Variant;
 use moor_values::SYSTEM_OBJECT;
 use moor_values::{v_obj, v_str, Symbol};
+use moor_values::{List, Variant};
 use moor_values::{Obj, Var};
 use rpc_common::DaemonToClientReply::{LoginResult, NewConnection};
 use rpc_common::{
@@ -869,7 +869,7 @@ impl RpcServer {
                 player,
                 &ObjectRef::Id(handler_object.clone()),
                 connected_verb,
-                vec![v_obj(player.clone())],
+                List::mk_list(&[v_obj(player.clone())]),
                 "".to_string(),
                 &SYSTEM_OBJECT,
                 session,
@@ -1038,7 +1038,7 @@ impl RpcServer {
             connection,
             object,
             verb,
-            args,
+            List::mk_list(&args),
             "".to_string(),
             &SYSTEM_OBJECT,
             session,

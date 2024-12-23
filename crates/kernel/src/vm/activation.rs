@@ -27,11 +27,11 @@ use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDef;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::util::BitEnum;
-use moor_values::NOTHING;
+use moor_values::Obj;
 use moor_values::{v_empty_list, v_int, v_obj, v_str, v_string, Var, VarType};
 use moor_values::{v_empty_str, Error};
-use moor_values::{v_list, Obj};
 use moor_values::{AsByteBuffer, Symbol};
+use moor_values::{List, NOTHING};
 
 use crate::vm::moo_frame::MooStackFrame;
 use crate::vm::vm_call::VerbProgram;
@@ -54,7 +54,7 @@ pub(crate) struct Activation {
     /// The object that is the 'player' role; that is, the active user of this task.
     pub(crate) player: Obj,
     /// The arguments to the verb or bf being called.
-    pub(crate) args: Vec<Var>,
+    pub(crate) args: List,
     /// The name of the verb that is currently being executed.
     pub(crate) verb_name: Symbol,
     /// The extended information about the verb that is currently being executed.
@@ -104,7 +104,7 @@ impl Decode for Activation {
             frame,
             this,
             player,
-            args,
+            args: List::mk_list(&args),
             verb_name,
             verbdef,
             permissions,
@@ -131,7 +131,7 @@ impl<'de> BorrowDecode<'de> for Activation {
             frame,
             this,
             player,
-            args,
+            args: List::mk_list(&args),
             verb_name,
             verbdef,
             permissions,
@@ -245,7 +245,7 @@ impl Activation {
             GlobalName::verb,
             v_str(verb_call_request.call.verb_name.as_str()),
         );
-        frame.set_global_variable(GlobalName::args, v_list(&verb_call_request.call.args));
+        frame.set_global_variable(GlobalName::args, verb_call_request.call.args.clone().into());
 
         // From the command, if any...
         if let Some(ref command) = verb_call_request.command {
@@ -337,7 +337,7 @@ impl Activation {
             verbdef,
             verb_name: *EVAL_SYMBOL,
             command: None,
-            args: vec![],
+            args: List::mk_list(&[]),
             permissions,
         }
     }
@@ -345,7 +345,7 @@ impl Activation {
     pub fn for_bf_call(
         bf_id: BuiltinId,
         bf_name: Symbol,
-        args: Vec<Var>,
+        args: List,
         _verb_flags: BitEnum<VerbFlag>,
         player: Obj,
     ) -> Self {
