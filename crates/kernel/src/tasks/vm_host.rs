@@ -28,7 +28,7 @@ use moor_compiler::Program;
 use moor_compiler::{compile, CompileOptions};
 use moor_values::model::{BinaryType, ObjFlag};
 use moor_values::model::{VerbDef, WorldState};
-use moor_values::tasks::{AbortLimitReason, Exception, TaskId};
+use moor_values::tasks::{AbortLimitReason, TaskId};
 use moor_values::Error::E_MAXREC;
 use moor_values::Obj;
 use moor_values::Var;
@@ -39,38 +39,15 @@ use crate::builtins::BuiltinRegistry;
 use crate::config::FeaturesConfig;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::tasks::vm_host::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::tasks::VerbCall;
 use crate::vm::activation::Frame;
 use crate::vm::moo_execute::moo_frame_execute;
-use crate::vm::vm_call::VerbProgram;
-use crate::vm::VmExecParams;
-use crate::vm::{ExecutionResult, Fork, VerbExecutionRequest};
+use crate::vm::vm_call::{VerbProgram, VmExecParams};
+use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
+use crate::vm::{ExecutionResult, Fork, VMHostResponse, VerbExecutionRequest};
 use crate::vm::{FinallyReason, VMExecState};
 use crate::PhantomUnsync;
 use moor_values::matching::command_parse::ParsedCommand;
-
-/// Return common from exec_interpreter back to the Task scheduler loop
-pub enum VMHostResponse {
-    /// Tell the task to just keep on letting us do what we're doing.
-    ContinueOk,
-    /// Tell the task to ask the scheduler to dispatch a fork request, and then resume execution.
-    DispatchFork(Fork),
-    /// Tell the task to suspend us.
-    Suspend(Option<Duration>),
-    /// Tell the task Johnny 5 needs input from the client (`read` invocation).
-    SuspendNeedInput,
-    /// Task timed out or exceeded ticks.
-    AbortLimit(AbortLimitReason),
-    /// Tell the task that execution has completed, and the task is successful.
-    CompleteSuccess(Var),
-    /// The VM aborted. (FinallyReason::Abort in MOO VM)
-    CompleteAbort,
-    /// The VM threw an exception. (FinallyReason::Uncaught in MOO VM)
-    CompleteException(Exception),
-    /// A rollback-retry was requested.
-    RollbackRetry,
-}
 
 /// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.
 pub struct VmHost {
@@ -271,7 +248,7 @@ impl VmHost {
                     result = self.vm_exec_state.unwind_stack(fr);
                     continue;
                 }
-                ExecutionResult::Pass(pass_args) => {
+                ExecutionResult::DispatchVerbPass(pass_args) => {
                     result = self
                         .vm_exec_state
                         .prepare_pass_verb(world_state, &pass_args);
@@ -310,7 +287,7 @@ impl VmHost {
                     self.vm_exec_state.exec_call_request(call_request);
                     return ContinueOk;
                 }
-                ExecutionResult::PerformEval {
+                ExecutionResult::DispatchEval {
                     permissions,
                     player,
                     program,
@@ -319,7 +296,7 @@ impl VmHost {
                         .exec_eval_request(&permissions, &player, program);
                     return ContinueOk;
                 }
-                ExecutionResult::ContinueBuiltin {
+                ExecutionResult::DispatchBuiltin {
                     builtin: bf_offset,
                     arguments: args,
                 } => {
@@ -335,7 +312,7 @@ impl VmHost {
                     );
                     continue;
                 }
-                ExecutionResult::DispatchFork(delay, task_id, fv_offset) => {
+                ExecutionResult::TaskStartFork(delay, task_id, fv_offset) => {
                     let a = self.vm_exec_state.top().clone();
                     let parent_task_id = self.vm_exec_state.task_id;
                     let new_activation = a.clone();
@@ -350,10 +327,10 @@ impl VmHost {
                     };
                     return DispatchFork(fork_request);
                 }
-                ExecutionResult::Suspend(delay) => {
+                ExecutionResult::TaskSuspend(delay) => {
                     return Suspend(delay);
                 }
-                ExecutionResult::NeedInput => {
+                ExecutionResult::TaskNeedInput => {
                     return VMHostResponse::SuspendNeedInput;
                 }
                 ExecutionResult::Complete(a) => {
@@ -376,7 +353,7 @@ impl VmHost {
                         }
                     };
                 }
-                ExecutionResult::RollbackRestart => {
+                ExecutionResult::TaskRollbackRestart => {
                     trace!(task_id, "Task rollback-restart");
                     return VMHostResponse::RollbackRetry;
                 }

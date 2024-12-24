@@ -140,8 +140,9 @@ pub mod vm_test_utils {
     use crate::builtins::BuiltinRegistry;
     use crate::config::FeaturesConfig;
     use crate::tasks::sessions::Session;
-    use crate::tasks::vm_host::{VMHostResponse, VmHost};
+    use crate::tasks::vm_host::VmHost;
     use crate::tasks::VerbCall;
+    use crate::vm::VMHostResponse;
     use moor_values::tasks::Exception;
 
     pub type ExecResult = Result<Var, Exception>;

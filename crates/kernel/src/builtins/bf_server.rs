@@ -400,7 +400,7 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Some(Duration::from_secs_f64(seconds))
     };
 
-    Ok(VmInstr(ExecutionResult::Suspend(seconds)))
+    Ok(VmInstr(ExecutionResult::TaskSuspend(seconds)))
 }
 bf_declare!(suspend, bf_suspend);
 
@@ -428,7 +428,7 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 
-    Ok(VmInstr(ExecutionResult::NeedInput))
+    Ok(VmInstr(ExecutionResult::TaskNeedInput))
 }
 bf_declare!(read, bf_read);
 
@@ -669,7 +669,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .ok_or(BfErr::Code(E_ARGS))?;
 
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
-    Ok(VmInstr(ExecutionResult::ContinueBuiltin {
+    Ok(VmInstr(ExecutionResult::DispatchBuiltin {
         builtin,
         arguments: arguments.clone(),
     }))
@@ -946,7 +946,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             bf_frame.bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);
             // Now we have to construct things to set up for eval. Which means tramping through with a
             // setup-for-eval result here.
-            Ok(VmInstr(ExecutionResult::PerformEval {
+            Ok(VmInstr(ExecutionResult::DispatchEval {
                 permissions: bf_args.task_perms_who(),
                 player: bf_args.exec_state.top().player.clone(),
                 program,

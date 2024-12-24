@@ -17,7 +17,6 @@
 //! Aims to be semantically identical, so as to be able to run existing LambdaMOO compatible cores
 //! without blocking issues.
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use bincode::{Decode, Encode};
@@ -27,14 +26,12 @@ use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
 use moor_values::matching::command_parse::ParsedCommand;
 use moor_values::model::VerbDef;
+use moor_values::tasks::{AbortLimitReason, Exception};
 use moor_values::{Error, List, Obj, Symbol, Var};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 
 // Exports to the rest of the kernel
-use crate::builtins::BuiltinRegistry;
-use crate::config::FeaturesConfig;
-use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;
 
@@ -47,6 +44,77 @@ pub(crate) mod vm_unwind;
 mod moo_frame;
 #[cfg(test)]
 mod vm_test;
+
+/// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
+#[derive(Debug, Clone)]
+pub enum ExecutionResult {
+    /// All is well. The task should let the VM continue executing.
+    More,
+    /// Execution of this stack frame is complete with a return value.
+    Complete(Var),
+    /// An error occurred during execution, that we might need to push to the stack and
+    /// potentially resume or unwind, depending on the context.
+    PushError(Error),
+    /// An error occurred during execution, that should definitely be treated as a proper "raise"
+    /// and unwind event unless there's a catch handler in place
+    RaiseError(Error),
+    /// An explicit stack unwind (for a reason other than a return.)
+    Unwind(FinallyReason),
+    /// Explicit return, unwind stack
+    Return(Var),
+    /// An exception was raised during execution.
+    Exception(FinallyReason),
+    /// Create the frames necessary to perform a `pass` up the inheritance chain.
+    DispatchVerbPass(List),
+    /// Begin preparing to call a verb, by looking up the verb and preparing the dispatch.
+    PrepareVerbDispatch {
+        this: Var,
+        verb_name: Symbol,
+        args: List,
+    },
+    /// Perform the verb dispatch, building the stack frame and executing it.
+    DispatchVerb {
+        /// The applicable permissions context.
+        permissions: Obj,
+        /// The requested verb.
+        resolved_verb: VerbDef,
+        /// And its binary
+        binary: Bytes,
+        /// The call parameters that were used to resolve the verb.
+        call: VerbCall,
+        /// The parsed user command that led to this verb dispatch, if any.
+        command: Option<ParsedCommand>,
+    },
+    /// Request `eval` execution, which is a kind of special activation creation where we've already
+    /// been given the program to execute instead of having to look it up.
+    DispatchEval {
+        /// The permissions context for the eval.
+        permissions: Obj,
+        /// The player who is performing the eval.
+        player: Obj,
+        /// The program to execute.
+        program: Program,
+    },
+    /// Request dispatch of a builtin function with the given arguments.
+    DispatchBuiltin { builtin: BuiltinId, arguments: List },
+    /// Request start of a new task as a fork, at a given offset into the fork vector of the
+    /// current program. If the duration is None, the task should be started immediately, otherwise
+    /// it should be scheduled to start after the given delay.
+    /// If a Name is provided, the task ID of the new task should be stored in the variable with
+    /// that in the parent activation.
+    TaskStartFork(Option<Duration>, Option<Name>, Offset),
+    /// Request that this task be suspended for a duration of time.
+    /// This leads to the task performing a commit, being suspended for a delay, and then being
+    /// resumed under a new transaction.
+    /// If the duration is None, then the task is suspended indefinitely, until it is killed or
+    /// resumed using `resume()` or `kill_task()`.
+    TaskSuspend(Option<Duration>),
+    /// Request input from the client.
+    TaskNeedInput,
+    /// Rollback the current transaction and restart the task in a new transaction.
+    /// This can happen when a conflict occurs during execution, independent of a commit.
+    TaskRollbackRestart,
+}
 
 /// The set of parameters for a VM-requested fork.
 #[derive(Debug, Clone, Encode, Decode)]
@@ -71,76 +139,24 @@ pub struct Fork {
     pub task_id: Option<Name>,
 }
 
-/// Represents the set of parameters passed to the VM for execution.
-pub struct VmExecParams {
-    pub task_scheduler_client: TaskSchedulerClient,
-    pub builtin_registry: Arc<BuiltinRegistry>,
-    pub max_stack_depth: usize,
-    pub config: FeaturesConfig,
-}
-
-#[derive(Debug, Clone)]
-pub enum ExecutionResult {
-    /// Execution of this call stack is complete.
-    Complete(Var),
-    /// An error occurred during execution, that we might need to push to the stack and
-    /// potentially resume or unwind, depending on the context.
-    PushError(Error),
-    /// An error occurred during execution, that should definitely be treated as a proper "raise"
-    /// and unwind event unless there's a catch handler in place
-    RaiseError(Error),
-    /// An explicit stack unwind (for a reason other than a return.
-    Unwind(FinallyReason),
-    /// Explicit return, unwind stack
-    Return(Var),
-    /// Create the frames necessary to perform a `pass` up the inheritance chain.
-    Pass(List),
-    /// All is well. The task should let the VM continue executing.
-    More,
-    /// An exception was raised during execution.
-    Exception(FinallyReason),
-    /// Begin preparing to call a verb, by looking up the verb and preparing the dispatch.
-    PrepareVerbDispatch {
-        this: Var,
-        verb_name: Symbol,
-        args: List,
-    },
-    /// Perform the verb dispatch, building the stack frame and executing it.
-    DispatchVerb {
-        /// The applicable permissions context.
-        permissions: Obj,
-        /// The requested verb.
-        resolved_verb: VerbDef,
-        /// And its binary
-        binary: Bytes,
-        /// The call parameters that were used to resolve the verb.
-        call: VerbCall,
-        /// The parsed user command that led to this verb dispatch, if any.
-        command: Option<ParsedCommand>,
-    },
-    /// Request dispatch of a new task as a fork
-    DispatchFork(Option<Duration>, Option<Name>, Offset),
-    /// Request dispatch of a builtin function with the given arguments.
-    ContinueBuiltin { builtin: BuiltinId, arguments: List },
-    /// Request that this task be suspended for a duration of time.
-    /// This leads to the task performing a commit, being suspended for a delay, and then being
-    /// resumed under a new transaction.
-    /// If the duration is None, then the task is suspended indefinitely, until it is killed or
-    /// resumed using `resume()` or `kill_task()`.
+/// Return common from exec_interpreter back to the Task scheduler loop
+pub enum VMHostResponse {
+    /// Tell the task to just keep on letting us do what we're doing.
+    ContinueOk,
+    /// Tell the task to ask the scheduler to dispatch a fork request, and then resume execution.
+    DispatchFork(Fork),
+    /// Tell the task to suspend us.
     Suspend(Option<Duration>),
-    /// Request input from the client.
-    NeedInput,
-    /// Request `eval` execution, which is a kind of special activation creation where we've already
-    /// been given the program to execute instead of having to look it up.
-    PerformEval {
-        /// The permissions context for the eval.
-        permissions: Obj,
-        /// The player who is performing the eval.
-        player: Obj,
-        /// The program to execute.
-        program: Program,
-    },
-    /// Rollback the current transaction and restart the task in a new transaction.
-    /// This can happen when a conflict occurs during execution, independent of a commit.
-    RollbackRestart,
+    /// Tell the task Johnny 5 needs input from the client (`read` invocation).
+    SuspendNeedInput,
+    /// Task timed out or exceeded ticks.
+    AbortLimit(AbortLimitReason),
+    /// Tell the task that execution has completed, and the task is successful.
+    CompleteSuccess(Var),
+    /// The VM aborted. (FinallyReason::Abort in MOO VM)
+    CompleteAbort,
+    /// The VM threw an exception. (FinallyReason::Uncaught in MOO VM)
+    CompleteException(Exception),
+    /// A rollback-retry was requested.
+    RollbackRetry,
 }

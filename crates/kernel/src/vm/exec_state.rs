@@ -35,10 +35,7 @@ pub struct Caller {
     pub line_number: usize,
 }
 
-/// Represents the state of VM execution.
-/// The actual "VM" remains stateless and could be potentially re-used for multiple tasks,
-/// and swapped out at each level of the activation stack for different runtimes.
-/// e.g. a MOO VM, a WASM VM, a JS VM, etc. but all having access to the same shared state.
+/// Represents the state of VM execution for a given task.
 #[derive(Encode, Decode)]
 pub struct VMExecState {
     /// The task ID of the task that for current stack of activations.
@@ -47,7 +44,7 @@ pub struct VMExecState {
     /// (For language runtimes that keep their own stack, this is simply the "entry" point
     ///  for the function invocation.)
     pub(crate) stack: Vec<Activation>,
-    /// The tick slice for the current execution.
+    /// The tick slice for the current/next execution.
     pub(crate) tick_slice: usize,
     /// The total number of ticks that the task is allowed to run.
     pub(crate) max_ticks: usize,

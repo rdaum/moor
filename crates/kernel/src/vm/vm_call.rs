@@ -25,13 +25,15 @@ use moor_values::{v_int, v_obj, Var};
 use moor_values::{Error, Sequence, Symbol, Variant, SYSTEM_OBJECT};
 use moor_values::{List, Obj};
 
-use crate::builtins::{BfCallState, BfErr, BfRet};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry};
+use crate::config::FeaturesConfig;
 use crate::tasks::sessions::Session;
+use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::tasks::VerbCall;
 use crate::vm::activation::{Activation, Frame};
 use crate::vm::vm_unwind::FinallyReason;
+use crate::vm::VMExecState;
 use crate::vm::{ExecutionResult, Fork};
-use crate::vm::{VMExecState, VmExecParams};
 use moor_values::matching::command_parse::ParsedCommand;
 
 lazy_static! {
@@ -70,6 +72,14 @@ pub enum VerbProgram {
     Moo(Program),
 }
 
+/// The set of parameters & utilities passed to the VM for execution of a given task.
+pub struct VmExecParams {
+    pub task_scheduler_client: TaskSchedulerClient,
+    pub builtin_registry: Arc<BuiltinRegistry>,
+    pub max_stack_depth: usize,
+    pub config: FeaturesConfig,
+}
+
 impl VMExecState {
     /// Entry point for dispatching a verb (method) call.
     /// Called from the VM execution loop for CallVerb opcodes.
@@ -88,7 +98,7 @@ impl VMExecState {
                 if !exec_params.config.type_dispatch {
                     return Err(E_TYPE);
                 }
-                // If the object is not an object of frob, it's a primitive.
+                // If the object is not an object or frob, it's a primitive.
                 // For primitives, we look at its type, and look for a
                 // sysprop that corresponds, then dispatch to that, with the object as the
                 // first argument.
@@ -161,7 +171,7 @@ impl VMExecState {
                     return self.push_error(E_PERM);
                 }
                 Err(WorldStateError::RollbackRetry) => {
-                    return ExecutionResult::RollbackRestart;
+                    return ExecutionResult::TaskRollbackRestart;
                 }
                 Err(WorldStateError::VerbPermissionDenied) => {
                     return self.push_error(E_PERM);
@@ -202,7 +212,7 @@ impl VMExecState {
         let parent = match world_state.parent_of(permissions, &definer) {
             Ok(parent) => parent,
             Err(WorldStateError::RollbackRetry) => {
-                return ExecutionResult::RollbackRestart;
+                return ExecutionResult::TaskRollbackRestart;
             }
             Err(e) => return self.raise_error(e.to_error_code()),
         };
@@ -215,7 +225,7 @@ impl VMExecState {
             match world_state.find_method_verb_on(permissions, &parent, verb) {
                 Ok(vi) => vi,
                 Err(WorldStateError::RollbackRetry) => {
-                    return ExecutionResult::RollbackRestart;
+                    return ExecutionResult::TaskRollbackRestart;
                 }
                 Err(e) => return self.raise_error(e.to_error_code()),
             };
@@ -328,7 +338,7 @@ impl VMExecState {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
             Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(e, msg, value),
-            Err(BfErr::Rollback) => ExecutionResult::RollbackRestart,
+            Err(BfErr::Rollback) => ExecutionResult::TaskRollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
         };
 
@@ -378,7 +388,7 @@ impl VMExecState {
             Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
             Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(e, msg, value),
 
-            Err(BfErr::Rollback) => ExecutionResult::RollbackRestart,
+            Err(BfErr::Rollback) => ExecutionResult::TaskRollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
         }
     }

@@ -601,14 +601,14 @@ pub fn moo_frame_execute(
                 }
                 let delay = (time != 0.0).then(|| Duration::from_secs_f64(time));
 
-                return ExecutionResult::DispatchFork(delay, *id, *fv_offset);
+                return ExecutionResult::TaskStartFork(delay, *id, *fv_offset);
             }
             Op::Pass => {
                 let args = f.pop();
                 let Variant::List(args) = args.variant() else {
                     return ExecutionResult::PushError(E_TYPE);
                 };
-                return ExecutionResult::Pass(args.clone());
+                return ExecutionResult::DispatchVerbPass(args.clone());
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
@@ -638,7 +638,7 @@ pub fn moo_frame_execute(
                 let Variant::List(args) = args.variant() else {
                     return ExecutionResult::PushError(E_ARGS);
                 };
-                return ExecutionResult::ContinueBuiltin {
+                return ExecutionResult::DispatchBuiltin {
                     builtin: *id,
                     arguments: args.iter().collect(),
                 };
