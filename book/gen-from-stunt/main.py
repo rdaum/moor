@@ -19,7 +19,8 @@ HEADER_RE: re.Pattern = re.compile("^#+ ")
 EXPLODE_SUBSECTIONS: list[str] = [
     "The ToastStunt Database",
     "The Built-in Command Parser",
-    "The MOO Programming Language"
+    "The MOO Programming Language",
+    "Built-in Functions",
 ]
 
 def main() -> int | None:
