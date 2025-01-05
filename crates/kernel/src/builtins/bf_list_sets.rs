@@ -1,3 +1,16 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
 // Copyright (C) 2024 Ryan Daum <ryan.daum@gmail.com>
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -17,7 +30,8 @@ use std::ops::BitOr;
 use moor_compiler::offset_for_builtin;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::{
-    v_empty_list, v_int, v_list, v_list_iter, v_string, IndexMode, Sequence, VarType,
+    v_empty_list, v_int, v_list, v_list_iter, v_map, v_str, v_string, IndexMode, List, Sequence,
+    Var, VarType,
 };
 use moor_values::{Error, Variant};
 use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
@@ -189,6 +203,10 @@ fn translate_pattern(pattern: &str) -> Option<String> {
 type Span = (isize, isize);
 type MatchSpans = (Span, Vec<Span>);
 
+/// Perform regex match using LambdaMOO's "legacy" regular expression support, which is based on
+/// pre-POSIX regexes.
+/// To do this, we use oniguruma, which is a modern regex library that supports these old-style
+/// regexes and a pile of other stuff.
 fn perform_regex_match(
     pattern: &str,
     subject: &str,
@@ -307,6 +325,133 @@ fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     do_re_match(bf_args, true)
 }
 bf_declare!(rmatch, bf_rmatch);
+
+/// Perform a PCRE match using oniguruma.
+/// If `map_support` is true, the return value is a list of maps, where each map contains the
+/// matched text and the start and end positions of the match.
+/// If `map_support` is false, the return value is a list of assoc-lists, where each assoc-list
+/// contains the matched text and the start and end positions of the match.
+/// If `case_matters` is true, the match is case-sensitive.
+/// If `repeat` is true, the match is repeated until no more matches are found.
+fn perform_pcre_match(
+    map_support: bool,
+    case_matters: bool,
+    re: &str,
+    target: &str,
+    repeat: bool,
+) -> List {
+    let options = if case_matters {
+        onig::RegexOptions::REGEX_OPTION_NONE
+    } else {
+        onig::RegexOptions::REGEX_OPTION_IGNORECASE
+    };
+
+    let syntax = onig::Syntax::perl();
+
+    let regex = onig::Regex::with_options(re, options, &syntax).unwrap();
+    let mut region = Region::new();
+    let mut matches = Vec::new();
+    let mut start = 0;
+    let end = target.len();
+    while let Some(_) = regex.search_with_options(
+        target,
+        start,
+        end,
+        SearchOptions::SEARCH_OPTION_NONE,
+        Some(&mut region),
+    ) {
+        if map_support {
+            let mut map = vec![];
+            for i in 0..region.len() {
+                let (start, end) = region.pos(i).unwrap();
+                let mut match_map = vec![];
+                match_map.push((v_str("match"), v_str(&target[start..end])));
+                match_map.push((
+                    v_str("position"),
+                    v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
+                ));
+                map.push((v_string(i.to_string()), v_map(&match_map)));
+            }
+            let map = v_map(&map);
+            matches.push(map);
+            start = region.pos(0).unwrap().1;
+        } else {
+            let mut assoc_list = vec![];
+            for i in 0..region.len() {
+                let (start, end) = region.pos(i).unwrap();
+                let mut match_list = vec![];
+                match_list.push(v_list(&[v_str("match"), v_str(&target[start..end])]));
+                match_list.push(v_list(&[
+                    v_str("position"),
+                    v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
+                ]));
+                assoc_list.push(v_list(&[v_string(i.to_string()), v_list(&match_list)]));
+            }
+            matches.push(v_list(&assoc_list));
+            start = region.pos(0).unwrap().1;
+        }
+        if !repeat {
+            break;
+        }
+    }
+
+    List::mk_list(&matches)
+}
+/*
+From Toast:
+
+Function: pcre_match
+
+pcre_match -- The function pcre_match() searches subject for pattern using the Perl Compatible Regular Expressions library.
+
+LIST pcre_match(STR subject, STR pattern [, ?case matters=0] [, ?repeat until no matches=1])
+
+The return value is a list of maps containing each match. Each returned map will have a key which corresponds to either a named capture group or
+ the number of the capture group being matched. The full match is always found in the key "0". The value of each key will be another map
+  containing the keys 'match' and 'position'. Match corresponds to the text that was matched and position will return the indices of the substring within subject.
+
+ In Moor, if maps features is disabled, the return is assoc-lists, which are lists of lists of two elements, the first being the key and the second being the value.
+
+ => {["0" -> ["match" -> "09/12/1999", "position" -> {1, 10}], "1" -> ["match" -> "09", "position" -> {1, 2}], "2" -> ["match" -> "12", "position" -> {4, 5}], "3" -> ["match" -> "1999", "position" -> {7, 10}]], ["0" -> ["match" -> "01/21/1952", "position" -> {30, 39}], "1" -> ["match" -> "01", "position" -> {30, 31}], "2" -> ["match" -> "21", "position" -> {33, 34}], "3" -> ["match" -> "1952", "position" -> {36, 39}]]}
+ */
+fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let (subject, pattern) = match (bf_args.args[0].variant(), bf_args.args[1].variant()) {
+        (Variant::Str(subject), Variant::Str(pattern)) => (subject, pattern),
+        _ => return Err(BfErr::Code(E_TYPE)),
+    };
+
+    let case_matters = if bf_args.args.len() >= 3 {
+        let Variant::Int(case_matters) = bf_args.args[2].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        *case_matters == 1
+    } else {
+        false
+    };
+
+    let repeat = if bf_args.args.len() == 4 {
+        let Variant::Int(repeat) = bf_args.args[3].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        *repeat == 1
+    } else {
+        true
+    };
+
+    let map_support = bf_args.config.map_type;
+    let result = perform_pcre_match(
+        map_support,
+        case_matters,
+        pattern.as_string(),
+        subject.as_string(),
+        repeat,
+    );
+    Ok(Ret(Var::from_variant(Variant::List(result))))
+}
+bf_declare!(pcre_match, bf_pcre_match);
 
 fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<String, Error> {
     // textual patterns of form %<int> (e.g. %1, %9, %11) are replaced by the text matched by the
@@ -436,11 +581,14 @@ pub(crate) fn register_bf_list_sets(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("match")] = Box::new(BfMatch {});
     builtins[offset_for_builtin("rmatch")] = Box::new(BfRmatch {});
     builtins[offset_for_builtin("substitute")] = Box::new(BfSubstitute {});
+    builtins[offset_for_builtin("pcre_match")] = Box::new(BfPcreMatch {});
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::builtins::bf_list_sets::{perform_regex_match, substitute};
+    use crate::builtins::bf_list_sets::{perform_pcre_match, perform_regex_match, substitute};
+    use moor_compiler::to_literal;
+    use moor_values::{v_int, v_list, v_map, v_str, Sequence, Var, Variant};
 
     #[test]
     fn test_match_substitute() {
@@ -549,5 +697,53 @@ mod tests {
     fn test_bug() {
         let problematic_regex = "^[]a-zA-Z0-9-%~`!@#$^&()=+{}[|';?/><.,]+$";
         perform_regex_match(problematic_regex, "foo", false, false).unwrap();
+    }
+
+    #[test]
+    fn test_pcre_match() {
+        // Example from toast manual:
+        //  pcre_match("09/12/1999 other random text 01/21/1952", "([0-9]{2})/([0-9]{2})/([0-9]{4})")
+        //  => {["0" -> ["match" -> "09/12/1999", "position" -> {1, 10}], "1" -> ["match" -> "09", "position" -> {1, 2}], "2" -> ["match" -> "12", "position" -> {4, 5}], "3" -> ["match" -> "1999", "position" -> {7, 10}]], ["0" -> ["match" -> "01/21/1952", "position" -> {30, 39}], "1" -> ["match" -> "01", "position" -> {30, 31}], "2" -> ["match" -> "21", "position" -> {33, 34}], "3" -> ["match" -> "1952", "position" -> {36, 39}]]}
+        let regex = "([0-9]{2})/([0-9]{2})/([0-9]{4})";
+        let target = "09/12/1999 other random text 01/21/1952";
+        let result = perform_pcre_match(true, false, regex, target, false);
+        let v = Var::from_variant(Variant::List(result));
+        let expected = v_list(&[v_map(&[
+            (
+                v_str("0"),
+                v_map(&[
+                    (v_str("match"), v_str("09/12/1999")),
+                    (v_str("position"), v_list(&[v_int(1), v_int(10)])),
+                ]),
+            ),
+            (
+                v_str("1"),
+                v_map(&[
+                    (v_str("match"), v_str("09")),
+                    (v_str("position"), v_list(&[v_int(1), v_int(2)])),
+                ]),
+            ),
+            (
+                v_str("2"),
+                v_map(&[
+                    (v_str("match"), v_str("12")),
+                    (v_str("position"), v_list(&[v_int(4), v_int(5)])),
+                ]),
+            ),
+            (
+                v_str("3"),
+                v_map(&[
+                    (v_str("match"), v_str("1999")),
+                    (v_str("position"), v_list(&[v_int(7), v_int(10)])),
+                ]),
+            ),
+        ])]);
+        assert_eq!(
+            v,
+            expected,
+            "Expected: \n{}\nGot: \n{}",
+            to_literal(&expected),
+            to_literal(&v)
+        );
     }
 }
