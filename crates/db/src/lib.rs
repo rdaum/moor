@@ -11,20 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Copyright (C) 2024 Ryan Daum <ryan.daum@gmail.com>
-//
-// This program is free software: you can redistribute it and/or modify it under
-// the terms of the GNU General Public License as published by the Free Software
-// Foundation, version 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-//
-
 use bytes::Bytes;
 use moor_values::model::WorldStateSource;
 use moor_values::model::{WorldState, WorldStateError};
@@ -53,7 +39,7 @@ mod config;
 mod tx;
 
 pub use tx::Provider;
-pub use tx::{Error, TransactionalCache, Timestamp, TransactionalTable, Tx, WorkingSet};
+pub use tx::{Error, Timestamp, TransactionalCache, TransactionalTable, Tx, WorkingSet};
 
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;

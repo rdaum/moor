@@ -11,20 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Copyright (C) 2024 Ryan Daum <ryan.daum@gmail.com>
-//
-// This program is free software: you can redistribute it and/or modify it under
-// the terms of the GNU General Public License as published by the Free Software
-// Foundation, version 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-//
-
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_values::Symbol;
@@ -318,13 +304,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Typed(TYPE_STR), Typed(TYPE_LIST)],
             implemented: true,
         },
-	Builtin {
-	    name: Symbol::mk("pcre_match"),
-	    min_args: Q(2),
-	    max_args: Q(4),
+        Builtin {
+            name: Symbol::mk("pcre_match"),
+            min_args: Q(2),
+            max_args: Q(4),
             types: vec![Typed(TYPE_STR), Typed(TYPE_STR), Any],
-            implemented: true,    
-	},
+            implemented: true,
+        },
         Builtin {
             name: Symbol::mk("crypt"),
             min_args: Q(1),

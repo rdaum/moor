@@ -11,24 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Copyright (C) 2024 Ryan Daum <ryan.daum@gmail.com>
-//
-// This program is free software: you can redistribute it and/or modify it under
-// the terms of the GNU General Public License as published by the Free Software
-// Foundation, version 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-//
-
 use crate::config::DatabaseConfig;
 use crate::db_transaction::DbTransaction;
 use crate::fjall_provider::FjallProvider;
-use crate::tx::{TransactionalCache, SizedCache, Timestamp, Tx, WorkingSet};
+use crate::tx::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
 use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
@@ -43,7 +29,8 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tracing::warn;
 
-type GC<Domain, Codomain> = Arc<TransactionalCache<Domain, Codomain, FjallProvider<Domain, Codomain>>>;
+type GC<Domain, Codomain> =
+    Arc<TransactionalCache<Domain, Codomain, FjallProvider<Domain, Codomain>>>;
 
 pub(crate) struct WorkingSets {
     #[allow(dead_code)]
