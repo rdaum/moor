@@ -12,6 +12,8 @@ rust-version.workspace = true
 description = "Interfaces for describing the worldstate of a moor database"
 
 [dev-dependencies]
+edn-format.workspace = true
+eyre.workspace = true
 tempfile.workspace = true
 
 [dependencies]

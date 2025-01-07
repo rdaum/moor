@@ -1666,6 +1666,8 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "crossbeam-channel",
+ "edn-format",
+ "eyre",
  "fjall",
  "indexmap",
  "lazy_static",

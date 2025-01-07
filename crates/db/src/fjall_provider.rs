@@ -86,7 +86,7 @@ where
         let Some(result) = self
             .fjall_partition
             .get(key)
-            .map_err(|_| Error::RetrievalFailure)?
+            .map_err(|e| Error::RetrievalFailure(e.to_string()))?
         else {
             return Ok(None);
         };
@@ -100,7 +100,7 @@ where
         let value = encode::<Codomain>(timestamp, codomain)?;
         self.fjall_partition
             .insert(key, value)
-            .map_err(|_| Error::StorageFailure)?;
+            .map_err(|e| Error::StorageFailure(e.to_string()))?;
         Ok(())
     }
 
@@ -108,7 +108,7 @@ where
         let key = domain.as_bytes().map_err(|_| Error::EncodingFailure)?;
         self.fjall_partition
             .remove(key)
-            .map_err(|_| Error::StorageFailure)?;
+            .map_err(|e| Error::StorageFailure(e.to_string()))?;
         Ok(())
     }
 
@@ -118,7 +118,7 @@ where
     {
         let mut result = Vec::new();
         for entry in self.fjall_partition.iter() {
-            let (key, value) = entry.map_err(|_| Error::RetrievalFailure)?;
+            let (key, value) = entry.map_err(|e| Error::RetrievalFailure(e.to_string()))?;
             let size = key.len() + value.len();
             let domain = Domain::from_bytes(key.into()).map_err(|_| Error::EncodingFailure)?;
             let (ts, codomain) = decode::<Codomain>(value)?;

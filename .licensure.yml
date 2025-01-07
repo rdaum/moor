@@ -53,4 +53,4 @@ excludes:
   - LICENSE.*
   - Dockerfile
   - core
-  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot)
+  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn)

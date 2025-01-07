@@ -28,7 +28,7 @@
 use crate::config::DatabaseConfig;
 use crate::db_transaction::DbTransaction;
 use crate::fjall_provider::FjallProvider;
-use crate::tx::{GlobalCache, SizedCache, Timestamp, Tx, WorkingSet};
+use crate::tx::{TransactionalCache, SizedCache, Timestamp, Tx, WorkingSet};
 use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
@@ -43,7 +43,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tracing::warn;
 
-type GC<Domain, Codomain> = Arc<GlobalCache<Domain, Codomain, FjallProvider<Domain, Codomain>>>;
+type GC<Domain, Codomain> = Arc<TransactionalCache<Domain, Codomain, FjallProvider<Domain, Codomain>>>;
 
 pub(crate) struct WorkingSets {
     #[allow(dead_code)]
@@ -190,84 +190,84 @@ impl WorldStateDB {
         let object_propflags = FjallProvider::new(object_propflags);
 
         let default_cache_eviction_threshold = config.default_eviction_threshold;
-        let object_location = Arc::new(GlobalCache::new(
+        let object_location = Arc::new(TransactionalCache::new(
             Arc::new(object_location),
             config
                 .object_location
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_contents = Arc::new(GlobalCache::new(
+        let object_contents = Arc::new(TransactionalCache::new(
             Arc::new(object_contents),
             config
                 .object_contents
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_flags = Arc::new(GlobalCache::new(
+        let object_flags = Arc::new(TransactionalCache::new(
             Arc::new(object_flags),
             config
                 .object_flags
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_parent = Arc::new(GlobalCache::new(
+        let object_parent = Arc::new(TransactionalCache::new(
             Arc::new(object_parent),
             config
                 .object_parent
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_children = Arc::new(GlobalCache::new(
+        let object_children = Arc::new(TransactionalCache::new(
             Arc::new(object_children),
             config
                 .object_children
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_owner = Arc::new(GlobalCache::new(
+        let object_owner = Arc::new(TransactionalCache::new(
             Arc::new(object_owner),
             config
                 .object_owner
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_name = Arc::new(GlobalCache::new(
+        let object_name = Arc::new(TransactionalCache::new(
             Arc::new(object_name),
             config
                 .object_name
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_verbdefs = Arc::new(GlobalCache::new(
+        let object_verbdefs = Arc::new(TransactionalCache::new(
             Arc::new(object_verbdefs),
             config
                 .object_verbdefs
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_verbs = Arc::new(GlobalCache::new(
+        let object_verbs = Arc::new(TransactionalCache::new(
             Arc::new(object_verbs),
             config
                 .object_verbs
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_propdefs = Arc::new(GlobalCache::new(
+        let object_propdefs = Arc::new(TransactionalCache::new(
             Arc::new(object_propdefs),
             config
                 .object_propdefs
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_propvalues = Arc::new(GlobalCache::new(
+        let object_propvalues = Arc::new(TransactionalCache::new(
             Arc::new(object_propvalues),
             config
                 .object_propvalues
                 .cache_eviction_threshold
                 .unwrap_or(default_cache_eviction_threshold),
         ));
-        let object_propflags = Arc::new(GlobalCache::new(
+        let object_propflags = Arc::new(TransactionalCache::new(
             Arc::new(object_propflags),
             config
                 .object_propflags

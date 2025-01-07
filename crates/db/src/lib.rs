@@ -52,6 +52,9 @@ pub use worldstate_tests::*;
 mod config;
 mod tx;
 
+pub use tx::Provider;
+pub use tx::{Error, TransactionalCache, Timestamp, TransactionalTable, Tx, WorkingSet};
+
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
 }

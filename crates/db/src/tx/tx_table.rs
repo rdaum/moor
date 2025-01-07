@@ -11,31 +11,30 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Copyright (C) 2024 Ryan Daum <ryan.daum@gmail.com>
-//
-// This program is free software: you can redistribute it and/or modify it under
-// the terms of the GNU General Public License as published by the Free Software
-// Foundation, version 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-//
-
-use crate::tx::{Error, Timestamp, Tx};
+use crate::tx::{Canonical, Error, Timestamp, Tx};
 use indexmap::IndexMap;
 use std::cell::RefCell;
 use std::hash::Hash;
 use std::sync::Arc;
 
-pub(crate) trait Canonical<Domain, Codomain> {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error>;
-    fn scan<F>(&self, f: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
-    where
-        F: Fn(&Domain, &Codomain) -> bool;
+/// A key-value caching store that is scoped for the lifetime of a transaction.
+/// When the transaction is completed, it collapses into a WorkingSet which can be applied to the
+/// global transactional cache.
+pub struct TransactionalTable<Domain, Codomain, Source>
+where
+    Source: Canonical<Domain, Codomain>,
+    Domain: Hash + Eq,
+    Codomain: Clone,
+{
+    tx: Tx,
+
+    // Note: This is RefCell for interior mutability so that the signatures for the public methods
+    // can be immutable references.
+    // TODO: this is a product of WorldState having immutable &self method signatures, which is
+    //   a historical artifact. We should be able to work through and refactor
+    index: RefCell<IndexMap<Domain, Entry<Codomain>>>,
+
+    backing_source: Arc<Source>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -54,7 +53,7 @@ pub(crate) enum DatumSource {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub(crate) struct Op<Datum: Clone> {
+pub struct Op<Datum: Clone> {
     pub(crate) read_ts: Timestamp,
     pub(crate) write_ts: Timestamp,
     pub(crate) source: DatumSource,
@@ -71,25 +70,13 @@ pub(crate) enum Entry<Datum: Clone> {
 
 pub type WorkingSet<Domain, Codomain> = Vec<(Domain, Op<Codomain>)>;
 
-pub struct TransactionalTable<Domain, Codomain, Source>
-where
-    Source: Canonical<Domain, Codomain>,
-    Domain: Hash + Eq,
-    Codomain: Clone,
-{
-    tx: Tx,
-    index: RefCell<IndexMap<Domain, Entry<Codomain>>>,
-
-    backing_source: Arc<Source>,
-}
-
 impl<Domain, Codomain, Source> TransactionalTable<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
     Domain: Clone + Hash + Eq,
     Codomain: Clone,
 {
-    pub(crate) fn new(
+    pub fn new(
         tx: Tx,
         backing_source: Arc<Source>,
     ) -> TransactionalTable<Domain, Codomain, Source> {
@@ -100,6 +87,7 @@ where
         }
     }
 
+    /// Preseed the cache with a set of tuples.
     pub(crate) fn preseed(&mut self, tuples: &[(Timestamp, Domain, Codomain)]) {
         let index = self.index.get_mut();
         for (ts, domain, value) in tuples {
@@ -117,7 +105,6 @@ where
         }
     }
 
-    #[allow(dead_code)]
     pub fn insert(&self, domain: Domain, value: Codomain) -> Result<(), Error> {
         let mut index = self.index.borrow_mut();
 
@@ -175,7 +162,6 @@ where
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn update(&self, domain: &Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
         let mut index = self.index.borrow_mut();
 

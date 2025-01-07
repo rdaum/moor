@@ -11,39 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Copyright (C) 2024 Ryan Daum <ryan.daum@gmail.com>
-//
-// This program is free software: you can redistribute it and/or modify it under
-// the terms of the GNU General Public License as published by the Free Software
-// Foundation, version 3.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see <https://www.gnu.org/licenses/>.
-//
-
 //! Global cache is a cache that acts as an origin for all local caches.
 
-use crate::tx::tx_table::{Canonical, OpType, TransactionalTable, WorkingSet};
-use crate::tx::{Error, Timestamp, Tx};
+use crate::tx::tx_table::{OpType, TransactionalTable, WorkingSet};
+use crate::tx::{Canonical, Error, Provider, SizedCache, Timestamp, Tx};
 use indexmap::IndexMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex, MutexGuard};
-
-pub trait Provider<Domain, Codomain> {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error>;
-    fn put(&self, timestamp: Timestamp, domain: Domain, codomain: Codomain) -> Result<(), Error>;
-    fn del(&self, timestamp: Timestamp, domain: &Domain) -> Result<(), Error>;
-
-    /// Scan the database for all keys match the given predicate
-    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
-    where
-        F: Fn(&Domain, &Codomain) -> bool;
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Datum<T: Clone + PartialEq> {
@@ -59,7 +34,7 @@ struct Entry<T: Clone + PartialEq> {
     size_bytes: usize,
 }
 
-pub struct GlobalCache<Domain, Codomain, Source>
+pub struct TransactionalCache<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
     Domain: Hash + PartialEq + Eq + Clone,
@@ -73,13 +48,13 @@ where
     source: Arc<Source>,
 }
 
-impl<Domain, Codomain, MyProvider> GlobalCache<Domain, Codomain, MyProvider>
+impl<Domain, Codomain, Source> TransactionalCache<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
-    MyProvider: Provider<Domain, Codomain>,
+    Source: Provider<Domain, Codomain>,
 {
-    pub(crate) fn new(provider: Arc<MyProvider>, threshold_bytes: usize) -> Self {
+    pub fn new(provider: Arc<Source>, threshold_bytes: usize) -> Self {
         Self {
             preseed: HashSet::new(),
             index: Mutex::new(Inner {
@@ -93,12 +68,7 @@ where
     }
 }
 
-pub trait SizedCache {
-    fn process_cache_evictions(&self) -> (usize, usize);
-    fn cache_usage_bytes(&self) -> usize;
-}
-
-pub struct Inner<Domain, Codomain>
+struct Inner<Domain, Codomain>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
@@ -118,7 +88,14 @@ where
     threshold_bytes: usize,
 }
 
-impl<Domain, Codomain, Source> GlobalCache<Domain, Codomain, Source>
+/// Holds a lock on the cache while a transaction commit is in progress.
+/// (Just wraps the lock to avoid leaking the Inner type.)
+pub struct CacheLock<'a, Domain, Codomain>(MutexGuard<'a, Inner<Domain, Codomain>>)
+where
+    Domain: Hash + PartialEq + Eq + Clone,
+    Codomain: Clone + PartialEq + Eq;
+
+impl<Domain, Codomain, Source> TransactionalCache<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
     Domain: Hash + PartialEq + Eq + Clone,
@@ -129,7 +106,7 @@ where
         let lock = self.lock();
         let mut preseed_tuples = vec![];
         for d in &self.preseed {
-            if let Some(e) = lock.index.get(d) {
+            if let Some(e) = lock.0.index.get(d) {
                 match &e.datum {
                     Datum::Value(c) => {
                         preseed_tuples.push((e.ts, d.clone(), c.clone()));
@@ -142,11 +119,16 @@ where
         lc
     }
 
+    /// Check the cache for conflicts with the given working set.
+    /// Holds a lock on the cache while checking.
+    /// This is the first phase of transaction commit, and does not mutate the contents of
+    /// the cache.
     pub fn check<'a>(
         &self,
-        mut inner: MutexGuard<'a, Inner<Domain, Codomain>>,
+        mut cache_lock: CacheLock<'a, Domain, Codomain>,
         working_set: &WorkingSet<Domain, Codomain>,
-    ) -> Result<MutexGuard<'a, Inner<Domain, Codomain>>, Error> {
+    ) -> Result<CacheLock<'a, Domain, Codomain>, Error> {
+        let inner = &mut cache_lock.0;
         // Check phase first.
         for (domain, op) in working_set {
             // Check local to see if we have one first, to see if there's a conflict.
@@ -174,23 +156,18 @@ where
                 }
             }
         }
-        Ok(inner)
+        Ok(cache_lock)
     }
 
-    pub fn lock(&self) -> MutexGuard<Inner<Domain, Codomain>> {
-        self.index.lock().unwrap()
-    }
-
-    #[allow(dead_code)]
-    pub fn cache_usage_bytes(&self) -> usize {
-        self.index.lock().unwrap().used_bytes
-    }
-
+    /// Apply the given working set to the cache.
+    /// This is the final phase of the transaction commit process, and mutates the cache and
+    /// requests mutation into the Source.
     pub fn apply<'a>(
         &self,
-        mut inner: MutexGuard<'a, Inner<Domain, Codomain>>,
+        mut lock: CacheLock<'a, Domain, Codomain>,
         working_set: WorkingSet<Domain, Codomain>,
-    ) -> Result<MutexGuard<'a, Inner<Domain, Codomain>>, Error> {
+    ) -> Result<CacheLock<'a, Domain, Codomain>, Error> {
+        let inner = &mut lock.0;
         // Apply phase.
         for (domain, op) in working_set {
             match op.to_type {
@@ -206,12 +183,22 @@ where
                 _ => continue,
             }
         }
-        Ok(inner)
+        Ok(lock)
     }
 
+    pub fn lock(&self) -> CacheLock<Domain, Codomain> {
+        CacheLock(self.index.lock().unwrap())
+    }
+
+    #[allow(dead_code)]
+    pub fn cache_usage_bytes(&self) -> usize {
+        self.index.lock().unwrap().used_bytes
+    }
+
+    /// Scavenge the cache for victims that haven't been hit in the last round.
     pub fn process_cache_evictions(&self) -> (usize, usize) {
         let mut inner = self.lock();
-        inner.process_evictions()
+        inner.0.process_evictions()
     }
 }
 
@@ -314,7 +301,8 @@ where
     }
 }
 
-impl<Domain, Codomain, Source> Canonical<Domain, Codomain> for GlobalCache<Domain, Codomain, Source>
+impl<Domain, Codomain, Source> Canonical<Domain, Codomain>
+    for TransactionalCache<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
@@ -352,7 +340,7 @@ where
     }
 }
 
-impl<Domain, Codomain, Source> SizedCache for GlobalCache<Domain, Codomain, Source>
+impl<Domain, Codomain, Source> SizedCache for TransactionalCache<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
@@ -437,7 +425,7 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(GlobalCache {
+        let global_cache = Arc::new(TransactionalCache {
             preseed: HashSet::new(),
             index: Mutex::new(Inner {
                 index: IndexMap::new(),
@@ -462,7 +450,7 @@ mod tests {
         let lock = global_cache.check(lock, &ws).unwrap();
         let lock = global_cache.apply(lock, ws).unwrap();
         assert_eq!(
-            lock.index.get(&domain).unwrap().datum,
+            lock.0.index.get(&domain).unwrap().datum,
             Datum::Value(codomain.clone())
         );
     }
