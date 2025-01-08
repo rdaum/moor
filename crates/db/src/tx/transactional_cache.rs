@@ -133,8 +133,14 @@ where
         for (domain, op) in working_set {
             // Check local to see if we have one first, to see if there's a conflict.
             if let Some(local_entry) = inner.index.get(domain) {
+                // If what we have is an insert, and there's something already there, that's a
+                // a conflict.
+                if op.to_type == OpType::Insert {
+                    return Err(Error::Conflict);
+                }
+
                 let ts = local_entry.ts;
-                // If the ts there is greater than the read-ts in the update_op, that's a conflict
+                // If the ts there is greater than the read-ts of our own op, that's a conflict
                 // Someone got to it first.
                 if ts > op.read_ts {
                     return Err(Error::Conflict);
@@ -145,7 +151,10 @@ where
             // Otherwise, pull from upstream and fetch to cache and check for conflict.
             if let Some((ts, codomain, size_bytes)) = self.source.get(domain)? {
                 inner.insert_entry(ts, domain.clone(), codomain.clone(), size_bytes);
-                if ts > op.read_ts {
+
+                // If what we have is an insert, and there's something already there, that's also
+                // a conflict.
+                if op.to_type == OpType::Insert || ts > op.read_ts {
                     return Err(Error::Conflict);
                 }
             } else {
@@ -444,5 +453,41 @@ mod tests {
             lock.0.index.get(&domain).unwrap().datum,
             Datum::Value(codomain.clone())
         );
+    }
+
+    #[test]
+    fn test_serializable_initial_insert_conflict() {
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(0), TestCodomain(0));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let global_cache = Arc::new(TransactionalCache::new(provider, 2048));
+
+        let domain = TestDomain(1);
+        let codomain_a = TestCodomain(1);
+        let codomain_b = TestCodomain(2);
+
+        let tx_a = Tx { ts: Timestamp(0) };
+        let tx_b = Tx { ts: Timestamp(1) };
+
+        let lc_a = global_cache.clone().start(&tx_a);
+
+        lc_a.insert(domain.clone(), codomain_a).unwrap();
+        let lc_b = global_cache.clone().start(&tx_b);
+        lc_b.insert(domain.clone(), codomain_b).unwrap();
+        let ws_a = lc_a.working_set();
+        let ws_b = lc_b.working_set();
+        {
+            let lock_a = global_cache.lock();
+            let lock_a = global_cache.check(lock_a, &ws_a).unwrap();
+            let _lock_a = global_cache.apply(lock_a, ws_a).unwrap();
+        }
+        {
+            let lock_b = global_cache.lock();
+
+            // This should fail because the first insert has already happened.
+            let check_result = global_cache.check(lock_b, &ws_b);
+            assert!(matches!(check_result, Err(Error::Conflict)));
+        }
     }
 }
