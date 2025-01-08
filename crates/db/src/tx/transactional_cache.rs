@@ -425,16 +425,7 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache {
-            preseed: HashSet::new(),
-            index: Mutex::new(Inner {
-                index: IndexMap::new(),
-                evict_q: vec![],
-                used_bytes: 0,
-                threshold_bytes: 2048,
-            }),
-            source: provider,
-        });
+        let global_cache = Arc::new(TransactionalCache::new(provider, 2048));
 
         let domain = TestDomain(1);
         let codomain = TestCodomain(1);

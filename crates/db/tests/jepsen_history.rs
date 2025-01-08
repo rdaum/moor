@@ -137,7 +137,7 @@ pub fn parse_edn(path: &Path) -> Vec<Entry> {
 mod tests {
     use crate::{Operation, Type};
     use eyre::bail;
-    use moor_db::{Error, TransactionalCache, Provider, Timestamp, TransactionalTable, Tx};
+    use moor_db::{Error, Provider, Timestamp, TransactionalCache, TransactionalTable, Tx};
     use std::collections::HashMap;
     use std::path::Path;
     use std::sync::{Arc, Mutex};
@@ -218,7 +218,7 @@ mod tests {
         workload.sort_by(|a, b| a.index.cmp(&b.index));
 
         let mut tx_counter = 0;
-        for entry in workload {
+        for entry in &workload {
             match entry.r#type {
                 Type::Invoke => {
                     tx_counter += 1;
@@ -237,14 +237,14 @@ mod tests {
                     let (_tx, cache) = transactions.remove(&entry.process).unwrap();
 
                     // Perform the operations.
-                    for ops in entry.operations {
+                    for ops in &entry.operations {
                         match ops {
                             Operation::Append(key, value) => {
                                 // Read, append, set
-                                let key = TestDomain(key);
+                                let key = TestDomain(*key);
                                 let mut codomain =
                                     cache.get(&key).unwrap().unwrap_or(TestCodomain(vec![]));
-                                codomain.0.push(value);
+                                codomain.0.push(*value);
                                 cache
                                     .upsert(key, codomain)
                                     .map_err(|_| eyre::eyre!("append failed"))?;
@@ -253,7 +253,7 @@ mod tests {
                                 // Reads happen but we don't check them until the transaction is
                                 // committed. This is just to prime the cache and get the timestamps
                                 // doing the timestamping.
-                                let key = TestDomain(key);
+                                let key = TestDomain(*key);
                                 cache.get(&key).map_err(|_| eyre::eyre!("read failed"))?;
                             }
                         }
@@ -276,22 +276,22 @@ mod tests {
 
                     // Returns "false" if our _expected_ failure did not happen
                     let fail_check_fn = || {
-                        for ops in entry.operations {
+                        for ops in &entry.operations {
                             match ops {
                                 Operation::Read(key, expected) => {
-                                    let key = TestDomain(key);
+                                    let key = TestDomain(*key);
                                     let codomain = cache.get(&key).unwrap().map(|x| x.0);
-                                    if expected != codomain {
-                                        return true;
+                                    if *expected != codomain {
+                                        return Ok(());
                                     }
                                 }
                                 Operation::Append(key, value) => {
-                                    let key = TestDomain(key);
+                                    let key = TestDomain(*key);
                                     let codomain =
                                         cache.get(&key).unwrap().unwrap_or(TestCodomain(vec![]));
                                     // The appended value should *not* be in there
                                     if !codomain.0.contains(&value) {
-                                        return true;
+                                        return Ok(());
                                     }
                                 }
                             }
@@ -300,17 +300,18 @@ mod tests {
                         let lock = backing_store.lock();
                         let lock = match backing_store.check(lock, &ws) {
                             Err(Error::Conflict) => {
-                                return true;
+                                return Ok(());
                             }
                             Err(e) => panic!("unexpected error: {:?}", e),
                             Ok(lock) => lock,
                         };
-                        backing_store.apply(lock, ws).is_err()
+                        match backing_store.apply(lock, ws) {
+                            Ok(_) => bail!("Expected conflict, got none in {entry:?}"),
+                            Err(Error::Conflict) => return Ok(()),
+                            Err(e) => panic!("unexpected error: {:?}", e),
+                        }
                     };
-
-                    if !fail_check_fn() {
-                        bail!("Fail check failed, expected some kind of conflict, got none");
-                    }
+                    return fail_check_fn();
                 }
             }
         }
@@ -319,15 +320,14 @@ mod tests {
     #[test]
     fn test_run_serializable_workload() {
         // This is our "serializable" list append workload, generated by `jepsen` `history.sim`
-        // Note that we also have a ssi- strong-serializable workload file that currently fails.
-        let result = run_workload_check(Path::new("tests/si-list-append-dataset.edn"));
-        assert!(result.is_ok());
+        // Note that we also have a ssi- strict-serializable workload file that currently fails.
+        run_workload_check(Path::new("tests/si-list-append-dataset.edn")).unwrap();
     }
 
+    // This test is expected to fail, as we don't support strict-serializable transactions yet.
     #[test]
-    fn test_run_strong_serializable_workload() {
-        let result = run_workload_check(Path::new("tests/ssi-list-append-dataset.edn"));
-        // This workload is expected to fail, as we don't support strong serializability.
-        assert!(!result.is_ok());
+    #[ignore]
+    fn test_run_strict_serializable_workload() {
+        run_workload_check(Path::new("tests/ssi-list-append-dataset.edn")).unwrap();
     }
 }
