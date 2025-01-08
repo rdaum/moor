@@ -143,7 +143,7 @@ impl ConnectionsDB for ConnectionsFjall {
                 .client_player_table
                 .insert(
                     Uuid::from_u128(client_id).as_u128().to_le_bytes(),
-                    &to_oid_bytes,
+                    to_oid_bytes,
                 )
                 .expect("Unable to update client player table");
         }
@@ -192,7 +192,7 @@ impl ConnectionsDB for ConnectionsFjall {
         let oid_bytes = player_id.as_bytes().unwrap();
         inner
             .client_player_table
-            .insert(client_id.as_u128().to_le_bytes(), &oid_bytes)
+            .insert(client_id.as_u128().to_le_bytes(), oid_bytes.clone())
             .unwrap();
 
         let now = SystemTime::now();
@@ -218,7 +218,7 @@ impl ConnectionsDB for ConnectionsFjall {
             bincode::encode_to_vec(connections_record, *BINCODE_CONFIG).unwrap();
         inner
             .player_clients_table
-            .insert(&oid_bytes, &encoded_connected)
+            .insert(oid_bytes, &encoded_connected)
             .unwrap();
 
         Ok(player_id)
@@ -244,7 +244,7 @@ impl ConnectionsDB for ConnectionsFjall {
             bincode::encode_to_vec(connections_record.clone(), *BINCODE_CONFIG).unwrap();
         inner
             .player_clients_table
-            .insert(&oid_bytes, &encoded_connected)
+            .insert(oid_bytes, &encoded_connected)
             .unwrap();
 
         Ok(())
@@ -270,7 +270,7 @@ impl ConnectionsDB for ConnectionsFjall {
             bincode::encode_to_vec(connections_record.clone(), *BINCODE_CONFIG).unwrap();
         inner
             .player_clients_table
-            .insert(&oid_bytes, &encoded_connected)
+            .insert(oid_bytes, &encoded_connected)
             .unwrap();
 
         Ok(())
@@ -299,7 +299,7 @@ impl ConnectionsDB for ConnectionsFjall {
                 bincode::encode_to_vec(&connections_record, *BINCODE_CONFIG).unwrap();
             inner
                 .player_clients_table
-                .insert(&oid_bytes, &encoded_connected)
+                .insert(oid_bytes, &encoded_connected)
                 .unwrap();
         }
     }
@@ -399,7 +399,7 @@ impl ConnectionsDB for ConnectionsFjall {
             bincode::encode_to_vec(connections_record.clone(), *BINCODE_CONFIG).unwrap();
         inner
             .player_clients_table
-            .insert(&oid_bytes, &encoded_connected)
+            .insert(oid_bytes, &encoded_connected)
             .unwrap();
 
         Ok(())
