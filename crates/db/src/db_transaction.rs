@@ -144,7 +144,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(r.unwrap_or(NOTHING))
     }
 
-    fn set_object_owner(&self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
+    fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
         self.object_owner
             .upsert(obj.clone(), owner.clone())
             .map_err(|e| {
@@ -153,7 +153,11 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn set_object_flags(&self, obj: &Obj, flags: BitEnum<ObjFlag>) -> Result<(), WorldStateError> {
+    fn set_object_flags(
+        &mut self,
+        obj: &Obj,
+        flags: BitEnum<ObjFlag>,
+    ) -> Result<(), WorldStateError> {
         self.object_flags.upsert(obj.clone(), flags).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object flags: {:?}", e))
         })?;
@@ -170,7 +174,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(r.0)
     }
 
-    fn set_object_name(&self, obj: &Obj, name: String) -> Result<(), WorldStateError> {
+    fn set_object_name(&mut self, obj: &Obj, name: String) -> Result<(), WorldStateError> {
         self.object_name
             .upsert(obj.clone(), StringHolder(name))
             .map_err(|e| {
@@ -179,7 +183,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn create_object(&self, id: Option<Obj>, attrs: ObjAttrs) -> Result<Obj, WorldStateError> {
+    fn create_object(&mut self, id: Option<Obj>, attrs: ObjAttrs) -> Result<Obj, WorldStateError> {
         let id = match id {
             Some(id) => id,
             None => {
@@ -228,7 +232,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(id)
     }
 
-    fn recycle_object(&self, obj: &Obj) -> Result<(), WorldStateError> {
+    fn recycle_object(&mut self, obj: &Obj) -> Result<(), WorldStateError> {
         // First go through and move all objects that are in this object's contents to the
         // to #-1.  It's up to the caller here to execute :exitfunc on all of them before invoking
         // this method.
@@ -304,7 +308,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(r.unwrap_or(NOTHING))
     }
 
-    fn set_object_parent(&self, o: &Obj, new_parent: &Obj) -> Result<(), WorldStateError> {
+    fn set_object_parent(&mut self, o: &Obj, new_parent: &Obj) -> Result<(), WorldStateError> {
         // Steps for object re-parenting:
 
         // Get o's old-parents's children
@@ -497,7 +501,11 @@ impl WorldStateTransaction for DbTransaction {
         Ok(size)
     }
 
-    fn set_object_location(&self, what: &Obj, new_location: &Obj) -> Result<(), WorldStateError> {
+    fn set_object_location(
+        &mut self,
+        what: &Obj,
+        new_location: &Obj,
+    ) -> Result<(), WorldStateError> {
         // Detect recursive move
         let mut oid = new_location.clone();
         loop {
@@ -659,7 +667,7 @@ impl WorldStateTransaction for DbTransaction {
     }
 
     fn update_verb(
-        &self,
+        &mut self,
         obj: &Obj,
         uuid: Uuid,
         verb_attrs: VerbAttrs,
@@ -707,7 +715,7 @@ impl WorldStateTransaction for DbTransaction {
     }
 
     fn add_object_verb(
-        &self,
+        &mut self,
         oid: &Obj,
         owner: &Obj,
         names: Vec<Symbol>,
@@ -746,7 +754,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn delete_verb(&self, location: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
+    fn delete_verb(&mut self, location: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         let verbdefs = self.get_verbs(location)?;
         let verbdefs = verbdefs
             .with_removed(uuid)
@@ -773,7 +781,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(r.unwrap_or_else(PropDefs::empty))
     }
 
-    fn set_property(&self, obj: &Obj, uuid: Uuid, value: Var) -> Result<(), WorldStateError> {
+    fn set_property(&mut self, obj: &Obj, uuid: Uuid, value: Var) -> Result<(), WorldStateError> {
         self.object_propvalues
             .upsert(ObjAndUUIDHolder::new(obj, uuid), value)
             .map_err(|e| {
@@ -783,7 +791,7 @@ impl WorldStateTransaction for DbTransaction {
     }
 
     fn define_property(
-        &self,
+        &mut self,
         definer: &Obj,
         location: &Obj,
         name: Symbol,
@@ -852,7 +860,7 @@ impl WorldStateTransaction for DbTransaction {
     }
 
     fn update_property_info(
-        &self,
+        &mut self,
         obj: &Obj,
         uuid: Uuid,
         new_owner: Option<Obj>,
@@ -905,7 +913,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn clear_property(&self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
+    fn clear_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         // remove property value
         self.object_propvalues
             .delete(&ObjAndUUIDHolder::new(obj, uuid))
@@ -915,7 +923,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn delete_property(&self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
+    fn delete_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         // delete propdef from self and all descendants
         let descendants = self.descendants(obj)?;
         let locations = ObjSet::from_items(&[obj.clone()]).with_concatenated(descendants);

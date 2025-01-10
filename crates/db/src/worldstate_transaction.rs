@@ -53,29 +53,33 @@ pub trait WorldStateTransaction: Send {
     fn get_object_owner(&self, obj: &Obj) -> Result<Obj, WorldStateError>;
 
     /// Set the owner of the given object.
-    fn set_object_owner(&self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError>;
+    fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError>;
 
     /// Set the flags of an object.
-    fn set_object_flags(&self, obj: &Obj, flags: BitEnum<ObjFlag>) -> Result<(), WorldStateError>;
+    fn set_object_flags(
+        &mut self,
+        obj: &Obj,
+        flags: BitEnum<ObjFlag>,
+    ) -> Result<(), WorldStateError>;
 
     /// Get the name of the given object.
     fn get_object_name(&self, obj: &Obj) -> Result<String, WorldStateError>;
 
     /// Set the name of the given object.
-    fn set_object_name(&self, obj: &Obj, name: String) -> Result<(), WorldStateError>;
+    fn set_object_name(&mut self, obj: &Obj, name: String) -> Result<(), WorldStateError>;
 
     /// Create a new object, assigning it a new unique object id if one is not provided, and manage
     /// the property inheritance and ownership rules around the object.
-    fn create_object(&self, id: Option<Obj>, attrs: ObjAttrs) -> Result<Obj, WorldStateError>;
+    fn create_object(&mut self, id: Option<Obj>, attrs: ObjAttrs) -> Result<Obj, WorldStateError>;
 
     /// Destroy the given object, and restructure the property inheritance accordingly.
-    fn recycle_object(&self, obj: &Obj) -> Result<(), WorldStateError>;
+    fn recycle_object(&mut self, obj: &Obj) -> Result<(), WorldStateError>;
 
     /// Get the parent of the given object.
     fn get_object_parent(&self, obj: &Obj) -> Result<Obj, WorldStateError>;
 
     /// Set the parent of the given object, and restructure the property inheritance accordingly.
-    fn set_object_parent(&self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError>;
+    fn set_object_parent(&mut self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError>;
 
     /// Get the children of the given object.
     fn get_object_children(&self, obj: &Obj) -> Result<ObjSet, WorldStateError>;
@@ -90,7 +94,7 @@ pub trait WorldStateTransaction: Send {
     fn get_object_size_bytes(&self, obj: &Obj) -> Result<usize, WorldStateError>;
 
     /// Set the location of the given object.
-    fn set_object_location(&self, obj: &Obj, location: &Obj) -> Result<(), WorldStateError>;
+    fn set_object_location(&mut self, obj: &Obj, location: &Obj) -> Result<(), WorldStateError>;
 
     /// Get all the verb defined on the given object.
     fn get_verbs(&self, obj: &Obj) -> Result<VerbDefs, WorldStateError>;
@@ -115,7 +119,7 @@ pub trait WorldStateTransaction: Send {
 
     /// Update the provided attributes for the given verb.
     fn update_verb(
-        &self,
+        &mut self,
         obj: &Obj,
         uuid: Uuid,
         verb_attrs: VerbAttrs,
@@ -124,7 +128,7 @@ pub trait WorldStateTransaction: Send {
     /// Define a new verb on the given object.
     #[allow(clippy::too_many_arguments)]
     fn add_object_verb(
-        &self,
+        &mut self,
         location: &Obj,
         owner: &Obj,
         names: Vec<Symbol>,
@@ -135,17 +139,17 @@ pub trait WorldStateTransaction: Send {
     ) -> Result<(), WorldStateError>;
 
     /// Remove the given verb from the given object.
-    fn delete_verb(&self, location: &Obj, uuid: Uuid) -> Result<(), WorldStateError>;
+    fn delete_verb(&mut self, location: &Obj, uuid: Uuid) -> Result<(), WorldStateError>;
 
     /// Get the properties defined on the given object.
     fn get_properties(&self, obj: &Obj) -> Result<PropDefs, WorldStateError>;
 
     /// Set the property value on the given object.
-    fn set_property(&self, obj: &Obj, uuid: Uuid, value: Var) -> Result<(), WorldStateError>;
+    fn set_property(&mut self, obj: &Obj, uuid: Uuid, value: Var) -> Result<(), WorldStateError>;
 
     /// Define a new property on the given object, and propagate it to all children.
     fn define_property(
-        &self,
+        &mut self,
         definer: &Obj,
         location: &Obj,
         name: Symbol,
@@ -156,7 +160,7 @@ pub trait WorldStateTransaction: Send {
 
     /// Set the property info on the given object.
     fn update_property_info(
-        &self,
+        &mut self,
         obj: &Obj,
         uuid: Uuid,
         new_owner: Option<Obj>,
@@ -166,10 +170,10 @@ pub trait WorldStateTransaction: Send {
 
     /// "Clear" the local value of the property on the given object so that it inherits from its
     /// parent.
-    fn clear_property(&self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError>;
+    fn clear_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError>;
 
     /// Delete the property from the given object, and propagate the deletion to all children.
-    fn delete_property(&self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError>;
+    fn delete_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError>;
 
     /// Retrieve the value & owner of the property without following inheritance.
     /// If the value is 'clear', the value will be None,

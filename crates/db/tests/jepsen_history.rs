@@ -234,7 +234,7 @@ mod tests {
                 }
                 Type::Ok => {
                     // Get the working set for the transaction
-                    let (_tx, cache) = transactions.remove(&entry.process).unwrap();
+                    let (_tx, mut cache) = transactions.remove(&entry.process).unwrap();
 
                     // Perform the operations.
                     for ops in &entry.operations {

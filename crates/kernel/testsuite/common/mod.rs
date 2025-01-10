@@ -47,9 +47,9 @@ pub fn testsuite_dir() -> PathBuf {
 /// Create a minimal Db to support the test harness.
 #[allow(dead_code)]
 pub fn load_textdump(db: &dyn Database) {
-    let tx = db.loader_client().unwrap();
+    let mut tx = db.loader_client().unwrap();
     textdump_load(
-        tx.as_ref(),
+        tx.as_mut(),
         test_db_path(),
         Version::new(0, 1, 0),
         FeaturesConfig::default(),

@@ -574,7 +574,7 @@ pub(crate) fn register_bf_list_sets(builtins: &mut [Box<dyn BuiltinFunction>]) {
 mod tests {
     use crate::builtins::bf_list_sets::{perform_pcre_match, perform_regex_match, substitute};
     use moor_compiler::to_literal;
-    use moor_values::{v_int, v_list, v_map, v_str, Sequence, Var, Variant};
+    use moor_values::{v_int, v_list, v_map, v_str, Var, Variant};
 
     #[test]
     fn test_match_substitute() {

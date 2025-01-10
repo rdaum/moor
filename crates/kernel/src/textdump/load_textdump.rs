@@ -87,7 +87,7 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
 
 #[tracing::instrument(skip(ldr))]
 pub fn textdump_load(
-    ldr: &dyn LoaderInterface,
+    ldr: &mut dyn LoaderInterface,
     path: PathBuf,
     moor_version: Version,
     features_config: FeaturesConfig,
@@ -104,7 +104,7 @@ pub fn textdump_load(
 }
 
 pub fn read_textdump<T: io::Read>(
-    loader: &dyn LoaderInterface,
+    loader: &mut dyn LoaderInterface,
     reader: BufReader<T>,
     moo_version: Version,
     features_config: FeaturesConfig,

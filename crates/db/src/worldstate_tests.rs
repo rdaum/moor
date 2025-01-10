@@ -31,7 +31,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
     let oid = tx
         .create_object(
             None,
@@ -59,7 +59,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     // Force at 1.
     let oid = tx
@@ -77,7 +77,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     // Single parent/child relationship.
     let a = tx
@@ -155,7 +155,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -231,7 +231,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -319,7 +319,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -355,7 +355,7 @@ where
 
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
-    let tx = begin_tx();
+    let mut tx = begin_tx();
     assert_eq!(tx.get_object_location(&b).unwrap(), a);
     assert_eq!(tx.get_object_location(&c).unwrap(), a);
     let contents = tx.get_object_contents(&a).expect("Unable to get contents");
@@ -401,7 +401,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     let oid = tx
         .create_object(
@@ -435,7 +435,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
     let oid = tx
         .create_object(
             None,
@@ -497,7 +497,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -554,7 +554,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -646,7 +646,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
     let a = tx
         .create_object(
             None,
@@ -697,7 +697,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -757,7 +757,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -844,7 +844,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
 
     let a = tx
         .create_object(
@@ -902,7 +902,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
     let a = tx
         .create_object(
             None,
@@ -960,7 +960,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
     let a = tx
         .create_object(
             None,
@@ -1077,7 +1077,7 @@ where
     TX: WorldStateTransaction,
 {
     // Simple: property-less, #-1 located, #-1 parented object.
-    let tx = begin_tx();
+    let mut tx = begin_tx();
     let tobj = tx
         .create_object(
             None,
@@ -1207,7 +1207,7 @@ where
     F: Fn() -> TX,
     TX: WorldStateTransaction,
 {
-    let tx = begin_tx();
+    let mut tx = begin_tx();
     // Max object in a virgin DB should return #-1
     let max_obj = tx.get_max_object().unwrap();
     assert_eq!(max_obj, NOTHING);

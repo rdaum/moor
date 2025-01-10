@@ -63,6 +63,9 @@ where
         &self.tx
     }
 
+    pub(crate) fn get_tx_mut(&mut self) -> &mut dyn WorldStateTransaction {
+        &mut self.tx
+    }
     fn perms(&self, who: &Obj) -> Result<Perms, WorldStateError> {
         let flags = self.flags_of(who)?;
         Ok(Perms {
@@ -72,7 +75,7 @@ where
     }
 
     fn do_update_verb(
-        &self,
+        &mut self,
         obj: &Obj,
         perms: &Obj,
         verbdef: &VerbDef,
@@ -89,7 +92,8 @@ where
             return Err(WorldStateError::VerbPermissionDenied);
         }
 
-        self.get_tx().update_verb(obj, verbdef.uuid(), verb_attrs)?;
+        self.get_tx_mut()
+            .update_verb(obj, verbdef.uuid(), verb_attrs)?;
         Ok(())
     }
 
@@ -148,7 +152,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         let (flags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Write.into())?;
-        self.get_tx().set_object_flags(obj, new_flags)
+        self.get_tx_mut().set_object_flags(obj, new_flags)
     }
 
     fn location_of(&self, _perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {
@@ -175,7 +179,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         //    as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
         //    object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
         let attrs = ObjAttrs::new(owner.clone(), parent.clone(), NOTHING, flags, "");
-        self.get_tx().create_object(None, attrs)
+        self.get_tx_mut().create_object(None, attrs)
     }
 
     fn recycle_object(&mut self, perms: &Obj, obj: &Obj) -> Result<(), WorldStateError> {
@@ -183,7 +187,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Write.into())?;
 
-        self.get_tx().recycle_object(obj)
+        self.get_tx_mut().recycle_object(obj)
     }
 
     fn max_object(&self, _perms: &Obj) -> Result<Obj, WorldStateError> {
@@ -200,7 +204,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         self.perms(perms)?
             .check_object_allows(&owner, flags, ObjFlag::Write.into())?;
 
-        self.get_tx().set_object_location(obj, new_loc)
+        self.get_tx_mut().set_object_location(obj, new_loc)
     }
 
     fn contents_of(&self, _perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
@@ -332,7 +336,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         //   <prop-name>, as opposed to an inheritor of the property, then `clear_property()' raises
         //   `E_INVARG'
 
-        self.get_tx().update_property_info(
+        self.get_tx_mut().update_property_info(
             obj,
             pdef.uuid(),
             attrs.owner,
@@ -373,7 +377,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
                 let Variant::Str(name) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.get_tx()
+                self.get_tx_mut()
                     .set_object_name(obj, name.as_string().clone())?;
                 return Ok(());
             }
@@ -382,7 +386,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
                 let Variant::Obj(owner) = value.variant() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.get_tx().set_object_owner(obj, owner)?;
+                self.get_tx_mut().set_object_owner(obj, owner)?;
                 return Ok(());
             }
 
@@ -395,7 +399,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
                 } else {
                     flags.clear(ObjFlag::Read);
                 }
-                self.get_tx().set_object_flags(obj, flags)?;
+                self.get_tx_mut().set_object_flags(obj, flags)?;
                 return Ok(());
             }
 
@@ -408,7 +412,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
                 } else {
                     flags.clear(ObjFlag::Write);
                 }
-                self.get_tx().set_object_flags(obj, flags)?;
+                self.get_tx_mut().set_object_flags(obj, flags)?;
                 return Ok(());
             }
 
@@ -421,7 +425,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
                 } else {
                     flags.clear(ObjFlag::Fertile);
                 }
-                self.get_tx().set_object_flags(obj, flags)?;
+                self.get_tx_mut().set_object_flags(obj, flags)?;
                 return Ok(());
             }
         }
@@ -446,7 +450,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
                 }
             }
 
-            self.get_tx().set_object_flags(obj, flags)?;
+            self.get_tx_mut().set_object_flags(obj, flags)?;
             return Ok(());
         }
 
@@ -454,7 +458,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
 
-        self.get_tx()
+        self.get_tx_mut()
             .set_property(obj, pdef.uuid(), value.clone())?;
         Ok(())
     }
@@ -482,7 +486,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
-        self.get_tx().clear_property(obj, pdef.uuid())?;
+        self.get_tx_mut().clear_property(obj, pdef.uuid())?;
         Ok(())
     }
 
@@ -503,7 +507,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
             .check_object_allows(&objowner, flags, ObjFlag::Write.into())?;
         self.perms(perms)?.check_obj_owner_perms(propowner)?;
 
-        self.get_tx().define_property(
+        self.get_tx_mut().define_property(
             definer,
             location,
             pname,
@@ -533,7 +537,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
 
-        self.get_tx().delete_property(obj, pdef.uuid())
+        self.get_tx_mut().delete_property(obj, pdef.uuid())
     }
 
     fn add_verb(
@@ -551,7 +555,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         self.perms(perms)?
             .check_object_allows(&obj_owner, objflags, ObjFlag::Write.into())?;
 
-        self.get_tx()
+        self.get_tx_mut()
             .add_object_verb(obj, owner, names, binary, binary_type, flags, args)?;
         Ok(())
     }
@@ -564,7 +568,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Write)?;
 
-        self.get_tx().delete_verb(obj, vh.uuid())?;
+        self.get_tx_mut().delete_verb(obj, vh.uuid())?;
         Ok(())
     }
 
@@ -730,7 +734,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         self.perms(perms)?
             .check_object_allows(&owner, objflags, ObjFlag::Write.into())?;
 
-        self.get_tx().set_object_parent(obj, new_parent)
+        self.get_tx_mut().set_object_parent(obj, new_parent)
     }
 
     fn children_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {

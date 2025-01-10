@@ -108,11 +108,11 @@ fn main() -> Result<(), Report> {
         } else {
             info!("Loading textdump from {:?}", textdump);
             let start = std::time::Instant::now();
-            let loader_interface = database
+            let mut loader_interface = database
                 .loader_client()
                 .expect("Unable to get loader interface from database");
             textdump_load(
-                loader_interface.as_ref(),
+                loader_interface.as_mut(),
                 textdump.clone(),
                 version.clone(),
                 config.features_config.clone(),

@@ -34,20 +34,24 @@ use crate::worldstate_transaction::WorldStateTransaction;
 
 /// A loader client which uses a database transaction to load the world state.
 impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
-    fn create_object(&self, objid: Option<Obj>, attrs: &ObjAttrs) -> Result<Obj, WorldStateError> {
-        self.get_tx().create_object(objid, attrs.clone())
+    fn create_object(
+        &mut self,
+        objid: Option<Obj>,
+        attrs: &ObjAttrs,
+    ) -> Result<Obj, WorldStateError> {
+        self.get_tx_mut().create_object(objid, attrs.clone())
     }
-    fn set_object_parent(&self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError> {
-        self.get_tx().set_object_parent(obj, parent)
+    fn set_object_parent(&mut self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError> {
+        self.get_tx_mut().set_object_parent(obj, parent)
     }
-    fn set_object_location(&self, o: &Obj, location: &Obj) -> Result<(), WorldStateError> {
-        self.get_tx().set_object_location(o, location)
+    fn set_object_location(&mut self, o: &Obj, location: &Obj) -> Result<(), WorldStateError> {
+        self.get_tx_mut().set_object_location(o, location)
     }
-    fn set_object_owner(&self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
-        self.get_tx().set_object_owner(obj, owner)
+    fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
+        self.get_tx_mut().set_object_owner(obj, owner)
     }
     fn add_verb(
-        &self,
+        &mut self,
         obj: &Obj,
         names: Vec<&str>,
         owner: &Obj,
@@ -55,7 +59,7 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
         args: VerbArgsSpec,
         binary: Vec<u8>,
     ) -> Result<(), WorldStateError> {
-        self.get_tx().add_object_verb(
+        self.get_tx_mut().add_object_verb(
             obj,
             owner,
             names
@@ -71,7 +75,7 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
     }
 
     fn define_property(
-        &self,
+        &mut self,
         definer: &Obj,
         objid: &Obj,
         propname: &str,
@@ -79,7 +83,7 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
-        self.get_tx().define_property(
+        self.get_tx_mut().define_property(
             definer,
             objid,
             Symbol::mk_case_insensitive(propname),
@@ -90,7 +94,7 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
         Ok(())
     }
     fn set_property(
-        &self,
+        &mut self,
         objid: &Obj,
         propname: &str,
         owner: &Obj,
@@ -104,11 +108,12 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
 
         // Now set the value if provided.
         if let Some(value) = value {
-            self.get_tx().set_property(objid, propdef.uuid(), value)?;
+            self.get_tx_mut()
+                .set_property(objid, propdef.uuid(), value)?;
         }
 
         // And then set the flags and owner the child had.
-        self.get_tx().update_property_info(
+        self.get_tx_mut().update_property_info(
             objid,
             propdef.uuid(),
             Some(owner.clone()),

@@ -440,7 +440,7 @@ mod tests {
         let codomain = TestCodomain(1);
 
         let tx = Tx { ts: Timestamp(0) };
-        let lc = global_cache.clone().start(&tx);
+        let mut lc = global_cache.clone().start(&tx);
         lc.insert(domain.clone(), codomain.clone()).unwrap();
         assert_eq!(lc.get(&domain).unwrap(), Some(codomain.clone()));
         assert_eq!(lc.get(&TestDomain(0)).unwrap(), Some(TestCodomain(0)));
@@ -470,10 +470,10 @@ mod tests {
         let tx_a = Tx { ts: Timestamp(0) };
         let tx_b = Tx { ts: Timestamp(1) };
 
-        let lc_a = global_cache.clone().start(&tx_a);
+        let mut lc_a = global_cache.clone().start(&tx_a);
 
         lc_a.insert(domain.clone(), codomain_a).unwrap();
-        let lc_b = global_cache.clone().start(&tx_b);
+        let mut lc_b = global_cache.clone().start(&tx_b);
         lc_b.insert(domain.clone(), codomain_b).unwrap();
         let ws_a = lc_a.working_set();
         let ws_b = lc_b.working_set();

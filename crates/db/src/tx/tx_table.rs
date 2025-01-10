@@ -28,10 +28,8 @@ where
 {
     tx: Tx,
 
-    // Note: This is RefCell for interior mutability so that the signatures for the public methods
-    // can be immutable references.
-    // TODO: this is a product of WorldState having immutable &self method signatures, which is
-    //   a historical artifact. We should be able to work through and refactor
+    // Note: This is RefCell for interior mutability since even get/scan operations can modify the
+    //   index.
     index: RefCell<IndexMap<Domain, Entry<Codomain>>>,
 
     backing_source: Arc<Source>,
@@ -105,7 +103,7 @@ where
         }
     }
 
-    pub fn insert(&self, domain: Domain, value: Codomain) -> Result<(), Error> {
+    pub fn insert(&mut self, domain: Domain, value: Codomain) -> Result<(), Error> {
         let mut index = self.index.borrow_mut();
 
         // Check if the domain is already in the index.
@@ -162,7 +160,7 @@ where
         Ok(())
     }
 
-    pub fn update(&self, domain: &Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
+    pub fn update(&mut self, domain: &Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
         let mut index = self.index.borrow_mut();
 
         // Check if the domain is already in the index.
@@ -205,7 +203,7 @@ where
         Ok(Some(backing_value))
     }
 
-    pub fn upsert(&self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
+    pub fn upsert(&mut self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
         let mut index = self.index.borrow_mut();
 
         // Check if the domain is already in the index.
@@ -292,7 +290,7 @@ where
         Ok(Some(backing_value))
     }
 
-    pub fn delete(&self, domain: &Domain) -> Result<Option<Codomain>, Error> {
+    pub fn delete(&mut self, domain: &Domain) -> Result<Option<Codomain>, Error> {
         let mut index = self.index.borrow_mut();
 
         // Check local first to see if we have an entry. If we do, check its source.  If it's
@@ -494,7 +492,7 @@ mod tests {
 
         let backing_store = Arc::new(backing_store);
         let tx = Tx { ts: Timestamp(1) };
-        let cache = TransactionalTable::new(tx, backing_store.clone());
+        let mut cache = TransactionalTable::new(tx, backing_store.clone());
 
         let result = cache.get(&1).unwrap();
         assert_eq!(result, Some(1));

@@ -30,14 +30,18 @@ use moor_values::Var;
 /// WorldState could provide, but potentially different constraints/semantics (e.g. no perms checks)
 pub trait LoaderInterface: Send {
     /// For reading textdumps...
-    fn create_object(&self, objid: Option<Obj>, attrs: &ObjAttrs) -> Result<Obj, WorldStateError>;
-    fn set_object_parent(&self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError>;
+    fn create_object(
+        &mut self,
+        objid: Option<Obj>,
+        attrs: &ObjAttrs,
+    ) -> Result<Obj, WorldStateError>;
+    fn set_object_parent(&mut self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError>;
 
-    fn set_object_location(&self, o: &Obj, location: &Obj) -> Result<(), WorldStateError>;
-    fn set_object_owner(&self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError>;
+    fn set_object_location(&mut self, o: &Obj, location: &Obj) -> Result<(), WorldStateError>;
+    fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError>;
 
     fn add_verb(
-        &self,
+        &mut self,
         obj: &Obj,
         names: Vec<&str>,
         owner: &Obj,
@@ -47,7 +51,7 @@ pub trait LoaderInterface: Send {
     ) -> Result<(), WorldStateError>;
 
     fn define_property(
-        &self,
+        &mut self,
         definer: &Obj,
         objid: &Obj,
         propname: &str,
@@ -57,7 +61,7 @@ pub trait LoaderInterface: Send {
     ) -> Result<(), WorldStateError>;
 
     fn set_property(
-        &self,
+        &mut self,
         objid: &Obj,
         propname: &str,
         owner: &Obj,
