@@ -361,7 +361,7 @@ impl WebSocketConnection {
     async fn emit_narrative(ws_sender: &mut SplitSink<WebSocket, Message>, msg: NarrativeOutput) {
         // Serialize to JSON.
         let msg = serde_json::to_string(&msg).unwrap();
-        let msg = Message::Text(msg);
+        let msg = Message::Text(msg.into());
         ws_sender
             .send(msg)
             .await
@@ -371,7 +371,7 @@ impl WebSocketConnection {
     async fn emit_error(ws_sender: &mut SplitSink<WebSocket, Message>, msg: ErrorOutput) {
         // Serialize to JSON.
         let msg = serde_json::to_string(&msg).unwrap();
-        let msg = Message::Text(msg);
+        let msg = Message::Text(msg.into());
         ws_sender
             .send(msg)
             .await
@@ -381,7 +381,7 @@ impl WebSocketConnection {
     async fn emit_value(ws_sender: &mut SplitSink<WebSocket, Message>, msg: ValueResult) {
         // Serialize to JSON.
         let msg = serde_json::to_string(&msg).unwrap();
-        let msg = Message::Text(msg);
+        let msg = Message::Text(msg.into());
         ws_sender
             .send(msg)
             .await

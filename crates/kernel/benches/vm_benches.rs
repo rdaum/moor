@@ -36,7 +36,7 @@ use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::tasks::AbortLimitReason;
 use moor_values::util::BitEnum;
 use moor_values::{v_obj, List, Symbol};
-use moor_values::{AsByteBuffer, Var, NOTHING, SYSTEM_OBJECT};
+use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 
 fn create_db() -> TxDB {
     let (ws_source, _) = TxDB::open(None, DatabaseConfig::default());

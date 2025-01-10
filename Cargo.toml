@@ -61,7 +61,7 @@ clap = "4.5"
 clap_derive = "4.5"
 
 ## HTTP/websockets front-end
-axum = { version = "0.7", features = ["ws"] }
+axum = { version = "0.8", features = ["ws"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0"
 serde_json = "1.0"
@@ -88,21 +88,21 @@ bytes = "1.7"
 chrono = "0.4"
 criterion = { version = "0.5", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
-encoding_rs = "0.8.34"
+encoding_rs = "0.8"
 enum-primitive-derive = "0.3"
 im = "15.1"
-indexmap = "2.7.0"
-itertools = "0.13"
+indexmap = "2.7"
+itertools = "0.14"
 lazy_static = "1.5"
 num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
-semver = "1.0.24"
+semver = "1.0"
 similar = "*"
 similar-asserts = "*"
 strum = { version = "0.26", features = ["derive"] }
 ustr = "1.0"
 uuid = { version = "1.11", features = ["v4"] }
-xml-rs = "0.8.24"
+xml-rs = "0.8"
 
 ## Required for MOO builtins.
 chrono-tz = "0.10"
