@@ -258,7 +258,7 @@ async fn main() -> Result<(), eyre::Error> {
     });
 
     let rpc_client = start_host_session(
-        host_token.clone(),
+        &host_token,
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         kill_switch.clone(),

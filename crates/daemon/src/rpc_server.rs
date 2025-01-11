@@ -750,9 +750,9 @@ impl RpcServer {
             ConnectType::Connected
         };
 
-        debug!(
-            "Performing {:?} login for client: {}",
-            connect_type, client_id
+        info!(
+            "Performing {:?} login for client: {}, with args: {:?}",
+            connect_type, client_id, args
         );
         let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
             return Err(RpcMessageError::CreateSessionFailed);

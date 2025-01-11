@@ -1,0 +1,25 @@
+{
+  "name": "moor-node-host",
+  "version": "0.1.0",
+  "description": "NPM extension to speak to the moor runtime",
+  "main": "index.js",
+  "scripts": {
+    "build": "cargo-cp-artifact -nc index.node -- cargo build --package=moor-node-host --message-format=json-render-diagnostics",
+    "install": "npm run build",
+    "test": "mocha"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "cargo-cp-artifact": "^0.1",
+    "mocha": "^10.0.0"
+  },
+  "keywords": [
+    "Neon",
+    "LambdaMOO",
+    "moor"
+  ],
+  "bugs": {
+    "url": "https://github.com/rdaum/moor/issues"
+  },
+  "homepage": "https://github.com/rdaum/moor"
+}

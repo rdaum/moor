@@ -14,6 +14,7 @@ members = [
     "crates/testing/load-tools",
     "crates/testing/moot",
     "crates/web-host",
+    "crates/node-host",
 ]
 default-members = [
     "crates/common",
@@ -28,6 +29,7 @@ default-members = [
     "crates/web-host",
     "crates/testing/moot",
     "crates/testing/load-tools",
+    "crates/node-host",
 ]
 
 [workspace.package]
@@ -150,3 +152,6 @@ termimad = "0.31"
 
 # For the consistency checker in `load-tools`
 edn-format = "3.3.0"
+
+# For the node-js host addon
+neon = "1.1.0-alpha.1"

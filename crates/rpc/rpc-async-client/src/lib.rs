@@ -68,7 +68,7 @@ pub async fn send_host_to_daemon_msg(
 /// Start the host session with the daemon, and return the RPC client to use for further
 /// communication.
 pub async fn start_host_session(
-    host_token: HostToken,
+    host_token: &HostToken,
     zmq_ctx: tmq::Context,
     rpc_address: String,
     kill_switch: Arc<AtomicBool>,

@@ -310,12 +310,26 @@ pub enum ClientsBroadcastEvent {
 
 #[derive(Error, Debug)]
 pub enum KeyError {
-    #[error("Could not read PEM-encoded key from file")]
+    #[error("Could not parse PEM-encoded key")]
     KeyParseError,
     #[error("Incorrect key format for key: {0}")]
     IncorrectKeyFormat(String),
     #[error("Could not read key from file: {0}")]
     ReadError(std::io::Error),
+}
+
+/// Parse a public and private key from the given PEM strings.
+pub fn parse_keypair(public_key: &str, private_key: &str) -> Result<(Key<64>, Key<32>), KeyError> {
+    let private_key =
+        SigningKey::from_pkcs8_pem(private_key).map_err(|_| KeyError::KeyParseError)?;
+    let public_key =
+        VerifyingKey::from_public_key_pem(public_key).map_err(|_| KeyError::KeyParseError)?;
+
+    let priv_key: Key<64> = Key::try_from(private_key.to_keypair_bytes())
+        .map_err(|_| KeyError::IncorrectKeyFormat("private".to_string()))?;
+    let pub_key: Key<32> = Key::try_from(public_key.to_bytes())
+        .map_err(|_| KeyError::IncorrectKeyFormat("public".to_string()))?;
+    Ok((priv_key, pub_key))
 }
 
 /// Load a keypair from the given public and private key (PEM) files.
@@ -330,14 +344,5 @@ pub fn load_keypair(public_key: &Path, private_key: &Path) -> Result<(Key<64>, K
         )));
     };
 
-    let private_key =
-        SigningKey::from_pkcs8_pem(&privkey_pem).map_err(|_| KeyError::KeyParseError)?;
-    let public_key =
-        VerifyingKey::from_public_key_pem(&pubkey_pem).map_err(|_| KeyError::KeyParseError)?;
-
-    let priv_key: Key<64> = Key::try_from(private_key.to_keypair_bytes())
-        .map_err(|_| KeyError::IncorrectKeyFormat("private".to_string()))?;
-    let pub_key: Key<32> = Key::try_from(public_key.to_bytes())
-        .map_err(|_| KeyError::IncorrectKeyFormat("public".to_string()))?;
-    Ok((priv_key, pub_key))
+    parse_keypair(&pubkey_pem, &privkey_pem)
 }

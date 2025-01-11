@@ -8,46 +8,28 @@
 <script type="text/javascript" src="https://cdn.jsdelivr.net/gh/vanjs-org/van/public/van-1.5.1.nomodule.min.js"></script>
 <script  type="text/javascript" src="https://unpkg.com/@djot/djot@0.3.1/dist/djot.js"></script>
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/vanjs-ui@0.10.0/dist/van-ui.nomodule.js"></script>
+
 <script type="text/javascript" src="rpc.js"></script>
 <script type="module" src="editor.js"></script>
-
-<script type="module" src="flexbuffers/bit-width.js"></script>
-<script type="module" src="flexbuffers/bit-width-util.js"></script>
-<script type="module" src="flexbuffers/builder.js"></script>
-<script type="module" src="flexbuffers/stack-value.js"></script>
-<script type="module" src="flexbuffers/value-type-util.js"></script>
-<script type="module" src="flexbuffers/value-type.js"></script>
-<script type="module" src="flexbuffers/flexbuffers-util.js"></script>
-<script type="module" src="flexbuffers/reference-util.js"></script>
-<script type="module" src="flexbuffers/reference.js"></script>
-
-
 <script type="module" src="moor.js"></script>
+
 <script>
     module = {
 
     }
 </script>
 <script type="module">
+    // Import modules
     import { context, action_invoke, action_edit_verb } from "./moor.js";
     import { MoorRPCObject } from "./rpc.js";
     import { ObjectRef } from "./var.js";
 
+    // .. and export them so they're available
     module.ObjectRef = ObjectRef;
     module.MoorRPCObject = MoorRPCObject;
     module.action_invoke = action_invoke;
     module.action_edit_verb = action_edit_verb;
     module.context = context;
-
-    import { Builder } from "./flexbuffers/builder.js";
-    import { ValueType } from "./flexbuffers/value-type.js";
-    import { Reference, toReference } from "./flexbuffers/reference.js";
-
-    module.flexbuffers = {}
-    module.flexbuffers.Builder = Builder;
-    module.flexbuffers.ValueType = ValueType;
-    module.flexbuffers.Reference = Reference;
-    module.flexbuffers.toReference = toReference;
 
 </script>
 </body>

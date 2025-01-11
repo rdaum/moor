@@ -109,7 +109,7 @@ async fn main() -> Result<(), eyre::Error> {
     let host_token = make_host_token(&private_key, HostType::TCP);
 
     let rpc_client = start_host_session(
-        host_token.clone(),
+        &host_token,
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         kill_switch.clone(),
