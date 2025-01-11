@@ -14,6 +14,10 @@
 import { useEffect, useState, useRef } from "react";
 import "./App.css";
 
+const WelcomeMessage = ({ message }) => {
+	return <div>{message}</div>;
+}
+
 const Messages = ({ messages }) => {
 	const messagesEndRef = useRef(null);
 	const scrollToBottom = () => {
@@ -59,8 +63,6 @@ function App() {
 	const [socket, setSocket] = useState(null);
 	const [message, setMessage] = useState("");
 
-
-
 	function sendMessage() {
 		socket.send(
 			JSON.stringify({
@@ -71,6 +73,11 @@ function App() {
 	}
 
 	useEffect(() => {
+		// On mount, connect to the websocket server, and set up the message handler.
+		// TODO: we instead want to start with a login screen, and only connect to the websocket server after the user has logged in.
+		//   we will have to add restful endpoints to request login screen, and to submit login credentials, which
+		//   will then cause the websocket connection to be established, but with the right auth-key magic.
+		//	 all of this was previous implemented in the web-host, but we will have to move it around to the frontend / node-host
 		const ws = new WebSocket("ws://localhost:8080");
 		ws.onmessage = (event) => setMessages((prev) => [...prev, event.data]);
 		ws.onopen = () => {

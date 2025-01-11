@@ -12,7 +12,7 @@
 //
 
 import {Host, Connection} from 'moor-node-host';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import WebSocket, { WebSocketServer } from 'ws';
 
 
@@ -67,7 +67,6 @@ export async function startWebSocketServer(host: Host) {
                 ws.send(msg);
                 },
             (msg : String) => {
-                console.log("onNarrativeEvent: ", msg);
                 ws.send(msg);
             },
             (msg : String) => {
@@ -85,9 +84,10 @@ export async function startWebSocketServer(host: Host) {
         );
         console.log("Connection established: ", connection);
 
+        // TODO: This is a hack to get the connection to authenticate. We need to add a login screen to the frontend, and then
+        //  use the login credentials to authenticate the connection.
         await connection.login("connect", "wizard", "");
         console.log("Connection authorized: ", connection);
-
 
         ws.on('close', () => {
             console.log("WebSocket connection closed");

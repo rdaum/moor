@@ -15,7 +15,7 @@
 
 const {
     createHost, attachToDaemon, listenHostEvents, shutdownHost,
-    newConnection, connectionLogin, connectionSend, connectionDisconnect
+    newConnection, connectionLogin, connectionSend, connectionDisconnect, welcomeMessage
 } = require("./index.node");
 
 class Host {
@@ -55,6 +55,10 @@ class Connection {
 
     async send(msg) {
         return await connectionSend(this.connection, msg);
+    }
+
+    async welcomeMessage() {
+        return await welcomeMessage(this.connection);
     }
 
     async disconnect() {

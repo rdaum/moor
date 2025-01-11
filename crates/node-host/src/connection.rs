@@ -13,8 +13,9 @@
 
 use crate::host::Host;
 use crate::var_to_js_value;
+use moor_values::model::ObjectRef;
 use moor_values::tasks::Event;
-use moor_values::{Obj, SYSTEM_OBJECT};
+use moor_values::{v_none, Obj, Symbol, SYSTEM_OBJECT};
 use neon::context::{Context, FunctionContext};
 use neon::object::Object;
 use neon::prelude::{
@@ -541,6 +542,90 @@ pub fn connection_send(mut cx: FunctionContext) -> JsResult<JsPromise> {
         deferred.settle_with(&channel, move |mut cx| match result {
             // TODO: create a "Task" object that we can then use to track the task
             Ok(task_id) => Ok(cx.number(task_id as f64)),
+            Err(e) => cx.throw_error(e),
+        });
+    });
+
+    Ok(promise)
+}
+
+pub fn connection_welcome_message(mut cx: FunctionContext) -> JsResult<JsPromise> {
+    let connection = cx.argument::<JsBox<ConnectionHandle>>(0)?;
+
+    let runtime = crate::runtime(&mut cx)?;
+    let channel = cx.channel();
+
+    let (deferred, promise) = cx.promise();
+
+    let (sender, client_token) = {
+        let connection = connection.inner.lock().unwrap();
+
+        let Some(auth_token) = connection.auth_token.clone() else {
+            return cx.throw_error("Connection not logged in");
+        };
+
+        (connection.sender.clone(), connection.client_token.clone())
+    };
+    runtime.spawn(async move {
+        let (reply, receive) = tokio::sync::oneshot::channel();
+
+        // welcome message is a login without any args.
+        if let Err(e) = sender
+            .send((
+                reply,
+                HostClientToDaemonMessage::RequestSysProp(
+                    client_token.clone(),
+                    ObjectRef::SysObj(vec![Symbol::mk("login")]),
+                    Symbol::mk("welcome_message"),
+                ),
+            ))
+            .await
+        {
+            error!("Unable to send welcome message request: {:?}", e);
+            deferred.settle_with(&channel, move |mut cx| {
+                cx.throw_error::<String, neon::handle::Handle<'_, JsPromise>>(format!(
+                    "Unable to send welcome message request: {:?}",
+                    e
+                ))
+            });
+            return;
+        }
+
+        let result = match receive.await {
+            Ok(Ok(ReplyResult::ClientSuccess(DaemonToClientReply::SysPropValue(Some(value))))) => {
+                debug!("Welcome message: {:?}", value);
+                Ok(value)
+            }
+            Ok(Ok(ReplyResult::ClientSuccess(DaemonToClientReply::SysPropValue(None)))) => {
+                debug!("No welcome message");
+                Ok(v_none())
+            }
+            Ok(Ok(ReplyResult::Failure(f))) => {
+                debug!("Welcome message failure: {:?}", f);
+                Err(format!("Welcome message failure: {:?}", f))
+            }
+            Ok(Err(e)) => {
+                debug!("Error in welcome message response: {:?}", e);
+                Err(format!("Error in welcome message response: {:?}", e))
+            }
+            Ok(Ok(m)) => {
+                debug!("Unexpected response from welcome message");
+                Err(format!("Unexpected response from welcome message: {:?}", m))
+            }
+            Err(e) => {
+                debug!("Unable to receive welcome message response: {:?}", e);
+                Err(format!(
+                    "Unable to receive welcome message response: {:?}",
+                    e
+                ))
+            }
+        };
+
+        deferred.settle_with(&channel, move |mut cx| match result {
+            Ok(value) => {
+                let value = var_to_js_value(&mut cx, &value)?;
+                Ok(value)
+            }
             Err(e) => cx.throw_error(e),
         });
     });
