@@ -1577,14 +1577,16 @@ impl TaskQ {
             Ok(th) => {
                 // Replacement task handle now exists, we need to send a message to the daemon to
                 // let it know that, otherwise it will sit hanging waiting on the old one forever.
-                old_tc
+                if let Err(e) = old_tc
                     .result_sender
                     .expect("No result sender for retry")
                     .send(Ok(TaskResult::Restarted(th)))
-                    .expect("Could not send retry result");
+                {
+                    error!(error = ?e, "Could not send retry result to requester, could not retry task");
+                }
             }
             Err(e) => {
-                error!(error = ?e, "Could not retry task: {:?}", e);
+                error!(error = ?e, "Could not start task thread to retry task");
             }
         };
     }
