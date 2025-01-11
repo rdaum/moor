@@ -3,14 +3,16 @@
   "version": "0.1.0",
   "description": "Moor node setup",
   "directories": {
-    "crates": "crates/node-host"
+    "crates": "crates/node-host",
+    "frontend": "frontend"
   },
   "scripts": {
     "test": "npm test --workspace=*"
   },
   "license": "GPL-3.0",
   "workspaces": [
-    "crates/**"
+    "crates/**",
+    "frontend/**"
   ],
   "dependencies": {
     "crates": "^1.0.0"
