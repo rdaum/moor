@@ -32,6 +32,24 @@ comments:
       comment_char: "//"
       trailing_lines: 1
   - columns: 80
+    extension: ts
+    commenter:
+      type: line
+      comment_char: "//"
+      trailing_lines: 1
+  - columns: 80
+    extension: tsx
+    commenter:
+      type: line
+      comment_char: "//"
+      trailing_lines: 1
+  - columns: 80
+    extension: jsx
+    commenter:
+      type: line
+      comment_char: "//"
+      trailing_lines: 1
+  - columns: 80
     extension: fbs
     commenter:
       type: line
@@ -53,4 +71,5 @@ excludes:
   - LICENSE.*
   - Dockerfile
   - core
-  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node)
+  - node_modules
+  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css)
