@@ -12,8 +12,9 @@
 //
 
 use crate::host::Host;
+use crate::var_to_js_value;
 use moor_values::tasks::Event;
-use moor_values::{Obj, Variant, SYSTEM_OBJECT};
+use moor_values::{Obj, SYSTEM_OBJECT};
 use neon::context::{Context, FunctionContext};
 use neon::object::Object;
 use neon::prelude::{
@@ -172,11 +173,19 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
 
     runtime.spawn(async move {
         let client_id = Uuid::new_v4();
-        let rpc_request_sock = request(&zmq_ctx)
+         let rpc_request_sock = match request(&zmq_ctx)
             .set_rcvtimeo(100)
             .set_sndtimeo(100)
-            .connect(rpc_address.as_str())
-            .expect("Unable to bind RPC server for connection");
+            .connect(rpc_address.as_str()) {
+             Ok(r) => {r}
+             Err(e) => {
+                 deferred.settle_with(&channel, move |mut cx| {
+                     cx.throw_error::<String, neon::handle::Handle<'_, JsBox<ConnectionHandle>>>(format!("Unable to connect to RPC server: {}", e))
+                 });
+                 return;
+             }
+         };
+
 
         // And let the RPC server know we're here, and it should start sending events on the
         // narrative subscription.
@@ -186,19 +195,25 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
             .await
         {
             Ok(ReplyResult::ClientSuccess(DaemonToClientReply::NewConnection(token, objid))) => {
-                info!("Connection established, connection ID: {}", objid);
+                debug!("Connection established, connection ID: {}", objid);
                 (token, objid)
             }
             Ok(ReplyResult::Failure(f)) => {
-                error!("RPC failure in connection establishment: {}", f);
+                deferred.settle_with(&channel, move |mut cx| {
+                    cx.throw_error::<String, neon::handle::Handle<'_, JsBox<ConnectionHandle>>>(format!("Failure response from RPC server: {:?}", f))
+                });
                 return;
             }
-            Ok(_) => {
-                error!("Unexpected response from RPC server");
+            Ok(r) => {
+                deferred.settle_with(&channel, move |mut cx| {
+                    cx.throw_error::<String, neon::handle::Handle<'_, JsBox<ConnectionHandle>>>(format!("Unexpected response from RPC server: {:?}", r))
+                });
                 return;
             }
             Err(e) => {
-                error!("Unable to establish connection: {}", e);
+                deferred.settle_with(&channel, move |mut cx| {
+                    cx.throw_error::<String, neon::handle::Handle<'_, JsBox<ConnectionHandle>>>(format!("Unable to establish connection: {}", e))
+                });
                 return;
             }
         };
@@ -206,18 +221,53 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
 
         // Before attempting login, we subscribe to the events socket, using our client
         // id. The daemon should be sending events here.
-        let events_sub = subscribe(&zmq_ctx)
+        let events_sub = match subscribe(&zmq_ctx)
             .connect(events_address.as_str())
-            .expect("Unable to connect narrative subscriber ");
-        let mut events_sub = events_sub
+        {
+            Ok(s) => {s}
+            Err(e) => {
+                deferred.settle_with(&channel, move |mut cx| {
+                    cx.throw_error::<String, neon::handle::Handle<'_, JsBox<ConnectionHandle>>>(format!("Unable to connect to events socket: {}", e))
+                });
+                return;
+            }
+        };
+        let mut events_sub = match events_sub
             .subscribe(&client_id.as_bytes()[..])
-            .expect("Unable to subscribe to narrative messages for client connection");
-        let broadcast_sub = subscribe(&zmq_ctx)
+        {
+            Ok(s) => {s}
+            Err(e) => {
+                deferred.settle_with(&channel, move |mut cx| {
+                    cx.throw_error::<String, neon::handle::Handle<'_, JsBox<ConnectionHandle>>>(format!("Unable to subscribe to events socket: {}", e))
+                });
+                return;
+            }
+        };
+
+        let broadcast_sub = match subscribe(&zmq_ctx)
             .connect(events_address.as_str())
-            .expect("Unable to connect broadcast subscriber ");
-        let mut broadcast_sub = broadcast_sub
+        {
+            Ok(s) => {s}
+            Err(e) => {
+                deferred.settle_with(&channel, move |mut cx| {
+                    cx.throw_error::<String, neon::handle::Handle<'_, JsBox<ConnectionHandle>>>(format!("Unable to connect to broadcast subscriber: {}", e))
+                });
+                return;
+            }
+        };
+
+        let mut broadcast_sub = match  broadcast_sub
             .subscribe(CLIENT_BROADCAST_TOPIC)
-            .expect("Unable to subscribe to broadcast messages for client connection");
+        {
+            Ok(s) => {s}
+            Err(e) => {
+                deferred.settle_with(&channel, move |mut cx| {
+                    cx.throw_error::<String, neon::handle::Handle<'_, JsBox<ConnectionHandle>>>(format!("Unable to subscribe to broadcast messages for client connection: {}", e))
+                });
+                return;
+            }
+        };
+
 
         info!(
             "Subscribed on pubsub events socket for {:?}, socket addr {}",
@@ -241,7 +291,7 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
             Ok(handle)
         });
 
-        info!("Entering connection loop");
+        debug!("Entering connection loop");
         loop {
             if kill_switch.load(std::sync::atomic::Ordering::SeqCst) {
                 info!("Kill switch activated, stopping...");
@@ -268,7 +318,7 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
                 Ok(event) = events_recv(client_id.clone(), &mut events_sub) => {
                     match event {
                         ClientEvent::SystemMessage(_author, msg) => {
-                            info!("System message: {}", msg);
+                            debug!("System message: {}", msg);
                             let continuation = channel.send(move |mut cx| {
                                 let callback = system_message_callback.clone(&mut cx);
                                 let callback = callback.into_inner(&mut cx);
@@ -289,26 +339,36 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
                             };
                         }
                         ClientEvent::Narrative(_author, event) => {
-                            info!("Narrative event: {:?}", event);
+                            debug!("Narrative event: {:?}", event);
                             let continuation = channel.send(move |mut cx| {
                                 let callback = narrative_event_callback.clone(&mut cx);
                                 let callback = callback.into_inner(&mut cx);
-                                let event_obj = match event.event {
-                                    Event::Notify(what, _content_type) => {
-                                        // For now just we'll just take string values here, but
-                                        // we'll need to handle other types of values in the future.
-                                        let Variant::Str(what) = what.variant() else {
-                                            return cx.throw_error("Unable to get string value from event");
+                                let (event, content_type) = match event.event {
+                                    Event::Notify(what, content_type) => {
+                                        let v = match var_to_js_value(&mut cx, &what) {
+                                            Ok(v) => v,
+                                            Err(e) => {
+                                                return cx.throw_error(e.to_string());
+                                            }
                                         };
 
-                                        what.to_string()
+                                        let c : Handle<JsValue> = match content_type {
+                                            Some(c) => {
+                                                let c = cx.string(c.as_str());
+                                                c.upcast()
+                                            }
+                                            None => cx.undefined().upcast()
+                                        };
+
+                                        (v, c)
                                     }
+
+
                                 };
 
-                                let event = cx.string(event_obj);
                                 let event: Handle<JsValue> = event.upcast();
                                 let undefined = cx.undefined();
-                                let Ok(_) = callback.call(&mut cx, undefined, vec![event]) else {
+                                let Ok(_) = callback.call(&mut cx, undefined, vec![event, content_type]) else {
                                     return cx.throw_error("Unable to call narrative event callback");
                                 };
                                 Ok(narrative_event_callback)
@@ -322,8 +382,8 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
                             };
                         }
                         ClientEvent::RequestInput(request_id) => {
-                            info!("Requesting input for request ID: {}", request_id);
-                            // Server is requesting that the next line of input get sent through as a response to this request.
+                            debug!("Requesting input for request ID: {}", request_id);
+                            // Server is requesting some input back through corelated with `request_id`
                             let continuation = channel.send(move |mut cx| {
                                 let callback = request_input_callback.clone(&mut cx);
                                 let callback = callback.into_inner(&mut cx);
@@ -344,7 +404,7 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
                             };
                         }
                         ClientEvent::Disconnect() => {
-                            info!("Disconnecting");
+                            debug!("Disconnecting");
                             channel.send(move |mut cx| {
                                 let callback = disconnect_callback.clone(&mut cx);
                                 let callback = callback.into_inner(&mut cx);
@@ -357,7 +417,7 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
                             return;
                         }
                         ClientEvent::TaskError(_ti, te) => {
-                            info!("Task error: {:?}", te);
+                            debug!("Task error: {:?}", te);
                             let continuation = channel.send(move |mut cx| {
                                 let callback = task_error_callback.clone(&mut cx);
                                 let callback = callback.into_inner(&mut cx);
@@ -378,13 +438,14 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
                                 }
                             };
                         }
-                        ClientEvent::TaskSuccess(_ti, _result) => {
-                            info!("Task success");
+                        ClientEvent::TaskSuccess(ti, _result) => {
+                            debug!("Task success");
                             let continuation = channel.send(move |mut cx| {
                                 let callback = task_success_callback.clone(&mut cx);
                                 let callback = callback.into_inner(&mut cx);
+                                let task_id = cx.number(ti as f64).upcast();
                                 let undefined = cx.undefined();
-                                let Ok(_) = callback.call(&mut cx, undefined, vec![]) else {
+                                let Ok(_) = callback.call(&mut cx, undefined, vec![task_id]) else {
                                     return cx.throw_error("Unable to call task success callback");
                                 };
                                 Ok(task_success_callback)
@@ -444,28 +505,35 @@ pub fn connection_send(mut cx: FunctionContext) -> JsResult<JsPromise> {
             ))
             .await
         {
-            info!("Unable to send message: {:?}", e);
+            error!("Unable to send message: {:?}", e);
+            deferred.settle_with(&channel, move |mut cx| {
+                cx.throw_error::<String, neon::handle::Handle<'_, JsPromise>>(format!(
+                    "Unable to send message: {:?}",
+                    e
+                ))
+            });
+            return;
         }
 
         let result = match receive.await {
             Ok(Ok(ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(task_id)))) => {
-                info!("Task submitted: {:?}", task_id);
+                debug!("Task submitted: {:?}", task_id);
                 Ok(task_id)
             }
             Ok(Ok(ReplyResult::Failure(f))) => {
-                info!("Message failure: {:?}", f);
+                debug!("Message failure: {:?}", f);
                 Err(format!("Message failure: {:?}", f))
             }
             Ok(Err(e)) => {
-                info!("Error in message response: {:?}", e);
+                debug!("Error in message response: {:?}", e);
                 Err(format!("Error in message response: {:?}", e))
             }
             Ok(Ok(m)) => {
-                info!("Unexpected response from message");
+                debug!("Unexpected response from message");
                 Err(format!("Unexpected response from message: {:?}", m))
             }
             Err(e) => {
-                info!("Unable to receive message response: {:?}", e);
+                debug!("Unable to receive message response: {:?}", e);
                 Err(format!("Unable to receive message response: {:?}", e))
             }
         };
@@ -499,28 +567,28 @@ pub fn connection_disconnect(mut cx: FunctionContext) -> JsResult<JsPromise> {
             .send((reply, HostClientToDaemonMessage::Detach(client_token)))
             .await
         {
-            info!("Unable to send disconnect: {:?}", e);
+            error!("Unable to send disconnect: {:?}", e);
         }
 
         let result = match receive.await {
             Ok(Ok(ReplyResult::ClientSuccess(DaemonToClientReply::Disconnected))) => {
-                info!("Disconnected");
+                debug!("Disconnected");
                 Ok(())
             }
             Ok(Ok(ReplyResult::Failure(f))) => {
-                info!("Disconnect failure: {:?}", f);
+                debug!("Disconnect failure: {:?}", f);
                 Err(format!("Disconnect failure: {:?}", f))
             }
             Ok(Err(e)) => {
-                info!("Error in disconnect response: {:?}", e);
+                debug!("Error in disconnect response: {:?}", e);
                 Err(format!("Error in disconnect response: {:?}", e))
             }
             Ok(Ok(m)) => {
-                info!("Unexpected response from disconnect");
+                debug!("Unexpected response from disconnect");
                 Err(format!("Unexpected response from disconnect: {:?}", m))
             }
             Err(e) => {
-                info!("Unable to receive disconnect response: {:?}", e);
+                debug!("Unable to receive disconnect response: {:?}", e);
                 Err(format!("Unable to receive disconnect response: {:?}", e))
             }
         };

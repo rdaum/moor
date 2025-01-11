@@ -62,4 +62,4 @@ class Connection {
     }
 }
 
-module.exports = Host;
+module.exports =  { Host, Connection };
