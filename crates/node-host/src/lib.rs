@@ -200,6 +200,11 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("connectionCommand", connection::connection_command)?;
     cx.export_function("connectionDisconnect", connection::connection_disconnect)?;
     cx.export_function("welcomeMessage", connection::connection_welcome_message)?;
+    cx.export_function("connectionGetPlayer", connection::connection_get_oid)?;
+    cx.export_function(
+        "connectionIsAuthenticated",
+        connection::connection_is_authenticated,
+    )?;
 
     Ok(())
 }

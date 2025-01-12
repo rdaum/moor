@@ -560,10 +560,6 @@ pub fn connection_welcome_message(mut cx: FunctionContext) -> JsResult<JsPromise
     let (sender, client_token) = {
         let connection = connection.inner.lock().unwrap();
 
-        let Some(auth_token) = connection.auth_token.clone() else {
-            return cx.throw_error("Connection not logged in");
-        };
-
         (connection.sender.clone(), connection.client_token.clone())
     };
     runtime.spawn(async move {
@@ -681,6 +677,48 @@ pub fn connection_disconnect(mut cx: FunctionContext) -> JsResult<JsPromise> {
         deferred.settle_with(&channel, move |mut cx| match result {
             Ok(_) => Ok(cx.undefined()),
             Err(e) => cx.throw_error(e),
+        });
+    });
+
+    Ok(promise)
+}
+
+pub fn connection_get_oid(mut cx: FunctionContext) -> JsResult<JsPromise> {
+    let connection = cx.argument::<JsBox<ConnectionHandle>>(0)?;
+
+    let runtime = crate::runtime(&mut cx)?;
+    let channel = cx.channel();
+
+    let (deferred, promise) = cx.promise();
+
+    let connection = connection.inner.clone();
+    runtime.spawn(async move {
+        let connection = connection.lock().unwrap();
+        let oid = connection.connection_oid.clone();
+        deferred.settle_with(&channel, move |mut cx| {
+            let oid = cx.number(oid.id().0 as f64);
+            Ok(oid)
+        });
+    });
+
+    Ok(promise)
+}
+
+pub fn connection_is_authenticated(mut cx: FunctionContext) -> JsResult<JsPromise> {
+    let connection = cx.argument::<JsBox<ConnectionHandle>>(0)?;
+
+    let runtime = crate::runtime(&mut cx)?;
+    let channel = cx.channel();
+
+    let (deferred, promise) = cx.promise();
+
+    let connection = connection.inner.clone();
+    runtime.spawn(async move {
+        let connection = connection.lock().unwrap();
+        let is_authenticated = connection.auth_token.is_some();
+        deferred.settle_with(&channel, move |mut cx| {
+            let is_authenticated = cx.boolean(is_authenticated);
+            Ok(is_authenticated)
         });
     });
 

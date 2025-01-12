@@ -13,16 +13,31 @@
 
 "use strict";
 
+class BindingConnection {};
+class BindingHost {};
+
+type Listener = { obj: Object, addr: string };
+type GetListenersFunction = () => [Listener];
+type AddListenerFunction = (obj: Object, addr: string) => void;
+type RemoveListenerFunction = (addr: string) => void;
+type TaskId = number;
+
 interface HostBindingsSig {
-    createHost(hostArguments: HostArguments): any;
-    attachToDaemon(host: any, rpcAddress: string, onGetListeners: Function, onAddListener: Function, onRemoveListener: Function): any;
-    listenHostEvents(host: any, eventsAddress: string, listenAddr: string): any;
-    shutdownHost(host: any): any;
-    newConnection(host: any, rpcAddress: string, eventsAddress: string, peerAddr: string, onSystemMessage: Function, onNarrativeEvent: Function, onRequestInput: Function, onDisconnect: Function, onTaskError: Function, onTaskSuccess: Function): any;
-    connectionLogin(connection: any, loginType: string, username: string, password: string): any;
-    connectionCommand(connection: any, msg: string): any;
-    connectionDisconnect(connection: any): any;
-    welcomeMessage(connection: any): any;
+    createHost(hostArguments: HostArguments): BindingHost;
+    attachToDaemon(host: BindingHost, rpcAddress: string,
+                   onGetListeners: GetListenersFunction, onAddListener: AddListenerFunction,
+                   onRemoveListener: RemoveListenerFunction): Promise<void>;
+    listenHostEvents(host: BindingHost, eventsAddress: string, listenAddr: string): any;
+    shutdownHost(host: BindingHost): any;
+    newConnection(host: BindingHost, rpcAddress: string, eventsAddress: string, peerAddr: string,
+                  onSystemMessage: Function, onNarrativeEvent: Function, onRequestInput: Function,
+                  onDisconnect: Function, onTaskError: Function, onTaskSuccess: Function): Promise<BindingConnection>;
+    connectionLogin(connection: BindingConnection, loginType: string, username: string, password: string): Promise<[string, string]>;
+    connectionCommand(connection: BindingConnection, msg: string): Promise<TaskId>;
+    connectionDisconnect(connection: BindingConnection): Promise<void>;
+    welcomeMessage(connection: BindingConnection): Promise<string>;
+    connectionGetPlayerId(connection: BindingConnection): any;
+    connectionIsAuthenticated(connection: BindingConnection): any;
 }
 
 const hostBindings : HostBindingsSig = require("../index.node");
@@ -48,7 +63,7 @@ export interface ConnectionArguments {
 }
 
 export class Host {
-    host: any;
+    host: BindingHost;
 
     // clientArgs: { public_key: string, private_key: string }
     constructor(hostArguments: HostArguments) {
@@ -56,7 +71,7 @@ export class Host {
     }
 
     // Attach to the daemon at the given ZMQ address.
-    async attachToDaemon(rpcAddress: string, onGetListeners: Function, onAddListener: Function, onRemoveListener: Function) {
+    async attachToDaemon(rpcAddress: string, onGetListeners: GetListenersFunction, onAddListener: AddListenerFunction, onRemoveListener: RemoveListenerFunction) {
         return await hostBindings.attachToDaemon(this.host, rpcAddress, onGetListeners, onAddListener, onRemoveListener);
     }
 
@@ -86,7 +101,7 @@ export class Host {
 }
 
 export class Connection {
-    connection: any;
+    connection: BindingConnection;
 
     constructor(connection: any) {
         this.connection = connection;
@@ -96,7 +111,7 @@ export class Connection {
         return await hostBindings.connectionLogin(this.connection, loginType, username, password);
     }
 
-    async command(msg: string) {
+    async command(msg: string): Promise<TaskId> {
         return await hostBindings.connectionCommand(this.connection, msg);
     }
 
@@ -106,6 +121,14 @@ export class Connection {
 
     async disconnect() {
         return await hostBindings.connectionDisconnect(this.connection);
+    }
+
+    isAuthenticated() {
+        return hostBindings.connectionIsAuthenticated(this.connection);
+    }
+
+    getPlayerId() {
+        return hostBindings.connectionGetPlayerId(this.connection);
     }
 }
 

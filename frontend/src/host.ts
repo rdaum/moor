@@ -41,7 +41,11 @@ export class Listeners {
 }
 
 // We have to turn
-function peerAddrToConnectionId(address: string, port: number) {
+function peerAddrToConnectionId(address: string | undefined, port: number | undefined) {
+    if (!address || !port) {
+        return "0.0.0.0:0"
+    }
+
     // If the address is ::1 we need to turn that into something Rust can parse as an IP address.
     if (address == "::1") {
         address = "0.0.0.0";
@@ -79,6 +83,7 @@ export async function startWebSocketServer(host: Host) {
         let connection : Connection = await host.newConnection(clientArguments, connectionArguments);
         console.log("Connection established: ", connection);
 
+        //
         // TODO: This is a hack to get the connection to authenticate. We need to add a login screen to the frontend, and then
         //  use the login credentials to authenticate the connection.
         await connection.login("connect", "wizard", "");
@@ -112,7 +117,8 @@ export async function startWebSocketServer(host: Host) {
 export class MoorHost {
     host: Host;
     listeners: Listeners;
-    webSocketServer: WebSocketServer;
+    webSocketServer: WebSocketServer | undefined;
+    welcomeMessage: string | undefined;
 
     constructor(privateKeyFileName : string, publicKeyFileName: string, daemonRpcAddr: string, daemonEventsAddr: string
 
@@ -133,6 +139,32 @@ export class MoorHost {
 
         this.host = host;
         this.listeners = l;
+
+        // Spawn an initial connection to retrieve the welcome message.
+        let clientArguments : ClientArguments = {
+            rpcAddress: daemonRpcAddr,
+            eventsAddress: daemonEventsAddr
+        };
+        let connectionArguments : ConnectionArguments = {
+            peerAddr: "0.0.0.0:0",
+            onSystemMessage: () => {},
+            onNarrativeEvent: () => {},
+            onRequestInput: () => {},
+            onDisconnect: () => {},
+            onTaskError: () => {},
+            onTaskSuccess: () => {}
+        };
+        host.newConnection(clientArguments, connectionArguments).then((connection) => {
+            connection.welcomeMessage().then((msg) => {
+                console.log("Welcome message: ", msg);
+                this.welcomeMessage = msg;
+                connection.disconnect().then(() => {
+                    console.log("Welcome Connection closed");
+                });
+            });
+
+        });
+
         startWebSocketServer(host).then((wss) => {
             this.webSocketServer = wss;
         });
