@@ -16,13 +16,15 @@
 		"cypress:run:e2e": "cypress run --e2e"
 	},
 	"dependencies": {
+		"moor-node-host": "^0.1.0",
 		"react": "^18.2.0",
 		"react-dom": "^18.2.0",
-		"moor-node-host": "^0.1.0"
+		"react-router-dom": "^7.1.1"
 	},
 	"devDependencies": {
 		"@types/react": "^18.2.64",
 		"@types/react-dom": "^18.2.21",
+		"@types/ws": "^8.5.13",
 		"@typescript-eslint/eslint-plugin": "^7.1.1",
 		"@typescript-eslint/parser": "^7.1.1",
 		"@vitejs/plugin-react-swc": "^3.5.0",

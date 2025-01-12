@@ -150,7 +150,7 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
     let peer_addr = cx.argument::<JsString>(3)?.value(&mut cx);
 
     let Ok(peer_addr) = peer_addr.parse::<SocketAddr>() else {
-        return cx.throw_error("Unable to parse peer address");
+        return cx.throw_error(format!("Unable to parse peer address: {}", peer_addr));
     };
 
     let mut system_message_callback = cx.argument::<JsFunction>(4)?.root(&mut cx);
@@ -469,7 +469,7 @@ pub fn new_connection(mut cx: FunctionContext) -> JsResult<JsPromise> {
 }
 
 /// Transmit a message to the daemon over this connection
-pub fn connection_send(mut cx: FunctionContext) -> JsResult<JsPromise> {
+pub fn connection_command(mut cx: FunctionContext) -> JsResult<JsPromise> {
     let connection = cx.argument::<JsBox<ConnectionHandle>>(0)?;
     let message = cx.argument::<JsString>(1)?.value(&mut cx);
 

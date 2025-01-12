@@ -13,20 +13,24 @@
 
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
-import { startupHost, startWebSocketServer } from './src/host';
+import { MoorHost } from './src/host';
 
 // https://vitejs.dev/config/
 export default defineConfig({
 	plugins: [react()]
 });
 
-console.log("Good morning");
+declare global {
+	var host: MoorHost;
+}
 
-let host = startupHost();
+// I'm sure this isn't the right 'vite' way to do this, but it works for now. I suspect I'm
+// meant to write a plugin or something.
+if (!global.host) {
+	const verifyingKey = '../moor-verifying-key.pem';
+	const signingKey = '../moor-signing-key.pem';
+	const daemonRpcAddr = "ipc:///tmp/moor_rpc.sock";
+	const daemonEventsAddr = "ipc:///tmp/moor_events.sock";
 
-console.log("host: ", host);
-
-startWebSocketServer(host).then(() => {
-	console.log("WebSocket server started");
-});
-
+	global.host = new MoorHost(signingKey, verifyingKey, daemonRpcAddr, daemonEventsAddr);
+}

@@ -197,7 +197,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("shutdownHost", host::shutdown_host)?;
     cx.export_function("newConnection", connection::new_connection)?;
     cx.export_function("connectionLogin", connection::connection_login)?;
-    cx.export_function("connectionSend", connection::connection_send)?;
+    cx.export_function("connectionCommand", connection::connection_command)?;
     cx.export_function("connectionDisconnect", connection::connection_disconnect)?;
     cx.export_function("welcomeMessage", connection::connection_welcome_message)?;
 

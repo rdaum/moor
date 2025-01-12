@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import {Host, Connection} from 'moor-node-host';
+import {Host, Connection, ConnectionArguments, ClientArguments, HostArguments} from 'moor-node-host';
 import {readFileSync} from 'node:fs';
 import WebSocket, { WebSocketServer } from 'ws';
 
@@ -40,48 +40,43 @@ export class Listeners {
     }
 }
 
-// Create a new host, attach it to the daemon, and listen for events.
-export function startupHost() : Host {
-    let verifying_key = readFileSync('../moor-verifying-key.pem', 'utf8');
-    let signing_key = readFileSync('../moor-signing-key.pem', 'utf8');
-    let host = new Host({
-        public_key: verifying_key,
-        private_key: signing_key,
-    });
-
-    let l = new Listeners();
-    host.attachToDaemon("ipc:///tmp/moor_rpc.sock", l.getListeners.bind(l), l.addListener.bind(l), l.removeListener.bind(l)).then(() => {
-        host.listenHostEvents("ipc:///tmp/moor_events.sock", "frontend");
-    });
-    return host
+// We have to turn
+function peerAddrToConnectionId(address: string, port: number) {
+    // If the address is ::1 we need to turn that into something Rust can parse as an IP address.
+    if (address == "::1") {
+        address = "0.0.0.0";
+    }
+    return address + ":" + port;
 }
 
-// Start up the websocket server, and listen for incoming connections, and pipe them through a Host connection
+// Start up the websocket server, and listen for incoming connections, and pipe them to/from the Host Connection
 export async function startWebSocketServer(host: Host) {
     const wss = new WebSocketServer({ port: 8080 });
 
-    wss.on('connection', async function connection(ws : WebSocket) {
+    wss.on('connection', async function connection(ws : WebSocket, req) {
         console.log("WebSocket connection established");
-        let connection : Connection = await host.newConnection("ipc:///tmp/moor_rpc.sock", "ipc:///tmp/moor_events.sock", "127.0.0.1:8080", (msg : String) => {
-                console.log("onSystemMessage: ", msg);
-                ws.send(msg);
+        let clientArguments : ClientArguments = {
+            rpcAddress: "ipc:///tmp/moor_rpc.sock",
+            eventsAddress: "ipc:///tmp/moor_events.sock"
+        };
+
+        const peerAddr = peerAddrToConnectionId(req.connection.remoteAddress, req.connection.remotePort);
+        let connectionArguments = {
+            peerAddr: peerAddr,
+            onSystemMessage:
+                (msg : String) => {
+                    ws.send(msg);
                 },
-            (msg : String) => {
+            onNarrativeEvent: (msg : String) => {
                 ws.send(msg);
             },
-            (msg : String) => {
-                console.log("onRequestInput: ", msg);
-            },
-            (msg : String) => {
-                console.log("onDisconnect: ", msg);
-            },
-            (msg : String) => {
-                console.log("onTaskError: ", msg);
-            },
-            (msg : String) => {
-                console.log("onTaskSuccess: ", msg);
-            }
-        );
+            onRequestInput: () => {},
+            onDisconnect: () => {},
+            onTaskError: () => {},
+            onTaskSuccess: () => {}
+        };
+
+        let connection : Connection = await host.newConnection(clientArguments, connectionArguments);
         console.log("Connection established: ", connection);
 
         // TODO: This is a hack to get the connection to authenticate. We need to add a login screen to the frontend, and then
@@ -106,10 +101,41 @@ export async function startWebSocketServer(host: Host) {
 
             if (jsonMsg.type == "input") {
                 console.log("Sending input: ", jsonMsg.payload.message);
-                connection.send(jsonMsg.payload.message);
+                connection.command(jsonMsg.payload.message);
             }
         });
     })
 
-
+    return wss;
 }
+
+export class MoorHost {
+    host: Host;
+    listeners: Listeners;
+    webSocketServer: WebSocketServer;
+
+    constructor(privateKeyFileName : string, publicKeyFileName: string, daemonRpcAddr: string, daemonEventsAddr: string
+
+    ) {
+        let verifying_key = readFileSync(publicKeyFileName, 'utf8');
+        let signing_key = readFileSync(privateKeyFileName, 'utf8');
+
+        let hostArguments : HostArguments = {
+            public_key: verifying_key,
+            private_key: signing_key
+        }
+        let host = new Host(hostArguments);
+
+        let l = new Listeners();
+        host.attachToDaemon(daemonRpcAddr, l.getListeners.bind(l), l.addListener.bind(l), l.removeListener.bind(l)).then(() => {
+            host.listenHostEvents(daemonEventsAddr, "frontend");
+        });
+
+        this.host = host;
+        this.listeners = l;
+        startWebSocketServer(host).then((wss) => {
+            this.webSocketServer = wss;
+        });
+    }
+}
+
