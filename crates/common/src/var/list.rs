@@ -169,11 +169,16 @@ impl Sequence for List {
         };
 
         let base_len = self.len();
+
+        if from < 0 || to < 0 {
+            return Err(E_RANGE);
+        }
+
         let from = from.to_usize().unwrap_or(0);
         let to = to.to_usize().unwrap_or(0);
 
-        // If from isn't in range that's E_RANGE.
-        if from != 0 && from >= base_len {
+        // E_RANGE if from is greater than the length of the list + 1
+        if from > base_len + 1 {
             return Err(E_RANGE);
         }
 
@@ -703,12 +708,35 @@ mod tests {
             .unwrap();
         assert_eq!(r, v_list(&[v_int(1), v_int(2), v_int(3)]));
 
-        // foo = {1}; foo[2..3] = {2, 3} => E_RANGE
+        // foo = {1}; foo[2..3] = {2, 3} => {1,2,3}}
         let l = v_list(&[v_int(1)]);
         let r = l.range_set(
             &v_int(2),
             &v_int(3),
             &v_list(&[v_int(2), v_int(3)]),
+            IndexMode::OneBased,
+        );
+        assert_eq!(r, Ok(v_list(&[v_int(1), v_int(2), v_int(3)])));
+
+        // ;;a = {""}; a[2..1] = {#1}; return a;
+        // => {"", #1}
+        let l = v_list(&[v_str("")]);
+        let r = l
+            .range_set(
+                &v_int(2),
+                &v_int(1),
+                &v_list(&[v_int(1)]),
+                IndexMode::OneBased,
+            )
+            .unwrap();
+        assert_eq!(r, v_list(&[v_str(""), v_int(1)]));
+
+        // a = {1,2,3}; a[6..7] = {6,7,8}; return a;  => E_RANGE
+        let l = v_list(&[v_int(1), v_int(2), v_int(3)]);
+        let r = l.range_set(
+            &v_int(6),
+            &v_int(7),
+            &v_list(&[v_int(6), v_int(7), v_int(8)]),
             IndexMode::OneBased,
         );
         assert_eq!(r, Err(E_RANGE));
