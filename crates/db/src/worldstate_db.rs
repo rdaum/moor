@@ -93,6 +93,16 @@ impl WorldStateDB {
 
         let sequences = [(); 16].map(|_| Arc::new(AtomicI64::new(-1)));
 
+        // Fill sequences from the sequences partition.
+        for (i, seq) in sequences.iter().enumerate() {
+            let seq_value = sequences_partition
+                .get(i.to_le_bytes())
+                .unwrap()
+                .map(|b| i64::from_le_bytes(b[0..8].try_into().unwrap()))
+                .unwrap_or(-1);
+            seq.store(seq_value, std::sync::atomic::Ordering::SeqCst);
+        }
+
         let mut fresh = false;
         if !keyspace.partition_exists("object_location") {
             fresh = true;
