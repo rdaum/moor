@@ -185,11 +185,11 @@ impl Listener {
 fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
     let webhost_router = Router::new()
         .route(
-            "/ws/attach/connect/:token",
+            "/ws/attach/connect/{token}",
             get(host::ws_connect_attach_handler),
         )
         .route(
-            "/ws/attach/create/:token",
+            "/ws/attach/create/{token}",
             get(host::ws_create_attach_handler),
         )
         .route("/", get(root_handler))
@@ -203,18 +203,18 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
         .route("/welcome", get(host::welcome_message_handler))
         .route("/eval", post(host::eval_handler))
         .route("/verbs", get(host::verbs_handler))
-        .route("/verbs/:object/:name", get(host::verb_retrieval_handler))
-        .route("/verbs/:object/:name", post(host::verb_program_handler))
+        .route("/verbs/{object}/{name}", get(host::verb_retrieval_handler))
+        .route("/verbs/{object}/{name}", post(host::verb_program_handler))
         .route("/properties", get(host::properties_handler))
         // ?oid=1234 or ?sysobj=foo.bar.baz or ?match=foo
-        .route("/objects/:object", get(host::resolve_objref_handler))
+        .route("/objects/{object}", get(host::resolve_objref_handler))
         .route(
-            "/properties/:object/:name",
+            "/properties/{object}/{name}",
             get(host::property_retrieval_handler),
         )
         .with_state(web_host);
 
-    Ok(Router::new().nest("/", webhost_router))
+    Ok(webhost_router)
 }
 
 #[tokio::main(flavor = "multi_thread")]
