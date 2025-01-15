@@ -294,16 +294,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         obj: &Obj,
         pname: Symbol,
     ) -> Result<(PropDef, PropPerms), WorldStateError> {
-        let properties = self.get_tx().get_properties(obj)?;
-        let pdef = properties
-            .find_first_named(pname)
-            .ok_or(WorldStateError::PropertyNotFound(
-                obj.clone(),
-                pname.to_string(),
-            ))?;
-        let propperms = self
-            .get_tx()
-            .retrieve_property_permissions(obj, pdef.uuid())?;
+        let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Read)?;
 
@@ -317,17 +308,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         pname: Symbol,
         attrs: PropAttrs,
     ) -> Result<(), WorldStateError> {
-        let properties = self.get_tx().get_properties(obj)?;
-        let pdef = properties
-            .find_first_named(pname)
-            .ok_or(WorldStateError::PropertyNotFound(
-                obj.clone(),
-                pname.to_string(),
-            ))?;
-
-        let propperms = self
-            .get_tx()
-            .retrieve_property_permissions(obj, pdef.uuid())?;
+        let (pdef, _, propperms, _) = self.get_tx().resolve_property(obj, pname)?;
         self.perms(perms)?
             .check_property_allows(&propperms, PropFlag::Write)?;
 

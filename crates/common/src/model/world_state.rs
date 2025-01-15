@@ -203,7 +203,7 @@ pub trait WorldState: Send {
         pname: Symbol,
     ) -> Result<Var, WorldStateError>;
 
-    /// Get information about a property, without walking the inheritance tree.
+    /// Get information about a property, walking the inheritance tree to find the definition.
     /// Returns the PropDef as well as the owner of the property.
     fn get_property_info(
         &self,
@@ -212,6 +212,7 @@ pub trait WorldState: Send {
         pname: Symbol,
     ) -> Result<(PropDef, PropPerms), WorldStateError>;
 
+    /// Change the property info for the given property.
     fn set_property_info(
         &mut self,
         perms: &Obj,
