@@ -17,7 +17,7 @@ command = [
     "--",
     "development.db",
     "--textdump",
-    "JHCore-DEV-2.db",
+    "Sleepcore.db",
     "--textdump-out",
     "out.db",
 ]

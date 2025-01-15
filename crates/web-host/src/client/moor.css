@@ -1,15 +1,79 @@
+/* bring in roboto mono font */
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap');
+/* and proportional */
+@import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
+
+/* overall background is dark grey, but lighter than output window */
+.main {
+    font-family: 'Roboto Mono', monospace;
+}
+
+
+
+.login_window {
+    background-color: #444;
+    color: white;
+    border-radius: 10px;
+    padding: 1.0em;
+    margin: 1.0em;
+    /* proportional font */
+    font-family: 'Roboto', sans-serif;
+}
+
+.welcome_box {
+    background-color: #333;
+    color: white;
+    border-radius: 10px;
+    padding: 1.0em;
+    margin: 1.0em;
+    /* proportional font */
+    font-family: 'Roboto', sans-serif;
+}
+
+.narrative {
+    background-color: #333;
+    color: white;
+    border-radius: 10px;
+    padding: 1.0em;
+    margin: 1.0em;
+    /* proportional font */
+    font-family: 'Roboto', sans-serif;
+}
+
 .output_window {
-    width: 100%;
+    background-color: #333;
+    color: white;
     overflow: auto;
     word-wrap: break-word;
+    margin: 0.5em;
+    font-family: 'Roboto Mono', monospace;
+
+    /* i should centre relative to parent ... */
+    align-self: center;
+
+    /* round out the top corners */
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
 }
 
 .text_narrative {
-    font-family: monospace;
+    font-family: 'Roboto Mono', monospace;
     font-size: 1em;
     white-space: pre-wrap;
     word-wrap: break-word;
     overflow: auto;
     padding: 0.0em;
     margin: 0;
+}
+
+.input_area {
+    background-color: #555;
+    color: white;
+    font-family: 'Roboto Mono', monospace;
+    padding: 0.5em;
+    margin: 0;
+    width: 100%;
+    border: none;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
 }
