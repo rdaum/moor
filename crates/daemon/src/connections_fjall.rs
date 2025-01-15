@@ -131,6 +131,12 @@ impl ConnectionsDB for ConnectionsFjall {
             bail!("No connection found for {:?}", from_connection);
         };
 
+        let from_oid_bytes = from_connection.as_bytes().unwrap();
+        inner
+            .player_clients_table
+            .remove(from_oid_bytes)
+            .expect("Unable to remove player clients table");
+
         for cr in &mut crs.connections {
             let client_id = cr.client_id;
             // Associate the client with the new player id.
@@ -150,6 +156,13 @@ impl ConnectionsDB for ConnectionsFjall {
 
         // If `to_player` already had a connection record, merge the two.
         if let Some(mut to_player_connections) = inner.player_clients.remove(&to_player) {
+            // Remove from the underlying physical storage.
+            let to_oid_bytes = to_player.as_bytes().unwrap();
+            inner
+                .player_clients_table
+                .remove(to_oid_bytes)
+                .expect("Unable to remove player clients table");
+
             crs.connections
                 .append(&mut to_player_connections.connections);
         }
@@ -516,5 +529,29 @@ mod tests {
         let client_ids = db.client_ids_for(ob).unwrap();
         assert_eq!(client_ids.len(), 1);
         assert_eq!(client_ids[0], client_id1);
+    }
+
+    /// When restarting the DB, old connections that were removed from the cache were living a
+    /// a second life because they weren't removed from the DB.
+    #[test]
+    fn update_client_connections_regression() {
+        let db_path = tempfile::tempdir().unwrap();
+        let db = Arc::new(ConnectionsFjall::open(Some(db_path.path())));
+
+        let client_id1 = uuid::Uuid::new_v4();
+        let ob = db
+            .new_connection(client_id1, "localhost".to_string(), None)
+            .unwrap();
+        assert_eq!(db.connections(), vec![ob.clone()]);
+        db.update_client_connection(ob.clone(), Obj::mk_id(1))
+            .unwrap();
+        let connections = db.connections();
+        assert_eq!(connections, vec![Obj::mk_id(1)]);
+
+        drop(db);
+
+        let db = Arc::new(ConnectionsFjall::open(Some(db_path.path())));
+        let connections = db.connections();
+        assert_eq!(connections, vec![Obj::mk_id(1)]);
     }
 }
