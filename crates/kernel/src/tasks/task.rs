@@ -311,11 +311,15 @@ impl Task {
             VMHostResponse::AbortLimit(reason) => {
                 warn!(task_id = self.task_id, "Task abort limit reached");
 
+                let this = self.vm_host.this();
+                let verb_name = self.vm_host.verb_name();
+                let line_number = self.vm_host.line_number();
+
                 self.vm_host.stop();
                 world_state
                     .rollback()
                     .expect("Could not rollback world state");
-                task_scheduler_client.abort_limits_reached(reason);
+                task_scheduler_client.abort_limits_reached(reason, this, verb_name, line_number);
                 None
             }
             VMHostResponse::RollbackRetry => {

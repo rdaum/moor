@@ -95,9 +95,18 @@ impl TaskSchedulerClient {
     }
 
     /// Send a message to the scheduler that the task has reached its abort limits.
-    pub fn abort_limits_reached(&self, reason: AbortLimitReason) {
+    pub fn abort_limits_reached(
+        &self,
+        reason: AbortLimitReason,
+        this: Var,
+        verb_name: Symbol,
+        line_number: usize,
+    ) {
         self.scheduler_sender
-            .send((self.task_id, TaskControlMsg::TaskAbortLimitsReached(reason)))
+            .send((
+                self.task_id,
+                TaskControlMsg::TaskAbortLimitsReached(reason, this, verb_name, line_number),
+            ))
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 
@@ -277,7 +286,7 @@ pub enum TaskControlMsg {
     /// The task is letting us know it was cancelled.
     TaskAbortCancelled,
     /// The task is letting us know that it has reached its abort limits.
-    TaskAbortLimitsReached(AbortLimitReason),
+    TaskAbortLimitsReached(AbortLimitReason, Var, Symbol, usize),
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)
     TaskSuspend(Option<Instant>, Task),
     /// Tell the scheduler we're suspending until we get input from the client.

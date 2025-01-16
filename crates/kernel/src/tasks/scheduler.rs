@@ -24,7 +24,7 @@ use lazy_static::lazy_static;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use moor_compiler::{compile, program_to_tree, unparse, Program};
+use moor_compiler::{compile, program_to_tree, to_literal, unparse, Program};
 use moor_db::Database;
 use moor_values::model::{BinaryType, HasUuid, ObjectRef, ValSet, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
@@ -950,11 +950,14 @@ impl Scheduler {
                 };
                 task_q.send_task_result(task_id, Err(TaskAbortedCancelled));
             }
-            TaskControlMsg::TaskAbortLimitsReached(limit_reason) => {
+            TaskControlMsg::TaskAbortLimitsReached(limit_reason, this, verb, line_number) => {
                 let abort_reason_text = match limit_reason {
                     AbortLimitReason::Ticks(t) => {
                         warn!(?task_id, ticks = t, "Task aborted, ticks exceeded");
-                        format!("Abort: Task exceeded ticks limit of {}", t)
+                        format!(
+                            "Abort: Task exceeded ticks limit of {t} @ {}:{verb}:{line_number}",
+                            to_literal(&this)
+                        )
                     }
                     AbortLimitReason::Time(t) => {
                         warn!(?task_id, time = ?t, "Task aborted, time exceeded");
@@ -965,6 +968,7 @@ impl Scheduler {
                 // Commit the session
                 let Some(task) = task_q.tasks.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
+
                     return;
                 };
 
