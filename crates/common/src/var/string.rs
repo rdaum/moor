@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::var::{v_str, Var};
+use crate::var::var::Var;
 use crate::var::variant::Variant;
 use crate::var::Error;
 use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
@@ -132,21 +132,26 @@ impl Sequence for Str {
             _ => return Err(Error::E_TYPE),
         };
 
-        let base_len = self.len();
-        let from = from.to_usize().unwrap_or(0);
-        let to = to.to_usize().unwrap_or(0);
-        if to + 1 > base_len {
-            return Err(E_RANGE);
-        }
-        let base_str = self.as_string();
-        let mut ans = base_str.get(..from).unwrap_or("").to_string();
-        ans.push_str(with_val.as_string());
-        if to == 0 {
-            ans.push_str(base_str);
+        let base_str = self.as_string().as_str();
+        let from = max(from, 0) as usize;
+
+        let mut result_str = if from > 0 {
+            base_str[..from].to_string()
         } else {
-            ans.push_str(base_str.get(to + 1..).unwrap_or(""));
+            "".to_string()
+        };
+        result_str.push_str(with_val.as_string().as_str());
+
+        match to.to_usize() {
+            Some(to) => {
+                result_str.push_str(&base_str[to + 1..]);
+            }
+            None => {
+                result_str.push_str(&base_str);
+            }
         }
-        Ok(v_str(&ans))
+
+        Ok(Var::mk_str(&result_str))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
@@ -454,5 +459,18 @@ mod tests {
         let s2 = Var::mk_str("Hello");
         assert_eq!(s, s2);
         assert!(!s.eq_case_sensitive(&s2));
+    }
+
+    #[test]
+    fn test_range_assignment_regression() {
+        let base = v_str("testing\"");
+        let value = v_str("");
+        let expected = v_str("esting\"");
+
+        let result = base
+            .range_set(&v_int(1), &v_int(1), &value, IndexMode::OneBased)
+            .unwrap();
+
+        assert_eq!(result, expected);
     }
 }
