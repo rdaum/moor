@@ -8,7 +8,7 @@ Objects are, of course, the main focus of most MOO programming and, largely due 
 
 ```
 obj create(obj parent [, obj owner] [, int anon-flag] [, list init-args])
-obj `create` (list parents [, obj owner] [, int anon-flag] [, list init-args])
+obj create(list parents [, obj owner] [, int anon-flag] [, list init-args])
 ```
 
 Creates and returns a new object whose parent (or parents) is parent (or parents) and whose owner is as described below.
