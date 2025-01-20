@@ -16,7 +16,6 @@
     - [Object-Oriented Programming](./the-moo-programming-language/built-in-functions/object-oriented-programming.md)
     - [Manipulating MOO Values](./the-moo-programming-language/built-in-functions/manipulating-moo-values.md)
     - [Manipulating Objects](./the-moo-programming-language/built-in-functions/manipulating-objects.md)
-    - [Operations on Files](./the-moo-programming-language/built-in-functions/operations-on-files.md)
   - [Server Commands and Database Assumptions](./the-moo-programming-language/server-commands-and-database-assumptions.md)
   - [Server Assumptions About the Database](./the-moo-programming-language/server-assumptions-about-the-database.md)
   - [Networking](./the-moo-programming-language/networking.md)
