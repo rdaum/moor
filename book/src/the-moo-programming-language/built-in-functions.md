@@ -1,4 +1,4 @@
-## Built-in Functions
+# Built-in Functions
 
 There are a large number of built-in functions available for use by MOO programmers. Each one is discussed in detail in this section. The presentation is broken up into subsections by grouping together functions with similar or related uses.
 

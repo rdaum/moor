@@ -1,8 +1,8 @@
-## Server Assumptions About the Database
+# Server Assumptions About the Database
 
 There are a small number of circumstances under which the server directly and specifically accesses a particular verb or property in the database. This section gives a complete list of such circumstances.
 
-### Server Options Set in the Database
+## Server Options Set in the Database
 
 Many optional behaviors of the server can be controlled from within the database by creating the property `#0.server_options` (also known as `$server_options`), assigning as its value a valid object number, and then defining various properties on that object. At a number of times, the server checks for whether the property `$server_options` exists and has an object number as its value. If so, then the server looks for a variety of other properties on that `$server_options` object and, if they exist, uses their values to control how the server operates.
 
@@ -43,7 +43,7 @@ The specific properties searched for are each described in the appropriate secti
 
 > Note: options.h #defines IGNORE_PROP_PROTECTED by default. If it is defined, the server ignores all attempts to protect built-in properties (such as $server_options.protect_location). Protecting properties is a significant performance hit, and most MOOs do not use this functionality.
 
-### Server Messages Set in the Database
+## Server Messages Set in the Database
 
 There are a number of circumstances under which the server itself generates messages on network connections. Most of these can be customized or even eliminated from within the database. In each such case, a property on `$server_options` is checked at the time the message would be printed. If the property does not exist, a default message is printed. If the property exists and its value is not a string or a list containing strings, then no message is printed at all. Otherwise, the string(s) are printed in place of the default message, one string per line. None of these messages are ever printed on an outbound network connection created by the function `open_network_connection()`.
 
@@ -62,7 +62,7 @@ The following list covers all of the customizable messages, showing for each the
 
 > Fine point: If the network connection in question was received at a listening point (established by the `listen()` function) handled by an object obj other than `#0`, then system messages for that connection are looked for on `obj.server_options`; if that property does not exist, then `$server_options` is used instead.
 
-### Checkpointing the Database
+## Checkpointing the Database
 
 The server maintains the entire MOO database in main memory, not on disk. It is therefore necessary for it to dump the database to disk if it is to persist beyond the lifetime of any particular server execution. The server is careful to dump the database just before shutting down, of course, but it is also prudent for it to do so at regular intervals, just in case something untoward happens.
 

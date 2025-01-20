@@ -1,4 +1,4 @@
-## Controlling the Execution of Tasks
+# Controlling the Execution of Tasks
 
 As described earlier, in the section describing MOO tasks, the server places limits on the number of seconds for which any task may run continuously and the number of “ticks,” or low-level operations, any task may execute in one unbroken period. By default, foreground tasks may use 60,000 ticks and five seconds, and background tasks may use 30,000 ticks and three seconds. These defaults can be overridden from within the database by defining any or all of the following properties on $server_options and giving them integer values:
 

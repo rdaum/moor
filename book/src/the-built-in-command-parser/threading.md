@@ -1,4 +1,4 @@
-## Threading
+# Threading
 
 ToastStunt is single threaded, but it utilizes a threading library (extension-background) to allow certain server functions to run in a separate thread. To protect the database, these functions will implicitly suspend the MOO code (similar to how read() operates).
 

@@ -1,4 +1,4 @@
-## The First Tasks Run By the Server
+# The First Tasks Run By the Server
 
 Whenever the server is booted, there are a few tasks it runs right at the beginning, before accepting connections or getting the value of $server_options.dump_interval to schedule the first checkpoint (see below for more information on checkpoint scheduling).
 

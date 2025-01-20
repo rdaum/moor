@@ -1,4 +1,4 @@
-## Creating and Recycling Objects
+# Creating and Recycling Objects
 
 Whenever the `create()` function is used to create a new object, that object's `initialize` verb, if any, is called with no arguments. The call is simply skipped if no such verb is defined on the object.
 

@@ -1,4 +1,4 @@
-## MOO Tasks
+# MOO Tasks
 
 A _task_ is an execution of a MOO program. There are five kinds of tasks in ToastStunt:
 
