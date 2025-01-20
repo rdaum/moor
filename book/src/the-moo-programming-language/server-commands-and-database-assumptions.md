@@ -1,14 +1,14 @@
-## Server Commands and Database Assumptions
+# Server Commands and Database Assumptions
 
 This chapter describes all of the commands that are built into the server and every property and verb in the database specifically accessed by the server. Aside from what is listed here, no assumptions are made by the server concerning the contents of the database.
 
-### Command Lines That Receive Special Treatment
+## Command Lines That Receive Special Treatment
 
 As was mentioned in the chapter on command parsing, there are a number of commands and special prefixes whose interpretation is fixed by the server. Examples include the flush command and the five intrinsic commands (PREFIX, OUTPUTPREFIX, SUFFIX, OUTPUTSUFFIX, and .program).
 
 This section discusses all of these built-in pieces of the command-interpretation process in the order in which they occur.
 
-#### Flushing Unprocessed Input
+### Flushing Unprocessed Input
 
 It sometimes happens that a user changes their mind about having typed one or more lines of input and would like to `untype` them before the server actually gets around to processing them. If they react quickly enough, they can type their connection`s defined flush command; when the server first reads that command from the network, it immediately and completely flushes any as-yet unprocessed input from that user, printing a message to the user describing just which lines of input were discarded, if any.
 
@@ -18,13 +18,13 @@ When a connection is first accepted by the server, it is given an initial flush 
 
 By default, each connection is initially given `.flush` as its flush command. If the property $server_options.default_flush_command exists, then its value overrides this default. If $server_options.default_flush_command is a non-empty string, then that string is the flush command for all new connections; otherwise, new connections are initially given no flush command at all.
 
-#### Out-of-Band Processing
+### Out-of-Band Processing
 
 It is possible to compile the server to recognize an out-of-band prefix and an out-of-band quoting prefix for input lines. These are strings that the server will check for at the beginning of every unflushed line of input from a non-binary connection, regardless of whether or not a player is logged in and regardless of whether or not reading tasks are waiting for input on that connection.
 
 This check can be disabled entirely by setting connection option "disable-oob", in which case none of the rest of this section applies, i.e., all subsequent unflushed lines on that connection will be available unchanged for reading tasks or normal command parsing.
 
-#### Quoted Lines
+### Quoted Lines
 
 We first describe how to ensure that a given input line will not be processed as an out-of-band command.
 
@@ -42,7 +42,7 @@ the server would behave exactly as if connection option "disable-oob" were set t
 #$#mcp-client-set-type fancy
 ```
 
-#### Commands
+### Commands
 
 If a given line of input begins with the defined out-of-band prefix (`#$#` by default), then it is not treated as a normal command or given as input to any reading task. Instead, the line is parsed into a list of words in the usual way and those words are given as the arguments in a call to $do_out_of_band_command().
 
@@ -66,7 +66,7 @@ Out-of-band commands are intended for use by advanced client programs that may g
 
 [Telnet IAC](http://www.faqs.org/rfcs/rfc854.html) commands will also get captured and passed, as binary strings, to a `do_out_of_band_command` verb on the listener.
 
-#### Command-Output Delimiters
+### Command-Output Delimiters
 
 > Warning: This is a deprecated feature
 
@@ -97,7 +97,7 @@ The effect of which, in a ToastCore-derived database, is to print out the code f
 
 The built-in function `output_delimiters()` can be used by MOO code to find out the output prefix and suffix currently in effect on a particular network connection.
 
-### The .program Command
+## The .program Command
 
 The `.program` command is a common way for programmers to associate a particular MOO-code program with a particular verb. It has the following syntax:
 
@@ -117,7 +117,7 @@ In the `.program` command, object may have one of three forms:
 - An object number, in the form `#number`.
 - A _system property_ (that is, a property on `#0`), in the form `$name`. In this case, the current value of `#0.name` must be a valid object.
 
-### Initial Punctuation in Commands
+## Initial Punctuation in Commands
 
 The server interprets command lines that begin with any of the following characters specially:
 

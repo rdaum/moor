@@ -1,4 +1,4 @@
-## MOO Language Expressions
+# MOO Language Expressions
 
 Expressions are those pieces of MOO code that generate values; for example, the MOO code
 
@@ -8,7 +8,7 @@ Expressions are those pieces of MOO code that generate values; for example, the 
 
 is an expression that generates (or "has" or "returns") the value 7. There are many kinds of expressions in MOO, all of them discussed below.
 
-### Errors While Evaluating Expressions
+## Errors While Evaluating Expressions
 
 Most kinds of expressions can, under some circumstances, cause an error to be generated. For example, the expression `x / y` will generate the error `E_DIV` if `y` is equal to zero. When an expression generates an error, the behavior of the server is controlled by setting of the `d` (debug) bit on the verb containing that expression. If the `d` bit is not set, then the error is effectively squelched immediately upon generation; the error value is simply returned as the value of the expression that generated it.
 
@@ -16,7 +16,7 @@ Most kinds of expressions can, under some circumstances, cause an error to be ge
 
 If the `d` bit is set, as it usually is, then the error is _raised_ and can be caught and handled either by code surrounding the expression in question or by verbs higher up on the chain of calls leading to the current verb. If the error is not caught, then the server aborts the entire task and, by default, prints a message to the current player. See the descriptions of the error-catching expression and the `try`-`except` statement for the details of how errors can be caught, and the chapter on server assumptions about the database for details on the handling of uncaught errors.
 
-### Writing Values Directly in Verbs
+## Writing Values Directly in Verbs
 
 The simplest kind of expression is a literal MOO value, just as described in the section on values at the beginning of this document. For example, the following are all expressions:
 
@@ -35,7 +35,7 @@ In the case of lists, like the last example above, note that the list expression
 
 is an expression whose value is the list `{7, -1, 12}`.
 
-### Naming Values Within a Verb
+## Naming Values Within a Verb
 
 As discussed earlier, it is possible to store values in properties on objects; the properties will keep those values forever, or until another value is explicitly put there. Quite often, though, it is useful to have a place to put a value for just a little while. MOO provides local variables for this purpose.
 
@@ -141,7 +141,7 @@ Thus, the expression
 
 changes the value of `x` to be 17 and returns 30.
 
-### Arithmetic Operators
+## Arithmetic Operators
 
 All of the usual simple operations on numbers are available to MOO programs:
 
@@ -207,7 +207,7 @@ MOO also supports the exponentiation operation, also known as "raising to a powe
 
 > Note: if the first operand is an integer, then the second operand must also be an integer. If the first operand is a floating-point number, then the second operand can be either kind of number. Although it is legal to raise an integer to a negative power, it is unlikely to be terribly useful.
 
-### Bitwise Operators
+## Bitwise Operators
 
 MOO also supports bitwise operations on integer types:
 
@@ -233,7 +233,7 @@ In the following table, the expressions on the left have the corresponding value
 
 For more information on Bitwise Operators, checkout the [Wikipedia](https://en.wikipedia.org/wiki/Bitwise_operation) page on them.
 
-### Comparing Values
+## Comparing Values
 
 Any two values can be compared for equality using `==` and `!=`. The first of these returns 1 if the two values are equal and 0 otherwise; the second does the reverse:
 
@@ -279,7 +279,7 @@ E_DIV > E_TYPE  =>  1
 
 Note that, as with the equality operators, strings are compared case-insensitively. To perform a case-sensitive string comparison, use the `strcmp` function described later. Also note that the error values are ordered as given in the table in the section on values. If the operands to these four comparison operators are of different types (even integers and floating-point numbers are considered different types), or if they are lists, then `E_TYPE` is raised.
 
-### Values as True and False
+## Values as True and False
 
 There is a notion in MOO of _true_ and _false_ values; every value is one or the other. The true values are as follows:
 
@@ -380,13 +380,13 @@ These two operators behave very much like "and" and "or" in English:
 17 <= 23  &&  23 <= 27  =>  1
 ```
 
-### Indexing into Lists, Maps and Strings
+## Indexing into Lists, Maps and Strings
 
 Strings, lists, and maps can be seen as ordered sequences of MOO values. In the case of strings, each is a sequence of single-character strings; that is, one can view the string `"bar"` as a sequence of the strings `"b"`, `"a"`, and `"r"`. MOO allows you to refer to the elements of lists, maps, and strings by number, by the _index_ of that element in the list or string. The first element has index 1, the second has index 2, and so on.
 
 > Warning: It is very important to note that unlike many programming languages (which use 0 as the starting index), MOO uses 1.
 
-#### Extracting an Element by Index
+### Extracting an Element by Index
 
 The indexing expression in MOO extracts a specified element from a list, map, or string:
 
@@ -416,7 +416,7 @@ Fine point: The ^ and $ expressions return the first/last index/key of the expre
 
 is possible because $ in this case represents the 3rd index of the list next to it, which evaluates to the value 4, which in turn is applied as the index to the string, which evaluates to the b.
 
-#### Replacing an Element of a List, Map, or String
+### Replacing an Element of a List, Map, or String
 
 It often happens that one wants to change just one particular slot of a list or string, which is stored in a variable or a property. This can be done conveniently using an _indexed assignment_ having one of the following forms:
 
@@ -488,7 +488,7 @@ l                    =>   {{1, 2, 3}, "baz", "foo", ["bar" -> #3]}
 
 The first two examples raise E_RANGE because 7 is out of the range of `l` and 8 is out of the range of `l[1]`. The next two examples raise `E_TYPE` because `l[3]` and `l[1][1]` are not lists.
 
-#### Extracting a Subsequence of a List, Map or String
+### Extracting a Subsequence of a List, Map or String
 
 The range expression extracts a specified subsequence from a list, map or string:
 
@@ -510,7 +510,7 @@ If the low index is greater than the high index, then the empty string, list or 
 [1 -> "one", 2 -> "two"][1..1]       =>  [1 -> "one"]
 ```
 
-#### Replacing a Subsequence of a List, Map or String
+### Replacing a Subsequence of a List, Map or String
 
 The subrange assignment replaces a specified subsequence of a list, map or string with a supplied subsequence. The allowed forms are:
 
@@ -574,7 +574,7 @@ m[1..2] = ["abc" -> #1]=>   ["abc" -> #1]
 m                      =>   [3 -> "three", "abc" -> #1]
 ```
 
-### Other Operations on Lists
+## Other Operations on Lists
 
 As was mentioned earlier, lists can be constructed by writing a comma-separated sequence of expressions inside curly braces:
 
@@ -627,7 +627,7 @@ Expression-2 must return a list; otherwise, `E_TYPE` is raised. If the value of 
 
 Note that the list membership operator is case-insensitive in comparing strings, just like the comparison operators. To perform a case-sensitive list membership test, use the `is_member` function described later. Note also that since it returns zero only if the given value is not in the given list, the `in` expression can be used either as a membership test or as an element locator.
 
-### Spreading List Elements Among Variables
+## Spreading List Elements Among Variables
 
 It is often the case in MOO programming that you will want to access the elements of a list individually, with each element stored in a separate variables. This desire arises, for example, at the beginning of almost every MOO verb, since the arguments to all verbs are delivered all bunched together in a single list. In such circumstances, you _could_ write statements like these:
 
@@ -689,7 +689,7 @@ Using scattering assignment, the example at the beginning of this section could 
 
 Fine point: If you are familiar with JavaScript, the 'rest' and 'spread' functionality should look pretty familiar. It is good MOO programming style to use a scattering assignment at the top of nearly every verb (at least ones that are 'this none this'), since it shows so clearly just what kinds of arguments the verb expects.
 
-### Operations on BOOLs
+## Operations on BOOLs
 
 ToastStunt offers a `bool` type. This type can be either `true` which is considered `1` or `false` which is considered `0`. Boolean values can be set in your code/props much the same way any other value can be assigned to a variable or property.
 
@@ -713,7 +713,7 @@ The true and false variables are set at task runtime (or your code) and can be o
 
 > Fine Point: As mentioned earlier, there are constants like STR which resolved to the integer code 2. OBJ resolves to the integer code of 1. Thus if you were to execute code such as `typeof(#15840) == TRUE` you would get a truthy response, as typeof() would return `1` to denote the object's integer code. This is a side effect of `true` always equaling 1, for compatibility reasons.
 
-### Getting and Setting the Values of Properties
+## Getting and Setting the Values of Properties
 
 Usually, one can read the value of a property on an object with a simple expression:
 
@@ -761,7 +761,7 @@ As with variables, one uses the assignment operator (`=`) to change the value of
 
 changes the value of the `foo` property of the object numbered 27 to be 17 and then returns 31. Assignments to properties check that the owner of the current verb has write permission on the given property, raising `E_PERM` otherwise. Read permission is not required.
 
-### Calling Built-in Functions and Other Verbs
+## Calling Built-in Functions and Other Verbs
 
 MOO provides a large number of useful functions for performing a wide variety of operations; a complete list, giving their names, arguments, and semantics, appears in a separate section later. As an example to give you the idea, there is a function named `length` that returns the length of a given string or list.
 
@@ -815,7 +815,7 @@ $name(expr-1, expr-2, ..., expr-N)
 #0:name(expr-1, expr-2, ..., expr-N)
 ```
 
-### Verb Calls on Primitive Types
+## Verb Calls on Primitive Types
 
 The server supports verbs calls on primitive types (numbers, strings, etc.) so calls like `"foo bar":split()` can be implemented and work as expected (they were always syntactically correct in LambdaMOO but resulted in an E_TYPE error). Verbs are implemented on prototype object delegates ($int_proto, $float_proto, $str_proto, etc.). The server transparently invokes the correct verb on the appropriate prototype -- the primitive value is the value of `this'.
 
@@ -823,7 +823,7 @@ This also includes supporting calling verbs on an object prototype ($obj_proto).
 
 > Fine Point: Utilizing verbs on primitives is a matter of style. Some people like it, some people don't. The author suggests you keep a utility object (like $string_utils) and simply forward verb calls from your primitive to this utility, which keeps backwards compatibility with how ToastCore and LambdaCore are generally built. By default in ToastCore, the primitives just wrap around their `type`_utils counterparts.
 
-### Catching Errors in Expressions
+## Catching Errors in Expressions
 
 It is often useful to be able to _catch_ an error that an expression raises, to keep the error from aborting the whole task, and to keep on running as if the expression had returned some other value normally. The following expression accomplishes this:
 
@@ -861,7 +861,7 @@ Returns `E_DIV`.
 
 > Note: It's important to mention how powerful this compact syntax for writing error catching code can be. When used properly you can write very complex and elegant code. For example imagine that you have a set of objects from different parents, some of which define a specific verb, and some of which do not. If for instance, your code wants to perform some function _if_ the verb exists, you can write `obj:verbname() ! E_VERBNF' to allow the MOO to attempt to execute that verb and then if it fails, catch the error and continue operations normally.
 
-### Parentheses and Operator Precedence
+## Parentheses and Operator Precedence
 
 As shown in a few examples above, MOO allows you to use parentheses to make it clear how you intend for complex expressions to be grouped. For example, the expression
 

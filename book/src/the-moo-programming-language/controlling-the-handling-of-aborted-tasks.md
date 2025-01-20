@@ -1,4 +1,4 @@
-## Controlling the Handling of Aborted Tasks
+# Controlling the Handling of Aborted Tasks
 
 The server will abort the execution of tasks for either of two reasons:
 

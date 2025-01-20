@@ -1,8 +1,8 @@
-## MOO Language Statements
+# MOO Language Statements
 
 Statements are MOO constructs that, in contrast to expressions, perform some useful, non-value-producing operation. For example, there are several kinds of statements, called _looping constructs_, that repeatedly perform some set of operations. Fortunately, there are many fewer kinds of statements in MOO than there are kinds of expressions.
 
-### Errors While Executing Statements
+## Errors While Executing Statements
 
 Statements do not return values, but some kinds of statements can, under certain circumstances described below, generate errors. If such an error is generated in a verb whose `d` (debug) bit is not set, then the error is ignored and the statement that generated it is simply skipped; execution proceeds with the next statement.
 
@@ -10,7 +10,7 @@ Statements do not return values, but some kinds of statements can, under certain
 
 If the `d` bit is set, as it usually is, then the error is _raised_ and can be caught and handled either by code surrounding the expression in question or by verbs higher up on the chain of calls leading to the current verb. If the error is not caught, then the server aborts the entire task and, by default, prints a message to the current player. See the descriptions of the error-catching expression and the `try`-`except` statement for the details of how errors can be caught, and the chapter on server assumptions about the database for details on the handling of uncaught errors.
 
-### Simple Statements
+## Simple Statements
 
 The simplest kind of statement is the _null_ statement, consisting of just a semicolon:
 
@@ -37,7 +37,7 @@ obj:verbname();
 2 < 1;
 ```
 
-### Statements for Testing Conditions
+## Statements for Testing Conditions
 
 The `if` statement allows you to decide whether or not to perform some statements based on the value of an arbitrary expression:
 
@@ -112,7 +112,7 @@ an-optional-else-phrase
 endif
 ```
 
-### Statements for Looping
+## Statements for Looping
 
 MOO provides three different kinds of looping statements, allowing you to have a set of statements executed (1) once for each element of a given sequence (list, map or string); (2) once for each integer or object number in a given range; and (3) over and over until a given condition stops being true.
 
@@ -224,7 +224,7 @@ With each kind of loop, it is possible that the statements in the body of the lo
 
 > Warning: With `while` loops it is especially important to make sure you do not create an infinite loop. That is, a loop that will never terminate because it's expression will never become false. Be especially careful if you suspend(), yin(), or $command_utils:suspend_if_needed() within a loop, as the task may never run out of ticks.
 
-### Terminating One or All Iterations of a Loop
+## Terminating One or All Iterations of a Loop
 
 Sometimes, it is useful to exit a loop before it finishes all of its iterations. For example, if the loop is used to search for a particular kind of element of a list, then it might make sense to stop looping as soon as the right kind of element is found, even if there are more elements yet to see. The `break` statement is used for this purpose; it has the form
 
@@ -285,7 +285,7 @@ else
 endif
 ```
 
-### Returning a Value from a Verb
+## Returning a Value from a Verb
 
 The MOO program in a verb is just a sequence of statements. Normally, when the verb is called, those statements are simply executed in order and then the integer 0 is returned as the value of the verb-call expression. Using the `return` statement, one can change this behavior. The `return` statement has one of the following two forms:
 
@@ -321,7 +321,7 @@ Of course we could write this much more simply (and get the index of the object 
 return seek_obj in list_of_objects;
 ```
 
-### Handling Errors in Statements
+## Handling Errors in Statements
 
 A traceback is raised when there is an error in the execution of code (this differs from a compilation error you might see when programming a verb).
 
@@ -404,7 +404,7 @@ except v (ANY)
 endtry
 ```
 
-### Cleaning Up After Errors
+## Cleaning Up After Errors
 
 Whenever an error is raised, it is usually the case that at least some MOO code gets skipped over and never executed. Sometimes, it's important that a piece of code _always_ be executed, whether or not an error is raised. Use the `try`-`finally` statement for these cases; it has the following syntax:
 
@@ -436,7 +436,7 @@ endtry
 
 > Warning: If a task runs out of ticks, it's possible for your finally code to not run.
 
-### Executing Statements at a Later Time
+## Executing Statements at a Later Time
 
 It is sometimes useful to have some sequence of statements execute at a later time, without human intervention. For example, one might implement an object that, when thrown into the air, eventually falls back to the ground; the `throw` verb on that object should arrange to print a message about the object landing on the ground, but the message shouldn't be printed until some number of seconds have passed.
 

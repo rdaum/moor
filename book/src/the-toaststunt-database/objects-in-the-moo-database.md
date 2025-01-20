@@ -1,4 +1,4 @@
-## Objects in the MOO Database
+# Objects in the MOO Database
 
 There are anonymous objects and permanent objects in ToastStunt. Throughout this guide when we discuss `objects` we are typically referring to `permanent objects` and not `anonymous objects`. When discussing anonymous objects we will call them out specifically.
 
@@ -14,7 +14,7 @@ The identifying number associated with a permanent object is unique to that obje
 
 Anonymous and permanent objects are made up of three kinds of pieces that together define its behavior: _attributes_, _properties_, and _verbs_.
 
-### Fundamental Object Attributes
+## Fundamental Object Attributes
 
 There are three fundamental _attributes_ to every object:
 
@@ -44,7 +44,7 @@ Invalid:        0x200   <destroy anonymous object>
 Recycled:       0x400   <destroy anonymous object and call recycle verb>
 ```
 
-### Properties on Objects
+## Properties on Objects
 
 A _property_ is a named "slot" in an object that can hold an arbitrary MOO value. Every object has eleven built-in properties whose values are constrained to be of particular types. In addition, an object can have any number of other properties, none of which have type constraints. The built-in properties are as follows:
 
@@ -112,7 +112,7 @@ Another, perhaps more down-to-earth example arose when a character named Ford st
 
 As explained later, programs run with the permissions of their author. So, in this case, Ford's nice verb for setting the channel ran with his permissions. But, since the `channel` property in the generic radio had the `c` permission bit set, the `channel` property on yduJ's radio was owned by her. Ford didn't have permission to change it! The fix was simple. Ford changed the permissions on the `channel` property of the generic radio to be just `r`, without the `c` bit, and yduJ made a new radio. This time, when yduJ's radio inherited the `channel` property, yduJ did not inherit ownership of it; Ford remained the owner. Now the radio worked properly, because Ford's verb had permission to change the channel.
 
-### Verbs on Objects
+## Verbs on Objects
 
 The final kind of piece making up an object is _verbs_. A verb is a named MOO program that is associated with a particular object. Most verbs implement commands that a player might type; for example, in the ToastCore database, there is a verb on all objects representing containers that implements commands of the form `put object in container`.
 

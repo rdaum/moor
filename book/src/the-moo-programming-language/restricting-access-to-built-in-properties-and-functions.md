@@ -1,4 +1,4 @@
-## Restricting Access to Built-in Properties and Functions
+# Restricting Access to Built-in Properties and Functions
 
 **Protected Properties**
 

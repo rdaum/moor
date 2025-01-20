@@ -1,6 +1,6 @@
-## Networking
+# Networking
 
-### Accepting and Initiating Network Connections
+## Accepting and Initiating Network Connections
 
 When the server first accepts a new, incoming network connection, it is given the low-level network address of computer on the other end. It immediately attempts to convert this address into the human-readable host name that will be entered in the server log and returned by the `connection_name()` function. This conversion can, for the TCP/IP networking configurations, involve a certain amount of communication with remote name servers, which can take quite a long time and/or fail entirely. While the server is doing this conversion, it is not doing anything else at all; in particular, it it not responding to user commands or executing MOO tasks.
 
@@ -10,7 +10,7 @@ When the `open_network_connection()` function is used, the server must again do 
 
 After a successful conversion, though, the server must still wait for the actual connection to be accepted by the remote computer. As before, this can take a long time during which the server is again doing nothing else. Also as before, the server will by default wait no more than 5 seconds for the connection attempt to succeed; if the timeout expires, `open_network_connection()` again raises `E_QUOTA`. This default timeout interval can also be overridden from within the database, by defining the property `outbound_connect_timeout` on `$server_options` with an integer as its value.
 
-### Associating Network Connections with Players
+## Associating Network Connections with Players
 
 When a network connection is first made to the MOO, it is identified by a unique, negative object number. Such a connection is said to be _un-logged-in_ and is not yet associated with any MOO player object.
 
@@ -79,7 +79,7 @@ During the call to `$do_out_of_band_command()`, the variable `player` is set to 
 
 Out-of-band commands are intended for use by fancy client programs that may generate asynchronous _events_ of which the server must be notified. Since the client cannot, in general, know the state of the player's connection (logged-in or not, reading task or not), out-of-band commands provide the only reliable client-to-server communications channel.
 
-### Player Input Handlers
+## Player Input Handlers
 
 **$do_out_of_band_command**
 

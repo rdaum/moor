@@ -1,8 +1,8 @@
-## Server Configuration
+# Server Configuration
 
 This section discusses the options for compiling and running the server that can affect the database and how the code within it runs.
 
-### Server Compilation Options
+## Server Compilation Options
 
 The following option values are specified (via #define) in the file `options.h` in the server sources. Except for those cases where property values on $server_options take precedence, these settings cannot be changed at runtime.
 
@@ -44,7 +44,7 @@ Network Options
 | ONLY_32_BITS             | Switch from 64bits back to 32bits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | CURL_TIMEOUT             | Specify the maximum amount of time a CURL request can take before failing.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
-### Running the Server
+## Running the Server
 
 The server command line has the following general form:
 
