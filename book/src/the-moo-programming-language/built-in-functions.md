@@ -9,4 +9,3 @@ Most functions take a certain fixed number of required arguments and, in some ca
 Functions are always called by the program for some verb; that program is running with the permissions of some player, usually the owner of the verb in question (it is not always the owner, though; wizards can use `set_task_perms()` to change the permissions _on the fly_). In the function descriptions below, we refer to the player whose permissions are being used as the _programmer_.
 
 Many built-in functions are described below as raising `E_PERM` unless the programmer meets certain specified criteria. It is possible to restrict use of any function, however, so that only wizards can use it; see the chapter on server assumptions about the database for details.
-

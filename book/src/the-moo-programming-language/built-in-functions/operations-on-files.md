@@ -1,8 +1,8 @@
 ### Operations on Files
 
-There are several administrator-only builtins for manipulating files from inside the MOO.  Security is enforced by making these builtins executable with wizard permissions only as well as only allowing access to a directory under the current directory (the one the server is running in). The new builtins are structured similarly to the stdio library for C. This allows MOO-code to perform stream-oriented I/O to files.
+There are several administrator-only builtins for manipulating files from inside the MOO. Security is enforced by making these builtins executable with wizard permissions only as well as only allowing access to a directory under the current directory (the one the server is running in). The new builtins are structured similarly to the stdio library for C. This allows MOO-code to perform stream-oriented I/O to files.
 
-Granting MOO code direct access to files opens a hole in the otherwise fairly good wall that the ToastStunt server puts up between the OS and the database.  The security is fairly well mitigated by restricting where files can be opened and allowing the builtins to be called by wizard permissions only. It is still possible execute various forms denial of service attacks, but the MOO server allows this form of attack as well.
+Granting MOO code direct access to files opens a hole in the otherwise fairly good wall that the ToastStunt server puts up between the OS and the database. The security is fairly well mitigated by restricting where files can be opened and allowing the builtins to be called by wizard permissions only. It is still possible execute various forms denial of service attacks, but the MOO server allows this form of attack as well.
 
 > Warning: Depending on what Core you are using (ToastCore, LambdaMOO, etc) you may have a utility that acts as a wrapper around the FileIO code. This is the preferred method for dealing with files and directly using the built-ins is discouraged. On ToastCore you may have a $file WAIF you can utilize for this purpose.
 
@@ -11,8 +11,9 @@ Granting MOO code direct access to files opens a hole in the otherwise fairly go
 > Note: More detailed information regarding the FileIO code can be found in the docs/FileioDocs.txt folder of the ToastStunt repo.
 
 The FileIO system has been updated in ToastCore and includes a number of enhancements over earlier LambdaMOO and Stunt versions.
-* Faster reading
-* Open as many files as you want, configurable with FILE_IO_MAX_FILES or $server_options.file_io_max_files
+
+- Faster reading
+- Open as many files as you want, configurable with FILE_IO_MAX_FILES or $server_options.file_io_max_files
 
 **FileIO Error Handling**
 
@@ -20,11 +21,11 @@ Errors are always handled by raising some kind of exception. The following excep
 
 `E_FILE`
 
-This is raised when a stdio call returned an error value. CODE is set to E_FILE, MSG is set to the return of strerror() (which may vary from system to system), and VALUE depends on which function raised the error.  When a function fails because the stdio function returned EOF, VALUE is set to "EOF".
+This is raised when a stdio call returned an error value. CODE is set to E_FILE, MSG is set to the return of strerror() (which may vary from system to system), and VALUE depends on which function raised the error. When a function fails because the stdio function returned EOF, VALUE is set to "EOF".
 
 `E_INVARG`
 
-This is raised for a number of reasons.  The common reasons are an invalid FHANDLE being passed to a function and an invalid pathname specification.  In each of these cases MSG will be set to the cause and VALUE will be the offending value.
+This is raised for a number of reasons. The common reasons are an invalid FHANDLE being passed to a function and an invalid pathname specification. In each of these cases MSG will be set to the cause and VALUE will be the offending value.
 
 `E_PERM`
 
@@ -42,38 +43,38 @@ str `file_version`()
 
 **Opening and closing of files and related functions**
 
-File streams are associated with FHANDLES.  FHANDLES are similar to the FILE\* using stdio.  You get an FHANDLE from file_open.  You should not depend on the actual type of FHANDLEs (currently TYPE_INT).  FHANDLEs are not persistent across server restarts.  That is, files open when the server is shut down are closed when it comes back up and no information about open files is saved in the DB.
+File streams are associated with FHANDLES. FHANDLES are similar to the FILE\* using stdio. You get an FHANDLE from file_open. You should not depend on the actual type of FHANDLEs (currently TYPE_INT). FHANDLEs are not persistent across server restarts. That is, files open when the server is shut down are closed when it comes back up and no information about open files is saved in the DB.
 
 ##### Function: `file_open`
 
-file_open -- Open a file 
+file_open -- Open a file
 
 FHANDLE `file_open`(STR pathname, STR mode)
 
 Raises: E_INVARG if mode is not a valid mode, E_QUOTA if too many files are open.
 
-This opens a file specified by pathname and returns an FHANDLE for it.  It ensures pathname is legal.  Mode is a string of characters indicating what mode the file is opened in. The mode string is four characters.
+This opens a file specified by pathname and returns an FHANDLE for it. It ensures pathname is legal. Mode is a string of characters indicating what mode the file is opened in. The mode string is four characters.
 
-The first character must be (r)ead, (w)rite, or (a)ppend.  The second must be '+' or '-'.  This modifies the previous argument.
+The first character must be (r)ead, (w)rite, or (a)ppend. The second must be '+' or '-'. This modifies the previous argument.
 
-* r- opens the file for reading and fails if the file does not exist.
-* r+ opens the file for reading and writing and fails if the file does not exist.
-* w- opens the file for writing, truncating if it exists and creating if not.
-* w+ opens the file for reading and writing, truncating if it exists and creating if not.
-* a- opens a file for writing, creates it if it does not exist and positions the stream at the end of the file.
-* a+ opens the file for reading and writing, creates it if does not exist and positions the stream at the end of the file.
+- r- opens the file for reading and fails if the file does not exist.
+- r+ opens the file for reading and writing and fails if the file does not exist.
+- w- opens the file for writing, truncating if it exists and creating if not.
+- w+ opens the file for reading and writing, truncating if it exists and creating if not.
+- a- opens a file for writing, creates it if it does not exist and positions the stream at the end of the file.
+- a+ opens the file for reading and writing, creates it if does not exist and positions the stream at the end of the file.
 
-The third character is either (t)ext or (b)inary.  In text mode, data is written as-is from the MOO and data read in by the MOO is stripped of unprintable characters.  In binary mode, data is written filtered through the binary-string->raw-bytes conversion and data is read filtered through the raw-bytes->binary-string conversion.  For example, in text mode writing " 1B" means three bytes are written: ' ' Similarly, in text mode reading " 1B" means the characters ' ' '1' 'B' were present in the file.  In binary mode reading " 1B" means an ASCII ESC was in the file.  In text mode, reading an ESC from a file results in the ESC getting stripped.
+The third character is either (t)ext or (b)inary. In text mode, data is written as-is from the MOO and data read in by the MOO is stripped of unprintable characters. In binary mode, data is written filtered through the binary-string->raw-bytes conversion and data is read filtered through the raw-bytes->binary-string conversion. For example, in text mode writing " 1B" means three bytes are written: ' ' Similarly, in text mode reading " 1B" means the characters ' ' '1' 'B' were present in the file. In binary mode reading " 1B" means an ASCII ESC was in the file. In text mode, reading an ESC from a file results in the ESC getting stripped.
 
-It is not recommended that files containing unprintable ASCII  data be read in text mode, for obvious reasons.
+It is not recommended that files containing unprintable ASCII data be read in text mode, for obvious reasons.
 
-The final character is either 'n' or 'f'.  If this character is 'f', whenever data is written to the file, the MOO will force it to finish writing to the physical disk before returning.  If it is 'n' then this won't happen.
+The final character is either 'n' or 'f'. If this character is 'f', whenever data is written to the file, the MOO will force it to finish writing to the physical disk before returning. If it is 'n' then this won't happen.
 
 This is implemented using fopen().
 
 ##### Function: `file_close`
 
-file_close -- Close a file 
+file_close -- Close a file
 
 void `file_close`(FHANDLE fh)
 
@@ -83,7 +84,7 @@ This is implemented using fclose().
 
 ##### Function: `file_name`
 
-file_name -- Returns the pathname originally associated with fh by file_open().  This is not necessarily the file's current name if it was renamed or unlinked after the fh was opened.
+file_name -- Returns the pathname originally associated with fh by file_open(). This is not necessarily the file's current name if it was renamed or unlinked after the fh was opened.
 
 STR `file_name`(FHANDLE fh)
 
@@ -103,7 +104,7 @@ LIST `file_handles` ()
 
 ##### Function: `file_readline`
 
-file_readline -- Reads the next line in the file and returns it (without the newline).  
+file_readline -- Reads the next line in the file and returns it (without the newline).
 
 str `file_readline`(FHANDLE fh)
 
@@ -113,7 +114,7 @@ This is implemented using fgetc().
 
 ##### Function: `file_readlines`
 
-file_readlines -- Rewinds the file and then reads the specified lines from the file, returning them as a list of strings.  After this operation, the stream is positioned right after the last line read.
+file_readlines -- Rewinds the file and then reads the specified lines from the file, returning them as a list of strings. After this operation, the stream is positioned right after the last line read.
 
 list `file_readlines`(FHANDLE fh, INT start, INT end)
 
@@ -215,15 +216,15 @@ This is implemented using ftell().
 
 ##### Function: `file_seek`
 
-file_seek -- Seeks to a particular location in a file.  
+file_seek -- Seeks to a particular location in a file.
 
 void `file_seek`(FHANDLE fh, INT loc, STR whence)
 
 whence is one of the strings:
 
-* "SEEK_SET" - seek to location relative to beginning
-* "SEEK_CUR" - seek to location relative to current
-* "SEEK_END" - seek to location relative to end
+- "SEEK_SET" - seek to location relative to beginning
+- "SEEK_CUR" - seek to location relative to current
+- "SEEK_END" - seek to location relative to end
 
 This is implemented using fseek().
 
@@ -263,7 +264,7 @@ int `file_last_modify`(FHANDLE filehandle)
 
 int `file_last_change`(FHANDLE filehandle)
 
-Returns the size, last access time, last modify time, or last change time of the specified file.   All of these functions also take FHANDLE arguments and then operate on the open file.
+Returns the size, last access time, last modify time, or last change time of the specified file. All of these functions also take FHANDLE arguments and then operate on the open file.
 
 ##### Function: `file_mode`
 
@@ -289,7 +290,7 @@ Specifically a list as follows:
 
 owner and group are always the empty string.
 
-It is recommended that the specific information functions file_size, file_type, file_mode, file_last_access, file_last_modify, and file_last_change be used instead.  In most cases only one of these elements is desired and in those cases there's no reason to make and free a list.
+It is recommended that the specific information functions file_size, file_type, file_mode, file_last_access, file_last_modify, and file_last_change be used instead. In most cases only one of these elements is desired and in those cases there's no reason to make and free a list.
 
 ##### Function: `file_rename`
 
@@ -302,7 +303,7 @@ This is implemented using rename().
 ##### Function: `file_remove`
 
 file_remove -- Attempts to remove the given file.
- 
+
 void `file_remove`(STR pathname)
 
 This is implemented using remove().
@@ -329,7 +330,7 @@ file_list -- Attempts to list the contents of the given directory.
 
 LIST `file_list`(STR pathname, [ANY detailed])
 
-Returns a list of files in the directory.  If the detailed argument is provided and true, then the list contains detailed entries, otherwise it contains a simple list of names.
+Returns a list of files in the directory. If the detailed argument is provided and true, then the list contains detailed entries, otherwise it contains a simple list of names.
 
 detailed entry:
 
@@ -369,9 +370,9 @@ int `sqlite_open`(STR path to database, [INT options])
 
 The second argument is a bitmask of options. Options are:
 
-SQLITE_PARSE_OBJECTS [4]:    Determines whether strings beginning with a pound symbol (#) are interpreted as MOO object numbers or not. The default is true, which means that any queries that would return a string (such as "#123") will be returned as objects.
+SQLITE_PARSE_OBJECTS [4]: Determines whether strings beginning with a pound symbol (#) are interpreted as MOO object numbers or not. The default is true, which means that any queries that would return a string (such as "#123") will be returned as objects.
 
-SQLITE_PARSE_TYPES [2]:      If unset, no parsing of rows takes place and only strings are returned.
+SQLITE_PARSE_TYPES [2]: If unset, no parsing of rows takes place and only strings are returned.
 
 SQLITE_SANITIZE_STRINGS [8]: If set, newlines (\n) are converted into tabs (\t) to avoid corrupting the MOO database. Default is unset.
 
@@ -460,7 +461,7 @@ As of this writing, the following limits exist:
 | LIMIT_LIKE_PATTERN_LENGTH | The maximum length of the pattern argument to the LIKE or GLOB operators.                                                                                                                                                                                                |
 | LIMIT_VARIABLE_NUMBER     | The maximum index number of any parameter in an SQL statement.                                                                                                                                                                                                           |
 | LIMIT_TRIGGER_DEPTH       | The maximum depth of recursion for triggers.                                                                                                                                                                                                                             |
-| LIMIT_WORKER_THREADS | The maximum number of auxiliary worker threads that a single prepared statement may start. |
+| LIMIT_WORKER_THREADS      | The maximum number of auxiliary worker threads that a single prepared statement may start.                                                                                                                                                                               |
 
 For an up-to-date list of limits, see the [SQLite documentation](https://www.sqlite.org/c3ref/c_limit_attached.html).
 
@@ -490,10 +491,10 @@ map `sqlite_info`(INT database handle)
 
 The information returned is:
 
-* Database Path
-* Type parsing enabled?
-* Object parsing enabled?
-* String sanitation enabled?
+- Database Path
+- Type parsing enabled?
+- Object parsing enabled?
+- String sanitation enabled?
 
 ##### Function: `sqlite_handles`
 
@@ -553,7 +554,7 @@ The second time pizza doesn't exist. The darkest timeline.
 
 ##### Function: `getenv`
 
-getenv -- Returns the value of the named environment variable. 
+getenv -- Returns the value of the named environment variable.
 
 str `getenv` (str name)
 
@@ -561,7 +562,7 @@ If no such environment variable exists, 0 is returned. If the programmer is not 
 
 ```
 getenv("HOME")                                          ⇒   "/home/foobar"
-getenv("XYZZY")      
+getenv("XYZZY")
 ```
 
 #### Operations on Network Connections
@@ -689,7 +690,7 @@ list `connection_info` (OBJ `connection`)
 | source_ip           | The unresolved numeric IP address of the interface a connection was made on. For outbound connections, this value is meaningless.                                                              |
 | source_port         | The local port a connection connected to. For outbound connections, this value is meaningless.                                                                                                 |
 | protocol            | Describes the protocol used to make the connection. At the time of writing, this could be IPv4 or IPv6.                                                                                        |
-| outbound | Indicates whether a connection is outbound or not |
+| outbound            | Indicates whether a connection is outbound or not                                                                                                                                              |
 
 ##### Function: `connection_name`
 
@@ -763,28 +764,28 @@ set_connection_option -- controls a number of optional behaviors associated the 
 
 none `set_connection_option` (obj conn, str option, value)
 
-Raises E_INVARG if conn does not specify a current connection and E_PERM if the programmer is neither conn nor a wizard. Unless otherwise specified below, options can only be set (value is true) or unset (otherwise). The following values for option are currently supported: 
+Raises E_INVARG if conn does not specify a current connection and E_PERM if the programmer is neither conn nor a wizard. Unless otherwise specified below, options can only be set (value is true) or unset (otherwise). The following values for option are currently supported:
 
 The following values for option are currently supported:
 
 `"binary"`
 When set, the connection is in binary mode, in which case both input from and output to conn can contain arbitrary bytes. Input from a connection in binary mode is not broken into lines at all; it is delivered to either the read() function or normal command parsing as binary strings, in whatever size chunks come back from the operating system. (See fine point on binary strings, for a description of the binary string representation.) For output to a connection in binary mode, the second argument to `notify()` must be a binary string; if it is malformed, E_INVARG is raised.
 
-> Fine point: If the connection mode is changed at any time when there is pending input on the connection, said input will be delivered as per the previous mode (i.e., when switching out of binary mode, there may be pending “lines” containing tilde-escapes for embedded linebreaks, tabs, tildes and other characters; when switching into binary mode, there may be pending lines containing raw tabs and from which nonprintable characters have been silently dropped as per normal mode. Only during the initial invocation of $do_login_command() on an incoming connection or immediately after the call to open_network_connection() that creates an outgoing connection is there guaranteed not to be pending input. At other times you will probably want to flush any pending input immediately after changing the connection mode. 
+> Fine point: If the connection mode is changed at any time when there is pending input on the connection, said input will be delivered as per the previous mode (i.e., when switching out of binary mode, there may be pending “lines” containing tilde-escapes for embedded linebreaks, tabs, tildes and other characters; when switching into binary mode, there may be pending lines containing raw tabs and from which nonprintable characters have been silently dropped as per normal mode. Only during the initial invocation of $do_login_command() on an incoming connection or immediately after the call to open_network_connection() that creates an outgoing connection is there guaranteed not to be pending input. At other times you will probably want to flush any pending input immediately after changing the connection mode.
 
 `"hold-input"`
 
-When set, no input received on conn will be treated as a command; instead, all input remains in the queue until retrieved by calls to read() or until this connection option is unset, at which point command processing resumes. Processing of out-of-band input lines is unaffected by this option. 
+When set, no input received on conn will be treated as a command; instead, all input remains in the queue until retrieved by calls to read() or until this connection option is unset, at which point command processing resumes. Processing of out-of-band input lines is unaffected by this option.
 
- `"disable-oob"`
+`"disable-oob"`
 
 When set, disables all out of band processing (see section Out-of-Band Processing). All subsequent input lines until the next command that unsets this option will be made available for reading tasks or normal command parsing exactly as if the out-of-band prefix and the out-of-band quoting prefix had not been defined for this server.
 
 `"client-echo"`
-The setting of this option is of no significance to the server. However calling set_connection_option() for this option sends the Telnet Protocol `WONT ECHO` or `WILL ECHO` according as value is true or false, respectively. For clients that support the Telnet Protocol, this should toggle whether or not the client echoes locally the characters typed by the user. Note that the server itself never echoes input characters under any circumstances. (This option is only available under the TCP/IP networking configurations.) 
+The setting of this option is of no significance to the server. However calling set_connection_option() for this option sends the Telnet Protocol `WONT ECHO` or `WILL ECHO` according as value is true or false, respectively. For clients that support the Telnet Protocol, this should toggle whether or not the client echoes locally the characters typed by the user. Note that the server itself never echoes input characters under any circumstances. (This option is only available under the TCP/IP networking configurations.)
 
 `"flush-command"`
-This option is string-valued. If the string is non-empty, then it is the flush command for this connection, by which the player can flush all queued input that has not yet been processed by the server. If the string is empty, then conn has no flush command at all. set_connection_option also allows specifying a non-string value which is equivalent to specifying the empty string. The default value of this option can be set via the property `$server_options.default_flush_command`; see Flushing Unprocessed Input for details. 
+This option is string-valued. If the string is non-empty, then it is the flush command for this connection, by which the player can flush all queued input that has not yet been processed by the server. If the string is empty, then conn has no flush command at all. set_connection_option also allows specifying a non-string value which is equivalent to specifying the empty string. The default value of this option can be set via the property `$server_options.default_flush_command`; see Flushing Unprocessed Input for details.
 
 `"intrinsic-commands"`
 
@@ -811,7 +812,7 @@ set_connection_options(player,"intrinsic-commands", save);
 return full_list;
 ```
 
-is a way of getting the full list of intrinsic commands available in the server while leaving the current connection unaffected. 
+is a way of getting the full list of intrinsic commands available in the server while leaving the current connection unaffected.
 
 ##### Function: `connection_options`
 
@@ -829,23 +830,23 @@ open_network_connection -- establishes a network connection to the place specifi
 
 obj `open_network_connection` (STR host, INT port [, MAP options])
 
-Establishes a network connection to the place specified by the arguments and more-or-less pretends that a new, normal player connection has been established from there.  The new connection, as usual, will not be logged in initially and will have a negative object number associated with it for use with `read()', `notify()', and `boot_player()'.  This object number is the value returned by this function.
+Establishes a network connection to the place specified by the arguments and more-or-less pretends that a new, normal player connection has been established from there. The new connection, as usual, will not be logged in initially and will have a negative object number associated with it for use with `read()',`notify()', and `boot_player()'. This object number is the value returned by this function.
 
-If the programmer is not a wizard or if the `OUTBOUND_NETWORK' compilation option was not used in building the server, then `E_PERM' is raised.
+If the programmer is not a wizard or if the `OUTBOUND_NETWORK' compilation option was not used in building the server, then`E_PERM' is raised.
 
-`host` refers to a string naming a host (possibly a numeric IP address) and `port` is an integer referring to a TCP port number.  If a connection cannot be made because the host does not exist, the port does not exist, the host is not reachable or refused the connection, `E_INVARG' is raised.  If the connection cannot be made for other reasons, including resource limitations, then `E_QUOTA' is raised.
+`host` refers to a string naming a host (possibly a numeric IP address) and `port` is an integer referring to a TCP port number. If a connection cannot be made because the host does not exist, the port does not exist, the host is not reachable or refused the connection, `E_INVARG' is raised.  If the connection cannot be made for other reasons, including resource limitations, then`E_QUOTA' is raised.
 
 Optionally, you can specify a map with any or all of the following options:
 
-  listener: An object whose listening verbs will be called at appropriate points. (See HELP LISTEN() for more details.)
+listener: An object whose listening verbs will be called at appropriate points. (See HELP LISTEN() for more details.)
 
-  tls:      If true, establish a secure TLS connection.
+tls: If true, establish a secure TLS connection.
 
-  ipv6:     If true, utilize the IPv6 protocol rather than the IPv4 protocol.
+ipv6: If true, utilize the IPv6 protocol rather than the IPv4 protocol.
 
-The outbound connection process involves certain steps that can take quite a long time, during which the server is not doing anything else, including responding to user commands and executing MOO tasks.  See the chapter on server assumptions about the database for details about how the server limits the amount of time it will wait for these steps to successfully complete.
+The outbound connection process involves certain steps that can take quite a long time, during which the server is not doing anything else, including responding to user commands and executing MOO tasks. See the chapter on server assumptions about the database for details about how the server limits the amount of time it will wait for these steps to successfully complete.
 
-It is worth mentioning one tricky point concerning the use of this function.  Since the server treats the new connection pretty much like any normal player connection, it will naturally try to parse any input from that connection as commands in the usual way.  To prevent this treatment, you should use `set_connection_option()' to set the `hold-input' option true on the connection.
+It is worth mentioning one tricky point concerning the use of this function. Since the server treats the new connection pretty much like any normal player connection, it will naturally try to parse any input from that connection as commands in the usual way. To prevent this treatment, you should use `set_connection_option()' to set the`hold-input' option true on the connection.
 
 Example:
 
@@ -875,7 +876,7 @@ Just like read(), if conn is provided, then the programmer must either be a wiza
 
 If parsing fails because the request or response is syntactically incorrect, read_http() will return a map with the single key "error" and a list of values describing the reason for the error. If parsing succeeds, read_http() will return a map with an appropriate subset of the following keys, with values parsed from the HTTP request or response: "method", "uri", "headers", "body", "status" and "upgrade".
 
- > Fine point: read_http() assumes the input strings are binary strings. When called interactively, as in the example below, the programmer must insert the literal line terminators or parsing will fail. 
+> Fine point: read_http() assumes the input strings are binary strings. When called interactively, as in the example below, the programmer must insert the literal line terminators or parsing will fail.
 
 The following example interactively reads an HTTP request from the players connection.
 
@@ -914,19 +915,19 @@ listen -- create a new point at which the server will listen for network connect
 
 value `listen` (obj object, port [, MAP options])
 
-Create a new point at which the server will listen for network connections, just as it does normally. `Object` is the object whose verbs `do_login_command', `do_command', `do_out_of_band_command', `user_connected', `user_created', `user_reconnected', `user_disconnected', and `user_client_disconnected' will be called at appropriate points as these verbs are called on #0 for normal connections. (See the chapter in the LambdaMOO Programmer's Manual on server assumptions about the database for the complete story on when these functions are called.) `Port` is a TCP port number on which to listen. The listen() function will return `port` unless `port` is zero, in which case the return value is a port number assigned by the operating system.
+Create a new point at which the server will listen for network connections, just as it does normally. `Object` is the object whose verbs `do_login_command',`do_command', `do_out_of_band_command',`user_connected', `user_created',`user_reconnected', `user_disconnected', and`user_client_disconnected' will be called at appropriate points as these verbs are called on #0 for normal connections. (See the chapter in the LambdaMOO Programmer's Manual on server assumptions about the database for the complete story on when these functions are called.) `Port` is a TCP port number on which to listen. The listen() function will return `port` unless `port` is zero, in which case the return value is a port number assigned by the operating system.
 
 An optional third argument allows you to set various miscellaneous options for the listening point. These are:
 
-  print-messages: If true, the various database-configurable messages (also detailed in the chapter on server assumptions) will be printed on connections received at the new listening port.
+print-messages: If true, the various database-configurable messages (also detailed in the chapter on server assumptions) will be printed on connections received at the new listening port.
 
-  ipv6:           Use the IPv6 protocol rather than IPv4.
+ipv6: Use the IPv6 protocol rather than IPv4.
 
-  tls:            Only accept valid secure TLS connections.
+tls: Only accept valid secure TLS connections.
 
-  certificate:    The full path to a TLS certificate. NOTE: Requires the TLS option also be specified and true. This option is only necessary if the certificate differs from the one specified in options.h.
+certificate: The full path to a TLS certificate. NOTE: Requires the TLS option also be specified and true. This option is only necessary if the certificate differs from the one specified in options.h.
 
-  key:            The full path to a TLS private key. NOTE: Requires the TLS option also be specified and true. This option is only necessary if the key differs from the one specified in options.h.
+key: The full path to a TLS private key. NOTE: Requires the TLS option also be specified and true. This option is only necessary if the key differs from the one specified in options.h.
 
 listen() raises E_PERM if the programmer is not a wizard, E_INVARG if `object` is invalid or there is already a listening point described by `point`, and E_QUOTA if some network-configuration-specific error occurred.
 
@@ -1022,7 +1023,7 @@ call_function -- calls the built-in function named func-name, passing the given 
 
 value `call_function` (str func-name, arg, ...)
 
-Raises `E_INVARG` if func-name is not recognized as the name of a known built-in function.  This allows you to compute the name of the function to call and, in particular, allows you to write a call to a built-in function that may or may not exist in the particular version of the server you're using.
+Raises `E_INVARG` if func-name is not recognized as the name of a known built-in function. This allows you to compute the name of the function to call and, in particular, allows you to write a call to a built-in function that may or may not exist in the particular version of the server you're using.
 
 ##### Function: `function_info`
 
@@ -1048,7 +1049,7 @@ where name is the name of the built-in function, min-args is the minimum number 
 {"tostr", 0, -1, {}}
 ```
 
-`listdelete()` takes exactly 2 arguments, of which the first must be a list (`LIST == 4`) and the second must be an integer (`INT == 0`).  `suspend()` has one optional argument that, if provided, must be a number (integer or float). `server_log()` has one required argument that must be a string (`STR == 2`) and one optional argument that, if provided, may be of any type.  `max()` requires at least one argument but can take any number above that, and the first argument must be either an integer or a floating-point number; the type(s) required for any other arguments can't be determined from this description. Finally, `tostr()` takes any number of arguments at all, but it can't be determined from this description which argument types would be acceptable in which positions.
+`listdelete()` takes exactly 2 arguments, of which the first must be a list (`LIST == 4`) and the second must be an integer (`INT == 0`). `suspend()` has one optional argument that, if provided, must be a number (integer or float). `server_log()` has one required argument that must be a string (`STR == 2`) and one optional argument that, if provided, may be of any type. `max()` requires at least one argument but can take any number above that, and the first argument must be either an integer or a floating-point number; the type(s) required for any other arguments can't be determined from this description. Finally, `tostr()` takes any number of arguments at all, but it can't be determined from this description which argument types would be acceptable in which positions.
 
 ##### Function: `eval`
 
@@ -1056,23 +1057,23 @@ eval -- the MOO-code compiler processes string as if it were to be the program a
 
 list `eval` (str string)
 
-If the programmer is not, in fact, a programmer, then `E_PERM` is raised. The normal result of calling `eval()` is a two element list.  The first element is true if there were no compilation errors and false otherwise. The second element is either the result returned from the fictional verb (if there were no compilation errors) or a list of the compiler's error messages (otherwise).
+If the programmer is not, in fact, a programmer, then `E_PERM` is raised. The normal result of calling `eval()` is a two element list. The first element is true if there were no compilation errors and false otherwise. The second element is either the result returned from the fictional verb (if there were no compilation errors) or a list of the compiler's error messages (otherwise).
 
 When the fictional verb is invoked, the various built-in variables have values as shown below:
 
-player    the same as in the calling verb
-this      #-1
-caller    the same as the initial value of this in the calling verb
+player the same as in the calling verb
+this #-1
+caller the same as the initial value of this in the calling verb
 
-args      {}
-argstr    ""
+args {}
+argstr ""
 
-verb      ""
-dobjstr   ""
-dobj      #-1
-prepstr   ""
-iobjstr   ""
-iobj      #-1
+verb ""
+dobjstr ""
+dobj #-1
+prepstr ""
+iobjstr ""
+iobj #-1
 
 The fictional verb runs with the permissions of the programmer and as if its `d` permissions bit were on.
 
@@ -1087,6 +1088,7 @@ set_task_perms -- changes the permissions with which the currently-executing ver
 one `set_task_perms` (obj who)
 
 If the programmer is neither who nor a wizard, then `E_PERM` is raised.
+
 > Note: This does not change the owner of the currently-running verb, only the permissions of this particular invocation. It is used in verbs owned by wizards to make themselves run with lesser (usually non-wizard) permissions.
 
 ##### Function: `caller_perms`
@@ -1099,7 +1101,7 @@ If the currently-executing verb was not called by another verb (i.e., it is the 
 
 ##### Function: `set_task_local`
 
-set_task_local -- Sets a value that gets associated with the current running task. 
+set_task_local -- Sets a value that gets associated with the current running task.
 
 void set_task_local(ANY value)
 
@@ -1136,7 +1138,7 @@ Note that the threading mode affects the current verb only and does NOT affect v
 
 ##### Function: `thread_info`
 
-thread_info -- If a MOO task is running in another thread, its thread handler will give you information about that thread. 
+thread_info -- If a MOO task is running in another thread, its thread handler will give you information about that thread.
 
 list `thread_info`(INT thread handler)
 
@@ -1282,11 +1284,11 @@ The returned value is a list of lists, each of which encodes certain information
 {task-id, start-time, x, y, programmer, verb-loc, verb-name, line, this, task-size}
 ```
 
-where task-id is an integer identifier for this queued task, start-time is the time after which this task will begin execution (in time() format), x and y are obsolete values that are no longer interesting, programmer is the permissions with which this task will begin execution (and also the player who owns this task), verb-loc is the object on which the verb that forked this task was defined at the time, verb-name is that name of that verb, line is the number of the first line of the code in that verb that this task will execute, this is the value of the variable `this` in that verb, and task-size is the size of the task in bytes. For reading tasks, start-time is -1. 
+where task-id is an integer identifier for this queued task, start-time is the time after which this task will begin execution (in time() format), x and y are obsolete values that are no longer interesting, programmer is the permissions with which this task will begin execution (and also the player who owns this task), verb-loc is the object on which the verb that forked this task was defined at the time, verb-name is that name of that verb, line is the number of the first line of the code in that verb that this task will execute, this is the value of the variable `this` in that verb, and task-size is the size of the task in bytes. For reading tasks, start-time is -1.
 
 The x and y fields are now obsolete and are retained only for backward-compatibility reasons. They may be reused for new purposes in some future version of the server.
 
-If `show-runtime` is true, all variables present in the task are presented in a map with the variable name as the key and its value as the value.     
+If `show-runtime` is true, all variables present in the task are presented in a map with the variable name as the key and its value as the value.
 
 If `count-only` is true, then only the number of tasks is returned. This is significantly more performant than length(queued_tasks()).
 
@@ -1310,17 +1312,17 @@ When enabled (via SAVE_FINISHED_TASKS in options.h), the server will keep track 
 
 The first is the finished_tasks() function. This function will return a list of maps of the last several finished tasks (configurable via $server_options.finished_tasks_limit) with the following information:
 
-| Value      | Description                                                                           |
-| ---------- | ------------------------------------------------------------------------------------- |
-| foreground | 1 if the task was a foreground task, 0 if it was a background task                    |
-| fullverb   | the full name of the verb, including aliases                                          |
-| object     | the object that defines the verb                                                      |
-| player     | the player that initiated the task                                                    |
-| programmer | the programmer who owns the verb                                                      |
-| receiver   | typically the same as 'this' but could be the handler in the case of primitive values |
-| suspended  | whether the task was suspended or not                                                 |
-| this       | the actual object the verb was called on                                              |
-| time | the total time it took the verb to run), and verb (the name of the verb call or command typed |
+| Value      | Description                                                                                   |
+| ---------- | --------------------------------------------------------------------------------------------- |
+| foreground | 1 if the task was a foreground task, 0 if it was a background task                            |
+| fullverb   | the full name of the verb, including aliases                                                  |
+| object     | the object that defines the verb                                                              |
+| player     | the player that initiated the task                                                            |
+| programmer | the programmer who owns the verb                                                              |
+| receiver   | typically the same as 'this' but could be the handler in the case of primitive values         |
+| suspended  | whether the task was suspended or not                                                         |
+| this       | the actual object the verb was called on                                                      |
+| time       | the total time it took the verb to run), and verb (the name of the verb call or command typed |
 
 The second is via the $handle_lagging_task verb. When the execution threshold defined in $server_options.task_lag_threshold is exceeded, the server will write an entry to the log file and call the $handle_lagging_task verb with the call stack of the task as well as the execution time.
 
@@ -1383,7 +1385,7 @@ server_log -- The text in message is sent to the server log with a distinctive p
 
 none server_log (str message [, int level])
 
-If the programmer is not a wizard, then E_PERM is raised. 
+If the programmer is not a wizard, then E_PERM is raised.
 
 If level is provided and is an integer between 0 and 7 inclusive, then message is marked in the server log as one of eight predefined types, from simple log message to error message. Otherwise, if level is provided and true, then message is marked in the server log as an error.
 
@@ -1459,7 +1461,7 @@ Raises `E_QUOTA` if, for some reason, no such on-disk representation is currentl
 
 ##### Function: `exec`
 
-exec -- Asynchronously executes the specified external executable, optionally sending input. 
+exec -- Asynchronously executes the specified external executable, optionally sending input.
 
 list `exec` (LIST command[, STR input][, LIST environment variables])
 
@@ -1515,6 +1517,4 @@ The server caches verbname-to-program lookups to improve performance. These func
 {hits, negative_hits, misses, table_clears, histogram},
 ```
 
-though this may change in future server releases. The cache is invalidated by any builtin function call that may have an effect on verb lookups (e.g., delete_verb()). 
-
-
+though this may change in future server releases. The cache is invalidated by any builtin function call that may have an effect on verb lookups (e.g., delete_verb()).

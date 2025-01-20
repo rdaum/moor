@@ -6,7 +6,7 @@ Expressions are those pieces of MOO code that generate values; for example, the 
 3 + 4
 ```
 
-is an expression that generates (or "has" or "returns") the value 7.  There are many kinds of expressions in MOO, all of them discussed below.
+is an expression that generates (or "has" or "returns") the value 7. There are many kinds of expressions in MOO, all of them discussed below.
 
 ### Errors While Evaluating Expressions
 
@@ -18,14 +18,14 @@ If the `d` bit is set, as it usually is, then the error is _raised_ and can be c
 
 ### Writing Values Directly in Verbs
 
-The simplest kind of expression is a literal MOO value, just as described in the section on values at the beginning of this document.  For example, the following are all expressions:
+The simplest kind of expression is a literal MOO value, just as described in the section on values at the beginning of this document. For example, the following are all expressions:
 
-* 17
-* #893
-* "This is a character string."
-* E_TYPE
-* ["key" -> "value"]
-* {"This", "is", "a", "list", "of", "words"}
+- 17
+- #893
+- "This is a character string."
+- E_TYPE
+- ["key" -> "value"]
+- {"This", "is", "a", "list", "of", "words"}
 
 In the case of lists, like the last example above, note that the list expression contains other expressions, several character strings in this case. In general, those expressions can be of any kind at all, not necessarily literal values. For example,
 
@@ -45,21 +45,21 @@ Variables are also "local" to a particular verb; every verb has its own set of t
 
 The name for a variable is made up entirely of letters, digits, and the underscore character (`_`) and does not begin with a digit. The following are all valid variable names:
 
-* foo
-* _foo
-* this2that
-* M68000
-* two_words
-* This_is_a_very_long_multiword_variable_name
+- foo
+- _foo
+- this2that
+- M68000
+- two_words
+- This_is_a_very_long_multiword_variable_name
 
 Note that, along with almost everything else in MOO, the case of the letters in variable names is insignificant. For example, these are all names for the same variable:
 
-* fubar
-* Fubar
-* FUBAR
-* fUbAr
+- fubar
+- Fubar
+- FUBAR
+- fUbAr
 
-A variable name is itself an expression; its value is the value of the named variable. When a verb begins, almost no variables have values yet; if you try to use the value of a variable that doesn't have one, the error value `E_VARNF` is raised. (MOO is unlike many other programming languages in which one must _declare_ each variable before using it; MOO has no such declarations.)  The following variables always have values:
+A variable name is itself an expression; its value is the value of the named variable. When a verb begins, almost no variables have values yet; if you try to use the value of a variable that doesn't have one, the error value `E_VARNF` is raised. (MOO is unlike many other programming languages in which one must _declare_ each variable before using it; MOO has no such declarations.) The following variables always have values:
 
 | Variable |
 | -------- |
@@ -130,8 +130,8 @@ variable = expression
 
 For example, to change the variable named `x` to have the value 17, you would write `x = 17` as an expression. An assignment expression does two things:
 
-* it changes the value of of the named variable
-* it returns the new value of that variable
+- it changes the value of of the named variable
+- it returns the new value of that variable
 
 Thus, the expression
 
@@ -173,7 +173,7 @@ Note that integer division in MOO throws away the remainder and that the result 
 
 Fine point: Integers and floating-point numbers cannot be mixed in any particular use of these arithmetic operators; unlike some other programming languages, MOO does not automatically coerce integers into floating-point numbers. You can use the `tofloat()` function to perform an explicit conversion.
 
-The `+` operator can also be used to append two strings. The expression 
+The `+` operator can also be used to append two strings. The expression
 
 `"foo" + "bar"`
 
@@ -209,7 +209,7 @@ MOO also supports the exponentiation operation, also known as "raising to a powe
 
 ### Bitwise Operators
 
-MOO also supports bitwise operations on integer types: 
+MOO also supports bitwise operations on integer types:
 
 | Operator | Meaning                              |
 | -------- | ------------------------------------ |
@@ -283,22 +283,22 @@ Note that, as with the equality operators, strings are compared case-insensitive
 
 There is a notion in MOO of _true_ and _false_ values; every value is one or the other. The true values are as follows:
 
-* all integers other than zero (positive or negative)
-* all floating-point numbers not equal to `0.0`
-* all non-empty strings (i.e., other than `""`)
-* all non-empty lists (i.e., other than `{}`)
-* all non-empty maps (i.e, other than `[]`)
-* the bool 'true'
+- all integers other than zero (positive or negative)
+- all floating-point numbers not equal to `0.0`
+- all non-empty strings (i.e., other than `""`)
+- all non-empty lists (i.e., other than `{}`)
+- all non-empty maps (i.e, other than `[]`)
+- the bool 'true'
 
 All other values are false:
 
-* the integer zero
-* the floating-point numbers `0.0` and `-0.0`
-* the empty string (`""`)
-* the empty list (`{}`)
-* all object numbers & object references 
-* all error values
-* the bool 'false'
+- the integer zero
+- the floating-point numbers `0.0` and `-0.0`
+- the empty string (`""`)
+- the empty list (`{}`)
+- all object numbers & object references
+- all error values
+- the bool 'false'
 
 > Note: Objects are considered false. If you need to evaluate if a value is of the type object, you can use `typeof(potential_object) == OBJ` however, keep in mind that this does not mean that the object referenced actually exists. IE: #100000000 will return true, but that does not mean that object exists in your MOO.
 
@@ -396,7 +396,7 @@ expression-1[expression-2]
 
 First, expression-1 is evaluated; it must return a list, map, or string (the _sequence_). Then, expression-2 is evaluated and must return an integer (the _index_) or the _key_ in the case of maps. If either of the expressions returns some other type of value, `E_TYPE` is returned.
 
-For lists and strings the index must be between 1 and the length of the sequence, inclusive; if it is not, then `E_RANGE` is raised.  The value of the indexing expression is the index'th element in the sequence. For maps, the key must be present, if it is not, then E_RANGE is raised. Within expression-2 you can use the symbol ^ as an expression returning the index or key of the first element in the sequence and you can use the symbol $ as an expression returning the index or key of the last element in expression-1.
+For lists and strings the index must be between 1 and the length of the sequence, inclusive; if it is not, then `E_RANGE` is raised. The value of the indexing expression is the index'th element in the sequence. For maps, the key must be present, if it is not, then E_RANGE is raised. Within expression-2 you can use the symbol ^ as an expression returning the index or key of the first element in the sequence and you can use the symbol $ as an expression returning the index or key of the last element in expression-1.
 
 ```
 "fob"[2]                =>  "o"
@@ -431,7 +431,7 @@ The first form writes into a variable, and the last three forms write into a pro
 
 Correspondingly, if variable does not yet have a value (i.e., it has never been assigned to), `E_VARNF` will be raised.
 
-If index-expr is not an integer (for lists and strings) or is a collection value (for maps), or if the value of `variable` or the property is not a list, map or string, `E_TYPE` is raised. If `result-expr` is a string, but not of length 1, E_INVARG is raised. Suppose `index-expr` evaluates to a value `k`. If `k` is an integer and is outside the range of the list or string (i.e. smaller than 1 or greater than the length of the list or string), `E_RANGE` is raised. If `k` is not a valid key of the map, `E_RANGE` is raised. Otherwise, the actual assignment takes place. 
+If index-expr is not an integer (for lists and strings) or is a collection value (for maps), or if the value of `variable` or the property is not a list, map or string, `E_TYPE` is raised. If `result-expr` is a string, but not of length 1, E_INVARG is raised. Suppose `index-expr` evaluates to a value `k`. If `k` is an integer and is outside the range of the list or string (i.e. smaller than 1 or greater than the length of the list or string), `E_RANGE` is raised. If `k` is not a valid key of the map, `E_RANGE` is raised. Otherwise, the actual assignment takes place.
 
 For lists, the variable or the property is assigned a new list that is identical to the original one except at the k-th position, where the new list contains the result of result-expr instead. Likewise for maps, the variable or the property is assigned a new map that is identical to the original one except for the k key, where the new map contains the result of result-expr instead. For strings, the variable or the property is assigned a new string that is identical to the original one, except the k-th character is changed to be result-expr.
 
@@ -439,7 +439,7 @@ If index-expr is not an integer, or if the value of variable or the property is 
 
 For lists, the variable or the property is assigned a new list that is identical to the original one except at the n-th position, where the new list contains the result of result-expr instead. For strings, the variable or the property is assigned a new string that is identical to the original one, except the n-th character is changed to be result-expr.
 
-The assignment expression itself returns the value of result-expr. For the following examples, assume that `l` initially contains the list `{1, 2, 3}`, that `m` initially contains the map `["one" -> 1, "two" -> 2]` and that `s` initially contains the string "foobar": 
+The assignment expression itself returns the value of result-expr. For the following examples, assume that `l` initially contains the list `{1, 2, 3}`, that `m` initially contains the map `["one" -> 1, "two" -> 2]` and that `s` initially contains the string "foobar":
 
 ```
 l[5] = 3          =>   E_RANGE (error)
@@ -463,7 +463,7 @@ m[1] = "baz"      =>   ["foo" -> "baz"]
 
 Fine point: After an indexed assignment, the variable or property contains a _new_ list or string, a copy of the original list in all but the n-th place, where it contains a new value. In programming-language jargon, the original list is not mutated, and there is no aliasing. (Indeed, no MOO value is mutable and no aliasing ever occurs.)
 
-In the list and map case, indexed assignment can be nested to many levels, to work on nested lists and maps. Assume that `l` initially contains the following 
+In the list and map case, indexed assignment can be nested to many levels, to work on nested lists and maps. Assume that `l` initially contains the following
 
 ```
 {{1, 2, 3}, {4, 5, 6}, "foo", ["bar" -> "baz"]}
@@ -486,9 +486,10 @@ l[$][^] = #3         =>   #3
 l                    =>   {{1, 2, 3}, "baz", "foo", ["bar" -> #3]}
 ```
 
-The first two examples raise E_RANGE because 7 is out of the range of `l` and 8 is out of the range of `l[1]`. The next two examples raise `E_TYPE` because `l[3]` and `l[1][1]` are not lists. 
+The first two examples raise E_RANGE because 7 is out of the range of `l` and 8 is out of the range of `l[1]`. The next two examples raise `E_TYPE` because `l[3]` and `l[1][1]` are not lists.
 
 #### Extracting a Subsequence of a List, Map or String
+
 The range expression extracts a specified subsequence from a list, map or string:
 
 ```
@@ -497,7 +498,7 @@ expression-1[expression-2..expression-3]
 
 The three expressions are evaluated in order. Expression-1 must return a list, map or string (the _sequence_) and the other two expressions must return integers (the _low_ and _high_ indices, respectively) for lists and strings, or non-collection values (the `begin` and `end` keys in the ordered map, respectively) for maps; otherwise, `E_TYPE` is raised. The `^` and `$` expression can be used in either or both of expression-2 and expression-3 just as before.
 
-If the low index is greater than the high index, then the empty string, list or map is returned, depending on whether the sequence is a string, list or map.  Otherwise, both indices must be between 1 and the length of the sequence (for lists or strings) or valid keys (for maps); `E_RANGE` is raised if they are not. A new list, map or string is returned that contains just the elements of the sequence with indices between the low/high and high/end bounds.
+If the low index is greater than the high index, then the empty string, list or map is returned, depending on whether the sequence is a string, list or map. Otherwise, both indices must be between 1 and the length of the sequence (for lists or strings) or valid keys (for maps); `E_RANGE` is raised if they are not. A new list, map or string is returned that contains just the elements of the sequence with indices between the low/high and high/end bounds.
 
 ```
 "foobar"[2..$]                       =>  "oobar"
@@ -524,7 +525,7 @@ As with indexed assignments, the first form writes into a variable, and the last
 
 If start-index-expr or end-index-expr is not an integer (for lists and strings) or a collection value (for maps), if the value of variable or the property is not a list, map, or string, or result-expr is not the same type as variable or the property, `E_TYPE` is raised. For lists and strings, `E_RANGE` is raised if end-index-expr is less than zero or if start-index-expr is greater than the length of the list or string plus one. Note: the length of result-expr does not need to be the same as the length of the specified range. For maps, `E_RANGE` is raised if `start-index-expr` or `end-index-expr` are not keys in the map.
 
-In precise terms, the subrange assignment 
+In precise terms, the subrange assignment
 
 ```
 v[start..end] = value
@@ -542,7 +543,7 @@ if v is a list and to
 v = v[1..start - 1] + value + v[end + 1..$]
 ```
 
-if v is a string. 
+if v is a string.
 
 There is no literal representation of the operation if v is a map. In this case the range given by start-index-expr and end-index-expr is removed, and the the values in result-expr are added.
 
@@ -590,7 +591,7 @@ The resulting list has the value of expression-1 as its first element, that of e
 The addition operator works with lists. When adding two lists together, the two will be concatenated:
 
 ```
-{1, 2, 3} + {4, 5, 6} => {1, 2, 3, 4, 5, 6}) 
+{1, 2, 3} + {4, 5, 6} => {1, 2, 3, 4, 5, 6})
 ```
 
 When adding another type to a list, it will append that value to the end of the list:
@@ -616,7 +617,7 @@ The list membership expression tests whether or not a given MOO value is an elem
 expression-1 in expression-2
 ```
 
-Expression-2 must return a list; otherwise, `E_TYPE` is raised.  If the value of expression-1 is in that list, then the index of its first occurrence in the list is returned; otherwise, the `in` expression returns 0.
+Expression-2 must return a list; otherwise, `E_TYPE` is raised. If the value of expression-1 is in that list, then the index of its first occurrence in the list is returned; otherwise, the `in` expression returns 0.
 
 ```
 2 in {5, 8, 2, 3}               =>  3
@@ -720,7 +721,7 @@ Usually, one can read the value of a property on an object with a simple express
 expression.name
 ```
 
-Expression must return an object number; if not, `E_TYPE` is raised. If the object with that number does not exist, `E_INVIND` is raised. Otherwise, if the object does not have a property with that name, then `E_PROPNF` is raised. Otherwise, if the named property is not readable by the owner of the current verb, then `E_PERM` is raised.  Finally, assuming that none of these terrible things happens, the value of the named property on the given object is returned.
+Expression must return an object number; if not, `E_TYPE` is raised. If the object with that number does not exist, `E_INVIND` is raised. Otherwise, if the object does not have a property with that name, then `E_PROPNF` is raised. Otherwise, if the named property is not readable by the owner of the current verb, then `E_PERM` is raised. Finally, assuming that none of these terrible things happens, the value of the named property on the given object is returned.
 
 I said "usually" in the paragraph above because that simple expression only works if the name of the property obeys the same rules as for the names of variables (i.e., consists entirely of letters, digits, and underscores, and doesn't begin with a digit). Property names are not restricted to this set, though. Also, it is sometimes useful to be able to figure out what property to read by some computation. For these more general uses, the following syntax is also allowed:
 
@@ -780,7 +781,7 @@ Verbs can also call other verbs, usually using this syntax:
 expr-0:name(expr-1, expr-2, ..., expr-N)
 ```
 
-Expr-0 must return an object number; `E_TYPE` is raised otherwise.  If the object with that number does not exist, `E_INVIND` is raised. If this task is too deeply nested in verbs calling verbs calling verbs, then `E_MAXREC` is raised; the default limit is 50 levels, but this can be changed from within the database; see the chapter on server assumptions about the database for details. If neither the object nor any of its ancestors defines a verb matching the given name, `E_VERBNF` is raised.  Otherwise, if none of these nasty things happens, the named verb on the given object is called; the various built-in variables have the following initial values in the called verb:
+Expr-0 must return an object number; `E_TYPE` is raised otherwise. If the object with that number does not exist, `E_INVIND` is raised. If this task is too deeply nested in verbs calling verbs calling verbs, then `E_MAXREC` is raised; the default limit is 50 levels, but this can be changed from within the database; see the chapter on server assumptions about the database for details. If neither the object nor any of its ancestors defines a verb matching the given name, `E_VERBNF` is raised. Otherwise, if none of these nasty things happens, the named verb on the given object is called; the various built-in variables have the following initial values in the called verb:
 
 | Variable            | Description                                                                                                                                                                      |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -816,7 +817,7 @@ $name(expr-1, expr-2, ..., expr-N)
 
 ### Verb Calls on Primitive Types
 
-The server supports verbs calls on primitive types (numbers, strings, etc.) so calls like `"foo bar":split()` can be implemented and work as expected (they were always syntactically correct in LambdaMOO but resulted in an E_TYPE error).  Verbs are implemented on prototype object delegates ($int_proto, $float_proto, $str_proto, etc.).  The server transparently invokes the correct verb on the appropriate prototype -- the primitive value is the value of `this'.
+The server supports verbs calls on primitive types (numbers, strings, etc.) so calls like `"foo bar":split()` can be implemented and work as expected (they were always syntactically correct in LambdaMOO but resulted in an E_TYPE error). Verbs are implemented on prototype object delegates ($int_proto, $float_proto, $str_proto, etc.). The server transparently invokes the correct verb on the appropriate prototype -- the primitive value is the value of `this'.
 
 This also includes supporting calling verbs on an object prototype ($obj_proto). Counterintuitively, this will only work for types of OBJ that are invalid. This can come in useful for un-logged-in connections (i.e. creating a set of convenient utilities for dealing with negative connections in-MOO).
 
@@ -858,7 +859,7 @@ Returns `x.y` if that doesn't cause an error, `17` if `x` doesn't have a `y` pro
 
 Returns `E_DIV`.
 
-> Note: It's important to mention how powerful this compact syntax for writing error catching code can be.  When used properly you can write very complex and elegant code. For example imagine that you have a set of objects from different parents, some of which define a specific verb, and some of which do not. If for instance, your code wants to perform some function _if_ the verb exists, you can write `obj:verbname() ! E_VERBNF' to allow the MOO to attempt to execute that verb and then if it fails, catch the error and continue operations normally.
+> Note: It's important to mention how powerful this compact syntax for writing error catching code can be. When used properly you can write very complex and elegant code. For example imagine that you have a set of objects from different parents, some of which define a specific verb, and some of which do not. If for instance, your code wants to perform some function _if_ the verb exists, you can write `obj:verbname() ! E_VERBNF' to allow the MOO to attempt to execute that verb and then if it fails, catch the error and continue operations normally.
 
 ### Parentheses and Operator Precedence
 
@@ -902,4 +903,3 @@ x = (((a < b) && (c > (d + (e * f)))) ? (w in y) | ((- q) - r))
 ```
 
 It is best to keep expressions simpler than this and to use parentheses liberally to make your meaning clear to other humans.
-

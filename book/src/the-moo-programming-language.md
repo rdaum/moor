@@ -1,6 +1,6 @@
 # The MOO Programming Language
 
-MOO stands for "MUD, Object Oriented."  MUD, in turn, has been said to stand for many different things, but I tend to think of it as "Multi-User Dungeon" in the spirit of those ancient precursors to MUDs, Adventure and Zork.
+MOO stands for "MUD, Object Oriented." MUD, in turn, has been said to stand for many different things, but I tend to think of it as "Multi-User Dungeon" in the spirit of those ancient precursors to MUDs, Adventure and Zork.
 
 MOO, the programming language, is a relatively small and simple object-oriented language designed to be easy to learn for most non-programmers; most complex systems still require some significant programming ability to accomplish, however.
 
@@ -18,4 +18,3 @@ endfor
 ```
 
 > Note: In practice, the only style of comments you will use is quoted strings of text. Get used to it. Another thing of note is that these strings ARE evaluated. Nothing is done with the results of the evaluation, because the value is not stored anywhere-- however, it may be prudent to keep string comments out of nested loops to make your code a bit faster.
-

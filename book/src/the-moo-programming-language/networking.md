@@ -61,7 +61,7 @@ When the network connection is first established, the null command is automatica
 
 > Warning: If there is no `$do_login_command()` verb defined, then lines of input from un-logged-in connections are simply discarded. Thus, it is _necessary_ for any database to include a suitable definition for this verb.
 
-> Note that a database with a missing or broken $do_login_command may still be accessed (and perhaps repaired) by running the server with the -e command line option. See section Emergency Wizard Mode. 
+> Note that a database with a missing or broken $do_login_command may still be accessed (and perhaps repaired) by running the server with the -e command line option. See section Emergency Wizard Mode.
 
 It is possible to compile the server with an option defining an `out-of-band prefix` for commands. This is a string that the server will check for at the beginning of every line of input from players, regardless of whether or not those players are logged in and regardless of whether or not reading tasks are waiting for input from those players. If a given line of input begins with the defined out-of-band prefix (leading spaces, if any, are _not_ stripped before testing), then it is not treated as a normal command or as input to any reading task. Instead, the line is parsed into a list of words in the usual way and those words are given as the arguments in a call to `$do_out_of_band_command()`. For example, if the out-of-band prefix were defined to be `#$#`, then the line of input
 
@@ -89,15 +89,14 @@ On any connection for which the connection-option disable-oob has not been set, 
 
 As we previously described in The Built-in Command Parser, on any logged-in connection that
 
-* is not the subject of a read() call,
-* does not have a .program command in progress, and
-* has not had its connection option hold-input set, 
+- is not the subject of a read() call,
+- does not have a .program command in progress, and
+- has not had its connection option hold-input set,
 
 any incoming line that
 
-* has not been flushed
-* is in-band (i.e., has not been consumed by out-of-band processing) and
-* is not itself .program or one of the other four intrinsic commands 
+- has not been flushed
+- is in-band (i.e., has not been consumed by out-of-band processing) and
+- is not itself .program or one of the other four intrinsic commands
 
-will result in a call to $do_command() provided that verb exists and is executable. If this verb suspends or returns a true value, then processing of that line ends at this point, otherwise, whether the verb returned false or did not exist in the first place, the remainder of the builtin parsing process is invoked. 
-
+will result in a call to $do_command() provided that verb exists and is executable. If this verb suspends or returns a true value, then processing of that line ends at this point, otherwise, whether the verb returned false or did not exist in the first place, the remainder of the builtin parsing process is invoked.

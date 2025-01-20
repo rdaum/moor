@@ -2,16 +2,16 @@
 
 There are only a few kinds of values that MOO programs can manipulate:
 
-* integers (in a specific, large range)
-* real numbers (represented with floating-point numbers)
-* strings (of characters)
-* object numbers (of the permanent objects in the database) 
-* object references (to the anonymous objects in the database)
-* bools
-* WAIFs
-* errors (arising during program execution)
-* lists (of all of the above, including lists)
-* maps (of all of the above, including lists and maps)
+- integers (in a specific, large range)
+- real numbers (represented with floating-point numbers)
+- strings (of characters)
+- object numbers (of the permanent objects in the database)
+- object references (to the anonymous objects in the database)
+- bools
+- WAIFs
+- errors (arising during program execution)
+- lists (of all of the above, including lists)
+- maps (of all of the above, including lists and maps)
 
 ### Integer Type
 
@@ -31,10 +31,10 @@ All of these examples mean the same number. The third of these, as an example of
 
 Fine point: The MOO represents floating-point numbers using the local meaning of the C-language `double` type, which is almost always equivalent to IEEE 754 double precision floating point. If so, then the smallest positive floating-point number is no larger than `2.2250738585072014e-308` and the largest floating-point number is `1.7976931348623157e+308`.
 
-* IEEE infinities and NaN values are not allowed in MOO.
-* The error `E_FLOAT` is raised whenever an infinity would otherwise be computed.
-* The error `E_INVARG` is raised whenever a NaN would otherwise arise.
-* The value `0.0` is always returned on underflow.
+- IEEE infinities and NaN values are not allowed in MOO.
+- The error `E_FLOAT` is raised whenever an infinity would otherwise be computed.
+- The error `E_INVARG` is raised whenever a NaN would otherwise arise.
+- The value `0.0` is always returned on underflow.
 
 ### String Type
 
@@ -67,9 +67,11 @@ MOO strings can be 'indexed into' using square braces and an integer index (much
 ```
 
 There is syntactic sugar that allows you to do:
+
 ```
 "Sli" in "Slither"
 ```
+
 as a shortcut for the index() built-in function.
 
 ### Object Type
@@ -108,7 +110,8 @@ false == -43 evaluates to false
 ```
 
 ### WAIF Type
-_WAIFs_ are lightweight objects. A WAIF is a value which you can store in a property or a variable or inside a LIST or another WAIF. A WAIF is smaller in size (measured in bytes) than a regular object, and it is faster to create and destroy. It is also reference counted, which means it is destroyed automatically when it is no longer in use. An empty WAIF is 72 bytes, empty list is 64 bytes. A WAIF will always be 8 bytes larger than a LIST (on 64bit, 4 bytes on 32bit) with the same values in it. 
+
+_WAIFs_ are lightweight objects. A WAIF is a value which you can store in a property or a variable or inside a LIST or another WAIF. A WAIF is smaller in size (measured in bytes) than a regular object, and it is faster to create and destroy. It is also reference counted, which means it is destroyed automatically when it is no longer in use. An empty WAIF is 72 bytes, empty list is 64 bytes. A WAIF will always be 8 bytes larger than a LIST (on 64bit, 4 bytes on 32bit) with the same values in it.
 
 > Note: WAIFs are not truly objects and don't really function like one. You can't manipulate a WAIF without basically recreating a normal object (and then what's the point?). It may be better to think of a WAIF as another data type. It's closer to being a list than it is to being an object. But that's semantics, really.
 
@@ -120,7 +123,7 @@ Essentially you should consider a WAIF as something you can make thousands of in
 
 You create and destroy OBJs explicitly with the builtins create() and recycle() (or allocate them from a pool using verbs in the core). They stay around no matter what you do until you destroy them.
 
-All of the other types you use in MOO (that require allocated memory) are reference counted. However you create them, they stay around as long as you keep them in a property or a variable somewhere, and when they are no longer used, they silently disappear, and you can't get them back. 
+All of the other types you use in MOO (that require allocated memory) are reference counted. However you create them, they stay around as long as you keep them in a property or a variable somewhere, and when they are no longer used, they silently disappear, and you can't get them back.
 
 We will go into more detail on WAIFs in the [Working with WAIFs](#working-with-waifs) section.
 
@@ -167,16 +170,15 @@ The final type in MOO is a _map_. It is sometimes called a hashmap, associative 
 
 The key of a map can be:
 
-* string
-* integer
-* object
-* error
-* float
-* anonymous object (not recommended)
-* waif
-* bool
+- string
+- integer
+- object
+- error
+- float
+- anonymous object (not recommended)
+- waif
+- bool
 
 The value of a map can be any valid MOO type including another map.
 
 > Note: Finding a value in a list is BigO(n) as a it uses a linear search. Maps are much more effective and are BigO(1) for retrieving a specific value by key.
-

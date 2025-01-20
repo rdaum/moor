@@ -1,6 +1,6 @@
 ## Server Commands and Database Assumptions
 
-This chapter describes all of the commands that are built into the server and every property and verb in the database specifically accessed by the server.  Aside from what is listed here, no assumptions are made by the server concerning the contents of the database.
+This chapter describes all of the commands that are built into the server and every property and verb in the database specifically accessed by the server. Aside from what is listed here, no assumptions are made by the server concerning the contents of the database.
 
 ### Command Lines That Receive Special Treatment
 
@@ -22,7 +22,7 @@ By default, each connection is initially given `.flush` as its flush command. If
 
 It is possible to compile the server to recognize an out-of-band prefix and an out-of-band quoting prefix for input lines. These are strings that the server will check for at the beginning of every unflushed line of input from a non-binary connection, regardless of whether or not a player is logged in and regardless of whether or not reading tasks are waiting for input on that connection.
 
-This check can be disabled entirely by setting connection option "disable-oob", in which case none of the rest of this section applies, i.e., all subsequent unflushed lines on that connection will be available unchanged for reading tasks or normal command parsing. 
+This check can be disabled entirely by setting connection option "disable-oob", in which case none of the rest of this section applies, i.e., all subsequent unflushed lines on that connection will be available unchanged for reading tasks or normal command parsing.
 
 #### Quoted Lines
 
@@ -31,13 +31,13 @@ We first describe how to ensure that a given input line will not be processed as
 If a given line of input begins with the defined out-of-band quoting prefix (`#$"` by default), that prefix is stripped. The resulting line is then available to reading tasks or normal command parsing in the usual way, even if said resulting line now happens to begin with either the out-of-band prefix or the out-of-band quoting prefix.
 
 For example, if a player types
- 	
+
 ```
 #$"#$#mcp-client-set-type fancy
 ```
 
 the server would behave exactly as if connection option "disable-oob" were set true and the player had instead typed
- 	
+
 ```
 #$#mcp-client-set-type fancy
 ```
@@ -49,20 +49,20 @@ If a given line of input begins with the defined out-of-band prefix (`#$#` by de
 If this verb does not exist or is not executable, the line in question will be completely ignored.
 
 For example, with the default out-of-band prefix, the line of input
- 	
+
 ```
 #$#mcp-client-set-type fancy
 ```
 
 would result in the following call being made in a new server task:
- 	
+
 ```
 $do_out_of_band_command("#$#mcp-client-set-type", "fancy")
 ```
 
 During the call to $do_out_of_band_command(), the variable player is set to the object number representing the player associated with the connection from which the input line came. Of course, if that connection has not yet logged in, the object number will be negative. Also, the variable argstr will have as its value the unparsed input line as received on the network connection.
 
-Out-of-band commands are intended for use by advanced client programs that may generate asynchronous events of which the server must be notified. Since the client cannot, in general, know the state of the player`s connection (logged-in or not, reading task or not), out-of-band commands provide the only reliable client-to-server communications channel. 
+Out-of-band commands are intended for use by advanced client programs that may generate asynchronous events of which the server must be notified. Since the client cannot, in general, know the state of the player`s connection (logged-in or not, reading task or not), out-of-band commands provide the only reliable client-to-server communications channel.
 
 [Telnet IAC](http://www.faqs.org/rfcs/rfc854.html) commands will also get captured and passed, as binary strings, to a `do_out_of_band_command` verb on the listener.
 
@@ -93,7 +93,7 @@ SUFFIX
 
 The effect of which, in a ToastCore-derived database, is to print out the code for the named verb preceded by a line containing only `>>MOO-Prefix<<` and followed by a line containing only `>>MOO-Suffix<<`. This enables the editor to reliably extract the program text from the MOO output and show it to the user in a separate editor window. There are many other possible uses.
 
-> Warning: If the command thus bracketed calls suspend(), its output will be deemed “finished” then and there; the suffix thus appears at that point and not, as one might expect, later when the resulting background task has finally returned from its top-level verb call. Thus, use of this feature (which was designed before suspend() existed) is no longer recommended. 
+> Warning: If the command thus bracketed calls suspend(), its output will be deemed “finished” then and there; the suffix thus appears at that point and not, as one might expect, later when the resulting background task has finally returned from its top-level verb call. Thus, use of this feature (which was designed before suspend() existed) is no longer recommended.
 
 The built-in function `output_delimiters()` can be used by MOO code to find out the output prefix and suffix currently in effect on a particular network connection.
 
@@ -113,9 +113,9 @@ If, at the time the line containing only a dot is processed, (a) the player is n
 
 In the `.program` command, object may have one of three forms:
 
-* The name of some object visible to the player. This is exactly like the kind of matching done by the server for the direct and indirect objects of ordinary commands. See the chapter on command parsing for details. Note that the special names `me` and `here` may be used.
-* An object number, in the form `#number`.
-* A _system property_ (that is, a property on `#0`), in the form `$name`. In this case, the current value of `#0.name` must be a valid object.
+- The name of some object visible to the player. This is exactly like the kind of matching done by the server for the direct and indirect objects of ordinary commands. See the chapter on command parsing for details. Note that the special names `me` and `here` may be used.
+- An object number, in the form `#number`.
+- A _system property_ (that is, a property on `#0`), in the form `$name`. In this case, the current value of `#0.name` must be a valid object.
 
 ### Initial Punctuation in Commands
 
@@ -144,4 +144,3 @@ say Hello, there.
 ```
 
 before parsing.
-
