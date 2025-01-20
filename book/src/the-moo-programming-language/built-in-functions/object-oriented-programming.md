@@ -2,7 +2,7 @@
 
 One of the most important facilities in an object-oriented programming language is ability for a child object to make use of a parent's implementation of some operation, even when the child provides its own definition for that operation. The `pass()` function provides this facility in MOO.
 
-**Function: `pass`**
+##### Function: `pass`
 
 pass -- calls the verb with the same name as the current verb but as defined on the parent of the object that defines the current verb.
 

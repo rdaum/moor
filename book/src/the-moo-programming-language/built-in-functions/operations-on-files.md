@@ -32,7 +32,7 @@ This is raised when any of these functions are called with non- wizardly permiss
 
 **General Functions**
 
-**Function: `file_version`**
+##### Function: `file_version`
 
 file_version -- Returns the package shortname/version number of this package e.g.
 
@@ -44,7 +44,7 @@ str `file_version`()
 
 File streams are associated with FHANDLES.  FHANDLES are similar to the FILE\* using stdio.  You get an FHANDLE from file_open.  You should not depend on the actual type of FHANDLEs (currently TYPE_INT).  FHANDLEs are not persistent across server restarts.  That is, files open when the server is shut down are closed when it comes back up and no information about open files is saved in the DB.
 
-**Function: `file_open`**
+##### Function: `file_open`
 
 file_open -- Open a file 
 
@@ -71,7 +71,7 @@ The final character is either 'n' or 'f'.  If this character is 'f', whenever da
 
 This is implemented using fopen().
 
-** Function: `file_close`**
+##### Function: `file_close`
 
 file_close -- Close a file 
 
@@ -81,19 +81,19 @@ Closes the file associated with fh.
 
 This is implemented using fclose().
 
-** Function: `file_name`**
+##### Function: `file_name`
 
 file_name -- Returns the pathname originally associated with fh by file_open().  This is not necessarily the file's current name if it was renamed or unlinked after the fh was opened.
 
 STR `file_name`(FHANDLE fh)
 
-** Function: `file_openmode`**
+##### Function: `file_openmode`
 
 file_open_mode -- Returns the mode the file associated with fh was opened in.
 
 str `file_openmode`(FHANDLE fh)
 
-** Function: `file_handles`**
+##### Function: `file_handles`
 
 file_handles -- Return a list of open files
 
@@ -101,7 +101,7 @@ LIST `file_handles` ()
 
 **Input and Output Operations**
 
-** Function: `file_readline`**
+##### Function: `file_readline`
 
 file_readline -- Reads the next line in the file and returns it (without the newline).  
 
@@ -111,7 +111,7 @@ Not recommended for use on files in binary mode.
 
 This is implemented using fgetc().
 
-** Function: `file_readlines`**
+##### Function: `file_readlines`
 
 file_readlines -- Rewinds the file and then reads the specified lines from the file, returning them as a list of strings.  After this operation, the stream is positioned right after the last line read.
 
@@ -121,7 +121,7 @@ Not recommended for use on files in binary mode.
 
 This is implemented using fgetc().
 
-** Function: `file_writeline`**
+##### Function: `file_writeline`
 
 file_writeline -- Writes the specified line to the file (adding a newline).
 
@@ -131,7 +131,7 @@ Not recommended for use on files in binary mode.
 
 This is implemented using fputs()
 
-** Function: `file_read`**
+##### Function: `file_read`
 
 file_read -- Reads up to the specified number of bytes from the file and returns them.
 
@@ -141,7 +141,7 @@ Not recommended for use on files in text mode.
 
 This is implemented using fread().
 
-** Function: `file_write`**
+##### Function: `file_write`
 
 file_write -- Writes the specified data to the file. Returns number of bytes written.
 
@@ -151,13 +151,13 @@ Not recommended for use on files in text mode.
 
 This is implemented using fwrite().
 
-** Function: `file_count_lines`**
+##### Function: `file_count_lines`
 
 file_count_lines -- count the lines in a file
 
 INT `file_count_lines` (FHANDLER fh)
 
-** Function: `file_grep`**
+##### Function: `file_grep`
 
 file_grep -- search for a string in a file
 
@@ -205,7 +205,7 @@ we will receive all the matching results:
 
 **Getting and setting stream position**
 
-** Function: `file_tell`**
+##### Function: `file_tell`
 
 file_tell -- Returns position in file.
 
@@ -213,7 +213,7 @@ INT `file_tell`(FHANDLE fh)
 
 This is implemented using ftell().
 
-** Function: `file_seek`**
+##### Function: `file_seek`
 
 file_seek -- Seeks to a particular location in a file.  
 
@@ -227,7 +227,7 @@ whence is one of the strings:
 
 This is implemented using fseek().
 
-** Function: `file_eof`**
+##### Function: `file_eof`
 
 file_eof -- Returns true if and only if fh's stream is positioned at EOF.
 
@@ -237,15 +237,15 @@ This is implemented using feof().
 
 **Housekeeping operations**
 
-** Function: `file_size`**
+##### Function: `file_size`
 
-** Function: `file_last_access`**
+##### Function: `file_last_access`
 
-** Function: `file_last_modify`**
+##### Function: `file_last_modify`
 
-** Function: `file_last_change`**
+##### Function: `file_last_change`
 
-** Function: `file_size`**
+##### Function: `file_size`
 
 int `file_size`(STR pathname)
 
@@ -265,7 +265,7 @@ int `file_last_change`(FHANDLE filehandle)
 
 Returns the size, last access time, last modify time, or last change time of the specified file.   All of these functions also take FHANDLE arguments and then operate on the open file.
 
-** Function: `file_mode`**
+##### Function: `file_mode`
 
 int `file_mode`(STR filename)
 
@@ -275,7 +275,7 @@ Returns octal mode for a file (e.g. "644").
 
 This is implemented using stat().
 
-**file_stat**
+##### Function: `file_stat`
 
 void `file_stat`(STR pathname)
 
@@ -291,7 +291,7 @@ owner and group are always the empty string.
 
 It is recommended that the specific information functions file_size, file_type, file_mode, file_last_access, file_last_modify, and file_last_change be used instead.  In most cases only one of these elements is desired and in those cases there's no reason to make and free a list.
 
-** Function: `file_rename`**
+##### Function: `file_rename`
 
 file_rename - Attempts to rename the oldpath to newpath.
 
@@ -299,7 +299,7 @@ void `file_rename`(STR oldpath, STR newpath)
 
 This is implemented using rename().
 
-**file_remove**
+##### Function: `file_remove`
 
 file_remove -- Attempts to remove the given file.
  
@@ -307,7 +307,7 @@ void `file_remove`(STR pathname)
 
 This is implemented using remove().
 
-**Function: `file_mkdir`**
+##### Function: `file_mkdir`
 
 file_mkdir -- Attempts to create the given directory.
 
@@ -315,7 +315,7 @@ void `file_mkdir`(STR pathname)
 
 This is implemented using mkdir().
 
-**Function: `file_rmdir`**
+##### Function: `file_rmdir`
 
 file_rmdir -- Attempts to remove the given directory.
 
@@ -323,7 +323,7 @@ void `file_rmdir`(STR pathname)
 
 This is implemented using rmdir().
 
-**Function: `file_list`**
+##### Function: `file_list`
 
 file_list -- Attempts to list the contents of the given directory.
 
@@ -341,7 +341,7 @@ STR filename
 
 This is implemented using scandir().
 
-**Function: `file_type`**
+##### Function: `file_type`
 
 file_type -- Returns the type of the given pathname, one of "reg", "dir", "dev", "fifo", or "socket".
 
@@ -349,7 +349,7 @@ STR `file_type`(STR pathname)
 
 This is implemented using stat().
 
-**Function: `file_chmod`**
+##### Function: `file_chmod`
 
 file_chmod -- Attempts to set mode of a file using mode as an octal string of exactly three characters.
 
@@ -361,7 +361,7 @@ This is implemented using chmod().
 
 SQLite allows you to store information in locally hosted SQLite databases.
 
-**Function: `sqlite_open`**
+##### Function: `sqlite_open`
 
 sqlite_open -- The function `sqlite_open` will attempt to open the database at path for use with SQLite.
 
@@ -383,7 +383,7 @@ If unsuccessful, the function will return a helpful error message.
 
 If the database is already open, a traceback will be thrown that contains the already open database handle.
 
-**Function: `sqlite_close`**
+##### Function: `sqlite_close`
 
 sqlite_close -- This function will close an open database.
 
@@ -393,7 +393,7 @@ If successful, return 1;
 
 If unsuccessful, returns E_INVARG.
 
-**Function: `sqlite_execute`**
+##### Function: `sqlite_execute`
 
 sqlite_execute -- This function will attempt to create and execute the prepared statement query given in query on the database referred to by handle with the values values.
 
@@ -419,7 +419,7 @@ sqlite_execute(4, "SELECT rowid FROM notes WHERE body REGEXP ?;", {"albori (snin
 
 > Note: This is a threaded function.
 
-**Function: `sqlite_query`**
+##### Function: `sqlite_query`
 
 sqlite_query -- This function will attempt to execute the query given in query on the database referred to by handle.
 
@@ -435,7 +435,7 @@ If show columns is true, the return list will include the name of the column bef
 
 > Note: This is a threaded function.
 
-**Function: `sqlite_limit`**
+##### Function: `sqlite_limit`
 
 sqlite_limit -- This function allows you to specify various construct limitations on a per-database basis.
 
@@ -464,13 +464,13 @@ As of this writing, the following limits exist:
 
 For an up-to-date list of limits, see the [SQLite documentation](https://www.sqlite.org/c3ref/c_limit_attached.html).
 
-**Function: `sqlite_last_insert_row_id`**
+##### Function: `sqlite_last_insert_row_id`
 
 sqlite_last_insert_row_id -- This function identifies the row ID of the last insert command executed on the database.
 
 int `sqlite_last_insert_row_id`(INT database handle)
 
-**Function: `sqlite_interrupt`**
+##### Function: `sqlite_interrupt`
 
 sqlite_interrupt -- This function causes any pending database operation to abort at its earliest opportunity.
 
@@ -482,7 +482,7 @@ This can be useful when you execute a long-running query and want to abort it.
 
 > NOTE: As of this writing (server version 2.7.0) the @kill command WILL NOT abort operations taking place in a helper thread. If you want to interrupt an SQLite query, you must use sqlite_interrupt and NOT the @kill command.
 
-**Function: `sqlite_info`**
+##### Function: `sqlite_info`
 
 sqlite_info -- This function returns a map of information about the database at handle
 
@@ -495,7 +495,7 @@ The information returned is:
 * Object parsing enabled?
 * String sanitation enabled?
 
-**Function: `sqlite_handles`**
+##### Function: `sqlite_handles`
 
 sqlite_handles -- Returns a list of open SQLite database handles.
 
@@ -503,7 +503,7 @@ list `sqlite_handles()`
 
 #### Operations on The Server Environment
 
-**Function: `exec`**
+##### Function: `exec`
 
 exec -- Asynchronously executes the specified external executable, optionally sending input.
 
@@ -551,7 +551,7 @@ exec({"vars.sh"}) => {0, "pizza = ~0A", ""}
 
 The second time pizza doesn't exist. The darkest timeline.
 
-**Function: `getenv`**
+##### Function: `getenv`
 
 getenv -- Returns the value of the named environment variable. 
 
@@ -566,7 +566,7 @@ getenv("XYZZY")
 
 #### Operations on Network Connections
 
-**Function: `connected_players`**
+##### Function: `connected_players`
 
 connected_players -- returns a list of the object numbers of those player objects with currently-active connections
 
@@ -574,11 +574,11 @@ list `connected_players` ([include-all])
 
 If include-all is provided and true, then the list includes the object numbers associated with _all_ current connections, including ones that are outbound and/or not yet logged-in.
 
-**Function: `connected_seconds`**
+##### Function: `connected_seconds`
 
 connected_seconds -- return the number of seconds that the currently-active connection to player has existed
 
-int `connected_seconds` (obj player) **Function: `idle_seconds`**
+int `connected_seconds` (obj player) ##### Function: `idle_seconds`
 
 idle_seconds -- return the number of seconds that the currently-active connection to player has been idle
 
@@ -586,7 +586,7 @@ int `idle_seconds` (obj player)
 
 If player is not the object number of a player object with a currently-active connection, then `E_INVARG` is raised.
 
-**Function: `notify`**
+##### Function: `notify`
 
 notify -- enqueues string for output (on a line by itself) on the connection conn
 
@@ -600,7 +600,7 @@ If no-flush is provided and true, then `notify()` never flushes any output from 
 
 If suppress-newline is provided and true, then `notify()` does not add a newline add the end of the string.
 
-**Function: `buffered_output_length`**
+##### Function: `buffered_output_length`
 
 buffered_output_length -- returns the number of bytes currently buffered for output to the connection conn
 
@@ -608,7 +608,7 @@ int `buffered_output_length` ([obj conn])
 
 If conn is not provided, returns the maximum number of bytes that will be buffered up for output on any connection.
 
-**Function: `read`**
+##### Function: `read`
 
 read -- reads and returns a line of input from the connection conn (or, if not provided, from the player that typed the command that initiated the current task)
 
@@ -634,7 +634,7 @@ set_connection_option(player, "hold-input", 0)
 
 to allow commands once again to be read and interpreted normally.
 
-**Function: `force_input`**
+##### Function: `force_input`
 
 force_input -- inserts the string line as an input task in the queue for the connection conn, just as if it had arrived as input over the network
 
@@ -642,7 +642,7 @@ none `force_input` (obj conn, str line [, at-front])
 
 If at_front is provided and true, then the new line of input is put at the front of conn's queue, so that it will be the very next line of input processed even if there is already some other input in that queue. Raises `E_INVARG` if conn does not specify a current connection and `E_PERM` if the programmer is neither conn nor a wizard.
 
-**Function: `flush_input`**
+##### Function: `flush_input`
 
 flush_input -- performs the same actions as if the connection conn's defined flush command had been received on that connection
 
@@ -650,7 +650,7 @@ none `flush_input` (obj conn [show-messages])
 
 I.E., removes all pending lines of input from conn's queue and, if show-messages is provided and true, prints a message to conn listing the flushed lines, if any. See the chapter on server assumptions about the database for more information about a connection's defined flush command.
 
-**Function: `output_delimiters`**
+##### Function: `output_delimiters`
 
 output_delimiters -- returns a list of two strings, the current _output prefix_ and _output suffix_ for player.
 
@@ -658,7 +658,7 @@ list `output_delimiters` (obj player)
 
 If player does not have an active network connection, then `E_INVARG` is raised. If either string is currently undefined, the value `""` is used instead. See the discussion of the `PREFIX` and `SUFFIX` commands in the next chapter for more information about the output prefix and suffix.
 
-**Function: `boot_player`**
+##### Function: `boot_player`
 
 boot_player -- marks for disconnection any currently-active connection to the given player
 
@@ -674,7 +674,7 @@ $user_disconnected(player)
 
 It is not an error if this verb does not exist; the call is simply skipped.
 
-**Function: `connection_info`**
+##### Function: `connection_info`
 
 connection_info -- Returns a MAP of network connection information for `connection`. At the time of writing, the following information is returned:
 
@@ -691,7 +691,7 @@ list `connection_info` (OBJ `connection`)
 | protocol            | Describes the protocol used to make the connection. At the time of writing, this could be IPv4 or IPv6.                                                                                        |
 | outbound | Indicates whether a connection is outbound or not |
 
-**Function: `connection_name`**
+##### Function: `connection_name`
 
 connection_name -- returns a network-specific string identifying the connection being used by the given player
 
@@ -731,7 +731,7 @@ where number is a UNIX numeric user ID.
 
 For the other networking configurations, the string is the same for all connections and, thus, useless.
 
-**Function: `connection_name_lookup`**
+##### Function: `connection_name_lookup`
 
 connection_name_lookup - This function performs a DNS name lookup on connection's IP address.
 
@@ -745,7 +745,7 @@ This function is primarily intended for use when the 'NO_NAME_LOOKUP' server opt
 
 > Note: This function runs in a separate thread. While this is good for performance (long lookups won't lock your MOO like traditional pre-2.6.0 name lookups), it also means it will require slightly more work to create an entirely in-database DNS lookup solution. Because it explicitly suspends, you won't be able to use it in 'do_login_command()' without also using the 'switch_player()' function. For an example of how this can work, see '#0:do_login_command()' in ToastCore.
 
-**Function: `switch_player`**
+##### Function: `switch_player`
 
 switch_player -- Silently switches the player associated with this connection from object1 to object2.
 
@@ -757,7 +757,7 @@ If silent is true, no connection messages will be printed.
 
 > Note: This calls the listening object's user_disconnected and user_connected verbs when appropriate.
 
-**Function: `set_connection_option`**
+##### Function: `set_connection_option`
 
 set_connection_option -- controls a number of optional behaviors associated the connection conn
 
@@ -813,7 +813,7 @@ return full_list;
 
 is a way of getting the full list of intrinsic commands available in the server while leaving the current connection unaffected. 
 
-**Function: `connection_options`**
+##### Function: `connection_options`
 
 connection_options -- returns a list of `{name, value}` pairs describing the current settings of all of the allowed options for the connection conn or the value if `name` is provided
 
@@ -823,7 +823,7 @@ Raises `E_INVARG` if conn does not specify a current connection and `E_PERM` if 
 
 Calling connection options without a name will return a LIST. Passing in name will return only the value for the option `name` requested.
 
-**Function: `open_network_connection`**
+##### Function: `open_network_connection`
 
 open_network_connection -- establishes a network connection to the place specified by the arguments and more-or-less pretends that a new, normal player connection has been established from there
 
@@ -855,7 +855,7 @@ open_network_connection("2607:5300:60:4be0::", 1234, ["ipv6" -> 1, "listener" ->
 
 Open a new connection to the IPv6 address 2607:5300:60:4be0:: on port 1234 using TLS. Relevant verbs will be called on #6.
 
-**Function: `curl`**
+##### Function: `curl`
 
 str `curl`(STR url [, INT include_headers, [ INT timeout])
 
@@ -865,7 +865,7 @@ It's worth noting that the data you get back will be binary encoded. In particul
 
 CURL_TIMEOUT is defined in options.h to specify the maximum amount of time a CURL request can take before failing. For special circumstances, you can specify a longer or shorter timeout using the third argument of curl().
 
-**Function: `read_http`**
+##### Function: `read_http`
 
 map `read_http` (request-or-response [, OBJ conn])
 
@@ -908,7 +908,7 @@ The call returns the following:
 ["body" -> "1234567890", "headers" -> ["Content-Length" -> "10"], "status" -> 200]
 ```
 
-**Function: `listen`**
+##### Function: `listen`
 
 listen -- create a new point at which the server will listen for network connections, just as it does normally
 
@@ -938,7 +938,7 @@ listen(#0, 1234, ["ipv6" -> 1, "tls" -> 1, "certificate" -> "/etc/certs/somethin
 
 Listen for IPv6 connections on port 1234 and print messages as appropriate. These connections must be TLS and will use the private key and certificate found in /etc/certs.
 
-**Function: `unlisten`**
+##### Function: `unlisten`
 
 unlisten -- stop listening for connections on the point described by canon, which should be the second element of some element of the list returned by `listeners()`
 
@@ -946,7 +946,7 @@ none `unlisten` (canon)
 
 Raises `E_PERM` if the programmer is not a wizard and `E_INVARG` if there does not exist a listener with that description.
 
-**Function: `listeners`**
+##### Function: `listeners`
 
 listeners -- returns a list describing all existing listening points, including the default one set up automatically by the server when it was started (unless that one has since been destroyed by a call to `unlisten()`)
 
@@ -968,13 +968,13 @@ unlisten(12345); listen(#0, 7777, 1)
 
 #### Operations Involving Times and Dates
 
-**Function: `time`**
+##### Function: `time`
 
 time -- returns the current time, represented as the number of seconds that have elapsed since midnight on 1 January 1970, Greenwich Mean Time
 
 int `time` ()
 
-**Function: `ftime`**
+##### Function: `ftime`
 
 ftime -- Returns the current time represented as the number of seconds and nanoseconds that have elapsed since midnight on 1 January 1970, Greenwich Mean Time.
 
@@ -984,7 +984,7 @@ If the `monotonic` argument is supplied and set to 1, the time returned will be 
 
 The general rule of thumb is that you should use ftime() with no arguments for telling time and ftime() with the monotonic clock argument for measuring the passage of time.
 
-**Function: `ctime`**
+##### Function: `ctime`
 
 ctime -- interprets time as a time, using the same representation as given in the description of `time()`, above, and converts it into a 28-character, human-readable string
 
@@ -1008,7 +1008,7 @@ Note that `ctime()` interprets time for the local time zone of the computer on w
 
 #### MOO-Code Evaluation and Task Manipulation
 
-**Function: `raise`**
+##### Function: `raise`
 
 raise -- raises code as an error in the same way as other MOO expressions, statements, and functions do
 
@@ -1016,7 +1016,7 @@ none `raise` (code [, str message [, value]])
 
 Message, which defaults to the value of `tostr(code)`, and value, which defaults to zero, are made available to any `try`-`except` statements that catch the error. If the error is not caught, then message will appear on the first line of the traceback printed to the user.
 
-**Function: `call_function`**
+##### Function: `call_function`
 
 call_function -- calls the built-in function named func-name, passing the given arguments, and returns whatever that function returns
 
@@ -1024,7 +1024,7 @@ value `call_function` (str func-name, arg, ...)
 
 Raises `E_INVARG` if func-name is not recognized as the name of a known built-in function.  This allows you to compute the name of the function to call and, in particular, allows you to write a call to a built-in function that may or may not exist in the particular version of the server you're using.
 
-**Function: `function_info`**
+##### Function: `function_info`
 
 function_info -- returns descriptions of the built-in functions available on the server
 
@@ -1050,7 +1050,7 @@ where name is the name of the built-in function, min-args is the minimum number 
 
 `listdelete()` takes exactly 2 arguments, of which the first must be a list (`LIST == 4`) and the second must be an integer (`INT == 0`).  `suspend()` has one optional argument that, if provided, must be a number (integer or float). `server_log()` has one required argument that must be a string (`STR == 2`) and one optional argument that, if provided, may be of any type.  `max()` requires at least one argument but can take any number above that, and the first argument must be either an integer or a floating-point number; the type(s) required for any other arguments can't be determined from this description. Finally, `tostr()` takes any number of arguments at all, but it can't be determined from this description which argument types would be acceptable in which positions.
 
-**Function: `eval`**
+##### Function: `eval`
 
 eval -- the MOO-code compiler processes string as if it were to be the program associated with some verb and, if no errors are found, that fictional verb is invoked
 
@@ -1080,7 +1080,7 @@ The fictional verb runs with the permissions of the programmer and as if its `d`
 eval("return 3 + 4;")   =>   {1, 7}
 ```
 
-**Function: `set_task_perms`**
+##### Function: `set_task_perms`
 
 set_task_perms -- changes the permissions with which the currently-executing verb is running to be those of who
 
@@ -1089,7 +1089,7 @@ one `set_task_perms` (obj who)
 If the programmer is neither who nor a wizard, then `E_PERM` is raised.
 > Note: This does not change the owner of the currently-running verb, only the permissions of this particular invocation. It is used in verbs owned by wizards to make themselves run with lesser (usually non-wizard) permissions.
 
-**Function: `caller_perms`**
+##### Function: `caller_perms`
 
 caller_perms -- returns the permissions in use by the verb that called the currently-executing verb
 
@@ -1097,7 +1097,7 @@ obj `caller_perms` ()
 
 If the currently-executing verb was not called by another verb (i.e., it is the first verb called in a command or server task), then `caller_perms()` returns `#-1`.
 
-**Function: `set_task_local`**
+##### Function: `set_task_local`
 
 set_task_local -- Sets a value that gets associated with the current running task. 
 
@@ -1110,19 +1110,19 @@ set_task_local("arbitrary data")
 set_task_local({"list", "of", "arbitrary", "data"})
 ```
 
-**Function: `task_local`**
+##### Function: `task_local`
 
 task_local -- Returns the value associated with the current task. The value is set with the `set_task_local` function.
 
 mixed `task_local` ()
 
-**Function: `threads`**
+##### Function: `threads`
 
 threads -- When one or more MOO processes are suspended and working in a separate thread, this function will return a LIST of handlers to those threads. These handlers can then be passed to `thread_info' for more information.
 
 list `threads`()
 
-**Function: `set_thread_mode`**
+##### Function: `set_thread_mode`
 
 int `set_thread_mode`([INT mode])
 
@@ -1134,7 +1134,7 @@ When should you disable threading? In general, threading should be disabled in v
 
 Note that the threading mode affects the current verb only and does NOT affect verbs called from within that verb.
 
-**Function: `thread_info`**
+##### Function: `thread_info`
 
 thread_info -- If a MOO task is running in another thread, its thread handler will give you information about that thread. 
 
@@ -1146,7 +1146,7 @@ English Name: This is the name the programmer of the builtin function has given 
 
 Active: 1 or 0 depending upon whether or not the MOO task has been killed. Not all threads cleanup immediately after the MOO task dies.
 
-**Function: `thread_pool`**
+##### Function: `thread_pool`
 
 void `thread_pool`(STR function, STR pool [, INT value])
 
@@ -1170,11 +1170,11 @@ Examples:
 thread_pool("INIT", "MAIN", 1)     => Replace the existing main thread pool with a new pool consisting of a single thread.
 ```
 
-**Function: `ticks_left`**
+##### Function: `ticks_left`
 
 ticks_left -- return the number of ticks left to the current task before it will be forcibly terminated
 
-int `ticks_left` () **Function: `seconds_left`**
+int `ticks_left` () ##### Function: `seconds_left`
 
 seconds_left -- return the number of seconds left to the current task before it will be forcibly terminated
 
@@ -1182,7 +1182,7 @@ int `seconds_left` ()
 
 These are useful, for example, in deciding when to call `suspend()` to continue a long-lived computation.
 
-**Function: `task_id`**
+##### Function: `task_id`
 
 task_id -- returns the non-zero, non-negative integer identifier for the currently-executing task
 
@@ -1190,7 +1190,7 @@ int `task_id` ()
 
 Such integers are randomly selected for each task and can therefore safely be used in circumstances where unpredictability is required.
 
-**Function: `suspend`**
+##### Function: `suspend`
 
 suspend -- suspends the current task, and resumes it after at least seconds seconds
 
@@ -1235,7 +1235,7 @@ A suspended task, like a forked task, can be described by the `queued_tasks()` f
 
 By default, there is no limit to the number of tasks any player may suspend, but such a limit can be imposed from within the database. See the chapter on server assumptions about the database for details.
 
-**Function: `resume`**
+##### Function: `resume`
 
 resume -- immediately ends the suspension of the suspended task with the given task-id; that task's call to `suspend()` will return value, which defaults to zero
 
@@ -1243,7 +1243,7 @@ none `resume` (int task-id [, value])
 
 If value is of type `ERR`, it will be raised, rather than returned, in the suspended task. `Resume()` raises `E_INVARG` if task-id does not specify an existing suspended task and `E_PERM` if the programmer is neither a wizard nor the owner of the specified task.
 
-**Function: `yin`**
+##### Function: `yin`
 
 yin -- Suspend the current task if it's running out of ticks or seconds.
 
@@ -1259,7 +1259,7 @@ Minimum ticks: The minimum number of ticks the task has left before suspending.
 
 Minimum seconds: The minimum number of seconds the task has left before suspending.
 
-**Function: `queue_info`**
+##### Function: `queue_info`
 
 queue_info -- if player is omitted, returns a list of object numbers naming all players that currently have active task queues inside the server
 
@@ -1270,7 +1270,7 @@ If player is provided, returns the number of background tasks currently queued f
 
 If the caller is a wizard a map of debug information about task queues will be returned.
 
-**Function: `queued_tasks`**
+##### Function: `queued_tasks`
 
 queued_tasks -- returns information on each of the background tasks (i.e., forked, suspended or reading) owned by the programmer (or, if the programmer is a wizard, all queued tasks)
 
@@ -1292,7 +1292,7 @@ If `count-only` is true, then only the number of tasks is returned. This is sign
 
 > Warning: If you are upgrading to ToastStunt from a version of LambdaMOO prior to 1.8.1 you will need to dump your database, reboot into LambdaMOO emergency mode, and kill all your queued_tasks() before dumping the DB again. Otherwise, your DB will not boot into ToastStunt.
 
-**Function: `kill_task`**
+##### Function: `kill_task`
 
 kill_task -- removes the task with the given task-id from the queue of waiting tasks
 
@@ -1300,7 +1300,7 @@ none `kill_task` (int task-id)
 
 If the programmer is not the owner of that task and not a wizard, then `E_PERM` is raised. If there is no task on the queue with the given task-id, then `E_INVARG` is raised.
 
-**Function: `finished_tasks()`**
+##### Function: `finished_tasks()`
 
 finished_tasks -- returns a list of the last X tasks to finish executing, including their total execution time
 
@@ -1326,7 +1326,7 @@ The second is via the $handle_lagging_task verb. When the execution threshold de
 
 > Note: This builtin must be enabled in options.h to be used.
 
-**Function: `callers`**
+##### Function: `callers`
 
 callers -- returns information on each of the verbs and built-in functions currently waiting to resume execution in the current task
 
@@ -1348,7 +1348,7 @@ For functions, this, programmer, and verb-loc are all `#-1`, verb-name is the na
 
 The first element of the list returned by `callers()` gives information on the verb that called the currently-executing verb, the second element describes the verb that called that one, and so on. The last element of the list describes the first verb called in this task.
 
-**Function: `task_stack`**
+##### Function: `task_stack`
 
 task_stack -- returns information like that returned by the `callers()` function, but for the suspended task with the given task-id; the include-line-numbers argument has the same meaning as in `callers()`
 
@@ -1362,7 +1362,7 @@ If include-variables is passed and true, variables will be included with each fr
 
 #### Administrative Operations
 
-**Function: `server_version`**
+##### Function: `server_version`
 
 server_version -- returns a string giving the version number of the running MOO server
 
@@ -1377,7 +1377,7 @@ none `load_server_options` ()
 
 For more information see section Server Options Set in the Database.. If the programmer is not a wizard, then E_PERM is raised.
 
-**Function: `server_log`**
+##### Function: `server_log`
 
 server_log -- The text in message is sent to the server log with a distinctive prefix (so that it can be distinguished from server-generated messages)
 
@@ -1387,7 +1387,7 @@ If the programmer is not a wizard, then E_PERM is raised.
 
 If level is provided and is an integer between 0 and 7 inclusive, then message is marked in the server log as one of eight predefined types, from simple log message to error message. Otherwise, if level is provided and true, then message is marked in the server log as an error.
 
-**Function: `renumber`**
+##### Function: `renumber`
 
 renumber -- the object number of the object currently numbered object is changed to be the least nonnegative object number not currently in use and the new object number is returned
 
@@ -1399,7 +1399,7 @@ The references to object in the parent/children and location/contents hierarchie
 
 This operation is intended for use in making new versions of the ToastCore database from the then-current ToastStunt database, and other similar situations. Its use requires great care.
 
-**Function: `reset_max_object`**
+##### Function: `reset_max_object`
 
 reset_max_object -- the server's idea of the highest object number ever used is changed to be the highest object number of a currently-existing object, thus allowing reuse of any higher numbers that refer to now-recycled objects
 
@@ -1409,7 +1409,7 @@ If the programmer is not a wizard, then `E_PERM` is raised.
 
 This operation is intended for use in making new versions of the ToastCore database from the then-current ToastStunt database, and other similar situations. Its use requires great care.
 
-**Function: `memory_usage`**
+##### Function: `memory_usage`
 
 memory_usage -- Return statistics concerning the server's consumption of system memory.
 
@@ -1419,7 +1419,7 @@ The result is a list in the following format:
 
 {total memory used, resident set size, shared pages, text, data + stack}
 
-**Function: `usage`**
+##### Function: `usage`
 
 usage -- Return statistics concerning the server the MOO is running on.
 
@@ -1431,7 +1431,7 @@ The result is a list in the following format:
 {{load averages}, user time, system time, page reclaims, page faults, block input ops, block output ops, voluntary context switches, involuntary context switches, signals received}
 ```
 
-**Function: `dump_database`**
+##### Function: `dump_database`
 
 dump_database -- requests that the server checkpoint the database at its next opportunity
 
@@ -1439,7 +1439,7 @@ none `dump_database` ()
 
 It is not normally necessary to call this function; the server automatically checkpoints the database at regular intervals; see the chapter on server assumptions about the database for details. If the programmer is not a wizard, then `E_PERM` is raised.
 
-**Function: `panic`**
+##### Function: `panic`
 
 panic -- Unceremoniously shut down the server, mimicking the behavior of a fatal error.
 
@@ -1449,7 +1449,7 @@ The database will NOT be dumped to the file specified when starting the server. 
 
 > Warning: Don't run this unless you really want to panic your server.
 
-**Function: `db_disk_size`**
+##### Function: `db_disk_size`
 
 db_disk_size -- returns the total size, in bytes, of the most recent full representation of the database as one or more disk files
 
@@ -1457,7 +1457,7 @@ int `db_disk_size` ()
 
 Raises `E_QUOTA` if, for some reason, no such on-disk representation is currently available.
 
-**Function: `exec`**
+##### Function: `exec`
 
 exec -- Asynchronously executes the specified external executable, optionally sending input. 
 
@@ -1493,7 +1493,7 @@ exec({"cat"}, "foo")                                     {0, "foo", ""}
 exec({"echo", "one", "two"})                             {0, "one two~0A", ""}
 ```
 
-**Function: `shutdown`**
+##### Function: `shutdown`
 
 shutdown -- requests that the server shut itself down at its next opportunity
 
@@ -1501,9 +1501,9 @@ none `shutdown` ([str message])
 
 Before doing so, a notice (incorporating message, if provided) is printed to all connected players. If the programmer is not a wizard, then `E_PERM` is raised.
 
-**Function: `verb_cache_stats`**
+##### Function: `verb_cache_stats`
 
-**Function: `log_cache_stats`**
+##### Function: `log_cache_stats`
 
 list verb_cache_stats ()
 
