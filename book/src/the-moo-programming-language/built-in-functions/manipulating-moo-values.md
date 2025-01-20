@@ -6,9 +6,11 @@ There are several functions for performing primitive operations on MOO values, a
 
 ### Function: `typeof`
 
-typeof -- Takes any MOO value and returns an integer representing the type of value.
+```
+int typeof(value)
+```
 
-int `typeof` (value)
+Takes any MOO value and returns an integer representing the type of value.
 
 The result is the same as the initial value of one of these built-in variables: `INT`, `FLOAT`, `STR`, `LIST`, `OBJ`, or `ERR`, `BOOL`, `MAP`, `WAIF`, `ANON`. Thus, one usually writes code like this:
 
@@ -26,9 +28,11 @@ because the former is much more readable than the latter.
 
 ### Function: `tostr`
 
-tostr -- Converts all of the given MOO values into strings and returns the concatenation of the results.
+```
+str tostr(value, ...)
+```
 
-str `tostr` (value, ...)
+Converts all of the given MOO values into strings and returns the concatenation of the results.
 
 ```
 tostr(17)                  =>   "17"
@@ -45,9 +49,11 @@ Warning `tostr()` does not do a good job of converting lists and maps into strin
 
 ### Function: `toliteral`
 
-Returns a string containing a MOO literal expression that, when evaluated, would be equal to value.
+```
+str toliteral(value)
+```
 
-str `toliteral` (value)
+Returns a string containing a MOO literal expression that, when evaluated, would be equal to value.
 
 ```
 toliteral(17)         =>   "17"
@@ -61,9 +67,11 @@ toliteral(E_PERM)     =>   "E_PERM"
 
 ### Function: `toint`
 
-toint -- Converts the given MOO value into an integer and returns that integer.
+```
+int toint(value)
+```
 
-int `toint` (value)
+Converts the given MOO value into an integer and returns that integer.
 
 Floating-point numbers are rounded toward zero, truncating their fractional parts. Object numbers are converted into the equivalent integers. Strings are parsed as the decimal encoding of a real number which is then converted to an integer. Errors are converted into integers obeying the same ordering (with respect to `<=` as the errors themselves. `toint()` raises `E_TYPE` if value is a list. If value is a string but the string does not contain a syntactically-correct number, then `toint()` returns 0.
 
@@ -79,9 +87,11 @@ toint(E_TYPE)      =>   1
 
 ### Function: `toobj`
 
-toobj -- Converts the given MOO value into an object number and returns that object number.
+```
+obj toobj(value)
+```
 
-obj `toobj` (value)
+Converts the given MOO value into an object number and returns that object number.
 
 The conversions are very similar to those for `toint()` except that for strings, the number _may_ be preceded by `#`.
 
@@ -94,9 +104,11 @@ toobj({1, 2})     =>   E_TYPE (error)
 
 ### Function: `tofloat`
 
-tofloat -- Converts the given MOO value into a floating-point number and returns that number.
+```
+float tofloat(value)
+```
 
-float `tofloat` (value)
+Converts the given MOO value into a floating-point number and returns that number.
 
 Integers and object numbers are converted into the corresponding integral floating-point numbers. Strings are parsed as the decimal encoding of a real number which is then represented as closely as possible as a floating-point number. Errors are first converted to integers as in `toint()` and then converted as integers are. `tofloat()` raises `E_TYPE` if value is a list. If value is a string but the string does not contain a syntactically-correct number, then `tofloat()` returns 0.
 
@@ -110,9 +122,11 @@ tofloat(E_TYPE)      =>   1.0
 
 ### Function: `equal`
 
-equal -- Returns true if value1 is completely indistinguishable from value2.
+```
+int equal(value, value2)
+```
 
-int `equal` (value, value2)
+Returns true if value1 is completely indistinguishable from value2.
 
 This is much the same operation as `value1 == value2` except that, unlike `==`, the `equal()` function does not treat upper- and lower-case characters in strings as equal and thus, is case-sensitive.
 
@@ -124,31 +138,37 @@ equal("Foo", "Foo")    =>   1
 
 ### Function: `value_bytes`
 
-value_bytes -- Returns the number of bytes of the server's memory required to store the given value.
+```
+int value_bytes(value)
+```
 
-int `value_bytes` (value)
+Returns the number of bytes of the server's memory required to store the given value.
 
 ### Function: `value_hash`
 
-value_hash -- Returns the same string as `string_hash(toliteral(value))`.
+```
+str value_hash(value, [, str algo] [, binary])
+```
 
-str `value_hash` (value, [, str algo] [, binary])
+Returns the same string as `string_hash(toliteral(value))`.
 
 See the description of `string_hash()` for details.
 
 ### Function: `value_hmac`
 
-value_hmac -- Returns the same string as string_hmac(toliteral(value), key)
+```
+str value_hmac(value, STR key [, STR algo [, binary]])
+```
 
-str `value_hmac` (value, STR key [, STR algo [, binary]])
+Returns the same string as string_hmac(toliteral(value), key)
 
 See the description of string_hmac() for details.
 
 ### Function: `generate_json`
 
-generate_json -- Returns the JSON representation of the MOO value.
-
-str generate_json (value [, str mode])
+```
+str generate_json(value [, str mode])
+```
 
 Returns the JSON representation of the MOO value.
 
@@ -187,9 +207,11 @@ generate_json([#1 -> 2], "embedded-types")                  =>  "{\"#1|obj\":2}"
 
 ### Function: `parse_json`
 
-parse_json -- Returns the MOO value representation of the JSON string.
+```
+value parse_json(str json [, str mode])
+```
 
-value parse_json (str json [, str mode])
+Returns the MOO value representation of the JSON string.
 
 If the specified string is not valid JSON, E_INVARG is raised.
 
@@ -228,9 +250,11 @@ parse_json("{\"#1|obj\":2}", "embedded-types")              =>   [#1 -> 2]
 
 ### Function: `random`
 
-random -- Return a random integer
+```
+int random([int mod, [int range]])
+```
 
-int `random` ([int mod, [int range]])
+random -- Return a random integer
 
 mod must be a positive integer; otherwise, `E_INVARG` is raised. If mod is not provided, it defaults to the largest MOO integer, which will depend on if you are running 32 or 64-bit.
 
@@ -244,167 +268,215 @@ random(1, 5000)             => integer between 1 and 5000
 
 ### Function: `frandom`
 
-float `frandom` (FLOAT mod1 [, FLOAT mod2)
+```
+float frandom(FLOAT mod1 [, FLOAT mod2)
+```
 
 If only one argument is given, a floating point number is chosen randomly from the range `[1.0..mod1]` and returned. If two arguments are given, a floating point number is randomly chosen from the range `[mod1..mod2]`.
 
 ### Function: `random_bytes`
 
-int `random_bytes` (int count)
+```
+int random_bytes(int count)
+```
 
 Returns a binary string composed of between one and 10000 random bytes. count specifies the number of bytes and must be a positive integer; otherwise, E_INVARG is raised.
 
 ### Function: `reseed_random`
 
-reseed_random -- Provide a new seed to the pseudo random number generator.
+```
+void reseed_random()
+```
 
-void `reseed_random`()
+Provide a new seed to the pseudo random number generator.
 
 ### Function: `min`
 
-min -- Return the smallest of it's arguments.
+```
+int min(int x, ...)
+```
 
-int `min` (int x, ...)
+Return the smallest of it's arguments.
 
 All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is raised.
 
 ### Function: `max`
 
-max -- Return the largest of it's arguments.
+```
+int max(int x, ...)
+```
 
-int `max` (int x, ...)
+Return the largest of it's arguments.
 
 All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is raised.
 
 ### Function: `abs`
 
-abs -- Returns the absolute value of x.
+```
+int abs(int x)
+```
 
-int `abs` (int x)
+Returns the absolute value of x.
 
 If x is negative, then the result is `-x`; otherwise, the result is x. The number x can be either integer or floating-point; the result is of the same kind.
 
 ### Function: `exp`
 
-exp -- Returns E (Eulers number) raised to the power of x.
+```
+float exp(FLOAT x)
+```
 
-float exp (FLOAT x)
+Returns E (Eulers number) raised to the power of x.
 
 ### Function: `floatstr`
 
-floatstr -- Converts x into a string with more control than provided by either `tostr()` or `toliteral()`.
+```
+str floatstr(float x, int precision [, scientific])
+```
 
-str `floatstr` (float x, int precision [, scientific])
+Converts x into a string with more control than provided by either `tostr()` or `toliteral()`.
 
 Precision is the number of digits to appear to the right of the decimal point, capped at 4 more than the maximum available precision, a total of 19 on most machines; this makes it possible to avoid rounding errors if the resulting string is subsequently read back as a floating-point value. If scientific is false or not provided, the result is a string in the form `"MMMMMMM.DDDDDD"`, preceded by a minus sign if and only if x is negative. If scientific is provided and true, the result is a string in the form `"M.DDDDDDe+EEE"`, again preceded by a minus sign if and only if x is negative.
 
 ### Function: `sqrt`
 
-sqrt -- Returns the square root of x.
+```
+float sqrt(float x)
+```
 
-float `sqrt` (float x)
+Returns the square root of x.
 
 Raises `E_INVARG` if x is negative.
 
 ### Function: `sin`
 
-sin -- Returns the sine of x.
+```
+float sin(float x)
+```
 
-float `sin` (float x)
+Returns the sine of x.
 
 ### Function: `cos`
 
-cos -- Returns the cosine of x.
+```
+float cos(float x)
+```
 
-float `cos` (float x)
+Returns the cosine of x.
 
 ### Function: `tangent`
 
-tan -- Returns the tangent of x.
+```
+float tan(float x)
+```
 
-float `tan` (float x)
+Returns the tangent of x.
 
 ### Function: `asin`
 
-asin -- Returns the arc-sine (inverse sine) of x, in the range `[-pi/2..pi/2]`
+```
+float asin(float x)
+```
 
-float `asin` (float x)
+Returns the arc-sine (inverse sine) of x, in the range `[-pi/2..pi/2]`
 
 Raises `E_INVARG` if x is outside the range `[-1.0..1.0]`.
 
 ### Function: `acos`
 
-acos -- Returns the arc-cosine (inverse cosine) of x, in the range `[0..pi]`
+```
+float acos(float x)
+```
 
-float `acos` (float x)
+Returns the arc-cosine (inverse cosine) of x, in the range `[0..pi]`
 
 Raises `E_INVARG` if x is outside the range `[-1.0..1.0]`.
 
 ### Function: `atan`
 
-atan -- Returns the arc-tangent (inverse tangent) of y in the range `[-pi/2..pi/2]`.
+```
+float atan(float y [, float x])
+```
 
-float `atan` (float y [, float x])
+Returns the arc-tangent (inverse tangent) of y in the range `[-pi/2..pi/2]`.
 
 if x is not provided, or of `y/x` in the range `[-pi..pi]` if x is provided.
 
 ### Function: `sinh`
 
-sinh -- Returns the hyperbolic sine of x.
+```
+float sinh(float x)
+```
 
-float `sinh` (float x)
+Returns the hyperbolic sine of x.
 
 ### Function: `cosh`
 
-cosh -- Returns the hyperbolic cosine of x.
+```
+float cosh(float x)
+```
 
-float `cosh` (float x)
+Returns the hyperbolic cosine of x.
 
 ### Function: `tanh`
 
-tanh -- Returns the hyperbolic tangent of x.
+```
+float tanh(float x)
+```
 
-float `tanh` (float x)
+Returns the hyperbolic tangent of x.
 
 ### Function: `exp`
 
-exp -- Returns e raised to the power of x.
+```
+float exp(float x)
+```
 
-float `exp` (float x)
+Returns e raised to the power of x.
 
 ### Function: `log`
 
-log -- Returns the natural logarithm of x.
+```
+float log(float x)
+```
 
-float `log` (float x)
+Returns the natural logarithm of x.
 
 Raises `E_INVARG` if x is not positive.
 
 ### Function: `log10`
 
-log10 -- Returns the base 10 logarithm of x.
+```
+float log10(float x)
+```
 
-float `log10` (float x)
+Returns the base 10 logarithm of x.
 
 Raises `E_INVARG` if x is not positive.
 
 ### Function: `ceil`
 
-ceil -- Returns the smallest integer not less than x, as a floating-point number.
+```
+float ceil(float x)
+```
 
-float `ceil` (float x)
+Returns the smallest integer not less than x, as a floating-point number.
 
 ### Function: `floor`
 
-floor -- Returns the largest integer not greater than x, as a floating-point number.
+```
+float floor(float x)
+```
 
-float `floor` (float x)
+Returns the largest integer not greater than x, as a floating-point number.
 
 ### Function: `trunc`
 
-trunc -- Returns the integer obtained by truncating x at the decimal point, as a floating-point number.
+```
+float trunc(float x)
+```
 
-float `trunc` (float x)
+Returns the integer obtained by truncating x at the decimal point, as a floating-point number.
 
 For negative x, this is equivalent to `ceil()`; otherwise it is equivalent to `floor()`.
 
@@ -412,9 +484,11 @@ For negative x, this is equivalent to `ceil()`; otherwise it is equivalent to `f
 
 ### Function: `length`
 
-length -- Returns the number of characters in string.
+```
+int length(str string)
+```
 
-int `length` (str string)
+Returns the number of characters in string.
 
 It is also permissible to pass a list to `length()`; see the description in the next section.
 
@@ -425,9 +499,11 @@ length("")      =>   0
 
 ### Function: `strsub`
 
-strsub -- Replaces all occurrences of what in subject with with, performing string substitution.
+```
+str strsub(str subject, str what, str with [, int case-matters])
+```
 
-str `strsub` (str subject, str what, str with [, int case-matters])
+Replaces all occurrences of what in subject with with, performing string substitution.
 
 The occurrences are found from left to right and all substitutions happen simultaneously. By default, occurrences of what are searched for while ignoring the upper/lower case distinction. If case-matters is provided and true, then case is treated as significant in all comparisons.
 
@@ -437,17 +513,16 @@ strsub("foobar", "OB", "b")             =>   "fobar"
 strsub("foobar", "OB", "b", 1)          =>   "foobar"
 ```
 
-### Function: `index`
-
-### Function: `rindex`
+### Functions: `index`, `rindex`
 
 index -- Returns the index of the first character of the first occurrence of str2 in str1.
 
 rindex -- Returns the index of the first character of the last occurrence of str2 in str1.
 
-int `index` (str str1, str str2, [, int case-matters [, int skip])
-
-int `rindex` (str str1, str str2, [, int case-matters [, int skip])
+```
+int index(str str1, str str2, [, int case-matters [, int skip])
+int rindex(str str1, str str2, [, int case-matters [, int skip])
+```
 
 These functions will return zero if str2 does not occur in str1 at all.
 
@@ -469,9 +544,11 @@ index("Foobar", "foo", 1)       ⇒   0
 
 ### Function: `strtr`
 
-strtr -- Transforms the string source by replacing the characters specified by str1 with the corresponding characters specified by str2.
+```
+int strtr(str source, str str1, str str2 [, case-matters])
+```
 
-int `strtr` (str source, str str1, str str2 [, case-matters])
+Transforms the string source by replacing the characters specified by str1 with the corresponding characters specified by str2.
 
 All other characters are not transformed. If str2 has fewer characters than str1 the unmatched characters are simply removed from source. By default the transformation is done on both upper and lower case characters no matter the case. If case-matters is provided and true, then case is treated as significant.
 
@@ -488,17 +565,21 @@ strtr("xXxX", "xXxX", "1234", 1)    ⇒    "3434"
 
 ### Function: `strcmp`
 
-strcmp -- Performs a case-sensitive comparison of the two argument strings.
+```
+int strcmp(str str1, str str2)
+```
 
-int `strcmp` (str str1, str str2)
+Performs a case-sensitive comparison of the two argument strings.
 
 If str1 is [lexicographically](https://en.wikipedia.org/wiki/Lexicographical_order) less than str2, the `strcmp()` returns a negative integer. If the two strings are identical, `strcmp()` returns zero. Otherwise, `strcmp()` returns a positive integer. The ASCII character ordering is used for the comparison.
 
 ### Function: `explode`
 
-explode -- Returns a list of substrings of subject that are separated by break. break defaults to a space.
+```
+list explodeSTR subject [, STR break [, INT include-sequential-occurrences])
+```
 
-list `explode`(STR subject [, STR break [, INT include-sequential-occurrences])
+Returns a list of substrings of subject that are separated by break. break defaults to a space.
 
 Only the first character of `break` is considered:
 
@@ -519,9 +600,11 @@ explode("%slither%is%%wiz%", "%", 1) => {"", "slither", "is", "", "wiz", ""}
 
 ### Function: `decode_binary`
 
-decode_binary -- Returns a list of strings and/or integers representing the bytes in the binary string bin_string in order.
+```
+list decode_binary(str bin-string [, int fully])
+```
 
-list `decode_binary` (str bin-string [, int fully])
+Returns a list of strings and/or integers representing the bytes in the binary string bin_string in order.
 
 If fully is false or omitted, the list contains an integer only for each non-printing, non-space byte; all other characters are grouped into the longest possible contiguous substrings. If fully is provided and true, the list contains only integers, one for each byte represented in bin_string. Raises `E_INVARG` if bin_string is not a properly-formed binary string. (See the early section on MOO value types for a full description of binary strings.)
 
@@ -535,9 +618,11 @@ decode_binary("foo~0D~0A", 1)      =>   {102, 111, 111, 13, 10}
 
 ### Function: `encode_binary`
 
-encode_binary -- Translates each integer and string in turn into its binary string equivalent, returning the concatenation of all these substrings into a single binary string.
+```
+str encode_binary(arg, ...)
+```
 
-str `encode_binary` (arg, ...)
+Translates each integer and string in turn into its binary string equivalent, returning the concatenation of all these substrings into a single binary string.
 
 Each argument must be an integer between 0 and 255, a string, or a list containing only legal arguments for this function. This function (See the early section on MOO value types for a full description of binary strings.)
 
@@ -549,9 +634,11 @@ encode_binary("foo", 10, "bar", 13)       =>   "foo~0Abar~0D"
 
 ### Function: `decode_base64`
 
-decode_base64 -- Returns the binary string representation of the supplied Base64 encoded string argument.
+```
+str decode_base64(str base64 [, int safe])
+```
 
-str `decode_base64` (str base64 [, int safe])
+Returns the binary string representation of the supplied Base64 encoded string argument.
 
 Raises E_INVARG if base64 is not a properly-formed Base64 string. If safe is provide and is true, a URL-safe version of Base64 is used (see RFC4648).
 
@@ -562,9 +649,11 @@ decode_base64("AAE", 1)    ⇒    "~00~01"
 
 ### Function: `encode_base64`
 
-encode_base64 -- Returns the Base64 encoded string representation of the supplied binary string argument.
+```
+str encode_base64(str binary [, int safe])
+```
 
-str `encode_base64` (str binary [, int safe])
+Returns the Base64 encoded string representation of the supplied binary string argument.
 
 Raises E_INVARG if binary is not a properly-formed binary string. If safe is provide and is true, a URL-safe version of Base64 is used (see [RFC4648](https://datatracker.ietf.org/doc/html/rfc4648)).
 
@@ -575,25 +664,31 @@ encode_base64("~00~01", 1)    ⇒    "AAE"
 
 ### Function: `spellcheck`
 
-spellcheck -- This function checks the English spelling of word.
+```
+int | list spellcheck(STR word)
+```
 
-int | list `spellcheck`(STR word)
+This function checks the English spelling of word.
 
 If the spelling is correct, the function will return a 1. If the spelling is incorrect, a LIST of suggestions for correct spellings will be returned instead. If the spelling is incorrect and no suggestions can be found, an empty LIST is returned.
 
 ### Function: `chr`
 
-chr -- This function translates integers into ASCII characters. Each argument must be an integer between 0 and 255.
+```
+int chr(INT arg, ...)
+```
 
-int `chr`(INT arg, ...)
+This function translates integers into ASCII characters. Each argument must be an integer between 0 and 255.
 
 If the programmer is not a wizard, and integers less than 32 are provided, E_INVARG is raised. This prevents control characters or newlines from being written to the database file by non-trusted individuals.
 
 ### Function: `match`
 
-match -- Searches for the first occurrence of the regular expression pattern in the string subject
+```
+list match(str subject, str pattern [, int case-matters])
+```
 
-list `match` (str subject, str pattern [, int case-matters])
+Searches for the first occurrence of the regular expression pattern in the string subject
 
 If pattern is syntactically malformed, then `E_INVARG` is raised. The process of matching can in some cases consume a great deal of memory in the server; should this memory consumption become excessive, then the matching process is aborted and `E_QUOTA` is raised.
 
@@ -619,9 +714,11 @@ match("foobar", "f%(o*%)b")
 
 ### Function: `rmatch`
 
-rmatch -- Searches for the last occurrence of the regular expression pattern in the string subject
+```
+list rmatch(str subject, str pattern [, int case-matters])
+```
 
-list `rmatch` (str subject, str pattern [, int case-matters])
+Searches for the last occurrence of the regular expression pattern in the string subject
 
 If pattern is syntactically malformed, then `E_INVARG` is raised. The process of matching can in some cases consume a great deal of memory in the server; should this memory consumption become excessive, then the matching process is aborted and `E_QUOTA` is raised.
 
@@ -649,9 +746,11 @@ ToastCore offers two primary methods of interacting with regular expressions.
 
 ### Function: `pcre_match`
 
-pcre_match -- The function `pcre_match()` searches `subject` for `pattern` using the Perl Compatible Regular Expressions library.
+```
+LIST pcre_match(STR subject, STR pattern [, ?case matters=0] [, ?repeat until no matches=1])
+```
 
-LIST `pcre_match`(STR subject, STR pattern [, ?case matters=0] [, ?repeat until no matches=1])
+The function `pcre_match()` searches `subject` for `pattern` using the Perl Compatible Regular Expressions library.
 
 The return value is a list of maps containing each match. Each returned map will have a key which corresponds to either a named capture group or the number of the capture group being matched. The full match is always found in the key "0". The value of each key will be another map containing the keys 'match' and 'position'. Match corresponds to the text that was matched and position will return the indices of the substring within `subject`.
 
@@ -679,9 +778,11 @@ Explode a string (albeit a contrived example):
 
 ### Function: `pcre_replace`
 
-pcre_replace -- The function `pcre_replace()` replaces `subject` with replacements found in `pattern` using the Perl Compatible Regular Expressions library.
+```
+STR pcre_replace(STR `subject`, STR `pattern`)
+```
 
-STR `pcre_replace` (STR `subject`, STR `pattern`)
+The function `pcre_replace()` replaces `subject` with replacements found in `pattern` using the Perl Compatible Regular Expressions library.
 
 The pattern string has a specific format that must be followed, which should be familiar if you have used the likes of Vim, Perl, or sed. The string is composed of four elements, each separated by a delimiter (typically a slash (/) or an exclamation mark (!)), that tell PCRE how to parse your replacement. We'll break the string down and mention relevant options below:
 
@@ -754,9 +855,11 @@ The following are the characters and character sequences that have special meani
 
 ### Function: `substitute`
 
-substitute -- Performs a standard set of substitutions on the string template, using the information contained in subs, returning the resulting, transformed template.
+```
+str substitute(str template, list subs)
+```
 
-str `substitute` (str template, list subs)
+Performs a standard set of substitutions on the string template, using the information contained in subs, returning the resulting, transformed template.
 
 Subs should be a list like those returned by `match()` or `rmatch()` when the match succeeds; otherwise, `E_INVARG` is raised.
 
@@ -770,9 +873,11 @@ substitute("I thank you for your %1 here in %2.", subs)
 
 ### Function: `salt`
 
-salt -- Generate a crypt() compatible salt string for the specified salt format using the specified binary random input.
+```
+str salt(str format, str input)
+```
 
-str `salt` (str format, str input)
+Generate a crypt() compatible salt string for the specified salt format using the specified binary random input.
 
 The specific set of formats supported depends on the libraries used to build the server, but will always include the standard salt format, indicated by the format string "" (the empty string), and the BCrypt salt format, indicated by the format string "$2a$NN$" (where "NN" is the work factor). Other possible formats include MD5 ("$1$"), SHA256 ("$5$") and SHA512 ("$6$"). Both the SHA256 and SHA512 formats support optional rounds.
 
@@ -790,9 +895,11 @@ salt("$2a$08$", "|~99~86~DEq~94_~F3-~1A~D2#~8C~B5sx")    ⇒    "$2a$08$dHkE1lES
 
 ### Function: `crypt`
 
-crypt -- Encrypts the given text using the standard UNIX encryption method.
+```
+str crypt(str text [, str salt])
+```
 
-str `crypt` (str text [, str salt])
+Encrypts the given text using the standard UNIX encryption method.
 
 Encrypts (hashes) the given text using the standard UNIX encryption method. If provided, salt should be a string at least two characters long, and it may dictate a specific algorithm to use. By default, crypt uses the original, now insecure, DES algorithm. ToastStunt specifically includes the BCrypt algorithm (identified by salts that start with "$2a$"), and may include MD5, SHA256, and SHA512 algorithms depending on the libraries used to build the server. The salt used is returned as the first part of the resulting encrypted string.
 
@@ -814,11 +921,11 @@ crypt("foobar", "$2a$08$dHkE1lESV9KrErGhhJTxc.")    ⇒    "$2a$08$dHkE1lESV9KrE
 
 ### Function: `argon2`
 
-argon2 -- Hashes a password using the Argon2id password hashing algorithm.
+```
+str argon2(STR password, STR salt [, iterations = 3] [, memory usage in KB = 4096] [, CPU threads = 1])
+```
 
 The function `argon2()' hashes a password using the Argon2id password hashing algorithm. It is parametrized by three optional arguments:
-
-str `argon2` (STR password, STR salt [, iterations = 3] [, memory usage in KB = 4096] [, CPU threads = 1])
 
 - Time: This is the number of times the hash will get run. This defines the amount of computation required and, as a result, how long the function will take to complete.
 - Memory: This is how much RAM is reserved for hashing.
@@ -835,9 +942,11 @@ return argon2(password, salt, 3, 4096, 1);
 
 ### Function: `argon2_verify`
 
-argon2_verify -- Compares password to the previously hashed hash.
+```
+int argon2_verify(STR hash, STR password)
+```
 
-int argon2_verify (STR hash, STR password)
+Compares password to the previously hashed hash.
 
 Returns 1 if the two match or 0 if they don't.
 
@@ -849,17 +958,16 @@ This is a more secure way to hash passwords than the `crypt()` builtin.
 
 > Note: More information on Argon2 can be found in the [Argon2 Github](https://github.com/P-H-C/phc-winner-argon2).
 
-### Function: `string_hash`
-
-### Function: `binary_hash`
+### Functions: `string_hash`, `binary_hash`
 
 string_hash -- Returns a string encoding the result of applying the SHA256 cryptographically secure hash function to the contents of the string text or the binary string bin-string.
 
 binary_hash -- Returns a string encoding the result of applying the SHA256 cryptographically secure hash function to the contents of the string text or the binary string bin-string.
 
-str `string_hash` (str string, [, algo [, binary]])
-
-str `binary_hash` (str bin-string, [, algo [, binary])
+```
+str `string_hash`(str string, [, algo [, binary]])
+str `binary_hash`(str bin-string, [, algo [, binary])
+```
 
 If algo is provided, it specifies the hashing algorithm to use. "MD5", "SHA1", "SHA224", "SHA256", "SHA384", "SHA512" and "RIPEMD160" are all supported. If binary is provided and true, the result is in MOO binary string format; by default the result is a hexadecimal string.
 
@@ -875,13 +983,12 @@ then, almost certainly,
 
 This can be useful, for example, in certain networking applications: after sending a large piece of text across a connection, also send the result of applying string_hash() to the text; if the destination site also applies string_hash() to the text and gets the same result, you can be quite confident that the large text has arrived unchanged.
 
-### Function: `string_hmac`
+### Functions: `string_hmac`, `binary_hmac`
 
-### Function: `binary_hmac`
-
-str `string_hmac` (str text, str key [, str algo [, binary]])
-
-str binary_hmac (str bin-string, str key [, str algo [, binary]])
+```
+str string_hmac(str text, str key [, str algo [, binary]])
+str binary_hmac(str bin-string, str key [, str algo [, binary]])
+```
 
 Returns a string encoding the result of applying the HMAC-SHA256 cryptographically secure HMAC function to the contents of the string text or the binary string bin-string with the specified secret key. If algo is provided, it specifies the hashing algorithm to use. Currently, only "SHA1" and "SHA256" are supported. If binary is provided and true, the result is in MOO binary string format; by default the result is a hexadecimal string.
 
@@ -903,9 +1010,11 @@ This can be useful, for example, in applications that need to verify both the in
 
 ### Function: `length`
 
-length -- Returns the number of elements in list.
+```
+int length(list list)
+```
 
-int `length` (list list)
+Returns the number of elements in list.
 
 It is also permissible to pass a string to `length()`; see the description in the previous section.
 
@@ -916,9 +1025,11 @@ length({})          =>   0
 
 ### Function: `is_member`
 
-is_member -- Returns true if there is an element of list that is completely indistinguishable from value.
+```
+int is_member(ANY value, LIST list [, INT case-sensitive])
+```
 
-int `is_member` (ANY value, LIST list [, INT case-sensitive])
+Returns true if there is an element of list that is completely indistinguishable from value.
 
 This is much the same operation as " `value in list`" except that, unlike `in`, the `is_member()` function does not treat upper- and lower-case characters in strings as equal. This treatment of strings can be controlled with the `case-sensitive` argument; setting `case-sensitive` to false will effectively disable this behavior.
 
@@ -933,9 +1044,11 @@ is_member("def", {"ABC", "DEF", "GHI"}, 0) => 2
 
 ### Function: `all_members`
 
-all_members -- Returns the indices of every instance of `value` in `alist`.
+```
+LIST all_members(ANY `value`, LIST `alist`)
+```
 
-LIST `all_members`(ANY `value`, LIST `alist`)
+Returns the indices of every instance of `value` in `alist`.
 
 Example:
 
@@ -943,15 +1056,16 @@ Example:
 all_members("a", {"a", "b", "a", "c", "a", "d"}) => {1, 3, 5}
 ```
 
-### Function: `listinsert`
-
-### Function: `listappend`
+### Functions: `listinsert`, `listappend`
 
 listinsert -- This functions return a copy of list with value added as a new element.
 
 listappend -- This functions return a copy of list with value added as a new element.
 
-list `listinsert` (list list, value [, int index]) list `listappend` (list list, value [, int index])
+```
+list `listinsert`(list list, value [, int index])
+list `listappend` (list list, value [, int index])
+```
 
 `listinsert()` and `listappend()` add value before and after (respectively) the existing element with the given index, if provided.
 
@@ -977,9 +1091,11 @@ listinsert(x, 4)      =>   {4, 1, 2, 3}
 
 ### Function: `listdelete`
 
-listdelete -- Returns a copy of list with the indexth element removed.
+```
+list listdelete(list list, int index)
+```
 
-list `listdelete` (list list, int index)
+Returns a copy of list with the indexth element removed.
 
 If index is not in the range `[1..length(list)]`, then `E_RANGE` is raised.
 
@@ -990,9 +1106,11 @@ listdelete(x, 2)   =>   {"foo", "baz"}
 
 ### Function: `listset`
 
-listset -- Returns a copy of list with the indexth element replaced by value.
+```
+list listset(list list, value, int index)
+```
 
-list `listset` (list list, value, int index)
+Returns a copy of list with the indexth element replaced by value.
 
 If index is not in the range `[1..length(list)]`, then `E_RANGE` is raised.
 
@@ -1003,15 +1121,16 @@ listset(x, "mumble", 2)   =>   {"foo", "mumble", "baz"}
 
 This function exists primarily for historical reasons; it was used heavily before the server supported indexed assignments like `x[i] = v`. New code should always use indexed assignment instead of `listset()` wherever possible.
 
-### Function: `setadd`<br>
-
-### Function: `setremove`
+### Functions: `setadd`, `setremove`
 
 setadd -- Returns a copy of list with the given value added.
 
 setremove -- Returns a copy of list with the given value removed.
 
-list `setadd` (list list, value) list `setremove` (list list, value)
+```
+list setadd(list list, value)
+list setremove(list list, value)
+```
 
 `setadd()` only adds value if it is not already an element of list; list is thus treated as a mathematical set. value is added at the end of the resulting list, if at all. Similarly, `setremove()` returns a list identical to list if value is not an element. If value appears more than once in list, only the first occurrence is removed in the returned copy.
 
@@ -1025,9 +1144,11 @@ setremove({1, 2, 3, 2}, 2)   =>   {1, 3, 2}
 
 ### Function: `reverse`
 
-reverse -- Return a reversed list or string
+```
+str | list reverse(LIST alist)
+```
 
-str | list `reverse`(LIST alist)
+Return a reversed list or string
 
 Examples:
 
@@ -1038,7 +1159,9 @@ reverse("asdf") => "fdsa"
 
 ### Function: `slice`
 
-list `slice`(LIST alist [, INT | LIST | STR index, ANY default map value])
+```
+list slice(LIST alist [, INT | LIST | STR index, ANY default map value])
+```
 
 Return the index-th elements of alist. By default, index will be 1. If index is a list of integers, the returned list will have those elements from alist. This is the built-in equivalent of LambdaCore's $list_utils:slice verb.
 
@@ -1057,9 +1180,11 @@ slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6], ["b" -> 8]}, "a", 0) => {1, 5
 
 ### Function: `sort`
 
-sort -- Sorts list either by keys or using the list itself.
+```
+list sort(LIST list [, LIST keys, INT natural sort order?, INT reverse])
+```
 
-list `sort`(LIST list [, LIST keys, INT natural sort order?, INT reverse])
+Sorts list either by keys or using the list itself.
 
 When sorting list by itself, you can use an empty list ({}) for keys to specify additional optional arguments.
 
@@ -1095,9 +1220,11 @@ When using the functions below, it's helpful to remember that maps are ordered.
 
 ### Function: `mapkeys`
 
-mapkeys -- returns the keys of the elements of a map.
+```
+list mapkeys(map map)
+```
 
-list `mapkeys` (map map)
+returns the keys of the elements of a map.
 
 ```
 x = ["foo" -> 1, "bar" -> 2, "baz" -> 3];
@@ -1106,9 +1233,11 @@ mapkeys(x)   =>  {"bar", "baz", "foo"}
 
 ### Function: `mapvalues`
 
-mapvalues -- returns the values of the elements of a map.
+```
+list mapvalues(MAP `map` [, ... STR `key`])
+```
 
-list `mapvalues` (MAP `map` [, ... STR `key`])
+returns the values of the elements of a map.
 
 If you only want the values of specific keys in the map, you can specify them as optional arguments. See examples below.
 
@@ -1122,9 +1251,11 @@ mapvalues(x, "foo", "baz") => {1, 3}
 
 ### Function: `mapdelete`
 
-mapdelete -- Returns a copy of map with the value corresponding to key removed. If key is not a valid key, then E_RANGE is raised.
+```
+map mapdelete(map map, key)
+```
 
-map `mapdelete` (map map, key)
+Returns a copy of map with the value corresponding to key removed. If key is not a valid key, then E_RANGE is raised.
 
 ```
 x = ["foo" -> 1, "bar" -> 2, "baz" -> 3];
@@ -1133,6 +1264,8 @@ mapdelete(x, "bar")   ⇒   ["baz" -> 3, "foo" -> 1]
 
 ### Function: `maphaskey`
 
-maphaskey -- Returns 1 if key exists in map. When not dealing with hundreds of keys, this function is faster (and easier to read) than something like: !(x in mapkeys(map))
+```
+int maphaskey(MAP map, STR key)
+```
 
-int `maphaskey` (MAP map, STR key)
+Returns 1 if key exists in map. When not dealing with hundreds of keys, this function is faster (and easier to read) than something like: !(x in mapkeys(map))

@@ -20,12 +20,12 @@ If the `d` bit is set, as it usually is, then the error is _raised_ and can be c
 
 The simplest kind of expression is a literal MOO value, just as described in the section on values at the beginning of this document. For example, the following are all expressions:
 
-- 17
-- #893
-- "This is a character string."
-- E_TYPE
-- ["key" -> "value"]
-- {"This", "is", "a", "list", "of", "words"}
+- `17`
+- `#893`
+- `"This is a character string."`
+- `E_TYPE`
+- `["key" -> "value"]`
+- `{"This", "is", "a", "list", "of", "words"}`
 
 In the case of lists, like the last example above, note that the list expression contains other expressions, several character strings in this case. In general, those expressions can be of any kind at all, not necessarily literal values. For example,
 
@@ -45,19 +45,19 @@ Variables are also "local" to a particular verb; every verb has its own set of t
 
 The name for a variable is made up entirely of letters, digits, and the underscore character (`_`) and does not begin with a digit. The following are all valid variable names:
 
-- foo
-- _foo
-- this2that
-- M68000
-- two_words
-- This_is_a_very_long_multiword_variable_name
+- `foo`
+- `_foo`
+- `this2that`
+- `M68000`
+- `two_words`
+- `This_is_a_very_long_multiword_variable_name`
 
 Note that, along with almost everything else in MOO, the case of the letters in variable names is insignificant. For example, these are all names for the same variable:
 
-- fubar
-- Fubar
-- FUBAR
-- fUbAr
+- `fubar`
+- `Fubar`
+- `FUBAR`
+- `fUbAr`
 
 A variable name is itself an expression; its value is the value of the named variable. When a verb begins, almost no variables have values yet; if you try to use the value of a variable that doesn't have one, the error value `E_VARNF` is raised. (MOO is unlike many other programming languages in which one must _declare_ each variable before using it; MOO has no such declarations.) The following variables always have values:
 

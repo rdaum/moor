@@ -4,9 +4,11 @@ One of the most important facilities in an object-oriented programming language 
 
 ### Function: `pass`
 
-pass -- calls the verb with the same name as the current verb but as defined on the parent of the object that defines the current verb.
+```
+value pass(arg, ...)
+```
 
-value `pass` (arg, ...)
+calls the verb with the same name as the current verb but as defined on the parent of the object that defines the current verb.
 
 Often, it is useful for a child object to define a verb that _augments_ the behavior of a verb on its parent object. For example, in the ToastCore database, the root object (which is an ancestor of every other object) defines a verb called `description` that simply returns the value of `this.description`; this verb is used by the implementation of the `look` command. In many cases, a programmer would like the
 description of some object to include some non-constant part; for example, a sentence about whether or not the object was 'awake' or 'sleeping'. This sentence should be added onto the end of the normal description. The programmer would like to have a means of calling the normal `description` verb and then appending the sentence onto the end of that description. The function `pass()` is for exactly such situations.
