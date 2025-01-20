@@ -33,4 +33,3 @@ Permission is granted to copy and distribute modified versions of this manual un
 Permission is granted to copy and distribute translations of this manual into another language, under the above conditions for modified versions, except that this permission notice may be stated in a translation approved by the author.
 
 For older versions of this document (or for pre-fork LambdaMOO version) please see the resources section.
-

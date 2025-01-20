@@ -2,9 +2,9 @@
 
 **Protected Properties**
 
-A built-in property prop is deemed protected if $server_options.protect_prop exists and has a true value. However, no such property protections are recognized if the compilation option IGNORE_PROP_PROTECTED (see section Server Compilation Options) was set when building the server. 
+A built-in property prop is deemed protected if $server_options.protect_prop exists and has a true value. However, no such property protections are recognized if the compilation option IGNORE_PROP_PROTECTED (see section Server Compilation Options) was set when building the server.
 
-> Note: In previous versions of the server enabling this has significant performance costs, but that has been resolved with caching lookups, and thus this option is enabled by default in ToastStunt. 
+> Note: In previous versions of the server enabling this has significant performance costs, but that has been resolved with caching lookups, and thus this option is enabled by default in ToastStunt.
 
 Whenever verb code attempts to read (on any object) the value of a built-in property that is protected in this way, the server raises E_PERM if the programmer is not a wizard.
 
@@ -15,4 +15,3 @@ A built-in function func() is deemed protected if $server_options.protect_func e
 A call to a protected built-in function that is not overridden proceeds normally as long as either the caller is #0 or has wizard permissions; otherwise the server raises E_PERM.
 
 Note that you must call load_server_options() in order to ensure that changes made in $server_options take effect.
-

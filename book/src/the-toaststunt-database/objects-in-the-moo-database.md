@@ -2,9 +2,9 @@
 
 There are anonymous objects and permanent objects in ToastStunt. Throughout this guide when we discuss `objects` we are typically referring to `permanent objects` and not `anonymous objects`. When discussing anonymous objects we will call them out specifically.
 
-Objects encapsulate state and behavior – as they do in other object-oriented programming languages. Permanent objects are also used to represent objects in the virtual reality, like people, rooms, exits, and other concrete things. Because of this, MOO makes a bigger deal out of creating objects than it does for other kinds of values, like integers. 
+Objects encapsulate state and behavior – as they do in other object-oriented programming languages. Permanent objects are also used to represent objects in the virtual reality, like people, rooms, exits, and other concrete things. Because of this, MOO makes a bigger deal out of creating objects than it does for other kinds of values, like integers.
 
-Numbers always exist, in a sense; you have only to write them down in order to operate on them. With permanent objects, it is different. The permanent object with number `#958` does not exist just because you write down its number. An explicit operation, the `create()` function described later, is required to bring a permanent object into existence. Once created, permanent objects continue to exist until they are explicitly destroyed by the `recycle()` function (also described later). 
+Numbers always exist, in a sense; you have only to write them down in order to operate on them. With permanent objects, it is different. The permanent object with number `#958` does not exist just because you write down its number. An explicit operation, the `create()` function described later, is required to bring a permanent object into existence. Once created, permanent objects continue to exist until they are explicitly destroyed by the `recycle()` function (also described later).
 
 Anonymous objects, which are also created using `create()`, will continue to exist until the `recycle()` function is called or until there are no more references to the anonymous object.
 
@@ -18,13 +18,13 @@ Anonymous and permanent objects are made up of three kinds of pieces that togeth
 
 There are three fundamental _attributes_ to every object:
 
-1. A flag representing the built-in properties allotted to the object. 
+1. A flag representing the built-in properties allotted to the object.
 2. A list of object that are its parents
 3. A list of the objects that are its _children_; that is, those objects for which this object is their parent.
 
 The act of creating a character sets the player attribute of an object and only a wizard (using the function `set_player_flag()`) can change that setting. Only characters have the player bit set to 1. Only permanent objects can be players.
 
-The parent/child hierarchy is used for classifying objects into general classes and then sharing behavior among all members of that class. For example, the ToastCore database contains an object representing a sort of "generic" room.  All other rooms are _descendants_ (i.e., children or children's children, or ...) of that one. The generic room defines those pieces of behavior that are common to all rooms; other rooms specialize that behavior for their own purposes. The notion of classes and specialization is the very essence of what is meant by _object-oriented_ programming. 
+The parent/child hierarchy is used for classifying objects into general classes and then sharing behavior among all members of that class. For example, the ToastCore database contains an object representing a sort of "generic" room. All other rooms are _descendants_ (i.e., children or children's children, or ...) of that one. The generic room defines those pieces of behavior that are common to all rooms; other rooms specialize that behavior for their own purposes. The notion of classes and specialization is the very essence of what is meant by _object-oriented_ programming.
 
 Only the functions `create()`, `recycle()`, `chparent()`, `chparents()`, `renumber()` and `recreate()` can change the parent and children attributes.
 
@@ -80,7 +80,7 @@ Symmetrically, the `w` bit controls whether or not non-owners can add or delete 
 
 The `f` bit specifies whether or not this object is _fertile_, whether or not players other than the owner of this object can create new objects with this one as the parent. It also controls whether or not non-owners can use the `chparent()` or `chparents()` built-in function to make this object the parent of an existing object. The `f` bit can only be set by a wizard or by the owner of the object.
 
-The `a` bit specifies whether or not this object can be used as a parent of an anonymous object created by a player other than the owner of this object. It works similarly to the `f` bit, but governs the creation of anonymous objects only. 
+The `a` bit specifies whether or not this object can be used as a parent of an anonymous object created by a player other than the owner of this object. It works similarly to the `f` bit, but governs the creation of anonymous objects only.
 
 All of the built-in properties on any object can, by default, be read by any player. It is possible, however, to override this behavior from within the database, making any of these properties readable only by wizards. See the chapter on server assumptions about the database for details.
 
@@ -94,7 +94,7 @@ Every defined property (as opposed to those that are built-in) has an owner and 
 
 The initial owner of a property is the player who added it; this is usually, but not always, the player who owns the object to which the property was added. This is because properties can only be added by the object owner or a wizard, unless the object is publicly writable (i.e., its `w` property is 1), which is rare. Thus, the owner of an object may not necessarily be the owner of every (or even any) property on that object.
 
-The permissions on properties are drawn from this set: 
+The permissions on properties are drawn from this set:
 
 | Permission Bit | Description                                                   |
 | -------------- | ------------------------------------------------------------- |
@@ -106,11 +106,11 @@ The `c` bit is a bit more complicated. Recall that every object has all of the p
 
 As an example of where this can be useful, the ToastCore database ensures that every player has a `password` property containing the encrypted version of the player's connection password. For security reasons, we don't want other players to be able to see even the encrypted version of the password, so we turn off the `r` permission bit. To ensure that the password is only set in a consistent way (i.e., to the encrypted version of a player's password), we don't want to let anyone but a wizard change the property. Thus, in the parent object for all players, we made a wizard the owner of the password property and set the permissions to the empty string, `""`. That is, non-owners cannot read or write the property and, because the `c` bit is not set, the wizard who owns the property on the parent class also owns it on all of the descendants of that class.
 
-> Warning:  In classic LambdaMOO only the first 8 characters of a password were hashed. In practice this meant that the passwords `password` and `password12345` were exactly the same and either one can be used to login. This was fixed in ToastStunt. If you are upgrading from LambdaMOO, you will need to log in with only the first 8 characters of the password (and then reset your password to something more secure).
+> Warning: In classic LambdaMOO only the first 8 characters of a password were hashed. In practice this meant that the passwords `password` and `password12345` were exactly the same and either one can be used to login. This was fixed in ToastStunt. If you are upgrading from LambdaMOO, you will need to log in with only the first 8 characters of the password (and then reset your password to something more secure).
 
 Another, perhaps more down-to-earth example arose when a character named Ford started building objects he called "radios" and another character, yduJ, wanted to own one. Ford kindly made the generic radio object fertile, allowing yduJ to create a child object of it, her own radio. Radios had a property called `channel` that identified something corresponding to the frequency to which the radio was tuned. Ford had written nice programs on radios (verbs, discussed below) for turning the channel selector on the front of the radio, which would make a corresponding change in the value of the `channel` property. However, whenever anyone tried to turn the channel selector on yduJ's radio, they got a permissions error. The problem concerned the ownership of the `channel` property.
 
-As explained later, programs run with the permissions of their author. So, in this case, Ford's nice verb for setting the channel ran with his permissions.  But, since the `channel` property in the generic radio had the `c` permission bit set, the `channel` property on yduJ's radio was owned by her. Ford didn't have permission to change it!  The fix was simple. Ford changed the permissions on the `channel` property of the generic radio to be just `r`, without the `c` bit, and yduJ made a new radio. This time, when yduJ's radio inherited the `channel` property, yduJ did not inherit ownership of it; Ford remained the owner. Now the radio worked properly, because Ford's verb had permission to change the channel.
+As explained later, programs run with the permissions of their author. So, in this case, Ford's nice verb for setting the channel ran with his permissions. But, since the `channel` property in the generic radio had the `c` permission bit set, the `channel` property on yduJ's radio was owned by her. Ford didn't have permission to change it! The fix was simple. Ford changed the permissions on the `channel` property of the generic radio to be just `r`, without the `c` bit, and yduJ made a new radio. This time, when yduJ's radio inherited the `channel` property, yduJ did not inherit ownership of it; Ford remained the owner. Now the radio worked properly, because Ford's verb had permission to change the channel.
 
 ### Verbs on Objects
 
@@ -138,7 +138,7 @@ The permission bits on verbs are drawn from this set: `r` (read), `w` (write), `
 The execute bit determines whether or not the verb can be invoked from within a MOO program (as opposed to from the command line, like the `put` verb on containers). If the `x` bit is not set, the verb cannot be called from inside a program. This is most obviously useful for `this none this` verbs which are intended to be executed from within other verb programs, however, it may be useful to set the `x` bit on verbs that are intended to be executed from the command line, as then those can also
 be executed from within another verb.
 
-The setting of the debug bit determines what happens when the verb's program does something erroneous, like subtracting a number from a character string.  If the `d` bit is set, then the server _raises_ an error value; such raised errors can be _caught_ by certain other pieces of MOO code. If the error is not caught, however, the server aborts execution of the command and, by default, prints an error message on the terminal of the player whose command is being executed. (See the chapter on server assumptions about the database for details on how uncaught errors are handled.)  If the `d` bit is not set, then no error is raised, no message is printed, and the command is not aborted; instead the error value is returned as the result of the erroneous operation.
+The setting of the debug bit determines what happens when the verb's program does something erroneous, like subtracting a number from a character string. If the `d` bit is set, then the server _raises_ an error value; such raised errors can be _caught_ by certain other pieces of MOO code. If the error is not caught, however, the server aborts execution of the command and, by default, prints an error message on the terminal of the player whose command is being executed. (See the chapter on server assumptions about the database for details on how uncaught errors are handled.) If the `d` bit is not set, then no error is raised, no message is printed, and the command is not aborted; instead the error value is returned as the result of the erroneous operation.
 
 > Note: The `d` bit exists only for historical reasons; it used to be the only way for MOO code to catch and handle errors. With the introduction of the `try` -`except` statement and the error-catching expression, the `d` bit is no longer useful. All new verbs should have the `d` bit set, using the newer facilities for error handling if desired. Over time, old verbs written assuming the `d` bit would not be set should be changed to use the new facilities instead.
 
@@ -163,4 +163,3 @@ In addition to an owner and some permission bits, every verb has three _argument
 | off/off of               |
 
 The argument specifiers are used in the process of parsing commands, described in the next chapter.
-

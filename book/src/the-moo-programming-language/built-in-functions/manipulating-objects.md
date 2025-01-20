@@ -12,11 +12,11 @@ obj `create` (obj parent [, obj owner] [, int anon-flag] [, list init-args])
 
 obj `create` (list parents [, obj owner] [, int anon-flag] [, list init-args])
 
-Creates and returns a new object whose parents are parents (or whose parent is parent) and whose owner is as described below. If any of the given parents are not valid, or if the given parent is neither valid nor #-1, then E_INVARG is raised. The given parents objects must be valid and must be usable as a parent (i.e., their `a` or `f` bits must be true) or else the programmer must own parents or be a wizard; otherwise E_PERM is raised. Furthermore, if anon-flag is true then `a` must be true; and, if anon-flag is false or not present, then `f` must be true. Otherwise, E_PERM is raised unless the programmer owns parents or is a wizard. E_PERM is also raised if owner is provided and not the same as the programmer, unless the programmer is a wizard. 
+Creates and returns a new object whose parents are parents (or whose parent is parent) and whose owner is as described below. If any of the given parents are not valid, or if the given parent is neither valid nor #-1, then E_INVARG is raised. The given parents objects must be valid and must be usable as a parent (i.e., their `a` or `f` bits must be true) or else the programmer must own parents or be a wizard; otherwise E_PERM is raised. Furthermore, if anon-flag is true then `a` must be true; and, if anon-flag is false or not present, then `f` must be true. Otherwise, E_PERM is raised unless the programmer owns parents or is a wizard. E_PERM is also raised if owner is provided and not the same as the programmer, unless the programmer is a wizard.
 
 After the new object is created, its initialize verb, if any, is called. If init-args were given, they are passed as args to initialize. The new object is assigned the least non-negative object number that has not yet been used for a created object. Note that no object number is ever reused, even if the object with that number is recycled.
 
-> Note: This is not strictly true, especially if you are using ToastCore and the `$recycler`, which is a great idea.  If you don't, you end up with extremely high object numbers. However, if you plan on reusing object numbers you need to consider this carefully in your code. You do not want to include object numbers in your code if this is the case, as object numbers could change. Use corified references instead. For example, you can use `@corify #objnum as $my_object` and then be able to reference $my_object in your code. Alternatively you can do ` @prop $sysobj.my_object #objnum`. If the object number ever changes, you can change the reference without updating all of your code.)
+> Note: This is not strictly true, especially if you are using ToastCore and the `$recycler`, which is a great idea. If you don't, you end up with extremely high object numbers. However, if you plan on reusing object numbers you need to consider this carefully in your code. You do not want to include object numbers in your code if this is the case, as object numbers could change. Use corified references instead. For example, you can use `@corify #objnum as $my_object` and then be able to reference $my_object in your code. Alternatively you can do `@prop $sysobj.my_object #objnum`. If the object number ever changes, you can change the reference without updating all of your code.)
 
 > Note: $sysobj is typically #0. Though it can technically be changed to something else, there is no reason that the author knows of to break from convention here.
 
@@ -24,7 +24,7 @@ If anon-flag is false or not present, the new object is a permanent object and i
 
 If anon-flag is true, the new object is an anonymous object and is not assigned an object number. Anonymous objects are automatically recycled when they are no longer used.
 
-The owner of the new object is either the programmer (if owner is not provided), the new object itself (if owner was given and is invalid, or owner (otherwise). 
+The owner of the new object is either the programmer (if owner is not provided), the new object itself (if owner was given and is invalid, or owner (otherwise).
 
 The other built-in properties of the new object are initialized as follows:
 
@@ -43,7 +43,7 @@ The function `is_player()` returns false for newly created objects.
 
 In addition, the new object inherits all of the other properties on its parents. These properties have the same permission bits as on the parents. If the `c` permissions bit is set, then the owner of the property on the new object is the same as the owner of the new object itself; otherwise, the owner of the property on the new object is the same as that on the parent. The initial value of every inherited property is clear; see the description of the built-in function clear_property() for details.
 
-If the intended owner of the new object has a property named `ownership_quota` and the value of that property is an integer, then create() treats that value as a quota. If the quota is less than or equal to zero, then the quota is considered to be exhausted and create() raises E_QUOTA instead of creating an object. Otherwise, the quota is decremented and stored back into the `ownership_quota` property as a part of the creation of the new object. 
+If the intended owner of the new object has a property named `ownership_quota` and the value of that property is an integer, then create() treats that value as a quota. If the quota is less than or equal to zero, then the quota is considered to be exhausted and create() raises E_QUOTA instead of creating an object. Otherwise, the quota is decremented and stored back into the `ownership_quota` property as a part of the creation of the new object.
 
 > Note: In ToastStunt, this is disabled by default with the "OWNERSHIP_QUOTA" option in options.h
 
@@ -120,7 +120,7 @@ If a third argument is present and true, the return value will be the first pare
 isa(#2, $wiz)                           => 1
 isa(#2, {$thing, $wiz, $container})     => 1
 isa(#2, {$thing, $wiz, $container}, 1)  => #57 (generic wizard)
-isa(#2, {$thing, $room, $container}, 1) => #-1 
+isa(#2, {$thing, $room, $container}, 1) => #-1
 ```
 
 ##### Function: `locate_by_name`
@@ -145,7 +145,7 @@ locations(me) => {#20381, #443, #104735}
 $string_utils:title_list(locations(me)) => "\"Butterknife Ballet\" Control Room FelElk, the one-person celestial birther \"Butterknife Ballet\", and Uncharted Space: Empty Space"
 ```
 
-If `stop` is in the locations found, it will stop before there and return the list (exclusive of the stop object). 
+If `stop` is in the locations found, it will stop before there and return the list (exclusive of the stop object).
 
 If the third argument is true, `stop` is assumed to be a PARENT. And if any of your locations are children of that parent, it stops there.
 
@@ -225,7 +225,7 @@ Raises `E_INVARG` if object is not a valid object and `E_PERM` if the programmer
 
 int | list respond_to(OBJ object, STR verb)
 
-Returns true if verb is callable on object, taking into account inheritance, wildcards (star verbs), etc. Otherwise, returns false.  If the caller is permitted to read the object (because the object's `r' flag is true, or the caller is the owner or a wizard) the true value is a list containing the object number of the object that defines the verb and the full verb name(s).  Otherwise, the numeric value `1' is returned.
+Returns true if verb is callable on object, taking into account inheritance, wildcards (star verbs), etc. Otherwise, returns false. If the caller is permitted to read the object (because the object's `r' flag is true, or the caller is the owner or a wizard) the true value is a list containing the object number of the object that defines the verb and the full verb name(s).  Otherwise, the numeric value`1' is returned.
 
 ##### Function: `max_object`
 
@@ -234,7 +234,7 @@ max_object -- Returns the largest object number ever assigned to a created objec
 obj `max_object`()
 
 //TODO update for how Toast handles recycled objects if it is different
-Note that the object with this number may no longer exist; it may have been recycled.  The next object created will be assigned the object number one larger than the value of `max_object()`. The next object getting the number one larger than `max_object()` only applies if you are using built-in functions for creating objects and does not apply if you are using the `$recycler` to create objects.
+Note that the object with this number may no longer exist; it may have been recycled. The next object created will be assigned the object number one larger than the value of `max_object()`. The next object getting the number one larger than `max_object()` only applies if you are using built-in functions for creating objects and does not apply if you are using the `$recycler` to create objects.
 
 #### Object Movement
 
@@ -244,7 +244,7 @@ move -- Changes what's location to be where.
 
 none `move` (obj what, obj where [, INT position)
 
-This is a complex process because a number of permissions checks and notifications must be performed.  The actual movement takes place as described in the following paragraphs.
+This is a complex process because a number of permissions checks and notifications must be performed. The actual movement takes place as described in the following paragraphs.
 
 what should be a valid object and where should be either a valid object or `#-1` (denoting a location of 'nowhere'); otherwise `E_INVARG` is raised. The programmer must be either the owner of what or a wizard; otherwise, `E_PERM` is raised.
 
@@ -336,7 +336,7 @@ none `clear_property` (obj object, str prop-name)
 
 These two functions test for clear and set to clear, respectively, the property named prop-name on the given object. If object is not valid, then `E_INVARG` is raised. If object has no non-built-in property named prop-name, then `E_PROPNF` is raised. If the programmer does not have read (write) permission on the property in question, then `is_clear_property()` (`clear_property()`) raises `E_PERM`.
 
-If a property is clear, then when the value of that property is queried the value of the parent's property of the same name is returned. If the parent's property is clear, then the parent's parent's value is examined, and so on.  If object is the definer of the property prop-name, as opposed to an inheritor of the property, then `clear_property()` raises `E_INVARG`.
+If a property is clear, then when the value of that property is queried the value of the parent's property of the same name is returned. If the parent's property is clear, then the parent's parent's value is examined, and so on. If object is the definer of the property prop-name, as opposed to an inheritor of the property, then `clear_property()` raises `E_INVARG`.
 
 #### Operations on Verbs
 
@@ -371,7 +371,7 @@ Clearly, this older mechanism is more difficult and risky to use; new code shoul
 
 verb_info -- Get the owner, permission bits, and name(s) for the verb as specified by verb-desc on the given object
 
-list `verb_info` (obj object, str|int verb-desc) 
+list `verb_info` (obj object, str|int verb-desc)
 
 ##### Function: `set_verb_info`
 
@@ -393,7 +393,7 @@ where owner is an object, perms is a string containing only characters from the 
 
 verb_args -- get the direct-object, preposition, and indirect-object specifications for the verb as specified by verb-desc on the given object.
 
-list `verb_args` (obj object, str|int verb-desc) 
+list `verb_args` (obj object, str|int verb-desc)
 
 ##### Function: `set_verb_args`
 
@@ -439,7 +439,7 @@ If object is not valid, then `E_INVARG` is raised. If the programmer does not ha
 
 verb_code -- get the MOO-code program associated with the verb as specified by verb-desc on object
 
-list `verb_code` (obj object, str|int verb-desc [, fully-paren [, indent]]) 
+list `verb_code` (obj object, str|int verb-desc [, fully-paren [, indent]])
 
 ##### Function: `set_verb_code`
 
@@ -481,7 +481,7 @@ waif_stats -- Returns a MAP of statistics about instantiated waifs.
 
 map `waif_stats`()
 
-Each waif class will be a key in the MAP and its value will be the number of waifs of that class currently instantiated. Additionally, there is a `total' key that will return the total number of instantiated waifs, and a `pending_recycle' key that will return the number of waifs that have been destroyed and are awaiting the call of their :recycle verb.
+Each waif class will be a key in the MAP and its value will be the number of waifs of that class currently instantiated. Additionally, there is a `total' key that will return the total number of instantiated waifs, and a`pending_recycle' key that will return the number of waifs that have been destroyed and are awaiting the call of their :recycle verb.
 
 #### Operations on Player Objects
 
@@ -510,4 +510,3 @@ If object is not valid, `E_INVARG` is raised. If the programmer is not a wizard,
 If value is true, then object gains (or keeps) "player object" status: it will be an element of the list returned by `players()`, the expression `is_player(object)` will return true, and the server will treat a call to `$do_login_command()` that returns object as logging in the current connection.
 
 If value is false, the object loses (or continues to lack) "player object" status: it will not be an element of the list returned by `players()`, the expression `is_player(object)` will return false, and users cannot connect to object by name when they log into the server. In addition, if a user is connected to object at the time that it loses "player object" status, then that connection is immediately broken, just as if `boot_player(object)` had been called (see the description of `boot_player()` below).
-

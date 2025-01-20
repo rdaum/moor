@@ -26,7 +26,7 @@ The next simplest statement is also one of the most common, the expression state
 expression;
 ```
 
-The given expression is evaluated and the resulting value is ignored.  Commonly-used kinds of expressions for such statements include assignments and verb calls. Of course, there's no use for such a statement unless the evaluation of expression has some side-effect, such as changing the value of some variable or property, printing some text on someone's screen, etc.
+The given expression is evaluated and the resulting value is ignored. Commonly-used kinds of expressions for such statements include assignments and verb calls. Of course, there's no use for such a statement unless the evaluation of expression has some side-effect, such as changing the value of some variable or property, printing some text on someone's screen, etc.
 
 ```
 #42.weight = 40;
@@ -117,7 +117,7 @@ endif
 MOO provides three different kinds of looping statements, allowing you to have a set of statements executed (1) once for each element of a given sequence (list, map or string); (2) once for each integer or object number in a given range; and (3) over and over until a given condition stops being true.
 
 To perform some statements once for each element of a given sequence, use this syntax:
- 	
+
 ```
 for value, key-or-index in (expression)
   statements
@@ -125,7 +125,7 @@ endfor
 ```
 
 The expression is evaluated and should return a list, map or string; if it does not, E_TYPE is raised. The statements are then executed once for each element of that sequence in turn; each time, the given value is assigned the value of the element in question, and key-or-index is assigned the index of value in the list or string, or its key if the sequence is a map. key-or-index is optional. For example, consider the following statements:
- 	
+
 ```
 odds = {1, 3, 5, 7, 9};
 evens = {};
@@ -135,7 +135,6 @@ endfor
 ```
 
 The value of the variable `evens` after executing these statements is the list
- 	
 
 `{2, 4, 6, 8, 10}`
 
@@ -150,7 +149,6 @@ endfor
 ```
 
 The value of the variable `pairs` after executing these statements is the map
- 	
 
 `[1 -> 2, 2 -> 4, 3 -> 6, 4 -> 8, 5 -> 10]`
 
@@ -228,7 +226,7 @@ With each kind of loop, it is possible that the statements in the body of the lo
 
 ### Terminating One or All Iterations of a Loop
 
-Sometimes, it is useful to exit a loop before it finishes all of its iterations. For example, if the loop is used to search for a particular kind of element of a list, then it might make sense to stop looping as soon as the right kind of element is found, even if there are more elements yet to see.  The `break` statement is used for this purpose; it has the form
+Sometimes, it is useful to exit a loop before it finishes all of its iterations. For example, if the loop is used to search for a particular kind of element of a list, then it might make sense to stop looping as soon as the right kind of element is found, even if there are more elements yet to see. The `break` statement is used for this purpose; it has the form
 
 ```
 break;
@@ -340,6 +338,7 @@ Examples to cause tracebacks:
 ```
 
 And another example:
+
 ```
 ;notify(me, 5)
 
@@ -434,6 +433,7 @@ finally
   this:charge_user_for_seconds(player, end - start);
 endtry
 ```
+
 > Warning: If a task runs out of ticks, it's possible for your finally code to not run.
 
 ### Executing Statements at a Later Time
@@ -460,7 +460,7 @@ fork name (expression)
 endfork
 ```
 
-then that variable is assigned the _task ID_ of the newly-created task.  The value of this variable is visible both to the task executing the fork statement and to the statements in the newly-created task. This ID can be passed to the `kill_task()` function to keep the task from running and will be the value of `task_id()` once the task begins execution.
+then that variable is assigned the _task ID_ of the newly-created task. The value of this variable is visible both to the task executing the fork statement and to the statements in the newly-created task. This ID can be passed to the `kill_task()` function to keep the task from running and will be the value of `task_id()` once the task begins execution.
 
 > Note: This feature has other uses as well. The MOO is single threaded (though ToastStunt supports some built-ins executing on other threads), which means that complex logic (verbs that call verbs that call verbs ...) can cause the MOO to _lag_. For instance, let's say when your user tosses their ball up, you want to calculate a complex trajectory involve the ball and other objects in the room. These calculations are costly and done in another verb, they take time to be performed. However, you want some actions to happen both before the calculations (everyone in the room seeing the ball is thrown into the air) and after the ball has left the players hands (the player reaches into their pocket and pulls out a new ball). If there is no `fork()` then the calculations need to complete before the verb can continue execution, which means the player won't pull out a fresh ball until after the calculations are complete. A `fork()` allows the player to throw the ball, the MOO to `fork()` the task, which allows execution of the verb to continue right away and the user to pull out a new ball, without experiencing the delay that the calculations being returned (without a `fork()`) would have incurred.
 
@@ -509,4 +509,3 @@ player:tell("Your ball arcs to the " + direction);
 ```
 
 The verb would raise `E_VARNF` due to direction not being defined.
-

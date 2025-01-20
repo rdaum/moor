@@ -25,4 +25,3 @@ $handle_task_timeout(resource, traceback, formatted)
 ```
 
 is made, where `resource` is the appropriate one of the strings `"ticks"` or `"seconds"`, and `traceback` and `formatted` are as above.
-

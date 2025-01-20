@@ -10,4 +10,3 @@ This guide is not just a technical document, it also contains opinions (mine and
 
 ToastStunt is a fork of [Stunt](https://github.com/toddsundsted/stunt) which is a fork of of [LambdaMOO](https://en.wikipedia.org/wiki/MOO). At the time of this writing (01/01/22) ToastStunt was under active development. Stunt and LambdaMOO were not. If you are looking for an up to date, feature rich, LambdaMOO, then ToastStunt is for you. It incorporates much of the 'patches' that were released for legacy LambdaMOO, and much more (TLS, better
 FileIO, updated and expanded built-ins functions, multiple inheritance, curl support, and threading to name a few).
-
