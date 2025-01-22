@@ -16,7 +16,7 @@ import {Context, Player} from "./model";
 
 import van, {State} from "vanjs-core";
 import {displayDjot, handleEvent} from "./narrative";
-const {button, div, span, input, select, option, br, pre, form, a, p} = van.tags;
+const {button, div, input, select, option, br, label} = van.tags;
 
 async function connect(context : Context, player, mode, username, password) {
     console.log("Connecting...");
@@ -86,6 +86,7 @@ export const Login = (context: Context, player : State<Player>, login_message: S
     const welcome = van.derive(() => div({class: "welcome_box"}, displayDjot({djot_text: login_message})));
 
     const username = input({
+        id: "login_username",
         type: "text",
         onkeyup: (e) => {
             if (e.key === "Enter") {
@@ -94,6 +95,7 @@ export const Login = (context: Context, player : State<Player>, login_message: S
         }
     });
     const password = input({
+        id: "login_password",
         type: "password",
         onkeyup: (e) => {
             if (e.key === "Enter") {
@@ -101,19 +103,36 @@ export const Login = (context: Context, player : State<Player>, login_message: S
             }
         }
     });
-    const go_button = button({onclick: connect_callback}, "Connect");
+    const go_button = button({onclick: connect_callback}, "Go");
     let hidden_style = van.derive(() => !player.val.connected ? "display: block;" : "display: none;");
 
     return div(
         {
-            class: "login",
+            class: "login_window",
             style: hidden_style
         },
         welcome,
-        mode_select,
-        username,
-        password,
-        go_button
+        br,
+        div(
+            {
+                class: "login_prompt"
+            },
+            mode_select,
+            " ",
+            label(
+                {for: "login_username"},
+                "Player: ",
+                username,
+            ),
+            " ",
+            label(
+                {for: "login_password"},
+                "Password: ",
+                password,
+            ),
+            " ",
+            go_button
+        ),
     );
 
 };

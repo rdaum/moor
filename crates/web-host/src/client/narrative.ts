@@ -19,7 +19,7 @@ import {matchRef} from "./var";
 import {Player, Spool, SpoolType, Context, NarrativeEvent, SystemEvent} from "./model";
 import {showVerbEditor} from "./verb_edit";
 
-const {button, div, span, input, select, option, br, pre, form, a, p} = van.tags;
+const {button, div, span, input, select, option, br, pre, form, a, p, textarea} = van.tags;
 
 // Utility function to build DOM elements from HTML.
 function generateElements(html) {
@@ -95,7 +95,14 @@ export function djotRender(author, ast) {
 }
 
 
-
+function narrativeAppend(content_node : HTMLElement) {
+    let output = document.getElementById("output_window");
+    output.appendChild(content_node);
+    let narrative = document.getElementById("narrative");
+    // scroll to bottom
+    narrative.scrollTop = narrative.scrollHeight;
+    document.body.scrollTop = document.body.scrollHeight;
+}
 
 function processNarrativeMessage(context :  Context, msg : NarrativeEvent) {
     // Msg may have content_type attr, and if so, check it, or default to text/plain
@@ -168,26 +175,29 @@ function processNarrativeMessage(context :  Context, msg : NarrativeEvent) {
     }
 
     // We can handle text/djot by turning into HTML. Otherwise you're gonna get raw text.
+    let content_node = span();
     if (content_type === "text/djot") {
         let ast = djot.parse(content);
         let html = djotRender(msg.author, ast);
-        console.log("DJOT HTML: " + html);
         let elements = generateElements(html);
+
         for (let element of elements) {
-            output.appendChild(div({class: "text_djot"}, element));
+            content_node.append(div({class: "text_djot"}, element));
         }
     } else {
-        let content_node = div({class: "text_narrative"}, content);
-        output.appendChild(content_node);
+        content_node.append(div({class: "text_narrative"}, content));
     }
-    // scroll to bottom
-    output.scrollTop = output.scrollHeight;
-    document.body.scrollTop = document.body.scrollHeight;
+    narrativeAppend(content_node);
 }
 
 function handleSystemMessage(context : Context, msg: SystemEvent) {
+    // pop up into the toast notification at the top
     let content = msg.system_message;
     context.systemMessage.show(content, 2);
+
+    // Also append to the narrative window.
+    let content_node = div({class: "system_message_narrative"}, content);
+    narrativeAppend(content_node);
 }
 
 // Process an inbound (JSON) event from the websocket connection to the server.
@@ -216,7 +226,7 @@ const OutputWindow = (player : State<Player>) => {
 
 const InputArea = (context: Context, player : State<Player>) => {
     let hidden_style = van.derive(() => player.val.connected ? "display: block;" : "display: none;");
-    const i = input({
+    const i = textarea({
         id: "input_area",
         style: hidden_style,
         disabled: van.derive(() => !player.val.connected),
@@ -270,6 +280,7 @@ export const Narrative = (context: Context, player : State<Player>) => {
     return div(
         {
             class: "narrative",
+            id: "narrative",
             style: hidden_style
         },
         OutputWindow(player),
