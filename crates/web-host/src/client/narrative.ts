@@ -13,13 +13,16 @@
 
 import van, {State} from "vanjs-core";
 
-import {MoorRemoteObject, retrieveWelcome} from "./rpc";
+import {MoorRemoteObject} from "./rpc";
 
 import {matchRef} from "./var";
 import {Player, Spool, SpoolType, Context, NarrativeEvent, SystemEvent} from "./model";
 import {showVerbEditor} from "./verb_edit";
 
-const {button, div, span, input, select, option, br, pre, form, a, p, textarea} = van.tags;
+// import sanitize html
+import DOMPurify from 'dompurify';
+
+const {div, span, textarea} = van.tags;
 
 // Utility function to build DOM elements from HTML.
 function generateElements(html) {
@@ -39,6 +42,59 @@ export const displayDjot = ({djot_text}) => {
     return d;
 };
 
+export function htmlPurifySetup() {
+    // Add a hook to make all links open a new window
+    DOMPurify.addHook('afterSanitizeAttributes', function(node) {
+        // set all elements owning target to target=_blank
+        if ('target' in node) {
+            node.setAttribute('target', '_blank');
+        }
+        // set non-HTML/MathML links to xlink:show=new
+        if (
+            !node.hasAttribute('target') &&
+            (node.hasAttribute('xlink:href') || node.hasAttribute('href'))
+        ) {
+            node.setAttribute('xlink:show', 'new');
+        }
+    });
+
+    // Add a hook to enforce URI scheme allow-list
+    const allowlist = ['http', 'https'];
+    const regex = RegExp('^(' + allowlist.join('|') + '):', 'gim');
+    DOMPurify.addHook('afterSanitizeAttributes', function(node) {
+        // build an anchor to map URLs to
+        const anchor = document.createElement('a');
+
+        // check all href attributes for validity
+        if (node.hasAttribute('href')) {
+            anchor.href = node.getAttribute('href');
+            if (anchor.protocol && !anchor.protocol.match(regex)) {
+                node.removeAttribute('href');
+            }
+        }
+        // check all action attributes for validity
+        if (node.hasAttribute('action')) {
+            anchor.href = node.getAttribute('action');
+            if (anchor.protocol && !anchor.protocol.match(regex)) {
+                node.removeAttribute('action');
+            }
+        }
+        // check all xlink:href attributes for validity
+        if (node.hasAttribute('xlink:href')) {
+            anchor.href = node.getAttribute('xlink:href');
+            if (anchor.protocol && !anchor.protocol.match(regex)) {
+                node.removeAttribute('xlink:href');
+            }
+        }
+    });
+}
+
+function htmlSanitize(author, html) {
+    // TODO: there should be some signing on this to prevent non-wizards from doing bad things.
+    //   basically only wizard-perm'd things should be able to send HTML, and it should be signed
+    //   by the server as such.
+    return DOMPurify.sanitize(html);
+}
 
 export function action_invoke(author, verb, argument) {
     console.log("Invoking " + verb + " on " + author);
@@ -184,6 +240,12 @@ function processNarrativeMessage(context :  Context, msg : NarrativeEvent) {
         for (let element of elements) {
             content_node.append(div({class: "text_djot"}, element));
         }
+    } else if (content_type == "text/html") {
+        let html = htmlSanitize(msg.author, content);
+        let elements = generateElements(html);
+        for (let element of elements) {
+            content_node.append(div({class: "text_html"}, element));
+        }
     } else {
         content_node.append(div({class: "text_narrative"}, content));
     }
@@ -276,6 +338,7 @@ const InputArea = (context: Context, player : State<Player>) => {
 
 export const Narrative = (context: Context, player : State<Player>) => {
     let hidden_style = van.derive(() => player.val.connected ? "display: block;" : "display: none;");
+
 
     return div(
         {

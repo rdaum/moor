@@ -17,7 +17,7 @@ import {retrieveWelcome} from "./rpc";
 
 import {Context} from "./model";
 import {Login} from "./login";
-import {Narrative} from "./narrative";
+import {htmlPurifySetup, Narrative} from "./narrative";
 
 const {button, div, span, input, select, option, br, pre, form, a, p} = van.tags;
 
@@ -78,5 +78,7 @@ const App = (context: Context) => {
         Narrative(context, player)
     );
 };
+
+htmlPurifySetup();
 
 van.add(document.body, App(context));
