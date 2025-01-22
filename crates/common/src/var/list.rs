@@ -170,7 +170,7 @@ impl Sequence for List {
 
         let base_len = self.len();
 
-        if from < 0 || to < 0 {
+        if from < 0 {
             return Err(E_RANGE);
         }
 
@@ -740,5 +740,18 @@ mod tests {
             IndexMode::OneBased,
         );
         assert_eq!(r, Err(E_RANGE));
+
+        //;;a = {}; a[1..0] = {"test"}; return a;
+        // => {"test"}
+        let l = v_list(&[]);
+        let r = l
+            .range_set(
+                &v_int(1),
+                &v_int(0),
+                &v_list(&[v_str("test")]),
+                IndexMode::OneBased,
+            )
+            .unwrap();
+        assert_eq!(r, v_list(&[v_str("test")]));
     }
 }

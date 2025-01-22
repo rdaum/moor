@@ -11,9 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import * as monaco from "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/+esm";
-
-export { createEditor, updateEditor };
+import * as monaco from "monaco-editor";
 
 // TODO: MOO syntax highlighting format validation
 //   what exists in editor.js is just a first crack at this, it's by no means complete.
@@ -171,11 +169,11 @@ const MooSyntax = {
   },
 };
 
-// TODO: editor.js: completion provider which works to lookup verbs / props for constant $references and #object_ids
+// TODO: completion provider which works to lookup verbs / props for constant $references and #object_ids
 
 let model_counter = 0;
 
-function createEditor(editor_element) {
+export function createEditor(editor_element) {
   editor_element.innerHTML = "";
   monaco.languages.setMonarchTokensProvider("moo", MooSyntax);
   // Each model gets a unique URI, by incrementing a counter.
@@ -185,9 +183,7 @@ function createEditor(editor_element) {
   let editor = monaco.editor.create(editor_element, {
     value: "",
     language: "moo",
-    // This is where we'd stick our settings once we have a mode for MOO code
-    // language: 'javascript',
-    theme: "vs-light",
+    theme: "vs-dark",
     readOnly: false,
     roundedSelection: true,
     scrollBeyondLastLine: false,
@@ -207,8 +203,7 @@ function createEditor(editor_element) {
   return model;
 }
 
-function updateEditor(editor, source) {
-  console.log("Updating editor with source: ", source);
+export function updateEditor(editor, source) {
   editor.setValue(source.join("\n"));
   editor.setLanguage("moo");
 }

@@ -23,6 +23,7 @@ pub use crate::model::verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid};
 pub use crate::model::world_state::{WorldState, WorldStateSource};
 use crate::AsByteBuffer;
 use bincode::{Decode, Encode};
+use serde::Serialize;
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -55,12 +56,18 @@ pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
     fn is_empty(&self) -> bool;
 }
 
-#[derive(Debug, Error, Clone, Decode, Encode, PartialEq)]
+#[derive(Debug, Error, Clone, Decode, Encode, PartialEq, Eq, Serialize)]
 pub enum CompileError {
     #[error("Failure to parse string: {0}")]
     StringLexError(String),
-    #[error("Failure to parse program: {0}")]
-    ParseError(String),
+    #[error("Failure to parse program @ {line}/{column}: {message}")]
+    ParseError {
+        line: usize,
+        column: usize,
+        context: String,
+        end_line_col: Option<(usize, usize)>,
+        message: String,
+    },
     #[error("Unknown built-in function: {0}")]
     UnknownBuiltinFunction(String),
     #[error("Could not find loop with id: {0}")]
@@ -71,4 +78,6 @@ pub enum CompileError {
     AssignToConst(Symbol),
     #[error("Disabled feature: {0}")]
     DisabledFeature(String),
+    #[error("Bad slot name on flyweight: {0}")]
+    BadSlotName(String),
 }

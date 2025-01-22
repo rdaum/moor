@@ -77,3 +77,45 @@
     border-bottom-left-radius: 10px;
     border-bottom-right-radius: 10px;
 }
+
+.message_board {
+    background-color: #555;
+    color: white;
+    border-radius: 10px;
+    padding: 1.0em;
+    margin: 1.0em;
+    /* proportional font */
+    font-family: 'Roboto', sans-serif;
+
+    /* pinned to top of page, and centred horizontally and sized to the width of its internal text content
+     */
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+}
+
+.editor_container {
+    background-color: #555;
+    color: white;
+    border-radius: 10px;
+    /* proportional font */
+    font-family: 'Roboto', sans-serif;
+}
+
+.verb_compile_errors {
+    /* proportional font */
+    font-family: 'Roboto', sans-serif;
+    width: 100%;
+    /* word wrap on horizontal overflow */
+
+    word-break-wrap: break-word;
+    overflow: auto;;
+    word-break: normal;
+    white-space: pre-wrap;
+
+    /* scroll bars if needed */
+    scrollbar-width: thin;
+    scrollbar-color: #444 #555;
+}

@@ -313,10 +313,7 @@ impl Scheduler {
                 code.join("\n").as_str(),
                 self.config.features_config.compile_options(),
             )
-            .map_err(|e| {
-                // TODO: just dumping a string here sucks.
-                VerbProgramFailed(VerbProgramError::CompilationError(vec![format!("{:?}", e)]))
-            })?;
+            .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?;
 
             // Now we have a program, we need to encode it.
             let binary = program

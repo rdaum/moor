@@ -28,23 +28,46 @@
 //   can't permit a full 64-bit integer, so we have to be careful about that.
 // - Future things like WAIFs, etc. will need to be encoded in a way that makes sense for JSON.
 
-export function jsonToValue(json) {
+export enum ORefKind {
+  Oid,
+  SysObj,
+  Match,
+}
+
+export interface Oid {
+  kind: ORefKind.Oid;
+  oid: number;
+}
+
+export interface SysObj {
+  kind: ORefKind.SysObj;
+  sysobj: string[];
+}
+
+export interface ObjMatch {
+  kind: ORefKind.Match;
+  match: string;
+}
+
+export type ObjectRef = Oid | SysObj | ObjMatch;
+
+export function jsonToValue(json : JSON) {
   if (typeof json === "number") {
-    return new Int(json);
+    return json;
   } else if (typeof json === "string") {
-    return new Str(json);
+    return json;
   } else if (typeof json === "object") {
     if (json["error"]) {
       return new Error(json["error"], json["message"]);
     } else if (json["oid"] != null) {
-      return new ObjectRef(json["oid"]);
+      return oidRef(json["oid"]);
     } else if (json["map_pairs"] != null) {
       let pairs = [];
       let jsonPairs = json["map_pairs"];
       if (!Array.isArray(jsonPairs)) {
         throw "Map pairs must be an array";
       }
-      for (let i = 0; i < json.length; i++) {
+      for (let i = 0; i < jsonPairs.length; i++) {
         pairs.push(jsonToValue(jsonPairs[i]));
       }
       return new Map(pairs);
@@ -57,14 +80,12 @@ export function jsonToValue(json) {
 }
 
 export function valueToJson(v) {
-  if (v instanceof Int) {
-    return v.value;
-  } else if (v instanceof Str) {
-    return v.value;
+  if (typeof v === "number" || typeof v === "string") {
+    return v;
   } else if (v instanceof Error) {
     return { error: v.code, message: v.message };
-  } else if (v instanceof ObjectRef) {
-    return { oid: v.oid };
+  } else if (v["kind"] === ORefKind.Oid) {
+    return {oid: v.oid};
   } else if (v instanceof Map) {
     return { map_pairs: v.pairs.map(valueToJson) };
   } else {
@@ -72,39 +93,31 @@ export function valueToJson(v) {
   }
 }
 
-// An ObjectRef can be one of:
-//      .oid: number - literal object id
-//      .sysobj: array of strings - system object reference, a "path" starting from #0.  $login.welcome_message
-//      .match: string - a string to match in the player's current environment (room)
 
-export class ObjectRef {
-  constructor(oid, sysobj = null, match = null) {
-    this.oid = oid;
-    this.sysobj = sysobj;
-    this.match_env = match;
-  }
+export function oidRef(oid) : Oid {
+    return { kind: ORefKind.Oid, oid: oid };
 }
 
-export function oidRef(oid) {
-  return new ObjectRef(oid);
+export function sysobjRef(sysobj: string[]): SysObj {
+    return { kind: ORefKind.SysObj, sysobj: sysobj };
 }
 
-export function sysobjRef(sysobj) {
-  return new ObjectRef(null, sysobj);
-}
-
-export function matchRef(match) {
-  return new ObjectRef(null, null, match);
+export function matchRef(match: string) : ObjMatch {
+  return { kind: ORefKind.Match, match: match };
 }
 
 export class Error {
-  constructor(code, message) {
+  code : string;
+  message: string | null;
+  constructor(code: string, message) {
     this.code = code;
     this.message = message;
   }
 }
 
 export class Map {
+  pairs : Array<[any, any]>;
+
   constructor(pairs = []) {
     this.pairs = pairs;
   }
@@ -146,10 +159,6 @@ export class Map {
   }
 
   // Return the set of pairs
-  pairs() {
-    return this.pairs;
-  }
-
   // Return the keys in the map
   keys() {
     return this.pairs.map(pair => pair[0]);
@@ -165,3 +174,4 @@ export class Map {
     return this.pairs.length;
   }
 }
+

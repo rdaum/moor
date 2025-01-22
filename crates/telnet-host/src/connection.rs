@@ -22,7 +22,7 @@ use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::SinkExt;
 use futures_util::StreamExt;
 use moor_compiler::to_literal;
-use moor_values::model::ObjectRef;
+use moor_values::model::{CompileError, ObjectRef};
 use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_values::util::parse_into_words;
 use moor_values::{Obj, Symbol, Variant};
@@ -71,6 +71,52 @@ enum LineMode {
     WaitingReply(u128),
     /// Spooling up .program input.
     SpoolingProgram(String, String),
+}
+
+fn describe_compile_error(compile_error: CompileError) -> String {
+    match compile_error {
+        CompileError::StringLexError(le) => {
+            format!("String format error: {}", le)
+        }
+        CompileError::ParseError {
+            line,
+            column,
+            context: _,
+            end_line_col,
+            message,
+        } => {
+            let mut err = format!(
+                "Parse error at line {} column {}: {}",
+                line, column, message
+            );
+            if let Some(end_line_col) = end_line_col {
+                err.push_str(&format!(
+                    " (to line {} column {})",
+                    end_line_col.0, end_line_col.1
+                ));
+            }
+            err.push_str(format!(": {}", message).as_str());
+            err
+        }
+        CompileError::UnknownBuiltinFunction(bf) => {
+            format!("Unknown builtin function: {}", bf)
+        }
+        CompileError::UnknownLoopLabel(ll) => {
+            format!("Unknown break/loop label: {}", ll)
+        }
+        CompileError::DuplicateVariable(dv) => {
+            format!("Duplicate variable: {}", dv)
+        }
+        CompileError::AssignToConst(ac) => {
+            format!("Assignment to constant: {}", ac)
+        }
+        CompileError::DisabledFeature(df) => {
+            format!("Disabled feature: {}", df)
+        }
+        CompileError::BadSlotName(bs) => {
+            format!("Bad slot name in flyweight: {}", bs)
+        }
+    }
 }
 
 impl TelnetConnection {
@@ -338,7 +384,8 @@ impl TelnetConnection {
                                     self.write.send(format!("0 error(s).\nVerb {} programmed on object {}", verb, o)).await?;
                                 }
                                 VerbProgramResponse::Failure(VerbProgramError::CompilationError(e)) => {
-                                    self.write.send(format!("{} error(s).\n{}", e.len(), e.join("\n"))).await?;
+                                    let desc = describe_compile_error(e);
+                                    self.write.send(desc).await?;
                                 }
                                 VerbProgramResponse::Failure(VerbProgramError::NoVerbToProgram) => {
                                     self.write.send("That object does not have that verb.".to_string()).await?;
@@ -413,10 +460,11 @@ impl TelnetConnection {
             SchedulerError::CommandExecutionError(CommandError::PermissionDenied) => {
                 self.write.send("You can't do that.".to_string()).await?;
             }
-            SchedulerError::VerbProgramFailed(VerbProgramError::CompilationError(lines)) => {
-                for line in lines {
-                    self.write.send(line).await?;
-                }
+            SchedulerError::VerbProgramFailed(VerbProgramError::CompilationError(
+                compile_error,
+            )) => {
+                let ce = describe_compile_error(compile_error);
+                self.write.send(ce).await?;
                 self.write.send("Verb not programmed.".to_string()).await?;
             }
             SchedulerError::VerbProgramFailed(VerbProgramError::NoVerbToProgram) => {

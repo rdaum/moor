@@ -1,0 +1,54 @@
+<!-- bare VanJS app, no NPM jazz -->
+<html>
+<head>
+    <!-- css -->
+    <link rel="stylesheet" href="moor.css">
+    <title>moo</title>
+</head>
+<body>
+
+<script type="importmap">
+    {
+        "imports": {
+            "moor": "/moor.js",
+            "rpc": "/rpc.js",
+            "editor": "/editor.js",
+            "var": "/var.js",
+            "vanjs-core": "https://cdn.jsdelivr.net/npm/vanjs-core@1.5.3/src/van.min.js",
+            "van-ui": "https://cdn.jsdelivr.net/npm/vanjs-ui@0.11.5/dist/van-ui.js",
+            "monaco-editor": "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/+esm"
+        }
+    }
+</script>
+
+
+
+<script  type="text/javascript" src="https://unpkg.com/@djot/djot@0.3.1/dist/djot.js"></script>
+
+<script type="module" src="moor.js"></script>
+<script type="module" src="rpc.js"></script>
+<script type="module" src="editor.js"></script>
+<script type="module" src="var.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/editor/editor.main.min.css" rel="stylesheet">
+
+<script>
+    module = {
+
+    }
+</script>
+<script type="module">
+    // Import modules
+    import { context } from "moor";
+    import { action_invoke } from "./narrative";
+    import { MoorRemoteObject } from "rpc";
+    import { ObjectRef } from "var";
+
+    // .. and export them so they're available to the outside world (e.g. djot generated links)
+    module.ObjectRef = ObjectRef;
+    module.MoorRPCObject = MoorRemoteObject;
+    module.action_invoke = action_invoke;
+    module.context = context;
+
+</script>
+</body>
+</html>

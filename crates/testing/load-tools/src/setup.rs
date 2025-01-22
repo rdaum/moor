@@ -250,11 +250,7 @@ pub async fn compile(
                 panic!("No verb to program");
             }
             VerbProgramError::CompilationError(e) => {
-                error!("Compilation error in {}:{}", oid, verb_name);
-                for e in e {
-                    error!("{}", e);
-                }
-                panic!("Compilation error");
+                error!("Compilation error in {}:{}: {:?}", oid, verb_name, e);
             }
             VerbProgramError::DatabaseError => {
                 panic!("Database error");

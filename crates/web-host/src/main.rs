@@ -11,10 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-mod client;
 mod host;
 
-use crate::client::{editor_handler, js_handler, root_handler};
 use crate::host::WebHost;
 use std::collections::HashMap;
 
@@ -23,18 +21,29 @@ use axum::Router;
 use clap::Parser;
 use clap_derive::Parser;
 
+use axum::handler::HandlerWithoutStateExt;
+use axum::http::{header, StatusCode};
+use axum::response::IntoResponse;
+use futures_util::future::OptionFuture;
 use moor_values::{Obj, SYSTEM_OBJECT};
+use rolldown::{
+    Bundler, BundlerOptions, ExperimentalOptions, InputItem, OutputFormat, Platform, SourceMapType,
+    Watcher,
+};
 use rpc_async_client::{
     make_host_token, proces_hosts_events, start_host_session, ListenersClient, ListenersMessage,
 };
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{load_keypair, HostType};
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
+use tokio::sync::Mutex;
+use tower_http::services::ServeDir;
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
@@ -49,6 +58,22 @@ struct Args {
         default_value = "0.0.0.0:8080"
     )]
     listen_address: String,
+
+    #[arg(
+        long,
+        value_name = "dist-directory",
+        help = "Directory to serve static files from, and to compile/bundle them to",
+        default_value = "./dist"
+    )]
+    dist_directory: PathBuf,
+
+    #[arg(
+        long,
+        value_name = "watch-changes",
+        help = "Watch for changes in the dist directory and recompile (for development)",
+        default_value = "true"
+    )]
+    watch_changes: bool,
 }
 
 struct Listeners {
@@ -57,6 +82,7 @@ struct Listeners {
     rpc_address: String,
     events_address: String,
     kill_switch: Arc<AtomicBool>,
+    dist_dir: PathBuf,
 }
 
 impl Listeners {
@@ -65,6 +91,7 @@ impl Listeners {
         rpc_address: String,
         events_address: String,
         kill_switch: Arc<AtomicBool>,
+        dist_dir: PathBuf,
     ) -> (
         Self,
         tokio::sync::mpsc::Receiver<ListenersMessage>,
@@ -77,6 +104,7 @@ impl Listeners {
             rpc_address,
             events_address,
             kill_switch,
+            dist_dir,
         };
         let listeners_client = ListenersClient::new(tx);
         (listeners, rx, listeners_client)
@@ -103,7 +131,7 @@ impl Listeners {
                         self.events_address.clone(),
                         handler.clone(),
                     );
-                    let main_router = match mk_routes(ws_host) {
+                    let main_router = match mk_routes(ws_host, &self.dist_dir) {
                         Ok(mr) => mr,
                         Err(e) => {
                             warn!(?e, "Unable to create main router");
@@ -182,8 +210,39 @@ impl Listener {
         Ok(())
     }
 }
-fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
+
+async fn index_handler() -> impl IntoResponse {
+    let index_html = include_str!("client/index.html");
+    // Return with content-type html
+    let mut headers = header::HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("text/html"),
+    );
+    (StatusCode::OK, headers, index_html)
+}
+
+async fn css_handler() -> impl IntoResponse {
+    let css = include_str!("client/moor.css");
+    // Return with content-type css
+    let mut headers = header::HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("text/css"),
+    );
+    (StatusCode::OK, headers, css)
+}
+
+fn mk_routes(web_host: WebHost, dist_dir: &Path) -> eyre::Result<Router> {
+    async fn handle_404() -> (StatusCode, &'static str) {
+        (StatusCode::NOT_FOUND, "Not found")
+    }
+
+    let dist_service = ServeDir::new(dist_dir).not_found_service(handle_404.into_service());
+
     let webhost_router = Router::new()
+        .route("/", get(index_handler))
+        .route("/moor.css", get(css_handler))
         .route(
             "/ws/attach/connect/{token}",
             get(host::ws_connect_attach_handler),
@@ -192,12 +251,6 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
             "/ws/attach/create/{token}",
             get(host::ws_create_attach_handler),
         )
-        .route("/", get(root_handler))
-        .route("/moor.js", get(js_handler))
-        .route("/rpc.js", get(client::rpc_handler))
-        .route("/editor.js", get(editor_handler))
-        .route("/moor.css", get(client::css_handler))
-        .route("/var.js", get(client::var_handler))
         .route("/auth/connect", post(host::connect_auth_handler))
         .route("/auth/create", post(host::create_auth_handler))
         .route("/welcome", get(host::welcome_message_handler))
@@ -212,9 +265,57 @@ fn mk_routes(web_host: WebHost) -> eyre::Result<Router> {
             "/properties/{object}/{name}",
             get(host::property_retrieval_handler),
         )
+        .fallback_service(dist_service)
         .with_state(web_host);
 
     Ok(webhost_router)
+}
+
+fn mk_js_bundler() -> Arc<Mutex<Bundler>> {
+    let bundler = Bundler::new(BundlerOptions {
+        input: Some(vec![
+            "crates/web-host/src/client/moor.ts".to_string().into(),
+            InputItem {
+                import: "crates/web-host/src/client/rpc.ts".to_string(),
+                ..Default::default()
+            },
+            InputItem {
+                import: "crates/web-host/src/client/var.ts".to_string(),
+                ..Default::default()
+            },
+            InputItem {
+                import: "crates/web-host/src/client/editor.ts".to_string(),
+                ..Default::default()
+            },
+            InputItem {
+                import: "crates/web-host/src/client/model.ts".to_string(),
+                ..Default::default()
+            },
+            InputItem {
+                import: "crates/web-host/src/client/verb_edit.ts".to_string(),
+                ..Default::default()
+            },
+            InputItem {
+                import: "crates/web-host/src/client/login.ts".to_string(),
+                ..Default::default()
+            },
+            InputItem {
+                import: "crates/web-host/src/client/narrative.ts".to_string(),
+                ..Default::default()
+            },
+        ]),
+        sourcemap: Some(SourceMapType::File),
+        minify: Some(false),
+        format: Some(OutputFormat::Esm),
+        platform: Some(Platform::Browser),
+        experimental: Some(ExperimentalOptions {
+            incremental_build: Some(true),
+            ..Default::default()
+        }),
+
+        ..Default::default()
+    });
+    Arc::new(Mutex::new(bundler))
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -252,11 +353,13 @@ async fn main() -> Result<(), eyre::Error> {
         args.client_args.rpc_address.clone(),
         args.client_args.events_address.clone(),
         kill_switch.clone(),
+        args.dist_directory.to_owned(),
     );
     let listeners_thread = tokio::spawn(async move {
         listeners_server.run(listeners_channel).await;
     });
 
+    info!("Serving out of CWD {:?}", std::env::current_dir()?);
     let rpc_client = start_host_session(
         &host_token,
         zmq_ctx.clone(),
@@ -282,7 +385,36 @@ async fn main() -> Result<(), eyre::Error> {
         listeners.clone(),
         HostType::TCP,
     );
+
+    let bundler = mk_js_bundler();
+
+    // Write initial bundle
+    if let Err(e) = bundler.lock().await.write().await {
+        warn!(?e, "Unable to write initial bundle");
+        for msg in e.iter() {
+            warn!("{:?}", msg);
+        }
+        panic!("Unable to write initial bundle");
+    }
+
+    // Start watching for changes, if such a thing is desired
+    let watcher_future: OptionFuture<_> = args
+        .watch_changes
+        .then(|| {
+            let bundler = bundler.clone();
+            let dist_dir = args.dist_directory.clone();
+            tokio::spawn(async move {
+                let watcher = Watcher::new(vec![bundler], None).unwrap();
+                info!("Watching {:?} for changes...", dist_dir);
+                watcher.start().await
+            })
+        })
+        .into();
+
     select! {
+        _ = watcher_future => {
+            info!("Watcher exited.");
+        },
         _ = host_listen_loop => {
             info!("Host events loop exited.");
         },

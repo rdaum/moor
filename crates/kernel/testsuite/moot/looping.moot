@@ -16,20 +16,10 @@ E_TYPE
 
 // test_that_invalid_for_loops_do_not_compile
 ; return eval("x = {}; for in ({1, 2, 3}); endfor; return x;");
-<{0, "Failure to parse program: Parse error:  --> 1:13
-<  |
-<1 | x = {}; for in ({1, 2, 3}); endfor; return x;
-<  |             ^---
-<  |
-<  = expected ident"}
+<{0, "Failure to parse program @ 1/13: expected ident"}
 
 ; return eval("x = {}; for i, j in ({1, 2, 3}); endfor; return x;");
-<{0, "Failure to parse program: Parse error:  --> 1:9
-<  |
-<1 | x = {}; for i, j in ({1, 2, 3}); endfor; return x;
-<  |         ^---
-<  |
-<  = expected EOI or statement"}
+<{0, "Failure to parse program @ 1/9: expected EOI or statement"}
 
 ; return eval("x = {}; for i in ({1, 2, 3}); continue foo; endfor; return x;");
 {0, "Could not find loop with id: foo"}

@@ -11,18 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// import {ObjectRef} from "./var";
+import {matchRef, ObjectRef, oidRef, ORefKind, sysobjRef} from "./var";
+import {context} from "./moor";
 
-// Converts a JSON representation of a MOO value into a MOO expression string
-// JSON common look like:
-//     number -> number
-//     "string" -> "string"
-//     { error_code: number, error_name: string (e.g. E_PROPNF), error_message: string } -> E_<error_name>
-//     { oid: number } -> #<oid>
-//     [ ... ] -> { ... }
-import { matchRef, ObjectRef, oidRef } from "./var.js";
-
-function json_to_moo(json) {
+function translateJsonToMOO(json : any): any {
   if (typeof json === "number") {
     return json.toString();
   } else if (typeof json === "string") {
@@ -35,7 +27,7 @@ function json_to_moo(json) {
     } else if (Array.isArray(json)) {
       let result = "{";
       for (let i = 0; i < json.length; i++) {
-        result += json_to_moo(json[i]);
+        result += translateJsonToMOO(json[i]);
         if (i < json.length - 1) {
           result += ", ";
         }
@@ -55,13 +47,13 @@ function json_to_moo(json) {
 function transform_args(args) {
   let result = [];
   for (let i = 0; i < args.length; i++) {
-    result.push(json_to_moo(args[i]));
+    result.push(translateJsonToMOO(args[i]));
   }
   return result.join(", ");
 }
 
 // Recursively descend a JSON result from eval, and turns object references into MooRPCObjects.
-function transform_eval(json) {
+function transformEval(json) {
   // Empty json is null, so return null.
   if (json == null) {
     return null;
@@ -70,46 +62,50 @@ function transform_eval(json) {
     return json;
   }
   if (json["oid"] != null) {
-    let oref = ObjectRef(json["oid"]);
-    return new MoorRPCObject(oref, context.auth_token);
+    let oref = oidRef(json["oid"]);
+    return new MoorRemoteObject(oref, context.authToken);
   } else if (Array.isArray(json)) {
     let result = [];
     for (let i = 0; i < json.length; i++) {
-      result.push(transform_eval(json[i]));
+      result.push(transformEval(json[i]));
     }
     return result;
   } else {
     let result = {};
     for (let key in json) {
-      result[key] = transform_eval(json[key]);
+      result[key] = transformEval(json[key]);
     }
     return result;
   }
 }
 
 // Object handle for a MOO object to permit simple RPC type behaviours.
-export class MoorRPCObject {
-  constructor(oref, auth_token) {
+export class MoorRemoteObject {
+  oref: ObjectRef;
+  authToken: string;
+
+  constructor(oref : ObjectRef, authToken: string) {
     this.oref = oref;
-    this.auth_token = auth_token;
+    this.authToken = authToken;
   }
 
   // Call a verb on the object by eval.
   // "return #<object_id>:<verb>(<args>)"
-  async invoke_verb(verb_name, args) {
+  // TODO: replace with use of RESTful API.
+  async callVerb(verb_name, args) {
     let self = "#" + this.oref;
     let args_str = transform_args(args);
     let expr = "return " + self + ":" + verb_name + "(" + args_str + ");";
-    return perform_eval(this.auth_token, expr);
+    return performEval(this.authToken, expr);
   }
 
   // Get the code and property value of a verb.
-  async get_verb_code(verb_name) {
+  async getVerbCode(verb_name) : Promise<string> {
     // REST resource /verbs/#object_id/verb_name
-    let result = await fetch("/verbs/" + oref_curie(this.oref) + "/" + verb_name, {
+    let result = await fetch("/verbs/" + orefCurie(this.oref) + "/" + verb_name, {
       method: "GET",
       headers: {
-        "X-Moor-Auth-Token": this.auth_token,
+        "X-Moor-Auth-Token": this.authToken,
       },
     });
     if (result.ok) {
@@ -120,12 +116,12 @@ export class MoorRPCObject {
     }
   }
 
-  async get_verbs() {
+  async getVerbs() {
     // REST resource /verbs/#object_id
-    let result = await fetch("/verbs/" + oref_curie(this.oref), {
+    let result = await fetch("/verbs/" + orefCurie(this.oref), {
       method: "GET",
       headers: {
-        "X-Moor-Auth-Token": this.auth_token,
+        "X-Moor-Auth-Token": this.authToken,
       },
     });
     if (result.ok) {
@@ -136,12 +132,12 @@ export class MoorRPCObject {
     }
   }
 
-  async compile_verb(verb_name, code) {
+  async compileVerb(verb_name, code) : Promise<object> {
     // REST post /verbs/#object_id/verb_name
-    let result = await fetch("/verbs/" + oref_curie(this.oref) + "/" + verb_name, {
+    let result = await fetch("/verbs/" + orefCurie(this.oref) + "/" + verb_name, {
       method: "POST",
       headers: {
-        "X-Moor-Auth-Token": this.auth_token,
+        "X-Moor-Auth-Token": this.authToken,
       },
       body: code,
     });
@@ -152,41 +148,41 @@ export class MoorRPCObject {
       if (result_json["errors"]) {
         return result_json["errors"];
       } else {
-        return [];
+        return {};
       }
     } else {
       console.log("Failed to compile verb!");
-      return false;
+      return { "error": "Failed to compile verb!" };
     }
   }
 
-  async get_property(property_name) {
+  async getProperty(property_name) {
     // /properties/#object_id/property_name
-    let result = await fetch("/properties/" + oref_curie(this.oref) + "/" + property_name, {
+    let result = await fetch("/properties/" + orefCurie(this.oref) + "/" + property_name, {
       method: "GET",
       headers: {
-        "X-Moor-Auth-Token": this.auth_token,
+        "X-Moor-Auth-Token": this.authToken,
       },
     });
     if (result.ok) {
       let value = await result.json();
-      return transform_eval(value);
+      return transformEval(value);
     } else {
       console.log("Failed to fetch property value!");
     }
   }
 
-  async get_properties() {
+  async getProperties() {
     // /properties/object_id
-    let result = await fetch("/properties/" + oref_curie(this.oref), {
+    let result = await fetch("/properties/" + orefCurie(this.oref), {
       method: "GET",
       headers: {
-        "X-Moor-Auth-Token": this.auth_token,
+        "X-Moor-Auth-Token": this.authToken,
       },
     });
     if (result.ok) {
       let value = await result.json();
-      return transform_eval(value);
+      return transformEval(value);
     } else {
       console.log("Failed to fetch property value!");
     }
@@ -194,21 +190,21 @@ export class MoorRPCObject {
 }
 
 // Construct a CURI from an object ref
-export function oref_curie(oref) {
-  if (oref.oid != null) {
+export function orefCurie(oref : ObjectRef) : string {
+  if (oref.kind == ORefKind.Oid) {
     return "oid:" + oref.oid;
   }
 
-  if (oref.sysobj != null) {
+  if (oref.kind == ORefKind.SysObj) {
     return "sysobj:" + encodeURIComponent(oref.sysobj.join("."));
   }
 
-  if (oref.match_env != null) {
-    return "match_env:" + encodeURIComponent(oref.match);
+  if (oref.kind == ORefKind.Match) {
+    return "match(\"" + encodeURIComponent(oref.match) + "\")";
   }
 }
 
-export function curie_oref(curie) {
+export function curieORef(curie) {
   let parts = curie.split(":");
   if (parts.length != 2) {
     throw "Invalid OREF CURI: " + curie;
@@ -229,32 +225,8 @@ export function curie_oref(curie) {
   throw "Unknown CURI type: " + parts[0];
 }
 
-// Handle for a Verb.
-class MoorVerb {
-  constructor(object_id, verb_name, verb_args, verb_info, auth_token) {
-    this.object_id = object_id;
-    this.verb_name = verb_name;
-    this.verb_args = verb_args;
-    this.verb_info = verb_info;
-    this.auth_token = auth_token;
-  }
-
-  async get_code() {
-    let self = "#" + this.object_id;
-    let expr = "return verb_code(" + self + ", \"" + this.verb_name + "\");";
-    return perform_eval(this.auth_token, expr);
-  }
-}
-
-// Call a builtin function on the server and return the result.
-async function call_builtin(auth_token, builtin, args) {
-  let args_str = transform_args(args);
-  let expr = "return " + builtin + "(" + args_str + ");";
-  return perform_eval(auth_token, expr);
-}
-
 // Evaluate a MOO expression on the server and return the result.
-async function perform_eval(auth_token, expr) {
+export async function performEval(auth_token, expr) {
   // HTTP POST with the body being the expression. And add in the X-Moor-Auth-Token header.
   let result = await fetch("/eval", {
     method: "POST",
@@ -265,8 +237,22 @@ async function perform_eval(auth_token, expr) {
   });
   if (result.ok) {
     let expr = await result.json();
-    return transform_eval(expr);
+    return transformEval(expr);
   } else {
     console.log("Failed to evaluate expression!");
+  }
+}
+
+export async function retrieveWelcome() {
+  let result = await fetch("/welcome");
+  if (result.ok) {
+    let welcome_text = await result.json();
+    // "welcome_text" is a json array of strings, but we want to treat it as one djot doc,
+    // so we'll join them together with a newline.
+    return welcome_text.join("\n");
+  } else {
+    console.log("Failed to retrieve welcome text!");
+    context.systemMessage.show("Failed to retrieve welcome text!", 3);
+    return "";
   }
 }

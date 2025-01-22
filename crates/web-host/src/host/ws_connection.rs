@@ -274,12 +274,12 @@ impl WebSocketConnection {
                 )
                 .await
             }
-            SchedulerError::VerbProgramFailed(VerbProgramError::CompilationError(lines)) => {
+            SchedulerError::VerbProgramFailed(VerbProgramError::CompilationError(ce)) => {
                 Self::emit_error(
                     ws_sender,
                     ErrorOutput {
                         message: "Verb not programmed.".to_string(),
-                        description: Some(lines),
+                        description: Some(vec![ce.to_string()]),
                         server_time: SystemTime::now(),
                     },
                 )

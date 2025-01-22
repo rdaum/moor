@@ -21,6 +21,7 @@ use std::str::FromStr;
 use itertools::Itertools;
 use moor_values::SYSTEM_OBJECT;
 use moor_values::{v_none, Symbol};
+use pest::error::LineColLocation;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
 use tracing::{instrument, warn};
@@ -346,10 +347,9 @@ impl TreeTransformer {
                                     if slot_name == Symbol::mk_case_insensitive("delegate")
                                         || slot_name == Symbol::mk_case_insensitive("slots")
                                     {
-                                        return Err(CompileError::ParseError(format!(
-                                            "Invalid slot name: {} for flyweight",
-                                            slot_name
-                                        )));
+                                        return Err(CompileError::BadSlotName(
+                                            slot_name.to_string(),
+                                        ));
                                     }
 
                                     let slot_expr = primary_self
@@ -1193,8 +1193,18 @@ pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Pars
     let pairs = match MooParser::parse(Rule::program, program_text) {
         Ok(pairs) => pairs,
         Err(e) => {
-            let msg = format!("Parse error: {}", e);
-            return Err(CompileError::ParseError(msg));
+            let ((line, column), end_line_col) = match e.line_col {
+                LineColLocation::Pos(lc) => (lc, None),
+                LineColLocation::Span(begin, end) => (begin, Some(end)),
+            };
+
+            return Err(CompileError::ParseError {
+                line,
+                column,
+                end_line_col,
+                context: e.line().to_string(),
+                message: e.variant.message().to_string(),
+            });
         }
     };
 

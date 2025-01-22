@@ -83,9 +83,9 @@ pub async fn verb_program_handler(
             VerbProgramError::DatabaseError,
         ))) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         Ok(DaemonToClientReply::ProgramResponse(VerbProgramResponse::Failure(
-            VerbProgramError::CompilationError(errors),
+            VerbProgramError::CompilationError(error),
         ))) => Json(json!({
-            "errors": errors.iter().map(|e| e.to_string()).collect::<Vec<String>>()
+            "errors": serde_json::to_value(error).unwrap()
         }))
         .into_response(),
         Ok(r) => {
