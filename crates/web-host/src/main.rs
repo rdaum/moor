@@ -71,7 +71,7 @@ struct Args {
         long,
         value_name = "watch-changes",
         help = "Watch for changes in the dist directory and recompile (for development)",
-        default_value = "true"
+        default_value = "false"
     )]
     watch_changes: bool,
 }
@@ -398,7 +398,7 @@ async fn main() -> Result<(), eyre::Error> {
     }
 
     // Start watching for changes, if such a thing is desired
-    let watcher_future: OptionFuture<_> = args
+    let _watcher_future: OptionFuture<_> = args
         .watch_changes
         .then(|| {
             let bundler = bundler.clone();
@@ -412,9 +412,6 @@ async fn main() -> Result<(), eyre::Error> {
         .into();
 
     select! {
-        _ = watcher_future => {
-            info!("Watcher exited.");
-        },
         _ = host_listen_loop => {
             info!("Host events loop exited.");
         },
