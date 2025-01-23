@@ -19,7 +19,9 @@ command = [
     "--textdump",
     "JHCore-DEV-2.db",
     "--textdump-out",
-    "out.db",
+    "textdumps",
+    "--checkpoint-interval-seconds",
+    "360",
 ]
 allow_warnings = true
 need_stdout = true

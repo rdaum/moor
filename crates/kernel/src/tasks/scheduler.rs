@@ -16,7 +16,7 @@ use std::fs::File;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::yield_now;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
@@ -1199,9 +1199,26 @@ impl Scheduler {
 
     fn checkpoint(&self) -> Result<(), SchedulerError> {
         let Some(textdump_path) = self.config.textdump_config.output_path.clone() else {
-            error!("Cannot textdump as textdump_file not configured");
+            error!("Cannot textdump as output directory not configured");
             return Err(SchedulerError::CouldNotStartTask);
         };
+
+        // Verify the directory exists / create it
+        if let Err(e) = std::fs::create_dir_all(&textdump_path) {
+            error!(?e, "Could not create textdump directory");
+            return Err(SchedulerError::CouldNotStartTask);
+        }
+
+        // Output file should be suffixed with an incrementing number, to avoid overwriting
+        // existing dumps, so we can do rolling backups.
+        // We should be able to just use seconds since epoch for this.
+        let textdump_path = textdump_path.join(format!(
+            "textdump-{}.in-progress",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs()
+        ));
 
         let encoding_mode = self.config.textdump_config.output_encoding;
 
@@ -1237,7 +1254,13 @@ impl Scheduler {
                     error!(?e, "Could not write textdump");
                     return;
                 }
-                trace!(?textdump_path, "Textdump written.");
+
+                // Now that the dump has been written, strip the in-progress suffix.
+                let final_path = textdump_path.with_extension("moo-textdump");
+                if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
+                    error!(?e, "Could not rename textdump to final path");
+                }
+                info!(?final_path, "Textdump written.");
             });
         if let Err(e) = tr {
             error!(?e, "Could not start textdump thread");

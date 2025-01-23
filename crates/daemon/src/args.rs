@@ -196,7 +196,7 @@ pub struct TextdumpArgs {
     #[arg(
         long,
         value_name = "textdump-output",
-        help = "Path to textdump file to write on `dump_database()`, if any"
+        help = "Path to directory to write the textdump file to on `dump_database()`, or on schedule, if any"
     )]
     pub textdump_out: Option<PathBuf>,
 

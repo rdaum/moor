@@ -101,7 +101,7 @@ impl FeaturesConfig {
 pub struct TextdumpConfig {
     /// Where to read the initial textdump from, if any.
     pub input_path: Option<PathBuf>,
-    /// Where to write periodic textdumps of the database, if any.
+    /// Directory to write periodic textdumps of the database, if any.
     pub output_path: Option<PathBuf>,
     /// What encoding to use for writing textdumps (ISO-8859-1 or UTF-8).
     pub output_encoding: EncodingMode,
