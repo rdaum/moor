@@ -55,7 +55,6 @@ const MessageBoard = (notice : State<Notice>) => {
     );
 }
 
-export const context = new Context();
 
 const App = (context: Context) => {
     const player = van.state(context.player);
@@ -81,4 +80,6 @@ const App = (context: Context) => {
 
 htmlPurifySetup();
 
-van.add(document.body, App(context));
+console.log("Context: ", Context);
+export const context = new Context();
+van.add(document.body, App(new Context()));

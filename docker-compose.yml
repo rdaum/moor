@@ -20,7 +20,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "./target/release/moor-daemon development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --textdump-out=textdump-out --checkpoint-interval-seconds=360"
+      sh -c "./moor-daemon development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --textdump-out=textdump-out --checkpoint-interval-seconds=360"
     ports:
       # ZMQ ports
       - "7899:7899"
@@ -36,7 +36,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "./target/release/moor-telnet-host --telnet-address=0.0.0.0 --telnet-port=8888 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
+      sh -c "./moor-telnet-host --telnet-address=0.0.0.0 --telnet-port=8888 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
     ports:
       # Telnet listener
       - "8888:8888"
@@ -51,7 +51,7 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "./target/release/moor-web-host --listen-address=0.0.0.0:8080 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
+      sh -c "./moor-web-host --listen-address=0.0.0.0:8080 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898 --client-sources=./client"
     ports:
       # HTTP listener
       - "8080:8080"

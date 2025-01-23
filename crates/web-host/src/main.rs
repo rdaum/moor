@@ -21,6 +21,7 @@ use axum::Router;
 use clap::Parser;
 use clap_derive::Parser;
 
+use axum::extract::State;
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
@@ -74,6 +75,15 @@ struct Args {
         default_value = "false"
     )]
     watch_changes: bool,
+
+    // Where to find the client source files for the web bundler
+    #[arg(
+        long,
+        value_name = "client-sources",
+        help = "Directory for HTML/JS/CSS client source files for serving and compilation",
+        default_value = "./crates/web-host/src/client"
+    )]
+    client_sources: PathBuf,
 }
 
 struct Listeners {
@@ -82,6 +92,7 @@ struct Listeners {
     rpc_address: String,
     events_address: String,
     kill_switch: Arc<AtomicBool>,
+    src_dir: PathBuf,
     dist_dir: PathBuf,
 }
 
@@ -91,6 +102,7 @@ impl Listeners {
         rpc_address: String,
         events_address: String,
         kill_switch: Arc<AtomicBool>,
+        src_dir: PathBuf,
         dist_dir: PathBuf,
     ) -> (
         Self,
@@ -104,6 +116,7 @@ impl Listeners {
             rpc_address,
             events_address,
             kill_switch,
+            src_dir,
             dist_dir,
         };
         let listeners_client = ListenersClient::new(tx);
@@ -127,6 +140,7 @@ impl Listeners {
             match listeners_channel.recv().await {
                 Some(ListenersMessage::AddListener(handler, addr)) => {
                     let ws_host = WebHost::new(
+                        self.src_dir.clone(),
                         self.rpc_address.clone(),
                         self.events_address.clone(),
                         handler.clone(),
@@ -211,10 +225,17 @@ impl Listener {
     }
 }
 
-async fn index_handler() -> impl IntoResponse {
-    let index_html = include_str!("client/index.html");
-    // Return with content-type html
+async fn index_handler(State(state): State<WebHost>) -> impl IntoResponse {
     let mut headers = header::HeaderMap::new();
+    // Read the index.html file out of state.root_path
+    let Ok(index_html) = std::fs::read_to_string(state.root_path.join("index.html")) else {
+        return (
+            StatusCode::NOT_FOUND,
+            headers,
+            "Unable to read index.html".to_string(),
+        );
+    };
+    // Return with content-type html
     headers.insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static("text/html"),
@@ -222,10 +243,16 @@ async fn index_handler() -> impl IntoResponse {
     (StatusCode::OK, headers, index_html)
 }
 
-async fn css_handler() -> impl IntoResponse {
-    let css = include_str!("client/moor.css");
-    // Return with content-type css
+async fn css_handler(State(state): State<WebHost>) -> impl IntoResponse {
     let mut headers = header::HeaderMap::new();
+    let Ok(css) = std::fs::read_to_string(state.root_path.join("moor.css")) else {
+        return (
+            StatusCode::NOT_FOUND,
+            headers,
+            "Unable to read moor.css".to_string(),
+        );
+    };
+    // Return with content-type css
     headers.insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static("text/css"),
@@ -271,39 +298,27 @@ fn mk_routes(web_host: WebHost, dist_dir: &Path) -> eyre::Result<Router> {
     Ok(webhost_router)
 }
 
-fn mk_js_bundler() -> Arc<Mutex<Bundler>> {
+fn mk_js_bundler(src_dir: &Path) -> Arc<Mutex<Bundler>> {
+    // Find all .ts files in the src directory
+    // moor.ts is always first
+    let mut input = vec![src_dir.join("moor.ts").to_string_lossy().to_string().into()];
+
+    for entry in std::fs::read_dir(src_dir).expect("Unable to read src directory") {
+        let entry = entry.expect("Unable to read entry");
+        let path = entry.path();
+        if path.extension().map_or(false, |ext| ext == "ts") {
+            if path.file_name().map_or(false, |name| name == "moor.ts") {
+                continue;
+            }
+            input.push(InputItem {
+                import: path.to_string_lossy().to_string(),
+                ..Default::default()
+            });
+        }
+    }
+
     let bundler = Bundler::new(BundlerOptions {
-        input: Some(vec![
-            "crates/web-host/src/client/moor.ts".to_string().into(),
-            InputItem {
-                import: "crates/web-host/src/client/rpc.ts".to_string(),
-                ..Default::default()
-            },
-            InputItem {
-                import: "crates/web-host/src/client/var.ts".to_string(),
-                ..Default::default()
-            },
-            InputItem {
-                import: "crates/web-host/src/client/editor.ts".to_string(),
-                ..Default::default()
-            },
-            InputItem {
-                import: "crates/web-host/src/client/model.ts".to_string(),
-                ..Default::default()
-            },
-            InputItem {
-                import: "crates/web-host/src/client/verb_edit.ts".to_string(),
-                ..Default::default()
-            },
-            InputItem {
-                import: "crates/web-host/src/client/login.ts".to_string(),
-                ..Default::default()
-            },
-            InputItem {
-                import: "crates/web-host/src/client/narrative.ts".to_string(),
-                ..Default::default()
-            },
-        ]),
+        input: Some(input),
         sourcemap: Some(SourceMapType::File),
         minify: Some(false),
         format: Some(OutputFormat::Esm),
@@ -353,6 +368,7 @@ async fn main() -> Result<(), eyre::Error> {
         args.client_args.rpc_address.clone(),
         args.client_args.events_address.clone(),
         kill_switch.clone(),
+        args.client_sources.to_owned(),
         args.dist_directory.to_owned(),
     );
     let listeners_thread = tokio::spawn(async move {
@@ -386,7 +402,13 @@ async fn main() -> Result<(), eyre::Error> {
         HostType::TCP,
     );
 
-    let bundler = mk_js_bundler();
+    let bundler = mk_js_bundler(&args.client_sources);
+
+    // Delete any pre-existing content in the dist dir.
+    if args.dist_directory.exists() {
+        std::fs::remove_dir_all(&args.dist_directory)
+            .expect("Unable to remove existing dist directory");
+    }
 
     // Write initial bundle
     if let Err(e) = bundler.lock().await.write().await {
@@ -396,6 +418,7 @@ async fn main() -> Result<(), eyre::Error> {
         }
         panic!("Unable to write initial bundle");
     }
+    info!("Bundle written to {:?}", args.dist_directory);
 
     // Start watching for changes, if such a thing is desired
     let _watcher_future: OptionFuture<_> = args

@@ -34,6 +34,7 @@ use rpc_common::{
     CLIENT_BROADCAST_TOPIC,
 };
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use tmq::{request, subscribe};
 use tracing::warn;
 use tracing::{debug, error, info};
@@ -51,6 +52,8 @@ pub struct WebHost {
     rpc_addr: String,
     pubsub_addr: String,
     pub(crate) handler_object: Obj,
+
+    pub(crate) root_path: PathBuf,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -64,9 +67,15 @@ pub enum WsHostError {
 }
 
 impl WebHost {
-    pub fn new(rpc_addr: String, narrative_addr: String, handler_object: Obj) -> Self {
+    pub fn new(
+        source_dir: PathBuf,
+        rpc_addr: String,
+        narrative_addr: String,
+        handler_object: Obj,
+    ) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
+            root_path: source_dir,
             zmq_context: tmq_context,
             rpc_addr,
             pubsub_addr: narrative_addr,
