@@ -997,6 +997,20 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Typed(TYPE_FLYWEIGHT), Typed(TYPE_MAP)],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("present"),
+            min_args: Q(2),
+            max_args: Q(6),
+            types: vec![
+                Typed(TYPE_OBJ),
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Any,
+            ],
+            implemented: true,
+        },
     ]
 }
 

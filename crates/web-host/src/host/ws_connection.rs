@@ -15,7 +15,9 @@ use crate::host::{serialize_var, var_as_json};
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
+use moor_values::tasks::{
+    AbortLimitReason, CommandError, Event, Presentation, SchedulerError, VerbProgramError,
+};
 use moor_values::{v_obj, Obj, Var};
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::events_recv;
@@ -49,14 +51,25 @@ pub struct WebSocketConnection {
 /// The JSON output of a narrative event.
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NarrativeOutput {
+    /// The object that authored or caused the event.
     author: Value,
+    /// If this is a system message, this is the message.
     #[serde(skip_serializing_if = "Option::is_none")]
     system_message: Option<String>,
+    /// If this is a user message, this is the message.
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<Value>,
+    /// If this is a message, the content type of the message, e.g. text/plain, text/html, etc.
     #[serde(skip_serializing_if = "Option::is_none")]
     content_type: Option<String>,
+    /// When the event happened, in the server's system time.
     server_time: SystemTime,
+    /// If this is a presentation, the presentation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    present: Option<Presentation>,
+    /// If this is an unpresent, the id to unpresent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unpresent: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -79,15 +92,11 @@ impl WebSocketConnection {
             ConnectType::Reconnected => "*** Reconnected ***",
             ConnectType::Created => "*** Created ***",
         };
-        Self::emit_narrative(
+        Self::emit_narrative_sys_msg(
             &mut ws_sender,
-            NarrativeOutput {
-                author: var_as_json(&v_obj(self.player.clone())),
-                system_message: Some(connect_message.to_string()),
-                message: None,
-                content_type: Some("text/plain".to_string()),
-                server_time: SystemTime::now(),
-            },
+            &self.player,
+            Some("text/plain".to_string()),
+            connect_message.to_string(),
         )
         .await;
 
@@ -115,53 +124,73 @@ impl WebSocketConnection {
                     }
                 }
                 Ok(event) = events_recv(self.client_id, &mut self.narrative_sub) => {
-                    trace!(?event, "narrative_event");
-                    match event {
-                        ClientEvent::SystemMessage(author, msg) => {
-                            Self::emit_narrative(&mut ws_sender, NarrativeOutput {
-                                author: var_as_json(&v_obj(author)),
-                                system_message: Some(msg),
-                                message: None,
-                                content_type: Some("text/plain".to_string()),
-                                server_time: SystemTime::now(),
-                            }).await;
-                        }
-                        ClientEvent::Narrative(_author, event) => {
-                            let msg = event.event();
-                            let Event::Notify(msg, content_type) = msg;
-                            let content_type = content_type.map(|s| s.to_string());
-                            Self::emit_narrative(&mut ws_sender, NarrativeOutput {
-                                author: var_as_json(event.author()),
-                                system_message: None,
-                                message: Some(var_as_json(&msg)),
-                                content_type,
-                                server_time: event.timestamp(),
-                            }).await;
-                        }
-                        ClientEvent::RequestInput(request_id) => {
-                            expecting_input = Some(request_id);
-                        }
-                        ClientEvent::Disconnect() => {
-                            Self::emit_narrative(&mut ws_sender, NarrativeOutput {
-                                author: var_as_json(&v_obj(self.player.clone())),
-                                system_message: Some("** Disconnected **".to_string()),
-                                message: None,
-                                content_type: Some("text/plain".to_string()),
-                                server_time: SystemTime::now(),
-                            }).await;
-                            ws_sender.close().await.expect("Unable to close connection");
-                            return ;
-                        }
-                        ClientEvent::TaskError(_ti, te) => {
-                            self.handle_task_error(&mut ws_sender, te).await.expect("Unable to handle task error");
-                        }
-                        ClientEvent::TaskSuccess(_ti, s) => {
-                            Self::emit_value(&mut ws_sender, ValueResult(s)).await;
-                        }
-                    }
+                    expecting_input = self.handle_narrative_event(&mut ws_sender, event).await;
                 }
             }
         }
+    }
+
+    async fn handle_narrative_event(
+        &mut self,
+        ws_sender: &mut SplitSink<WebSocket, Message>,
+        event: ClientEvent,
+    ) -> Option<u128> {
+        trace!(?event, "narrative_event");
+        match event {
+            ClientEvent::SystemMessage(author, msg) => {
+                Self::emit_narrative_sys_msg(
+                    ws_sender,
+                    &author,
+                    Some("text/plain".to_string()),
+                    msg,
+                )
+                .await;
+            }
+            ClientEvent::Narrative(_author, event) => {
+                let msg = event.event();
+                match &msg {
+                    Event::Notify(msg, content_type) => {
+                        let content_type = content_type.map(|s| s.to_string());
+                        Self::emit_narrative_msg(
+                            ws_sender,
+                            event.author(),
+                            content_type,
+                            msg.clone(),
+                        )
+                        .await;
+                    }
+                    Event::Present(p) => {
+                        Self::emit_present(ws_sender, event.author(), p.clone()).await;
+                    }
+                    Event::Unpresent(id) => {
+                        Self::emit_unpresent(ws_sender, event.author(), id.clone()).await;
+                    }
+                }
+            }
+            ClientEvent::RequestInput(request_id) => {
+                return Some(request_id);
+            }
+            ClientEvent::Disconnect() => {
+                Self::emit_narrative_sys_msg(
+                    ws_sender,
+                    &self.player,
+                    Some("text/plain".to_string()),
+                    "** Disconnected **".to_string(),
+                )
+                .await;
+                ws_sender.close().await.expect("Unable to close connection");
+            }
+            ClientEvent::TaskError(_ti, te) => {
+                self.handle_task_error(ws_sender, te)
+                    .await
+                    .expect("Unable to handle task error");
+            }
+            ClientEvent::TaskSuccess(_ti, s) => {
+                Self::emit_value(ws_sender, ValueResult(s)).await;
+            }
+        }
+
+        None
     }
 
     async fn process_line(
@@ -356,6 +385,88 @@ impl WebSocketConnection {
             }
         }
         Ok(())
+    }
+
+    async fn emit_present(
+        ws_sender: &mut SplitSink<WebSocket, Message>,
+        author: &Var,
+        present: Presentation,
+    ) {
+        Self::emit_narrative(
+            ws_sender,
+            NarrativeOutput {
+                author: var_as_json(&author.clone()),
+                system_message: None,
+                message: None,
+                content_type: Some(present.content_type.clone()),
+                server_time: SystemTime::now(),
+                present: Some(present),
+                unpresent: None,
+            },
+        )
+        .await;
+    }
+
+    async fn emit_unpresent(
+        ws_sender: &mut SplitSink<WebSocket, Message>,
+        author: &Var,
+        id: String,
+    ) {
+        Self::emit_narrative(
+            ws_sender,
+            NarrativeOutput {
+                author: var_as_json(&author.clone()),
+                system_message: None,
+                message: None,
+                content_type: None,
+                server_time: SystemTime::now(),
+                present: None,
+                unpresent: Some(id),
+            },
+        )
+        .await
+    }
+
+    async fn emit_narrative_msg(
+        ws_sender: &mut SplitSink<WebSocket, Message>,
+        author: &Var,
+        content_type: Option<String>,
+        msg: Var,
+    ) {
+        Self::emit_narrative(
+            ws_sender,
+            NarrativeOutput {
+                author: var_as_json(&author.clone()),
+                system_message: None,
+                message: Some(var_as_json(&msg)),
+                content_type,
+                server_time: SystemTime::now(),
+                present: None,
+                unpresent: None,
+            },
+        )
+        .await;
+    }
+
+    async fn emit_narrative_sys_msg(
+        ws_sender: &mut SplitSink<WebSocket, Message>,
+        author: &Obj,
+        content_type: Option<String>,
+        msg: String,
+    ) {
+        Self::emit_narrative(
+            ws_sender,
+            NarrativeOutput {
+                author: var_as_json(&v_obj(author.clone())),
+                system_message: Some(msg),
+                message: None,
+                content_type,
+                server_time: SystemTime::now(),
+                present: None,
+                unpresent: None,
+            },
+        )
+        .await;
     }
 
     async fn emit_narrative(ws_sender: &mut SplitSink<WebSocket, Message>, msg: NarrativeOutput) {

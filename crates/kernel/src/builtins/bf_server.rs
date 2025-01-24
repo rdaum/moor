@@ -19,22 +19,22 @@ use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;
 use tracing::{error, info, warn};
 
-use moor_compiler::compile;
-use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTINS};
-use moor_values::model::{ObjFlag, WorldStateError};
-use moor_values::tasks::NarrativeEvent;
-use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
-use moor_values::Variant;
-use moor_values::{v_bool, v_int, v_list, v_none, v_obj, v_str, v_string, Var};
-use moor_values::{v_list_iter, Error};
-use moor_values::{Sequence, Symbol};
-
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::ExecutionResult;
+use moor_compiler::compile;
+use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTINS};
+use moor_values::model::{ObjFlag, WorldStateError};
+use moor_values::tasks::Event::{Present, Unpresent};
 use moor_values::tasks::TaskId;
+use moor_values::tasks::{NarrativeEvent, Presentation};
+use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_values::VarType::TYPE_STR;
+use moor_values::Variant;
+use moor_values::{v_bool, v_int, v_list, v_none, v_obj, v_str, v_string, Var};
+use moor_values::{v_list_iter, Error};
+use moor_values::{Sequence, Symbol};
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(
@@ -97,6 +97,131 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(1)))
 }
 bf_declare!(notify, bf_notify);
+
+/// presentation(player, id : string, [content_type : string, target : string, content: string, [ attributes : list / map]])
+/// Emits a presentation event to the client. The client should interpret this as a request to present
+/// the content provided as a pop-up, panel, or other client-specific UI element (depending on 'target')
+///
+/// If only the first two arguments are provided, the client should "unpresent" the presentation with that ID.
+fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.config.rich_notify {
+        return Err(BfErr::Code(E_PERM));
+    };
+
+    if bf_args.args.len() < 2 || bf_args.args.len() > 6 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let player = bf_args.args[0].variant();
+    let Variant::Obj(player) = player else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    task_perms
+        .check_obj_owner_perms(player)
+        .map_err(world_state_bf_err)?;
+
+    let id = match bf_args.args[1].variant() {
+        Variant::Str(id) => id,
+        _ => return Err(BfErr::Code(E_TYPE)),
+    };
+
+    // This is unpresent
+    if bf_args.args.len() == 2 {
+        let event = Unpresent(id.as_string().clone());
+        let event = NarrativeEvent {
+            timestamp: SystemTime::now(),
+            author: bf_args.exec_state.this(),
+            event,
+        };
+        bf_args.task_scheduler_client.notify(player.clone(), event);
+
+        return Ok(Ret(v_int(1)));
+    }
+
+    if bf_args.args.len() < 5 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Variant::Str(content_type) = bf_args.args[2].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let Variant::Str(target) = bf_args.args[3].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let Variant::Str(content) = bf_args.args[4].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let mut attributes = vec![];
+    if bf_args.args.len() == 6 {
+        // must be either a list of { string, string } pairs, or a map of string -> string values.
+        match bf_args.args[5].variant() {
+            Variant::List(l) => {
+                for item in l.iter() {
+                    match item.variant() {
+                        Variant::List(l) => {
+                            if l.len() != 2 {
+                                return Err(BfErr::Code(E_ARGS));
+                            }
+                            let key = match l[0].variant() {
+                                Variant::Str(s) => s,
+                                _ => return Err(BfErr::Code(E_TYPE)),
+                            };
+                            let value = match l[1].variant() {
+                                Variant::Str(s) => s,
+                                _ => return Err(BfErr::Code(E_TYPE)),
+                            };
+                            attributes.push((key.as_string().clone(), value.as_string().clone()));
+                        }
+                        _ => {
+                            return Err(BfErr::Code(E_TYPE));
+                        }
+                    }
+                }
+            }
+            Variant::Map(m) => {
+                for (key, value) in m.iter() {
+                    let key = match key.variant() {
+                        Variant::Str(s) => s,
+                        _ => return Err(BfErr::Code(E_TYPE)),
+                    };
+                    let value = match value.variant() {
+                        Variant::Str(s) => s,
+                        _ => return Err(BfErr::Code(E_TYPE)),
+                    };
+                    attributes.push((key.as_string().clone(), value.as_string().clone()));
+                }
+            }
+            _ => {
+                return Err(BfErr::Code(E_TYPE));
+            }
+        }
+    }
+
+    let event = Presentation {
+        id: id.as_string().clone(),
+        content_type: content_type.as_string().clone(),
+        content: content.as_string().clone(),
+        target: target.as_string().clone(),
+        attributes,
+    };
+
+    let event = NarrativeEvent {
+        timestamp: SystemTime::now(),
+        author: bf_args.exec_state.this(),
+        event: Present(event),
+    };
+
+    bf_args.task_scheduler_client.notify(player.clone(), event);
+
+    Ok(Ret(v_none()))
+}
+bf_declare!(present, bf_present);
 
 fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -1110,4 +1235,6 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("memory_usage")] = Box::new(BfMemoryUsage {});
     builtins[offset_for_builtin("db_disk_size")] = Box::new(BfDbDiskSize {});
     builtins[offset_for_builtin("load_server_options")] = Box::new(BfLoadServerOptions {});
+
+    builtins[offset_for_builtin("present")] = Box::new(BfPresent {});
 }

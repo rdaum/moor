@@ -55,20 +55,106 @@ html, body {
     font-family: 'Roboto', sans-serif;
 }
 
+/* container div for two panes, narrative (majority) and right-panel */
+.columns_grid {
+    width: 100%;
+    height: 100%;
+
+    display: inline-flex;
+
+    /* expand to fill the space */
+    flex-grow: 1;
+}
+
+/* this one is the main container for the narrative */
 .narrative {
     background-color: #333;
     color: white;
     border-radius: 10px;
     padding: 1.0em;
-    margin: 1.0em;
+    margin: 1.0em 0.5em 1.0em 1.0em;
 
     font-family: 'Roboto', sans-serif;
 
     overflow-y: scroll;
 
-    height: calc(100% - 4em);
+    min-width: 50%;
 
-    resize: both;
+    height: calc(100% - 4em);
+    resize: horizontal;
+
+    width: 100%;
+}
+
+/* this one should be on the right of it */
+.right_dock {
+    background-color: #333;
+    color: white;
+    border-radius: 10px;
+    padding: 1.0em;
+    margin: 1.0em 0.5em 1.0em 1.0em;
+
+    font-family: 'Roboto', sans-serif;
+
+    overflow-y: scroll;
+
+    /* should expand to fill the space */
+    flex-grow: 1;
+    min-width: 20em;
+
+    /* starts out hidden and will only display when we put content into it */
+    display: none;
+}
+
+
+/* vertically stacked divs that live in the right_dock */
+.right_dock_panel {
+    min-height: min-content;
+    flex-grow: 1;
+    margin: 0.5em;
+    padding: 0.5em;
+    background-color: #444;
+    color: white;
+    border-radius: 10px;
+    font-family: 'Roboto', sans-serif;
+
+    overflow-y: auto;
+
+    resize: vertical;
+}
+
+/* title for each panel entry */
+.right_dock_panel_title {
+    font-family: 'Roboto', sans-serif;
+    font-size: 1.0em;
+    font-weight: bold;
+    margin: 0.5em;
+
+    /* vertical-center the text inside */
+    vertical-align: top;
+
+    /* should take up the full width */
+    display: inline-flex;
+    width: 90%;
+
+    /* dark on light background, rounded corners */
+    background-color: #aaa;
+    color: black;
+    border-radius: 10px;
+    padding: 0.5em;
+}
+
+/* there's an X button, just lightly pad it out mildly and darken up the background */
+.right_dock_panel_close {
+    background-color: #666;
+    color: white;
+    border-radius: 5px;
+    padding: 0.2em;
+    margin: 0.2em 0.8em 0.2em 0.2em;
+    vertical-align: center;
+
+    /* font is smaller */
+    font-size: 0.8em;
 }
 
 .output_window {
@@ -165,3 +251,12 @@ html, body {
     scrollbar-width: thin;
     scrollbar-color: #444 #555;
 }
+
+.presentation_window {
+    font-family: 'Roboto', sans-serif;
+}
+
+.presentation_window_content {
+    font-family: 'Roboto', sans-serif;
+}
+

@@ -13,6 +13,7 @@
 
 use crate::{Symbol, Var};
 use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
 /// A narrative event is a record of something that happened in the world, and is what `bf_notify`
@@ -33,9 +34,35 @@ pub enum Event {
     /// The typical "something happened" descriptive event.
     /// Value & Content-Type
     Notify(Var, Option<Symbol>),
+    /// A "presentation" event, which is a recommendation to the client to present something to the
+    /// user in a particular way.
+    Present(Presentation),
+    /// A "unpresent" event, which is a recommendation to the client to remove a presentation (identified with a string)
+    /// from the user interface.
+    Unpresent(String),
     // TODO: Other Event types on Session stream
     //   other events that might happen here would be things like (local) "object moved" or "object
     //   created."
+}
+
+/// A recommended "presentation" to the client. E.g. a pop-up, a panel, widget, etc. Not necessarily
+/// "momentary" event in the narrative like a "notify" event, but something that should be placed
+/// in the user interface in a client-interpreted fashion.
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
+pub struct Presentation {
+    /// A unique identifier for this presentation. If a new presentation is sent with the same id,
+    /// the client should replace the existing presentation with the new one.
+    pub id: String,
+    /// The content-type of the presentation, e.g. text/html, text/plain, text/djot, etc.
+    pub content_type: String,
+    /// The actual content. String for now. We might want to support binary content in the future.
+    pub content: String,
+    /// A client-interpretable identifier for "where" this should be presented. E.g. a window or
+    /// geometry identifier. ("right", "bottom", "popup", etc.)
+    pub target: String,
+    /// A bag of attributes that the client can use to interpret the presentation. E.g. "title",
+    /// "width", "height", etc.
+    pub attributes: Vec<(String, String)>,
 }
 
 impl NarrativeEvent {

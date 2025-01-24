@@ -12,21 +12,20 @@
 //
 
 // Handle the connect phase in response to a user clicking the "Connect" button.
-import {Context, Player} from "./model";
+import { Context, Player } from "./model";
 
-import van, {State} from "vanjs-core";
-import {displayDjot, handleEvent} from "./narrative";
-const {button, div, input, select, option, br, label} = van.tags;
+import van, { State } from "vanjs-core";
+import { displayDjot, handleEvent } from "./narrative";
+const { button, div, input, select, option, br, label } = van.tags;
 
-async function connect(context : Context, player, mode, username, password) {
-    console.log("Connecting...");
+async function connect(context: Context, player: State<Player>, mode, username, password) {
     let url = "/auth/" + mode;
     let data = new URLSearchParams();
     data.set("player", username.value);
     data.set("password", password.value);
     let result = await fetch(url, {
         method: "POST",
-        body: data
+        body: data,
     });
     if (result.ok) {
         console.log("Connected!");
@@ -75,15 +74,15 @@ async function connect(context : Context, player, mode, username, password) {
 
 // A login box that prompts the user for their player name and password, and then initiates login through
 // /auth/connect (if connecting) or /auth/create (if creating).
-export const Login = (context: Context, player : State<Player>, login_message: State<string>) => {
+export const Login = (context: Context, player: State<Player>, login_message: State<string>) => {
     const mode_select = select(
-        {id: "mode_select"},
-        option({value: "connect"}, "Connect"),
-        option({value: "create"}, "Create")
+        { id: "mode_select" },
+        option({ value: "connect" }, "Connect"),
+        option({ value: "create" }, "Create"),
     );
 
     let connect_callback = () => connect(context, player, mode_select.value, username, password);
-    const welcome = van.derive(() => div({class: "welcome_box"}, displayDjot({djot_text: login_message})));
+    const welcome = van.derive(() => div({ class: "welcome_box" }, displayDjot({ djot_text: login_message })));
 
     const username = input({
         id: "login_username",
@@ -92,7 +91,7 @@ export const Login = (context: Context, player : State<Player>, login_message: S
             if (e.key === "Enter") {
                 connect_callback();
             }
-        }
+        },
     });
     const password = input({
         id: "login_password",
@@ -101,38 +100,37 @@ export const Login = (context: Context, player : State<Player>, login_message: S
             if (e.key === "Enter") {
                 connect_callback();
             }
-        }
+        },
     });
-    const go_button = button({onclick: connect_callback}, "Go");
+    const go_button = button({ onclick: connect_callback }, "Go");
     let hidden_style = van.derive(() => !player.val.connected ? "display: block;" : "display: none;");
 
     return div(
         {
             class: "login_window",
-            style: hidden_style
+            style: hidden_style,
         },
         welcome,
         br,
         div(
             {
-                class: "login_prompt"
+                class: "login_prompt",
             },
             mode_select,
             " ",
             label(
-                {for: "login_username"},
+                { for: "login_username" },
                 "Player: ",
                 username,
             ),
             " ",
             label(
-                {for: "login_password"},
+                { for: "login_password" },
                 "Password: ",
                 password,
             ),
             " ",
-            go_button
+            go_button,
         ),
     );
-
 };

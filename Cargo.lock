@@ -2065,6 +2065,7 @@ dependencies = [
  "im",
  "itertools 0.14.0",
  "lazy_static",
+ "log",
  "num-traits",
  "paste",
  "serde",

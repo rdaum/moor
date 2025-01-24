@@ -16,6 +16,6 @@ mod events;
 
 pub use errors::{AbortLimitReason, CommandError, Exception, SchedulerError, VerbProgramError};
 
-pub use events::{Event, NarrativeEvent};
+pub use events::{Event, NarrativeEvent, Presentation};
 
 pub type TaskId = usize;

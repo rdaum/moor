@@ -175,7 +175,15 @@ impl TelnetConnection {
         Ok(())
     }
 
-    async fn output(&mut self, Event::Notify(msg, content_type): Event) -> Result<(), eyre::Error> {
+    async fn output(&mut self, event: Event) -> Result<(), eyre::Error> {
+        let Event::Notify(msg, content_type) = event else {
+            self.write
+                .send(format!("Unsupported event for telnet: {:?}", event))
+                .await
+                .with_context(|| "Unable to send message to client")?;
+            return Ok(());
+        };
+
         // Strings output as text lines to the client, otherwise send the
         // literal form (for e.g. lists, objrefs, etc)
         match msg.variant() {

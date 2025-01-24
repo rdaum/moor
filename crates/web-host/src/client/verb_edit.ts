@@ -11,38 +11,37 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import van, {State} from "vanjs-core";
-import {FloatingWindow} from "van-ui";
+import { FloatingWindow } from "van-ui";
+import van, { State } from "vanjs-core";
 
-import {Context} from "./model";
-import {ObjectRef} from "./var";
-import {MoorRemoteObject} from "./rpc";
-import {createEditor, updateEditor} from "./editor";
+import { createEditor, updateEditor } from "./editor";
+import { Context } from "./model";
+import { MoorRemoteObject } from "./rpc";
+import { ObjectRef } from "./var";
 
-const {button, div, span, input, select, option, br, pre, form, a, p} = van.tags;
+const { button, div, span, input, select, option, br, pre, form, a, p } = van.tags;
 
 enum CompileErrorKind {
     ParseError,
-    Other
+    Other,
 }
 
 interface ParseError {
-    kind: CompileErrorKind.ParseError
-    line: number,
-    column: number,
-    context: string,
-    end_line_col: [number, number] | null,
-    message : string
+    kind: CompileErrorKind.ParseError;
+    line: number;
+    column: number;
+    context: string;
+    end_line_col: [number, number] | null;
+    message: string;
 }
 
 interface OtherError {
-    kind: CompileErrorKind.Other,
-    message: string
+    kind: CompileErrorKind.Other;
+    message: string;
 }
 type CompileError = ParseError | OtherError;
 
-
-function transformErrors(error : CompileError | null) {
+function transformErrors(error: CompileError | null) {
     if (error == null) {
         return "";
     }
@@ -54,7 +53,7 @@ function transformErrors(error : CompileError | null) {
     }
 }
 
-async function compileVerb(context: Context, object : ObjectRef, verb : string, code) : Promise<CompileError> {
+async function compileVerb(context: Context, object: ObjectRef, verb: string, code): Promise<CompileError> {
     let mrpc_object = new MoorRemoteObject(object, context.authToken);
     let result = await mrpc_object.compileVerb(verb, code);
     if (!result) {
@@ -68,46 +67,59 @@ async function compileVerb(context: Context, object : ObjectRef, verb : string, 
     if (result["message"] == undefined) {
         return null;
     }
-    return {kind: CompileErrorKind.Other, message: "Unknown error"};
+    return { kind: CompileErrorKind.Other, message: "Unknown error" };
 }
 
-export function showVerbEditor(context : Context, title: string, object: ObjectRef, verb: string, content: Array<string>) {
-    let editor_state = van.state({model: null});
+export function showVerbEditor(
+    context: Context,
+    title: string,
+    object: ObjectRef,
+    verb: string,
+    content: Array<string>,
+) {
+    let editor_state = van.state({ model: null });
     let compile_error_state = van.state(null);
 
     // Where the monaco editor itself lives.
     let editor_div = div(
         {
-            style: "width: 100%; height: 100%;"
-        }
+            style: "width: 100%; height: 100%;",
+        },
     );
 
-    let hidden_style = van.derive(() => compile_error_state.val["message"] != undefined)
+    let hidden_style = van.derive(() => {
+            return compile_error_state.val != null && compile_error_state.val["message"] != undefined;
+        })
         ? "width: 100%; height: 64px; display: block;"
         : "width: 100%; height: 0px; display: none;";
     let compile_errors = div(
         {
             style: hidden_style,
-            class: "verb_compile_errors"
+            class: "verb_compile_errors",
         },
-        () => pre(transformErrors(compile_error_state.val))
+        () => pre(transformErrors(compile_error_state.val)),
     );
 
     // Surrounding container with compile button and whatever else we might need
     let container_div = div(
         {
-            class: "editor_container"
+            class: "editor_container",
         },
         button(
             {
                 onclick: async () => {
-                    compile_error_state.val = await compileVerb(context, object, verb, editor_state.val.model.getValue());
-                }
+                    compile_error_state.val = await compileVerb(
+                        context,
+                        object,
+                        verb,
+                        editor_state.val.model.getValue(),
+                    );
+                },
             },
-            "Compile"
+            "Compile",
         ),
         () => compile_errors,
-        editor_div
+        editor_div,
     );
 
     let editor = div(
@@ -119,18 +131,18 @@ export function showVerbEditor(context : Context, title: string, object: ObjectR
                 width: 500,
                 height: 300,
             },
-            container_div
-        )
+            container_div,
+        ),
     );
     document.body.appendChild(editor);
 
     // Now hang the editor off it.
     let model = createEditor(editor_div);
-    editor_state.val = {model: model};
+    editor_state.val = { model: model };
     updateEditor(model, content);
 }
 
-export function launchVerbEditor(context: Context, title: string, object : ObjectRef, verb : string) {
+export function launchVerbEditor(context: Context, title: string, object: ObjectRef, verb: string) {
     // First things first, retrieve the verb.
     // Decode the 'object' as a reference to an object, in curie form.
     let mrpc_object = new MoorRemoteObject(object, context.authToken);
@@ -138,4 +150,3 @@ export function launchVerbEditor(context: Context, title: string, object : Objec
         showVerbEditor(context, title, object, verb, result.split("\n"));
     });
 }
-

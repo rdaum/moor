@@ -11,18 +11,28 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import van, {State} from "vanjs-core";
+import van, { State } from "vanjs-core";
 
-import {MoorRemoteObject} from "./rpc";
+import { FloatingWindow } from "van-ui";
+import { MoorRemoteObject } from "./rpc";
 
-import {matchRef} from "./var";
-import {Player, Spool, SpoolType, Context, NarrativeEvent, SystemEvent} from "./model";
-import {showVerbEditor} from "./verb_edit";
+import {
+    Context,
+    NarrativeEvent,
+    Player,
+    Presentation,
+    PresentationModel,
+    Spool,
+    SpoolType,
+    SystemEvent,
+} from "./model";
+import { matchRef } from "./var";
+import { showVerbEditor } from "./verb_edit";
 
 // import sanitize html
-import DOMPurify from 'dompurify';
+import DOMPurify from "dompurify";
 
-const {div, span, textarea} = van.tags;
+const { div, span, textarea } = van.tags;
 
 // Utility function to build DOM elements from HTML.
 function generateElements(html) {
@@ -31,7 +41,7 @@ function generateElements(html) {
     return template.content.children;
 }
 
-export const displayDjot = ({djot_text}) => {
+export const displayDjot = ({ djot_text }) => {
     let ast = djot.parse(djot_text.val);
     let html = djot.renderHTML(ast);
     let elements = generateElements(html);
@@ -44,46 +54,46 @@ export const displayDjot = ({djot_text}) => {
 
 export function htmlPurifySetup() {
     // Add a hook to make all links open a new window
-    DOMPurify.addHook('afterSanitizeAttributes', function(node) {
+    DOMPurify.addHook("afterSanitizeAttributes", function(node) {
         // set all elements owning target to target=_blank
-        if ('target' in node) {
-            node.setAttribute('target', '_blank');
+        if ("target" in node) {
+            node.setAttribute("target", "_blank");
         }
         // set non-HTML/MathML links to xlink:show=new
         if (
-            !node.hasAttribute('target') &&
-            (node.hasAttribute('xlink:href') || node.hasAttribute('href'))
+            !node.hasAttribute("target")
+            && (node.hasAttribute("xlink:href") || node.hasAttribute("href"))
         ) {
-            node.setAttribute('xlink:show', 'new');
+            node.setAttribute("xlink:show", "new");
         }
     });
 
     // Add a hook to enforce URI scheme allow-list
-    const allowlist = ['http', 'https'];
-    const regex = RegExp('^(' + allowlist.join('|') + '):', 'gim');
-    DOMPurify.addHook('afterSanitizeAttributes', function(node) {
+    const allowlist = ["http", "https"];
+    const regex = RegExp("^(" + allowlist.join("|") + "):", "gim");
+    DOMPurify.addHook("afterSanitizeAttributes", function(node) {
         // build an anchor to map URLs to
-        const anchor = document.createElement('a');
+        const anchor = document.createElement("a");
 
         // check all href attributes for validity
-        if (node.hasAttribute('href')) {
-            anchor.href = node.getAttribute('href');
+        if (node.hasAttribute("href")) {
+            anchor.href = node.getAttribute("href");
             if (anchor.protocol && !anchor.protocol.match(regex)) {
-                node.removeAttribute('href');
+                node.removeAttribute("href");
             }
         }
         // check all action attributes for validity
-        if (node.hasAttribute('action')) {
-            anchor.href = node.getAttribute('action');
+        if (node.hasAttribute("action")) {
+            anchor.href = node.getAttribute("action");
             if (anchor.protocol && !anchor.protocol.match(regex)) {
-                node.removeAttribute('action');
+                node.removeAttribute("action");
             }
         }
         // check all xlink:href attributes for validity
-        if (node.hasAttribute('xlink:href')) {
-            anchor.href = node.getAttribute('xlink:href');
+        if (node.hasAttribute("xlink:href")) {
+            anchor.href = node.getAttribute("xlink:href");
             if (anchor.protocol && !anchor.protocol.match(regex)) {
-                node.removeAttribute('xlink:href');
+                node.removeAttribute("xlink:href");
             }
         }
     });
@@ -107,7 +117,6 @@ export function action_invoke(author, verb, argument) {
         console.log("Result: " + result);
     });
 }
-
 
 // Override link behaviour for djot to only permit inline links that refer to object verbs.
 // These get turned into requests to invoke the verb with the player's permissions.
@@ -145,13 +154,12 @@ export function djotRender(author, ast) {
                 // Hover should say something about external link
                 let destination = node.text;
                 return "link: <a href='" + destination + "' target='_blank'>" + destination + "</a>";
-            }
-        }
+            },
+        },
     });
 }
 
-
-function narrativeAppend(content_node : HTMLElement) {
+function narrativeAppend(content_node: HTMLElement) {
     let output = document.getElementById("output_window");
     output.appendChild(content_node);
     let narrative = document.getElementById("narrative");
@@ -160,7 +168,7 @@ function narrativeAppend(content_node : HTMLElement) {
     document.body.scrollTop = document.body.scrollHeight;
 }
 
-function processNarrativeMessage(context :  Context, msg : NarrativeEvent) {
+function processNarrativeMessage(context: Context, msg: NarrativeEvent) {
     // Msg may have content_type attr, and if so, check it, or default to text/plain
     let content_type = msg.content_type || "text/plain";
 
@@ -238,55 +246,149 @@ function processNarrativeMessage(context :  Context, msg : NarrativeEvent) {
         let elements = generateElements(html);
 
         for (let element of elements) {
-            content_node.append(div({class: "text_djot"}, element));
+            content_node.append(div({ class: "text_djot" }, element));
         }
     } else if (content_type == "text/html") {
         let html = htmlSanitize(msg.author, content);
         let elements = generateElements(html);
         for (let element of elements) {
-            content_node.append(div({class: "text_html"}, element));
+            content_node.append(div({ class: "text_html" }, element));
         }
     } else {
-        content_node.append(div({class: "text_narrative"}, content));
+        content_node.append(div({ class: "text_narrative" }, content));
     }
     narrativeAppend(content_node);
 }
 
-function handleSystemMessage(context : Context, msg: SystemEvent) {
+function handleSystemMessage(context: Context, msg: SystemEvent) {
     // pop up into the toast notification at the top
     let content = msg.system_message;
     context.systemMessage.show(content, 2);
 
     // Also append to the narrative window.
-    let content_node = div({class: "system_message_narrative"}, content);
+    let content_node = div({ class: "system_message_narrative" }, content);
     narrativeAppend(content_node);
 }
 
+function handlePresent(context: Context, msg: Presentation) {
+    // Turn the attributes into a dictionary.
+    let attrs = {};
+    for (let attr of msg.attributes) {
+        attrs[attr[0]] = attr[1];
+    }
+
+    // Transform the content, based on content-type.
+    // We support three types: text/html, text/plain, and text/djot.
+    var content;
+    if (msg.content_type == "text/html") {
+        let html = htmlSanitize(msg.id, msg.content);
+        let tag = div();
+        let elements = generateElements(html);
+        for (let element of elements) {
+            tag.appendChild(element);
+        }
+        content = tag;
+    } else if (msg.content_type == "text/plain") {
+        content = div(msg.content);
+    } else if (msg.content_type = "text/djot") {
+        let ast = djot.parse(msg.content);
+        let html = djotRender(msg.id, ast);
+        let elements = generateElements(html);
+        let tag = div();
+        for (let element of elements) {
+            tag.appendChild(element);
+        }
+        content = tag;
+    } else {
+        console.log("Unknown content type in presentation: " + msg.content_type);
+        return;
+    }
+
+    let model: State<PresentationModel> = van.state({
+        id: msg.id,
+        closed: van.state(false),
+        target: msg.target,
+        content: content,
+        attrs: attrs,
+    });
+    context.presentations.val = context.presentations.val.withAdded(msg.id, model);
+
+    // types of targets:
+    //      window: build a FloatingWindow
+    //      etc
+    if (msg.target == "window") {
+        let title = attrs["title"] || msg.id;
+        let width = attrs["width"] || 500;
+        let height = attrs["height"] || 300;
+
+        let present = div(
+            FloatingWindow(
+                {
+                    parentDom: document.body,
+                    title: title,
+                    closed: model.closed,
+                    id: "window-present-" + msg.id,
+                    width: width,
+                    height: height,
+                    windowClass: "presentation_window",
+                },
+                div(
+                    {
+                        class: "presentation_window_content",
+                    },
+                    content,
+                ),
+            ),
+        );
+        van.add(document.body, present);
+    }
+
+    if (msg.target == "right-dock") {
+        // TODO: anything special beyond just adding to the state?
+    }
+}
+
+function handleUnpresent(context: Context, id: string) {
+    let model = context.presentations.get(id);
+    if (!model) {
+        console.log("No such presentation: " + id);
+        return;
+    }
+    console.log("Closing presentation: " + id);
+    context.presentations.val.getPresentation(id).closed.val = true;
+    context.presentations.val = context.presentations.val.withRemoved(id);
+}
+
 // Process an inbound (JSON) event from the websocket connection to the server.
-export function handleEvent(context : Context, msg) {
+export function handleEvent(context: Context, msg) {
     let event = JSON.parse(msg);
     if (!event) {
-        console.log("No event data in message: " + msg);
         return;
     }
     if (event["message"]) {
         processNarrativeMessage(context, event);
     } else if (event["system_message"]) {
         handleSystemMessage(context, event);
+    } else if (event["present"]) {
+        console.log("Present event: ", event);
+        handlePresent(context, event["present"]);
+    } else if (event["unpresent"]) {
+        console.log("Unpresent event: ", event);
+        handleUnpresent(context, event["unpresent"]);
     } else {
         console.log("Unknown event type: " + event);
     }
 }
 
 // Text area where output will go
-const OutputWindow = (player : State<Player>) => {
+const OutputWindow = (player: State<Player>) => {
     return div({
         id: "output_window",
-        class: "output_window"
+        class: "output_window",
     });
 };
 
-const InputArea = (context: Context, player : State<Player>) => {
+const InputArea = (context: Context, player: State<Player>) => {
     let hidden_style = van.derive(() => player.val.connected ? "display: block;" : "display: none;");
     const i = textarea({
         id: "input_area",
@@ -294,6 +396,7 @@ const InputArea = (context: Context, player : State<Player>) => {
         disabled: van.derive(() => !player.val.connected),
         class: "input_area",
         onkeyup: e => {
+            let cval = context;
             // Arrow up means go back in history and fill the input area with that, if there is any.
             if (e.key === "ArrowUp") {
                 if (context.historyOffset < context.history.length) {
@@ -331,23 +434,21 @@ const InputArea = (context: Context, player : State<Player>) => {
                 context.history.push(input);
                 context.historyOffset = 0;
             }
-        }
+        },
     });
     return div(i);
 };
 
-export const Narrative = (context: Context, player : State<Player>) => {
+export const Narrative = (context: Context, player: State<Player>) => {
     let hidden_style = van.derive(() => player.val.connected ? "display: block;" : "display: none;");
-
 
     return div(
         {
             class: "narrative",
             id: "narrative",
-            style: hidden_style
+            style: hidden_style,
         },
         OutputWindow(player),
-        InputArea(context, player)
+        InputArea(context, player),
     );
 };
-

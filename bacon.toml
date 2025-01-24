@@ -41,6 +41,7 @@ command = [
     "--",
     "--listen-address",
     "0.0.0.0:8080",
+    "--watch-changes",
 ]
 allow_warnings = true
 

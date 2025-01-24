@@ -150,4 +150,3 @@ termimad = "0.31"
 
 # For the consistency checker in `load-tools`
 edn-format = "3.3.0"
-

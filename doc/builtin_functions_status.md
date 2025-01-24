@@ -9,7 +9,7 @@ included in the notes column.
 ### Lists
 
 | Name         | Complete | Notes                     |
-|--------------|----------|---------------------------|
+| ------------ | -------- | ------------------------- |
 | `length`     | &check;  |                           |
 | `setadd`     | &check;  |                           |
 | `setremove`  | &check;  |                           |
@@ -27,7 +27,7 @@ included in the notes column.
 ### Strings
 
 | Name        | Complete | Notes                                                                          |
-|-------------|----------|--------------------------------------------------------------------------------|
+| ----------- | -------- | ------------------------------------------------------------------------------ |
 | `tostr`     | &check;  |                                                                                |
 | `toliteral` | &check;  |                                                                                |
 | `crypt`     | &check;  | Pretty damned insecure, only here to support existing core password functions. |
@@ -39,7 +39,7 @@ included in the notes column.
 ### Numbers
 
 | Name       | Complete | Notes |
-|------------|----------|-------|
+| ---------- | -------- | ----- |
 | `toint`    | &check;  |       |
 | `tonum`    | &check;  |       |
 | `tofloat`  | &check;  |       |
@@ -70,7 +70,7 @@ included in the notes column.
 ### Objects
 
 | Name              | Complete | Notes                              |
-|-------------------|----------|------------------------------------|
+| ----------------- | -------- | ---------------------------------- |
 | `toobj`           | &check;  |                                    |
 | `typeof`          | &check;  |                                    |
 | `create`          | &check;  | Quota support not implemented yet. |
@@ -88,7 +88,7 @@ included in the notes column.
 ### Properties
 
 | Name                | Complete | Notes |
-|---------------------|----------|-------|
+| ------------------- | -------- | ----- |
 | `properties`        | &check;  |       |
 | `property_info`     | &check;  |       |
 | `set_property_info` | &check;  |       |
@@ -100,7 +100,7 @@ included in the notes column.
 ### Verbs
 
 | Name            | Complete | Notes                                 |
-|-----------------|----------|---------------------------------------|
+| --------------- | -------- | ------------------------------------- |
 | `verbs`         | &check;  |                                       |
 | `verb_info`     | &check;  |                                       |
 | `set_verb_info` | &check;  |                                       |
@@ -116,7 +116,7 @@ included in the notes column.
 ### Values / encoding
 
 | Name            | Complete | Notes                                                                              |
-|-----------------|----------|------------------------------------------------------------------------------------|
+| --------------- | -------- | ---------------------------------------------------------------------------------- |
 | `value_bytes`   | &check;  |                                                                                    |
 | `value_hash`    |          |                                                                                    |
 | `string_hash`   | &check;  |                                                                                    |
@@ -128,7 +128,7 @@ included in the notes column.
 ### Server
 
 | Name                  | Complete | Notes                                                                    |
-|-----------------------|----------|--------------------------------------------------------------------------|
+| --------------------- | -------- | ------------------------------------------------------------------------ |
 | `server_version`      | &check;  | Hardcoded value, should derive from bin crate                            |
 | `renumber`            |          |                                                                          |
 | `reset_max_object`    |          |                                                                          |
@@ -150,7 +150,7 @@ included in the notes column.
 ### Tasks
 
 | Name           | Complete | Notes |
-|----------------|----------|-------|
+| -------------- | -------- | ----- |
 | `task_id`      | &check;  |       |
 | `queued_tasks` | &check;  |       |
 | `kill_task`    | &check;  |       |
@@ -162,7 +162,7 @@ included in the notes column.
 ### Execution
 
 | Name             | Complete | Notes        |
-|------------------|----------|--------------|
+| ---------------- | -------- | ------------ |
 | `call_function`  | &check;  |              |
 | `raise`          | &check;  |              |
 | `suspend`        | &check;  |              |
@@ -177,7 +177,7 @@ included in the notes column.
 ### Network connections
 
 | Name                      | Complete | Notes                                                                                                |
-|---------------------------|----------|------------------------------------------------------------------------------------------------------|
+| ------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `set_connection_option`   |          |                                                                                                      |
 | `connection_option`       |          |                                                                                                      |
 | `connection_options`      |          |                                                                                                      |
@@ -195,6 +195,6 @@ Functions not part of the original LambdaMOO, but added in moor
 ### XML / HTML content management
 
 | Name        | Description                                                      | Notes                                                 |
-|-------------|------------------------------------------------------------------|-------------------------------------------------------|
+| ----------- | ---------------------------------------------------------------- | ----------------------------------------------------- |
 | `xml_parse` | Parse a string c ntaining XML into a tree of flyweight objects   | Available only if the flyweights feature is turned on |
 | `to_xml`    | Convert a tree of flyweight objects into a string containing XML | Available only if the flyweights feature is turned on |
