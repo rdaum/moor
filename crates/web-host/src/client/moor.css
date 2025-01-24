@@ -260,3 +260,7 @@ html, body {
     font-family: 'Roboto', sans-serif;
 }
 
+.input_echo {
+    font-family: 'Roboto Mono', monospace;
+    color: #00ff00;
+}

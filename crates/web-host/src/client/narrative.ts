@@ -404,7 +404,7 @@ const InputArea = (context: Context, player: State<Player>) => {
                     if (context.history.length - context.historyOffset >= 0) {
                         let value = context.history[context.history.length - context.historyOffset];
                         if (value) {
-                            i.value = value;
+                            i.value = value.trimEnd();
                         } else {
                             i.value = "";
                         }
@@ -416,7 +416,7 @@ const InputArea = (context: Context, player: State<Player>) => {
                     if (context.history.length - context.historyOffset >= 0) {
                         let value = context.history[context.history.length - context.historyOffset];
                         if (value) {
-                            i.value = value;
+                            i.value = value.trimEnd();
                         } else {
                             i.value = "";
                         }
@@ -426,8 +426,12 @@ const InputArea = (context: Context, player: State<Player>) => {
                 // Put a copy into the narrative window, send it over websocket, and clear
                 let input = i.value;
                 let output = document.getElementById("output_window");
-                let outine = div("> " + input);
-                output.appendChild(outine);
+                let echo = div(
+                    {
+                        class: "input_echo",
+                    },
+                    "> " + input);
+                output.appendChild(echo);
                 context.ws.send(i.value);
                 i.value = "";
                 // Append to history
