@@ -280,7 +280,9 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
 
         match (&left.node, &right.node) {
             (StmtNode::Return(_), StmtNode::Return(_)) => {}
-            (StmtNode::Expr { .. }, StmtNode::Expr { .. }) => {}
+            (StmtNode::Expr(e1), StmtNode::Expr(e2)) => {
+                assert_eq!(e1, e2);
+            }
             (StmtNode::Break { .. }, StmtNode::Break { .. }) => {}
             (StmtNode::Continue { .. }, StmtNode::Continue { .. }) => {}
             (

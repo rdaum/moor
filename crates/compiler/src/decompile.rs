@@ -594,7 +594,7 @@ impl Decompile {
                 self.push_expr(Expr::Map(vec![]));
             }
             Op::MapInsert => {
-                let (k, v) = (self.pop_expr()?, self.pop_expr()?);
+                let (v, k) = (self.pop_expr()?, self.pop_expr()?);
                 let map = self.pop_expr()?;
                 let Expr::Map(mut map) = map else {
                     return Err(MalformedProgram("expected map".to_string()));
@@ -642,6 +642,8 @@ impl Decompile {
                     };
                     slots.push((k, v));
                 }
+                // To maintain equivalency for testing, these need to be reversed.
+                slots.reverse();
                 let delegate = self.pop_expr()?;
                 self.push_expr(Expr::Flyweight(Box::new(delegate), slots, contents));
             }
@@ -1233,6 +1235,13 @@ return 0 && "Automatically Added Return";
     #[test]
     fn test_flyweight() {
         let program = r#"let flywt = < #1, [ colour -> "orange", z -> 5 ], {#2, #4, "a"}>;"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn test_map_decompile() {
+        let program = r#"[ 1 -> 2, 3 -> 4 ];"#;
         let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }
