@@ -107,7 +107,7 @@ where
             self.perms(perms)?.check_object_allows(
                 &parentowner,
                 parentflags,
-                BitEnum::new_with(ObjFlag::Write) | ObjFlag::Fertile,
+                BitEnum::new_with(ObjFlag::Fertile),
             )?;
         }
         Ok(())
