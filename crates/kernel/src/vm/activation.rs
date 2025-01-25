@@ -383,8 +383,4 @@ impl Activation {
             _ => self.verbdef.location(),
         }
     }
-
-    pub fn verb_owner(&self) -> Obj {
-        self.verbdef.owner()
-    }
 }

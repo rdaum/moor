@@ -1,4 +1,5 @@
 // Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
 // software: you can redistribute it and/or modify it under the terms of the GNU
 // General Public License as published by the Free Software Foundation, version
 // 3.
@@ -53,8 +54,8 @@ impl VMExecState {
                     vec![
                         a.this.clone(),
                         v_str(a.verbdef.names().join(" ").as_str()),
+                        v_obj(a.permissions.clone()),
                         v_obj(a.verb_definer()),
-                        v_obj(a.verb_owner()),
                         v_obj(a.player.clone()),
                         line_no,
                     ]
@@ -64,7 +65,7 @@ impl VMExecState {
                     vec![
                         a.this.clone(),
                         v_str(bf_name.as_str()),
-                        v_obj(NOTHING),
+                        v_obj(a.permissions.clone()),
                         v_obj(NOTHING),
                         v_obj(a.player.clone()),
                         v_none(),
@@ -238,7 +239,14 @@ impl VMExecState {
                                 return ExecutionResult::More;
                             }
                             ScopeType::TryCatch(catches) => {
-                                if let FinallyReason::Raise(Exception { code, .. }) = &why {
+                                if let FinallyReason::Raise(Exception {
+                                    code,
+                                    msg,
+                                    value,
+                                    stack,
+                                    ..
+                                }) = &why
+                                {
                                     for catch in catches {
                                         let found = match catch.0 {
                                             CatchType::Any => true,
@@ -246,7 +254,12 @@ impl VMExecState {
                                         };
                                         if found {
                                             frame.jump(&catch.1);
-                                            frame.push(v_list(&[v_err(*code)]));
+                                            frame.push(v_list(&[
+                                                v_err(*code),
+                                                v_str(msg),
+                                                value.clone(),
+                                                v_list(&stack),
+                                            ]));
                                             return ExecutionResult::More;
                                         }
                                     }
