@@ -19,6 +19,7 @@ use crate::var::{string, Associative};
 use crate::var::{Error, Obj, VarType};
 use crate::{BincodeAsByteBufferExt, Symbol};
 use bincode::{Decode, Encode};
+use log::info;
 use std::cmp::{min, Ordering};
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
@@ -293,7 +294,10 @@ impl Var {
                     .unwrap_or(-1);
                 Ok(v_int(index_mode.reverse_adjust_isize(idx as isize) as i64))
             }
-            _ => Err(E_INVARG),
+            _ => {
+                info!("index_in: not a sequence or map: {:?}", self);
+                Err(E_TYPE)
+            }
         }
     }
 
