@@ -395,50 +395,60 @@ const InputArea = (context: Context, player: State<Player>) => {
         style: hidden_style,
         disabled: van.derive(() => !player.val.connected),
         class: "input_area",
-        onkeyup: e => {
-            let cval = context;
-            // Arrow up means go back in history and fill the input area with that, if there is any.
-            if (e.key === "ArrowUp") {
-                if (context.historyOffset < context.history.length) {
-                    context.historyOffset += 1;
-                    if (context.history.length - context.historyOffset >= 0) {
-                        let value = context.history[context.history.length - context.historyOffset];
-                        if (value) {
-                            i.value = value.trimEnd();
-                        } else {
-                            i.value = "";
-                        }
+    });
+    i.addEventListener("keyup", e => {
+        // Arrow up means go back in history and fill the input area with that, if there is any.
+        if (e.key === "ArrowUp") {
+            e.preventDefault();
+
+            if (context.historyOffset < context.history.length) {
+                context.historyOffset += 1;
+                if (context.history.length - context.historyOffset >= 0) {
+                    let value = context.history[context.history.length - context.historyOffset];
+                    if (value) {
+                        i.value = value.trimEnd();
+                    } else {
+                        i.value = "";
                     }
                 }
-            } else if (e.key === "ArrowDown") {
-                if (context.historyOffset > 0) {
-                    context.historyOffset -= 1;
-                    if (context.history.length - context.historyOffset >= 0) {
-                        let value = context.history[context.history.length - context.historyOffset];
-                        if (value) {
-                            i.value = value.trimEnd();
-                        } else {
-                            i.value = "";
-                        }
-                    }
-                }
-            } else if (e.key === "Enter") {
-                // Put a copy into the narrative window, send it over websocket, and clear
-                let input = i.value;
-                let output = document.getElementById("output_window");
-                let echo = div(
-                    {
-                        class: "input_echo",
-                    },
-                    "> " + input);
-                output.appendChild(echo);
-                context.ws.send(i.value);
-                i.value = "";
-                // Append to history
-                context.history.push(input);
-                context.historyOffset = 0;
             }
-        },
+        } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+
+            if (context.historyOffset > 0) {
+                context.historyOffset -= 1;
+                if (context.history.length - context.historyOffset >= 0) {
+                    let value = context.history[context.history.length - context.historyOffset];
+                    if (value) {
+                        i.value = value.trimEnd();
+                    } else {
+                        i.value = "";
+                    }
+                }
+            }
+        } else if (e.keyCode == 13 && e.shiftKey) {
+            // Shift-Enter means force a newline, like in other chat systems.
+            e.preventDefault();
+
+            // Put a newline in the input area at the current cursor position.
+            let cursor = i.selectionStart;
+            let text = i.value;
+            i.value = text.substring(0, cursor) + "\n" + text.substring(cursor);
+            i.selectionStart = cursor + 1;
+            i.selectionEnd = cursor + 1;
+
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+
+            // Put a copy into the narrative window, send it over websocket, and clear
+            let input = i.value;
+            let output = document.getElementById("output_window");
+            context.ws.send(i.value);
+            i.value = "";
+            // Append to history
+            context.history.push(input);
+            context.historyOffset = 0;
+        }
     });
     return div(i);
 };
