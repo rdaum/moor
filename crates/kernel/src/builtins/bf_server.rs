@@ -224,18 +224,26 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(present, bf_present);
 
 fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
-    }
+    let include_all = if bf_args.args.len() == 1 {
+        let Variant::Int(include_all) = bf_args.args[0].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        *include_all == 1
+    } else {
+        false
+    };
 
-    Ok(Ret(v_list_iter(
-        bf_args
-            .session
-            .connected_players()
-            .unwrap()
-            .iter()
-            .map(|p| v_obj(p.clone())),
-    )))
+    let connected_player_set = bf_args
+        .session
+        .connected_players()
+        .expect("Connected players should always be available");
+    let map = connected_player_set.iter().filter_map(|p| {
+        if p.id().0 < 0 && !include_all {
+            return None;
+        }
+        Some(v_obj(p.clone()))
+    });
+    Ok(Ret(v_list_iter(map)))
 }
 bf_declare!(connected_players, bf_connected_players);
 

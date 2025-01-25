@@ -225,8 +225,10 @@ impl ConnectionsDB for ConnectionsFjall {
             .connections
             .push(cr);
 
-        let connections_record = inner.player_clients.get(&player_id).unwrap();
-
+        let connections_record = inner.player_clients.remove(&player_id).unwrap();
+        inner
+            .player_clients
+            .insert(player_id.clone(), connections_record.clone());
         let encoded_connected =
             bincode::encode_to_vec(connections_record, *BINCODE_CONFIG).unwrap();
         inner
@@ -400,7 +402,7 @@ impl ConnectionsDB for ConnectionsFjall {
             .remove(client_id.as_u128().to_le_bytes())
             .ok();
 
-        let Some(connections_record) = inner.player_clients.get_mut(&player_id) else {
+        let Some(mut connections_record) = inner.player_clients.remove(&player_id) else {
             return Ok(());
         };
         connections_record
@@ -410,6 +412,9 @@ impl ConnectionsDB for ConnectionsFjall {
         let oid_bytes = player_id.as_bytes().unwrap();
         let encoded_connected =
             bincode::encode_to_vec(connections_record.clone(), *BINCODE_CONFIG).unwrap();
+        inner
+            .player_clients
+            .insert(player_id.clone(), connections_record.clone());
         inner
             .player_clients_table
             .insert(oid_bytes, &encoded_connected)
