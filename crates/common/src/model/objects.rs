@@ -99,7 +99,7 @@ pub enum ObjFlag {
     Read = 4,
     Write = 5,
     Obsolete2 = 6,
-    Fertile = 8,
+    Fertile = 7,
 }
 
 // The set of built-in object attributes
