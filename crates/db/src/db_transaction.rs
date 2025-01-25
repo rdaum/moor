@@ -431,8 +431,13 @@ impl WorldStateTransaction for DbTransaction {
         let descendants = self.descendants(o).expect("Unable to get descendants");
         for c in descendants.iter().chain(std::iter::once(o.clone())) {
             for (p, propperms) in new_props.iter() {
+                let propperms = if propperms.flags().contains(PropFlag::Chown) {
+                    propperms.clone().with_owner(c.clone())
+                } else {
+                    propperms.clone()
+                };
                 self.object_propflags
-                    .upsert(ObjAndUUIDHolder::new(&c, p.uuid()), propperms.clone())
+                    .upsert(ObjAndUUIDHolder::new(&c, p.uuid()), propperms)
                     .expect("Unable to update property flags");
             }
         }
@@ -843,13 +848,19 @@ impl WorldStateTransaction for DbTransaction {
         }
 
         // Put the initial object owner on ourselves and all our descendants.
+        // Unless we're 'Chown' in which case, the owner should be the descendant.
         let value_locations =
             ObjSet::from_items(&[location.clone()]).with_concatenated(descendants);
         for location in value_locations.iter() {
+            let actual_owner = if perms.contains(PropFlag::Chown) {
+                location.clone()
+            } else {
+                owner.clone()
+            };
             self.object_propflags
                 .upsert(
                     ObjAndUUIDHolder::new(&location, u),
-                    PropPerms::new(owner.clone(), perms),
+                    PropPerms::new(actual_owner, perms),
                 )
                 .map_err(|e| {
                     WorldStateError::DatabaseError(format!("Error setting property owner: {:?}", e))
