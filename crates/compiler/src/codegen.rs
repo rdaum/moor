@@ -745,9 +745,9 @@ impl CodegenState {
                         self.emit(Jump { label: end_label });
                     }
                 }
-                self.emit(Op::EndScope {
-                    num_bindings: *environment_width as u16,
-                });
+                // self.emit(Op::EndScope {
+                //     num_bindings: *environment_width as u16,
+                // });
                 self.commit_jump_label(end_label);
             }
             StmtNode::TryFinally {

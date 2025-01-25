@@ -874,7 +874,6 @@ mod tests {
                 ImmInt(3),
                 Put(a),
                 Pop,
-                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -1490,7 +1489,6 @@ mod tests {
                 Return,
                 EndExcept(Label(1)),
                 Pop,
-                EndScope { num_bindings: 0 },
                 Done
             ]
         );

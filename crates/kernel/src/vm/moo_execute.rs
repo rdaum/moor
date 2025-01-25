@@ -731,7 +731,13 @@ pub fn moo_frame_execute(
                 f.push_scope(ScopeType::Block, *num_bindings, end_label);
             }
             Op::EndScope { num_bindings: _ } => {
-                f.pop_scope().expect("Missing scope");
+                let Some(_scope) = f.pop_scope() else {
+                    panic!(
+                        "EndScope without a scope @ {} ({})",
+                        f.pc,
+                        f.find_line_no(f.pc).unwrap_or(0)
+                    );
+                };
             }
             Op::ExitId(label) => {
                 f.jump(label);
