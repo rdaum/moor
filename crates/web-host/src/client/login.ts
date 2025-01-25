@@ -49,7 +49,9 @@ async function connect(context: Context, player: State<Player>, mode, username, 
 
     // Now initiate the websocket connection.
     const baseUrl = window.location.host;
-    const wsUrl = "ws://" + baseUrl + "/ws/attach/" + mode + "/" + auth_token;
+    // Choose ws or wss depending on whether we're using HTTPS.
+    let isSecure = window.location.protocol === "https:";
+    const wsUrl = (isSecure ? "wss://" : "ws://") + baseUrl + "/ws/attach/" + mode + "/" + auth_token;
     let ws = new WebSocket(wsUrl);
     ws.onopen = () => {
         console.log("Connected to server!");
