@@ -337,7 +337,7 @@ fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
     let Ok(idle_seconds) = bf_args.session.idle_seconds(who.clone()) else {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::Code(E_INVARG));
     };
 
     Ok(Ret(v_int(idle_seconds as i64)))
