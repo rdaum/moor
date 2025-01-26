@@ -43,6 +43,25 @@ impl LayoutAs<u8> for VerbFlag {
 }
 
 impl VerbFlag {
+    pub fn parse_str(s: &str) -> Option<BitEnum<Self>> {
+        let mut flags: u8 = 0;
+        for c in s.chars() {
+            if c == 'r' {
+                flags = flags | VerbFlag::Read as u8;
+            } else if c == 'w' {
+                flags = flags | VerbFlag::Write as u8;
+            } else if c == 'x' {
+                flags = flags | VerbFlag::Exec as u8;
+            } else if c == 'd' {
+                flags = flags | VerbFlag::Debug as u8;
+            } else {
+                return None;
+            }
+        }
+
+        Some(BitEnum::from_u8(flags))
+    }
+
     #[must_use]
     pub fn rwxd() -> BitEnum<Self> {
         BitEnum::new_with(Self::Read) | Self::Write | Self::Exec | Self::Debug

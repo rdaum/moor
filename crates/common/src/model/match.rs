@@ -16,6 +16,7 @@ use bincode::{Decode, Encode};
 use strum::FromRepr;
 
 use crate::encode::{DecodingError, EncodingError};
+use crate::model::PrepSpec::Other;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Hash, Ord, PartialOrd, Encode, Decode)]
 #[repr(u8)]
@@ -134,6 +135,18 @@ pub enum PrepSpec {
     Other(Preposition),
 }
 
+impl PrepSpec {
+    pub fn parse(s: &str) -> Option<Self> {
+        if s == "any" {
+            Some(Self::Any)
+        } else if s == "none" {
+            Some(Self::None)
+        } else {
+            let p = Preposition::parse(s)?;
+            Some(Other(p))
+        }
+    }
+}
 impl LayoutAs<i16> for PrepSpec {
     type ReadError = DecodingError;
     type WriteError = EncodingError;

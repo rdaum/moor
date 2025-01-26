@@ -96,6 +96,7 @@ itertools = "0.14"
 lazy_static = "1.5"
 num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
+regex = "1.11"
 semver = "1.0"
 similar = "*"
 similar-asserts = "*"

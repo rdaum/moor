@@ -21,6 +21,7 @@ use std::marker::PhantomData;
 
 pub mod builtins;
 pub mod config;
+pub mod dirdump;
 pub mod tasks;
 pub mod textdump;
 pub mod vm;

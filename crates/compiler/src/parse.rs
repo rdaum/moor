@@ -22,6 +22,7 @@ use itertools::Itertools;
 use moor_values::SYSTEM_OBJECT;
 use moor_values::{v_none, Symbol};
 use pest::error::LineColLocation;
+use pest::iterators::Pairs;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
 use tracing::{instrument, warn};
@@ -1188,7 +1189,6 @@ pub struct Parse {
     pub names_mapping: HashMap<UnboundName, Name>,
 }
 
-#[instrument(skip(program_text))]
 pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Parse, CompileError> {
     let pairs = match MooParser::parse(Rule::program, program_text) {
         Ok(pairs) => pairs,
@@ -1209,6 +1209,35 @@ pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Pars
     };
 
     // TODO: this is in Rc because of borrowing issues in the Pratt parser
+    let tree_transform = TreeTransformer::new(options);
+    tree_transform.compile(pairs)
+}
+
+pub struct ObjDefParse<'a> {
+    tree: Pairs<'a, Rule>,
+}
+
+pub fn parse_object_def(object_text: &str) -> Result<ObjDefParse, CompileError> {
+    match MooParser::parse(Rule::object, object_text) {
+        Ok(pairs) => Ok(ObjDefParse { tree: pairs }),
+        Err(e) => {
+            let ((line, column), end_line_col) = match e.line_col {
+                LineColLocation::Pos(lc) => (lc, None),
+                LineColLocation::Span(begin, end) => (begin, Some(end)),
+            };
+
+            return Err(CompileError::ParseError {
+                line,
+                column,
+                end_line_col,
+                context: e.line().to_string(),
+                message: e.variant.message().to_string(),
+            });
+        }
+    }
+}
+
+pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, CompileError> {
     let tree_transform = TreeTransformer::new(options);
     tree_transform.compile(pairs)
 }
