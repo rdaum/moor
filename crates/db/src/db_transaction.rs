@@ -431,7 +431,7 @@ impl WorldStateTransaction for DbTransaction {
         let descendants = self.descendants(o).expect("Unable to get descendants");
         for c in descendants.iter().chain(std::iter::once(o.clone())) {
             for (p, propperms) in new_props.iter() {
-                let propperms = if propperms.flags().contains(PropFlag::Chown) {
+                let propperms = if propperms.flags().contains(PropFlag::Chown) && c != *o {
                     propperms.clone().with_owner(c.clone())
                 } else {
                     propperms.clone()
@@ -851,15 +851,15 @@ impl WorldStateTransaction for DbTransaction {
         // Unless we're 'Chown' in which case, the owner should be the descendant.
         let value_locations =
             ObjSet::from_items(&[location.clone()]).with_concatenated(descendants);
-        for location in value_locations.iter() {
-            let actual_owner = if perms.contains(PropFlag::Chown) {
-                location.clone()
+        for proploc in value_locations.iter() {
+            let actual_owner = if perms.contains(PropFlag::Chown) && proploc != *location {
+                proploc.clone()
             } else {
                 owner.clone()
             };
             self.object_propflags
                 .upsert(
-                    ObjAndUUIDHolder::new(&location, u),
+                    ObjAndUUIDHolder::new(&proploc, u),
                     PropPerms::new(actual_owner, perms),
                 )
                 .map_err(|e| {

@@ -624,6 +624,9 @@ impl Drop for WorldStateDB {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::DatabaseConfig;
+    use crate::db_transaction::DbTransaction;
+    use crate::worldstate_transaction::WorldStateTransaction;
     use crate::{
         perform_reparent_props, perform_test_create_object, perform_test_create_object_fixed_id,
         perform_test_descendants, perform_test_location_contents, perform_test_max_object,
@@ -635,10 +638,10 @@ mod tests {
         perform_test_verb_resolve, perform_test_verb_resolve_inherited,
         perform_test_verb_resolve_wildcard,
     };
+    use moor_values::model::PropFlag;
+    use moor_values::util::BitEnum;
+    use moor_values::Symbol;
     use std::sync::Arc;
-
-    use crate::config::DatabaseConfig;
-    use crate::db_transaction::DbTransaction;
 
     fn test_db() -> Arc<super::WorldStateDB> {
         super::WorldStateDB::open(None, DatabaseConfig::default()).0
@@ -756,5 +759,32 @@ mod tests {
     fn test_max_object() {
         let db = test_db();
         perform_test_max_object(|| begin_tx(&db));
+    }
+
+    #[test]
+    fn test_chown_property() {
+        let db = test_db();
+        let mut tx = begin_tx(&db);
+        let obj = tx.create_object(None, Default::default()).unwrap();
+        let obj2 = tx.create_object(None, Default::default()).unwrap();
+        let obj3 = tx.create_object(None, Default::default()).unwrap();
+        tx.set_object_parent(&obj2, &obj).unwrap();
+
+        let uuid = tx
+            .define_property(
+                &obj,
+                &obj,
+                Symbol::mk("test"),
+                &obj3,
+                BitEnum::new_with(PropFlag::Chown),
+                None,
+            )
+            .unwrap();
+
+        // Property owner on obj should be obj3, but on obj2 it should be obj2
+        let o1perms = tx.retrieve_property_permissions(&obj, uuid).unwrap();
+        assert_eq!(o1perms.owner(), obj3);
+        let o2perms = tx.retrieve_property_permissions(&obj2, uuid).unwrap();
+        assert_eq!(o2perms.owner(), obj2);
     }
 }
