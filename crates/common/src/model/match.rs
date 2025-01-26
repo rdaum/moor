@@ -86,21 +86,23 @@ pub enum Preposition {
 impl Preposition {
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "with" | "using" => Some(Self::WithUsing),
-            "at" | "to" => Some(Self::AtTo),
+            "with/using" | "with" | "using" => Some(Self::WithUsing),
+            "at/to" | "at" | "to" => Some(Self::AtTo),
             "in front of" => Some(Self::InFrontOf),
-            "in" | "inside" | "into" => Some(Self::IntoIn),
-            "on top of" | "on" | "onto" | "upon" => Some(Self::OnTopOfOn),
-            "out of" | "from inside" | "from" => Some(Self::OutOf),
+            "in/inside/into" | "in" | "inside" | "into" => Some(Self::IntoIn),
+            "on top of/on/onto/upon" | "on top of" | "on" | "onto" | "upon" => {
+                Some(Self::OnTopOfOn)
+            }
+            "out of/from inside/from" | "out of" | "from inside" | "from" => Some(Self::OutOf),
             "over" => Some(Self::Over),
             "through" => Some(Self::Through),
-            "under" | "underneath" | "beneath" => Some(Self::Under),
+            "under/underneath/beneath" | "under" | "underneath" | "beneath" => Some(Self::Under),
             "behind" => Some(Self::Behind),
             "beside" => Some(Self::Beside),
-            "for" | "about" => Some(Self::ForAbout),
+            "for/about" | "for" | "about" => Some(Self::ForAbout),
             "is" => Some(Self::Is),
             "as" => Some(Self::As),
-            "off" | "off of" => Some(Self::OffOf),
+            "off/off of" | "off" | "off of" => Some(Self::OffOf),
             _ => None,
         }
     }
