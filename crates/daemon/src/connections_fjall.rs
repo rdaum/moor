@@ -310,6 +310,9 @@ impl ConnectionsDB for ConnectionsFjall {
             connections_record
                 .connections
                 .retain(|cr| cr.client_id != client_id);
+            inner
+                .player_clients
+                .insert(player_id.clone(), connections_record.clone());
             let encoded_connected =
                 bincode::encode_to_vec(&connections_record, *BINCODE_CONFIG).unwrap();
             inner
@@ -325,12 +328,15 @@ impl ConnectionsDB for ConnectionsFjall {
             return Err(SessionError::NoConnectionForPlayer(connection));
         };
         let connections_record = connections_record.clone();
-        let last_activity = connections_record
+        let Some(last_activity) = connections_record
             .connections
             .iter()
             .map(|cr| cr.last_activity)
             .max()
-            .unwrap();
+        else {
+            return Err(SessionError::NoConnectionForPlayer(connection));
+        };
+
         Ok(last_activity)
     }
 
@@ -410,11 +416,11 @@ impl ConnectionsDB for ConnectionsFjall {
             .retain(|cr| cr.client_id != client_id.as_u128());
 
         let oid_bytes = player_id.as_bytes().unwrap();
-        let encoded_connected =
-            bincode::encode_to_vec(connections_record.clone(), *BINCODE_CONFIG).unwrap();
         inner
             .player_clients
             .insert(player_id.clone(), connections_record.clone());
+        let encoded_connected =
+            bincode::encode_to_vec(connections_record, *BINCODE_CONFIG).unwrap();
         inner
             .player_clients_table
             .insert(oid_bytes, &encoded_connected)

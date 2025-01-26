@@ -128,8 +128,8 @@ export function showVerbEditor(
                 parentDom: document.body,
                 title: title,
                 id: "editor",
-                width: 500,
-                height: 300,
+                width: 600,
+                height: 800,
             },
             container_div,
         ),
@@ -147,6 +147,7 @@ export function launchVerbEditor(context: Context, title: string, object: Object
     // Decode the 'object' as a reference to an object, in curie form.
     let mrpc_object = new MoorRemoteObject(object, context.authToken);
     mrpc_object.getVerbCode(verb).then((result) => {
-        showVerbEditor(context, title, object, verb, result.split("\n"));
+        console.log("Got verb code: " + result);
+        showVerbEditor(context, title, object, verb, result);
     });
 }

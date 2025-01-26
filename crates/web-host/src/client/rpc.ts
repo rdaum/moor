@@ -100,7 +100,7 @@ export class MoorRemoteObject {
     }
 
     // Get the code and property value of a verb.
-    async getVerbCode(verb_name): Promise<string> {
+    async getVerbCode(verb_name): Promise<[string]> {
         // REST resource /verbs/#object_id/verb_name
         let result = await fetch("/verbs/" + orefCurie(this.oref) + "/" + verb_name, {
             method: "GET",

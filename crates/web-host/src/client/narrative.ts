@@ -14,7 +14,7 @@
 import van, { State } from "vanjs-core";
 
 import { FloatingWindow } from "van-ui";
-import { MoorRemoteObject } from "./rpc";
+import {curieORef, MoorRemoteObject} from "./rpc";
 
 import {
     Context,
@@ -27,7 +27,7 @@ import {
     SystemEvent,
 } from "./model";
 import { matchRef } from "./var";
-import { showVerbEditor } from "./verb_edit";
+import {launchVerbEditor, showVerbEditor} from "./verb_edit";
 
 // import sanitize html
 import DOMPurify from "dompurify";
@@ -345,6 +345,15 @@ function handlePresent(context: Context, msg: Presentation) {
 
     if (msg.target == "right-dock") {
         // TODO: anything special beyond just adding to the state?
+    }
+
+    if (msg.target == "verb-editor") {
+        // attributes: object (curie), verb
+        let object = attrs["object"];
+        let verb = attrs["verb"];
+
+        let oref = curieORef(object);
+        launchVerbEditor(context, "Edit: " + object + ":" + verb, oref, verb);
     }
 }
 
