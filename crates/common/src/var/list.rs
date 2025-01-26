@@ -174,6 +174,13 @@ impl Sequence for List {
             return Err(E_RANGE);
         }
 
+        // 1..0 is a "special" MOO-ism that is short for "insert at front" and rather than trying
+        // to wrangle the logic below to Do The Right Thing, we'll just handle it here.
+        if from == 0 && to == -1 {
+            let new_iter = with_val.iter().chain(self.iter());
+            return Ok(v_list_iter(new_iter));
+        }
+
         let from = from.to_usize().unwrap_or(0);
         let to = to.to_usize().unwrap_or(0);
 
@@ -753,5 +760,18 @@ mod tests {
             )
             .unwrap();
         assert_eq!(r, v_list(&[v_str("test")]));
+
+        // escapes = {".", "@abort"}; escapes[1..0] = {"?"}; return escapes;
+        // => {"?", ".", "@abort"}
+        let l = v_list(&[v_str("."), v_str("@abort")]);
+        let r = l
+            .range_set(
+                &v_int(1),
+                &v_int(0),
+                &v_list(&[v_str("?")]),
+                IndexMode::OneBased,
+            )
+            .unwrap();
+        assert_eq!(r, v_list(&[v_str("?"), v_str("."), v_str("@abort")]));
     }
 }
