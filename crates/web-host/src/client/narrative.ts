@@ -396,9 +396,18 @@ const InputArea = (context: Context, player: State<Player>) => {
         disabled: van.derive(() => !player.val.connected),
         class: "input_area",
     });
-    i.addEventListener("keyup", e => {
+    i.addEventListener("keydown", e => {
         // Arrow up means go back in history and fill the input area with that, if there is any.
         if (e.key === "ArrowUp") {
+            // If the field is multiple lines and the cursor is not at the beginning of the line or end of line,
+            // then just do regular arrow-key stuff (don't go back in history).
+            if (
+                i.value.includes("\n")
+                && (i.selectionStart != 0 && (i.selectionStart != i.selectionEnd || i.selectionStart != i.value.length))
+            ) {
+                return;
+            }
+
             e.preventDefault();
 
             if (context.historyOffset < context.history.length) {
@@ -413,6 +422,13 @@ const InputArea = (context: Context, player: State<Player>) => {
                 }
             }
         } else if (e.key === "ArrowDown") {
+            if (
+                i.value.includes("\n")
+                && (i.selectionStart != 0 && (i.selectionStart != i.selectionEnd || i.selectionStart != i.value.length))
+            ) {
+                return;
+            }
+
             e.preventDefault();
 
             if (context.historyOffset > 0) {
@@ -436,13 +452,19 @@ const InputArea = (context: Context, player: State<Player>) => {
             i.value = text.substring(0, cursor) + "\n" + text.substring(cursor);
             i.selectionStart = cursor + 1;
             i.selectionEnd = cursor + 1;
-
         } else if (e.key === "Enter") {
             e.preventDefault();
 
             // Put a copy into the narrative window, send it over websocket, and clear
             let input = i.value;
             let output = document.getElementById("output_window");
+            let echo = div(
+                {
+                    class: "input_echo",
+                },
+                "> " + input,
+            );
+            output.appendChild(echo);
             context.ws.send(i.value);
             i.value = "";
             // Append to history
