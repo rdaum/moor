@@ -638,9 +638,9 @@ mod tests {
         perform_test_verb_resolve, perform_test_verb_resolve_inherited,
         perform_test_verb_resolve_wildcard,
     };
-    use moor_values::model::PropFlag;
+    use moor_values::model::{ObjAttrs, ObjFlag, PropFlag};
     use moor_values::util::BitEnum;
-    use moor_values::Symbol;
+    use moor_values::{Obj, Symbol};
     use std::sync::Arc;
 
     fn test_db() -> Arc<super::WorldStateDB> {
@@ -768,7 +768,9 @@ mod tests {
         let obj = tx.create_object(None, Default::default()).unwrap();
         let obj2 = tx.create_object(None, Default::default()).unwrap();
         let obj3 = tx.create_object(None, Default::default()).unwrap();
+        let obj4 = tx.create_object(None, Default::default()).unwrap();
         tx.set_object_parent(&obj2, &obj).unwrap();
+        tx.set_object_owner(&obj2, &obj4).unwrap();
 
         let uuid = tx
             .define_property(
@@ -781,10 +783,29 @@ mod tests {
             )
             .unwrap();
 
-        // Property owner on obj should be obj3, but on obj2 it should be obj2
+        // Property owner on obj should be obj3, but on obj2 it should be obj4, since that's
+        // obj2's owner
         let o1perms = tx.retrieve_property_permissions(&obj, uuid).unwrap();
         assert_eq!(o1perms.owner(), obj3);
         let o2perms = tx.retrieve_property_permissions(&obj2, uuid).unwrap();
-        assert_eq!(o2perms.owner(), obj2);
+        assert_eq!(o2perms.owner(), obj4);
+
+        // Now create a new object, descendant of obj, and the same logic should apply
+        let obj5 = tx
+            .create_object(
+                None,
+                ObjAttrs::new(
+                    Obj::mk_id(obj4.id().0 + 1),
+                    obj.clone(),
+                    obj,
+                    BitEnum::new_with(ObjFlag::Read),
+                    "zoinks",
+                ),
+            )
+            .unwrap();
+
+        assert_eq!(tx.get_object_owner(&obj5).unwrap(), obj5);
+        let o5perms = tx.retrieve_property_permissions(&obj5, uuid).unwrap();
+        assert_eq!(o5perms.owner(), obj5);
     }
 }

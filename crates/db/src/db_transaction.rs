@@ -420,6 +420,12 @@ impl WorldStateTransaction for DbTransaction {
                                 ))
                             })?
                         {
+                            let propperms = if propperms.flags().contains(PropFlag::Chown) {
+                                let my_owner = self.get_object_owner(o)?;
+                                propperms.with_owner(my_owner)
+                            } else {
+                                propperms
+                            };
                             new_props.push((p.clone(), propperms));
                         }
                     }
