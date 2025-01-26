@@ -432,7 +432,8 @@ impl WorldStateTransaction for DbTransaction {
         for c in descendants.iter().chain(std::iter::once(o.clone())) {
             for (p, propperms) in new_props.iter() {
                 let propperms = if propperms.flags().contains(PropFlag::Chown) && c != *o {
-                    propperms.clone().with_owner(c.clone())
+                    let owner = self.get_object_owner(&c)?;
+                    propperms.clone().with_owner(owner)
                 } else {
                     propperms.clone()
                 };
@@ -853,7 +854,8 @@ impl WorldStateTransaction for DbTransaction {
             ObjSet::from_items(&[location.clone()]).with_concatenated(descendants);
         for proploc in value_locations.iter() {
             let actual_owner = if perms.contains(PropFlag::Chown) && proploc != *location {
-                proploc.clone()
+                // get the owner of proploc
+                self.get_object_owner(&proploc)?
             } else {
                 owner.clone()
             };
