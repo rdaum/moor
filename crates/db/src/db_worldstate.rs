@@ -719,10 +719,6 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
     }
 
     fn children_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
-        let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
-        self.perms(perms)?
-            .check_object_allows(&owner, objflags, ObjFlag::Read.into())?;
-
         self.get_tx().get_object_children(obj)
     }
 
