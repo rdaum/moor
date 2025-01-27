@@ -613,10 +613,21 @@ impl RpcServer {
                 Ok(DaemonToClientReply::Verbs(verbs))
             }
             HostClientToDaemonMessage::Detach(token) => {
-                self.validate_client_token(token, client_id)?;
+                info!(?client_id, "Detaching client");
+                let connection = self.client_auth(token, client_id)?;
 
-                debug!(?client_id, "Detaching client");
-
+                // Submit disconnected only if this is an authenticated user... that is,
+                // the connection oid >= 0
+                if connection.is_positive() {
+                    if let Err(e) = self.clone().submit_disconnected_task(
+                        &SYSTEM_OBJECT,
+                        scheduler_client,
+                        client_id,
+                        &connection,
+                    ) {
+                        error!(error = ?e, "Error submitting user_disconnected task");
+                    }
+                }
                 // Detach this client id from the player/connection object.
                 let Ok(_) = self.connections.remove_client_connection(client_id) else {
                     return Err(RpcMessageError::InternalError(
@@ -868,6 +879,32 @@ impl RpcServer {
                 player,
                 &ObjectRef::Id(handler_object.clone()),
                 connected_verb,
+                List::mk_list(&[v_obj(player.clone())]),
+                "".to_string(),
+                &SYSTEM_OBJECT,
+                session,
+            )
+            .with_context(|| "could not submit 'connected' task")?;
+        Ok(())
+    }
+
+    fn submit_disconnected_task(
+        self: Arc<Self>,
+        handler_object: &Obj,
+        scheduler_client: SchedulerClient,
+        client_id: Uuid,
+        player: &Obj,
+    ) -> Result<(), eyre::Error> {
+        let session = self
+            .clone()
+            .new_session(client_id, player.clone())
+            .with_context(|| "could not create 'connected' task session for player")?;
+
+        scheduler_client
+            .submit_verb_task(
+                player,
+                &ObjectRef::Id(handler_object.clone()),
+                Symbol::mk("user_disconnected"),
                 List::mk_list(&[v_obj(player.clone())]),
                 "".to_string(),
                 &SYSTEM_OBJECT,

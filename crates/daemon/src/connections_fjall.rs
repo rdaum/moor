@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -390,7 +390,11 @@ impl ConnectionsDB for ConnectionsFjall {
 
     fn connections(&self) -> Vec<Obj> {
         let inner = self.inner.lock().unwrap();
-        inner.player_clients.keys().cloned().collect()
+        inner
+            .player_clients
+            .iter()
+            .filter_map(|(o, c)| (!c.connections.is_empty()).then(|| o.clone()))
+            .collect()
     }
 
     fn connection_object_for_client(&self, client_id: Uuid) -> Option<Obj> {
@@ -403,10 +407,13 @@ impl ConnectionsDB for ConnectionsFjall {
         let Some(player_id) = inner.client_players.remove(&client_id) else {
             bail!("No connection to prune found for {:?}", client_id);
         };
-        inner
+        if !inner
             .client_player_table
             .remove(client_id.as_u128().to_le_bytes())
-            .ok();
+            .is_ok()
+        {
+            warn!("No existing record for client {client_id:?} at removal");
+        };
 
         let Some(mut connections_record) = inner.player_clients.remove(&player_id) else {
             return Ok(());
@@ -416,16 +423,19 @@ impl ConnectionsDB for ConnectionsFjall {
             .retain(|cr| cr.client_id != client_id.as_u128());
 
         let oid_bytes = player_id.as_bytes().unwrap();
-        inner
-            .player_clients
-            .insert(player_id.clone(), connections_record.clone());
-        let encoded_connected =
-            bincode::encode_to_vec(connections_record, *BINCODE_CONFIG).unwrap();
-        inner
-            .player_clients_table
-            .insert(oid_bytes, &encoded_connected)
-            .unwrap();
-
+        if connections_record.connections.is_empty() {
+            inner
+                .player_clients
+                .insert(player_id.clone(), connections_record.clone());
+            inner.player_clients_table.remove(oid_bytes).ok();
+        } else {
+            let encoded_connected =
+                bincode::encode_to_vec(connections_record, *BINCODE_CONFIG).unwrap();
+            inner
+                .player_clients_table
+                .insert(oid_bytes, &encoded_connected)
+                .ok();
+        }
         Ok(())
     }
 }
@@ -564,5 +574,19 @@ mod tests {
         let db = Arc::new(ConnectionsFjall::open(Some(db_path.path())));
         let connections = db.connections();
         assert_eq!(connections, vec![Obj::mk_id(1)]);
+    }
+
+    #[test]
+    fn remove_connection() {
+        let db_path = tempfile::tempdir().unwrap();
+        let db = Arc::new(ConnectionsFjall::open(Some(db_path.path())));
+
+        let client_id1 = uuid::Uuid::new_v4();
+        let ob = db
+            .new_connection(client_id1, "localhost".to_string(), None)
+            .unwrap();
+        assert_eq!(db.connections(), vec![ob.clone()]);
+        db.remove_client_connection(client_id1).unwrap();
+        assert_eq!(db.connections(), vec![]);
     }
 }

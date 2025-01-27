@@ -171,7 +171,7 @@ impl WebSocketConnection {
                         }
                         ReadEvent::ConnectionClose => {
                             info!("Connection closed");
-                            return
+                            break;
                         }
                         ReadEvent::PendingEvent => {
                             continue
@@ -196,6 +196,15 @@ impl WebSocketConnection {
                 }
             }
         }
+
+        // We're done now send detach.
+        self.rpc_client
+            .make_client_rpc_call(
+                self.client_id,
+                HostClientToDaemonMessage::Detach(self.client_token.clone()),
+            )
+            .await
+            .expect("Unable to send detach event to RPC server");
     }
 
     async fn handle_narrative_event(

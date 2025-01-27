@@ -470,7 +470,11 @@ async fn attach(
             .unwrap();
     };
 
-    ws.on_upgrade(move |socket| async move { connection.handle(connect_type, socket).await })
+    ws.on_upgrade(move |socket| async move {
+        {
+            connection.handle(connect_type, socket).await
+        }
+    })
 }
 
 /// Websocket upgrade handler for authenticated users who are connecting to an existing user

@@ -84,6 +84,9 @@ struct Args {
         default_value = "./crates/web-host/src/client"
     )]
     client_sources: PathBuf,
+
+    #[arg(long, help = "Enable debug logging", default_value = "false")]
+    pub debug: bool,
 }
 
 struct Listeners {
@@ -344,7 +347,11 @@ async fn main() -> Result<(), eyre::Error> {
         .with_file(true)
         .with_line_number(true)
         .with_thread_names(true)
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(if args.debug {
+            tracing::Level::DEBUG
+        } else {
+            tracing::Level::INFO
+        })
         .finish();
     tracing::subscriber::set_global_default(main_subscriber)
         .expect("Unable to set configure logging");
