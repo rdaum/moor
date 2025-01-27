@@ -29,6 +29,7 @@ use rpc_common::{
 };
 use rpc_common::{ClientEvent, HostType};
 use serde_json::Value;
+use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 use tmq::subscribe::Subscribe;
@@ -46,6 +47,7 @@ pub struct WebSocketConnection {
     pub(crate) auth_token: AuthToken,
     pub(crate) rpc_client: RpcSendClient,
     pub(crate) handler_object: Obj,
+    pub(crate) pending_task: Option<PendingTask>,
 }
 
 /// The JSON output of a narrative event.
@@ -82,6 +84,18 @@ pub struct ErrorOutput {
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
 pub struct ValueResult(#[serde(serialize_with = "serialize_var")] Var);
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum PendingTask {
+    Task(usize),
+}
+
+pub enum ReadEvent {
+    Command(Message),
+    InputReply(Message),
+    ConnectionClose,
+    PendingEvent,
+}
+
 impl WebSocketConnection {
     pub async fn handle(&mut self, connect_type: ConnectType, stream: WebSocket) {
         info!("New connection from {}, {}", self.peer_addr, self.player);
@@ -102,15 +116,44 @@ impl WebSocketConnection {
 
         debug!(client_id = ?self.client_id, "Entering command dispatch loop");
 
-        let mut expecting_input = None;
+        let mut expecting_input = VecDeque::new();
         loop {
+            // We should not send the next line until we've received a narrative event for the
+            // previous.
+            //
+            let input_future = async {
+                if self.pending_task.is_some() && expecting_input.is_empty() {
+                    return ReadEvent::PendingEvent;
+                }
+
+                let Some(Ok(line)) = ws_receiver.next().await else {
+                    return ReadEvent::ConnectionClose;
+                };
+
+                if !expecting_input.is_empty() {
+                    return ReadEvent::InputReply(line);
+                } else {
+                    return ReadEvent::Command(line);
+                }
+            };
+
             select! {
-                line = ws_receiver.next() => {
-                    let Some(Ok(line)) = line else {
-                        info!("Connection closed");
-                        return;
-                    };
-                    self.process_line(line, &mut expecting_input, &mut ws_sender).await;
+                line = input_future => {
+                    match line {
+                        ReadEvent::Command(line) => {
+                            self.process_command_line(line, &mut ws_sender).await;
+                        }
+                        ReadEvent::InputReply(line) =>{
+                            self.process_requested_input_line(line, &mut expecting_input, &mut ws_sender).await;
+                        }
+                        ReadEvent::ConnectionClose => {
+                            info!("Connection closed");
+                            return
+                        }
+                        ReadEvent::PendingEvent => {
+                            continue
+                        }
+                    }
                 }
                 Ok(event) = broadcast_recv(&mut self.broadcast_sub) => {
                     trace!(?event, "broadcast_event");
@@ -124,7 +167,9 @@ impl WebSocketConnection {
                     }
                 }
                 Ok(event) = events_recv(self.client_id, &mut self.narrative_sub) => {
-                    expecting_input = self.handle_narrative_event(&mut ws_sender, event).await;
+                    if let Some(input_request) = self.handle_narrative_event(&mut ws_sender, event).await {
+                        expecting_input.push_back(input_request);
+                    }
                 }
             }
         }
@@ -171,6 +216,7 @@ impl WebSocketConnection {
                 return Some(request_id);
             }
             ClientEvent::Disconnect() => {
+                self.pending_task = None;
                 Self::emit_narrative_sys_msg(
                     ws_sender,
                     &self.player,
@@ -180,12 +226,22 @@ impl WebSocketConnection {
                 .await;
                 ws_sender.close().await.expect("Unable to close connection");
             }
-            ClientEvent::TaskError(_ti, te) => {
+            ClientEvent::TaskError(ti, te) => {
+                if let Some(pending_event) = self.pending_task.take() {
+                    if pending_event != PendingTask::Task(ti) {
+                        error!("Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}");
+                    }
+                }
                 self.handle_task_error(ws_sender, te)
                     .await
                     .expect("Unable to handle task error");
             }
-            ClientEvent::TaskSuccess(_ti, s) => {
+            ClientEvent::TaskSuccess(ti, s) => {
+                if let Some(pending_event) = self.pending_task.take() {
+                    if pending_event != PendingTask::Task(ti) {
+                        error!("Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}");
+                    }
+                }
                 Self::emit_value(ws_sender, ValueResult(s)).await;
             }
         }
@@ -193,48 +249,85 @@ impl WebSocketConnection {
         None
     }
 
-    async fn process_line(
+    async fn process_command_line(
         &mut self,
         line: Message,
-        expecting_input: &mut Option<u128>,
         ws_sender: &mut SplitSink<WebSocket, Message>,
     ) {
         let line = line.into_text().unwrap();
         let cmd = line.trim().to_string();
 
-        let response = match expecting_input.take() {
-            Some(input_request_id) => self
-                .rpc_client
-                .make_client_rpc_call(
-                    self.client_id,
-                    HostClientToDaemonMessage::RequestedInput(
-                        self.client_token.clone(),
-                        self.auth_token.clone(),
-                        input_request_id,
-                        cmd,
-                    ),
-                )
-                .await
-                .expect("Unable to send input to RPC server"),
-            None => self
-                .rpc_client
-                .make_client_rpc_call(
-                    self.client_id,
-                    HostClientToDaemonMessage::Command(
-                        self.client_token.clone(),
-                        self.auth_token.clone(),
-                        self.handler_object.clone(),
-                        cmd,
-                    ),
-                )
-                .await
-                .expect("Unable to send command to RPC server"),
+        match self
+            .rpc_client
+            .make_client_rpc_call(
+                self.client_id,
+                HostClientToDaemonMessage::Command(
+                    self.client_token.clone(),
+                    self.auth_token.clone(),
+                    self.handler_object.clone(),
+                    cmd,
+                ),
+            )
+            .await
+            .expect("Unable to send command to RPC server")
+        {
+            ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(ti)) => {
+                self.pending_task = Some(PendingTask::Task(ti));
+            }
+            ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
+                warn!("Received input thanks unprovoked, out of order")
+            }
+            ReplyResult::Failure(RpcMessageError::TaskError(e)) => {
+                self.handle_task_error(ws_sender, e)
+                    .await
+                    .expect("Unable to handle task error");
+            }
+            ReplyResult::Failure(e) => {
+                error!("Unhandled RPC error: {:?}", e);
+            }
+            ReplyResult::ClientSuccess(s) => {
+                error!("Unexpected RPC success: {:?}", s);
+            }
+            ReplyResult::HostSuccess(hs) => {
+                error!("Unexpected host success: {:?}", hs);
+            }
+        }
+    }
+
+    async fn process_requested_input_line(
+        &mut self,
+        line: Message,
+        expecting_input: &mut VecDeque<u128>,
+        ws_sender: &mut SplitSink<WebSocket, Message>,
+    ) {
+        let line = line.into_text().unwrap();
+        let cmd = line.trim().to_string();
+
+        let Some(input_request_id) = expecting_input.front() else {
+            warn!("Attempt to send reply to input request without an input request");
+            return;
         };
 
-        match response {
-            ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(_))
-            | ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
-                // Nothing to do
+        match self
+            .rpc_client
+            .make_client_rpc_call(
+                self.client_id,
+                HostClientToDaemonMessage::RequestedInput(
+                    self.client_token.clone(),
+                    self.auth_token.clone(),
+                    input_request_id.clone(),
+                    cmd,
+                ),
+            )
+            .await
+            .expect("Unable to send input to RPC server")
+        {
+            ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(task_id)) => {
+                self.pending_task = Some(PendingTask::Task(task_id));
+                warn!("Got TaskSubmitted when expecting input-thanks")
+            }
+            ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
+                expecting_input.pop_front();
             }
             ReplyResult::Failure(RpcMessageError::TaskError(e)) => {
                 self.handle_task_error(ws_sender, e)
@@ -473,29 +566,20 @@ impl WebSocketConnection {
         // Serialize to JSON.
         let msg = serde_json::to_string(&msg).unwrap();
         let msg = Message::Text(msg.into());
-        ws_sender
-            .send(msg)
-            .await
-            .expect("Unable to send message to client");
+        ws_sender.send(msg).await.ok();
     }
 
     async fn emit_error(ws_sender: &mut SplitSink<WebSocket, Message>, msg: ErrorOutput) {
         // Serialize to JSON.
         let msg = serde_json::to_string(&msg).unwrap();
         let msg = Message::Text(msg.into());
-        ws_sender
-            .send(msg)
-            .await
-            .expect("Unable to send message to client");
+        ws_sender.send(msg).await.ok();
     }
 
     async fn emit_value(ws_sender: &mut SplitSink<WebSocket, Message>, msg: ValueResult) {
         // Serialize to JSON.
         let msg = serde_json::to_string(&msg).unwrap();
         let msg = Message::Text(msg.into());
-        ws_sender
-            .send(msg)
-            .await
-            .expect("Unable to send message to client");
+        ws_sender.send(msg).await.ok();
     }
 }

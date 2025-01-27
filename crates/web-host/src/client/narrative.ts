@@ -14,7 +14,7 @@
 import van, { State } from "vanjs-core";
 
 import { FloatingWindow } from "van-ui";
-import {curieORef, MoorRemoteObject} from "./rpc";
+import { curieORef, MoorRemoteObject } from "./rpc";
 
 import {
     Context,
@@ -27,7 +27,7 @@ import {
     SystemEvent,
 } from "./model";
 import { matchRef } from "./var";
-import {launchVerbEditor, showVerbEditor} from "./verb_edit";
+import { launchVerbEditor, showVerbEditor } from "./verb_edit";
 
 // import sanitize html
 import DOMPurify from "dompurify";
@@ -405,6 +405,20 @@ const InputArea = (context: Context, player: State<Player>) => {
         disabled: van.derive(() => !player.val.connected),
         class: "input_area",
     });
+    i.addEventListener("paste", e => {
+        // Directly process the pasted content as-is and put it in the input box as-is
+        e.stopPropagation();
+        e.preventDefault();
+        const pastedData = e.clipboardData?.getData("text") || "";
+        if (pastedData) {
+            // Fill the input field with the pasted content as-is
+            i.value = pastedData;
+
+            // Jump the selection to the end of the line
+            i.selectionStart = pastedData.length;
+            i.selectionEnd = pastedData.length;
+        }
+    });
     i.addEventListener("keydown", e => {
         // Arrow up means go back in history and fill the input area with that, if there is any.
         if (e.key === "ArrowUp") {
@@ -467,16 +481,23 @@ const InputArea = (context: Context, player: State<Player>) => {
             // Put a copy into the narrative window, send it over websocket, and clear
             let input = i.value;
             let output = document.getElementById("output_window");
-            let echo = div(
-                {
-                    class: "input_echo",
-                },
-                "> " + input,
-            );
-            output.appendChild(echo);
-            context.ws.send(i.value);
+
+            // For actual sent-content we split linefeeds out to avoid sending multiline content, at
+            // least for now.
+            const lines = i.value.split("\n");
+            for (let line of lines) {
+                let echo = div(
+                    {
+                        class: "input_echo",
+                    },
+                    "> " + line,
+                );
+                output.appendChild(echo);
+                context.ws.send(line);
+            }
             i.value = "";
-            // Append to history
+
+            // Append (unmolested) to history
             context.history.push(input);
             context.historyOffset = 0;
         }

@@ -193,6 +193,7 @@ impl WebHost {
             client_token,
             auth_token,
             rpc_client,
+            pending_task: None,
         })
     }
 
