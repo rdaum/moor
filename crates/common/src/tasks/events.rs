@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::tasks::Exception;
 use crate::{Symbol, Var};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -40,6 +41,8 @@ pub enum Event {
     /// A "unpresent" event, which is a recommendation to the client to remove a presentation (identified with a string)
     /// from the user interface.
     Unpresent(String),
+    /// Present a backtrace to the user.
+    Traceback(Exception),
     // TODO: Other Event types on Session stream
     //   other events that might happen here would be things like (local) "object moved" or "object
     //   created."

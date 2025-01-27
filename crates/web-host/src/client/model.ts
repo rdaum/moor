@@ -153,3 +153,9 @@ export interface Presentation {
     target: string;
     attributes: Array<[string, string]>;
 }
+
+export interface Traceback {
+    msg: string;
+    code: string;
+    traceback: Array<string>;
+}

@@ -25,6 +25,7 @@ import {
     Spool,
     SpoolType,
     SystemEvent,
+    Traceback,
 } from "./model";
 import { matchRef } from "./var";
 import { launchVerbEditor, showVerbEditor } from "./verb_edit";
@@ -368,6 +369,12 @@ function handleUnpresent(context: Context, id: string) {
     context.presentations.val = context.presentations.val.withRemoved(id);
 }
 
+function handleTraceback(context: Context, traceback: Traceback) {
+    let content = traceback.traceback.join("\n");
+    let content_node = div({ class: "traceback_narrative" }, content);
+    narrativeAppend(content_node);
+}
+
 // Process an inbound (JSON) event from the websocket connection to the server.
 export function handleEvent(context: Context, msg) {
     let event = JSON.parse(msg);
@@ -379,11 +386,11 @@ export function handleEvent(context: Context, msg) {
     } else if (event["system_message"]) {
         handleSystemMessage(context, event);
     } else if (event["present"]) {
-        console.log("Present event: ", event);
         handlePresent(context, event["present"]);
     } else if (event["unpresent"]) {
-        console.log("Unpresent event: ", event);
         handleUnpresent(context, event["unpresent"]);
+    } else if (event["traceback"]) {
+        handleTraceback(context, event["traceback"]);
     } else {
         console.log("Unknown event type: " + event);
     }

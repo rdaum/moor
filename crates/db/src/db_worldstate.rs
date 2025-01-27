@@ -718,7 +718,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         self.get_tx_mut().set_object_parent(obj, new_parent)
     }
 
-    fn children_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+    fn children_of(&self, _perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
         self.get_tx().get_object_children(obj)
     }
 

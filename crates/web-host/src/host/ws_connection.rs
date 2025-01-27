@@ -16,9 +16,10 @@ use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use moor_values::tasks::{
-    AbortLimitReason, CommandError, Event, Presentation, SchedulerError, VerbProgramError,
+    AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
+    VerbProgramError,
 };
-use moor_values::{v_obj, Obj, Var};
+use moor_values::{v_obj, Obj, Var, Variant};
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;
@@ -74,6 +75,16 @@ pub struct NarrativeOutput {
     /// If this is an unpresent, the id to unpresent.
     #[serde(skip_serializing_if = "Option::is_none")]
     unpresent: Option<String>,
+    /// If this is a traceback 'splosion, it's here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    traceback: Option<Traceback>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Traceback {
+    error: String,
+    msg: String,
+    traceback: Vec<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -215,6 +226,9 @@ impl WebSocketConnection {
                             msg.clone(),
                         )
                         .await;
+                    }
+                    Event::Traceback(exception) => {
+                        Self::emit_traceback(ws_sender, event.author(), exception).await;
                     }
                     Event::Present(p) => {
                         Self::emit_present(ws_sender, event.author(), p.clone()).await;
@@ -469,16 +483,8 @@ impl WebSocketConnection {
                 )
                 .await
             }
-            SchedulerError::TaskAbortedException(e) => {
-                Self::emit_error(
-                    ws_sender,
-                    ErrorOutput {
-                        message: "Task exception".to_string(),
-                        description: Some(vec![format!("{}", e)]),
-                        server_time: SystemTime::now(),
-                    },
-                )
-                .await
+            SchedulerError::TaskAbortedException(_e) => {
+                // No need to emit anything here, the standard exception handler should show.
             }
             SchedulerError::TaskAbortedCancelled => {
                 Self::emit_error(
@@ -513,6 +519,7 @@ impl WebSocketConnection {
                 server_time: SystemTime::now(),
                 present: Some(present),
                 unpresent: None,
+                traceback: None,
             },
         )
         .await;
@@ -533,6 +540,7 @@ impl WebSocketConnection {
                 server_time: SystemTime::now(),
                 present: None,
                 unpresent: Some(id),
+                traceback: None,
             },
         )
         .await
@@ -554,6 +562,7 @@ impl WebSocketConnection {
                 server_time: SystemTime::now(),
                 present: None,
                 unpresent: None,
+                traceback: None,
             },
         )
         .await;
@@ -575,6 +584,39 @@ impl WebSocketConnection {
                 server_time: SystemTime::now(),
                 present: None,
                 unpresent: None,
+                traceback: None,
+            },
+        )
+        .await;
+    }
+
+    async fn emit_traceback(
+        ws_sender: &mut SplitSink<WebSocket, Message>,
+        author: &Var,
+        exception: &Exception,
+    ) {
+        let mut traceback = vec![];
+        for frame in &exception.backtrace {
+            let Variant::Str(s) = frame.variant() else {
+                continue;
+            };
+            traceback.push(s.to_string());
+        }
+        Self::emit_narrative(
+            ws_sender,
+            NarrativeOutput {
+                author: var_as_json(author),
+                system_message: None,
+                message: None,
+                content_type: None,
+                server_time: SystemTime::now(),
+                present: None,
+                unpresent: None,
+                traceback: Some(Traceback {
+                    error: exception.code.message().into(),
+                    traceback,
+                    msg: exception.msg.clone(),
+                }),
             },
         )
         .await;

@@ -176,44 +176,54 @@ impl TelnetConnection {
     }
 
     async fn output(&mut self, event: Event) -> Result<(), eyre::Error> {
-        let Event::Notify(msg, content_type) = event else {
-            self.write
-                .send(format!("Unsupported event for telnet: {:?}", event))
-                .await
-                .with_context(|| "Unable to send message to client")?;
-            return Ok(());
-        };
-
-        // Strings output as text lines to the client, otherwise send the
-        // literal form (for e.g. lists, objrefs, etc)
-        match msg.variant() {
-            Variant::Str(msg_text) => {
-                let formatted = output_format(msg_text.as_string(), content_type);
-                self.write
-                    .send(formatted)
-                    .await
-                    .with_context(|| "Unable to send message to client")?;
-            }
-            Variant::List(lines) => {
-                for line in lines.iter() {
-                    let Variant::Str(line) = line.variant() else {
-                        trace!("Non-string in list output");
-                        continue;
-                    };
-                    let formatted = output_format(line.as_string(), content_type);
+        match event {
+            Event::Notify(msg, content_type) => match msg.variant() {
+                Variant::Str(msg_text) => {
+                    let formatted = output_format(msg_text.as_string(), content_type);
                     self.write
                         .send(formatted)
+                        .await
+                        .with_context(|| "Unable to send message to client")?;
+                }
+                Variant::List(lines) => {
+                    for line in lines.iter() {
+                        let Variant::Str(line) = line.variant() else {
+                            trace!("Non-string in list output");
+                            continue;
+                        };
+                        let formatted = output_format(line.as_string(), content_type);
+                        self.write
+                            .send(formatted)
+                            .await
+                            .with_context(|| "Unable to send message to client")?;
+                    }
+                }
+                _ => {
+                    self.write
+                        .send(to_literal(&msg))
+                        .await
+                        .with_context(|| "Unable to send message to client")?;
+                }
+            },
+            Event::Traceback(e) => {
+                for frame in e.backtrace {
+                    let Variant::Str(s) = frame.variant() else {
+                        continue;
+                    };
+                    self.write
+                        .send(s.to_string())
                         .await
                         .with_context(|| "Unable to send message to client")?;
                 }
             }
             _ => {
                 self.write
-                    .send(to_literal(&msg))
+                    .send(format!("Unsupported event for telnet: {:?}", event))
                     .await
                     .with_context(|| "Unable to send message to client")?;
             }
         }
+
         Ok(())
     }
 

@@ -191,8 +191,20 @@ html, body {
     overflow: auto;
     padding: 0.0em;
     margin: 0;
+    /* emp with a little blue-osity */
+    color: #4169E1;
+}
+
+.traceback_narrative {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 1em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow: auto;
+    padding: 0.0em;
+    margin: 0;
     /* emp with a little redness */
-    color: #ff0000;
+    color: #cc0000;
 }
 
 .input_area {

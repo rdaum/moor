@@ -52,7 +52,7 @@ use moor_values::tasks::SchedulerError::{
     TaskAbortedException, TaskAbortedLimit, VerbProgramFailed,
 };
 use moor_values::tasks::{
-    AbortLimitReason, CommandError, SchedulerError, TaskId, VerbProgramError,
+    AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError, TaskId, VerbProgramError,
 };
 use moor_values::Error::{E_INVARG, E_INVIND, E_PERM};
 use moor_values::{v_err, v_int, v_none, v_obj, v_string, List, Symbol, Var};
@@ -986,21 +986,15 @@ impl Scheduler {
                 };
 
                 // Compose a string out of the backtrace
-                let mut traceback = vec![];
-                for frame in exception.backtrace.iter() {
-                    let Variant::Str(s) = frame.variant() else {
-                        continue;
-                    };
-                    traceback.push(format!("{:}", s));
-                }
-
-                for l in traceback.iter() {
-                    if let Err(send_error) = task
-                        .session
-                        .send_system_msg(task.player.clone(), l.as_str())
-                    {
-                        warn!("Could not send traceback to player: {:?}", send_error);
-                    }
+                if let Err(send_error) = task.session.send_event(
+                    task.player.clone(),
+                    NarrativeEvent {
+                        timestamp: SystemTime::now(),
+                        author: v_obj(task.player.clone()),
+                        event: Event::Traceback(exception.clone()),
+                    },
+                ) {
+                    warn!("Could not send traceback to player: {:?}", send_error);
                 }
 
                 let _ = task.session.commit();
