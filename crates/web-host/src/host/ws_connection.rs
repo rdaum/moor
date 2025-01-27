@@ -31,11 +31,13 @@ use rpc_common::{ClientEvent, HostType};
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::net::SocketAddr;
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 use tmq::subscribe::Subscribe;
 use tokio::select;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
+
+const TASK_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct WebSocketConnection {
     pub(crate) player: Obj,
@@ -85,8 +87,9 @@ pub struct ErrorOutput {
 pub struct ValueResult(#[serde(serialize_with = "serialize_var")] Var);
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum PendingTask {
-    Task(usize),
+pub struct PendingTask {
+    task_id: usize,
+    start_time: Instant,
 }
 
 pub enum ReadEvent {
@@ -123,7 +126,16 @@ impl WebSocketConnection {
             //
             let input_future = async {
                 if self.pending_task.is_some() && expecting_input.is_empty() {
-                    return ReadEvent::PendingEvent;
+                    let pt = self.pending_task.as_ref().unwrap();
+                    if pt.start_time.elapsed() > TASK_TIMEOUT {
+                        error!(
+                            "Task {} stuck without response for more than {TASK_TIMEOUT:?}",
+                            pt.task_id
+                        );
+                        self.pending_task = None;
+                    } else {
+                        return ReadEvent::PendingEvent;
+                    }
                 }
 
                 let Some(Ok(line)) = ws_receiver.next().await else {
@@ -228,7 +240,7 @@ impl WebSocketConnection {
             }
             ClientEvent::TaskError(ti, te) => {
                 if let Some(pending_event) = self.pending_task.take() {
-                    if pending_event != PendingTask::Task(ti) {
+                    if pending_event.task_id != ti {
                         error!("Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}");
                     }
                 }
@@ -238,7 +250,7 @@ impl WebSocketConnection {
             }
             ClientEvent::TaskSuccess(ti, s) => {
                 if let Some(pending_event) = self.pending_task.take() {
-                    if pending_event != PendingTask::Task(ti) {
+                    if pending_event.task_id != ti {
                         error!("Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}");
                     }
                 }
@@ -272,7 +284,10 @@ impl WebSocketConnection {
             .expect("Unable to send command to RPC server")
         {
             ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(ti)) => {
-                self.pending_task = Some(PendingTask::Task(ti));
+                self.pending_task = Some(PendingTask {
+                    task_id: ti,
+                    start_time: Instant::now(),
+                });
             }
             ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
                 warn!("Received input thanks unprovoked, out of order")
@@ -323,7 +338,10 @@ impl WebSocketConnection {
             .expect("Unable to send input to RPC server")
         {
             ReplyResult::ClientSuccess(DaemonToClientReply::TaskSubmitted(task_id)) => {
-                self.pending_task = Some(PendingTask::Task(task_id));
+                self.pending_task = Some(PendingTask {
+                    task_id,
+                    start_time: Instant::now(),
+                });
                 warn!("Got TaskSubmitted when expecting input-thanks")
             }
             ReplyResult::ClientSuccess(DaemonToClientReply::InputThanks) => {
