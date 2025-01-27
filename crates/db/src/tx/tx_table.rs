@@ -109,7 +109,6 @@ where
         // Check if the domain is already in the index.
         let old_entry = index.get_mut(&domain);
 
-        // If the domain is already in the index and is non-Delete, that's a dupe.
         if let Some(Entry::Present(old_entry)) = old_entry {
             // If the domain is already in the index and is Delete, we can just turn it back
             // into an Insert or an Update, with the new value.
@@ -117,6 +116,7 @@ where
                 (OpType::Cached, OpType::Delete) => OpType::Update,
                 (from, OpType::Delete) => from,
                 _ => {
+                    // If the domain is already in the index and is non-Delete, that's a dupe.
                     return Err(Error::Duplicate);
                 }
             };
@@ -214,9 +214,9 @@ where
 
             old_entry.to_type = match old_entry.to_type {
                 OpType::Cached => OpType::Update,
-                OpType::Delete | OpType::Insert => OpType::Insert,
+                OpType::Insert | OpType::None => OpType::Insert,
                 OpType::Update => OpType::Update,
-                _ => old_entry.from_type,
+                OpType::Delete => old_entry.from_type,
             };
             old_entry.value = Some(value.clone());
 
@@ -299,13 +299,16 @@ where
 
         let (new_entry, old_value) = match entry {
             Some(Entry::Present(op)) => {
-                match op.source {
-                    DatumSource::Local => {
+                match (op.source, op.to_type) {
+                    (DatumSource::Local, _) => {
                         // Just remove it by marking it not-present
                         (Entry::NotPresent(self.tx.ts), op.value.clone())
                     }
-                    DatumSource::Upstream => {
-                        // Create a Delete entry
+                    (DatumSource::Upstream, OpType::Delete) => {
+                        return Ok(None);
+                    }
+                    (DatumSource::Upstream, _) => {
+                        // Create a Delete entry, unless we have one already?
                         (
                             Entry::Present(Op {
                                 read_ts: op.read_ts,
