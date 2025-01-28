@@ -132,10 +132,7 @@ impl ConnectionsDB for ConnectionsFjall {
         };
 
         let from_oid_bytes = from_connection.as_bytes().unwrap();
-        inner
-            .player_clients_table
-            .remove(from_oid_bytes)
-            .expect("Unable to remove player clients table");
+        inner.player_clients_table.remove(from_oid_bytes).ok();
 
         for cr in &mut crs.connections {
             let client_id = cr.client_id;
@@ -151,17 +148,14 @@ impl ConnectionsDB for ConnectionsFjall {
                     Uuid::from_u128(client_id).as_u128().to_le_bytes(),
                     to_oid_bytes,
                 )
-                .expect("Unable to update client player table");
+                .ok();
         }
 
         // If `to_player` already had a connection record, merge the two.
         if let Some(mut to_player_connections) = inner.player_clients.remove(&to_player) {
             // Remove from the underlying physical storage.
             let to_oid_bytes = to_player.as_bytes().unwrap();
-            inner
-                .player_clients_table
-                .remove(to_oid_bytes)
-                .expect("Unable to remove player clients table");
+            inner.player_clients_table.remove(to_oid_bytes).ok();
 
             crs.connections
                 .append(&mut to_player_connections.connections);
@@ -172,7 +166,7 @@ impl ConnectionsDB for ConnectionsFjall {
         inner
             .player_clients_table
             .insert(to_player.as_bytes().unwrap(), &encoded_cr)
-            .expect("Unable to update player clients table");
+            .ok();
         Ok(())
     }
 
@@ -358,11 +352,9 @@ impl ConnectionsDB for ConnectionsFjall {
 
     fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
         let inner = self.inner.lock().unwrap();
-        let connections_record = inner
-            .player_clients
-            .get(&player)
-            .expect("no record")
-            .clone();
+        let Some(connections_record) = inner.player_clients.get(&player) else {
+            return Err(SessionError::NoConnectionForPlayer(player));
+        };
         let connected_seconds = connections_record
             .connections
             .iter()
