@@ -1,0 +1,62 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_create
+
+@wizard
+; add_property($system, "a", create($nothing), {$wizard_player, "rwc"});
+; add_property($system, "b", create($a), {$wizard_player, "rwc"});
+; add_property($system, "c", create($b, $nothing), {$wizard_player, "rwc"});
+; add_property($system, "d", create($b, $a), {$wizard_player, "rwc"});
+
+// test that `parent()' works for single inheritance hierarchies
+; return parent($a);
+$nothing
+; return parent($b);
+$a
+; return parent($c);
+$b
+; return parent($c);
+$b
+
+// test that `children()' works for single inheritance hierarchies
+; return children($a);
+{$b}
+; return children($b);
+{$c, $d}
+; return children($c);
+{}
+; return children($d);
+{}
+
+// test that create sets the owner correctly
+; return $a.owner;
+$wizard_player
+; return $b.owner;
+$wizard_player
+; return $c.owner;
+$c
+; return $d.owner;
+$a
+
+; add_property($system, "e", create($nothing, $nothing), {$wizard_player, "rwc"});
+; add_property($system, "_f", create($nothing, $ambiguous_match), {$wizard_player, "rwc"});
+; add_property($system, "g", create($nothing, $failed_match), {$wizard_player, "rwc"});
+; add_property($system, "h", create($nothing, $invalid_object), {$wizard_player, "rwc"});
+
+; return $e.owner;
+$e 
+; return $_f.owner;
+$ambiguous_match
+; return $g.owner;
+$failed_match
+; return $h.owner;
+$invalid_object
+
+@programmer
+; create($nothing, $nothing);
+E_PERM
+; create($nothing, $ambiguous_match);
+E_PERM
+; create($nothing, $failed_match);
+E_PERM
+; create($nothing, $invalid_object);
+E_PERM

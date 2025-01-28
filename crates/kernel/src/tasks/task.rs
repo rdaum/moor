@@ -308,7 +308,11 @@ impl Task {
                     return None;
                 };
 
-                warn!(task_id = self.task_id, "Task exception");
+                warn!(
+                    task_id = self.task_id,
+                    msg = exception.msg,
+                    "Task exception"
+                );
                 self.vm_host.stop();
 
                 task_scheduler_client.exception(exception);
