@@ -25,6 +25,7 @@ use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunc
 use crate::vm::ExecutionResult;
 use moor_compiler::compile;
 use moor_compiler::{offset_for_builtin, ArgCount, ArgType, Builtin, BUILTINS};
+use moor_values::build::{PKG_VERSION, SHORT_COMMIT};
 use moor_values::model::{ObjFlag, WorldStateError};
 use moor_values::tasks::Event::{Present, Unpresent};
 use moor_values::tasks::TaskId;
@@ -501,11 +502,8 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(BfErr::Code(E_ARGS));
     }
-    // TODO: Support server version flag passed down the pipe, rather than hardcoded
-    //   This is a placeholder for now, should be set by the server on startup. But right now
-    //   there isn't a good place to stash this other than WorldState. I intend on refactoring the
-    //   signature for BF invocations, and when I do this, I'll get additional metadata on there.
-    Ok(Ret(v_string("0.0.1".to_string())))
+    let version_string = format!("{}+{}", PKG_VERSION, SHORT_COMMIT);
+    Ok(Ret(v_string(version_string)))
 }
 bf_declare!(server_version, bf_server_version);
 

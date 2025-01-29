@@ -17,6 +17,7 @@ pub use encode::{
     AsByteBuffer, BincodeAsByteBufferExt, CountingWriter, DecodingError, EncodingError,
     BINCODE_CONFIG,
 };
+use shadow_rs::shadow;
 
 pub use var::{
     v_bool, v_empty_list, v_empty_map, v_empty_str, v_err, v_float, v_flyweight, v_int, v_list,
@@ -37,3 +38,5 @@ mod var;
 /// When encoding or decoding types to/from data or network, this is a version tag put into headers
 /// for validity / version checking.
 pub const DATA_LAYOUT_VERSION: u8 = 1;
+
+shadow!(build);

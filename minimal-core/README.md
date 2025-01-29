@@ -5,4 +5,4 @@ It corresponds basically to Minimal.db from LambdaMOO, having only a single play
 
 If there is no existing binary database, the daemon will read all .moo files in the directory and import.
 
-TODO: More documentation on the format 
+TODO: More documentation on the format

@@ -129,7 +129,7 @@ included in the notes column.
 
 | Name                  | Complete | Notes                                                                    |
 | --------------------- | -------- | ------------------------------------------------------------------------ |
-| `server_version`      | &check;  | Hardcoded value, should derive from bin crate                            |
+| `server_version`      | &check;  | Crate version + short commit hash, for now                               |
 | `renumber`            |          |                                                                          |
 | `reset_max_object`    |          |                                                                          |
 | `memory_usage`        | &check;  |                                                                          |

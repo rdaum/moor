@@ -98,6 +98,7 @@ num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
 regex = "1.11"
 semver = "1.0"
+shadow-rs = "0.38"
 similar = "*"
 similar-asserts = "*"
 strum = { version = "0.26", features = ["derive"] }

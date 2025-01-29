@@ -2,6 +2,7 @@
 name = "moor-values"
 version = "0.1.0"
 authors.workspace = true
+build = "build.rs"
 categories.workspace = true
 edition.workspace = true
 keywords.workspace = true
@@ -10,6 +11,9 @@ readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "The set of values, and model/entities used across the system"
+
+[build-dependencies]
+shadow-rs.workspace = true
 
 [dependencies]
 binary-layout.workspace = true
@@ -23,6 +27,7 @@ log = "0.4.25"
 num-traits.workspace = true
 paste.workspace = true
 serde.workspace = true
+shadow-rs.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 ustr.workspace = true
