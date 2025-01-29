@@ -385,8 +385,8 @@ impl ConnectionsDB for ConnectionsFjall {
         inner
             .player_clients
             .iter()
-            .filter(|&(o, c)| (!c.connections.is_empty()))
-            .map(|(o, c)| o.clone())
+            .filter(|&(_o, c)| (!c.connections.is_empty()))
+            .map(|(o, _c)| o.clone())
             .collect()
     }
 

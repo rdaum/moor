@@ -74,6 +74,8 @@ pub struct Task {
     pub(crate) vm_host: VmHost,
     /// True if the task should die.
     pub(crate) kill_switch: Arc<AtomicBool>,
+    /// The number of retries this process has undergone.
+    pub(crate) retries: u8,
 }
 
 impl Task {
@@ -107,6 +109,7 @@ impl Task {
             vm_host,
             perms,
             kill_switch,
+            retries: 0,
         }
     }
 
@@ -644,7 +647,8 @@ impl Encode for Task {
         self.player.encode(encoder)?;
         self.task_start.encode(encoder)?;
         self.vm_host.encode(encoder)?;
-        self.perms.encode(encoder)
+        self.perms.encode(encoder)?;
+        self.retries.encode(encoder)
     }
 }
 
@@ -655,6 +659,8 @@ impl Decode for Task {
         let task_start = Arc::decode(decoder)?;
         let vm_host = VmHost::decode(decoder)?;
         let perms = Obj::decode(decoder)?;
+        let retries = u8::decode(decoder)?;
+
         let kill_switch = Arc::new(AtomicBool::new(false));
         Ok(Task {
             task_id,
@@ -663,6 +669,7 @@ impl Decode for Task {
             vm_host,
             perms,
             kill_switch,
+            retries,
         })
     }
 }
@@ -674,6 +681,8 @@ impl<'de> BorrowDecode<'de> for Task {
         let task_start = Arc::borrow_decode(decoder)?;
         let vm_host = VmHost::borrow_decode(decoder)?;
         let perms = Obj::borrow_decode(decoder)?;
+        let retries = u8::decode(decoder)?;
+
         let kill_switch = Arc::new(AtomicBool::new(false));
         Ok(Task {
             task_id,
@@ -682,6 +691,7 @@ impl<'de> BorrowDecode<'de> for Task {
             vm_host,
             perms,
             kill_switch,
+            retries,
         })
     }
 }

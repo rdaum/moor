@@ -64,6 +64,10 @@ const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
 /// Number of times to retry a program compilation transaction in case of conflict, before giving up.
 const NUM_VERB_PROGRAM_ATTEMPTS: usize = 5;
 
+/// If a task is retried more than N number of times (due to commit conflict) we choose to abort.
+// TODO: we could also look into some exponential-ish backoff
+const MAX_TASK_RETRIES: u8 = 10;
+
 lazy_static! {
     static ref SERVER_OPTIONS: Symbol = Symbol::mk("server_options");
     static ref BG_SECONDS: Symbol = Symbol::mk("bg_seconds");
@@ -1557,7 +1561,7 @@ impl TaskQ {
     #[instrument(skip(self, control_sender, builtin_registry, database))]
     fn retry_task(
         &mut self,
-        task: Task,
+        mut task: Task,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         server_options: &ServerOptions,
@@ -1574,6 +1578,18 @@ impl TaskQ {
             .tasks
             .remove(&task.task_id)
             .expect("Task not found for retry");
+
+        // If the number of retries has been exceeded, we'll just immediately respond with abort.
+        if task.retries > MAX_TASK_RETRIES {
+            old_tc.result_sender.expect("Task not found for retry");
+            info!(
+                "Maximum number of retries exceeded for task {}.  Aborting.",
+                task.task_id
+            );
+            self.send_task_result(task.task_id, Err(TaskAbortedError));
+            return;
+        }
+        task.retries += 1;
 
         // Grab the "task start" record from the (now dead) task, and submit this again with the same
         // task_id.
