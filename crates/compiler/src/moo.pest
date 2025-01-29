@@ -245,34 +245,45 @@ exp = _{ ^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+ }
 
 escape = @{ "\\" ~ ("b" | "t" | "n" | "f" | "r" | "\"" | "\\" | NEWLINE)? }
 
-WHITESPACE = _{ " " | "\t" | NEWLINE }
+comment = _{ c_comment | cpp_comment }
+c_comment = @{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+cpp_comment = @{ "//" ~ (!NEWLINE ~ ANY)* }
 
-// For object files from dumpdir, we have an additional structure.
-object_definition = { object_attributes ~ (verb_decl | prop_set | prop_def)*}
+WHITESPACE = _{ " " | "\t" | NEWLINE | comment }
 
-//
-object_attributes = { name_attr | owner_attr | location_attr | wizard_attr | prog_attr | player_attr | fertile_attr }
+// "Objects files" are an alternate import format for reading cores or databases, that is designed to be readable and
+// editable by regular tools.
+objects_file = { SOI ~ object_definition* ~ EOI }
+
+object_definition = {  ^"object" ~ object ~ object_attributes ~ (verb_decl | prop_def | prop_set)* ~ "endobject"  }
+object_attributes = { object_attribute+ }
+object_attribute = { name_attr | parent_attr | owner_attr | location_attr | wizard_attr | prog_attr | player_attr | fertile_attr | read_attr | write_attr }
 name_attr = { "name" ~ ":" ~ string }
 owner_attr = { "owner" ~ ":" ~ object }
+parent_attr = { "parent" ~ ":" ~ object }
 location_attr = { "location" ~ ":" ~ object }
 wizard_attr = { "wizard" ~ ":" ~ boolean}
 prog_attr = { "programmer" ~ ":" ~ boolean}
 player_attr = { "player" ~ ":" ~ boolean}
 fertile_attr = { "fertile" ~ ":" ~ boolean}
-flags_attr = { "flags" ~ ":" ~ ident }
+read_attr = { "readable" ~ ":" ~ boolean }
+write_attr = { "writeable" ~ ":" ~ boolean }
 
 boolean = { "true" | "false" }
 
-verb_decl = { "verb" ~ "(" ~ (verb_name)*  ~ ")" ~ ":" ~ verbargspec ~ owner_attr ~ flags_attr }
+verb_decl = { ^"verb" ~ verb_names ~ "(" ~ verbargspec ~ ")" ~ owner_attr ~ flags_attr ~ verb_statements  }
+verb_names = { (verb_name ~ ("," ~ verb_name)*) }
+verb_statements = { statements ~ "endverb" }
 verb_name = { ident ~ "*"? }
-verbargspec = {"(" ~ argspec ~ ident ~ argspec ~ ")" }
+verbargspec = {argspec ~ ident ~ argspec }
 argspec = {"this" | "none" | "any"}
+flags_attr = {"flags" ~ ":" ~ ident}
 
 literal = { atom | literal_map | literal_list }
 literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | "[]" }
 literal_list     = { ("{" ~ literallist ~ "}") | "{}" }
 literallist = { literal ~ ("," ~ literal)* }
 
-prop_set = {"set" ~ ident ~ "=" ~ literal }
-prop_def = {"define" ~ ident ~ "(" ~ propflags ~ ")" ~ "=" ~ literal}
-propflags = {owner_attr ~ "," ~ flags_attr }
+prop_def = {"property" ~ ident ~ propinfo ~ ("=" ~ literal)? ~ ";" }
+prop_set = {"override" ~ ident ~ propinfo? ~ ("=" ~ literal)? ~ ";" }
+propinfo = {"(" ~ owner_attr ~ "," ~ flags_attr ~ ")"}

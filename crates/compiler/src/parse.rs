@@ -25,7 +25,7 @@ use pest::error::LineColLocation;
 use pest::iterators::Pairs;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
-use tracing::{instrument, warn};
+use tracing::warn;
 
 use moor_values::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
@@ -1128,7 +1128,10 @@ impl TreeTransformer {
         Ok(Expr::Scatter(items, Box::new(rhs)))
     }
 
-    fn compile(self: Rc<Self>, pairs: pest::iterators::Pairs<Rule>) -> Result<Parse, CompileError> {
+    fn compile_program(
+        self: Rc<Self>,
+        pairs: pest::iterators::Pairs<Rule>,
+    ) -> Result<Parse, CompileError> {
         let mut program = Vec::new();
         for pair in pairs {
             match pair.as_rule() {
@@ -1152,6 +1155,33 @@ impl TreeTransformer {
                 }
             }
         }
+
+        self.do_compile(program)
+    }
+
+    fn compile_statements(
+        self: Rc<Self>,
+        pairs: pest::iterators::Pairs<Rule>,
+    ) -> Result<Parse, CompileError> {
+        let mut program = Vec::new();
+        for pair in pairs {
+            match pair.as_rule() {
+                Rule::statements => {
+                    let statements = pair.into_inner();
+                    let parsed_statements = self.clone().parse_statements(statements)?;
+                    program.extend(parsed_statements);
+                }
+
+                _ => {
+                    panic!("Unexpected rule: {:?}", pair.as_rule());
+                }
+            }
+        }
+
+        self.do_compile(program)
+    }
+
+    fn do_compile(self: Rc<Self>, mut program: Vec<Stmt>) -> Result<Parse, CompileError> {
         let names = self.names.borrow_mut();
         // Annotate the "true" line numbers of the AST nodes.
         annotate_line_numbers(1, &mut program);
@@ -1210,36 +1240,12 @@ pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Pars
 
     // TODO: this is in Rc because of borrowing issues in the Pratt parser
     let tree_transform = TreeTransformer::new(options);
-    tree_transform.compile(pairs)
-}
-
-pub struct ObjDefParse<'a> {
-    tree: Pairs<'a, Rule>,
-}
-
-pub fn parse_object_def(object_text: &str) -> Result<ObjDefParse, CompileError> {
-    match MooParser::parse(Rule::object, object_text) {
-        Ok(pairs) => Ok(ObjDefParse { tree: pairs }),
-        Err(e) => {
-            let ((line, column), end_line_col) = match e.line_col {
-                LineColLocation::Pos(lc) => (lc, None),
-                LineColLocation::Span(begin, end) => (begin, Some(end)),
-            };
-
-            return Err(CompileError::ParseError {
-                line,
-                column,
-                end_line_col,
-                context: e.line().to_string(),
-                message: e.variant.message().to_string(),
-            });
-        }
-    }
+    tree_transform.compile_program(pairs)
 }
 
 pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, CompileError> {
     let tree_transform = TreeTransformer::new(options);
-    tree_transform.compile(pairs)
+    tree_transform.compile_statements(pairs)
 }
 
 // Lex a simpe MOO string literal.  Expectation is:

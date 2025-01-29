@@ -97,8 +97,8 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
         &mut self,
         objid: &Obj,
         propname: &str,
-        owner: &Obj,
-        flags: BitEnum<PropFlag>,
+        owner: Option<Obj>,
+        flags: Option<BitEnum<PropFlag>>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
         // First find the property.
@@ -116,8 +116,8 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
         self.get_tx_mut().update_property_info(
             objid,
             propdef.uuid(),
-            Some(owner.clone()),
-            Some(flags),
+            owner.clone(),
+            flags,
             None,
         )?;
         Ok(())

@@ -55,6 +55,12 @@ comments:
       type: line
       comment_char: "//"
       trailing_lines: 1
+  - columns: 80
+    extension: moo
+    commenter:
+      type: line
+      comment_char: "//"
+      trailing_lines: 1
 
 excludes:
   - \.gitignore

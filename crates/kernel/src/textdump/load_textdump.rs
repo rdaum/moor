@@ -204,7 +204,13 @@ pub fn read_textdump<T: io::Read>(
             let value = (!p.is_clear).then(|| p.value.clone());
 
             loader
-                .set_property(objid, resolved.name.as_str(), &p.owner, flags, value)
+                .set_property(
+                    objid,
+                    resolved.name.as_str(),
+                    Some(p.owner.clone()),
+                    Some(flags),
+                    value,
+                )
                 .unwrap();
         }
     }

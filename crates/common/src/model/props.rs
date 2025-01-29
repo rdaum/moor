@@ -27,6 +27,41 @@ pub enum PropFlag {
     Chown = 2,
 }
 
+impl PropFlag {
+    pub fn parse_str(s: &str) -> Option<BitEnum<PropFlag>> {
+        let mut flags: u8 = 0;
+        for c in s.chars() {
+            if c == 'r' {
+                flags = flags | (1 << PropFlag::Read as u8);
+            } else if c == 'w' {
+                flags = flags | (1 << PropFlag::Write as u8);
+            } else if c == 'c' {
+                flags = flags | (1 << PropFlag::Chown as u8);
+            } else {
+                return None;
+            }
+        }
+
+        Some(BitEnum::from_u8(flags))
+    }
+
+    pub fn rcw() -> BitEnum<PropFlag> {
+        BitEnum::new_with(PropFlag::Read) | BitEnum::new_with(PropFlag::Write)
+    }
+
+    pub fn rc() -> BitEnum<PropFlag> {
+        BitEnum::new_with(PropFlag::Read) | BitEnum::new_with(PropFlag::Chown)
+    }
+
+    pub fn rw() -> BitEnum<PropFlag> {
+        BitEnum::new_with(PropFlag::Write) | BitEnum::new_with(PropFlag::Chown)
+    }
+
+    pub fn r() -> BitEnum<PropFlag> {
+        BitEnum::new_with(PropFlag::Read)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Primitive)]
 pub enum PropAttr {
     Value = 0,

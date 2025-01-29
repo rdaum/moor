@@ -64,8 +64,8 @@ pub trait LoaderInterface: Send {
         &mut self,
         objid: &Obj,
         propname: &str,
-        owner: &Obj,
-        flags: BitEnum<PropFlag>,
+        owner: Option<Obj>,
+        flags: Option<BitEnum<PropFlag>>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError>;
 

@@ -183,8 +183,15 @@ impl FeatureArgs {
 }
 #[derive(Parser, Debug)]
 pub struct TextdumpArgs {
-    #[arg(short, long, value_name = "textdump", help = "Path to textdump to import", value_hint = ValueHint::FilePath)]
+    #[arg(short, long, value_name = "textdump", help = "Path to the textdump to import", value_hint = ValueHint::FilePath)]
     pub textdump: Option<PathBuf>,
+
+    #[arg(
+        long,
+        help = "Use the new-style \"dirdump\" importer to load object definition files from the textdump directory instead of the legacy LambdaMOO format.",
+        default_value = "false"
+    )]
+    pub dirdump_format: bool,
 
     #[arg(
         long,
@@ -238,6 +245,7 @@ impl TextdumpArgs {
         if let Some(args) = self.version_override.as_ref() {
             config.version_override = Some(args.clone());
         }
+        config.dirdump_format = self.dirdump_format;
     }
 }
 

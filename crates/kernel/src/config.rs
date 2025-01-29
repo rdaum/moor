@@ -114,6 +114,9 @@ pub struct TextdumpConfig {
     /// This is useful for producing textdumps that are compatible with other servers, but be
     /// careful to not lie about the features (and encoding) you support.
     pub version_override: Option<String>,
+    /// If true, use the new-style directory based objectdef import format instead of traditional
+    /// textdump.
+    pub dirdump_format: bool,
 }
 
 impl Default for TextdumpConfig {
@@ -124,6 +127,7 @@ impl Default for TextdumpConfig {
             output_encoding: EncodingMode::UTF8,
             checkpoint_interval: Some(Duration::from_secs(60)),
             version_override: None,
+            dirdump_format: false,
         }
     }
 }

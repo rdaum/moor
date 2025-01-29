@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use pest::iterators::Pairs;
 /// Takes the AST and turns it into a list of opcodes.
 use std::collections::HashMap;
 use std::sync::Arc;
-
 use tracing::error;
 
 use moor_values::Variant;
@@ -28,7 +28,8 @@ use crate::labels::{JumpLabel, Label, Offset};
 use crate::names::{Name, Names, UnboundName};
 use crate::opcode::Op::Jump;
 use crate::opcode::{Op, ScatterArgs, ScatterLabel};
-use crate::parse::{parse_program, CompileOptions};
+use crate::parse::moo::Rule;
+use crate::parse::{parse_program, parse_tree, CompileOptions, Parse};
 use crate::program::Program;
 use moor_values::model::CompileError;
 
@@ -862,12 +863,7 @@ impl CodegenState {
     }
 }
 
-pub fn compile(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
-    let compile_span = tracing::trace_span!("compile");
-    let _compile_guard = compile_span.enter();
-
-    let parse = parse_program(program, options)?;
-
+fn do_compile(parse: Parse) -> Result<Program, CompileError> {
     // Generate the code into 'cg_state'.
     let mut cg_state = CodegenState::new(parse.names, parse.names_mapping);
     for x in parse.stmts {
@@ -882,7 +878,7 @@ pub fn compile(program: &str, options: CompileOptions) -> Result<Program, Compil
         )
     }
 
-    let binary = Program {
+    let program = Program {
         literals: cg_state.literals,
         jump_labels: cg_state.jumps,
         var_names: cg_state.var_names,
@@ -891,5 +887,21 @@ pub fn compile(program: &str, options: CompileOptions) -> Result<Program, Compil
         line_number_spans: cg_state.line_number_spans,
     };
 
-    Ok(binary)
+    Ok(program)
+}
+
+/// Compile from a program string, starting at the "program" rule.
+pub fn compile(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
+    let parse = parse_program(program, options)?;
+
+    do_compile(parse)
+}
+
+/// Compile from an already-parsed tree stating at the `statements` rule.
+pub fn compile_tree(tree: Pairs<Rule>, options: CompileOptions) -> Result<Program, CompileError> {
+    let parse = parse_tree(tree, options)?;
+
+    // TODO: we'll have to adjust line numbers accordingly to who called us?
+
+    do_compile(parse)
 }

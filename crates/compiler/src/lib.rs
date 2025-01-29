@@ -25,6 +25,7 @@ mod unparse;
 
 mod codegen_tests;
 mod names;
+mod objdef;
 mod opcode;
 mod program;
 
@@ -33,6 +34,10 @@ pub use crate::codegen::compile;
 pub use crate::decompile::program_to_tree;
 pub use crate::labels::{JumpLabel, Label, Offset};
 pub use crate::names::{Name, UnboundNames};
+pub use crate::objdef::{
+    compile_object_definitions, ObjDefParseError, ObjPropDef, ObjPropSet, ObjVerbDef,
+    ObjectDefinition,
+};
 pub use crate::opcode::{Op, ScatterLabel};
 pub use crate::parse::CompileOptions;
 pub use crate::program::{Program, EMPTY_PROGRAM};

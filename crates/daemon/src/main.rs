@@ -18,6 +18,7 @@ use crate::rpc_server::RpcServer;
 use clap::Parser;
 use eyre::Report;
 use moor_db::{Database, TxDB};
+use moor_kernel::objdef::ObjDefParser;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_kernel::textdump::textdump_load;
@@ -101,8 +102,8 @@ fn main() -> Result<(), Report> {
     let database = Box::new(database);
     info!(path = ?args.db_args.db, "Opened database");
 
-    // If the database already existed, do not try to import the textdump...
     if let Some(textdump) = config.textdump_config.input_path.as_ref() {
+        // If the database already existed, do not try to import the textdump...
         if !freshly_made {
             info!("Database already exists, skipping textdump import");
         } else {
@@ -111,13 +112,24 @@ fn main() -> Result<(), Report> {
             let mut loader_interface = database
                 .loader_client()
                 .expect("Unable to get loader interface from database");
-            textdump_load(
-                loader_interface.as_mut(),
-                textdump.clone(),
-                version.clone(),
-                config.features_config.clone(),
-            )
-            .unwrap();
+
+            // We have two ways of loading textdump.
+            // legacy "textdump" format from LambdaMOO,
+            // or our own exploded objdef format.
+            if config.textdump_config.dirdump_format {
+                let mut od = ObjDefParser::new(loader_interface.as_mut());
+                od.read_dirdump(config.features_config.clone(), textdump.as_ref())
+                    .unwrap();
+            } else {
+                textdump_load(
+                    loader_interface.as_mut(),
+                    textdump.clone(),
+                    version.clone(),
+                    config.features_config.clone(),
+                )
+                .unwrap();
+            }
+
             let duration = start.elapsed();
             info!("Loaded textdump in {:?}", duration);
             loader_interface

@@ -47,13 +47,13 @@ impl VerbFlag {
         let mut flags: u8 = 0;
         for c in s.chars() {
             if c == 'r' {
-                flags = flags | VerbFlag::Read as u8;
+                flags = flags | (1 << VerbFlag::Read as u8);
             } else if c == 'w' {
-                flags = flags | VerbFlag::Write as u8;
+                flags = flags | (1 << VerbFlag::Write as u8);
             } else if c == 'x' {
-                flags = flags | VerbFlag::Exec as u8;
+                flags = flags | (1 << VerbFlag::Exec as u8);
             } else if c == 'd' {
-                flags = flags | VerbFlag::Debug as u8;
+                flags = flags | (1 << VerbFlag::Debug as u8);
             } else {
                 return None;
             }

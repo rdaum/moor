@@ -52,12 +52,12 @@ encoding_rs.workspace = true
 lazy_static.workspace = true
 libc.workspace = true
 oneshot.workspace = true
+regex.workspace = true
 semver.workspace = true
 serde.workspace = true
 strum.workspace = true
 text_io.workspace = true
 uuid.workspace = true
-regex.workspace = true
 
 ## Required for MOO builtins.
 chrono-tz.workspace = true
