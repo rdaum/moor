@@ -14,7 +14,7 @@
 #[cfg(test)]
 mod test {
     use semver::Version;
-    use similar_asserts;
+
     use std::collections::BTreeSet;
     use std::fs::File;
     use std::io::{BufReader, Read};

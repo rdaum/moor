@@ -77,15 +77,14 @@ impl<'a> ObjDefParser<'a> {
         // Create all the objects first with no attributes, and then update after, so that the
         // inheritance/location etc hierarchy is set up right
         for object_path in dirpath.read_dir().unwrap() {
-            let object_file =
-                object_path.map_err(|e| DirDumpReaderError::ObjectFileReadError(e))?;
+            let object_file = object_path.map_err(DirDumpReaderError::ObjectFileReadError)?;
 
             if object_file.path().extension().unwrap() != "moo" {
                 continue;
             }
 
             let object_file_contents = std::fs::read_to_string(object_file.path())
-                .map_err(|e| DirDumpReaderError::ObjectFileReadError(e))?;
+                .map_err(DirDumpReaderError::ObjectFileReadError)?;
 
             self.parse_objects(&object_file_contents, &compile_options)?;
         }
@@ -103,7 +102,7 @@ impl<'a> ObjDefParser<'a> {
         object_file_contents: &str,
         compile_options: &CompileOptions,
     ) -> Result<(), DirDumpReaderError> {
-        let compiled_defs = compile_object_definitions(object_file_contents, &compile_options)
+        let compiled_defs = compile_object_definitions(object_file_contents, compile_options)
             .map_err(DirDumpReaderError::ObjectFileParseError)?;
 
         let mut total_verbs = 0;
@@ -142,17 +141,17 @@ impl<'a> ObjDefParser<'a> {
         for (obj, def) in &self.object_definitions {
             if def.parent != NOTHING {
                 self.loader
-                    .set_object_parent(&obj, &def.parent)
+                    .set_object_parent(obj, &def.parent)
                     .map_err(DirDumpReaderError::CouldNotSetObjectParent)?;
             }
             if def.location != NOTHING {
                 self.loader
-                    .set_object_location(&obj, &def.location)
+                    .set_object_location(obj, &def.location)
                     .map_err(DirDumpReaderError::CouldNotSetObjectLocation)?;
             }
             if def.owner != NOTHING {
                 self.loader
-                    .set_object_owner(&obj, &def.owner)
+                    .set_object_owner(obj, &def.owner)
                     .map_err(DirDumpReaderError::CouldNotSetObjectOwner)?;
             }
         }

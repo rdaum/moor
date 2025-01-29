@@ -326,20 +326,20 @@ impl WorldStateTransaction for DbTransaction {
             self.closest_common_ancestor_with_ancestors(new_parent, o)?;
 
         // Remove from _me_ any of the properties defined by any of my ancestors
-        let old_props = self.object_propdefs.get(&o).map_err(|e| {
+        let old_props = self.object_propdefs.get(o).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object properties: {:?}", e))
         })?;
         let old_props = old_props.unwrap_or(PropDefs::empty());
         let mut delort_props = vec![];
         for ancestor in &old_ancestors {
-            let ancestor_props = self.get_properties(&ancestor)?;
+            let ancestor_props = self.get_properties(ancestor)?;
             for p in ancestor_props.iter() {
                 delort_props.push(p.uuid())
             }
         }
         if !delort_props.is_empty() {
             for p in &delort_props {
-                let pid = ObjAndUUIDHolder::new(o, p.clone());
+                let pid = ObjAndUUIDHolder::new(o, *p);
                 if let Ok(Some(_)) = self.object_propvalues.get(&pid) {
                     self.object_propvalues.delete(&pid).ok();
                 }

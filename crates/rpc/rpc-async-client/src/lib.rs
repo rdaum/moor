@@ -96,7 +96,7 @@ pub async fn start_host_session(
                 .await
                 .map_err(|e| RpcError::CouldNotSend(e.to_string()))?,
         );
-        match send_host_to_daemon_msg(&mut rpc_client, &host_token, host_hello).await {
+        match send_host_to_daemon_msg(&mut rpc_client, host_token, host_hello).await {
             Ok(DaemonToHostReply::Ack) => {
                 info!("Host token accepted by daemon.");
                 break rpc_client;

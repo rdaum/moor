@@ -147,7 +147,7 @@ impl Sequence for Str {
                 result_str.push_str(&base_str[to + 1..]);
             }
             None => {
-                result_str.push_str(&base_str);
+                result_str.push_str(base_str);
             }
         }
 

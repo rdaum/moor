@@ -32,11 +32,11 @@ impl PropFlag {
         let mut flags: u8 = 0;
         for c in s.chars() {
             if c == 'r' {
-                flags = flags | (1 << PropFlag::Read as u8);
+                flags |= 1 << PropFlag::Read as u8;
             } else if c == 'w' {
-                flags = flags | (1 << PropFlag::Write as u8);
+                flags |= 1 << PropFlag::Write as u8;
             } else if c == 'c' {
-                flags = flags | (1 << PropFlag::Chown as u8);
+                flags |= 1 << PropFlag::Chown as u8;
             } else {
                 return None;
             }

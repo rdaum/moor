@@ -385,7 +385,8 @@ impl ConnectionsDB for ConnectionsFjall {
         inner
             .player_clients
             .iter()
-            .filter_map(|(o, c)| (!c.connections.is_empty()).then(|| o.clone()))
+            .filter(|&(o, c)| (!c.connections.is_empty()))
+            .map(|(o, c)| o.clone())
             .collect()
     }
 
@@ -399,10 +400,10 @@ impl ConnectionsDB for ConnectionsFjall {
         let Some(player_id) = inner.client_players.remove(&client_id) else {
             bail!("No connection to prune found for {:?}", client_id);
         };
-        if !inner
+        if inner
             .client_player_table
             .remove(client_id.as_u128().to_le_bytes())
-            .is_ok()
+            .is_err()
         {
             warn!("No existing record for client {client_id:?} at removal");
         };

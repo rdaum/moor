@@ -43,7 +43,7 @@ impl MatchEnvironment for WsMatchEnv<'_> {
 
     fn get_surroundings(&self, player: &Obj) -> Result<ObjSet, WorldStateError> {
         let location = self.ws.location_of(&self.perms, player)?;
-        let self_contents = self.ws.contents_of(&self.perms, &player)?;
+        let self_contents = self.ws.contents_of(&self.perms, player)?;
         let surroundings = self
             .ws
             .contents_of(&self.perms, &location)?

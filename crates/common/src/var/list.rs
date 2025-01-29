@@ -237,9 +237,9 @@ impl Sequence for List {
     }
 }
 
-impl Into<Var> for List {
-    fn into(self) -> Var {
-        Var::from_variant(Variant::List(self))
+impl From<List> for Var {
+    fn from(val: List) -> Self {
+        Var::from_variant(Variant::List(val))
     }
 }
 

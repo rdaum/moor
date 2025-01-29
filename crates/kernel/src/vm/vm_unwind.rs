@@ -258,7 +258,7 @@ impl VMExecState {
                                                 v_err(*code),
                                                 v_str(msg),
                                                 value.clone(),
-                                                v_list(&stack),
+                                                v_list(stack),
                                             ]));
                                             return ExecutionResult::More;
                                         }

@@ -251,7 +251,7 @@ pub fn compile_object_definitions(
     for pair in pairs {
         match pair.as_rule() {
             Rule::object_definition => {
-                objdefs.push(compile_object_definition(pair, &options)?);
+                objdefs.push(compile_object_definition(pair, options)?);
             }
             Rule::EOI => {
                 break;
@@ -378,7 +378,7 @@ fn compile_object_definition(
         match pair.as_rule() {
             Rule::verb_decl => {
                 let inner = pair.into_inner();
-                let vd = parse_verb_decl(inner, &options)?;
+                let vd = parse_verb_decl(inner, options)?;
                 objdef.verbs.push(vd);
             }
             Rule::prop_def => {

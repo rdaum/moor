@@ -334,18 +334,21 @@ fn perform_pcre_match(
 
     let syntax = onig::Syntax::perl();
 
-    let regex = onig::Regex::with_options(re, options, &syntax).unwrap();
+    let regex = onig::Regex::with_options(re, options, syntax).unwrap();
     let mut region = Region::new();
     let mut matches = Vec::new();
     let mut start = 0;
     let end = target.len();
-    while let Some(_) = regex.search_with_options(
-        target,
-        start,
-        end,
-        SearchOptions::SEARCH_OPTION_NONE,
-        Some(&mut region),
-    ) {
+    while regex
+        .search_with_options(
+            target,
+            start,
+            end,
+            SearchOptions::SEARCH_OPTION_NONE,
+            Some(&mut region),
+        )
+        .is_some()
+    {
         if map_support {
             let mut map = vec![];
             for i in 0..region.len() {

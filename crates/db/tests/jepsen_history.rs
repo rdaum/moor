@@ -228,7 +228,7 @@ mod tests {
                     let cache = TransactionalTable::new(tx, backing_store.clone());
                     backing_store.clone().start(&tx);
 
-                    if !transactions.insert(entry.process, (tx, cache)).is_none() {
+                    if transactions.insert(entry.process, (tx, cache)).is_some() {
                         bail!("transaction already exists");
                     }
                 }
@@ -290,7 +290,7 @@ mod tests {
                                     let codomain =
                                         cache.get(&key).unwrap().unwrap_or(TestCodomain(vec![]));
                                     // The appended value should *not* be in there
-                                    if !codomain.0.contains(&value) {
+                                    if !codomain.0.contains(value) {
                                         return Ok(());
                                     }
                                 }
@@ -307,7 +307,7 @@ mod tests {
                         };
                         match backing_store.apply(lock, ws) {
                             Ok(_) => bail!("Expected conflict, got none in {entry:?}"),
-                            Err(Error::Conflict) => return Ok(()),
+                            Err(Error::Conflict) => Ok(()),
                             Err(e) => panic!("unexpected error: {:?}", e),
                         }
                     };

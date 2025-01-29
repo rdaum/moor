@@ -154,9 +154,9 @@ impl WebSocketConnection {
                 };
 
                 if !expecting_input.is_empty() {
-                    return ReadEvent::InputReply(line);
+                    ReadEvent::InputReply(line)
                 } else {
-                    return ReadEvent::Command(line);
+                    ReadEvent::Command(line)
                 }
             };
 
@@ -353,7 +353,7 @@ impl WebSocketConnection {
                 HostClientToDaemonMessage::RequestedInput(
                     self.client_token.clone(),
                     self.auth_token.clone(),
-                    input_request_id.clone(),
+                    *input_request_id,
                     cmd,
                 ),
             )
