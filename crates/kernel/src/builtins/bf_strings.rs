@@ -11,18 +11,20 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use argon2::password_hash::SaltString;
+use argon2::{Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version};
 use md5::Digest;
-use rand::distributions::Alphanumeric;
-use rand::Rng;
-
 use moor_compiler::offset_for_builtin;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_values::{v_int, v_str, v_string};
+use moor_values::{v_bool, v_int, v_str, v_string};
 use moor_values::{Sequence, Variant};
+use rand::distributions::Alphanumeric;
+use rand::Rng;
+use tracing::warn;
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();
@@ -220,9 +222,109 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(string_hash, bf_string_hash);
 
 fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    unimplemented!("binary_hash")
+    return Err(BfErr::Code(E_INVARG));
 }
 bf_declare!(binary_hash, bf_binary_hash);
+
+bf_declare!(argon2, bf_argon2);
+// password (string), salt (string), iterations, memory, parallelism
+fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // Must be wizard.
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    if bf_args.args.len() > 5 || bf_args.args.len() < 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let Variant::Str(password) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    let Variant::Str(salt) = bf_args.args[1].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let iterations = if bf_args.args.len() > 2 {
+        let Variant::Int(iterations) = bf_args.args[2].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        *iterations as u32
+    } else {
+        3
+    };
+    let memory = if bf_args.args.len() > 3 {
+        let Variant::Int(memory) = bf_args.args[3].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        *memory as u32
+    } else {
+        4096
+    };
+
+    let parallelism = if bf_args.args.len() > 4 {
+        let Variant::Int(parallelism) = bf_args.args[4].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        *parallelism as u32
+    } else {
+        1
+    };
+
+    let params = Params::new(memory, iterations, parallelism, None).map_err(|e| {
+        warn!("Failed to create argon2 params: {}", e);
+        BfErr::Code(E_INVARG)
+    })?;
+
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+
+    let salt_string =
+        SaltString::encode_b64(salt.as_string().as_str().as_bytes()).map_err(|e| {
+            warn!("Failed to encode salt: {}", e);
+            BfErr::Code(E_INVARG)
+        })?;
+
+    let hash = argon2
+        .hash_password(password.as_string().as_bytes(), &salt_string)
+        .map_err(|e| {
+            warn!("Failed to hash password: {}", e);
+            BfErr::Code(E_INVARG)
+        })?;
+
+    Ok(Ret(v_string(hash.to_string())))
+}
+
+// password, salt
+fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // Must be wizard.
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let Variant::Str(hashed_password) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    let Variant::Str(password) = bf_args.args[1].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, Params::default());
+    let Ok(hashed_password) = argon2::PasswordHash::new(hashed_password.as_string()) else {
+        return Err(BfErr::Code(E_INVARG));
+    };
+
+    let validated = argon2
+        .verify_password(password.as_string().as_bytes(), &hashed_password)
+        .is_ok();
+    Ok(Ret(v_bool(validated)))
+}
+bf_declare!(argon2_verify, bf_argon2_verify);
 
 pub(crate) fn register_bf_strings(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("strsub")] = Box::new(BfStrsub {});
@@ -230,6 +332,8 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("rindex")] = Box::new(BfRindex {});
     builtins[offset_for_builtin("strcmp")] = Box::new(BfStrcmp {});
     builtins[offset_for_builtin("crypt")] = Box::new(BfCrypt {});
+    builtins[offset_for_builtin("argon2")] = Box::new(BfArgon2 {});
+    builtins[offset_for_builtin("argon2_verify")] = Box::new(BfArgon2Verify {});
     builtins[offset_for_builtin("string_hash")] = Box::new(BfStringHash {});
     builtins[offset_for_builtin("binary_hash")] = Box::new(BfBinaryHash {});
 }

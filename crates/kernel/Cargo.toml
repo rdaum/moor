@@ -59,6 +59,7 @@ text_io.workspace = true
 uuid.workspace = true
 
 ## Required for MOO builtins.
+argon2.workspace = true
 chrono-tz.workspace = true
 iana-time-zone.workspace = true
 md-5.workspace = true

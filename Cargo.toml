@@ -109,6 +109,7 @@ uuid = { version = "1.11", features = ["v4"] }
 xml-rs = "0.8"
 
 ## Required for MOO builtins.
+argon2 = "0.5"
 chrono-tz = "0.10"
 iana-time-zone = "0.1"
 md-5 = "0.10" # For MOO's "string_hash"

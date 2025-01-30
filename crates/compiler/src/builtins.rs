@@ -319,6 +319,26 @@ fn mk_builtin_table() -> Vec<Builtin> {
             implemented: true,
         },
         Builtin {
+            name: Symbol::mk("argon2"),
+            min_args: Q(2),
+            max_args: Q(5),
+            types: vec![
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Typed(TYPE_INT),
+                Typed(TYPE_INT),
+                Typed(TYPE_INT),
+            ],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("argon2_verify"),
+            min_args: Q(2),
+            max_args: Q(2),
+            types: vec![Typed(TYPE_STR), Typed(TYPE_STR)],
+            implemented: true,
+        },
+        Builtin {
             name: Symbol::mk("index"),
             min_args: Q(2),
             max_args: Q(3),
