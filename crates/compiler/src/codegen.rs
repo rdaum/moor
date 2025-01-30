@@ -490,27 +490,24 @@ impl CodegenState {
             }
             Expr::Map(m) => {
                 self.emit(Op::MakeMap);
+                self.push_stack(1);
                 for (k, v) in m {
                     self.generate_expr(k)?;
-                    self.pop_stack(1);
                     self.generate_expr(v)?;
-                    self.pop_stack(1);
                     self.emit(Op::MapInsert);
+                    self.pop_stack(2);
                 }
-                self.push_stack(1);
             }
             Expr::Flyweight(delegate, slots, contents) => {
                 // push delegate, slots, contents. op is # of slots.
                 self.generate_expr(delegate.as_ref())?;
                 for (k, v) in slots {
                     self.generate_expr(v)?;
-                    self.pop_stack(1);
                     self.generate_expr(&Expr::Value(v_str(k.as_str())))?;
-                    self.pop_stack(1);
                 }
                 self.generate_arg_list(contents)?;
                 self.emit(Op::MakeFlyweight(slots.len()));
-                self.pop_stack(1);
+                self.pop_stack(1 + (slots.len() * 2));
             }
             Expr::Scatter(scatter, right) => self.generate_scatter_assign(scatter, right)?,
             Expr::Assign { left, right } => self.generate_assign(left, right)?,

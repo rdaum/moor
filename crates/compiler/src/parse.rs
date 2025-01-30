@@ -2824,6 +2824,19 @@ mod tests {
             ))]
         );
     }
+    #[test]
+    fn test_flyweight_empty_slots_just_contents() {
+        let program = r#"<#1, [], {2}>;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Flyweight(
+                Box::new(Value(v_objid(1))),
+                vec![],
+                vec![Normal(Value(v_int(2)))],
+            ))]
+        );
+    }
 
     #[test]
     fn test_flyweight_only_slots() {

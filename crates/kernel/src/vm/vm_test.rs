@@ -1220,4 +1220,36 @@ mod tests {
         );
         assert_eq!(result.unwrap(), v_int(2));
     }
+
+    /// Bug where stack offsets were wrong in maps, causing problems with the $ range operation
+    #[test]
+    fn test_range_in_map_oddities() {
+        let program = r#"return[ "z"->5, "b"->"another_seq"[1..$]]["b"];"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_str("another_seq"));
+    }
+
+    #[test]
+    fn test_range_flyweight_oddities() {
+        let program =
+            r#"return <#1, [another_slot -> 5, slot -> "123"], {"another_seq"[1..$]}>[1];"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_str("another_seq"));
+    }
 }

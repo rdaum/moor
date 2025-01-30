@@ -160,12 +160,12 @@ list     = { ("{" ~ exprlist ~ "}") | "{}" }
 
 // flyweight is < parent, [ prop -> value, ... ], { contents, ... } >
 flyweight     = { "<" ~ expr ~ ("," ~ flyweight_slots)? ~ ("," ~ flyweight_contents)? ~ ">" }
-flyweight_slots    = { "[" ~ (ident ~ "->" ~ expr) ~ ("," ~ ident ~ "->" ~ expr)* ~ "]"}
+flyweight_slots    = { ("[" ~ (ident ~ "->" ~ expr) ~ ("," ~ ident ~ "->" ~ expr)* ~ "]") | ( "[" ~ "]") }
 flyweight_contents = { "{" ~ exprlist?  ~ "}" }
 
 exprlist = { argument ~ ("," ~ argument)* }
 argument = { expr | "@" ~ expr }
-map      = { ("[" ~ (expr ~ "->" ~ expr) ~ ("," ~ expr ~ "->" ~ expr)* ~ "]") | "[]" }
+map      = { ("[" ~ (expr ~ "->" ~ expr) ~ ("," ~ expr ~ "->" ~ expr)* ~ "]") | ( "[" ~ "]" ) }
 
 range_end = { "$" }
 
@@ -290,10 +290,10 @@ flagchars = @{ ASCII_ALPHA* }
 flags_attr = {"flags" ~ ":" ~ "\"" ~ flagchars ~ "\"" }
 
 literal = { atom | literal_map | literal_list | literal_flyweight }
-literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | "[]" }
+literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | ( "[" ~ "]") }
 literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}") | "{}" }
 literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slots)? ~ ("," ~ literal_flyweight_contents)? ~ ">" }
-literal_flyweight_slots = { "[" ~ (ident ~ "->" ~ literal) ~ ("," ~ ident ~ "->" ~ literal)* ~ "]" }
+literal_flyweight_slots = { ("[" ~ (ident ~ "->" ~ literal) ~ ("," ~ ident ~ "->" ~ literal)* ~ "]") | ("[" ~ "]") }
 literal_flyweight_contents = { "{" ~ (literal ~ ("," ~ literal)*)? ~ "}" }
 prop_def = {"property" ~ propname ~ propinfo ~ ("=" ~ literal)? ~ ";" }
 prop_set = {"override" ~ propname ~ propinfo? ~ ("=" ~ literal)? ~ ";" }

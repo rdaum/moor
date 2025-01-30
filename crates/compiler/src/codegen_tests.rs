@@ -1532,4 +1532,27 @@ mod tests {
             ]
         )
     }
+
+    #[test]
+    fn test_range_in_map_oddities() {
+        let program = r#"return[ "a"->5, "b"->"another_seq"[1..$]];"#;
+        let binary = compile(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            *binary.main_vector.as_ref(),
+            vec![
+                MakeMap,
+                Imm(Label(0)),
+                ImmInt(5),
+                MapInsert,
+                Imm(Label(1)),
+                Imm(Label(2)),
+                ImmInt(1),
+                Length(Offset(2)),
+                RangeRef,
+                MapInsert,
+                Return,
+                Done
+            ]
+        );
+    }
 }
