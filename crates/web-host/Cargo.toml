@@ -42,7 +42,7 @@ axum.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
-tower-http = { version = "0.6.2", features = ["fs"] }
+tower-http.workspace = true
 
 #
 rolldown = { git = "https://github.com/rolldown/rolldown" }

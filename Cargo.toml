@@ -53,7 +53,7 @@ keywords = [
 license = "GPL-3"
 readme = "README.md"
 repository = "https://github.com/rdaum/moor.git"
-rust-version = "1.78.0"
+rust-version = "1.84.0"
 
 [workspace.dependencies]
 ## Command line arguments parsing.
@@ -72,6 +72,7 @@ futures = "0.3"
 futures-util = { version = "0.3", features = ["sink", "std"] }
 tokio = { version = "1.37", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
+tower-http = { version = "0.6", features = ["fs"] }
 
 # Used for RPC daemon/client
 tmq = "0.5"
@@ -151,4 +152,4 @@ signal-hook = "0.3"
 termimad = "0.31"
 
 # For the consistency checker in `load-tools`
-edn-format = "3.3.0"
+edn-format = "3.3"
