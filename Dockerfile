@@ -10,6 +10,7 @@ RUN openssl pkey -in moor-signing-key.pem -pubout -out moor-verifying-key.pem
 
 # Stuff we'll need from the host to make the build work
 COPY ./crates ./crates
+COPY ./tools ./tools
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
 
