@@ -54,8 +54,11 @@ async function connect(context: Context, player: State<Player>, mode, username, 
     const wsUrl = (isSecure ? "wss://" : "ws://") + baseUrl + "/ws/attach/" + mode + "/" + auth_token;
     let ws = new WebSocket(wsUrl);
     ws.onopen = () => {
-        console.log("Connected to server!");
         player.val = new Player(player_oid, auth_token, true);
+
+        // Move focus to input area.
+        // This is done in a timer because it can't actually work until after the dom style is updated.
+        setTimeout( () =>  document.getElementById("input_area").focus(), 0.5)
     };
     ws.onmessage = (e) => {
         if (e.data) {
@@ -70,8 +73,6 @@ async function connect(context: Context, player: State<Player>, mode, username, 
     context.ws = ws;
     context.authToken = auth_token;
 
-    // Move focus to input area.
-    document.getElementById("input_area").focus();
 }
 
 // A login box that prompts the user for their player name and password, and then initiates login through
