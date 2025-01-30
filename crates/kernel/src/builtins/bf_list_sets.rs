@@ -353,12 +353,13 @@ fn perform_pcre_match(
             let mut map = vec![];
             for i in 0..region.len() {
                 let (start, end) = region.pos(i).unwrap();
-                let mut match_map = vec![];
-                match_map.push((v_str("match"), v_str(&target[start..end])));
-                match_map.push((
-                    v_str("position"),
-                    v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
-                ));
+                let match_map = vec![
+                    (v_str("match"), v_str(&target[start..end])),
+                    (
+                        v_str("position"),
+                        v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
+                    ),
+                ];
                 map.push((v_string(i.to_string()), v_map(&match_map)));
             }
             let map = v_map(&map);
@@ -368,12 +369,13 @@ fn perform_pcre_match(
             let mut assoc_list = vec![];
             for i in 0..region.len() {
                 let (start, end) = region.pos(i).unwrap();
-                let mut match_list = vec![];
-                match_list.push(v_list(&[v_str("match"), v_str(&target[start..end])]));
-                match_list.push(v_list(&[
-                    v_str("position"),
-                    v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
-                ]));
+                let match_list = vec![
+                    v_list(&[v_str("match"), v_str(&target[start..end])]),
+                    v_list(&[
+                        v_str("position"),
+                        v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
+                    ]),
+                ];
                 assoc_list.push(v_list(&[v_string(i.to_string()), v_list(&match_list)]));
             }
             matches.push(v_list(&assoc_list));

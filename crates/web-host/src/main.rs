@@ -309,8 +309,8 @@ fn mk_js_bundler(src_dir: &Path) -> Arc<Mutex<Bundler>> {
     for entry in std::fs::read_dir(src_dir).expect("Unable to read src directory") {
         let entry = entry.expect("Unable to read entry");
         let path = entry.path();
-        if path.extension().map_or(false, |ext| ext == "ts") {
-            if path.file_name().map_or(false, |name| name == "moor.ts") {
+        if path.extension().is_some_and(|ext| ext == "ts") {
+            if path.file_name().is_some_and(|name| name == "moor.ts") {
                 continue;
             }
             input.push(InputItem {

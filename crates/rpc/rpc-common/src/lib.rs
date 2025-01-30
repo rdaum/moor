@@ -325,10 +325,8 @@ pub fn parse_keypair(public_key: &str, private_key: &str) -> Result<(Key<64>, Ke
     let public_key =
         VerifyingKey::from_public_key_pem(public_key).map_err(|_| KeyError::KeyParseError)?;
 
-    let priv_key: Key<64> = Key::try_from(private_key.to_keypair_bytes())
-        .map_err(|_| KeyError::IncorrectKeyFormat("private".to_string()))?;
-    let pub_key: Key<32> = Key::try_from(public_key.to_bytes())
-        .map_err(|_| KeyError::IncorrectKeyFormat("public".to_string()))?;
+    let priv_key: Key<64> = Key::from(private_key.to_keypair_bytes());
+    let pub_key: Key<32> = Key::from(public_key.to_bytes());
     Ok((priv_key, pub_key))
 }
 

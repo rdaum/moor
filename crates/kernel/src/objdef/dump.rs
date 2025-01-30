@@ -60,7 +60,7 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
                 .get_verb_binary(&o, v.uuid())
                 .expect("Failed to get verb binary");
             let ov = ObjVerbDef {
-                names: v.names().iter().map(|s| Symbol::mk(*s)).collect(),
+                names: v.names().iter().map(|s| Symbol::mk(s)).collect(),
                 argspec: v.args(),
                 owner: v.owner(),
                 flags: v.flags(),
@@ -91,11 +91,10 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
                 if let Ok((definer_value, definer_perms)) =
                     loader.get_property_value(&p.definer(), p.uuid())
                 {
-                    if definer_perms.flags().contains(PropFlag::Chown)
-                        && perms.owner() == obj_attrs.owner().unwrap_or(NOTHING)
+                    if perms.eq(&definer_perms)
+                        || definer_perms.flags().contains(PropFlag::Chown)
+                            && perms.owner() == obj_attrs.owner().unwrap_or(NOTHING)
                     {
-                        perms_update = None;
-                    } else if perms.eq(&definer_perms) {
                         perms_update = None;
                     }
 
@@ -236,7 +235,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         }
 
         if !o.property_definitions.is_empty() {
-            objstr.push_str("\n");
+            objstr.push('\n');
         }
         for pd in &o.property_definitions {
             let owner = format!("{}", pd.perms.owner());
@@ -255,7 +254,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         }
 
         if !o.property_overrides.is_empty() {
-            objstr.push_str("\n");
+            objstr.push('\n');
         }
         for ps in &o.property_overrides {
             let name = propname(ps.name);
@@ -274,7 +273,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         }
 
         for v in &o.verbs {
-            objstr.push_str("\n");
+            objstr.push('\n');
             let owner = v.owner.clone();
             let vflags = verb_perms_string(v.flags);
 
