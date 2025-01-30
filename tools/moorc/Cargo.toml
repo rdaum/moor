@@ -1,0 +1,33 @@
+[package]
+name = "moorc"
+version = "0.9.0-alpha"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "A tool for importing, compiling, and exporting mooR cores without running the full daemon"
+
+[dependencies]
+moor-db = { path = "../../crates/db" }
+moor-kernel = { path = "../../crates/kernel" }
+moor-values = { path = "../../crates/common" }
+
+## Command line arguments parsing.
+clap.workspace = true
+clap_derive.workspace = true
+
+# General.
+bincode.workspace = true
+bytes.workspace = true
+color-eyre.workspace = true
+eyre.workspace = true
+semver.workspace = true
+tempfile.workspace = true
+
+## Logging & tracing
+tracing.workspace = true
+tracing-subscriber.workspace = true

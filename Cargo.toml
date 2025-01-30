@@ -14,6 +14,7 @@ members = [
     "crates/testing/load-tools",
     "crates/testing/moot",
     "crates/web-host",
+    "tools/moorc",
 ]
 default-members = [
     "crates/common",

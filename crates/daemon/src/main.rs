@@ -22,6 +22,7 @@ use moor_kernel::objdef::ObjectDefinitionLoader;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_kernel::textdump::textdump_load;
+use moor_values::build;
 use rpc_common::load_keypair;
 use tracing::{debug, info, warn};
 
@@ -35,8 +36,6 @@ mod rpc_session;
 mod sys_ctrl;
 mod tasks_fjall;
 
-pub const MOOR_VERSION: &str = env!("CARGO_PKG_VERSION");
-
 /// Host for the moor runtime.
 ///   * Brings up the database
 ///   * Instantiates a scheduler
@@ -44,7 +43,7 @@ pub const MOOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 fn main() -> Result<(), Report> {
     color_eyre::install()?;
 
-    let version = semver::Version::parse(MOOR_VERSION).expect("Invalid moor version");
+    let version = semver::Version::parse(build::PKG_VERSION).expect("Invalid moor version");
 
     let args: Args = Args::parse();
 
