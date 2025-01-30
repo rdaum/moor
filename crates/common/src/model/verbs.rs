@@ -42,6 +42,24 @@ impl LayoutAs<u8> for VerbFlag {
     }
 }
 
+pub fn verb_perms_string(perms: BitEnum<VerbFlag>) -> String {
+    let mut perms_string = String::new();
+    if perms.contains(VerbFlag::Read) {
+        perms_string.push('r');
+    }
+    if perms.contains(VerbFlag::Write) {
+        perms_string.push('w');
+    }
+    if perms.contains(VerbFlag::Exec) {
+        perms_string.push('x');
+    }
+    if perms.contains(VerbFlag::Debug) {
+        perms_string.push('d');
+    }
+
+    perms_string
+}
+
 impl VerbFlag {
     pub fn parse_str(s: &str) -> Option<BitEnum<Self>> {
         let mut flags: u8 = 0;

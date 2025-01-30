@@ -24,9 +24,9 @@ use moor_compiler::GlobalName;
 use moor_compiler::Program;
 use moor_compiler::{compile, to_literal};
 use moor_values::matching::command_parse::{parse_preposition_spec, preposition_to_string};
-use moor_values::model::ObjFlag;
 use moor_values::model::VerbDef;
 use moor_values::model::WorldStateError;
+use moor_values::model::{verb_perms_string, ObjFlag};
 use moor_values::model::{ArgSpec, VerbArgsSpec};
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_values::model::{HasUuid, Named};
@@ -76,23 +76,12 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             return Err(BfErr::Code(E_TYPE));
         }
     };
+
     let owner = verb_info.owner();
     let perms = verb_info.flags();
     let names = verb_info.names();
 
-    let mut perms_string = String::new();
-    if perms.contains(VerbFlag::Read) {
-        perms_string.push('r');
-    }
-    if perms.contains(VerbFlag::Write) {
-        perms_string.push('w');
-    }
-    if perms.contains(VerbFlag::Exec) {
-        perms_string.push('x');
-    }
-    if perms.contains(VerbFlag::Debug) {
-        perms_string.push('d');
-    }
+    let perms_string = verb_perms_string(perms);
 
     // Join names into a single string, this is how MOO presents it.
     let verb_names = names.join(" ");

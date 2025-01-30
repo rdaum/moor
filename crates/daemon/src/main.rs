@@ -18,7 +18,7 @@ use crate::rpc_server::RpcServer;
 use clap::Parser;
 use eyre::Report;
 use moor_db::{Database, TxDB};
-use moor_kernel::objdef::ObjDefParser;
+use moor_kernel::objdef::ObjectDefinitionLoader;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_kernel::textdump::textdump_load;
@@ -116,8 +116,8 @@ fn main() -> Result<(), Report> {
             // We have two ways of loading textdump.
             // legacy "textdump" format from LambdaMOO,
             // or our own exploded objdef format.
-            if config.textdump_config.dirdump_format {
-                let mut od = ObjDefParser::new(loader_interface.as_mut());
+            if config.textdump_config.import_dirdump {
+                let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
                 od.read_dirdump(config.features_config.clone(), textdump.as_ref())
                     .unwrap();
             } else {

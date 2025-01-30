@@ -251,6 +251,10 @@ cpp_comment = @{ "//" ~ (!NEWLINE ~ ANY)* }
 
 WHITESPACE = _{ " " | "\t" | NEWLINE | comment }
 
+// And prepositions can't just be IDENT, because that excludes keywords... like "for"
+PREP_CHARACTERS = @{ ASCII_ALPHA+ }
+PROPCHARS = @{ ASCII_ALPHANUMERIC | "_" }
+
 // "Objects files" are an alternate import format for reading cores or databases, that is designed to be readable and
 // editable by regular tools.
 objects_file = { SOI ~ object_definition* ~ EOI }
@@ -271,19 +275,27 @@ write_attr = { "writeable" ~ ":" ~ boolean }
 
 boolean = { "true" | "false" }
 
-verb_decl = { ^"verb" ~ verb_names ~ "(" ~ verbargspec ~ ")" ~ owner_attr ~ flags_attr ~ verb_statements  }
-verb_names = { (verb_name ~ ("," ~ verb_name)*) }
+verb_decl = { ^"verb" ~ verb_name ~ "(" ~ verbargspec ~ ")" ~ owner_attr ~ flags_attr ~ verb_statements  }
 verb_statements = { statements ~ "endverb" }
-verb_name = { ident ~ "*"? }
-verbargspec = {argspec ~ ident ~ argspec }
+
+// A verb name for a textdump is actually more permissive than ident, since you can embed them in :("string") style dispatch
+// Beyond wildcards, they also permit special characters like #, %, etc.
+// So we'll accept either a string literal, or a single alphanumeric-ish ident
+verb_name = { string | verbident }
+verbident = { PROPCHARS+ }
+
+verbargspec = {argspec ~ PREP_CHARACTERS ~ argspec }
 argspec = {"this" | "none" | "any"}
-flags_attr = {"flags" ~ ":" ~ ident}
+flagchars = @{ ASCII_ALPHA* }
+flags_attr = {"flags" ~ ":" ~ "\"" ~ flagchars ~ "\"" }
 
-literal = { atom | literal_map | literal_list }
+literal = { atom | literal_map | literal_list | literal_flyweight }
 literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | "[]" }
-literal_list     = { ("{" ~ literallist ~ "}") | "{}" }
-literallist = { literal ~ ("," ~ literal)* }
-
-prop_def = {"property" ~ ident ~ propinfo ~ ("=" ~ literal)? ~ ";" }
-prop_set = {"override" ~ ident ~ propinfo? ~ ("=" ~ literal)? ~ ";" }
+literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}") | "{}" }
+literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slots)? ~ ("," ~ literal_flyweight_contents)? ~ ">" }
+literal_flyweight_slots = { "[" ~ (ident ~ "->" ~ literal) ~ ("," ~ ident ~ "->" ~ literal)* ~ "]" }
+literal_flyweight_contents = { "{" ~ (literal ~ ("," ~ literal)*)? ~ "}" }
+prop_def = {"property" ~ propname ~ propinfo ~ ("=" ~ literal)? ~ ";" }
+prop_set = {"override" ~ propname ~ propinfo? ~ ("=" ~ literal)? ~ ";" }
+propname = { string | PROPCHARS+ }
 propinfo = {"(" ~ owner_attr ~ "," ~ flags_attr ~ ")"}

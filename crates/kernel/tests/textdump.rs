@@ -259,16 +259,15 @@ mod test {
     }
 
     #[test]
-    // This is an expensive test, so it's not run by default.
     fn load_big_core() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
+        let jhcore = manifest_dir.join("../../JHCore-DEV-2.db");
 
         let (db1, _) = TxDB::open(None, DatabaseConfig::default());
         let db1 = Arc::new(db1);
         load_textdump_file(
             db1.clone().loader_client().unwrap(),
-            minimal_db.to_str().unwrap(),
+            jhcore.to_str().unwrap(),
         );
     }
 
@@ -279,13 +278,13 @@ mod test {
     #[ignore]
     fn load_write_reload_big_core() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let minimal_db = manifest_dir.join("../../JHCore-DEV-2.db");
+        let jhcore = manifest_dir.join("../../JHCore-DEV-2.db");
 
         let (db1, _) = TxDB::open(None, DatabaseConfig::default());
         let db1 = Arc::new(db1);
         load_textdump_file(
             db1.clone().loader_client().unwrap(),
-            minimal_db.to_str().unwrap(),
+            jhcore.to_str().unwrap(),
         );
 
         let textdump = write_textdump(db1.clone(), "** LambdaMOO Database, Format Version 4 **");

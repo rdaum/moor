@@ -62,6 +62,20 @@ impl PropFlag {
     }
 }
 
+pub fn prop_flags_string(flags: BitEnum<PropFlag>) -> String {
+    let mut s = String::new();
+    if flags.contains(PropFlag::Read) {
+        s.push('r');
+    }
+    if flags.contains(PropFlag::Write) {
+        s.push('w');
+    }
+    if flags.contains(PropFlag::Chown) {
+        s.push('c');
+    }
+    s
+}
+
 #[derive(Debug, Clone, Copy, Primitive)]
 pub enum PropAttr {
     Value = 0,

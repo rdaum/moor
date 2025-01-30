@@ -191,7 +191,14 @@ pub struct TextdumpArgs {
         help = "Use the new-style \"dirdump\" importer to load object definition files from the textdump directory instead of the legacy LambdaMOO format.",
         default_value = "false"
     )]
-    pub dirdump_format: bool,
+    pub import_dirdump_format: bool,
+
+    #[arg(
+        long,
+        help = "Use the new-style \"dirdump\" importer to dump object definition files into textdump directory instead of the legacy LambdaMOO format.",
+        default_value = "false"
+    )]
+    pub export_dirdump_format: bool,
 
     #[arg(
         long,
@@ -245,7 +252,8 @@ impl TextdumpArgs {
         if let Some(args) = self.version_override.as_ref() {
             config.version_override = Some(args.clone());
         }
-        config.dirdump_format = self.dirdump_format;
+        config.import_dirdump = self.import_dirdump_format;
+        config.export_dirdump = self.export_dirdump_format;
     }
 }
 

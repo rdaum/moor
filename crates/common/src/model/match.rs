@@ -89,7 +89,7 @@ impl Preposition {
         match s {
             "with/using" | "with" | "using" => Some(Self::WithUsing),
             "at/to" | "at" | "to" => Some(Self::AtTo),
-            "in front of" => Some(Self::InFrontOf),
+            "in front of" | "in-front-of" => Some(Self::InFrontOf),
             "in/inside/into" | "in" | "inside" | "into" => Some(Self::IntoIn),
             "on top of/on/onto/upon" | "on top of" | "on" | "onto" | "upon" => {
                 Some(Self::OnTopOfOn)
@@ -124,6 +124,28 @@ impl Preposition {
             Self::Is => "is",
             Self::As => "as",
             Self::OffOf => "off/off of",
+        }
+    }
+
+    /// Output only one preposition, instead of the full break down.
+    /// For output in objdefs, etc where space-separation is required
+    pub fn to_string_single(&self) -> &str {
+        match self {
+            Self::WithUsing => "with",
+            Self::AtTo => "at",
+            Self::InFrontOf => "in-front-of",
+            Self::IntoIn => "in",
+            Self::OnTopOfOn => "on",
+            Self::OutOf => "from",
+            Self::Over => "over",
+            Self::Through => "through",
+            Self::Under => "under",
+            Self::Behind => "behind",
+            Self::Beside => "beside",
+            Self::ForAbout => "for",
+            Self::Is => "is",
+            Self::As => "as",
+            Self::OffOf => "off",
         }
     }
 }

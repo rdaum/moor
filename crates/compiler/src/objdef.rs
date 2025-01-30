@@ -15,7 +15,9 @@ use crate::codegen::compile_tree;
 use crate::parse::moo::{MooParser, Rule};
 use crate::parse::unquote_str;
 use crate::CompileOptions;
+use crate::ObjDefParseError::VerbCompileError;
 use bytes::Bytes;
+use itertools::Itertools;
 use moor_values::model::{
     ArgSpec, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec, VerbFlag,
 };
@@ -25,7 +27,8 @@ use moor_values::Error::{
     E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use moor_values::{
-    v_err, v_float, v_int, v_list, v_map, v_obj, v_str, AsByteBuffer, Obj, Symbol, Var, NOTHING,
+    v_err, v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str, AsByteBuffer, List, Obj,
+    Symbol, Var, Variant, NOTHING,
 };
 use pest::error::LineColLocation;
 use pest::iterators::{Pair, Pairs};
@@ -41,8 +44,8 @@ pub struct ObjectDefinition {
     pub flags: BitEnum<ObjFlag>,
 
     pub verbs: Vec<ObjVerbDef>,
-    pub propsdefs: Vec<ObjPropDef>,
-    pub propovrrds: Vec<ObjPropSet>,
+    pub property_definitions: Vec<ObjPropDef>,
+    pub property_overrides: Vec<ObjPropOverride>,
 }
 
 pub struct ObjVerbDef {
@@ -59,7 +62,7 @@ pub struct ObjPropDef {
     pub value: Option<Var>,
 }
 
-pub struct ObjPropSet {
+pub struct ObjPropOverride {
     pub name: Symbol,
     pub perms_update: Option<PropPerms>,
     pub value: Option<Var>,
@@ -126,6 +129,66 @@ fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Result<Var, ObjDefParseEr
             let pairs = pair.into_inner();
 
             parse_literal_map(pairs)
+        }
+        Rule::literal => {
+            let literal = pair.into_inner().next().unwrap();
+            parse_literal(literal)
+        }
+        Rule::literal_flyweight => {
+            // Three components:
+            // 1. The delegate object
+            // 2. The slots
+            // 3. The contents
+            let mut parts = pair.into_inner();
+            let delegate = parse_literal(parts.next().unwrap().into_inner().next().unwrap())?;
+            let Variant::Obj(delegate) = delegate.variant().clone() else {
+                panic!("Expected object literal, got {:?}", delegate);
+            };
+            let mut slots = vec![];
+            let mut contents = vec![];
+
+            // If the next is `flyweight_slots`, parse the pairs inside it
+            for next in parts {
+                match next.as_rule() {
+                    Rule::literal_flyweight_slots => {
+                        // Parse the slots, they're a sequence of ident, expr pairs.
+                        // Collect them into two iterators,
+                        let slot_pairs = next.into_inner().chunks(2);
+                        for mut pair in &slot_pairs {
+                            let slot_name =
+                                Symbol::mk_case_insensitive(pair.next().unwrap().as_str());
+
+                            // "delegate" and "slots" are forbidden slot names.
+                            if slot_name == Symbol::mk_case_insensitive("delegate")
+                                || slot_name == Symbol::mk_case_insensitive("slots")
+                            {
+                                return Err(VerbCompileError(CompileError::BadSlotName(
+                                    slot_name.to_string(),
+                                )));
+                            }
+
+                            let slot_expr = parse_literal(pair.next().unwrap())?;
+                            slots.push((slot_name, slot_expr));
+                        }
+                    }
+                    Rule::literal_flyweight_contents => {
+                        let pairs = next.into_inner();
+                        for pair in pairs {
+                            let l = parse_literal(pair)?;
+                            contents.push(l);
+                        }
+                    }
+                    _ => {
+                        panic!("Unexpected rule: {:?}", next.as_rule());
+                    }
+                };
+            }
+            Ok(v_flyweight(
+                delegate,
+                &slots,
+                List::mk_list(&contents),
+                None,
+            ))
         }
         _ => {
             panic!("Unimplemented literal: {:?}", pair);
@@ -279,8 +342,8 @@ fn compile_object_definition(
         location: NOTHING,
         flags: Default::default(),
         verbs: Default::default(),
-        propsdefs: Default::default(),
-        propovrrds: Default::default(),
+        property_definitions: Default::default(),
+        property_overrides: Default::default(),
     };
 
     let mut pairs = pair.into_inner();
@@ -384,12 +447,12 @@ fn compile_object_definition(
             Rule::prop_def => {
                 let inner = pair.into_inner();
                 let pd = parse_prop_def(inner)?;
-                objdef.propsdefs.push(pd);
+                objdef.property_definitions.push(pd);
             }
             Rule::prop_set => {
                 let inner = pair.into_inner();
                 let ps = parse_prop_set(inner)?;
-                objdef.propovrrds.push(ps);
+                objdef.property_overrides.push(ps);
             }
             Rule::EOI => {
                 return Ok(objdef);
@@ -402,8 +465,15 @@ fn compile_object_definition(
     Ok(objdef)
 }
 
-fn parse_prop_set(mut pairs: Pairs<Rule>) -> Result<ObjPropSet, ObjDefParseError> {
-    let name = Symbol::mk(pairs.next().unwrap().as_str().trim());
+fn parse_property_name(pair: Pair<Rule>) -> Result<Symbol, ObjDefParseError> {
+    // If rule is "string", parse it as that. Otherwise, just grab the literal characters.
+    match pair.as_rule() {
+        Rule::string => Ok(Symbol::mk(parse_string_literal(pair)?.as_str())),
+        _ => Ok(Symbol::mk(pair.as_str().trim())),
+    }
+}
+fn parse_prop_set(mut pairs: Pairs<Rule>) -> Result<ObjPropOverride, ObjDefParseError> {
+    let name = parse_property_name(pairs.next().unwrap())?;
 
     // Next is either propinfo -> perms override, or if not, it's straight to the value.
     // So check what it is first
@@ -417,10 +487,12 @@ fn parse_prop_set(mut pairs: Pairs<Rule>) -> Result<ObjPropSet, ObjDefParseError
         let owner = parse_object_literal(attr_inner)?;
 
         let flags_pair = inner.next().unwrap();
-        let flags_inner = flags_pair.into_inner().next().unwrap();
-        let flags_str = flags_inner.as_str();
-        // TODO : proper error
-        let flags = PropFlag::parse_str(flags_str).expect("Failed to parse flags");
+        let inner = flags_pair.into_inner();
+        let flags_str = inner.as_str();
+        let flags_str = flags_str.replace('"', "");
+        let Some(flags) = PropFlag::parse_str(&flags_str) else {
+            return Err(ObjDefParseError::BadPropFlags(flags_str.to_string()));
+        };
         next = pairs.next();
         Some(PropPerms::new(owner, flags))
     } else {
@@ -440,7 +512,7 @@ fn parse_prop_set(mut pairs: Pairs<Rule>) -> Result<ObjPropSet, ObjDefParseError
         None => None,
     };
 
-    Ok(ObjPropSet {
+    Ok(ObjPropOverride {
         name,
         perms_update,
         value,
@@ -448,7 +520,7 @@ fn parse_prop_set(mut pairs: Pairs<Rule>) -> Result<ObjPropSet, ObjDefParseError
 }
 
 fn parse_prop_def(mut pairs: Pairs<Rule>) -> Result<ObjPropDef, ObjDefParseError> {
-    let name = Symbol::mk(pairs.next().unwrap().as_str().trim());
+    let name = parse_property_name(pairs.next().unwrap())?;
 
     let propinfo = pairs.next().unwrap();
     let perms = match propinfo.as_rule() {
@@ -460,11 +532,12 @@ fn parse_prop_def(mut pairs: Pairs<Rule>) -> Result<ObjPropDef, ObjDefParseError
             let owner = parse_object_literal(attr_inner)?;
 
             let flags_pair = inner.next().unwrap();
-            let flags_inner = flags_pair.into_inner().next().unwrap();
-            let flags_str = flags_inner.as_str();
-            // TODO : proper error
-            let flags = PropFlag::parse_str(flags_str).expect("Failed to parse flags");
-
+            let inner = flags_pair.into_inner();
+            let flags_str = inner.as_str();
+            let flags_str = flags_str.replace('"', "");
+            let Some(flags) = PropFlag::parse_str(&flags_str) else {
+                return Err(ObjDefParseError::BadPropFlags(flags_str.to_string()));
+            };
             PropPerms::new(owner, flags)
         }
         _ => {
@@ -502,16 +575,23 @@ fn parse_verb_decl(
     };
 
     let verb_names = pairs.next().unwrap();
+    let verb_names = verb_names.into_inner().next().unwrap();
+
+    // verb names have to be parsed as a string.
+    // And then we split on spaces.
     match verb_names.as_rule() {
-        Rule::verb_names => {
-            let inner = verb_names.into_inner();
-            for name in inner {
-                let name = Symbol::mk(name.as_str().trim());
+        Rule::string => {
+            let verb_names = parse_string_literal(verb_names)?;
+            let verb_names = verb_names.split_whitespace();
+            for name in verb_names {
+                let name = Symbol::mk(name.trim());
                 vd.names.push(name);
             }
         }
         _ => {
-            panic!("Expected verb names, got {:?}", verb_names);
+            let verb_name = verb_names.as_str().trim();
+            let name = Symbol::mk(verb_name);
+            vd.names.push(name);
         }
     }
 
@@ -552,9 +632,13 @@ fn parse_verb_decl(
     let flags_pair = pairs.next().unwrap();
     match flags_pair.as_rule() {
         Rule::flags_attr => {
-            let inner = flags_pair.into_inner().next().unwrap();
-            let content = inner.as_str();
-            vd.flags = VerbFlag::parse_str(content).expect("Failed to parse flags");
+            let inner = flags_pair.into_inner();
+            let flags_str = inner.as_str();
+            let flags_str = flags_str.replace('"', "");
+            let Some(flags) = VerbFlag::parse_str(&flags_str) else {
+                return Err(ObjDefParseError::BadVerbFlags(flags_str.to_string()));
+            };
+            vd.flags = flags;
         }
         _ => {
             panic!("Expected flags, got {:?}", flags_pair);
@@ -633,11 +717,11 @@ mod tests {
                     fertile: true
                     readable: true
 
-                    verb look_self, look_* (this to any) owner: #2 flags: rxd
+                    verb "look_self look_*" (this to any) owner: #2 flags: "rxd"
                         return 5;
                     endverb
 
-                    verb another_test (this none this) owner: #2 flags: r
+                    verb another_test (this none this) owner: #2 flags: "r"
                         player:tell("here is something");
                     endverb
                 endobject"#;
@@ -682,26 +766,31 @@ mod tests {
                     fertile: true
                     readable: true
 
-                    // Declares a property named "description" with owner #2 and flags rc
-                    property description (owner: #2, flags: rc) = "This is a test object";
-                    property other (owner: #2, flags: rc);
+                    // Declares a property named "description" with owner #2 and flags "rc"
+                    property description (owner: #2, flags: "rc") = "This is a test object";
+                    // empty flags are also permitted
+                    property other (owner: #2, flags: "");
                 endobject"#;
         let odef = &compile_object_definitions(spec, &CompileOptions::default()).unwrap()[0];
 
-        assert_eq!(odef.propsdefs.len(), 2);
-        assert_eq!(odef.propsdefs[0].name, Symbol::mk("description"));
-        assert_eq!(odef.propsdefs[0].name, Symbol::mk("description"));
-        assert_eq!(odef.propsdefs[0].perms.owner(), Obj::mk_id(2));
-        assert_eq!(odef.propsdefs[0].perms.flags(), PropFlag::rc());
-        let Variant::Str(s) = odef.propsdefs[0].value.as_ref().unwrap().variant() else {
+        assert_eq!(odef.property_definitions.len(), 2);
+        assert_eq!(odef.property_definitions[0].name, Symbol::mk("description"));
+        assert_eq!(odef.property_definitions[0].perms.owner(), Obj::mk_id(2));
+        assert_eq!(odef.property_definitions[0].perms.flags(), PropFlag::rc());
+        let Variant::Str(s) = odef.property_definitions[0]
+            .value
+            .as_ref()
+            .unwrap()
+            .variant()
+        else {
             panic!("Expected string value");
         };
         assert_eq!(s.as_string(), "This is a test object");
 
-        assert_eq!(odef.propsdefs[1].name, Symbol::mk("other"));
-        assert_eq!(odef.propsdefs[1].perms.owner(), Obj::mk_id(2));
-        assert_eq!(odef.propsdefs[1].perms.flags(), PropFlag::rc());
-        assert!(odef.propsdefs[1].value.is_none());
+        assert_eq!(odef.property_definitions[1].name, Symbol::mk("other"));
+        assert_eq!(odef.property_definitions[1].perms.owner(), Obj::mk_id(2));
+        assert_eq!(odef.property_definitions[1].perms.flags(), BitEnum::new());
+        assert!(odef.property_definitions[1].value.is_none());
     }
 
     #[test]
@@ -719,20 +808,19 @@ mod tests {
 
                     // Overrides the description property from the parent
                     override description = "This is a test object";
-
-                    override other (owner: #2, flags: rc) = "test";
+                    override other (owner: #2, flags: "rc") = "test";
                 endobject"#;
         let odef = &compile_object_definitions(spec, &CompileOptions::default()).unwrap()[0];
 
-        assert_eq!(odef.propovrrds.len(), 2);
-        assert_eq!(odef.propovrrds[0].name, Symbol::mk("description"));
-        let Variant::Str(s) = odef.propovrrds[0].value.as_ref().unwrap().variant() else {
+        assert_eq!(odef.property_overrides.len(), 2);
+        assert_eq!(odef.property_overrides[0].name, Symbol::mk("description"));
+        let Variant::Str(s) = odef.property_overrides[0].value.as_ref().unwrap().variant() else {
             panic!("Expected string value");
         };
         assert_eq!(s.as_string(), "This is a test object");
 
-        assert_eq!(odef.propovrrds[1].name, Symbol::mk("other"));
-        let Variant::Str(s) = odef.propovrrds[1].value.as_ref().unwrap().variant() else {
+        assert_eq!(odef.property_overrides[1].name, Symbol::mk("other"));
+        let Variant::Str(s) = odef.property_overrides[1].value.as_ref().unwrap().variant() else {
             panic!("Expected string value");
         };
         assert_eq!(s.as_string(), "test");
@@ -755,16 +843,169 @@ mod tests {
                     /* C style comment
                     *
                     */
-                    property description (owner: #2, flags: rc) = "This is a test object";
-                    property other (owner: #2, flags: rc);
+                    property description (owner: #2, flags: "rc") = "This is a test object";
+                    property other (owner: #2, flags: "rc");
                     override description = "This is a test object";
-                    override other (owner: #2, flags: rc) = "test";
+                    override other (owner: #2, flags: "rc") = "test";
 
-                    verb look_self, look_* (this to any) owner: #2 flags: rxd
+                    override "@funky_prop_name" = "test";
+                    
+                    verb "look_self look_*" (this to any) owner: #2 flags: "rxd"
                         return 5;
                     endverb
 
-                    verb another_test (this none this) owner: #2 flags: r
+                    verb another_test (this none this) owner: #2 flags: "r"
+                        player:tell("here is something");
+                    endverb
+
+
+                endobject"#;
+        compile_object_definitions(spec, &CompileOptions::default()).unwrap();
+    }
+
+    #[test]
+    fn test_various_literals() {
+        let spec = r#"
+                object #1
+                    // Testing a C++ Style comment
+                    parent: #1
+                    name: "Test Object"
+                    location: #3
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: true
+                    readable: true
+
+                    override objid = #-1;
+                    override string = "Hello World";
+                    override integer = 12345;
+                    override float = 123.45;
+                    override error = E_INVIND;
+                    override list = {1, 2, 3, 4};
+                    override map = [ 1 -> 2, "test" -> 4 ];
+                    override nested_list = { 1,2, { 5, 6, 7 }};
+                    override nested_map = [ 1 -> [ 2 -> 3, 4 -> 5 ], 6 -> 7 ];
+                    override flyweight = <#1, [ a -> 1, b-> 2 ], { 1,2, 3}>;
+                endobject"#;
+        let odef = compile_object_definitions(spec, &CompileOptions::default()).unwrap();
+
+        assert_eq!(
+            odef[0].property_overrides[0]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_obj(NOTHING)
+        );
+        assert_eq!(
+            odef[0].property_overrides[1]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_str("Hello World")
+        );
+        assert_eq!(
+            odef[0].property_overrides[2]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_int(12345)
+        );
+        assert_eq!(
+            odef[0].property_overrides[3]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_float(123.45)
+        );
+        assert_eq!(
+            odef[0].property_overrides[4]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_err(E_INVIND)
+        );
+        assert_eq!(
+            odef[0].property_overrides[5]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_list(&[v_int(1), v_int(2), v_int(3), v_int(4)])
+        );
+        assert_eq!(
+            odef[0].property_overrides[6]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_map(&[(v_int(1), v_int(2)), (v_str("test"), v_int(4))])
+        );
+        assert_eq!(
+            odef[0].property_overrides[7]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_list(&[v_int(1), v_int(2), v_list(&[v_int(5), v_int(6), v_int(7)])])
+        );
+        assert_eq!(
+            odef[0].property_overrides[8]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_map(&[
+                (
+                    v_int(1),
+                    v_map(&[(v_int(2), v_int(3)), (v_int(4), v_int(5))])
+                ),
+                (v_int(6), v_int(7))
+            ])
+        );
+        assert_eq!(
+            odef[0].property_overrides[9]
+                .value
+                .as_ref()
+                .unwrap()
+                .clone(),
+            v_flyweight(
+                Obj::mk_id(1),
+                &[(Symbol::mk("a"), v_int(1)), (Symbol::mk("b"), v_int(2))],
+                List::mk_list(&[v_int(1), v_int(2), v_int(3)]),
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn test_exotic_verbnames() {
+        let spec = r#"
+                object #1
+                    // Testing a C++ Style comment
+                    parent: #1
+                    name: "Test Object"
+                    location: #3
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: true
+                    readable: true
+
+                    verb "@building-o*ptions @buildingo*ptions" (any any any) owner: #184 flags: "rd"
+                        return 5;
+                    endverb
+
+                    verb "modname_# @recycle!" (any any any) owner: #184 flags: "rd"
+                        return 5;
+                    endverb
+
+                    verb "contains_\"quote" (this none this) owner: #184 flags: "rxd"
                         player:tell("here is something");
                     endverb
                 endobject"#;

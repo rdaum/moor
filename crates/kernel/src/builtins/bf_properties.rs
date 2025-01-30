@@ -12,7 +12,7 @@
 //
 
 use moor_compiler::offset_for_builtin;
-use moor_values::model::{PropAttrs, PropFlag};
+use moor_values::model::{prop_flags_string, PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::Variant;
@@ -49,16 +49,7 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let flags = perms.flags();
 
     // Turn perm flags into string: r w c
-    let mut perms = String::new();
-    if flags.contains(PropFlag::Read) {
-        perms.push('r');
-    }
-    if flags.contains(PropFlag::Write) {
-        perms.push('w');
-    }
-    if flags.contains(PropFlag::Chown) {
-        perms.push('c');
-    }
+    let perms = prop_flags_string(flags);
 
     Ok(Ret(v_list(&[v_obj(owner), v_string(perms)])))
 }

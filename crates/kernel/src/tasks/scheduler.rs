@@ -32,6 +32,7 @@ use moor_values::model::{WorldState, WorldStateError};
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::Config;
+use crate::objdef::{collect_object_definitions, dump_object_definitions};
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::sessions::{Session, SessionFactory, SystemControl};
 use crate::tasks::suspension::{SuspensionQ, WakeCondition};
@@ -1234,31 +1235,45 @@ impl Scheduler {
             .config
             .textdump_config
             .version_string(&self.version, &self.config.features_config);
+        let dirdump = self.config.textdump_config.export_dirdump;
 
         let tr = std::thread::Builder::new()
             .name("textdump-thread".to_string())
             .spawn(move || {
-                let Ok(mut output) = File::create(&textdump_path) else {
-                    error!("Could not open textdump file for writing");
-                    return;
-                };
+                if dirdump {
+                    info!("Collecting objects for dump...");
+                    let objects = collect_object_definitions(loader_client.as_ref());
+                    info!("Dumping objects to {textdump_path:?}");
+                    dump_object_definitions(&objects, &textdump_path);
+                    // Now that the dump has been written, strip the in-progress suffix.
+                    let final_path = textdump_path.with_extension("moo");
+                    if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
+                        error!(?e, "Could not rename objdefdump to final path");
+                    }
+                    info!(?final_path, "Objdefdump written.");
+                } else {
+                    let Ok(mut output) = File::create(&textdump_path) else {
+                        error!("Could not open textdump file for writing");
+                        return;
+                    };
 
-                trace!("Creating textdump...");
-                let textdump = make_textdump(loader_client.as_ref(), version_string);
+                    trace!("Creating textdump...");
+                    let textdump = make_textdump(loader_client.as_ref(), version_string);
 
-                debug!(?textdump_path, "Writing textdump..");
-                let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
-                if let Err(e) = writer.write_textdump(&textdump) {
-                    error!(?e, "Could not write textdump");
-                    return;
+                    debug!(?textdump_path, "Writing textdump..");
+                    let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
+                    if let Err(e) = writer.write_textdump(&textdump) {
+                        error!(?e, "Could not write textdump");
+                        return;
+                    }
+
+                    // Now that the dump has been written, strip the in-progress suffix.
+                    let final_path = textdump_path.with_extension("moo-textdump");
+                    if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
+                        error!(?e, "Could not rename textdump to final path");
+                    }
+                    info!(?final_path, "Textdump written.");
                 }
-
-                // Now that the dump has been written, strip the in-progress suffix.
-                let final_path = textdump_path.with_extension("moo-textdump");
-                if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
-                    error!(?e, "Could not rename textdump to final path");
-                }
-                info!(?final_path, "Textdump written.");
             });
         if let Err(e) = tr {
             error!(?e, "Could not start textdump thread");

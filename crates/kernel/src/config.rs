@@ -116,7 +116,10 @@ pub struct TextdumpConfig {
     pub version_override: Option<String>,
     /// If true, use the new-style directory based objectdef import format instead of traditional
     /// textdump.
-    pub dirdump_format: bool,
+    pub import_dirdump: bool,
+    /// If true, use the new-style directory based objectdef dump format instead of traditional
+    /// textdump.
+    pub export_dirdump: bool,
 }
 
 impl Default for TextdumpConfig {
@@ -127,7 +130,8 @@ impl Default for TextdumpConfig {
             output_encoding: EncodingMode::UTF8,
             checkpoint_interval: Some(Duration::from_secs(60)),
             version_override: None,
-            dirdump_format: false,
+            import_dirdump: false,
+            export_dirdump: false,
         }
     }
 }
