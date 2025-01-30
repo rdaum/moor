@@ -2127,7 +2127,7 @@ dependencies = [
 
 [[package]]
 name = "moor-compiler"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "bincode",
  "bytes",
@@ -2146,7 +2146,7 @@ dependencies = [
 
 [[package]]
 name = "moor-daemon"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "bincode",
  "bytes",
@@ -2173,7 +2173,7 @@ dependencies = [
 
 [[package]]
 name = "moor-db"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "bytes",
  "crossbeam-channel",
@@ -2194,7 +2194,7 @@ dependencies = [
 
 [[package]]
 name = "moor-kernel"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "bincode",
  "bytes",
@@ -2235,7 +2235,7 @@ dependencies = [
 
 [[package]]
 name = "moor-model-checker"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "clap",
  "clap_derive",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "moor-moot"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "eyre",
  "moor-values",
@@ -2267,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "moor-telnet-host"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "clap",
  "clap_derive",
@@ -2294,7 +2294,7 @@ dependencies = [
 
 [[package]]
 name = "moor-values"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "binary-layout",
  "bincode",
@@ -2316,7 +2316,7 @@ dependencies = [
 
 [[package]]
 name = "moor-web-host"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "axum",
  "clap",
@@ -3675,7 +3675,7 @@ dependencies = [
 
 [[package]]
 name = "rpc-async-client"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "bincode",
  "futures-util",
@@ -3691,7 +3691,7 @@ dependencies = [
 
 [[package]]
 name = "rpc-common"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "bincode",
  "clap",
@@ -3704,7 +3704,7 @@ dependencies = [
 
 [[package]]
 name = "rpc-sync-client"
-version = "0.1.0"
+version = "0.9.0-alpha"
 dependencies = [
  "bincode",
  "rpc-common",

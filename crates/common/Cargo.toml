@@ -1,6 +1,6 @@
 [package]
 name = "moor-values"
-version = "0.1.0"
+version = "0.9.0-alpha"
 authors.workspace = true
 build = "build.rs"
 categories.workspace = true
