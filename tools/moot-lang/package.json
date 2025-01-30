@@ -13,7 +13,7 @@
     "languages": [{
       "id": "moot",
       "aliases": ["moot", "moot"],
-      "extensions": [".moot"],
+      "extensions": [".moot", ".moo"],
       "configuration": "./language-configuration.json"
     }],
     "grammars": [{
