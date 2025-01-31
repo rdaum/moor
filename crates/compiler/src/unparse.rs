@@ -12,7 +12,8 @@
 //
 
 use moor_values::util::quote_str;
-use moor_values::{Sequence, Var, Variant};
+use moor_values::{Obj, Sequence, Var, Variant};
+use std::collections::HashMap;
 
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
@@ -837,6 +838,88 @@ pub fn to_literal(v: &Var) -> String {
             result
         }
     }
+}
+
+/// Like `to_literal` but performs a tree walk assembling the string out of calls to a designated
+/// function as it recursively visits each element.
+pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
+    let f = |o: &Obj| {
+        if let Some(name_sub) = name_subs.get(o) {
+            name_sub.clone()
+        } else {
+            format!("{}", o)
+        }
+    };
+    let mut result = String::new();
+    match v.variant() {
+        Variant::List(l) => {
+            result.push('{');
+            for (i, v) in l.iter().enumerate() {
+                if i > 0 {
+                    result.push_str(", ");
+                }
+                result.push_str(to_literal_objsub(&v, name_subs).as_str());
+            }
+            result.push('}');
+        }
+        Variant::Map(m) => {
+            let mut result = String::new();
+            result.push('[');
+            for (i, (k, v)) in m.iter().enumerate() {
+                if i > 0 {
+                    result.push_str(", ");
+                }
+                result.push_str(to_literal_objsub(&k, name_subs).as_str());
+                result.push_str(" -> ");
+                result.push_str(to_literal_objsub(&v, name_subs).as_str());
+            }
+            result.push(']');
+        }
+        Variant::Flyweight(fl) => {
+            // If sealed, just return <sealed flyweight>
+            if fl.seal().is_some() {
+                return "<sealed flyweight>".to_string();
+            }
+
+            // Syntax:
+            // < delegate, [ s -> v, ... ], v, v, v ... >
+            let mut result = String::new();
+            result.push('<');
+            result.push_str(fl.delegate().to_literal().as_str());
+            if !fl.slots().is_empty() {
+                result.push_str(", [");
+                for (i, (k, v)) in fl.slots().iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(k.as_str());
+                    result.push_str(" -> ");
+                    result.push_str(to_literal_objsub(&v, name_subs).as_str());
+                }
+                result.push(']');
+            }
+            let v = fl.contents();
+            if !v.is_empty() {
+                result.push_str(", {");
+                for (i, v) in v.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(to_literal_objsub(&v, name_subs).as_str());
+                }
+                result.push('}');
+            }
+
+            result.push('>');
+        }
+        Variant::Obj(oid) => {
+            result.push_str(&f(oid));
+        }
+        _ => {
+            result.push_str(to_literal(v).as_str());
+        }
+    };
+    result
 }
 
 #[cfg(test)]

@@ -12,8 +12,8 @@
 //
 
 use moor_compiler::{
-    program_to_tree, to_literal, unparse, ObjPropDef, ObjPropOverride, ObjVerbDef,
-    ObjectDefinition, Program,
+    program_to_tree, to_literal, to_literal_objsub, unparse, ObjPropDef, ObjPropOverride,
+    ObjVerbDef, ObjectDefinition, Program,
 };
 use moor_db::loader::LoaderInterface;
 use moor_values::model::{
@@ -139,7 +139,7 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
 // Return the object number and if this is $nameable thing, put a // $comment
 fn canon_name(oid: &Obj, index_names: &HashMap<Obj, String>) -> String {
     if let Some(name) = index_names.get(oid) {
-        return name.to_ascii_uppercase();
+        return name.clone();
     };
 
     format!("{}", oid)
@@ -164,11 +164,13 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
     // we'll use those for filenames when we can
     // TODO: this doesn't help with nested values
     let mut index_names = HashMap::new();
+    let mut file_names = HashMap::new();
     if let Some(sysobj) = object_defs.iter().find(|od| od.oid == SYSTEM_OBJECT) {
         for pd in sysobj.property_definitions.iter() {
             if let Some(value) = pd.value.as_ref() {
                 if let Variant::Obj(oid) = value.variant() {
-                    index_names.insert(oid.clone(), pd.name.to_string());
+                    index_names.insert(oid.clone(), pd.name.to_string().to_ascii_uppercase());
+                    file_names.insert(oid.clone(), pd.name.to_string());
                 }
             }
         }
@@ -204,7 +206,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
 
     for o in object_defs {
         // Pick a file name.
-        let file_name = match index_names.get(&o.oid) {
+        let file_name = match file_names.get(&o.oid) {
             Some(name) => format!("{}.moo", name),
             None => format!("object_{}.moo", o.oid.id().0),
         };
@@ -260,7 +262,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
 
             let mut base = format!("{indent}property {name} (owner: {owner}, flags: \"{flags}\")");
             if let Some(value) = &pd.value {
-                let value = to_literal(value);
+                let value = to_literal_objsub(value, &index_names);
                 base.push_str(&format!(" = {}", value));
             }
             base.push_str(";\n");
@@ -279,7 +281,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
                 base.push_str(&format!(" (owner: {owner}, flags: \"{flags}\")"));
             }
             if let Some(value) = &ps.value {
-                let value = to_literal(value);
+                let value = to_literal_objsub(value, &index_names);
                 base.push_str(&format!(" = {}", value));
             }
             base.push_str(";\n");

@@ -41,7 +41,7 @@ pub use crate::objdef::{
 pub use crate::opcode::{Op, ScatterLabel};
 pub use crate::parse::CompileOptions;
 pub use crate::program::{Program, EMPTY_PROGRAM};
-pub use crate::unparse::{to_literal, unparse};
+pub use crate::unparse::{to_literal, to_literal_objsub, unparse};
 
 #[macro_use]
 extern crate pest_derive;
