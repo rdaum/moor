@@ -28,12 +28,26 @@ use moor_values::Error::{
 };
 use moor_values::{
     v_err, v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str, AsByteBuffer, List, Obj,
-    Symbol, Var, Variant, NOTHING,
+    Symbol, Var, VarType, Variant, NOTHING,
 };
 use pest::error::LineColLocation;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
+use std::collections::HashMap;
 use std::str::FromStr;
+
+pub struct ObjFileContext(HashMap<Symbol, Var>);
+impl Default for ObjFileContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ObjFileContext {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+}
 
 pub struct ObjectDefinition {
     pub oid: Obj,
@@ -78,6 +92,10 @@ pub enum ObjDefParseError {
     BadVerbArgspec(String),
     #[error("Failed to parse propflags: {0}")]
     BadPropFlags(String),
+    #[error("Constant not found: {0}")]
+    ConstantNotFound(String),
+    #[error("Bad attribute type: {0:?}")]
+    BadAttributeType(VarType),
 }
 
 fn parse_boolean_literal(pair: pest::iterators::Pair<Rule>) -> Result<bool, ObjDefParseError> {
@@ -90,19 +108,25 @@ fn parse_boolean_literal(pair: pest::iterators::Pair<Rule>) -> Result<bool, ObjD
         }
     }
 }
-fn parse_literal_list(pairs: pest::iterators::Pairs<Rule>) -> Result<Var, ObjDefParseError> {
+fn parse_literal_list(
+    context: &mut ObjFileContext,
+    pairs: pest::iterators::Pairs<Rule>,
+) -> Result<Var, ObjDefParseError> {
     let mut list = vec![];
     for pair in pairs {
-        let l = parse_literal(pair)?;
+        let l = parse_literal(context, pair)?;
         list.push(l);
     }
     Ok(v_list(&list))
 }
 
-fn parse_literal_map(pairs: pest::iterators::Pairs<Rule>) -> Result<Var, ObjDefParseError> {
+fn parse_literal_map(
+    context: &mut ObjFileContext,
+    pairs: pest::iterators::Pairs<Rule>,
+) -> Result<Var, ObjDefParseError> {
     let mut elements = vec![];
     for r in pairs {
-        elements.push(parse_literal(r)?);
+        elements.push(parse_literal(context, r)?);
     }
     let pairs: Vec<_> = elements
         .chunks(2)
@@ -115,24 +139,27 @@ fn parse_literal_map(pairs: pest::iterators::Pairs<Rule>) -> Result<Var, ObjDefP
     Ok(v_map(&pairs))
 }
 
-fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Result<Var, ObjDefParseError> {
+fn parse_literal(
+    context: &mut ObjFileContext,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<Var, ObjDefParseError> {
     match pair.as_rule() {
         Rule::atom => {
             let pair = pair.into_inner().next().unwrap();
-            parse_literal_atom(pair)
+            parse_literal_atom(context, pair)
         }
         Rule::literal_list => {
             let pairs = pair.into_inner();
-            parse_literal_list(pairs)
+            parse_literal_list(context, pairs)
         }
         Rule::literal_map => {
             let pairs = pair.into_inner();
 
-            parse_literal_map(pairs)
+            parse_literal_map(context, pairs)
         }
         Rule::literal => {
             let literal = pair.into_inner().next().unwrap();
-            parse_literal(literal)
+            parse_literal(context, literal)
         }
         Rule::literal_flyweight => {
             // Three components:
@@ -140,7 +167,8 @@ fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Result<Var, ObjDefParseEr
             // 2. The slots
             // 3. The contents
             let mut parts = pair.into_inner();
-            let delegate = parse_literal(parts.next().unwrap().into_inner().next().unwrap())?;
+            let delegate =
+                parse_literal(context, parts.next().unwrap().into_inner().next().unwrap())?;
             let Variant::Obj(delegate) = delegate.variant().clone() else {
                 panic!("Expected object literal, got {:?}", delegate);
             };
@@ -167,14 +195,14 @@ fn parse_literal(pair: pest::iterators::Pair<Rule>) -> Result<Var, ObjDefParseEr
                                 )));
                             }
 
-                            let slot_expr = parse_literal(pair.next().unwrap())?;
+                            let slot_expr = parse_literal(context, pair.next().unwrap())?;
                             slots.push((slot_name, slot_expr));
                         }
                     }
                     Rule::literal_flyweight_contents => {
                         let pairs = next.into_inner();
                         for pair in pairs {
-                            let l = parse_literal(pair)?;
+                            let l = parse_literal(context, pair)?;
                             contents.push(l);
                         }
                     }
@@ -216,7 +244,10 @@ fn parse_string_literal(pair: pest::iterators::Pair<Rule>) -> Result<String, Obj
     Ok(parsed)
 }
 
-fn parse_literal_atom(pair: pest::iterators::Pair<Rule>) -> Result<Var, ObjDefParseError> {
+fn parse_literal_atom(
+    context: &mut ObjFileContext,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<Var, ObjDefParseError> {
     match pair.as_rule() {
         Rule::object => {
             let objid = parse_object_literal(pair)?;
@@ -272,6 +303,13 @@ fn parse_literal_atom(pair: pest::iterators::Pair<Rule>) -> Result<Var, ObjDefPa
                 }
             })
         }
+        Rule::ident | Rule::variable => {
+            let sym = Symbol::mk(pair.as_str());
+            let Some(value) = context.0.get(&sym) else {
+                return Err(ObjDefParseError::ConstantNotFound(sym.to_string()));
+            };
+            Ok(value.clone())
+        }
         _ => {
             panic!("Unimplemented atom: {:?}", pair);
         }
@@ -281,6 +319,7 @@ fn parse_literal_atom(pair: pest::iterators::Pair<Rule>) -> Result<Var, ObjDefPa
 pub fn compile_object_definitions(
     objdef: &str,
     options: &CompileOptions,
+    context: &mut ObjFileContext,
 ) -> Result<Vec<ObjectDefinition>, ObjDefParseError> {
     let mut pairs = match MooParser::parse(Rule::objects_file, objdef) {
         Ok(pairs) => pairs,
@@ -314,7 +353,14 @@ pub fn compile_object_definitions(
     for pair in pairs {
         match pair.as_rule() {
             Rule::object_definition => {
-                objdefs.push(compile_object_definition(pair, options)?);
+                objdefs.push(compile_object_definition(pair, options, context)?);
+            }
+            Rule::constant_decl => {
+                let mut pairs = pair.into_inner();
+                let constant = pairs.next().unwrap().as_str();
+                let value = pairs.next().unwrap();
+                let value = parse_literal(context, value)?;
+                context.0.insert(Symbol::mk(constant), value);
             }
             Rule::EOI => {
                 break;
@@ -328,9 +374,32 @@ pub fn compile_object_definitions(
     Ok(objdefs)
 }
 
+fn parse_obj_attr(
+    context: &mut ObjFileContext,
+    inner: Pair<Rule>,
+) -> Result<Obj, ObjDefParseError> {
+    let value = parse_literal_atom(context, inner)?;
+    let Variant::Obj(obj) = value.variant() else {
+        return Err(ObjDefParseError::BadAttributeType(value.type_code()));
+    };
+    Ok(obj.clone())
+}
+
+fn parse_str_attr(
+    context: &mut ObjFileContext,
+    inner: Pair<Rule>,
+) -> Result<String, ObjDefParseError> {
+    let value = parse_literal_atom(context, inner)?;
+    let Variant::Str(name) = value.variant() else {
+        return Err(ObjDefParseError::BadAttributeType(value.type_code()));
+    };
+    Ok(name.to_string())
+}
+
 fn compile_object_definition(
     pair: Pair<Rule>,
     options: &CompileOptions,
+    context: &mut ObjFileContext,
 ) -> Result<ObjectDefinition, ObjDefParseError> {
     // Now walk the tree of object / verb / property definitions and extract out the relevant info,
     // also attempting to compile each verb.
@@ -347,16 +416,8 @@ fn compile_object_definition(
     };
 
     let mut pairs = pair.into_inner();
-    let let_oid = pairs.next().unwrap();
-    match let_oid.as_rule() {
-        Rule::object => {
-            let oid = parse_object_literal(let_oid)?;
-            objdef.oid = oid;
-        }
-        _ => {
-            panic!("Expected object, got {:?}", let_oid);
-        }
-    }
+    let oid = parse_obj_attr(context, pairs.next().unwrap())?;
+    objdef.oid = oid;
 
     // Next is object attributes
     let object_attrs = pairs.next().unwrap();
@@ -369,19 +430,19 @@ fn compile_object_definition(
                 match rule {
                     Rule::parent_attr => {
                         let inner = attr_pair.into_inner().next().unwrap();
-                        objdef.parent = parse_object_literal(inner)?;
+                        objdef.parent = parse_obj_attr(context, inner)?
                     }
                     Rule::name_attr => {
                         let inner = attr_pair.into_inner().next().unwrap();
-                        objdef.name = parse_string_literal(inner)?;
+                        objdef.name = parse_str_attr(context, inner)?
                     }
                     Rule::owner_attr => {
                         let inner = attr_pair.into_inner().next().unwrap();
-                        objdef.owner = parse_object_literal(inner)?;
+                        objdef.owner = parse_obj_attr(context, inner)?
                     }
                     Rule::location_attr => {
                         let inner = attr_pair.into_inner().next().unwrap();
-                        objdef.location = parse_object_literal(inner)?;
+                        objdef.location = parse_obj_attr(context, inner)?
                     }
                     Rule::wizard_attr => {
                         let inner = attr_pair.into_inner().next().unwrap();
@@ -441,17 +502,17 @@ fn compile_object_definition(
         match pair.as_rule() {
             Rule::verb_decl => {
                 let inner = pair.into_inner();
-                let vd = parse_verb_decl(inner, options)?;
+                let vd = parse_verb_decl(inner, options, context)?;
                 objdef.verbs.push(vd);
             }
             Rule::prop_def => {
                 let inner = pair.into_inner();
-                let pd = parse_prop_def(inner)?;
+                let pd = parse_prop_def(context, inner)?;
                 objdef.property_definitions.push(pd);
             }
             Rule::prop_set => {
                 let inner = pair.into_inner();
-                let ps = parse_prop_set(inner)?;
+                let ps = parse_prop_set(context, inner)?;
                 objdef.property_overrides.push(ps);
             }
             Rule::EOI => {
@@ -472,7 +533,11 @@ fn parse_property_name(pair: Pair<Rule>) -> Result<Symbol, ObjDefParseError> {
         _ => Ok(Symbol::mk(pair.as_str().trim())),
     }
 }
-fn parse_prop_set(mut pairs: Pairs<Rule>) -> Result<ObjPropOverride, ObjDefParseError> {
+
+fn parse_prop_set(
+    context: &mut ObjFileContext,
+    mut pairs: Pairs<Rule>,
+) -> Result<ObjPropOverride, ObjDefParseError> {
     let name = parse_property_name(pairs.next().unwrap())?;
 
     // Next is either propinfo -> perms override, or if not, it's straight to the value.
@@ -484,7 +549,7 @@ fn parse_prop_set(mut pairs: Pairs<Rule>) -> Result<ObjPropOverride, ObjDefParse
         let mut inner = pr.into_inner();
         let attr_pair = inner.next().unwrap();
         let attr_inner = attr_pair.into_inner().next().unwrap();
-        let owner = parse_object_literal(attr_inner)?;
+        let owner = parse_obj_attr(context, attr_inner)?;
 
         let flags_pair = inner.next().unwrap();
         let inner = flags_pair.into_inner();
@@ -503,7 +568,7 @@ fn parse_prop_set(mut pairs: Pairs<Rule>) -> Result<ObjPropOverride, ObjDefParse
         Some(n) => match n.as_rule() {
             Rule::literal => {
                 let inner = n.clone().into_inner().next().unwrap();
-                Some(parse_literal(inner)?)
+                Some(parse_literal(context, inner)?)
             }
             _ => {
                 panic!("Expected literal, got {:?}", next);
@@ -519,7 +584,10 @@ fn parse_prop_set(mut pairs: Pairs<Rule>) -> Result<ObjPropOverride, ObjDefParse
     })
 }
 
-fn parse_prop_def(mut pairs: Pairs<Rule>) -> Result<ObjPropDef, ObjDefParseError> {
+fn parse_prop_def(
+    context: &mut ObjFileContext,
+    mut pairs: Pairs<Rule>,
+) -> Result<ObjPropDef, ObjDefParseError> {
     let name = parse_property_name(pairs.next().unwrap())?;
 
     let propinfo = pairs.next().unwrap();
@@ -529,7 +597,7 @@ fn parse_prop_def(mut pairs: Pairs<Rule>) -> Result<ObjPropDef, ObjDefParseError
             let mut inner = propinfo.into_inner();
             let attr_pair = inner.next().unwrap();
             let attr_inner = attr_pair.into_inner().next().unwrap();
-            let owner = parse_object_literal(attr_inner)?;
+            let owner = parse_obj_attr(context, attr_inner)?;
 
             let flags_pair = inner.next().unwrap();
             let inner = flags_pair.into_inner();
@@ -550,7 +618,7 @@ fn parse_prop_def(mut pairs: Pairs<Rule>) -> Result<ObjPropDef, ObjDefParseError
         Some(pair) => match pair.as_rule() {
             Rule::literal => {
                 let inner = pair.into_inner().next().unwrap();
-                Some(parse_literal(inner)?)
+                Some(parse_literal(context, inner)?)
             }
             _ => {
                 panic!("Expected literal, got {:?}", pair);
@@ -564,6 +632,7 @@ fn parse_prop_def(mut pairs: Pairs<Rule>) -> Result<ObjPropDef, ObjDefParseError
 fn parse_verb_decl(
     mut pairs: Pairs<Rule>,
     compile_options: &CompileOptions,
+    context: &mut ObjFileContext,
 ) -> Result<ObjVerbDef, ObjDefParseError> {
     // First is the verb_names
     let mut vd = ObjVerbDef {
@@ -621,7 +690,7 @@ fn parse_verb_decl(
     match owner_pair.as_rule() {
         Rule::owner_attr => {
             let inner = owner_pair.into_inner().next().unwrap();
-            vd.owner = parse_object_literal(inner)?;
+            vd.owner = parse_obj_attr(context, inner)?;
         }
         _ => {
             panic!("Expected owner, got {:?}", owner_pair);
@@ -690,7 +759,9 @@ mod tests {
         endobject
         "#;
 
-        let odef = &compile_object_definitions(spec, &CompileOptions::default()).unwrap()[0];
+        let mut context = ObjFileContext::new();
+        let odef =
+            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap()[0];
         assert_eq!(odef.oid, Obj::mk_id(1));
         assert_eq!(odef.name, "Test Object");
         assert_eq!(odef.parent, Obj::mk_id(1));
@@ -725,8 +796,10 @@ mod tests {
                         player:tell("here is something");
                     endverb
                 endobject"#;
+        let mut context = ObjFileContext::new();
+        let odef =
+            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap()[0];
 
-        let odef = &compile_object_definitions(spec, &CompileOptions::default()).unwrap()[0];
         assert_eq!(odef.verbs.len(), 2);
 
         assert_eq!(odef.verbs[0].names.len(), 2);
@@ -771,7 +844,10 @@ mod tests {
                     // empty flags are also permitted
                     property other (owner: #2, flags: "");
                 endobject"#;
-        let odef = &compile_object_definitions(spec, &CompileOptions::default()).unwrap()[0];
+
+        let mut context = ObjFileContext::new();
+        let odef =
+            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap()[0];
 
         assert_eq!(odef.property_definitions.len(), 2);
         assert_eq!(odef.property_definitions[0].name, Symbol::mk("description"));
@@ -810,7 +886,9 @@ mod tests {
                     override description = "This is a test object";
                     override other (owner: #2, flags: "rc") = "test";
                 endobject"#;
-        let odef = &compile_object_definitions(spec, &CompileOptions::default()).unwrap()[0];
+        let mut context = ObjFileContext::new();
+        let odef =
+            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap()[0];
 
         assert_eq!(odef.property_overrides.len(), 2);
         assert_eq!(odef.property_overrides[0].name, Symbol::mk("description"));
@@ -860,7 +938,8 @@ mod tests {
 
 
                 endobject"#;
-        compile_object_definitions(spec, &CompileOptions::default()).unwrap();
+        let mut context = ObjFileContext::new();
+        compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
     }
 
     #[test]
@@ -888,7 +967,9 @@ mod tests {
                     override nested_map = [ 1 -> [ 2 -> 3, 4 -> 5 ], 6 -> 7 ];
                     override flyweight = <#1, [ a -> 1, b-> 2 ], { 1,2, 3}>;
                 endobject"#;
-        let odef = compile_object_definitions(spec, &CompileOptions::default()).unwrap();
+        let mut context = ObjFileContext::new();
+        let odef =
+            &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
 
         assert_eq!(
             odef[0].property_overrides[0]
@@ -1009,6 +1090,36 @@ mod tests {
                         player:tell("here is something");
                     endverb
                 endobject"#;
-        compile_object_definitions(spec, &CompileOptions::default()).unwrap();
+        let mut context = ObjFileContext::new();
+        compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+    }
+
+    #[test]
+    fn test_constants_usage() {
+        let spec = r#"
+                define ROOT = #1;
+                define SYS_OBJ = #2;
+                define MAGIC = "magic constant";
+                define NESTED = { ROOT, SYS_OBJ, MAGIC };
+
+                object #1
+                    parent: ROOT
+                    name: MAGIC
+                    location: SYS_OBJ
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: true
+                    readable: true
+
+                    property description (owner: SYS_OBJ, flags: "rc") = "This is a test object";
+
+                    verb "contains_\"quote" (this none this) owner: ROOT flags: "rxd"
+                        player:tell("here is something");
+                    endverb
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
     }
 }

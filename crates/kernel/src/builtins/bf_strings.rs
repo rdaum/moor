@@ -222,7 +222,7 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(string_hash, bf_string_hash);
 
 fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    return Err(BfErr::Code(E_INVARG));
+    Err(BfErr::Code(E_INVARG))
 }
 bf_declare!(binary_hash, bf_binary_hash);
 

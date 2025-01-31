@@ -257,15 +257,17 @@ PROPCHARS = @{ ASCII_ALPHANUMERIC | "_" }
 
 // "Objects files" are an alternate import format for reading cores or databases, that is designed to be readable and
 // editable by regular tools.
-objects_file = { SOI ~ object_definition* ~ EOI }
+objects_file = { SOI ~ (object_definition | constant_decl)* ~ EOI }
 
-object_definition = {  ^"object" ~ object ~ object_attributes ~ (verb_decl | prop_def | prop_set)* ~ "endobject"  }
+constant_decl = { "define" ~ ident ~ "=" ~ literal ~ ";"? }
+
+object_definition = {  ^"object" ~ (object | variable) ~ object_attributes ~ (verb_decl | prop_def | prop_set)* ~ "endobject"  }
 object_attributes = { object_attribute+ }
 object_attribute = { name_attr | parent_attr | owner_attr | location_attr | wizard_attr | prog_attr | player_attr | fertile_attr | read_attr | write_attr }
-name_attr = { "name" ~ ":" ~ string }
-owner_attr = { "owner" ~ ":" ~ object }
-parent_attr = { "parent" ~ ":" ~ object }
-location_attr = { "location" ~ ":" ~ object }
+name_attr = { "name" ~ ":" ~ (string | variable )}
+owner_attr = { "owner" ~ ":" ~ ( object | variable ) }
+parent_attr = { "parent" ~ ":" ~ ( object | variable ) }
+location_attr = { "location" ~ ":" ~ ( object | variable ) }
 wizard_attr = { "wizard" ~ ":" ~ boolean}
 prog_attr = { "programmer" ~ ":" ~ boolean}
 player_attr = { "player" ~ ":" ~ boolean}
@@ -289,7 +291,8 @@ argspec = {"this" | "none" | "any"}
 flagchars = @{ ASCII_ALPHA* }
 flags_attr = {"flags" ~ ":" ~ "\"" ~ flagchars ~ "\"" }
 
-literal = { atom | literal_map | literal_list | literal_flyweight }
+literal = { atom | literal_map | literal_list | literal_flyweight | variable }
+variable = { ident }
 literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | ( "[" ~ "]") }
 literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}") | "{}" }
 literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slots)? ~ ("," ~ literal_flyweight_contents)? ~ ">" }

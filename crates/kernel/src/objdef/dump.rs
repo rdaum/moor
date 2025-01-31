@@ -139,7 +139,7 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
 // Return the object number and if this is $nameable thing, put a // $comment
 fn canon_name(oid: &Obj, index_names: &HashMap<Obj, String>) -> String {
     if let Some(name) = index_names.get(oid) {
-        return format!("{} // ${}", oid, name);
+        return name.to_ascii_uppercase();
     };
 
     format!("{}", oid)
@@ -186,6 +186,20 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
             directory_path.display(),
             e
         );
+    }
+
+    // Output a "constants.moo" file "define X = #5;";
+    {
+        let mut constants = String::new();
+        // Sort incrementall by object id.
+        let mut objects: Vec<_> = index_names.iter().collect();
+        objects.sort_by(|a, b| a.0.id().0.cmp(&b.0.id().0));
+        for i in objects {
+            constants.push_str(&format!("define {} = {};\n", i.1.to_ascii_uppercase(), i.0));
+        }
+        let constants_file = directory_path.join("constants.moo");
+        let mut constants_file = std::fs::File::create(constants_file).unwrap();
+        constants_file.write_all(constants.as_bytes()).unwrap();
     }
 
     for o in object_defs {
@@ -238,7 +252,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
             objstr.push('\n');
         }
         for pd in &o.property_definitions {
-            let owner = format!("{}", pd.perms.owner());
+            let owner = canon_name(&pd.perms.owner(), &index_names);
             let flags = prop_flags_string(pd.perms.flags());
 
             // If the name contains funny business, use string literal form.
@@ -261,7 +275,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
             let mut base = format!("{indent}override {}", name);
             if let Some(perms) = &ps.perms_update {
                 let flags = prop_flags_string(perms.flags());
-                let owner = format!("{}", perms.owner());
+                let owner = canon_name(&perms.owner(), &index_names);
                 base.push_str(&format!(" (owner: {owner}, flags: \"{flags}\")"));
             }
             if let Some(value) = &ps.value {
@@ -274,7 +288,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
 
         for v in &o.verbs {
             objstr.push('\n');
-            let owner = v.owner.clone();
+            let owner = canon_name(&v.owner, &index_names);
             let vflags = verb_perms_string(v.flags);
 
             let prepspec = match v.argspec.prep {

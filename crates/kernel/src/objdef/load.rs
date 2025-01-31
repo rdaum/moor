@@ -13,7 +13,7 @@
 
 use crate::config::FeaturesConfig;
 use crate::objdef::DirDumpReaderError;
-use moor_compiler::{compile_object_definitions, CompileOptions, ObjectDefinition};
+use moor_compiler::{compile_object_definitions, CompileOptions, ObjFileContext, ObjectDefinition};
 use moor_db::loader::LoaderInterface;
 use moor_values::model::ObjAttrs;
 use moor_values::{Obj, NOTHING};
@@ -44,21 +44,45 @@ impl<'a> ObjectDefinitionLoader<'a> {
             return Err(DirDumpReaderError::DirectoryNotFound(dirpath.to_path_buf()));
         }
 
+        // Constant variables will go here.
+        let mut context = ObjFileContext::new();
+
+        // Collect all the file names, and if there's a "constants.moo" put that at the top to
+        // parse first.
+        let filenames: Vec<_> = dirpath
+            .read_dir()
+            .unwrap()
+            .filter(|e| e.as_ref().unwrap().path().extension().unwrap() == "moo")
+            .map(|e| e.unwrap().path())
+            .collect();
+        let constants_file = filenames
+            .iter()
+            .find(|f| f.file_name().unwrap() == "constants.moo");
+        if let Some(constants_file) = constants_file {
+            let constants_file_contents = std::fs::read_to_string(constants_file)
+                .map_err(DirDumpReaderError::ObjectFileReadError)?;
+            self.parse_objects(
+                &mut context,
+                &constants_file_contents,
+                &features_config.compile_options(),
+            )?;
+        }
+
         // Read the objects first, going through and creating them all
         let compile_options = features_config.compile_options();
         // Create all the objects first with no attributes, and then update after, so that the
         // inheritance/location etc hierarchy is set up right
-        for object_path in dirpath.read_dir().unwrap() {
-            let object_file = object_path.map_err(DirDumpReaderError::ObjectFileReadError)?;
-
-            if object_file.path().extension().unwrap() != "moo" {
+        for object_file in filenames {
+            if object_file.extension().unwrap() != "moo"
+                || object_file.file_name().unwrap() == "constants.moo"
+            {
                 continue;
             }
 
-            let object_file_contents = std::fs::read_to_string(object_file.path())
+            let object_file_contents = std::fs::read_to_string(object_file)
                 .map_err(DirDumpReaderError::ObjectFileReadError)?;
 
-            self.parse_objects(&object_file_contents, &compile_options)?;
+            self.parse_objects(&mut context, &object_file_contents, &compile_options)?;
         }
 
         self.apply_attributes()?;
@@ -71,11 +95,13 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
     fn parse_objects(
         &mut self,
+        context: &mut ObjFileContext,
         object_file_contents: &str,
         compile_options: &CompileOptions,
     ) -> Result<(), DirDumpReaderError> {
-        let compiled_defs = compile_object_definitions(object_file_contents, compile_options)
-            .map_err(DirDumpReaderError::ObjectFileParseError)?;
+        let compiled_defs =
+            compile_object_definitions(object_file_contents, compile_options, context)
+                .map_err(DirDumpReaderError::ObjectFileParseError)?;
 
         let mut total_verbs = 0;
         let mut total_propdefs = 0;
@@ -203,7 +229,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 #[cfg(test)]
 mod tests {
     use crate::objdef::load::ObjectDefinitionLoader;
-    use moor_compiler::CompileOptions;
+    use moor_compiler::{CompileOptions, ObjFileContext};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_values::model::{Named, PrepSpec, WorldStateSource};
     use moor_values::{v_str, Obj, Symbol, NOTHING, SYSTEM_OBJECT};
@@ -243,8 +269,9 @@ mod tests {
                         return this.description;
                     endverb
                 endobject"#;
+        let mut context = ObjFileContext::new();
         parser
-            .parse_objects(spec, &CompileOptions::default())
+            .parse_objects(&mut context, spec, &CompileOptions::default())
             .unwrap();
 
         parser.apply_attributes().unwrap();
@@ -308,8 +335,9 @@ mod tests {
                     endverb
                 endobject"#;
 
+        let mut context = ObjFileContext::new();
         parser
-            .parse_objects(spec, &CompileOptions::default())
+            .parse_objects(&mut context, spec, &CompileOptions::default())
             .unwrap();
         parser.apply_attributes().unwrap();
         parser.define_verbs().unwrap();

@@ -35,8 +35,8 @@ pub use crate::decompile::program_to_tree;
 pub use crate::labels::{JumpLabel, Label, Offset};
 pub use crate::names::{Name, UnboundNames};
 pub use crate::objdef::{
-    compile_object_definitions, ObjDefParseError, ObjPropDef, ObjPropOverride, ObjVerbDef,
-    ObjectDefinition,
+    compile_object_definitions, ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride,
+    ObjVerbDef, ObjectDefinition,
 };
 pub use crate::opcode::{Op, ScatterLabel};
 pub use crate::parse::CompileOptions;
