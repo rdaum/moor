@@ -418,13 +418,11 @@ const InputArea = (context: Context, player: State<Player>) => {
         e.preventDefault();
         const pastedData = e.clipboardData?.getData("text") || "";
         if (pastedData) {
-            // Append to the input field with the pasted content as-is, not interpreted as
-            // key-strokes.
-            i.value += pastedData;
+            // Insert the pasted data at the current cursor position.
+            i.value = i.value.substring(0, i.selectionStart) + pastedData + i.value.substring(i.selectionEnd);
 
-            // Jump the selection to the end of the line
-            i.selectionStart = i.value.length;
-            i.selectionEnd = i.value.length;
+            // Jump the selection to the end of the pasted part
+            i.selectionStart = i.selectionEnd = i.selectionStart + pastedData.length;
         }
     });
     i.addEventListener("keydown", e => {
