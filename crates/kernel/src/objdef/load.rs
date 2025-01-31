@@ -19,6 +19,7 @@ use moor_values::model::ObjAttrs;
 use moor_values::{Obj, NOTHING};
 use std::collections::HashMap;
 use std::path::Path;
+use std::time::Instant;
 use tracing::info;
 
 pub struct ObjectDefinitionLoader<'a> {
@@ -39,6 +40,8 @@ impl<'a> ObjectDefinitionLoader<'a> {
         features_config: FeaturesConfig,
         dirpath: &Path,
     ) -> Result<(), DirDumpReaderError> {
+        let start_time = Instant::now();
+
         // Check that the directory exists
         if !dirpath.exists() {
             return Err(DirDumpReaderError::DirectoryNotFound(dirpath.to_path_buf()));
@@ -85,10 +88,45 @@ impl<'a> ObjectDefinitionLoader<'a> {
             self.parse_objects(&mut context, &object_file_contents, &compile_options)?;
         }
 
+        let num_total_verbs = self
+            .object_definitions
+            .values()
+            .map(|d| d.verbs.len())
+            .sum::<usize>();
+        let num_total_properties = self
+            .object_definitions
+            .values()
+            .map(|d| d.property_definitions.len())
+            .sum::<usize>();
+        let num_total_property_overrides = self
+            .object_definitions
+            .values()
+            .map(|d| d.property_overrides.len())
+            .sum::<usize>();
+
+        info!(
+            "Created {} objects. Adjusting inheritance, location, and ownership attributes...",
+            self.object_definitions.len()
+        );
         self.apply_attributes()?;
+        info!("Defining {} properties...", num_total_properties);
         self.define_properties()?;
+        info!(
+            "Overriding {} property values...",
+            num_total_property_overrides
+        );
         self.set_properties()?;
+        info!("Defining and compiling {} verbs...", num_total_verbs);
         self.define_verbs()?;
+
+        info!(
+            "Imported {} objects w/ {} verbs, {} properties and {} property overrides in {} seconds.",
+            self.object_definitions.len(),
+            num_total_verbs,
+            num_total_properties,
+            num_total_property_overrides,
+            start_time.elapsed().as_secs()
+        );
 
         Ok(())
     }
@@ -103,14 +141,8 @@ impl<'a> ObjectDefinitionLoader<'a> {
             compile_object_definitions(object_file_contents, compile_options, context)
                 .map_err(DirDumpReaderError::ObjectFileParseError)?;
 
-        let mut total_verbs = 0;
-        let mut total_propdefs = 0;
-
         for compiled_def in compiled_defs {
             let oid = compiled_def.oid.clone();
-
-            total_verbs += compiled_def.verbs.len();
-            total_propdefs += compiled_def.property_definitions.len();
 
             self.loader
                 .create_object(
@@ -127,11 +159,6 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
             self.object_definitions.insert(oid, compiled_def);
         }
-        info!(
-            "Loaded {} objects with a total of {total_verbs} verbs and {total_propdefs} total properties",
-            self.object_definitions.len()
-        );
-
         Ok(())
     }
 
