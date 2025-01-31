@@ -29,6 +29,7 @@ default-members = [
     "crates/web-host",
     "crates/testing/moot",
     "crates/testing/load-tools",
+    "tools/moorc",
 ]
 
 [workspace.package]
