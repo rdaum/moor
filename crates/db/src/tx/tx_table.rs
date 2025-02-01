@@ -37,7 +37,6 @@ where
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum OpType {
-    None,
     Cached,
     Insert,
     Update,
@@ -163,18 +162,23 @@ where
     pub fn update(&mut self, domain: &Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
         let mut index = self.index.borrow_mut();
 
-        // Check if the domain is already in the index.
+        // Check if the domain is already in the _local_ index.
         let old_entry = index.get_mut(domain);
 
         if let Some(Entry::Present(old_entry)) = old_entry {
             let old_value = old_entry.value.clone();
 
+            // Update the "to_type" depending on what the existing to_type was.
+            // If it was a "delete", that's an error, you can't update something deleted.
+            // If it was an "insert", keep it as an insert, but with the new value.
+            // If it was an "update", same.
+            // "None" or "cached" become
             old_entry.to_type = match old_entry.to_type {
-                OpType::Cached => OpType::Update,
+                OpType::Cached | OpType::Update => OpType::Update,
                 OpType::Delete => {
                     return Ok(None);
                 }
-                _ => old_entry.from_type,
+                OpType::Insert => OpType::Insert,
             };
             old_entry.value = Some(value.clone());
 
@@ -398,7 +402,7 @@ where
             .filter_map(|(domain, entry)| match entry {
                 Entry::NotPresent(_) => None,
                 Entry::Present(op) => {
-                    if op.to_type == OpType::Cached || op.to_type == OpType::None {
+                    if op.to_type == OpType::Cached {
                         return None;
                     }
                     Some((domain, op))

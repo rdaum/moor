@@ -296,6 +296,7 @@ pub mod scheduler_test_utils {
         player: &Obj,
         command: &str,
     ) -> Result<Var, SchedulerError> {
+        eprintln!("call_command: {}", command);
         execute(|| scheduler.submit_command_task(&SYSTEM_OBJECT, player, command, session))
     }
 
@@ -305,6 +306,7 @@ pub mod scheduler_test_utils {
         player: &Obj,
         code: String,
     ) -> Result<Var, SchedulerError> {
+        eprintln!("call_eval: {}", code);
         execute(|| {
             scheduler.submit_eval_task(player, player, code, session, FeaturesConfig::default())
         })
