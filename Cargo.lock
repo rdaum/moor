@@ -2273,6 +2273,8 @@ version = "0.9.0-alpha"
 dependencies = [
  "eyre",
  "moor-values",
+ "pest",
+ "pest_derive",
  "pretty_assertions",
  "tracing",
  "tracing-subscriber",
