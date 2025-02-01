@@ -21,7 +21,8 @@ file = _{
 block = _{ 
     change_player |
     eval |
-    cmd
+    cmd |
+    eval_bg
 }
 
 skip = _{ (
@@ -34,7 +35,8 @@ change_player_name = { ASCII_ALPHA_LOWER+ }
 
 eval = { ";" ~ test }
 cmd = { "%" ~ test }
-test = _{ " "* ~ test_input ~ skip ~ expect? }
+eval_bg = { "&" ~ test }
+test = _{ " "* ~ test_input ~ skip ~ expect* }
 test_input = _{ test_line ~ eol ~ (">" ~ test_line ~ eol)* }
 test_line = { (!NEWLINE ~ ANY)* }
 
@@ -42,7 +44,7 @@ expect = _{ expect_verbatim | expect_eval }
 expect_verbatim = _{ "=" ~ expect_verbatim_line ~ eol }
 expect_verbatim_line = { (!NEWLINE ~ ANY)* }
 
-expect_eval = _{ ("<" | !(";" | "@" | "%" | "//")) ~ " "* ~ expect_eval_line ~ eol }
+expect_eval = _{ ("<" | !(";" | "@" | "%" | "//" | "&")) ~ " "* ~ expect_eval_line ~ eol }
 expect_eval_line = { (!NEWLINE ~ ANY)+ }
 
 eol = _{ NEWLINE | EOI }

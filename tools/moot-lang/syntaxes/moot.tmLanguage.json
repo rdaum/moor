@@ -30,7 +30,7 @@
         },
         {
           "name": "variable.language.moo",
-          "match": "\\b(INT|NUM|FLOAT|LIST|MAP|STR|ANON|OBJ|ERR|player|this|caller|verb|args|argstr|dobj|dobjstr|prepstr|iobj|iobjstr)\\b"
+          "match": "\\b(INT|NUM|FLOAT|LIST|MAP|STR|ANON|OBJ|ERR|false|true|player|this|caller|verb|args|argstr|dobj|dobjstr|prepstr|iobj|iobjstr)\\b"
         },
         {
           "name": "constant.language.moo.error",
@@ -62,7 +62,7 @@
         },
         {
           "name": "markup.inserted.moot.input",
-          "match": "^[;%>]"
+          "match": "^[;%>&]"
         },
         {
           "name": "markup.inline.raw.moot.output",

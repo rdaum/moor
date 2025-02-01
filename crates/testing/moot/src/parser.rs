@@ -39,19 +39,11 @@ pub struct MootBlockChangePlayer<'a> {
 pub struct MootBlockTest<'a> {
     pub kind: MootBlockTestKind,
     pub prog_lines: Vec<&'a str>,
-    pub expected_output: Option<MootBlockTestExpectedOutput<'a>>,
+    pub expected_output: Vec<MootBlockTestExpectedOutput<'a>>,
 }
 impl MootBlockTest<'_> {
     pub fn prog(&self) -> String {
         self.prog_lines.join("\n")
-    }
-
-    pub fn verbatim(&self) -> bool {
-        self.expected_output.as_ref().map_or(false, |e| e.verbatim)
-    }
-
-    pub fn expected_output_str(&self) -> Option<&str> {
-        self.expected_output.as_ref().map(|e| e.expected_output)
     }
 }
 
@@ -66,6 +58,7 @@ pub struct MootBlockTestExpectedOutput<'a> {
 pub enum MootBlockTestKind {
     Eval,
     Command,
+    EvalBg,
 }
 
 pub fn parse(input: &str) -> eyre::Result<Vec<MootBlockSpan>> {
@@ -79,16 +72,17 @@ pub fn parse(input: &str) -> eyre::Result<Vec<MootBlockSpan>> {
                 name: pair.as_str(),
             })),
 
-            Rule::eval | Rule::cmd => {
+            Rule::eval | Rule::cmd | Rule::eval_bg => {
                 let kind = match pair.as_rule() {
                     Rule::eval => MootBlockTestKind::Eval,
                     Rule::cmd => MootBlockTestKind::Command,
+                    Rule::eval_bg => MootBlockTestKind::EvalBg,
                     r => unreachable!("{:?}", r),
                 };
                 let mut test = MootBlockTest {
                     kind,
                     prog_lines: vec![],
-                    expected_output: None,
+                    expected_output: vec![],
                 };
                 for pair in pair.into_inner() {
                     match pair.as_rule() {
@@ -96,7 +90,12 @@ pub fn parse(input: &str) -> eyre::Result<Vec<MootBlockSpan>> {
                             test.prog_lines.push(pair.as_str());
                         }
                         Rule::expect_eval_line | Rule::expect_verbatim_line => {
-                            test.expected_output = Some(MootBlockTestExpectedOutput {
+                            if test.kind == MootBlockTestKind::EvalBg {
+                                return Err(eyre::eyre!(
+                                    "background eval blocks cannot have expected output"
+                                ));
+                            }
+                            test.expected_output.push(MootBlockTestExpectedOutput {
                                 expected_output: pair.as_str(),
                                 verbatim: pair.as_rule() == Rule::expect_verbatim_line,
                                 line_no: pair.as_span().start_pos().line_col().0,
@@ -151,11 +150,11 @@ mod tests {
                 expr: MootBlock::Test(MootBlockTest {
                     kind: MootBlockTestKind::Eval,
                     prog_lines: vec!["1 + ", " 2;"],
-                    expected_output: Some(MootBlockTestExpectedOutput {
+                    expected_output: vec![MootBlockTestExpectedOutput {
                         expected_output: "3",
                         verbatim: true,
                         line_no: 4,
-                    }),
+                    }],
                 })
             }]
         );
@@ -171,7 +170,7 @@ mod tests {
                     expr: MootBlock::Test(MootBlockTest {
                         kind: MootBlockTestKind::Eval,
                         prog_lines: vec!["1; 2; 3;"],
-                        expected_output: None
+                        expected_output: vec![]
                     })
                 },
                 MootBlockSpan {
@@ -179,11 +178,11 @@ mod tests {
                     expr: MootBlock::Test(MootBlockTest {
                         kind: MootBlockTestKind::Eval,
                         prog_lines: vec!["4;"],
-                        expected_output: Some(MootBlockTestExpectedOutput {
+                        expected_output: vec![MootBlockTestExpectedOutput {
                             expected_output: "4",
                             verbatim: false,
                             line_no: 3,
-                        }),
+                        }],
                     })
                 }
             ]
