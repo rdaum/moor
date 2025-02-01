@@ -116,7 +116,7 @@ fn describe_compile_error(compile_error: CompileError) -> String {
         CompileError::BadSlotName(bs) => {
             format!("Bad slot name in flyweight: {}", bs)
         }
-        CompileError::InvalidAssignemnt => return "Invalid l-value for assignment".to_string(),
+        CompileError::InvalidAssignemnt => "Invalid l-value for assignment".to_string(),
     }
 }
 

@@ -894,7 +894,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
                     }
                     result.push_str(k.as_str());
                     result.push_str(" -> ");
-                    result.push_str(to_literal_objsub(&v, name_subs).as_str());
+                    result.push_str(to_literal_objsub(v, name_subs).as_str());
                 }
                 result.push(']');
             }
