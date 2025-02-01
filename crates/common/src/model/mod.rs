@@ -80,4 +80,6 @@ pub enum CompileError {
     DisabledFeature(String),
     #[error("Bad slot name on flyweight: {0}")]
     BadSlotName(String),
+    #[error("Invalid l-value for assignment")]
+    InvalidAssignemnt,
 }

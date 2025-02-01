@@ -32,6 +32,7 @@ use crate::parse::moo::Rule;
 use crate::parse::{parse_program, parse_tree, CompileOptions, Parse};
 use crate::program::Program;
 use moor_values::model::CompileError;
+use moor_values::model::CompileError::InvalidAssignemnt;
 
 pub struct Loop {
     loop_name: Option<Name>,
@@ -288,7 +289,7 @@ impl CodegenState {
                 }
             }
             _ => {
-                panic!("Invalid expr for lvalue: {:?}", expr);
+                return Err(InvalidAssignemnt);
             }
         }
         Ok(())
