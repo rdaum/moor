@@ -1,11 +1,11 @@
 ; return 200;
 =200
 
-; return read();
+& return read();
 %201
 ="201"
 
-; notify(player, "read: " + read()); return "retval";
+& notify(player, "read: " + read()); return "retval";
 %hi
 =read: hi
 ="retval"

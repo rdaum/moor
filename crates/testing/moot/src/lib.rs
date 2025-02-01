@@ -92,32 +92,39 @@ fn run_moot_block<R: MootRunner>(
         MootBlock::Test(test) => {
             let prog = test.prog();
             match test.kind {
-                MootBlockTestKind::Eval => {
+                MootBlockTestKind::Eval | MootBlockTestKind::EvalBg => {
                     runner.eval(player, format!("{prog} \"moot-line:{line_no}\";"))?;
                 }
                 MootBlockTestKind::Command => {
                     runner.command(player, prog)?;
                 }
             }
-            let expectation_line_no = test
-                .expected_output
-                .as_ref()
-                .map(|e| e.line_no)
-                .unwrap_or(line_no);
-            if test.verbatim() {
-                assert_raw_line(
-                    runner,
-                    player,
-                    test.expected_output_str(),
-                    expectation_line_no,
-                )?;
-            } else {
-                assert_eval_result(
-                    runner,
-                    player,
-                    test.expected_output_str(),
-                    expectation_line_no,
-                )?;
+
+            if test.kind == MootBlockTestKind::EvalBg {
+                return Ok(None);
+            }
+
+            if test.expected_output.is_empty() && test.kind == MootBlockTestKind::Eval {
+                assert_eval_result(runner, player, None, line_no)?;
+                return Ok(None);
+            }
+
+            for expectation in &test.expected_output {
+                if expectation.verbatim {
+                    assert_raw_line(
+                        runner,
+                        player,
+                        Some(expectation.expected_output),
+                        expectation.line_no,
+                    )?;
+                } else {
+                    assert_eval_result(
+                        runner,
+                        player,
+                        Some(expectation.expected_output),
+                        expectation.line_no,
+                    )?;
+                }
             }
         }
     };

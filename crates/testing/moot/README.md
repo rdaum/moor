@@ -7,6 +7,7 @@
 | <pre>; return<br>> 42;</pre> | Multi-line `eval`                                                                  |
 | <pre>% look<br>> here</pre>  | Multi-line command                                                                 |
 | `% look`                     | Execute `look` as a command                                                        |
+| `& return read();`           | `eval("return read();")`, but don't expect any output                              |
 | `42`, `< 42`                 | Assert that we receive `42` from the server as a response to the `eval` or command |
 | `=foobar`                    | Assert that we received a line containing exactly the string `foobar`              |
 | `// comment`                 | It's a comment!                                                                    |
