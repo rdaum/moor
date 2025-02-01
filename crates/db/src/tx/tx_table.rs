@@ -603,7 +603,7 @@ mod tests {
                 read_ts: Timestamp(1),
                 write_ts: Timestamp(1),
                 source: DatumSource::Local,
-                from_type: OpType::None,
+                from_type: OpType::Insert,
                 to_type: OpType::Insert,
                 value: Some(7),
             })
