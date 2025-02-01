@@ -38,9 +38,9 @@ E_PERM
 ; player.f = 1;
 ; return player.f;
 1
-@wizard
 
 // test_that_a_wizard_can_create_even_if_the_fertile_flag_is_not_set
+@wizard
 ; return $system.f;
 0
 ; create($system);
@@ -57,7 +57,10 @@ E_PERM
 @programmer
 ; return $object.f;
 1
+; create($object);
+@wizard
 ; $tmp = create($nothing);
+@programmer
 ; return $tmp.f;
 0
 ; create($tmp);
