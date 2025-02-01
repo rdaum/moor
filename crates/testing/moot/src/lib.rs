@@ -11,9 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+mod parser;
+
 use std::{
     collections::HashMap,
-    fs::File,
     io::{BufRead, BufReader, BufWriter, Write},
     net::TcpStream,
     path::{Path, PathBuf},
@@ -26,6 +27,7 @@ use std::{
 use eyre::{eyre, ContextCompat, WrapErr};
 use moor_values::Obj;
 
+use parser::{MootBlock, MootBlockSpan, MootBlockTestKind};
 use pretty_assertions::assert_eq;
 
 #[allow(dead_code)]
@@ -70,236 +72,108 @@ pub trait MootRunner {
     fn none(&self) -> Self::Value;
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum CommandKind {
-    Eval,
-    Command,
+fn run_moot_block<R: MootRunner>(
+    runner: &mut R,
+    player: &Obj,
+    span: &MootBlockSpan,
+) -> eyre::Result<Option<Obj>> {
+    eprintln!("{:?}", span);
+    let line_no = span.line_no;
+    match &span.expr {
+        MootBlock::ChangePlayer(change_player) => {
+            return Ok(Some(match change_player.name {
+                "wizard" => WIZARD,
+                "programmer" => PROGRAMMER,
+                "nonprogrammer" => NONPROGRAMMER,
+                _ => return Err(eyre!("Unknown player: {}", change_player.name)),
+            }));
+        }
+
+        MootBlock::Test(test) => {
+            let prog = test.prog();
+            match test.kind {
+                MootBlockTestKind::Eval => {
+                    runner.eval(player, format!("{prog} \"moot-line:{line_no}\";"))?;
+                }
+                MootBlockTestKind::Command => {
+                    runner.command(player, prog)?;
+                }
+            }
+            let expectation_line_no = test
+                .expected_output
+                .as_ref()
+                .map(|e| e.line_no)
+                .unwrap_or(line_no);
+            if test.verbatim() {
+                assert_raw_line(
+                    runner,
+                    player,
+                    test.expected_output_str(),
+                    expectation_line_no,
+                )?;
+            } else {
+                assert_eval_result(
+                    runner,
+                    player,
+                    test.expected_output_str(),
+                    expectation_line_no,
+                )?;
+            }
+        }
+    };
+
+    Ok(None)
 }
-impl From<char> for CommandKind {
-    fn from(c: char) -> Self {
-        match c {
-            ';' => CommandKind::Eval,
-            '%' => CommandKind::Command,
-            _ => panic!("Unknown command kind: {}", c),
-        }
-    }
-}
 
-pub enum MootState<R: MootRunner> {
-    Ready {
-        runner: R,
-        player: Obj,
-    },
-    ReadingCommand {
-        runner: R,
-        player: Obj,
-        line_no: usize,
-        command: String,
-        command_kind: CommandKind,
-    },
-    ReadingEvalAssertion {
-        runner: R,
-        player: Obj,
-        line_no: usize,
-        expectation: String,
-    },
-}
-impl<R: MootRunner> MootState<R> {
-    pub fn new(runner: R, player: Obj) -> Self {
-        MootState::Ready { runner, player }
-    }
+fn assert_eval_result<R: MootRunner>(
+    runner: &mut R,
+    player: &Obj,
+    expectation: Option<&str>,
+    line_no: usize, // for the assertion message
+) -> eyre::Result<()> {
+    let err_prefix = || format!("assert_eval_result({player}, {expectation:?}, {line_no})");
+    let actual = runner
+        .read_eval_result(player)?
+        .ok_or_else(|| eyre!("{}/actual: got no eval result", err_prefix()))?;
 
-    // Could implement this with `nom` I guess, but this seems simple enough, and it's probably easier to read.
-    pub fn process_line(self, new_line_no: usize, line: &str) -> eyre::Result<Self> {
-        let line = line.trim_end_matches('\n');
-        match self {
-            MootState::Ready { mut runner, player } => {
-                if line.starts_with([';', '%']) {
-                    Ok(MootState::ReadingCommand {
-                        runner,
-                        player,
-                        line_no: new_line_no,
-                        command: line[1..].trim_start().to_string(),
-                        command_kind: line.chars().next().unwrap().into(),
-                    })
-                } else if let Some(new_player) = line.strip_prefix('@') {
-                    Ok(MootState::new(runner, Self::player(new_player)?))
-                } else if line.is_empty() || line.starts_with("//") {
-                    Ok(MootState::new(runner, player))
-                } else if let Some(expectation) = line.strip_prefix('=') {
-                    Self::assert_raw_line(
-                        &mut runner,
-                        player.clone(),
-                        Some(expectation),
-                        new_line_no,
-                    )?;
-                    Ok(MootState::new(runner, player))
-                } else {
-                    Err(eyre::eyre!(
-                        "Expected a command (starting `;`), a comment (starting `//`), a player switch (starting `@`), a command (starting `%`), or an empty line"
-                    ))
-                }
-            }
-            MootState::ReadingCommand {
-                mut runner,
+    let expected = if let Some(expectation) = expectation {
+        runner
+            .eval(
                 player,
-                line_no,
-                mut command,
-                command_kind,
-            } => {
-                if let Some(rest) = line.strip_prefix('>') {
-                    command.push_str(rest);
-                    Ok(MootState::ReadingCommand {
-                        runner,
-                        player,
-                        line_no,
-                        command,
-                        command_kind,
-                    })
-                } else if let Some(new_player) = line.strip_prefix('@') {
-                    Self::execute_command(&mut runner, &player, &command, command_kind, line_no)?;
-                    Ok(MootState::new(runner, Self::player(new_player)?))
-                } else if line.is_empty()
-                    || line.starts_with("//")
-                    || line.starts_with([';', '%', '='])
-                {
-                    Self::execute_command(&mut runner, &player, &command, command_kind, line_no)?;
-                    MootState::new(runner, player).process_line(new_line_no, line)
-                } else {
-                    Self::execute_command(&mut runner, &player, &command, command_kind, line_no)?;
-                    let line = line.strip_prefix('<').unwrap_or(line);
-                    Ok(MootState::ReadingEvalAssertion {
-                        runner,
-                        player,
-                        line_no: new_line_no,
-                        expectation: line.to_string(),
-                    })
-                }
-            }
-            MootState::ReadingEvalAssertion {
-                mut runner,
-                player,
-                line_no,
-                mut expectation,
-            } => {
-                if line.is_empty() || line.starts_with("//") || line.starts_with([';', '%', '=']) {
-                    Self::assert_eval_result(&mut runner, &player, Some(&expectation), line_no)?;
-                }
-                if line.is_empty() || line.starts_with("//") {
-                    Ok(MootState::new(runner, player))
-                } else if let Some(new_player) = line.strip_prefix('@') {
-                    Ok(MootState::new(runner, Self::player(new_player)?))
-                } else if line.starts_with([';', '%', '=']) {
-                    MootState::new(runner, player).process_line(new_line_no, line)
-                } else {
-                    expectation.push('\n');
-                    let line = line.strip_prefix('<').unwrap_or(line);
-                    expectation.push_str(line);
-                    Ok(MootState::ReadingEvalAssertion {
-                        runner,
-                        player,
-                        line_no,
-                        expectation,
-                    })
-                }
-            }
-        }
-    }
-
-    pub fn finalize(self) -> eyre::Result<()> {
-        match self {
-            MootState::Ready { mut runner, player } => {
-                Self::assert_raw_line(&mut runner, player, None, 0)
-            }
-            MootState::ReadingCommand {
-                mut runner,
-                player,
-                command,
-                line_no,
-                command_kind,
-            } => {
-                Self::execute_command(&mut runner, &player, &command, command_kind, line_no)?;
-                Self::assert_eval_result(&mut runner, &player, None, line_no)
-            }
-            MootState::ReadingEvalAssertion {
-                mut runner,
-                player,
-                line_no,
-                expectation,
-            } => Self::assert_eval_result(&mut runner, &player, Some(&expectation), line_no),
-        }
-    }
-
-    fn player(s: &str) -> eyre::Result<Obj> {
-        match s {
-            "wizard" => Ok(WIZARD),
-            "programmer" => Ok(PROGRAMMER),
-            "nonprogrammer" => Ok(NONPROGRAMMER),
-            _ => Err(eyre::eyre!("Unknown player: {s}")),
-        }
-    }
-
-    fn execute_command(
-        runner: &mut R,
-        player: &Obj,
-        command: &str,
-        command_kind: CommandKind,
-        line_no: usize,
-    ) -> eyre::Result<()> {
-        match command_kind {
-            CommandKind::Eval => runner.eval(player, format!("{command} \"moot-line:{line_no}\";")),
-            CommandKind::Command => runner.command(player, command),
-        }?;
-        Ok(())
-    }
-
-    fn assert_eval_result(
-        runner: &mut R,
-        player: &Obj,
-        expectation: Option<&str>,
-        line_no: usize, // for the assertion message
-    ) -> eyre::Result<()> {
-        let err_prefix = || format!("assert_eval_result({player}, {expectation:?}, {line_no})");
-        let actual = runner
+                format!("return {expectation}; \"moot-expect-line:{line_no}\";"),
+            )
+            .wrap_err_with(|| {
+                format!(
+                    "{}/expected: Failed to compile expected output: {expectation}",
+                    err_prefix()
+                )
+            })?;
+        runner
             .read_eval_result(player)?
-            .ok_or_else(|| eyre!("{}/actual: got no eval result", err_prefix()))?;
+            .wrap_err_with(|| format!("{}/expected: got no eval result", err_prefix()))?
+    } else {
+        runner.none()
+    };
 
-        let expected = if let Some(expectation) = expectation {
-            runner
-                .eval(player, format!("return {expectation};"))
-                .wrap_err_with(|| {
-                    format!(
-                        "{}/expected: Failed to compile expected output: {expectation}",
-                        err_prefix()
-                    )
-                })?;
-            runner
-                .read_eval_result(player)?
-                .wrap_err_with(|| format!("{}/expected: got no eval result", err_prefix()))?
-        } else {
-            runner.none()
-        };
+    // Send the common through the debug formatter, because MOO string comparison
+    // is case-insensitive, but we want case-sensitive comparison in tests.
+    assert_eq!(
+        format!("{actual:?}"),
+        format!("{expected:?}"),
+        "Line {line_no}"
+    );
+    Ok(())
+}
 
-        // Send the common through the debug formatter, because MOO string comparison
-        // is case-insensitive, but we want case-sensitive comparison in tests.
-        assert_eq!(
-            format!("{actual:?}"),
-            format!("{expected:?}"),
-            "Line {line_no}"
-        );
-        Ok(())
-    }
-
-    fn assert_raw_line(
-        runner: &mut R,
-        player: Obj,
-        expectation: Option<&str>,
-        line_no: usize,
-    ) -> eyre::Result<()> {
-        let actual = runner.read_line(&player)?;
-        assert_eq!(actual.as_deref(), expectation, "Line {line_no}");
-        Ok(())
-    }
+fn assert_raw_line<R: MootRunner>(
+    runner: &mut R,
+    player: &Obj,
+    expectation: Option<&str>,
+    line_no: usize,
+) -> eyre::Result<()> {
+    let actual = runner.read_line(player)?;
+    assert_eq!(actual.as_deref(), expectation, "Line {line_no}");
+    Ok(())
 }
 
 pub struct ManagedChild {
@@ -496,30 +370,27 @@ impl MootRunner for TelnetMootRunner {
 }
 
 pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
-    runner: R,
+    mut runner: R,
     path: &Path,
     validate_state: F,
 ) {
     init_logging();
     eprintln!("Test definition: {}", path.display());
 
-    let f = BufReader::new(
-        File::open(path)
-            .wrap_err(format!("{}", path.display()))
-            .unwrap(),
-    );
+    let test = std::fs::read_to_string(path)
+        .wrap_err(format!("{}", path.display()))
+        .unwrap();
 
-    let mut state = MootState::new(runner, WIZARD);
-    for (line_no, line) in f.lines().enumerate() {
-        validate_state()
-            .unwrap_or_else(|e| panic!("Invalid state before processing line {line_no}: {e:?}"));
-
-        let line = line.unwrap();
-        let line_no = line_no + 1;
-        state = state
-            .process_line(line_no, &line)
-            .unwrap_or_else(|e| panic!("{}:{line_no}: {e:?}", path.display()))
-        //eprintln!("[{line_no}] {line}");
+    let mut player = WIZARD;
+    for span in parser::parse(&test).unwrap() {
+        validate_state().unwrap_or_else(|e| {
+            panic!(
+                "Invalid state before processing line {}: {e:?}",
+                span.line_no
+            )
+        });
+        if let Some(new_player) = run_moot_block(&mut runner, &player, &span).unwrap() {
+            player = new_player;
+        }
     }
-    state.finalize().expect("EOF");
 }
