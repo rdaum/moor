@@ -204,57 +204,45 @@ where
     }
 
     pub fn upsert(&mut self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
+        // TODO: We could probably more efficient about this, but there we bugs here before and this
+        //   fixed them.
+        if self.has_tuple(&domain)? {
+            return self.update(&domain, value);
+        }
+        self.insert(domain, value)?;
+        Ok(None)
+    }
+
+    pub fn has_tuple(&self, domain: &Domain) -> Result<bool, Error> {
         let mut index = self.index.borrow_mut();
 
-        // Check if the domain is already in the index.
-        let old_entry = index.get_mut(&domain);
+        let entry = index.get(domain);
 
-        if let Some(Entry::Present(old_entry)) = old_entry {
-            let old_value = old_entry.value.clone();
-
-            old_entry.to_type = match old_entry.to_type {
-                OpType::Cached => OpType::Update,
-                OpType::Insert | OpType::None => OpType::Insert,
-                OpType::Update => OpType::Update,
-                OpType::Delete => old_entry.from_type,
-            };
-            old_entry.value = Some(value.clone());
-
-            return Ok(old_value);
-        }
-        // Not in the index, we check the backing source.
-
-        if let Some((read_ts, backing_value)) = self.backing_source.get(&domain)? {
-            // Already present, this becomes an update
-            index.insert(
-                domain.clone(),
-                Entry::Present(Op {
-                    read_ts,
-                    write_ts: self.tx.ts,
-                    source: DatumSource::Upstream,
-                    from_type: OpType::Cached,
-                    to_type: OpType::Update,
-                    value: Some(value.clone()),
-                }),
-            );
-
-            return Ok(Some(backing_value.clone()));
+        if let Some(Entry::Present(entry)) = entry {
+            if entry.to_type == OpType::Delete {
+                return Ok(false);
+            }
+            return Ok(true);
         }
 
-        // It's not upstream, create an insert
+        let backing_value = self.backing_source.get(domain)?;
+        let Some((read_ts, backing_value)) = backing_value else {
+            return Ok(false);
+        };
+
         index.insert(
             domain.clone(),
             Entry::Present(Op {
-                read_ts: self.tx.ts,
+                read_ts,
                 write_ts: self.tx.ts,
-                source: DatumSource::Local,
-                from_type: OpType::None,
-                to_type: OpType::Insert,
-                value: Some(value.clone()),
+                source: DatumSource::Upstream,
+                from_type: OpType::Cached,
+                to_type: OpType::Cached,
+                value: Some(backing_value.clone()),
             }),
         );
 
-        Ok(None)
+        Ok(true)
     }
 
     pub fn get(&self, domain: &Domain) -> Result<Option<Codomain>, Error> {
