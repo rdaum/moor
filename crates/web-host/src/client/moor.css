@@ -273,5 +273,6 @@ html, body {
 
 .input_echo {
     font-family: 'Roboto Mono', monospace;
+    white-space: pre-wrap;
     color: #00ff00;
 }
