@@ -97,18 +97,19 @@ where
         Ok(())
     }
 
-    /// Check the permissions for the application of an application of inheritance to a parent.
-    /// This is a helper function for `create_object` and `change_parent`.
-    /// It checks that the parent is writable and fertile, and that the parent is either the
-    /// NOTHING object or that the parent is usable by the object's owner.
-    fn check_parent(&self, perms: &Obj, parent: &Obj) -> Result<(), WorldStateError> {
-        if *parent != NOTHING {
-            let (parentflags, parentowner) = (self.flags_of(parent)?, self.owner_of(parent)?);
-            self.perms(perms)?.check_object_allows(
+    fn check_parent(&self, perms: &Obj, parent: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
+        let (parentflags, parentowner) = (self.flags_of(parent)?, self.owner_of(parent)?);
+        let createorperms = self.perms(perms)?;
+        if self.valid(parent)? {
+            createorperms.check_object_allows(
                 &parentowner,
                 parentflags,
                 BitEnum::new_with(ObjFlag::Fertile),
             )?;
+        } else {
+            if parent.ne(&NOTHING) || (owner.ne(perms) && !createorperms.check_is_wizard()?) {
+                return Err(WorldStateError::ObjectPermissionDenied);
+            }
         }
         Ok(())
     }
@@ -172,7 +173,20 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         owner: &Obj,
         flags: BitEnum<ObjFlag>,
     ) -> Result<Obj, WorldStateError> {
-        self.check_parent(perms, parent)?;
+        /*
+           if ((valid(parent) ? !db_object_allows(parent, progr, FLAG_FERTILE)
+                              : (parent != NOTHING)) || (owner != progr && !is_wizard(progr)))
+               return make_error_pack(E_PERM);
+
+           bool pe;
+           if (valid(parent)) {
+               pe = !db_object_allows(parent, progr, FLAG_FERTILE)
+           } else {
+               pe = (parent != NOTHING)) || (owner != progr && !is_wizard(progr)))
+           }
+        */
+
+        self.check_parent(perms, parent, owner)?;
 
         // TODO: ownership_quota support
         //    If the intended owner of the new object has a property named `ownership_quota' and the value of that property is an integer, then `create()' treats that value
@@ -711,7 +725,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
 
         let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
 
-        self.check_parent(perms, new_parent)?;
+        self.check_parent(perms, new_parent, &owner)?;
         self.perms(perms)?
             .check_object_allows(&owner, objflags, ObjFlag::Write.into())?;
 
