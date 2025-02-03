@@ -640,7 +640,7 @@ mod tests {
     };
     use moor_values::model::{ObjAttrs, ObjFlag, PropFlag};
     use moor_values::util::BitEnum;
-    use moor_values::{Obj, Symbol};
+    use moor_values::{v_int, Obj, Symbol};
     use std::sync::Arc;
 
     fn test_db() -> Arc<super::WorldStateDB> {
@@ -807,5 +807,43 @@ mod tests {
         assert_eq!(tx.get_object_owner(&obj5).unwrap(), obj5);
         let o5perms = tx.retrieve_property_permissions(&obj5, uuid).unwrap();
         assert_eq!(o5perms.owner(), obj5);
+    }
+
+    /// Regression where property values of an ancestor shared with a new parent got lost.
+    /// E.g. password lost when reparenting from "player" to "programmer", which also inherited
+    /// from "player"
+    #[test]
+    fn test_property_subgraph_reparent() {
+        let db = test_db();
+        let mut tx = begin_tx(&db);
+        let player = tx.create_object(None, Default::default()).unwrap();
+        let uuid = tx
+            .define_property(
+                &player,
+                &player,
+                Symbol::mk("password"),
+                &player,
+                BitEnum::new(),
+                Some(v_int(666)),
+            )
+            .unwrap();
+        let programmer = tx.create_object(None, Default::default()).unwrap();
+        let builder = tx.create_object(None, Default::default()).unwrap();
+        let user = tx.create_object(None, Default::default()).unwrap();
+        tx.set_object_parent(&builder, &player).unwrap();
+        tx.set_object_parent(&programmer, &builder).unwrap();
+        tx.set_object_parent(&user, &player).unwrap();
+
+        tx.set_property(&user, uuid, v_int(1234567890)).unwrap();
+        assert_eq!(
+            tx.retrieve_property(&user, uuid).unwrap().0.unwrap(),
+            v_int(1234567890)
+        );
+
+        tx.set_object_parent(&user, &programmer).unwrap();
+        assert_eq!(
+            tx.retrieve_property(&user, uuid).unwrap().0.unwrap(),
+            v_int(1234567890)
+        );
     }
 }

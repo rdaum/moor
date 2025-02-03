@@ -309,46 +309,46 @@ impl WorldStateTransaction for DbTransaction {
     }
 
     fn set_object_parent(&mut self, o: &Obj, new_parent: &Obj) -> Result<(), WorldStateError> {
-        // Steps for object re-parenting:
+        // Find the set of old ancestors (terminating at "new_parent" if they intersect, before
+        // changing the inheritance graph
+        let old_ancestors = self.ancestors_up_to(o, new_parent)?;
 
-        // Get o's old-parents's children
-        //      remove o from it, and save.
-        // Walk existing descendant tree of O and find any props that they inherited from old-parent
-        // or any of its ancestors up to the most recent common ancestor, remove them.
-        // Get o's new-parent's children list add o to it, and save.
-        // Walk same descendant tree, and add props defined by new-parent and *its* ancestors, up to
-        // shared one.
-        // Set o's parent field.
+        // If this is a new object it won't have a parent, old parent this will come up not-found,
+        // and if that's the case we can ignore that.
+        let old_parent = self.get_object_parent(o)?;
+        if !old_parent.is_nothing() && old_parent.eq(new_parent) {
+            return Ok(());
+        };
 
-        // This will find a) our shared ancestor, b) all ancestors not shared with new ancestor,
-        // c) all the new ancestors we'd have after the reparenting, all in one go. Hopefully.
-        let (_shared_ancestor, new_ancestors, old_ancestors) =
-            self.closest_common_ancestor_with_ancestors(new_parent, o)?;
+        // Now find the set of new ancestors.
+        let mut new_ancestors: HashSet<_> = self.ancestors_set(new_parent)?;
+        new_ancestors.insert(new_parent.clone());
 
-        // Remove from _me_ any of the properties defined by any of my ancestors
+        // What's not shared?
+        let unshared_ancestors: HashSet<_> = old_ancestors.difference(&new_ancestors).collect();
+
+        // Go through and find all property definitions that were defined in the old ancestry graph that
+        // no longer apply in the new.
         let old_props = self.object_propdefs.get(o).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object properties: {:?}", e))
         })?;
-        let old_props = old_props.unwrap_or(PropDefs::empty());
-        let mut delort_props = vec![];
-        for ancestor in &old_ancestors {
-            let ancestor_props = self.get_properties(ancestor)?;
-            for p in ancestor_props.iter() {
-                delort_props.push(p.uuid())
-            }
-        }
-        if !delort_props.is_empty() {
-            for p in &delort_props {
-                let pid = ObjAndUUIDHolder::new(o, *p);
-                if let Ok(Some(_)) = self.object_propvalues.get(&pid) {
-                    self.object_propvalues.delete(&pid).ok();
+        let mut dead_properties = vec![];
+        if let Some(old_props) = old_props {
+            for prop in old_props.iter() {
+                if !unshared_ancestors.contains(&prop.definer()) {
+                    dead_properties.push(prop.uuid());
                 }
             }
-
-            let new_props = old_props.with_all_removed(&delort_props);
+            let new_props = old_props.with_all_removed(&dead_properties);
             self.object_propdefs
                 .upsert(o.clone(), new_props)
                 .expect("Unable to update propdefs");
+
+            // Remove their values and flags.
+            for prop in old_props.iter() {
+                let holder = ObjAndUUIDHolder::new(o, prop.uuid());
+                self.object_propvalues.delete(&holder).ok();
+            }
         }
 
         // Now walk all-my-children and destroy all the properties whose definer is me or any
@@ -362,6 +362,9 @@ impl WorldStateTransaction for DbTransaction {
             let old_props = self.get_properties(o)?;
             if !old_props.is_empty() {
                 for p in old_props.iter() {
+                    if new_ancestors.contains(&p.definer()) {
+                        continue;
+                    }
                     if old_ancestors.contains(&p.definer()) {
                         inherited_props.push(p.uuid());
                         self.object_propvalues
@@ -1177,42 +1180,35 @@ impl DbTransaction {
         }
     }
 
-    #[allow(clippy::type_complexity)]
-    fn closest_common_ancestor_with_ancestors(
-        &self,
-        a: &Obj,
-        b: &Obj,
-    ) -> Result<(Option<Obj>, HashSet<Obj>, HashSet<Obj>), WorldStateError> {
-        let mut ancestors_a = HashSet::new();
-        let mut search_a = a.clone();
-
-        let mut ancestors_b = HashSet::new();
-        let mut search_b = b.clone();
-
+    fn ancestors_up_to(&self, obj: &Obj, limit: &Obj) -> Result<HashSet<Obj>, WorldStateError> {
+        if obj.eq(&NOTHING) || obj.eq(limit) {
+            return Ok(HashSet::new());
+        }
+        let mut ancestor_set = HashSet::new();
+        let mut search_obj = obj.clone();
         loop {
-            if search_a.is_nothing() && search_b.is_nothing() {
-                return Ok((None, ancestors_a, ancestors_b)); // No common ancestor found
+            let ancestor = self.get_object_parent(&search_obj)?;
+            if ancestor.eq(&NOTHING) || ancestor.eq(limit) {
+                return Ok(ancestor_set);
             }
+            ancestor_set.insert(ancestor.clone());
+            search_obj = ancestor;
+        }
+    }
 
-            if ancestors_b.contains(&search_a) {
-                return Ok((Some(search_a.clone()), ancestors_a, ancestors_b)); // Common ancestor found
+    fn ancestors_set(&self, obj: &Obj) -> Result<HashSet<Obj>, WorldStateError> {
+        if obj.eq(&NOTHING) {
+            return Ok(HashSet::new());
+        }
+        let mut ancestor_set = HashSet::new();
+        let mut search_obj = obj.clone();
+        loop {
+            let ancestor = self.get_object_parent(&search_obj)?;
+            if ancestor.eq(&NOTHING) {
+                return Ok(ancestor_set);
             }
-
-            if ancestors_a.contains(&search_b) {
-                return Ok((Some(search_b.clone()), ancestors_a, ancestors_b)); // Common ancestor found
-            }
-
-            if !search_a.is_nothing() {
-                ancestors_a.insert(search_a.clone());
-                let parent = self.get_object_parent(&search_a)?;
-                search_a = parent.clone();
-            }
-
-            if !search_b.is_nothing() {
-                ancestors_b.insert(search_b.clone());
-                let parent = self.get_object_parent(&search_b)?;
-                search_b = parent.clone();
-            }
+            ancestor_set.insert(ancestor.clone());
+            search_obj = ancestor;
         }
     }
 }

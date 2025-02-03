@@ -106,10 +106,8 @@ where
                 parentflags,
                 BitEnum::new_with(ObjFlag::Fertile),
             )?;
-        } else {
-            if parent.ne(&NOTHING) || (owner.ne(perms) && !createorperms.check_is_wizard()?) {
-                return Err(WorldStateError::ObjectPermissionDenied);
-            }
+        } else if parent.ne(&NOTHING) || (owner.ne(perms) && !createorperms.check_is_wizard()?) {
+            return Err(WorldStateError::ObjectPermissionDenied);
         }
         Ok(())
     }
