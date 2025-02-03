@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_moot::{test_db_path, ManagedChild};
+use moor_moot::{telnet::ManagedChild, test_db_path};
 use serial_test::serial;
 use std::net::TcpListener;
 use std::{
@@ -110,7 +110,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 // only one runs at a time.
 
 fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
-    use moor_moot::{execute_moot_test, TelnetMootRunner};
+    use moor_moot::{execute_moot_test, telnet::TelnetMootRunner};
 
     // Assign our unique identifier for this test run to be used in the paths for the IPC sockets.
     let uuid = Uuid::new_v4();

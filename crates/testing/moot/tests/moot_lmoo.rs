@@ -24,7 +24,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use moor_moot::{execute_moot_test, test_db_path, ManagedChild, TelnetMootRunner};
+use moor_moot::{execute_moot_test, telnet::ManagedChild, telnet::TelnetMootRunner, test_db_path};
 
 fn moo_path() -> PathBuf {
     env::var("MOOT_MOO_PATH")
