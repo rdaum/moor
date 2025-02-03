@@ -122,8 +122,19 @@ fn handle_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
     path: &Path,
 ) -> eyre::Result<()> {
     execute_test_prog(runner, player, line_no, test, &validate_state)?;
-    for expectation in &test.expected_output {
-        execute_test_expectation(runner, player, &validate_state, expectation, path)?;
+
+    if test.expected_output.is_empty() {
+        if test.kind == MootBlockTestKind::EvalBg {
+            // Discard the result of the eval
+            runner.read_eval_result(player)?;
+        } else if test.kind == MootBlockTestKind::Eval {
+            // Assert that we got the empty result
+            assert_eval_result(runner, player, None, path, line_no)?;
+        }
+    } else {
+        for expectation in &test.expected_output {
+            execute_test_expectation(runner, player, &validate_state, expectation, path)?;
+        }
     }
 
     Ok(())
