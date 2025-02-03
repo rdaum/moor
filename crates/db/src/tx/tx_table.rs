@@ -171,8 +171,8 @@ where
             // Update the "to_type" depending on what the existing to_type was.
             // If it was a "delete", that's an error, you can't update something deleted.
             // If it was an "insert", keep it as an insert, but with the new value.
-            // If it was an "update", same.
-            // "None" or "cached" become
+            // If it was an "update", it stays the same, but with new value.
+            // If it was "cached", it now becomes an update.
             old_entry.to_type = match old_entry.to_type {
                 OpType::Cached | OpType::Update => OpType::Update,
                 OpType::Delete => {
@@ -181,6 +181,7 @@ where
                 OpType::Insert => OpType::Insert,
             };
             old_entry.value = Some(value.clone());
+            old_entry.write_ts = self.tx.ts;
 
             return Ok(old_value);
         }
