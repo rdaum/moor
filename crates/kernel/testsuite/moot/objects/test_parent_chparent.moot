@@ -1,0 +1,84 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_parent_chparent 
+
+; add_property($system, "a", create($nothing), {player, "wrc"});
+; add_property($system, "b", create($nothing), {player, "wrc"});
+; add_property($system, "c", create($nothing), {player, "wrc"});
+
+; return parent($a);
+$nothing
+; return parent($b);
+$nothing
+; return parent($c);
+$nothing
+
+; chparent($a, $b);
+; chparent($b, $c);
+
+; return parent($a);
+$b
+; return parent($b);
+$c
+; return parent($c);
+$nothing
+
+; return children($a);
+{}
+; return children($b);
+{$a}
+; return children($c);
+{$b}
+
+; chparent($a, $c);
+
+; return parent($a);
+$c
+; return parent($b);
+$c
+; return parent($c);
+$nothing
+
+; return children($a);
+{}
+; return children($b);
+{}
+; return children($c);
+{$b, $a}
+
+; chparent($a, $nothing);
+; chparent($b, $nothing);
+; chparent($c, $nothing);
+
+; return parent($a);
+$nothing
+; return parent($b);
+$nothing
+; return parent($c);
+$nothing
+
+; return children($a);
+{}
+; return children($b);
+{}
+; return children($c);
+{}
+
+// Test that if two objects define the same property by name, the
+// assigned property value (and info) is not preserved across
+// chparent.  Test both the single and multiple inheritance
+// cases.
+
+; add_property($a, "foo", "foo", {$a, "c"});
+; add_property($b, "foo", "foo", {$b, ""});
+
+; chparent($c, $a);
+; return property_info($c, "foo");
+{player, "c"}
+; $c.foo = "bar";
+; return $c.foo;
+"bar"
+; chparent($c, $b);
+; return property_info($c, "foo");
+{$b, ""}
+; return $c.foo;
+"foo"
