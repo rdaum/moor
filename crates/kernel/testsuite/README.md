@@ -48,3 +48,7 @@ https://github.com/toddsundsted/stunt/tree/master/test
   - https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb#L84-L94
   - https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb#L106-L111
   - https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb#L164-L169
+
+## Useful Vim commands
+
+To speed up migrating Stunt tests. These are pretty rough, but a good way to take care of ~80% of the lines.
