@@ -528,9 +528,13 @@ fn compile_object_definition(
 
 fn parse_property_name(pair: Pair<Rule>) -> Result<Symbol, ObjDefParseError> {
     // If rule is "string", parse it as that. Otherwise, just grab the literal characters.
-    match pair.as_rule() {
-        Rule::string => Ok(Symbol::mk(parse_string_literal(pair)?.as_str())),
-        _ => Ok(Symbol::mk(pair.as_str().trim())),
+    let inner = pair.into_inner().next().unwrap();
+    match inner.as_rule() {
+        Rule::string => Ok(Symbol::mk(parse_string_literal(inner)?.as_str())),
+        Rule::unquoted_propname => Ok(Symbol::mk(inner.as_str().trim())),
+        _ => {
+            panic!("Unexpected property name: {:?}", inner);
+        }
     }
 }
 
@@ -1121,5 +1125,37 @@ mod tests {
 
         let mut context = ObjFileContext::new();
         compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+    }
+
+    /// Regression on quoted string constants for property names
+    #[test]
+    fn test_quoted_string_propname() {
+        let spec = r#"object #1
+                    // Testing a C++ Style comment
+                    parent: #1
+                    name: "Test Object"
+                    location: #3
+                    wizard: false
+                    programmer: false
+                    player: false
+                    fertile: true
+                    readable: true
+
+                    property " " (owner: #1, flags: "") = {"", "", {}, {}};
+                    property just_regular (owner: #1, flags: "") = {"", "", {}, {}};
+                    property "quoted normal" (owner: #1, flags: "") = {"", "", {}, {}};
+                endobject"#;
+
+        let mut context = ObjFileContext::new();
+        let objs =
+            compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap();
+        let obj = &objs[0];
+
+        assert_eq!(obj.property_definitions[0].name, Symbol::mk(" "));
+        assert_eq!(obj.property_definitions[1].name, Symbol::mk("just_regular"));
+        assert_eq!(
+            obj.property_definitions[2].name,
+            Symbol::mk("quoted normal")
+        );
     }
 }

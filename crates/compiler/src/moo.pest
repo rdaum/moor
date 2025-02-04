@@ -259,6 +259,7 @@ WHITESPACE = _{ " " | "\t" | NEWLINE | comment }
 PREP_CHARACTERS = @{ ASCII_ALPHA+ }
 PROPCHARS = @{ ASCII_ALPHANUMERIC | "_" }
 
+
 // "Objects files" are an alternate import format for reading cores or databases, that is designed to be readable and
 // editable by regular tools.
 objects_file = { SOI ~ (object_definition | constant_decl)* ~ EOI }
@@ -304,5 +305,6 @@ literal_flyweight_slots = { ("[" ~ (ident ~ "->" ~ literal) ~ ("," ~ ident ~ "->
 literal_flyweight_contents = { "{" ~ (literal ~ ("," ~ literal)*)? ~ "}" }
 prop_def = {"property" ~ propname ~ propinfo ~ ("=" ~ literal)? ~ ";" }
 prop_set = {"override" ~ propname ~ propinfo? ~ ("=" ~ literal)? ~ ";" }
-propname = { string | PROPCHARS+ }
+unquoted_propname = { PROPCHARS+ }
+propname = { string | unquoted_propname }
 propinfo = {"(" ~ owner_attr ~ "," ~ flags_attr ~ ")"}
