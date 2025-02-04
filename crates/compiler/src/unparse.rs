@@ -912,7 +912,6 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
             result.push('}');
         }
         Variant::Map(m) => {
-            let mut result = String::new();
             result.push('[');
             for (i, (k, v)) in m.iter().enumerate() {
                 if i > 0 {
@@ -976,6 +975,7 @@ mod tests {
     use super::*;
     use crate::ast::assert_trees_match_recursive;
     use crate::CompileOptions;
+    use moor_values::v_empty_map;
     use pretty_assertions::assert_eq;
     use test_case::test_case;
     use unindent::unindent;
