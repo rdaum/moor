@@ -136,6 +136,32 @@ pub enum Op {
     },
     If(Label, u16),
     Eif(Label, u16),
+    BeginComprehension(ComprehensionType, Label, Label),
+    ComprehendRange {
+        /// The variable to populate with the result of the current range iteration, which is
+        /// declared in the current scope.
+        position: Name,
+        end_of_range_register: Name,
+        /// Where to jump after done producing
+        end_label: Label,
+    },
+    ComprehendList {
+        /// The register (unnamed variable) which holds the current offset into the list
+        position_register: Name,
+        /// The register holding the evaluated list we're iterating.
+        list_register: Name,
+        /// The variable we assign with the value indexed from the list.
+        item_variable: Name,
+        /// Where to jump after done producing
+        end_label: Label,
+    },
+    ContinueComprehension(Name),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+pub enum ComprehensionType {
+    Range,
+    List,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]

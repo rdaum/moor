@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::names::Binding::{Named, Register};
 use crate::GlobalName;
 use bincode::{Decode, Encode};
 use moor_values::model::CompileError;
@@ -24,16 +25,31 @@ pub struct UnboundNames {
     scope: Vec<HashMap<Symbol, UnboundName>>,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub enum Binding {
+    Named(Symbol),
+    Register,
+}
+
+impl Binding {
+    pub fn to_symbol(&self) -> Symbol {
+        match self {
+            Binding::Named(sym) => *sym,
+            Binding::Register => Symbol::mk("<register>"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Decl {
-    pub sym: Symbol,
+    pub identifier: Binding,
     pub depth: usize,
     pub constant: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UnboundName {
-    offset: usize,
+    pub offset: usize,
 }
 
 impl Default for UnboundNames {
@@ -81,7 +97,7 @@ impl UnboundNames {
         // MOO currently works.
         // These types of variables are always mutable, and always re-use a variable name, to
         // maintain existing MOO language semantics.
-        let unbound_name = self.new_unbound(name, 0, false, BindMode::Reuse)?;
+        let unbound_name = self.new_unbound_named(name, 0, false, BindMode::Reuse)?;
         self.scope[0].insert(name, unbound_name);
         Ok(unbound_name)
     }
@@ -97,10 +113,16 @@ impl UnboundNames {
         scope.len()
     }
 
+    pub fn declare_register(&mut self) -> Result<UnboundName, CompileError> {
+        let unbound_name = self.new_unbound_register(self.scope.len() - 1, false)?;
+        Ok(unbound_name)
+    }
+
     /// Declare a (mutable) name in the current lexical scope.
     pub fn declare_name(&mut self, name: &str) -> Result<UnboundName, CompileError> {
         let name = Symbol::mk_case_insensitive(name);
-        let unbound_name = self.new_unbound(name, self.scope.len() - 1, false, BindMode::New)?;
+        let unbound_name =
+            self.new_unbound_named(name, self.scope.len() - 1, false, BindMode::New)?;
         self.scope.last_mut().unwrap().insert(name, unbound_name);
         Ok(unbound_name)
     }
@@ -108,7 +130,8 @@ impl UnboundNames {
     /// Declare a (mutable) name in the current lexical scope.
     pub fn declare_const(&mut self, name: &str) -> Result<UnboundName, CompileError> {
         let name = Symbol::mk_case_insensitive(name);
-        let unbound_name = self.new_unbound(name, self.scope.len() - 1, true, BindMode::New)?;
+        let unbound_name =
+            self.new_unbound_named(name, self.scope.len() - 1, true, BindMode::New)?;
         self.scope.last_mut().unwrap().insert(name, unbound_name);
         Ok(unbound_name)
     }
@@ -132,8 +155,15 @@ impl UnboundNames {
     pub fn find_named(&self, name: &str) -> Vec<UnboundName> {
         let name = Symbol::mk_case_insensitive(name);
         let mut names = vec![];
-        for (i, Decl { sym, .. }) in self.unbound_names.iter().enumerate() {
-            if *sym == name {
+        for (
+            i,
+            Decl {
+                identifier: binding,
+                ..
+            },
+        ) in self.unbound_names.iter().enumerate()
+        {
+            if *binding == Named(name) {
                 names.push(UnboundName { offset: i });
             }
         }
@@ -152,7 +182,7 @@ impl UnboundNames {
     }
 
     /// Create a new unbound variable.
-    fn new_unbound(
+    fn new_unbound_named(
         &mut self,
         name: Symbol,
         scope: usize,
@@ -165,7 +195,21 @@ impl UnboundNames {
         }
         let idx = self.unbound_names.len();
         self.unbound_names.push(Decl {
-            sym: name,
+            identifier: Named(name),
+            depth: scope,
+            constant,
+        });
+        Ok(UnboundName { offset: idx })
+    }
+
+    fn new_unbound_register(
+        &mut self,
+        scope: usize,
+        constant: bool,
+    ) -> Result<UnboundName, CompileError> {
+        let idx = self.unbound_names.len();
+        self.unbound_names.push(Decl {
+            identifier: Register,
             depth: scope,
             constant,
         });
@@ -187,7 +231,7 @@ impl UnboundNames {
         let mut scope_depth = Vec::with_capacity(self.unbound_names.len());
         for (idx, _) in self.unbound_names.iter().enumerate() {
             let offset = bound.len();
-            bound.push(self.unbound_names[idx].sym);
+            bound.push(self.unbound_names[idx].identifier.clone());
             scope_depth.push(self.unbound_names[idx].depth as u16);
             mapping.insert(UnboundName { offset: idx }, Name(offset as u16));
         }
@@ -211,7 +255,7 @@ pub struct Name(u16);
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct Names {
     /// The set of bound variables and their names.
-    bound: Vec<Symbol>,
+    bound: Vec<Binding>,
     /// The size of the global scope, e.g. the size the environment should be when the frame
     /// is first created.
     global_width: usize,
@@ -231,7 +275,10 @@ impl Names {
     /// Find the name in the name table, if it exists.
     pub fn find_name(&self, name: &str) -> Option<Name> {
         for (idx, n) in self.bound.iter().enumerate() {
-            if n.as_str() == name {
+            let Named(sym) = n else {
+                continue;
+            };
+            if sym.as_str() == name {
                 return Some(Name(idx as u16));
             }
         }
@@ -249,16 +296,27 @@ impl Names {
         self.global_width
     }
 
-    /// Return the symbol value of the given name offset.
+    /// Return the symbol value of the given name offset, if it has one
     pub fn name_of(&self, name: &Name) -> Option<Symbol> {
         if name.0 as usize >= self.bound.len() {
             return None;
         }
-        Some(self.bound[name.0 as usize])
+        let Named(name) = self.bound[name.0 as usize] else {
+            return None;
+        };
+        Some(name)
     }
 
-    pub fn symbols(&self) -> &Vec<Symbol> {
-        &self.bound
+    pub fn symbols(&self) -> Vec<Symbol> {
+        self.bound
+            .iter()
+            .filter_map(|b| {
+                let Named(name) = b else {
+                    return None;
+                };
+                Some(*name)
+            })
+            .collect()
     }
 
     pub fn names(&self) -> Vec<Name> {

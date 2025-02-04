@@ -33,17 +33,18 @@ mooR is written from the ground up, with reference to the LambdaMOO sources, but
 Enhancements over base the LambdaMOO 1.8.x system include (but are not limited to):
 
 - Runtime features:
-  - A fully multithreaded architecture, taking advantage of the wizardly powers of modern multicore computing
-    machines.
-  - A native web front end, with rich content presentation.
-  - A text import / export format for objects that can be read by a human and edited by a standard text editor.
-  - An architecture that is easier to extend and add to.
+    - A fully multithreaded architecture, taking advantage of the wizardly powers of modern multicore computing
+      machines.
+    - A native web front end, with rich content presentation.
+    - A text import / export format for objects that can be read by a human and edited by a standard text editor.
+    - An architecture that is easier to extend and add to.
 - Language features:
-  - Lexically scoped variables / blocks in the language
-  - Maps: an associative container type
-  - UTF-8 strings
-  - 64-bit integers and floats
-  - "flyweights" - a lightweight anonymous reference counted immutable object / container type.
+    - Lexically scoped variables / blocks in the language
+    - Maps: an associative container type
+    - List / Range comprehensions, similar to Python, Julia, etc.
+    - UTF-8 strings
+    - 64-bit integers and floats
+    - "flyweights" - a lightweight anonymous reference counted immutable object / container type.
 
 ### Why?
 

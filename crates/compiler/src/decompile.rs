@@ -15,6 +15,7 @@ use moor_values::{v_err, v_int, v_none, v_obj, Symbol, Var};
 use moor_values::{v_float, Variant};
 use std::collections::{HashMap, VecDeque};
 
+use crate::ast::Expr::ComprehendRange;
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
     StmtNode, UnaryOp,
@@ -23,7 +24,7 @@ use crate::builtins::BuiltinId;
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::labels::{JumpLabel, Label};
 use crate::names::{Name, UnboundName, UnboundNames};
-use crate::opcode::{Op, ScatterLabel};
+use crate::opcode::{ComprehensionType, Op, ScatterLabel};
 use crate::parse::Parse;
 use crate::program::Program;
 use crate::BUILTINS;
@@ -968,6 +969,101 @@ impl Decompile {
             Op::EndScope { .. } => {
                 // Noop.
             }
+            Op::BeginComprehension(comprehension_type, _, loop_start_label) => {
+                let assign_statements = self.decompile_statements_until(&loop_start_label)?;
+                match comprehension_type {
+                    ComprehensionType::Range => {
+                        // We should have two assignments -- begin and end range
+                        assert_eq!(assign_statements.len(), 2);
+
+                        // Next must be ComprehendRange
+                        let next = self.next()?;
+                        let Op::ComprehendRange {
+                            position,
+                            end_of_range_register,
+                            end_label,
+                        } = next
+                        else {
+                            return Err(MalformedProgram(
+                                "malformed range comprehension".to_string(),
+                            ));
+                        };
+
+                        self.decompile_statements_until(&end_label)?;
+                        let producer_expr = self.pop_expr()?;
+
+                        let StmtNode::Expr(Expr::Assign {
+                            left: _,
+                            right: from,
+                        }) = &assign_statements[0].node
+                        else {
+                            return Err(MalformedProgram(
+                                "malformed range comprehension".to_string(),
+                            ));
+                        };
+
+                        let StmtNode::Expr(Expr::Assign { left: _, right: to }) =
+                            &assign_statements[1].node
+                        else {
+                            return Err(MalformedProgram(
+                                "malformed range comprehension".to_string(),
+                            ));
+                        };
+
+                        self.push_expr(ComprehendRange {
+                            variable: self.names_mapping[&position],
+                            end_of_range_register: self.names_mapping[&end_of_range_register],
+                            producer_expr: Box::new(producer_expr),
+                            from: from.clone(),
+                            to: to.clone(),
+                        })
+                    }
+                    ComprehensionType::List => {
+                        // we have two assignments, the list and initial position. we only care
+                        // about the value of the list
+                        assert_eq!(assign_statements.len(), 2);
+
+                        let next_opcode = self.next()?;
+                        let Op::ComprehendList {
+                            position_register,
+                            list_register,
+                            item_variable,
+                            end_label,
+                        } = next_opcode
+                        else {
+                            return Err(MalformedProgram(
+                                "malformed list comprehension".to_string(),
+                            ));
+                        };
+
+                        self.decompile_statements_until(&end_label)?;
+                        let producer_expr = self.pop_expr()?;
+
+                        let StmtNode::Expr(Expr::Assign {
+                            left: _,
+                            right: list,
+                        }) = &assign_statements[0].node
+                        else {
+                            return Err(MalformedProgram(
+                                "malformed list comprehension".to_string(),
+                            ));
+                        };
+
+                        self.push_expr(Expr::ComprehendList {
+                            variable: self.names_mapping[&item_variable],
+                            position_register: self.names_mapping[&position_register],
+                            list_register: self.names_mapping[&list_register],
+                            producer_expr: Box::new(producer_expr),
+                            list: list.clone(),
+                        })
+                    }
+                }
+            }
+            Op::ContinueComprehension(..)
+            | Op::ComprehendRange { .. }
+            | Op::ComprehendList { .. } => {
+                // noop, handled above
+            }
         }
         Ok(())
     }
@@ -989,10 +1085,14 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     let mut bound_to_unbound = HashMap::new();
     let mut unbound_to_bound = HashMap::new();
     for bound_name in program.var_names.names() {
-        let n = program.var_names.name_of(&bound_name).unwrap();
-        let ub = unbound_names
-            .find_or_add_name_global(n.as_str())
-            .map_err(|_| DecompileError::NameNotFound(bound_name))?;
+        let ub = match program.var_names.name_of(&bound_name) {
+            None => unbound_names
+                .declare_register()
+                .map_err(|_| DecompileError::NameNotFound(bound_name))?,
+            Some(n) => unbound_names
+                .find_or_add_name_global(n.as_str())
+                .map_err(|_| DecompileError::NameNotFound(bound_name))?,
+        };
         bound_to_unbound.insert(bound_name, ub);
         unbound_to_bound.insert(ub, bound_name);
     }
@@ -1242,6 +1342,20 @@ return 0 && "Automatically Added Return";
     #[test]
     fn test_map_decompile() {
         let program = r#"[ 1 -> 2, 3 -> 4 ];"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn test_for_range_comprehension() {
+        let program = r#"return { x * 2 for x in [1..3] };"#;
+        let (parse, decompiled) = parse_decompile(program);
+        assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
+    }
+
+    #[test]
+    fn test_for_list_comprehension() {
+        let program = r#"return { x * 2 for x in ({1,2,3}) };"#;
         let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }

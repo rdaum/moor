@@ -48,6 +48,8 @@ pub struct FeaturesConfig {
     pub type_dispatch: bool,
     /// Whether to support flyweight types. Flyweights are a lightweight, non-persistent thingy
     pub flyweight_type: bool,
+    /// Whether to support list/range comprehensions in the language
+    pub list_comprehensions: bool,
 }
 
 impl Default for FeaturesConfig {
@@ -59,6 +61,7 @@ impl Default for FeaturesConfig {
             map_type: true,
             type_dispatch: true,
             flyweight_type: true,
+            list_comprehensions: true,
         }
     }
 }
@@ -69,6 +72,7 @@ impl FeaturesConfig {
             lexical_scopes: self.lexical_scopes,
             map_type: self.map_type,
             flyweight_type: self.flyweight_type,
+            list_comprehensions: self.list_comprehensions,
         }
     }
 
@@ -94,6 +98,7 @@ impl FeaturesConfig {
             && (!other.map_type || self.map_type)
             && (!other.type_dispatch || self.type_dispatch)
             && (!other.flyweight_type || self.flyweight_type)
+            && (!other.list_comprehensions || self.list_comprehensions)
     }
 }
 

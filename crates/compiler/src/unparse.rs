@@ -65,6 +65,8 @@ impl Expr {
             Expr::Prop { .. } => 1,
             Expr::Verb { .. } => 1,
             Expr::Range { .. } => 1,
+            Expr::ComprehendRange { .. } => 1,
+            Expr::ComprehendList { .. } => 1,
             Expr::Index(_, _) => 2,
 
             Expr::Value(_) => 1,
@@ -367,6 +369,55 @@ impl<'a> Unparse<'a> {
                     buffer.push('}');
                 }
                 buffer.push('>');
+                Ok(buffer)
+            }
+            Expr::ComprehendRange {
+                variable,
+                end_of_range_register: _,
+                producer_expr,
+                from,
+                to,
+            } => {
+                // { <producer_expr> for <variable> in [<from>..<to>] }
+                let mut buffer = String::new();
+                buffer.push_str("{ ");
+                buffer.push_str(&self.unparse_expr(producer_expr)?);
+                buffer.push_str(" for ");
+                let name = self
+                    .tree
+                    .names
+                    .name_of(&self.unparse_name(variable))
+                    .unwrap();
+                buffer.push_str(name.as_str());
+                buffer.push_str(" in [");
+                buffer.push_str(&self.unparse_expr(from)?);
+                buffer.push_str("..");
+                buffer.push_str(&self.unparse_expr(to)?);
+                buffer.push_str("] }");
+                Ok(buffer)
+            }
+            Expr::ComprehendList {
+                variable,
+                position_register: _,
+                producer_expr,
+                list,
+                ..
+            } => {
+                // { <producer_Expr> for <variable> in (list) }
+                // { <producer_expr> for <variable> in [<from>..<to>] }
+                let mut buffer = String::new();
+                buffer.push_str("{ ");
+                buffer.push_str(&self.unparse_expr(producer_expr)?);
+                buffer.push_str(" for ");
+                let name = self
+                    .tree
+                    .names
+                    .name_of(&self.unparse_name(variable))
+                    .unwrap();
+                buffer.push_str(name.as_str());
+                buffer.push_str(" in (");
+                buffer.push_str(&self.unparse_expr(list)?);
+                buffer.push_str(") }");
                 Ok(buffer)
             }
         }
@@ -1117,6 +1168,22 @@ mod tests {
     #[test]
     fn test_flyweight() {
         let program = r#"return <#1, [slot -> "123"], {1, 2, 3}>;"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn for_range_comprehension() {
+        let program = r#"return { x * 2 for x in [1..3] };"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn for_list_comprehension() {
+        let program = r#"return { x * 2 for x in ({1, 2, 3}) };"#;
         let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());

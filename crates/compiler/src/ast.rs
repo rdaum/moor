@@ -168,6 +168,20 @@ pub enum Expr {
     Flyweight(Box<Expr>, Vec<(Symbol, Expr)>, Vec<Arg>),
     Scatter(Vec<ScatterItem>, Box<Expr>),
     Length,
+    ComprehendList {
+        variable: UnboundName,
+        position_register: UnboundName,
+        list_register: UnboundName,
+        producer_expr: Box<Expr>,
+        list: Box<Expr>,
+    },
+    ComprehendRange {
+        variable: UnboundName,
+        end_of_range_register: UnboundName,
+        producer_expr: Box<Expr>,
+        from: Box<Expr>,
+        to: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]

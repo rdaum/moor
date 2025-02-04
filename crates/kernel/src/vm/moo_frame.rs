@@ -67,6 +67,7 @@ pub(crate) enum ScopeType {
     While,
     For,
     Block,
+    Comprehension,
 }
 
 /// A scope is a record of the current size of the valstack when it was created, and are
@@ -301,10 +302,10 @@ impl MooStackFrame {
     }
 
     /// Enter a new lexical scope and/or try/catch handling block.
-    pub fn push_scope(&mut self, scope: ScopeType, environment_width: u16, end_label: &Label) {
+    pub fn push_scope(&mut self, scope: ScopeType, scope_width: u16, end_label: &Label) {
         // If this is a lexical scope, expand the environment to accommodate the new variables.
         // (This is just updating environment_width)
-        let environment_width = environment_width as usize;
+        let environment_width = scope_width as usize;
         self.environment_width += environment_width;
 
         let end_pos = self.program.jump_labels[end_label.0 as usize].position.0 as usize;

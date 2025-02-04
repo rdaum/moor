@@ -20,7 +20,7 @@ use moor_values::model::WorldState;
 use std::ops::Add;
 use std::time::Duration;
 
-use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_TYPE, E_VARNF};
+use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::{
     v_bool, v_empty_list, v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none,
     v_obj, v_str, Error, IndexMode, Obj, Sequence, Str, Var, Variant,
@@ -834,6 +834,84 @@ pub fn moo_frame_execute(
                     f.pop();
                     return ExecutionResult::PushError(E_TYPE);
                 }
+            }
+
+            // Execution of the comprehension is:
+            //
+            //  Op::BeginComprehension (enter scope)
+            //      pushes empty list & scope to stack
+            //  set variable to start of index
+            //  push end of index to stack
+            //  begin loop (set label X)
+            //      Op:ComprehendRange:
+            //        pop end of range index from stack
+            //        get index from var
+            //        if index > end of range, jmp to end label (Y)
+            //        push index
+            //      execute producer expr
+            //      Op::ContinueRange
+            //          pop result
+            //          pop list from stack
+            //          append result to list, push back
+            //          push end of range index to stack
+            //          push cur index to stack
+            //      jmp X
+            //  end loop / scope
+            //  (set label Y)
+            Op::BeginComprehension(_type, end_label, _start) => {
+                f.push(v_empty_list());
+                f.push_scope(ScopeType::Comprehension, 1, end_label);
+            }
+            Op::ComprehendRange {
+                position,
+                end_of_range_register,
+                end_label,
+            } => {
+                let end_of_range = f.get_env(end_of_range_register).unwrap().clone();
+                let position = f
+                    .get_env(position)
+                    .expect("Bad range position variable in range comprehension")
+                    .clone();
+                if !position.le(&end_of_range) {
+                    f.jump(end_label);
+                }
+            }
+            Op::ComprehendList {
+                item_variable,
+                position_register,
+                list_register,
+                end_label,
+            } => {
+                let list = f.get_env(list_register).unwrap().clone();
+                let position = f.get_env(position_register).unwrap().clone();
+                let Variant::Int(position) = position.variant() else {
+                    return ExecutionResult::PushError(E_TYPE);
+                };
+                let position = *position;
+                if position > list.len().unwrap() as i64 {
+                    f.jump(end_label);
+                } else {
+                    let Ok(item) = list.index(&v_int(position), IndexMode::OneBased) else {
+                        return ExecutionResult::PushError(E_RANGE);
+                    };
+                    f.set_env(item_variable, item);
+                }
+            }
+            Op::ContinueComprehension(id) => {
+                let result = f.pop();
+                let list = f.pop();
+                let position = f
+                    .get_env(id)
+                    .expect("Bad range position variable in range comprehension")
+                    .clone();
+                let Ok(new_position) = position.add(&v_int(1)) else {
+                    return ExecutionResult::PushError(E_TYPE);
+                };
+                let Ok(new_list) = list.push(&result) else {
+                    return ExecutionResult::PushError(E_TYPE);
+                };
+                f.set_env(id, new_position);
+                f.push(new_list);
             }
         }
     }

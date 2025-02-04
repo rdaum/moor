@@ -17,7 +17,7 @@ command = [
     "--",
     "development.db",
     "--textdump",
-    "JHCore-DEV-2.db",
+    "LambdaCore-20Jun18.db",
     "--export-dirdump-format",
     "--textdump-out",
     "textdumps",

@@ -66,6 +66,9 @@ const_assignment = { ^"const" ~ (const_assign_scatter | const_assign_single) ~ "
 const_assign_single = { ident ~ (ASSIGN ~ expr)? }
 const_assign_scatter = { scatter_assign ~ expr }
 
+// range comprehension expression.   {expr for x in (range)}
+range_comprehension = { "{" ~ expr ~ "for" ~ ident ~ "in" ~ (for_range_clause | for_in_clause) ~ "}" }
+
 // globally scoped (same as default in MOO) adds explicitly to global scope.
 global_assignment = { ^"global" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
 
@@ -145,6 +148,7 @@ primary    = _{
   | list
   | atom
   | range_end
+  | range_comprehension
 }
 paren_expr =  { "(" ~ expr ~ ")" }
 

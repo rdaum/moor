@@ -27,10 +27,13 @@ use crate::builtins::BUILTINS;
 use crate::labels::{JumpLabel, Label, Offset};
 use crate::names::{Name, Names, UnboundName};
 use crate::opcode::Op::Jump;
-use crate::opcode::{Op, ScatterArgs, ScatterLabel};
+use crate::opcode::{ComprehensionType, Op, ScatterArgs, ScatterLabel};
 use crate::parse::moo::Rule;
 use crate::parse::{parse_program, parse_tree, CompileOptions, Parse};
 use crate::program::Program;
+use crate::Op::{
+    BeginComprehension, ComprehendList, ComprehendRange, ContinueComprehension, ImmInt, Pop, Put,
+};
 use moor_values::model::CompileError;
 use moor_values::model::CompileError::InvalidAssignemnt;
 
@@ -512,6 +515,93 @@ impl CodegenState {
             }
             Expr::Scatter(scatter, right) => self.generate_scatter_assign(scatter, right)?,
             Expr::Assign { left, right } => self.generate_assign(left, right)?,
+            Expr::ComprehendRange {
+                variable,
+                end_of_range_register,
+                producer_expr,
+                from,
+                to,
+            } => {
+                let end_label = self.make_jump_label(None);
+                let loop_start_label = self.make_jump_label(None);
+                assert_ne!(end_label, loop_start_label);
+                let index_variable = self.binding_mappings[variable];
+                let end_of_range_register = self.binding_mappings[end_of_range_register];
+
+                self.emit(BeginComprehension(
+                    ComprehensionType::Range,
+                    end_label,
+                    loop_start_label,
+                ));
+
+                // range start position set to variable
+                self.generate_expr(from.as_ref())?;
+                self.emit(Put(index_variable));
+                self.emit(Pop);
+
+                // And end of range to register
+                self.generate_expr(to.as_ref())?;
+                self.emit(Put(end_of_range_register));
+                self.emit(Pop);
+
+                self.pop_stack(2);
+                self.commit_jump_label(loop_start_label);
+                self.emit(ComprehendRange {
+                    position: index_variable,
+                    end_of_range_register,
+                    end_label,
+                });
+                self.generate_expr(producer_expr.as_ref())?;
+                self.emit(ContinueComprehension(index_variable));
+                self.emit(Jump {
+                    label: loop_start_label,
+                });
+                self.commit_jump_label(end_label);
+            }
+            Expr::ComprehendList {
+                variable,
+                position_register,
+                list_register,
+                producer_expr,
+                list,
+            } => {
+                let end_label = self.make_jump_label(None);
+                let position_register = self.binding_mappings[position_register];
+                let list_register = self.binding_mappings[list_register];
+                let item_variable = self.binding_mappings[variable];
+
+                let loop_start_label = self.make_jump_label(None);
+                self.emit(BeginComprehension(
+                    ComprehensionType::List,
+                    end_label,
+                    loop_start_label,
+                ));
+
+                // Produce the list
+                self.generate_expr(list.as_ref())?;
+                self.emit(Put(list_register));
+                self.emit(Pop);
+                self.pop_stack(1);
+
+                // Initial position
+                self.emit(ImmInt(1));
+                self.emit(Put(position_register));
+                self.emit(Pop);
+
+                self.commit_jump_label(loop_start_label);
+                self.emit(ComprehendList {
+                    list_register,
+                    position_register,
+                    item_variable,
+                    end_label,
+                });
+                self.generate_expr(producer_expr.as_ref())?;
+                self.emit(ContinueComprehension(position_register));
+                self.emit(Jump {
+                    label: loop_start_label,
+                });
+                self.commit_jump_label(end_label);
+            }
         }
 
         Ok(())

@@ -1252,4 +1252,34 @@ mod tests {
         );
         assert_eq!(result.unwrap(), v_str("another_seq"));
     }
+
+    #[test]
+    fn test_for_range_comprehension() {
+        let program = r#"return { x * 2 for x in [1..3] };"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_list(&[v_int(2), v_int(4), v_int(6)]));
+    }
+
+    #[test]
+    fn test_for_list_comprehension() {
+        let program = r#"return { x * 2 for x in ({1,2,3}) };"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_list(&[v_int(2), v_int(4), v_int(6)]));
+    }
 }

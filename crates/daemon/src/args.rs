@@ -153,6 +153,12 @@ pub struct FeatureArgs {
 
     #[arg(
         long,
+        help = "Enable support for list / range comprehensions in the language"
+    )]
+    pub list_comprehensions: Option<bool>,
+
+    #[arg(
+        long,
         help = "Enable persistent tasks, which persist the state of suspended/forked tasks between restarts. \
                 Note that this is the default behaviour in LambdaMOO."
     )]
@@ -178,6 +184,9 @@ impl FeatureArgs {
         }
         if let Some(args) = self.persistent_tasks {
             config.persistent_tasks = args;
+        }
+        if let Some(args) = self.list_comprehensions {
+            config.list_comprehensions = args;
         }
     }
 }

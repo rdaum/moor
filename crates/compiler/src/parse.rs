@@ -60,8 +60,10 @@ pub struct CompileOptions {
     pub map_type: bool,
     /// Whether to support the flyweight type (a delegate object with slots and contents)
     pub flyweight_type: bool, // TODO: future options:
-                              //      - symbol types
-                              //      - disable "#" style object references (obscure_references)
+    //      - symbol types
+    //      - disable "#" style object references (obscure_references)
+    /// Whether to support list and range comprehensions in the compiler
+    pub list_comprehensions: bool,
 }
 
 impl Default for CompileOptions {
@@ -70,6 +72,7 @@ impl Default for CompileOptions {
             lexical_scopes: true,
             map_type: true,
             flyweight_type: true,
+            list_comprehensions: true,
         }
     }
 }
@@ -426,6 +429,66 @@ impl TreeTransformer {
                         Ok(Expr::Value(v_err(E_INVARG)))
                     }
                 },
+                Rule::range_comprehension => {
+                    if !self.options.list_comprehensions {
+                        return Err(CompileError::DisabledFeature(
+                            "ListComprehension".to_string(),
+                        ));
+                    }
+                    let mut inner = primary.into_inner();
+
+                    let producer_expr = primary_self
+                        .clone()
+                        .parse_expr(inner.next().unwrap().into_inner())?;
+
+                    let variable_ident = inner.next().unwrap();
+                    let variable = match variable_ident.as_rule() {
+                        Rule::ident => self
+                            .names
+                            .borrow_mut()
+                            .find_or_add_name_global(variable_ident.as_str().trim())?,
+                        _ => {
+                            panic!("Unexpected rule: {:?}", variable_ident.as_rule());
+                        }
+                    };
+                    let clause = inner.next().unwrap();
+
+                    match clause.as_rule() {
+                        Rule::for_range_clause => {
+                            let mut clause_inner = clause.into_inner();
+                            let from_rule = clause_inner.next().unwrap();
+                            let to_rule = clause_inner.next().unwrap();
+                            let from = self.clone().parse_expr(from_rule.into_inner())?;
+                            let to = self.clone().parse_expr(to_rule.into_inner())?;
+                            let end_of_range_register =
+                                self.names.borrow_mut().declare_register()?;
+                            Ok(Expr::ComprehendRange {
+                                variable,
+                                end_of_range_register,
+                                producer_expr: Box::new(producer_expr),
+                                from: Box::new(from),
+                                to: Box::new(to),
+                            })
+                        }
+                        Rule::for_in_clause => {
+                            let mut clause_inner = clause.into_inner();
+                            let in_rule = clause_inner.next().unwrap();
+                            let expr = self.clone().parse_expr(in_rule.into_inner())?;
+                            let position_register = self.names.borrow_mut().declare_register()?;
+                            let list_register = self.names.borrow_mut().declare_register()?;
+                            Ok(Expr::ComprehendList {
+                                list_register,
+                                variable,
+                                position_register,
+                                producer_expr: Box::new(producer_expr),
+                                list: Box::new(expr),
+                            })
+                        }
+                        _ => {
+                            todo!("unhandled rule: {:?}", clause.as_rule())
+                        }
+                    }
+                }
                 _ => todo!("Unimplemented primary: {:?}", primary.as_rule()),
             })
             .map_infix(|lhs, op, rhs| match op.as_rule() {
@@ -565,7 +628,9 @@ impl TreeTransformer {
                             let names = self.names.borrow();
                             let decl = names.decl_for(name);
                             if decl.constant {
-                                return Err(CompileError::AssignToConst(decl.sym));
+                                return Err(CompileError::AssignToConst(
+                                    decl.identifier.to_symbol(),
+                                ));
                             }
                         }
                         Ok(Expr::Assign {
@@ -1298,11 +1363,15 @@ mod tests {
     use moor_values::{v_none, Symbol};
 
     use crate::ast::Arg::{Normal, Splice};
-    use crate::ast::Expr::{Call, Flyweight, Id, Prop, Value, Verb};
+    use crate::ast::BinaryOp::Add;
+    use crate::ast::Expr::{
+        Call, ComprehendList, ComprehendRange, Flyweight, Id, Prop, Value, Verb,
+    };
     use crate::ast::{
         BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
         StmtNode, UnaryOp,
     };
+    use crate::names::UnboundName;
     use crate::parse::{parse_program, unquote_str};
     use crate::CompileOptions;
     use moor_values::model::CompileError;
@@ -2853,5 +2922,60 @@ mod tests {
                 vec![],
             ))]
         );
+    }
+
+    #[test]
+    fn test_for_list_comprehension() {
+        let program = r#"{ x + 5 for x in ( {1,2,3} ) };"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        let x = parse.unbound_names.find_named("x")[0];
+
+        assert_eq!(
+            stripped_stmts(&parse.stmts,),
+            vec![StmtNode::Expr(ComprehendList {
+                variable: x,
+                position_register: UnboundName {
+                    offset: x.offset + 1
+                },
+                list_register: UnboundName {
+                    offset: x.offset + 2
+                },
+                producer_expr: Box::new(Expr::Binary(
+                    Add,
+                    Box::new(Id(x)),
+                    Box::new(Value(v_int(5)))
+                )),
+                list: Box::new(Expr::List(vec![
+                    Normal(Value(v_int(1))),
+                    Normal(Value(v_int(2))),
+                    Normal(Value(v_int(3)))
+                ])),
+            })]
+        )
+    }
+
+    #[test]
+    fn test_for_range_comprehension() {
+        let program = r#"{ x + 5 for x in [1..5] };"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        let x = parse.unbound_names.find_named("x")[0];
+        let y = UnboundName {
+            offset: x.offset + 1,
+        };
+        assert_eq!(
+            stripped_stmts(&parse.stmts,),
+            vec![StmtNode::Expr(ComprehendRange {
+                variable: x,
+                end_of_range_register: y,
+                producer_expr: Box::new(Expr::Binary(
+                    Add,
+                    Box::new(Id(x)),
+                    Box::new(Value(v_int(5)))
+                )),
+
+                from: Box::new(Value(v_int(1))),
+                to: Box::new(Value(v_int(5)))
+            })]
+        )
     }
 }
