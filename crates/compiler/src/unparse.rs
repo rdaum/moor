@@ -160,11 +160,9 @@ impl<'a> Unparse<'a> {
             Expr::Pass { args } => {
                 let mut buffer = String::new();
                 buffer.push_str("pass");
-                if !args.is_empty() {
-                    buffer.push('(');
-                    buffer.push_str(self.unparse_args(args).unwrap().as_str());
-                    buffer.push(')');
-                }
+                buffer.push('(');
+                buffer.push_str(self.unparse_args(args).unwrap().as_str());
+                buffer.push(')');
                 Ok(buffer)
             }
             Expr::Value(var) => Ok(self.unparse_var(var, false)),
