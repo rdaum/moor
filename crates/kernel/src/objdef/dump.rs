@@ -300,9 +300,9 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
             };
             let verbargsspec = format!(
                 "{} {} {}",
-                v.argspec.iobj.to_string(),
+                v.argspec.dobj.to_string(),
                 prepspec,
-                v.argspec.dobj.to_string()
+                v.argspec.iobj.to_string(),
             );
 
             // If there's only a single name, and it doesn't contain any funky characters, we can
