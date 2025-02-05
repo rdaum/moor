@@ -1,11 +1,10 @@
 # Summary
 
 - [Foreword](./foreword.md)
-- [ToastStunt & MOO Resources](./toaststunt-moo-resources.md)
 - [Introduction](./introduction.md)
-- [The ToastStunt Database](./the-toaststunt-database.md)
-  - [MOO Value Types](./the-toaststunt-database/moo-value-types.md)
-  - [Objects in the MOO Database](./the-toaststunt-database/objects-in-the-moo-database.md)
+- [The Database](./the-database.md)
+  - [MOO Value Types](./the-database/moo-value-types.md)
+  - [Objects in the MOO Database](./the-database/objects-in-the-moo-database.md)
 - [The Built-in Command Parser](./the-built-in-command-parser.md)
 - [The MOO Programming Language](./the-moo-programming-language.md)
   - [MOO Language Expressions](./the-moo-programming-language/moo-language-expressions.md)
@@ -28,6 +27,7 @@
   - [Temporarily Enabling Obsolete Server Features](./the-moo-programming-language/temporarily-enabling-obsolete-server-features.md)
   - [Signals to the Server](./the-moo-programming-language/signals-to-the-server.md)
   - [Server Configuration](./the-moo-programming-language/server-configuration.md)
+- [MOO Resources](./moo-resources.md)
 
 ---
 
