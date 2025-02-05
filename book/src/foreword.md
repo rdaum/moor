@@ -1,12 +1,82 @@
 # Foreword
 
-01/08/2022
+Welcome to the manual for mooR. 
 
-Hi, I'm Brendan aka Slither. I've been coding in MOO on [Sindome](https://www.sindome.org/) since 2003. I have spent many many hours over the years pouring over the original LambdaMOO programmers manual written by Pavel Curtis. In 2016 I set about updating the original manual with some of my learnings and it wasn't until 2019 that I finished work on it. Around the same time I heard about ToastStunt from [lisdude](https://github.com/lisdude). I wanted to get involved, but sadly, my C/++ coding skills are terrible. Thus, I decided my contribution would be to update the programmers guide to include all the changes that Toast has added, as well as further learnings and feedback from lisdude, DistantOrigin, and other members of the ToastStunt Discord server.
+First, credit where credit is due: The documentation provided here is
+a product of the hard work of many authors over multiple decades,
+beginning with the original LambdaMOO manual from the early 90s,
+through to the documentation written by Brendan ("aka Slither") for
+ToastStunt, in 2022. We've made the earnest effort to credit those
+authors throughout, but we'll state up front now that if there's a
+place where that has been missed, we urge you to let us know, and
+we'll make sure to provide it.
 
-This guide is not just a technical document, it also contains opinions (mine and others) about what you should (waifs) and shouldn't (anonymous objects, multiple inheritance) consider doing and using. In the end though it's up to you. LambdaMOO and now its successor, ToastStunt, are amazing for creating games, hobby projects, and for tinkering or learning to code. I hope you have some fun!
+Secondly, some basic background and definitions. I'll be brief here
+because the [introduction](./introduction.md) section gets into more
+detail, but:
 
-## What is ToastStunt?
+*mooR* -- which stands for "moo-reconstructed" or "moo - rewrite" or
+"moo [in] Rust" or "moo [by] Ryan" -- is an authoring system for
+multiuser / multiplayer online communities. It is both a fully
+compatible rewrite of LambdaMOO -- a pioneering super-flexible
+object-oriented "MUD" server from the 1990s -- and a modernized and
+flexible platform on which to build dynamic, fun, multiuser/multipler
+connected communities and games.
 
-ToastStunt is a fork of [Stunt](https://github.com/toddsundsted/stunt) which is a fork of of [LambdaMOO](https://en.wikipedia.org/wiki/MOO). At the time of this writing (01/01/22) ToastStunt was under active development. Stunt and LambdaMOO were not. If you are looking for an up to date, feature rich, LambdaMOO, then ToastStunt is for you. It incorporates much of the 'patches' that were released for legacy LambdaMOO, and much more (TLS, better
-FileIO, updated and expanded built-ins functions, multiple inheritance, curl support, and threading to name a few).
+Thirdly, motivations and reasons.
+
+This is a project I began on a _"it can't be that hard"_ whim in the
+fall of 2022, with the intent of trying to revive the ideas behind MOO
+but with a more "21st century" technological foundation that would
+make it easier to maintain and scale such applications going forward.
+
+I did this because I perceived then (and still do) that there is a
+problem in the way the "social _media_" landscape has evolved, and
+felt the desire to see a return of an earlier type of interaction on
+the Internet. But felt that to make that happen I couldn't just start
+with a fork of the original LambdaMOO (as e.g. ToastStunt had done),
+but with a brand new implementation which fulfilled the following
+requirements:
+
+  * That it be built from day 1 to be able to meet the expectations of
+    today's users to provide "rich" content (images, styled text,
+    video) and not require a custom client. So to start with the idea
+    that the user would be connecting by a web browser, and to make
+    the platform and core database with that in mind.
+  * That it be built from day 1 with modern computers in mind -- to
+    take advantage of multiple threads, on multiple cores, potentially
+    distributed across multiple machines in a datacentre.
+  * That it be built in such a way that it would be easier to extend
+    and add behaviours -- new builtin functions, new protocols for
+    connecting, new integrations to outside services, and even new
+    languages (beyond "MOOcode") for writing verbs. And so be built in
+    a modular fashion.
+
+But why did I start from LambdaMOO -- instead of building something
+new from scratch? Nostalgia could be one explanation, but the primary
+motivator was the desire to have a "benchmark" to measure my
+deliverables. When the system could bring in and successfully run an
+existing LambdaMOO core database -- and offer additional features on
+top of that -- then it would be ready for release.
+
+The choice of Rust as the implementation language for mooR was driven
+by many reasons, which I need not go into here. But I feel that it is
+has overall served the project well, and allowed me to develop with
+confidence.
+
+It is now the winter of 2025, and the project that I began over two
+years ago is circling around to its first major, public, 1.0
+release. Many hundreds of hours have gone into development -- not just
+by myself, but by others who have put immense effort into developing and
+testing and suggesting. Thanks goes not just to them, but to the
+original authors and users of LambdaMOO, Stunt, ToastStunt, and to the
+adjacent projects and communities I (and others) was a part of over
+the years, in particular Stephen White's CoolMUD and Greg Hudson's
+ColdMUD -- ideas from those sytems have made their way into mooR as
+well.
+
+I hope you, the reader, enjoy the system we've put together. Even more
+so I welcome your contributions and suggestions.
+
+Ryan Daum (written on an airplane flying over the Canadian prairies,
+Feb 5, 2025)
