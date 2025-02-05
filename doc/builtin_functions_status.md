@@ -147,7 +147,7 @@ included in the notes column.
 | `server_log`          | &check;  |                                                                          |
 | `load_server_options` |          |                                                                          |
 | `function_info`       | &check;  |                                                                          |
-| `read`                |          |                                                                          |
+| `read`                | &check;  |                                                                          |
 
 ### Tasks
 
