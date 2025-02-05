@@ -7,7 +7,6 @@
   - [MOO Value Types](./the-toaststunt-database/moo-value-types.md)
   - [Objects in the MOO Database](./the-toaststunt-database/objects-in-the-moo-database.md)
 - [The Built-in Command Parser](./the-built-in-command-parser.md)
-  - [Threading](./the-built-in-command-parser/threading.md)
 - [The MOO Programming Language](./the-moo-programming-language.md)
   - [MOO Language Expressions](./the-moo-programming-language/moo-language-expressions.md)
   - [MOO Language Statements](./the-moo-programming-language/moo-language-statements.md)
