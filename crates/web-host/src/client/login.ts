@@ -58,7 +58,7 @@ async function connect(context: Context, player: State<Player>, mode, username, 
 
         // Move focus to input area.
         // This is done in a timer because it can't actually work until after the dom style is updated.
-        setTimeout( () =>  document.getElementById("input_area").focus(), 0.5)
+        setTimeout(() => document.getElementById("input_area").focus(), 0.5);
     };
     ws.onmessage = (e) => {
         if (e.data) {
@@ -72,7 +72,6 @@ async function connect(context: Context, player: State<Player>, mode, username, 
 
     context.ws = ws;
     context.authToken = auth_token;
-
 }
 
 // A login box that prompts the user for their player name and password, and then initiates login through
