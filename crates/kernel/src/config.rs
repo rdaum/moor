@@ -52,6 +52,8 @@ pub struct FeaturesConfig {
     pub list_comprehensions: bool,
     /// Whether to support a boolean literal type in the compiler
     pub bool_type: bool,
+    /// Whether to support a symbol literal type in the compiler
+    pub symbol_type: bool,
     /// Whether to have builtins that return truth values return boolean types instead of integer
     /// 1 or 0. Same goes for binary value operators like <, !, ==, <= etc.
     ///
@@ -67,6 +69,7 @@ impl Default for FeaturesConfig {
             lexical_scopes: true,
             map_type: true,
             bool_type: true,
+            symbol_type: true,
             type_dispatch: true,
             flyweight_type: true,
             list_comprehensions: true,
@@ -83,6 +86,7 @@ impl FeaturesConfig {
             flyweight_type: self.flyweight_type,
             list_comprehensions: self.list_comprehensions,
             bool_type: self.bool_type,
+            symbol_type: self.symbol_type,
         }
     }
 
@@ -95,6 +99,8 @@ impl FeaturesConfig {
             && !self.rich_notify
             && !self.bool_type
             && !self.list_comprehensions
+            && !self.use_boolean_returns
+            && !self.symbol_type
             && self.persistent_tasks
     }
 
@@ -112,6 +118,7 @@ impl FeaturesConfig {
             && (!other.use_boolean_returns || self.use_boolean_returns)
             && (!other.type_dispatch || self.type_dispatch)
             && (!other.flyweight_type || self.flyweight_type)
+            && (!other.symbol_type || self.symbol_type)
             && (!other.list_comprehensions || self.list_comprehensions)
     }
 }

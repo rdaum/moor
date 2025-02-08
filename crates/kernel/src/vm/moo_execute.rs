@@ -625,10 +625,14 @@ pub fn moo_frame_execute(
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
-                let (Variant::List(l), Variant::Str(s)) = (args.variant(), verb.variant()) else {
+                let Variant::List(l) = args.variant() else {
                     return ExecutionResult::PushError(E_TYPE);
                 };
-                let verb = Symbol::mk_case_insensitive(s.as_string());
+                let verb = match verb.variant() {
+                    Variant::Sym(s) => *s,
+                    Variant::Str(s) => Symbol::mk_case_insensitive(s.as_string()),
+                    _ => return ExecutionResult::PushError(E_TYPE),
+                };
                 return ExecutionResult::PrepareVerbDispatch {
                     this: obj,
                     verb_name: verb,

@@ -889,6 +889,9 @@ pub fn to_literal(v: &Var) -> String {
             result.push('>');
             result
         }
+        Variant::Sym(s) => {
+            format!("'{}", s.as_str())
+        }
     }
 }
 

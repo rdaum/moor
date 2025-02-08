@@ -23,7 +23,7 @@ use moor_compiler::Label;
 use moor_values::model::CompileError;
 use moor_values::model::WorldStateError;
 use moor_values::{
-    v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str, List, Symbol, Var, VarType,
+    v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str, v_sym, List, Symbol, Var, VarType,
 };
 use moor_values::{v_flyweight, Obj};
 use moor_values::{v_list, v_map, Error};
@@ -144,6 +144,11 @@ impl<R: Read> TextdumpReader<R> {
             VarType::TYPE_BOOL => {
                 let s = self.read_string()?;
                 v_bool_int(s == "true")
+            }
+            VarType::TYPE_SYMBOL => {
+                let s = self.read_string()?;
+                let s = Symbol::mk_case_insensitive(&s);
+                v_sym(s)
             }
             VarType::TYPE_OBJ => v_obj(self.read_objid()?),
             VarType::TYPE_STR => v_str(&self.read_string()?),

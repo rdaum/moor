@@ -16,6 +16,7 @@ use crate::var::list::List;
 use crate::var::Associative;
 use crate::var::{map, string, Sequence};
 use crate::var::{Error, Obj};
+use crate::Symbol;
 use bincode::{Decode, Encode};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
@@ -34,6 +35,7 @@ pub enum Variant {
     Map(map::Map),
     Err(Error),
     Flyweight(Flyweight),
+    Sym(Symbol),
 }
 
 impl Hash for Variant {
@@ -49,6 +51,7 @@ impl Hash for Variant {
             Variant::Map(m) => m.hash(state),
             Variant::Err(e) => e.hash(state),
             Variant::Flyweight(f) => f.hash(state),
+            Variant::Sym(s) => s.hash(state),
         }
     }
 }
@@ -66,6 +69,7 @@ impl Ord for Variant {
             (Variant::Map(l), Variant::Map(r)) => l.cmp(r),
             (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
             (Variant::Flyweight(l), Variant::Flyweight(r)) => l.cmp(r),
+            (Variant::Sym(l), Variant::Sym(r)) => l.cmp(r),
 
             (Variant::None, _) => Ordering::Less,
             (_, Variant::None) => Ordering::Greater,
@@ -86,6 +90,9 @@ impl Ord for Variant {
 
             (Variant::Flyweight(_), _) => Ordering::Less,
             (_, Variant::Flyweight(_)) => Ordering::Greater,
+
+            (Variant::Sym(_), _) => Ordering::Less,
+            (_, Variant::Sym(_)) => Ordering::Greater,
         }
     }
 }
@@ -119,6 +126,7 @@ impl Debug for Variant {
             }
             Variant::Err(e) => write!(f, "Error({:?})", e),
             Variant::Flyweight(fl) => write!(f, "Flyweight({:?})", fl),
+            Variant::Sym(s) => write!(f, "Symbol({})", s),
         }
     }
 }
@@ -129,6 +137,7 @@ impl PartialEq<Self> for Variant {
         match (self, other) {
             (Variant::Bool(s), Variant::Bool(o)) => s == o,
             (Variant::Str(s), Variant::Str(o)) => s == o,
+            (Variant::Sym(s), Variant::Sym(o)) => s == o,
             (Variant::Int(s), Variant::Int(o)) => s == o,
             (Variant::Float(s), Variant::Float(o)) => s == o,
             (Variant::Obj(s), Variant::Obj(o)) => s == o,

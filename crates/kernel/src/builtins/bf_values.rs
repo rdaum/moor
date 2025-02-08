@@ -19,7 +19,8 @@ use moor_compiler::{offset_for_builtin, to_literal};
 use moor_values::model::WorldState;
 use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_RANGE, E_TYPE};
 use moor_values::{
-    v_float, v_int, v_list, v_obj, v_objid, v_str, v_string, Flyweight, List, Map, Obj,
+    v_float, v_int, v_list, v_obj, v_objid, v_str, v_string, v_sym, v_sym_str, Flyweight, List,
+    Map, Obj,
 };
 use moor_values::{v_flyweight, Associative};
 use moor_values::{AsByteBuffer, Sequence};
@@ -47,6 +48,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::Obj(o) => result.push_str(&o.to_string()),
             Variant::List(_) => result.push_str("{list}"),
             Variant::Map(_) => result.push_str("[map]"),
+            Variant::Sym(s) => result.push_str(&s.to_string()),
             Variant::Err(e) => result.push_str(e.name()),
             Variant::Flyweight(fl) => {
                 if fl.is_sealed() {
@@ -60,6 +62,25 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_str(result.as_str())))
 }
 bf_declare!(tostr, bf_tostr);
+
+fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // Convert scalar values to symbols.
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    match bf_args.args[0].variant() {
+        Variant::Bool(b) => {
+            let s = format!("{b}");
+            Ok(Ret(v_sym_str(&s)))
+        }
+        Variant::Str(s) => Ok(Ret(v_sym_str(s.as_string()))),
+        Variant::Err(e) => Ok(Ret(v_sym_str(e.name()))),
+        Variant::Sym(s) => Ok(Ret(v_sym(*s))),
+        _ => Err(BfErr::Code(E_TYPE)),
+    }
+}
+bf_declare!(tosym, bf_tosym);
 
 fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -480,6 +501,7 @@ bf_declare!(to_xml, bf_to_xml);
 pub(crate) fn register_bf_values(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("typeof")] = Box::new(BfTypeof {});
     builtins[offset_for_builtin("tostr")] = Box::new(BfTostr {});
+    builtins[offset_for_builtin("tosym")] = Box::new(BfTosym {});
     builtins[offset_for_builtin("toliteral")] = Box::new(BfToliteral {});
     builtins[offset_for_builtin("toint")] = Box::new(BfToint {});
     builtins[offset_for_builtin("tonum")] = Box::new(BfToint {});

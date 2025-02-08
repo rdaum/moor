@@ -69,6 +69,10 @@ impl Var {
         Var(Variant::Bool(b))
     }
 
+    pub fn mk_symbol(s: Symbol) -> Self {
+        Var(Variant::Sym(s))
+    }
+
     pub fn type_code(&self) -> VarType {
         match self.variant() {
             Variant::Bool(_) => VarType::TYPE_BOOL,
@@ -81,6 +85,7 @@ impl Var {
             Variant::Float(_) => VarType::TYPE_FLOAT,
             Variant::Map(_) => VarType::TYPE_MAP,
             Variant::Flyweight(_) => VarType::TYPE_FLYWEIGHT,
+            Variant::Sym(_) => VarType::TYPE_SYMBOL,
         }
     }
 
@@ -116,6 +121,7 @@ impl Var {
             Variant::Map(m) => !m.is_empty(),
             Variant::Err(_) => false,
             Variant::Flyweight(f) => !f.is_empty(),
+            Variant::Sym(_) => true,
         }
     }
 
@@ -472,6 +478,14 @@ pub fn v_objid(o: i32) -> Var {
 
 pub fn v_obj(o: Obj) -> Var {
     Var::mk_object(o)
+}
+
+pub fn v_sym(s: Symbol) -> Var {
+    Var::mk_symbol(s)
+}
+
+pub fn v_sym_str(s: &str) -> Var {
+    Var::mk_symbol(Symbol::mk_case_insensitive(s))
 }
 
 pub fn v_flyweight(

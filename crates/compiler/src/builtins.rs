@@ -50,6 +50,8 @@ pub struct Builtin {
 //  the list of functions for the `function_info` built-in right now. It could be used for
 //  validating arguments, and could be part of the registration process for the actual builtin
 //  implementations.
+// NOTE: only add new functions to the end of this table or you will throw off function indexes on
+//  existing (binary) databases, causing severe incompatibility.
 fn mk_builtin_table() -> Vec<Builtin> {
     vec![
         Builtin {
@@ -1029,6 +1031,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(2),
             max_args: Q(2),
             types: vec![Typed(TYPE_STR), Typed(TYPE_STR)],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("tosym"),
+            min_args: Q(1),
+            max_args: Q(1),
+            types: vec![Any],
             implemented: true,
         },
     ]

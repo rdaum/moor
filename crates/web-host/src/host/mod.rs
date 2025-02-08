@@ -45,6 +45,11 @@ struct Error {
     error_msg: Option<String>,
 }
 
+#[derive(serde_derive::Serialize, Deserialize)]
+struct Symbol {
+    symbol: String,
+}
+
 /// Construct a JSON representation of a Var.
 /// This is not a straight-ahead representation because moo common have some semantic differences
 /// from JSON common, in particular:
@@ -71,6 +76,11 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             error: e.name().to_string(),
             error_msg: Some(e.message().to_string()),
         }),
+        Variant::Sym(s) => {
+            json!(Symbol {
+                symbol: s.to_string(),
+            })
+        }
         Variant::List(l) => {
             let mut v = Vec::new();
             for e in l.iter() {

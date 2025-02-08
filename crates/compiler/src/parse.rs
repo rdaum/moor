@@ -66,6 +66,8 @@ pub struct CompileOptions {
     pub list_comprehensions: bool,
     /// Whether to support boolean types in compilation
     pub bool_type: bool,
+    /// Whether to support symbol types ('sym) in compilation
+    pub symbol_type: bool,
 }
 
 impl Default for CompileOptions {
@@ -76,6 +78,7 @@ impl Default for CompileOptions {
             flyweight_type: true,
             list_comprehensions: true,
             bool_type: true,
+            symbol_type: true,
         }
     }
 }
@@ -126,6 +129,13 @@ impl TreeTransformer {
                 }
                 let b = pairs.as_str().trim() == "true";
                 Ok(Expr::Value(Var::mk_bool(b)))
+            }
+            Rule::symbol => {
+                if !self.options.symbol_type {
+                    return Err(CompileError::DisabledFeature("Symbols".to_string()));
+                }
+                let s = Symbol::mk(&pairs.as_str()[1..]);
+                Ok(Expr::Value(Var::mk_symbol(s)))
             }
             Rule::float => {
                 let float = pairs.as_str().parse::<f64>().unwrap();
