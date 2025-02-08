@@ -50,6 +50,13 @@ pub struct FeaturesConfig {
     pub flyweight_type: bool,
     /// Whether to support list/range comprehensions in the language
     pub list_comprehensions: bool,
+    /// Whether to support a boolean literal type in the compiler
+    pub bool_type: bool,
+    /// Whether to have builtins that return truth values return boolean types instead of integer
+    /// 1 or 0. Same goes for binary value operators like <, !, ==, <= etc.
+    ///
+    /// This can break backwards compatibility with existing cores, so is off by default.
+    pub use_boolean_returns: bool,
 }
 
 impl Default for FeaturesConfig {
@@ -59,9 +66,11 @@ impl Default for FeaturesConfig {
             rich_notify: true,
             lexical_scopes: true,
             map_type: true,
+            bool_type: true,
             type_dispatch: true,
             flyweight_type: true,
             list_comprehensions: true,
+            use_boolean_returns: false,
         }
     }
 }
@@ -73,16 +82,19 @@ impl FeaturesConfig {
             map_type: self.map_type,
             flyweight_type: self.flyweight_type,
             list_comprehensions: self.list_comprehensions,
+            bool_type: self.bool_type,
         }
     }
 
     /// Returns true if the configuration is backwards compatible with LambdaMOO 1.8 features
-    pub fn is_lambdammoo_compatible(&self) -> bool {
+    pub fn is_lambdamoo_compatible(&self) -> bool {
         !self.lexical_scopes
             && !self.map_type
             && !self.type_dispatch
             && !self.flyweight_type
             && !self.rich_notify
+            && !self.bool_type
+            && !self.list_comprehensions
             && self.persistent_tasks
     }
 
@@ -96,6 +108,8 @@ impl FeaturesConfig {
         // the database format.
         (!other.lexical_scopes || self.lexical_scopes)
             && (!other.map_type || self.map_type)
+            && (!other.bool_type || self.bool_type)
+            && (!other.use_boolean_returns || self.use_boolean_returns)
             && (!other.type_dispatch || self.type_dispatch)
             && (!other.flyweight_type || self.flyweight_type)
             && (!other.list_comprehensions || self.list_comprehensions)

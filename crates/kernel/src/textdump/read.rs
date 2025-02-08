@@ -22,7 +22,9 @@ use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_compiler::Label;
 use moor_values::model::CompileError;
 use moor_values::model::WorldStateError;
-use moor_values::{v_err, v_float, v_int, v_none, v_obj, v_str, List, Symbol, Var, VarType};
+use moor_values::{
+    v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str, List, Symbol, Var, VarType,
+};
 use moor_values::{v_flyweight, Obj};
 use moor_values::{v_list, v_map, Error};
 
@@ -139,6 +141,10 @@ impl<R: Read> TextdumpReader<R> {
         let vtype: VarType = VarType::from_repr(t_num as u8).expect("Invalid var type");
         let v = match vtype {
             VarType::TYPE_INT => v_int(self.read_num()?),
+            VarType::TYPE_BOOL => {
+                let s = self.read_string()?;
+                v_bool_int(s == "true")
+            }
             VarType::TYPE_OBJ => v_obj(self.read_objid()?),
             VarType::TYPE_STR => v_str(&self.read_string()?),
             VarType::TYPE_ERR => {

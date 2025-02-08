@@ -60,6 +60,7 @@ struct Error {
 pub fn var_as_json(v: &Var) -> serde_json::Value {
     match v.variant() {
         Variant::None => serde_json::Value::Null,
+        Variant::Bool(b) => serde_json::Value::Bool(*b),
         Variant::Str(s) => serde_json::Value::String(s.to_string()),
         Variant::Obj(o) => json!(Oid {
             oid: o.id().0 as i64

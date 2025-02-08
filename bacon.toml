@@ -17,12 +17,14 @@ command = [
     "--",
     "development.db",
     "--textdump",
-    "LambdaCore-20Jun18.db",
+    "JHCore-DEV-2.db",
     "--export-dirdump-format",
     "--textdump-out",
     "textdumps",
     "--checkpoint-interval-seconds",
     "360",
+    "--use-boolean-returns",
+    "true"
 ]
 allow_warnings = true
 need_stdout = true

@@ -20,10 +20,11 @@ use moor_values::model::WorldState;
 use std::ops::Add;
 use std::time::Duration;
 
+use crate::config::FeaturesConfig;
 use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::{
-    v_bool, v_empty_list, v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none,
-    v_obj, v_str, Error, IndexMode, Obj, Sequence, Str, Var, Variant,
+    v_bool_int, v_empty_list, v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map,
+    v_none, v_obj, v_str, Error, IndexMode, Obj, Sequence, Str, Var, Variant,
 };
 use moor_values::{Symbol, VarType};
 
@@ -33,11 +34,18 @@ lazy_static! {
 }
 
 macro_rules! binary_bool_op {
-    ( $f:ident, $op:tt ) => {
+    ( $f:ident, $op:tt, $bi:expr ) => {
         let rhs = $f.pop();
         let lhs = $f.peek_top();
-        let result = if lhs $op &rhs { 1 } else { 0 };
-        $f.poke(0, v_int(result))
+        let bres : bool = *lhs $op rhs;
+        let result = {
+            if $bi {
+                Var::mk_bool(bres)
+            } else {
+                v_bool_int(bres)
+            }
+        };
+        $f.poke(0, result)
     };
 }
 
@@ -63,6 +71,7 @@ pub fn moo_frame_execute(
     permissions: Obj,
     f: &mut MooStackFrame,
     world_state: &mut dyn WorldState,
+    features_config: &FeaturesConfig,
 ) -> ExecutionResult {
     // To avoid borrowing issues when mutating the frame elsewhere...
     let opcodes = f.program.main_vector.clone();
@@ -379,22 +388,22 @@ pub fn moo_frame_execute(
                 f.temp = v_none();
             }
             Op::Eq => {
-                binary_bool_op!(f, ==);
+                binary_bool_op!(f, ==, features_config.use_boolean_returns);
             }
             Op::Ne => {
-                binary_bool_op!(f, !=);
+                binary_bool_op!(f, !=, features_config.use_boolean_returns);
             }
             Op::Gt => {
-                binary_bool_op!(f, >);
+                binary_bool_op!(f, >, features_config.use_boolean_returns);
             }
             Op::Lt => {
-                binary_bool_op!(f, <);
+                binary_bool_op!(f, <, features_config.use_boolean_returns);
             }
             Op::Ge => {
-                binary_bool_op!(f, >=);
+                binary_bool_op!(f, >=, features_config.use_boolean_returns);
             }
             Op::Le => {
-                binary_bool_op!(f, <=);
+                binary_bool_op!(f, <=, features_config.use_boolean_returns);
             }
             Op::In => {
                 let (lhs, rhs) = (f.pop(), f.peek_top());
@@ -456,7 +465,12 @@ pub fn moo_frame_execute(
             }
             Op::Not => {
                 let v = !f.peek_top().is_true();
-                f.poke(0, v_bool(v));
+                let b = if features_config.use_boolean_returns {
+                    Var::mk_bool(v)
+                } else {
+                    v_bool_int(v)
+                };
+                f.poke(0, b);
             }
             Op::UnaryMinus => {
                 let v = f.peek_top();

@@ -158,7 +158,7 @@ builtin_call = { (ident ~ !(keyword)) ~ arglist }
 sysprop      = { "$" ~ ident }
 sysprop_call = { sysprop ~ arglist }
 
-atom     = { integer | float | string | object | err | ident }
+atom     = { integer | float | string | object | err | boolean | ident }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
 

@@ -33,7 +33,7 @@ use moor_values::tasks::{NarrativeEvent, Presentation};
 use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_values::VarType::TYPE_STR;
 use moor_values::Variant;
-use moor_values::{v_bool, v_int, v_list, v_none, v_obj, v_str, v_string, Var};
+use moor_values::{v_int, v_list, v_none, v_obj, v_str, v_string, Var};
 use moor_values::{v_list_iter, Error};
 use moor_values::{Sequence, Symbol};
 
@@ -262,7 +262,7 @@ fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Err(WorldStateError::ObjectNotFound(_)) => return Err(BfErr::Code(E_ARGS)),
         Err(e) => return Err(world_state_bf_err(e)),
     };
-    Ok(Ret(v_bool(is_player)))
+    Ok(Ret(bf_args.v_bool(is_player)))
 }
 bf_declare!(is_player, bf_is_player);
 
@@ -1085,7 +1085,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         BF_SERVER_EVAL_TRAMPOLINE_RESUME => {
             // Value must be on in our activation's "return value"
             let value = bf_args.exec_state.top().frame.return_value();
-            Ok(Ret(v_list(&[v_bool(true), value])))
+            Ok(Ret(v_list(&[bf_args.v_bool(true), value])))
         }
         _ => {
             panic!("Invalid trampoline value for bf_eval: {}", tramp);
@@ -1103,7 +1103,7 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args.task_scheduler_client.checkpoint();
 
-    Ok(Ret(v_bool(true)))
+    Ok(Ret(bf_args.v_bool(true)))
 }
 bf_declare!(dump_database, bf_dump_database);
 

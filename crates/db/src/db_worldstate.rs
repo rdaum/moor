@@ -30,7 +30,7 @@ use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
 use moor_values::Variant;
 use moor_values::NOTHING;
-use moor_values::{v_bool, Obj};
+use moor_values::{v_bool_int, Obj};
 use moor_values::{v_list, Symbol};
 use moor_values::{v_obj, Var};
 
@@ -266,32 +266,32 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
             let flags = self.flags_of(obj)?;
             return Ok(flags
                 .contains(ObjFlag::Programmer)
-                .then(|| v_bool(true))
-                .unwrap_or(v_bool(false)));
+                .then(|| v_bool_int(true))
+                .unwrap_or(v_bool_int(false)));
         } else if pname == *WIZARD_SYM {
             let flags = self.flags_of(obj)?;
             return Ok(flags
                 .contains(ObjFlag::Wizard)
-                .then(|| v_bool(true))
-                .unwrap_or(v_bool(false)));
+                .then(|| v_bool_int(true))
+                .unwrap_or(v_bool_int(false)));
         } else if pname == *R_SYM {
             let flags = self.flags_of(obj)?;
             return Ok(flags
                 .contains(ObjFlag::Read)
-                .then(|| v_bool(true))
-                .unwrap_or(v_bool(false)));
+                .then(|| v_bool_int(true))
+                .unwrap_or(v_bool_int(false)));
         } else if pname == *W_SYM {
             let flags = self.flags_of(obj)?;
             return Ok(flags
                 .contains(ObjFlag::Write)
-                .then(|| v_bool(true))
-                .unwrap_or(v_bool(false)));
+                .then(|| v_bool_int(true))
+                .unwrap_or(v_bool_int(false)));
         } else if pname == *F_SYM {
             let flags = self.flags_of(obj)?;
             return Ok(flags
                 .contains(ObjFlag::Fertile)
-                .then(|| v_bool(true))
-                .unwrap_or(v_bool(false)));
+                .then(|| v_bool_int(true))
+                .unwrap_or(v_bool_int(false)));
         }
 
         let (_, value, propperms, _) = self.get_tx().resolve_property(obj, pname)?;

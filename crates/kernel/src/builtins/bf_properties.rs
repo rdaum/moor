@@ -16,8 +16,8 @@ use moor_values::model::{prop_flags_string, PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::Variant;
-use moor_values::{v_bool, v_list, v_none, v_obj, v_string};
 use moor_values::{v_empty_list, List};
+use moor_values::{v_list, v_none, v_obj, v_string};
 use moor_values::{Sequence, Symbol};
 
 use crate::bf_declare;
@@ -154,7 +154,7 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
         )
         .map_err(world_state_bf_err)?;
-    Ok(Ret(v_bool(is_clear)))
+    Ok(Ret(bf_args.v_bool(is_clear)))
 }
 bf_declare!(is_clear_property, bf_is_clear_property);
 

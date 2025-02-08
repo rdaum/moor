@@ -20,7 +20,7 @@ use moor_values::model::WorldStateError;
 use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
-use moor_values::{v_bool, v_int, v_none, v_obj, v_str};
+use moor_values::{v_int, v_none, v_obj, v_str};
 use moor_values::{v_list, Sequence, Symbol};
 use moor_values::{v_list_iter, NOTHING};
 use moor_values::{List, Variant};
@@ -51,7 +51,7 @@ fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
     let is_valid = bf_args.world_state.valid(obj).map_err(world_state_bf_err)?;
-    Ok(Ret(v_bool(is_valid)))
+    Ok(Ret(bf_args.v_bool(is_valid)))
 }
 bf_declare!(valid, bf_valid);
 

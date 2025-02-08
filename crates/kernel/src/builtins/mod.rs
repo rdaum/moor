@@ -19,9 +19,9 @@ use moor_compiler::{BuiltinId, BUILTINS};
 use moor_values::model::Perms;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::Var;
+use moor_values::{v_bool_int, Obj};
 use moor_values::{Error, List};
 
 use crate::builtins::bf_list_sets::register_bf_list_sets;
@@ -136,6 +136,14 @@ impl BfCallState<'_> {
         };
 
         frame
+    }
+
+    pub fn v_bool(&self, truthy: bool) -> Var {
+        if !self.config.use_boolean_returns {
+            v_bool_int(truthy)
+        } else {
+            Var::mk_bool(truthy)
+        }
     }
 }
 

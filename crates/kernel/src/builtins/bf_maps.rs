@@ -15,7 +15,7 @@ use crate::bf_declare;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
 use moor_values::Error::{E_ARGS, E_RANGE, E_TYPE};
-use moor_values::{v_bool, v_list, Var, Variant};
+use moor_values::{v_list, Var, Variant};
 use moor_values::{Associative, Sequence};
 /// Returns a copy of map with the value corresponding to key removed. If key is not a valid key, then E_RANGE is raised.
 fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -91,7 +91,7 @@ fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let contains = m
         .contains_key(&bf_args.args[1], false)
         .map_err(BfErr::Code)?;
-    Ok(BfRet::Ret(v_bool(contains)))
+    Ok(BfRet::Ret(bf_args.v_bool(contains)))
 }
 bf_declare!(maphaskey, bf_maphaskey);
 

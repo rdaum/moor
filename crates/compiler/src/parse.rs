@@ -19,8 +19,8 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use itertools::Itertools;
-use moor_values::SYSTEM_OBJECT;
 use moor_values::{v_none, Symbol};
+use moor_values::{Var, SYSTEM_OBJECT};
 use pest::error::LineColLocation;
 use pest::iterators::Pairs;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
@@ -64,6 +64,8 @@ pub struct CompileOptions {
     //      - disable "#" style object references (obscure_references)
     /// Whether to support list and range comprehensions in the compiler
     pub list_comprehensions: bool,
+    /// Whether to support boolean types in compilation
+    pub bool_type: bool,
 }
 
 impl Default for CompileOptions {
@@ -73,6 +75,7 @@ impl Default for CompileOptions {
             map_type: true,
             flyweight_type: true,
             list_comprehensions: true,
+            bool_type: true,
         }
     }
 }
@@ -117,6 +120,13 @@ impl TreeTransformer {
                     Ok(Expr::Value(v_err(E_INVARG)))
                 }
             },
+            Rule::boolean => {
+                if !self.options.bool_type {
+                    return Err(CompileError::DisabledFeature("Booleans".to_string()));
+                }
+                let b = pairs.as_str().trim() == "true";
+                Ok(Expr::Value(Var::mk_bool(b)))
+            }
             Rule::float => {
                 let float = pairs.as_str().parse::<f64>().unwrap();
                 Ok(Expr::Value(v_float(float)))

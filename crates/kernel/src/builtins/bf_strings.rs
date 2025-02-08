@@ -16,7 +16,7 @@ use argon2::{Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Versio
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_values::{v_bool, v_int, v_str, v_string};
+use moor_values::{v_int, v_str, v_string};
 use moor_values::{Sequence, Variant};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
@@ -322,7 +322,7 @@ fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let validated = argon2
         .verify_password(password.as_string().as_bytes(), &hashed_password)
         .is_ok();
-    Ok(Ret(v_bool(validated)))
+    Ok(Ret(bf_args.v_bool(validated)))
 }
 bf_declare!(argon2_verify, bf_argon2_verify);
 

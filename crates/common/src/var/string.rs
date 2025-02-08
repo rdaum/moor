@@ -258,7 +258,7 @@ impl Hash for Str {
 
 #[cfg(test)]
 mod tests {
-    use crate::v_bool;
+    use crate::v_bool_int;
     use crate::var::var::{v_int, v_str, Var};
     use crate::var::variant::Variant;
     use crate::var::IndexMode;
@@ -442,14 +442,17 @@ mod tests {
     fn test_string_contains() {
         // Check both case-sensitive and case-insensitive
         let s = Var::mk_str("hello");
-        assert_eq!(s.contains(&Var::mk_str("ell"), true).unwrap(), v_bool(true));
+        assert_eq!(
+            s.contains(&Var::mk_str("ell"), true).unwrap(),
+            v_bool_int(true)
+        );
         assert_eq!(
             s.contains(&Var::mk_str("Ell"), false).unwrap(),
-            v_bool(true)
+            v_bool_int(true)
         );
         assert_eq!(
             s.contains(&Var::mk_str("world"), true).unwrap(),
-            v_bool(false)
+            v_bool_int(false)
         );
     }
 

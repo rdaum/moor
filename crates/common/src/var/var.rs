@@ -65,8 +65,13 @@ impl Var {
         Var(Variant::Obj(o))
     }
 
+    pub fn mk_bool(b: bool) -> Self {
+        Var(Variant::Bool(b))
+    }
+
     pub fn type_code(&self) -> VarType {
         match self.variant() {
+            Variant::Bool(_) => VarType::TYPE_BOOL,
             Variant::Int(_) => VarType::TYPE_INT,
             Variant::Obj(_) => VarType::TYPE_OBJ,
             Variant::Str(_) => VarType::TYPE_STR,
@@ -102,6 +107,7 @@ impl Var {
     pub fn is_true(&self) -> bool {
         match self.variant() {
             Variant::None => false,
+            Variant::Bool(b) => *b,
             Variant::Obj(_) => false,
             Variant::Int(i) => *i != 0,
             Variant::Float(f) => *f != 0.0,
@@ -263,11 +269,11 @@ impl Var {
         match self.type_class() {
             TypeClass::Sequence(s) => {
                 let c = s.contains(value, case_sensitive)?;
-                Ok(v_bool(c))
+                Ok(v_bool_int(c))
             }
             TypeClass::Associative(a) => {
                 let c = a.contains_key(value, case_sensitive)?;
-                Ok(v_bool(c))
+                Ok(v_bool_int(c))
             }
             TypeClass::Scalar => Err(E_INVARG),
         }
@@ -413,7 +419,9 @@ pub fn v_int(i: i64) -> Var {
     Var::mk_integer(i)
 }
 
-pub fn v_bool(b: bool) -> Var {
+/// Produces a truthy integer, not a Variant::Bool boolean value in order to maintain
+/// backwards compatibility with LambdaMOO cores.
+pub fn v_bool_int(b: bool) -> Var {
     if b {
         v_int(1)
     } else {

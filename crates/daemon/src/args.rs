@@ -151,6 +151,15 @@ pub struct FeatureArgs {
     )]
     pub flyweight_type: Option<bool>,
 
+    #[arg(long, help = "Enable boolean true/false literals and a boolean type")]
+    pub bool_type: Option<bool>,
+
+    #[arg(
+        long,
+        help = "Whether to have builtins that return truth values return boolean types instead of integer 1 or 0. Same goes for binary value operators like <, !, ==, <= etc."
+    )]
+    pub use_boolean_returns: Option<bool>,
+
     #[arg(
         long,
         help = "Enable support for list / range comprehensions in the language"
@@ -181,6 +190,12 @@ impl FeatureArgs {
         }
         if let Some(args) = self.flyweight_type {
             config.flyweight_type = args;
+        }
+        if let Some(args) = self.bool_type {
+            config.bool_type = args;
+        }
+        if let Some(args) = self.use_boolean_returns {
+            config.use_boolean_returns = args;
         }
         if let Some(args) = self.persistent_tasks {
             config.persistent_tasks = args;

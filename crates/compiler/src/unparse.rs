@@ -816,6 +816,9 @@ pub fn to_literal(v: &Var) -> String {
         Variant::Obj(oid) => {
             format!("{}", oid)
         }
+        Variant::Bool(b) => {
+            format!("{}", b)
+        }
         Variant::Int(i) => i.to_string(),
         Variant::Float(f) => {
             format!("{f:?}")
@@ -975,7 +978,7 @@ mod tests {
     use super::*;
     use crate::ast::assert_trees_match_recursive;
     use crate::CompileOptions;
-    use moor_values::v_empty_map;
+
     use pretty_assertions::assert_eq;
     use test_case::test_case;
     use unindent::unindent;

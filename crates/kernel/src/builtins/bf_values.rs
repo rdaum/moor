@@ -19,7 +19,7 @@ use moor_compiler::{offset_for_builtin, to_literal};
 use moor_values::model::WorldState;
 use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_RANGE, E_TYPE};
 use moor_values::{
-    v_bool, v_float, v_int, v_list, v_obj, v_objid, v_str, v_string, Flyweight, List, Map, Obj,
+    v_float, v_int, v_list, v_obj, v_objid, v_str, v_string, Flyweight, List, Map, Obj,
 };
 use moor_values::{v_flyweight, Associative};
 use moor_values::{AsByteBuffer, Sequence};
@@ -40,6 +40,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     for arg in bf_args.args.iter() {
         match arg.variant() {
             Variant::None => result.push_str("None"),
+            Variant::Bool(b) => result.push_str(format!("{}", b).as_str()),
             Variant::Int(i) => result.push_str(&i.to_string()),
             Variant::Float(f) => result.push_str(format!("{:?}", f).as_str()),
             Variant::Str(s) => result.push_str(s.as_string().as_str()),
@@ -157,7 +158,7 @@ fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let (a1, a2) = (&bf_args.args[0], &bf_args.args[1]);
     let result = a1.eq_case_sensitive(a2);
-    Ok(Ret(v_bool(result)))
+    Ok(Ret(bf_args.v_bool(result)))
 }
 bf_declare!(equal, bf_equal);
 

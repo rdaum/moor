@@ -22,7 +22,7 @@ mod tests {
     use moor_values::util::BitEnum;
     use moor_values::Error::E_DIV;
     use moor_values::{
-        v_bool, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_objid,
+        v_bool_int, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_objid,
         v_str, List, Obj, Var,
     };
 
@@ -1046,7 +1046,7 @@ mod tests {
         "range assignment 2")]
     #[test_case(r#"return (!1 || 1);"#, v_int(1); "not/or precedence")]
     #[test_case(r#"return {1, eval("return $test;")};"#, 
-            v_list(&[v_int(1), v_list(&[v_bool(true), v_int(1)])]); "eval builtin")]
+            v_list(&[v_int(1), v_list(&[v_bool_int(true), v_int(1)])]); "eval builtin")]
     #[test_case(
         r#"string="you";
                          i = index("abcdefghijklmnopqrstuvwxyz", string[1]);

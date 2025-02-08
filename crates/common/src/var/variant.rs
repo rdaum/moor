@@ -25,6 +25,7 @@ use std::hash::{Hash, Hasher};
 #[derive(Clone, Encode, Decode)]
 pub enum Variant {
     None,
+    Bool(bool),
     Obj(Obj),
     Int(i64),
     Float(f64),
@@ -39,6 +40,7 @@ impl Hash for Variant {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             Variant::None => 0.hash(state),
+            Variant::Bool(b) => b.hash(state),
             Variant::Obj(o) => o.hash(state),
             Variant::Int(i) => i.hash(state),
             Variant::Float(f) => f.to_bits().hash(state),
@@ -55,6 +57,7 @@ impl Ord for Variant {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (Variant::None, Variant::None) => Ordering::Equal,
+            (Variant::Bool(l), Variant::Bool(r)) => l.cmp(r),
             (Variant::Obj(l), Variant::Obj(r)) => l.cmp(r),
             (Variant::Int(l), Variant::Int(r)) => l.cmp(r),
             (Variant::Float(l), Variant::Float(r)) => l.total_cmp(r),
@@ -66,6 +69,8 @@ impl Ord for Variant {
 
             (Variant::None, _) => Ordering::Less,
             (_, Variant::None) => Ordering::Greater,
+            (Variant::Bool(_), _) => Ordering::Less,
+            (_, Variant::Bool(_)) => Ordering::Greater,
             (Variant::Obj(_), _) => Ordering::Less,
             (_, Variant::Obj(_)) => Ordering::Greater,
             (Variant::Int(_), _) => Ordering::Less,
@@ -95,6 +100,7 @@ impl Debug for Variant {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Variant::None => write!(f, "None"),
+            Variant::Bool(b) => write!(f, "{}", *b),
             Variant::Obj(o) => write!(f, "Object({})", o),
             Variant::Int(i) => write!(f, "Integer({})", i),
             Variant::Float(fl) => write!(f, "Float({})", fl),
@@ -121,6 +127,7 @@ impl PartialEq<Self> for Variant {
     fn eq(&self, other: &Self) -> bool {
         // If the types are different, they're not equal.
         match (self, other) {
+            (Variant::Bool(s), Variant::Bool(o)) => s == o,
             (Variant::Str(s), Variant::Str(o)) => s == o,
             (Variant::Int(s), Variant::Int(o)) => s == o,
             (Variant::Float(s), Variant::Float(o)) => s == o,

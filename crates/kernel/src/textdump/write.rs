@@ -55,6 +55,7 @@ impl<W: io::Write> TextdumpWriter<W> {
             Variant::Int(i) => {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_INT as i64, i)?;
             }
+            Variant::Bool(b) => writeln!(self.writer, "{}\n{}", VarType::TYPE_BOOL as i64, b)?,
             Variant::Obj(o) => {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_OBJ as u64, o.id().0)?;
             }

@@ -396,6 +396,7 @@ impl VmHost {
                     activation.permissions.clone(),
                     fr,
                     world_state,
+                    &vm_exec_params.config,
                 );
                 (result, tick_count)
             }

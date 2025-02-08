@@ -307,7 +307,7 @@ mod tests {
     use crate::var::var::Var;
     use crate::var::variant::Variant;
     use crate::var::{Associative, IndexMode};
-    use crate::{v_bool, v_int, v_str};
+    use crate::{v_bool_int, v_int, v_str};
 
     #[test]
     fn test_map_pack_unpack_index() {
@@ -564,12 +564,12 @@ mod tests {
         let not_key = Var::mk_str("d");
 
         // Case-insensitive
-        assert_eq!(m.contains(&key, false).unwrap(), v_bool(true));
-        assert_eq!(m.contains(&not_key, true).unwrap(), v_bool(false));
+        assert_eq!(m.contains(&key, false).unwrap(), v_bool_int(true));
+        assert_eq!(m.contains(&not_key, true).unwrap(), v_bool_int(false));
 
         // Case sensitive
-        assert_eq!(m.contains(&key, true).unwrap(), v_bool(false));
-        assert_eq!(m.contains(&not_key, false).unwrap(), v_bool(false));
+        assert_eq!(m.contains(&key, true).unwrap(), v_bool_int(false));
+        assert_eq!(m.contains(&not_key, false).unwrap(), v_bool_int(false));
     }
 
     #[test]
@@ -689,6 +689,6 @@ mod tests {
         let key = Var::mk_str("bar");
 
         let result = m.index_in(&key, false, IndexMode::OneBased).unwrap();
-        assert_eq!(result, v_bool(true));
+        assert_eq!(result, v_bool_int(true));
     }
 }

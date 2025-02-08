@@ -354,7 +354,7 @@ impl std::iter::FromIterator<Var> for List {
 
 #[cfg(test)]
 mod tests {
-    use crate::v_bool;
+    use crate::v_bool_int;
     use crate::var::var::{v_empty_list, v_int, v_list, v_str, Var};
     use crate::var::variant::Variant;
     use crate::var::Error;
@@ -634,9 +634,9 @@ mod tests {
     fn test_list_contains() {
         // Case sensitive and case-insensitive tests
         let l = v_list(&[v_str("a"), v_str("b"), v_str("c")]);
-        assert_eq!(l.contains(&v_str("a"), true), Ok(v_bool(true)));
-        assert_eq!(l.contains(&v_str("A"), false), Ok(v_bool(true)));
-        assert_eq!(l.contains(&v_str("A"), true), Ok(v_bool(false)));
+        assert_eq!(l.contains(&v_str("a"), true), Ok(v_bool_int(true)));
+        assert_eq!(l.contains(&v_str("A"), false), Ok(v_bool_int(true)));
+        assert_eq!(l.contains(&v_str("A"), true), Ok(v_bool_int(false)));
     }
 
     #[test]
