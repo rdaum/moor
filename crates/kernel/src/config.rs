@@ -52,13 +52,18 @@ pub struct FeaturesConfig {
     pub list_comprehensions: bool,
     /// Whether to support a boolean literal type in the compiler
     pub bool_type: bool,
-    /// Whether to support a symbol literal type in the compiler
-    pub symbol_type: bool,
     /// Whether to have builtins that return truth values return boolean types instead of integer
     /// 1 or 0. Same goes for binary value operators like <, !, ==, <= etc.
     ///
     /// This can break backwards compatibility with existing cores, so is off by default.
     pub use_boolean_returns: bool,
+    /// Whether to support a symbol literal type in the compiler
+    pub symbol_type: bool,
+    /// Whether to have certain builtins use or return symbols instead of strings for things like property
+    /// names, etc.
+    ///
+    /// This can break backwards compatibility with existing cores, so is off by default.
+    pub use_symbols_in_builtins: bool,
 }
 
 impl Default for FeaturesConfig {
@@ -74,6 +79,7 @@ impl Default for FeaturesConfig {
             flyweight_type: true,
             list_comprehensions: true,
             use_boolean_returns: false,
+            use_symbols_in_builtins: false,
         }
     }
 }

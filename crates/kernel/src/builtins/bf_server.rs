@@ -20,6 +20,7 @@ use iana_time_zone::get_timezone;
 use tracing::{error, info, warn};
 
 use crate::bf_declare;
+use crate::builtins::BfErr::Code;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
 use crate::vm::ExecutionResult;
@@ -35,7 +36,7 @@ use moor_values::VarType::TYPE_STR;
 use moor_values::Variant;
 use moor_values::{v_int, v_list, v_none, v_obj, v_str, v_string, Var};
 use moor_values::{v_list_iter, Error};
-use moor_values::{Sequence, Symbol};
+use moor_values::Sequence;
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(
@@ -78,12 +79,8 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     let content_type = if bf_args.config.rich_notify && bf_args.args.len() == 3 {
-        let Variant::Str(content_type) = bf_args.args[2].variant() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        Some(Symbol::mk_case_insensitive(
-            content_type.as_string().as_str(),
-        ))
+        let content_type = bf_args.args[2].as_symbol().map_err(Code)?;
+        Some(content_type)
     } else {
         None
     };
@@ -782,9 +779,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let Variant::Str(func_name) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
-    };
+    let func_name = bf_args.args[0].as_symbol().map_err(Code)?;
 
     // Arguments are everything left, if any.
     let (_, args) = bf_args.args.pop_front().map_err(|_| BfErr::Code(E_ARGS))?;
@@ -793,7 +788,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     // Find the function id for the given function name.
-    let func_name = Symbol::mk_case_insensitive(func_name.as_string().as_str());
+
     let builtin = BUILTINS
         .find_builtin(func_name)
         .ok_or(BfErr::Code(E_ARGS))?;
@@ -886,10 +881,7 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     if bf_args.args.len() == 1 {
-        let Variant::Str(func_name) = bf_args.args[0].variant() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        let func_name = Symbol::mk_case_insensitive(func_name.as_string());
+        let func_name = bf_args.args[0].as_symbol().map_err(BfErr::Code)?;
         let bf = BUILTINS
             .find_builtin(func_name)
             .ok_or(BfErr::Code(E_ARGS))?;

@@ -18,7 +18,7 @@ use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::Variant;
 use moor_values::{v_empty_list, List};
 use moor_values::{v_list, v_none, v_obj, v_string};
-use moor_values::{Sequence, Symbol};
+use moor_values::Sequence;
 
 use crate::bf_declare;
 use crate::builtins::BfErr::Code;
@@ -34,16 +34,10 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(Code(E_TYPE));
     };
-    let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(Code(E_TYPE));
-    };
+    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
     let (_, perms) = bf_args
         .world_state
-        .get_property_info(
-            &bf_args.task_perms_who(),
-            obj,
-            Symbol::mk_case_insensitive(prop_name.as_string()),
-        )
+        .get_property_info(&bf_args.task_perms_who(), obj, prop_name)
         .map_err(world_state_bf_err)?;
     let owner = perms.owner();
     let flags = perms.flags();
@@ -109,9 +103,7 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(Code(E_TYPE));
     };
-    let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(Code(E_TYPE));
-    };
+    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
     let Variant::List(info) = bf_args.args[2].variant() else {
         return Err(Code(E_TYPE));
     };
@@ -125,12 +117,7 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args
         .world_state
-        .set_property_info(
-            &bf_args.task_perms_who(),
-            obj,
-            Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
-            attrs,
-        )
+        .set_property_info(&bf_args.task_perms_who(), obj, prop_name, attrs)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
@@ -143,16 +130,10 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(Code(E_TYPE));
     };
-    let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(Code(E_TYPE));
-    };
+    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
     let is_clear = bf_args
         .world_state
-        .is_property_clear(
-            &bf_args.task_perms_who(),
-            obj,
-            Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
-        )
+        .is_property_clear(&bf_args.task_perms_who(), obj, prop_name)
         .map_err(world_state_bf_err)?;
     Ok(Ret(bf_args.v_bool(is_clear)))
 }
@@ -165,16 +146,10 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(Code(E_TYPE));
     };
-    let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(Code(E_TYPE));
-    };
+    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
     bf_args
         .world_state
-        .clear_property(
-            &bf_args.task_perms_who(),
-            obj,
-            Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
-        )
+        .clear_property(&bf_args.task_perms_who(), obj, prop_name)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
@@ -186,14 +161,16 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_ARGS));
     }
 
-    let (Variant::Obj(location), Variant::Str(name), value, Variant::List(info)) = (
+    let (Variant::Obj(location), name, value, Variant::List(info)) = (
         bf_args.args[0].variant(),
-        bf_args.args[1].variant(),
+        bf_args.args[1].clone(),
         bf_args.args[2].clone(),
         bf_args.args[3].variant(),
     ) else {
         return Err(Code(E_ARGS));
     };
+
+    let prop_name = name.as_symbol().map_err(Code)?;
 
     let attrs = match info_to_prop_attrs(info) {
         InfoParseResult::Fail(e) => {
@@ -208,7 +185,7 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             &bf_args.task_perms_who(),
             location,
             location,
-            Symbol::mk_case_insensitive(name.as_string().as_str()),
+            prop_name,
             &attrs.owner.unwrap(),
             attrs.flags.unwrap(),
             Some(value),
@@ -225,16 +202,10 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(Code(E_TYPE));
     };
-    let Variant::Str(prop_name) = bf_args.args[1].variant() else {
-        return Err(Code(E_TYPE));
-    };
+    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
     bf_args
         .world_state
-        .delete_property(
-            &bf_args.task_perms_who(),
-            obj,
-            Symbol::mk_case_insensitive(prop_name.as_string().as_str()),
-        )
+        .delete_property(&bf_args.task_perms_who(), obj, prop_name)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }

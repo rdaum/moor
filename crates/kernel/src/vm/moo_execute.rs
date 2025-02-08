@@ -24,7 +24,7 @@ use crate::config::FeaturesConfig;
 use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_values::{
     v_bool_int, v_empty_list, v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map,
-    v_none, v_obj, v_str, Error, IndexMode, Obj, Sequence, Str, Var, Variant,
+    v_none, v_obj, v_str, v_sym, Error, IndexMode, Obj, Sequence, Var, Variant,
 };
 use moor_values::{Symbol, VarType};
 
@@ -364,10 +364,9 @@ pub fn moo_frame_execute(
                 let mut slots = Vec::with_capacity(*num_slots);
                 for _ in 0..*num_slots {
                     let (k, v) = (f.pop(), f.pop());
-                    let Variant::Str(k) = k.variant() else {
+                    let Ok(sym) = k.as_symbol() else {
                         return ExecutionResult::PushError(E_TYPE);
                     };
-                    let sym = Symbol::mk_case_insensitive(k.as_string());
                     slots.push((sym, v));
                 }
                 let delegate = f.pop();
@@ -543,11 +542,11 @@ pub fn moo_frame_execute(
             Op::GetProp => {
                 let (propname, obj) = (f.pop(), f.peek_top());
 
-                let Variant::Str(propname) = propname.variant() else {
+                let Ok(propname) = propname.as_symbol() else {
                     return ExecutionResult::PushError(E_TYPE);
                 };
 
-                let value = get_property(world_state, &permissions, obj, propname);
+                let value = get_property(world_state, &permissions, obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.poke(0, v);
@@ -560,11 +559,11 @@ pub fn moo_frame_execute(
             Op::PushGetProp => {
                 let (propname, obj) = f.peek2();
 
-                let Variant::Str(propname) = propname.variant() else {
+                let Ok(propname) = propname.as_symbol() else {
                     return ExecutionResult::PushError(E_TYPE);
                 };
 
-                let value = get_property(world_state, &permissions, obj, propname);
+                let value = get_property(world_state, &permissions, obj, propname, features_config);
                 match value {
                     Ok(v) => {
                         f.push(v);
@@ -577,14 +576,12 @@ pub fn moo_frame_execute(
             Op::PutProp => {
                 let (rhs, propname, obj) = (f.pop(), f.pop(), f.peek_top());
 
-                let (propname, obj) = match (propname.variant(), obj.variant()) {
-                    (Variant::Str(propname), Variant::Obj(obj)) => (propname, obj),
-                    (_, _) => {
-                        return ExecutionResult::PushError(E_TYPE);
-                    }
+                let Variant::Obj(obj) = obj.variant() else {
+                    return ExecutionResult::PushError(E_TYPE);
                 };
-
-                let propname = Symbol::mk_case_insensitive(propname.as_string());
+                let Ok(propname) = propname.as_symbol() else {
+                    return ExecutionResult::PushError(E_TYPE);
+                };
                 let update_result =
                     world_state.update_property(&permissions, obj, propname, &rhs.clone());
 
@@ -628,10 +625,8 @@ pub fn moo_frame_execute(
                 let Variant::List(l) = args.variant() else {
                     return ExecutionResult::PushError(E_TYPE);
                 };
-                let verb = match verb.variant() {
-                    Variant::Sym(s) => *s,
-                    Variant::Str(s) => Symbol::mk_case_insensitive(s.as_string()),
-                    _ => return ExecutionResult::PushError(E_TYPE),
+                let Ok(verb) = verb.as_symbol() else {
+                    return ExecutionResult::PushError(E_TYPE);
                 };
                 return ExecutionResult::PrepareVerbDispatch {
                     this: obj,
@@ -943,11 +938,11 @@ fn get_property(
     world_state: &mut dyn WorldState,
     permissions: &Obj,
     obj: &Var,
-    propname: &Str,
+    propname: Symbol,
+    features_config: &FeaturesConfig,
 ) -> Result<Var, Error> {
     match obj.variant() {
         Variant::Obj(obj) => {
-            let propname = Symbol::mk_case_insensitive(propname.as_string());
             let result = world_state.retrieve_property(permissions, obj, propname);
             match result {
                 Ok(v) => Ok(v),
@@ -955,8 +950,6 @@ fn get_property(
             }
         }
         Variant::Flyweight(flyweight) => {
-            let propname = Symbol::mk_case_insensitive(propname.as_string());
-
             // If propname is `delegate`, return the delegate object.
             // If the propname is `slots`, return the slots list.
             // Otherwise, return the value from the slots list.
@@ -966,7 +959,16 @@ fn get_property(
                 let slots: Vec<_> = flyweight
                     .slots()
                     .iter()
-                    .map(|(k, v)| (v_str(k.as_str()), v.clone()))
+                    .map(|(k, v)| {
+                        (
+                            if features_config.use_symbols_in_builtins {
+                                v_sym(k.clone())
+                            } else {
+                                v_str(k.as_str())
+                            },
+                            v.clone(),
+                        )
+                    })
                     .collect();
                 v_map(&slots)
             } else if let Some(result) = flyweight.get_slot(&propname) {

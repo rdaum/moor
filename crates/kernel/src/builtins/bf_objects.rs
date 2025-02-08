@@ -20,7 +20,7 @@ use moor_values::model::WorldStateError;
 use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
-use moor_values::{v_int, v_none, v_obj, v_str};
+use moor_values::{v_int, v_none, v_obj, v_str, v_sym_str};
 use moor_values::{v_list, Sequence, Symbol};
 use moor_values::{v_list_iter, NOTHING};
 use moor_values::{List, Variant};
@@ -640,7 +640,11 @@ fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .properties(&bf_args.task_perms_who(), obj)
         .map_err(world_state_bf_err)?;
-    let props: Vec<_> = props.iter().map(|p| v_str(p.name())).collect();
+    let props: Vec<_> = if bf_args.config.use_symbols_in_builtins {
+        props.iter().map(|p| v_sym_str(p.name())).collect()
+    } else {
+        props.iter().map(|p| v_str(p.name())).collect()
+    };
     Ok(Ret(v_list(&props)))
 }
 bf_declare!(properties, bf_properties);

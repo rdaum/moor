@@ -109,6 +109,16 @@ impl Var {
         &self.0
     }
 
+    /// If a string, turn into symbol, or if already a symbol, return that.
+    /// Otherwise, E_TYPE
+    pub fn as_symbol(&self) -> Result<Symbol, Error> {
+        match self.variant() {
+            Variant::Str(s) => Ok(Symbol::mk_case_insensitive(s.as_string())),
+            Variant::Sym(s) => Ok(*s),
+            _ => Err(E_TYPE),
+        }
+    }
+
     pub fn is_true(&self) -> bool {
         match self.variant() {
             Variant::None => false,

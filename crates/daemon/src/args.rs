@@ -154,14 +154,20 @@ pub struct FeatureArgs {
     #[arg(long, help = "Enable boolean true/false literals and a boolean type")]
     pub bool_type: Option<bool>,
 
-    #[arg(long, help = "Enable 'symbol literals")]
-    pub symbol_type: Option<bool>,
-
     #[arg(
         long,
         help = "Whether to have builtins that return truth values return boolean types instead of integer 1 or 0. Same goes for binary value operators like <, !, ==, <= etc."
     )]
     pub use_boolean_returns: Option<bool>,
+
+    #[arg(long, help = "Enable 'symbol literals")]
+    pub symbol_type: Option<bool>,
+
+    #[arg(
+        long,
+        help = "Whether to have certain builtins use or return symbols instead of strings for things like property names, etc."
+    )]
+    pub use_symbols_in_builtins: Option<bool>,
 
     #[arg(
         long,
@@ -202,6 +208,9 @@ impl FeatureArgs {
         }
         if let Some(args) = self.symbol_type {
             config.symbol_type = args;
+        }
+        if let Some(args) = self.use_symbols_in_builtins {
+            config.use_symbols_in_builtins = args;
         }
         if let Some(args) = self.persistent_tasks {
             config.persistent_tasks = args;
