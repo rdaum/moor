@@ -19,7 +19,7 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use tracing::{debug, error, trace, warn};
 
 use moor_compiler::Name;
@@ -101,7 +101,7 @@ impl VmHost {
     pub fn start_call_command_verb(
         &mut self,
         task_id: TaskId,
-        verb: (Bytes, VerbDef),
+        verb: (ByteView, VerbDef),
         verb_call: VerbCall,
         command: ParsedCommand,
         permissions: &Obj,
@@ -123,7 +123,7 @@ impl VmHost {
         &mut self,
         task_id: TaskId,
         perms: &Obj,
-        verb_info: (Bytes, VerbDef),
+        verb_info: (ByteView, VerbDef),
         verb_call: VerbCall,
     ) {
         let binary = Self::decode_program(verb_info.1.binary_type(), verb_info.0);
@@ -439,7 +439,7 @@ impl VmHost {
         self.running = false;
     }
 
-    pub fn decode_program(binary_type: BinaryType, binary_bytes: Bytes) -> VerbProgram {
+    pub fn decode_program(binary_type: BinaryType, binary_bytes: ByteView) -> VerbProgram {
         match binary_type {
             BinaryType::LambdaMoo18X => VerbProgram::Moo(
                 Program::from_bytes(binary_bytes).expect("Could not decode MOO program"),

@@ -11,10 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bytes::Bytes;
+use byteview::ByteView;
 use moor_values::model::WorldStateSource;
 use moor_values::model::{WorldState, WorldStateError};
 use moor_values::{AsByteBuffer, DecodingError, EncodingError, Obj};
+use std::cmp::Ordering;
 use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -94,14 +95,14 @@ impl AsByteBuffer for StringHolder {
         Ok(self.0.as_bytes().to_vec())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         Ok(Self(
             String::from_utf8(bytes.to_vec()).expect("Invalid UTF-8"),
         ))
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(Bytes::from(self.0.as_bytes().to_vec()))
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        Ok(ByteView::from(self.0.as_bytes().to_vec()))
     }
 }
 
@@ -121,7 +122,7 @@ impl AsByteBuffer for UUIDHolder {
         Ok(self.0.as_bytes().to_vec())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         let bytes = bytes.as_ref();
         if bytes.len() != 16 {
             return Err(DecodingError::CouldNotDecode(format!(
@@ -134,8 +135,8 @@ impl AsByteBuffer for UUIDHolder {
         Ok(Self(Uuid::from_bytes(uuid_bytes)))
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(Bytes::from(self.0.as_bytes().to_vec()))
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        Ok(ByteView::from(self.0.as_bytes().to_vec()))
     }
 }
 
@@ -155,12 +156,12 @@ impl AsByteBuffer for BytesHolder {
         Ok(self.0.clone())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         Ok(Self(bytes.to_vec()))
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(Bytes::from(self.0.clone()))
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        Ok(ByteView::from(self.0.clone()))
     }
 }
 
@@ -188,7 +189,7 @@ impl AsByteBuffer for SystemTimeHolder {
         Ok(micros.to_le_bytes().to_vec())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         let bytes = bytes.as_ref();
         let micros = u128::from_le_bytes(bytes.try_into().map_err(|_| {
             DecodingError::CouldNotDecode("Expected 16 bytes for SystemTime".to_string())
@@ -197,12 +198,12 @@ impl AsByteBuffer for SystemTimeHolder {
         Ok(Self(std::time::UNIX_EPOCH + dur))
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
         let dur = self.0.duration_since(std::time::UNIX_EPOCH).map_err(|_| {
             EncodingError::CouldNotEncode("SystemTime before UNIX_EPOCH".to_string())
         })?;
         let micros = dur.as_micros();
-        Ok(Bytes::from(micros.to_le_bytes().to_vec()))
+        Ok(ByteView::from(micros.to_le_bytes().to_vec()))
     }
 }
 
@@ -210,6 +211,22 @@ impl AsByteBuffer for SystemTimeHolder {
 pub struct ObjAndUUIDHolder {
     pub obj: Obj,
     pub uuid: Uuid,
+}
+
+impl PartialOrd for ObjAndUUIDHolder {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.uuid
+            .partial_cmp(&other.uuid)
+            .or_else(|| self.obj.partial_cmp(&other.obj))
+    }
+}
+
+impl Ord for ObjAndUUIDHolder {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.uuid
+            .cmp(&other.uuid)
+            .then_with(|| self.obj.cmp(&other.obj))
+    }
 }
 
 impl ObjAndUUIDHolder {
@@ -220,6 +237,7 @@ impl ObjAndUUIDHolder {
         }
     }
 }
+
 impl AsByteBuffer for ObjAndUUIDHolder {
     fn size_bytes(&self) -> usize {
         self.obj.size_bytes() + 16
@@ -228,18 +246,18 @@ impl AsByteBuffer for ObjAndUUIDHolder {
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
         let mut bytes = Vec::with_capacity(self.size_bytes());
         bytes.extend_from_slice(self.uuid.as_bytes());
-        bytes.extend_from_slice(&self.obj.as_bytes()?);
+        bytes.extend_from_slice(self.obj.as_bytes()?.as_ref());
         Ok(f(&bytes))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
         let mut bytes = Vec::with_capacity(self.size_bytes());
         bytes.extend_from_slice(self.uuid.as_bytes());
-        bytes.extend_from_slice(&self.obj.as_bytes()?);
+        bytes.extend_from_slice(self.obj.as_bytes()?.as_ref());
         Ok(bytes)
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         let bytes = bytes.as_ref();
         let uuid_bytes = bytes.get(..16).ok_or(DecodingError::CouldNotDecode(
             "Expected 16 bytes for UUID".to_string(),
@@ -250,14 +268,54 @@ impl AsByteBuffer for ObjAndUUIDHolder {
         let uuid = Uuid::from_bytes(uuid_bytes.try_into().map_err(|_| {
             DecodingError::CouldNotDecode("Expected 16 bytes for UUID".to_string())
         })?);
-        let obj = Obj::from_bytes(Bytes::from(obj_bytes.to_vec()))?;
+        let obj = Obj::from_bytes(ByteView::from(obj_bytes.to_vec()))?;
         Ok(Self { obj, uuid })
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
         let mut bytes = Vec::with_capacity(self.size_bytes());
         bytes.extend_from_slice(self.uuid.as_bytes());
-        bytes.extend_from_slice(&self.obj.as_bytes()?);
-        Ok(Bytes::from(bytes))
+        bytes.extend_from_slice(self.obj.as_bytes()?.as_ref());
+        Ok(ByteView::from(bytes))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ObjAndUUIDHolder;
+    use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+    use std::collections::BTreeSet;
+    use std::hash::{Hash, Hasher};
+    use uuid::Uuid;
+
+    #[test]
+    fn test_reconstitute_obj_uuid_holder() {
+        let u = Uuid::new_v4();
+        let oh = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
+        let bytes = oh.as_bytes().unwrap();
+        let oh2 = ObjAndUUIDHolder::from_bytes(bytes).unwrap();
+        assert_eq!(oh, oh2);
+        assert_eq!(oh.uuid, oh2.uuid);
+        assert_eq!(oh.obj, oh2.obj);
+    }
+
+    #[test]
+    fn test_hash_obj_uuid_holder() {
+        let u = Uuid::new_v4();
+        let oh = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
+        let oh2 = ObjAndUUIDHolder::new(&SYSTEM_OBJECT, u);
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        oh.hash(&mut hasher);
+        oh2.hash(&mut hasher);
+        let h1 = hasher.finish();
+        let h2 = hasher.finish();
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn test_ord_eq_obj_uuid_holder() {
+        let mut tree = BTreeSet::new();
+        tree.insert(ObjAndUUIDHolder::new(&SYSTEM_OBJECT, Uuid::new_v4()));
     }
 }

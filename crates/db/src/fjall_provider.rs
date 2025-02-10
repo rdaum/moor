@@ -12,7 +12,7 @@
 //
 
 use crate::tx::{Error, Provider, Timestamp};
-use bytes::Bytes;
+use byteview::ByteView;
 use fjall::UserValue;
 use moor_values::AsByteBuffer;
 use std::marker::PhantomData;
@@ -31,7 +31,7 @@ fn decode<Codomain>(user_value: UserValue) -> Result<(Timestamp, Codomain), Erro
 where
     Codomain: AsByteBuffer,
 {
-    let result: Bytes = user_value.into();
+    let result: ByteView = user_value.into();
     let ts = Timestamp(u64::from_le_bytes(result[0..8].try_into().unwrap()));
     let codomain = Codomain::from_bytes(result.slice(8..)).map_err(|_| Error::EncodingFailure)?;
     Ok((ts, codomain))
@@ -45,7 +45,7 @@ where
     let mut result = Vec::with_capacity(8 + as_bytes.len());
     result.extend_from_slice(&ts.0.to_le_bytes());
     result.extend_from_slice(&as_bytes);
-    Ok(UserValue::from(Bytes::from(result)))
+    Ok(UserValue::from(ByteView::from(result)))
 }
 
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
@@ -106,7 +106,8 @@ where
         for entry in self.fjall_partition.iter() {
             let (key, value) = entry.map_err(|e| Error::RetrievalFailure(e.to_string()))?;
             let size = key.len() + value.len();
-            let domain = Domain::from_bytes(key.into()).map_err(|_| Error::EncodingFailure)?;
+            let domain =
+                Domain::from_bytes(key.clone().into()).map_err(|_| Error::EncodingFailure)?;
             let (ts, codomain) = decode::<Codomain>(value)?;
             if predicate(&domain, &codomain) {
                 result.push((ts, domain, codomain, size));

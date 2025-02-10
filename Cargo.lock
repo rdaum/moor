@@ -425,9 +425,9 @@ checksum = "f61dac84819c6588b558454b194026eb1f09c293b9036ae9b159e74e73ab6cf9"
 
 [[package]]
 name = "byteview"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9f101f5d5ac7c27fa7e664bbdc2697b2627f24c701e1309564840c67554dbcc"
+checksum = "7a4516a8561bff0598c45512f90ee04ed62cee2cb36839e650a0a0704d5f741f"
 
 [[package]]
 name = "cast"
@@ -1235,9 +1235,9 @@ checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "fjall"
-version = "2.6.2"
+version = "2.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ddab3925ea1ed59863d246305c7bc113dc2e12b691405d2d02e429cfa0c87a5"
+checksum = "33e0fd3f3a8cbaa2b179ccc690ea0d37282d24787c06eab0dfd9137e1c4d4699"
 dependencies = [
  "byteorder",
  "byteview",
@@ -2038,9 +2038,9 @@ checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
 
 [[package]]
 name = "lsm-tree"
-version = "2.6.2"
+version = "2.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2880324e429cd3285e56d0382c025b3d9336d672bbf344e3fde9783a5623f0f6"
+checksum = "614a43954a8414dcca688f9d4c91f727860b55ffd9a029438b18f234ed33330f"
 dependencies = [
  "byteorder",
  "crossbeam-skiplist",
@@ -2152,7 +2152,7 @@ name = "moor-compiler"
 version = "0.9.0-alpha"
 dependencies = [
  "bincode",
- "bytes",
+ "byteview",
  "itertools 0.14.0",
  "lazy_static",
  "moor-values",
@@ -2171,7 +2171,7 @@ name = "moor-daemon"
 version = "0.9.0-alpha"
 dependencies = [
  "bincode",
- "bytes",
+ "byteview",
  "clap",
  "clap_derive",
  "color-eyre",
@@ -2197,7 +2197,7 @@ dependencies = [
 name = "moor-db"
 version = "0.9.0-alpha"
 dependencies = [
- "bytes",
+ "byteview",
  "crossbeam-channel",
  "edn-format",
  "eyre",
@@ -2220,7 +2220,7 @@ version = "0.9.0-alpha"
 dependencies = [
  "argon2",
  "bincode",
- "bytes",
+ "byteview",
  "chrono",
  "chrono-tz",
  "criterion",
@@ -2322,7 +2322,7 @@ version = "0.9.0-alpha"
 dependencies = [
  "binary-layout",
  "bincode",
- "bytes",
+ "byteview",
  "enum-primitive-derive",
  "im",
  "itertools 0.14.0",
@@ -4987,12 +4987,11 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "value-log"
-version = "1.5.2"
+version = "1.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5589fb4f51f528b0cca7fdd03ec63a67f447bdcd313b09cdf9d2fc519149c02a"
+checksum = "f2398750880b2b9770afbd1a3e299b9e859d6143c299867eb35fdf484b7625d3"
 dependencies = [
  "byteorder",
- "bytes",
  "byteview",
  "interval-heap",
  "log",

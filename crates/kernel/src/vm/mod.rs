@@ -19,7 +19,7 @@
 use std::time::Duration;
 
 use bincode::{Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 pub use exec_state::VMExecState;
 use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
@@ -78,7 +78,7 @@ pub enum ExecutionResult {
         /// The requested verb.
         resolved_verb: VerbDef,
         /// And its binary
-        binary: Bytes,
+        binary: ByteView,
         /// The call parameters that were used to resolve the verb.
         call: VerbCall,
         /// The parsed user command that led to this verb dispatch, if any.

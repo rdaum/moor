@@ -13,18 +13,18 @@
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_compiler::offset_for_builtin;
-use moor_values::model::WorldState;
 use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
+use moor_values::model::WorldState;
 use moor_values::{
-    v_flyweight, v_list, v_map, v_obj, v_str, v_string, v_sym, Associative, Flyweight, List, Map,
-    Obj, Sequence, Symbol, Variant, SYSTEM_OBJECT,
+    Associative, Flyweight, List, Map, Obj, SYSTEM_OBJECT, Sequence, Symbol, Variant, v_flyweight,
+    v_list, v_map, v_obj, v_str, v_string, v_sym,
 };
 use std::io::{BufReader, BufWriter};
 use tracing::error;
-use xml::reader::XmlEvent;
 use xml::EmitterConfig;
+use xml::reader::XmlEvent;
 
 /// Uses xml-rs to parse a string into a series of flyweights
 /// representing the XML structure.

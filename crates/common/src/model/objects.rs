@@ -18,7 +18,7 @@ use crate::util::BitEnum;
 use crate::var::{Obj, Symbol};
 use crate::{AsByteBuffer, DecodingError, EncodingError, NOTHING};
 use bincode::{Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use enum_primitive_derive::Primitive;
 use serde::{Deserialize, Serialize};
 
@@ -132,7 +132,7 @@ binary_layout!(objattrs_buf, LittleEndian, {
 });
 
 #[derive(Debug, Clone)]
-pub struct ObjAttrs(Bytes);
+pub struct ObjAttrs(ByteView);
 
 impl ObjAttrs {
     #[must_use]
@@ -156,7 +156,7 @@ impl ObjAttrs {
             .try_write(BitEnum::new())
             .expect("Failed to encode flags");
 
-        Self(Bytes::from(buffer))
+        Self(ByteView::from(buffer))
     }
 
     pub fn new(
@@ -189,7 +189,7 @@ impl ObjAttrs {
 
         buf[header_size..].copy_from_slice(name_bytes);
 
-        Self(Bytes::from(buf))
+        Self(ByteView::from(buf))
     }
 
     pub fn owner(&self) -> Option<Obj> {
@@ -205,7 +205,7 @@ impl ObjAttrs {
             .owner_mut()
             .try_write(o)
             .expect("Failed to encode owner");
-        self.0 = Bytes::from(buffer_as_vec);
+        self.0 = ByteView::from(buffer_as_vec);
         self
     }
 
@@ -222,7 +222,7 @@ impl ObjAttrs {
             .location_mut()
             .try_write(o)
             .expect("Failed to encode location");
-        self.0 = Bytes::from(buffer_as_vec);
+        self.0 = ByteView::from(buffer_as_vec);
         self
     }
 
@@ -239,7 +239,7 @@ impl ObjAttrs {
             .parent_mut()
             .try_write(o)
             .expect("Failed to encode parent");
-        self.0 = Bytes::from(buffer_as_vec);
+        self.0 = ByteView::from(buffer_as_vec);
         self
     }
 
@@ -255,7 +255,7 @@ impl ObjAttrs {
             .flags_mut()
             .try_write(flags)
             .expect("Failed to encode flags");
-        self.0 = Bytes::from(buffer_as_vec);
+        self.0 = ByteView::from(buffer_as_vec);
         self
     }
 
@@ -272,7 +272,7 @@ impl ObjAttrs {
         let mut buffer_as_vec = self.0.as_ref().to_vec();
         let name_as_vec = s.as_bytes().to_vec();
         buffer_as_vec.extend_from_slice(&name_as_vec);
-        self.0 = Bytes::from(buffer_as_vec);
+        self.0 = ByteView::from(buffer_as_vec);
         self
     }
 }
@@ -296,14 +296,14 @@ impl AsByteBuffer for ObjAttrs {
         Ok(self.0.as_ref().to_vec())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
         Ok(Self(bytes))
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
         Ok(self.0.clone())
     }
 }

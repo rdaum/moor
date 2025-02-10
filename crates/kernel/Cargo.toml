@@ -45,7 +45,7 @@ moor-moot = { path = "../testing/moot" }
 moor-values = { path = "../common" }
 
 ## General usefulness
-bytes.workspace = true
+byteview.workspace = true
 chrono.workspace = true
 crossbeam-channel.workspace = true
 encoding_rs.workspace = true

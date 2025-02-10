@@ -19,7 +19,7 @@ use crate::encode::{DecodingError, EncodingError};
 
 use crate::AsByteBuffer;
 use bincode::{Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 /// A barebones minimal custom bitset enum, to replace use of `EnumSet` crate which was not rkyv'able.
 use num_traits::ToPrimitive;
 
@@ -153,7 +153,7 @@ impl<T: ToPrimitive> AsByteBuffer for BitEnum<T> {
         Ok(self.value.to_le_bytes().to_vec())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
@@ -172,7 +172,7 @@ impl<T: ToPrimitive> AsByteBuffer for BitEnum<T> {
         })
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(Bytes::from(self.value.to_le_bytes().to_vec()))
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        Ok(ByteView::from(self.value.to_le_bytes().to_vec()))
     }
 }

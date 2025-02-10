@@ -16,7 +16,7 @@ use crate::ObjDefParseError::VerbCompileError;
 use crate::codegen::compile_tree;
 use crate::parse::moo::{MooParser, Rule};
 use crate::parse::unquote_str;
-use bytes::Bytes;
+use byteview::ByteView;
 use itertools::Itertools;
 use moor_values::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
@@ -67,7 +67,7 @@ pub struct ObjVerbDef {
     pub argspec: VerbArgsSpec,
     pub owner: Obj,
     pub flags: BitEnum<VerbFlag>,
-    pub binary: Bytes,
+    pub binary: ByteView,
 }
 
 pub struct ObjPropDef {

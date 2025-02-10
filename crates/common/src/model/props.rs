@@ -17,7 +17,7 @@ use crate::util::BitEnum;
 use crate::{AsByteBuffer, DecodingError, EncodingError};
 use binary_layout::binary_layout;
 use bincode::{Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use enum_primitive_derive::Primitive;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive, Encode, Decode)]
@@ -119,7 +119,7 @@ binary_layout!(prop_perms_buf, LittleEndian, {
 });
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PropPerms(Bytes);
+pub struct PropPerms(ByteView);
 
 impl PropPerms {
     #[must_use]
@@ -132,7 +132,7 @@ impl PropPerms {
         view.flags_mut()
             .try_write(flags)
             .expect("Failed to encode flags");
-        Self(Bytes::from(buf))
+        Self(ByteView::from(buf))
     }
 
     #[must_use]
@@ -169,11 +169,24 @@ impl AsByteBuffer for PropPerms {
         Ok(self.0.as_ref().to_vec())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         Ok(Self(bytes))
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
         Ok(self.0.clone())
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn test_make_get() {
+        let pperms = PropPerms::new(Obj::mk_id(1), PropFlag::rc());
+        assert_eq!(pperms.owner(), Obj::mk_id(1));
+        assert_eq!(pperms.flags(), PropFlag::rc());
     }
 }

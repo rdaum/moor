@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bytes::Bytes;
+use byteview::ByteView;
 use uuid::Uuid;
 
 use moor_values::Obj;
@@ -149,7 +149,7 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
         self.get_tx().get_verbs(objid)
     }
 
-    fn get_verb_binary(&self, objid: &Obj, uuid: Uuid) -> Result<Bytes, WorldStateError> {
+    fn get_verb_binary(&self, objid: &Obj, uuid: Uuid) -> Result<ByteView, WorldStateError> {
         self.get_tx().get_verb_binary(objid, uuid)
     }
 

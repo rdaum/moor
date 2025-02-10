@@ -20,8 +20,7 @@ tempfile.workspace = true
 ## Own
 moor-values = { path = "../common" }
 
-## Error declaration/ handling
-bytes.workspace = true
+byteview.workspace = true
 crossbeam-channel.workspace = true
 fjall.workspace = true
 indexmap.workspace = true

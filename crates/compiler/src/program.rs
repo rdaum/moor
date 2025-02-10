@@ -16,7 +16,7 @@ use crate::names::{Name, Names};
 use crate::opcode::Op;
 use crate::unparse::to_literal;
 use bincode::{Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use lazy_static::lazy_static;
 use moor_values::Var;
 use moor_values::{AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError};
@@ -144,7 +144,7 @@ impl AsByteBuffer for Program {
             .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
         Self: Sized + Decode,
     {
@@ -153,7 +153,7 @@ impl AsByteBuffer for Program {
             .0)
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(Bytes::from(self.make_copy_as_vec()?))
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        Ok(ByteView::from(self.make_copy_as_vec()?))
     }
 }

@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bytes::Bytes;
+use byteview::ByteView;
 use uuid::Uuid;
 
 use moor_values::Obj;
@@ -86,7 +86,7 @@ pub trait LoaderInterface: Send {
     fn get_object_verbs(&self, objid: &Obj) -> Result<VerbDefs, WorldStateError>;
 
     /// Get the binary for a given verb
-    fn get_verb_binary(&self, objid: &Obj, uuid: Uuid) -> Result<Bytes, WorldStateError>;
+    fn get_verb_binary(&self, objid: &Obj, uuid: Uuid) -> Result<ByteView, WorldStateError>;
 
     /// Get the properties defined on a given object
     fn get_object_properties(&self, objid: &Obj) -> Result<PropDefs, WorldStateError>;

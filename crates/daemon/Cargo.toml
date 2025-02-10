@@ -31,7 +31,7 @@ clap_derive.workspace = true
 
 # General.
 bincode.workspace = true
-bytes.workspace = true
+byteview.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
 fjall.workspace = true

@@ -30,7 +30,7 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use crossbeam_channel::Sender;
 use lazy_static::lazy_static;
 use tracing::{error, trace, warn};
@@ -613,7 +613,7 @@ fn find_verb_for_command(
     player_location: &Obj,
     pc: &ParsedCommand,
     ws: &mut dyn WorldState,
-) -> Result<Option<((Bytes, VerbDef), Obj)>, CommandError> {
+) -> Result<Option<((ByteView, VerbDef), Obj)>, CommandError> {
     let targets_to_search = vec![
         player.clone(),
         player_location.clone(),

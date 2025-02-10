@@ -808,7 +808,7 @@ where
         .resolve_verb(&a, Symbol::mk_case_insensitive("test"), None)
         .unwrap()
         .uuid();
-    assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![]);
+    assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![].into());
 
     // Add a second verb with a different name
     tx.add_object_verb(
@@ -902,7 +902,7 @@ where
         .resolve_verb(&b, Symbol::mk_case_insensitive("test"), None)
         .unwrap()
         .uuid();
-    assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![]);
+    assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![].into());
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 

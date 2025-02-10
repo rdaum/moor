@@ -15,7 +15,7 @@ use crate::AsByteBuffer;
 use crate::encode::{DecodingError, EncodingError};
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Add;
@@ -143,7 +143,7 @@ impl AsByteBuffer for Obj {
         self.id().make_copy_as_vec()
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
@@ -151,7 +151,7 @@ impl AsByteBuffer for Obj {
         Ok(Self::mk_id(id.0))
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
         self.id().as_bytes()
     }
 }
@@ -169,7 +169,7 @@ impl AsByteBuffer for Objid {
         Ok(self.0.to_le_bytes().to_vec())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
@@ -185,8 +185,8 @@ impl AsByteBuffer for Objid {
         Ok(Self(i32::from_le_bytes(buf)))
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(Bytes::from(self.make_copy_as_vec()?))
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        Ok(ByteView::from(self.make_copy_as_vec()?))
     }
 }
 

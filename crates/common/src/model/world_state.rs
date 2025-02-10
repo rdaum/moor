@@ -12,7 +12,7 @@
 //
 
 use bincode::{Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -329,7 +329,7 @@ pub trait WorldState: Send {
         perms: &Obj,
         obj: &Obj,
         uuid: Uuid,
-    ) -> Result<(Bytes, VerbDef), WorldStateError>;
+    ) -> Result<(ByteView, VerbDef), WorldStateError>;
 
     /// Retrieve a verb/method from the given object (or its parents).
     fn find_method_verb_on(
@@ -337,7 +337,7 @@ pub trait WorldState: Send {
         perms: &Obj,
         obj: &Obj,
         vname: Symbol,
-    ) -> Result<(Bytes, VerbDef), WorldStateError>;
+    ) -> Result<(ByteView, VerbDef), WorldStateError>;
 
     /// Seek the verb referenced by the given command on the given object.
     fn find_command_verb_on(
@@ -348,7 +348,7 @@ pub trait WorldState: Send {
         dobj: &Obj,
         prep: PrepSpec,
         iobj: &Obj,
-    ) -> Result<Option<(Bytes, VerbDef)>, WorldStateError>;
+    ) -> Result<Option<(ByteView, VerbDef)>, WorldStateError>;
 
     /// Get the object that is the parent of the given object.
     fn parent_of(&self, perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError>;

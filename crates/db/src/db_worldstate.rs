@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bytes::Bytes;
+use byteview::ByteView;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
@@ -626,7 +626,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         perms: &Obj,
         obj: &Obj,
         uuid: Uuid,
-    ) -> Result<(Bytes, VerbDef), WorldStateError> {
+    ) -> Result<(ByteView, VerbDef), WorldStateError> {
         let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
@@ -642,7 +642,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         perms: &Obj,
         obj: &Obj,
         vname: Symbol,
-    ) -> Result<(Bytes, VerbDef), WorldStateError> {
+    ) -> Result<(ByteView, VerbDef), WorldStateError> {
         let vh = self.get_tx().resolve_verb(obj, vname, None)?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
@@ -659,7 +659,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         dobj: &Obj,
         prep: PrepSpec,
         iobj: &Obj,
-    ) -> Result<Option<(Bytes, VerbDef)>, WorldStateError> {
+    ) -> Result<Option<(ByteView, VerbDef)>, WorldStateError> {
         if !self.valid(obj)? {
             return Ok(None);
         }

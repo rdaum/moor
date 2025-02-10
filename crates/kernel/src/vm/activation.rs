@@ -15,7 +15,7 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
@@ -96,7 +96,7 @@ impl Decode for Activation {
         let command = Option::<ParsedCommand>::decode(decoder)?;
 
         let verbdef_bytes = Vec::<u8>::decode(decoder)?;
-        let verbdef_bytes = Bytes::from(verbdef_bytes);
+        let verbdef_bytes = ByteView::from(verbdef_bytes);
         let verbdef = VerbDef::from_bytes(verbdef_bytes).unwrap();
 
         Ok(Self {
@@ -123,7 +123,7 @@ impl<'de> BorrowDecode<'de> for Activation {
         let command = Option::<ParsedCommand>::decode(decoder)?;
 
         let verbdef_bytes = Vec::<u8>::decode(decoder)?;
-        let verbdef_bytes = Bytes::from(verbdef_bytes);
+        let verbdef_bytes = ByteView::from(verbdef_bytes);
         let verbdef = VerbDef::from_bytes(verbdef_bytes).unwrap();
 
         Ok(Self {

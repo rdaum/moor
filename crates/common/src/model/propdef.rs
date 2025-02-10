@@ -17,12 +17,11 @@ use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{Field, binary_layout};
-use bytes::Bytes;
-use bytes::{Buf, BufMut};
+use byteview::ByteView;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct PropDef(Bytes);
+#[derive(Debug, Eq, PartialEq)]
+pub struct PropDef(ByteView);
 
 binary_layout!(propdef, LittleEndian, {
     data_version: u8,
@@ -32,8 +31,14 @@ binary_layout!(propdef, LittleEndian, {
     name: [u8],
 });
 
+impl Clone for PropDef {
+    fn clone(&self) -> Self {
+        Self(self.0.to_detached().clone())
+    }
+}
+
 impl PropDef {
-    fn from_bytes(bytes: Bytes) -> Self {
+    fn from_bytes(bytes: ByteView) -> Self {
         Self(bytes)
     }
 
@@ -53,11 +58,11 @@ impl PropDef {
             .try_write(location)
             .expect("Failed to encode location");
 
-        let mut name_buf = propdef_view.name_mut();
-        name_buf.put_u8(name.len() as u8);
-        name_buf.put_slice(name.as_bytes());
+        let name_buf = propdef_view.name_mut();
+        name_buf[0] = name.len() as u8;
+        name_buf[1..1 + name.len()].copy_from_slice(name.as_bytes());
 
-        Self(Bytes::from(buf))
+        Self(ByteView::from(buf))
     }
 
     fn get_layout_view(&self) -> propdef::View<&[u8]> {
@@ -89,9 +94,11 @@ impl PropDef {
     #[must_use]
     pub fn name(&self) -> &str {
         let names_offset = propdef::name::OFFSET;
-        let mut names_buf = &self.0.as_ref()[names_offset..];
-        let name_len = names_buf.get_u8() as usize;
-        let name_slice = names_buf.get(..name_len).unwrap();
+        let buf_len = self.0.len();
+        assert!(buf_len >= names_offset);
+        let names_buf = &self.0.as_ref()[names_offset..];
+        let name_len = names_buf[0] as usize;
+        let name_slice = names_buf[1..].get(..name_len).unwrap();
         std::str::from_utf8(name_slice).unwrap()
     }
 }
@@ -109,13 +116,13 @@ impl AsByteBuffer for PropDef {
         Ok(self.0.as_ref().to_vec())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         // TODO: Validate propdef on decode
         Ok(Self::from_bytes(bytes))
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(self.0.clone())
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        Ok(self.0.to_detached())
     }
 }
 
@@ -143,10 +150,8 @@ mod tests {
     use crate::AsByteBuffer;
     use crate::Obj;
     use crate::Symbol;
-    use crate::model::ValSet;
-    use crate::model::defset::HasUuid;
-    use crate::model::propdef::{PropDef, PropDefs};
-    use bytes::Bytes;
+    use crate::model::{HasUuid, PropDef, PropDefs, ValSet};
+    use byteview::ByteView;
     use uuid::Uuid;
 
     #[test]
@@ -185,12 +190,52 @@ mod tests {
         assert_eq!(pd1.uuid(), test_pd1.uuid());
 
         let byte_vec = pds.with_byte_buffer(<[u8]>::to_vec).unwrap();
-        let pds2 = PropDefs::from_bytes(Bytes::from(byte_vec)).unwrap();
+        let pds2 = PropDefs::from_bytes(ByteView::from(byte_vec)).unwrap();
         let pd2 = pds2.find_first_named(Symbol::mk("test2")).unwrap();
         assert_eq!(pd2.uuid(), test_pd2.uuid());
 
         assert_eq!(pd2.name(), "test2");
         assert_eq!(pd2.definer(), Obj::mk_id(10));
         assert_eq!(pd2.location(), Obj::mk_id(12));
+    }
+
+    #[test]
+    fn test_clone_compare() {
+        let pd = PropDef::new(Uuid::new_v4(), Obj::mk_id(1), Obj::mk_id(2), "test");
+        let pd2 = pd.clone();
+        assert_eq!(pd, pd2);
+        assert_eq!(pd.uuid(), pd2.uuid());
+        assert_eq!(pd.definer(), pd2.definer());
+        assert_eq!(pd.location(), pd2.location());
+        assert_eq!(pd.name(), pd2.name());
+    }
+
+    #[test]
+    fn test_propdefs_iter() {
+        let pds_vec = vec![
+            PropDef::new(Uuid::new_v4(), Obj::mk_id(1), Obj::mk_id(2), "test1"),
+            PropDef::new(Uuid::new_v4(), Obj::mk_id(10), Obj::mk_id(12), "test2"),
+            PropDef::new(Uuid::new_v4(), Obj::mk_id(100), Obj::mk_id(120), "test3"),
+        ];
+
+        let pds = PropDefs::from_items(&pds_vec);
+        let mut pd_iter = pds.iter();
+        let pd1 = pd_iter.next().unwrap();
+        assert_eq!(pd1.uuid(), pds_vec[0].uuid());
+        let pd2 = pd_iter.next().unwrap();
+        assert_eq!(pd2.uuid(), pds_vec[1].uuid());
+        let pd3 = pd_iter.next().unwrap();
+        assert_eq!(pd3.uuid(), pds_vec[2].uuid());
+        assert!(pd_iter.next().is_none());
+
+        let pd_uuids: Vec<_> = pds.iter().map(|pd| pd.uuid()).collect();
+        let pvec_uuids: Vec<_> = pds_vec.iter().map(|pd| pd.uuid()).collect();
+        assert_eq!(pd_uuids, pvec_uuids);
+
+        // Now write out and reconsistute.
+        let pds_as_bytes = pds.as_bytes().unwrap();
+        let re_pds = PropDefs::from_bytes(pds_as_bytes).unwrap();
+        let re_pd_uuids: Vec<_> = re_pds.iter().map(|pd| pd.uuid()).collect();
+        assert_eq!(re_pd_uuids, pvec_uuids);
     }
 }

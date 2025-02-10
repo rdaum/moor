@@ -11,12 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::AsByteBuffer;
 use crate::Symbol;
-use crate::encode::{DecodingError, EncodingError};
 use crate::model::ValSet;
-use bytes::BufMut;
-use bytes::Bytes;
+use crate::{AsByteBuffer, DecodingError, EncodingError};
+use byteview::ByteView;
 use itertools::Itertools;
 use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};
@@ -33,10 +31,19 @@ pub trait Named {
 
 /// A container for verb or property defs.
 /// Immutable, and can be iterated over in sequence, or searched by name.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct Defs<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> {
-    bytes: Bytes,
+    bytes: ByteView,
     _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> Clone for Defs<T> {
+    fn clone(&self) -> Self {
+        Self {
+            bytes: self.bytes.to_detached().clone(),
+            _phantom: Default::default(),
+        }
+    }
 }
 
 impl<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> Display for Defs<T> {
@@ -58,7 +65,7 @@ impl<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> Debug for Defs
 }
 pub struct DefsIter<T: AsByteBuffer> {
     position: usize,
-    buffer: Bytes,
+    buffer: ByteView,
     _phantom: std::marker::PhantomData<T>,
 }
 impl<T: AsByteBuffer> Iterator for DefsIter<T> {
@@ -87,7 +94,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
     #[must_use]
     fn empty() -> Self {
         Self {
-            bytes: Bytes::default(),
+            bytes: ByteView::default(),
             _phantom: Default::default(),
         }
     }
@@ -96,8 +103,9 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
         let mut bytes = Vec::new();
         for item in items {
             item.with_byte_buffer(|item_bytes| {
-                bytes.put_u32_le(item_bytes.len() as u32);
-                bytes.put_slice(item_bytes);
+                let len = item_bytes.len() as u32;
+                bytes.extend_from_slice(&len.to_le_bytes());
+                bytes.extend_from_slice(item_bytes);
             })
             .expect("Failed to encode item");
         }
@@ -109,7 +117,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
     fn iter(&self) -> impl Iterator<Item = T> {
         DefsIter {
             position: 0,
-            buffer: self.bytes.clone(),
+            buffer: self.bytes.to_detached(),
             _phantom: Default::default(),
         }
     }
@@ -130,8 +138,9 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> FromIterator<T> for Defs<T> {
         let mut bytes = Vec::new();
         for item in iter {
             item.with_byte_buffer(|item_bytes| {
-                bytes.put_u32_le(item_bytes.len() as u32);
-                bytes.put_slice(item_bytes);
+                let len = item_bytes.len() as u32;
+                bytes.extend_from_slice(&len.to_le_bytes());
+                bytes.extend_from_slice(item_bytes);
             })
             .expect("Failed to encode item");
         }
@@ -171,14 +180,13 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
         let mut buf = Vec::with_capacity(self.bytes.len());
         for v in self.iter().filter(|v| v.uuid() != uuid) {
             v.with_byte_buffer(|bytes| {
-                // Write the length prefix.
-                buf.put_u32_le(bytes.len() as u32);
-                // Write the bytes for the item.
-                buf.put_slice(bytes);
+                let len = bytes.len() as u32;
+                buf.extend_from_slice(&len.to_le_bytes());
+                buf.extend_from_slice(&bytes);
             })
             .expect("Failed to encode item");
         }
-        Some(Self::from_bytes(Bytes::from(buf)).unwrap())
+        Some(Self::from_bytes(ByteView::from(buf)).unwrap())
     }
 
     #[must_use]
@@ -186,40 +194,37 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
         let mut buf = Vec::with_capacity(self.bytes.len());
         for v in self.iter().filter(|v| !uuids.contains(&v.uuid())) {
             v.with_byte_buffer(|bytes| {
-                // Write the length prefix.
-                buf.put_u32_le(bytes.len() as u32);
-                // Write the bytes for the item.
-                buf.put_slice(bytes);
+                let len = bytes.len() as u32;
+                buf.extend_from_slice(&len.to_le_bytes());
+                buf.extend_from_slice(&bytes);
             })
             .expect("Failed to encode item");
         }
-        Self::from_bytes(Bytes::from(buf)).unwrap()
+        Self::from_bytes(ByteView::from(buf)).unwrap()
     }
 
     // TODO Add builder patterns for these that construct in-place, building the buffer right in us.
     pub fn with_added(&self, v: T) -> Self {
         let mut buf = self.bytes.to_vec();
         v.with_byte_buffer(|bytes| {
-            // Write the length prefix.
-            buf.put_u32_le(bytes.len() as u32);
-            // Write the bytes for the item.
-            buf.put_slice(bytes);
+            let len = bytes.len() as u32;
+            buf.extend_from_slice(&len.to_le_bytes());
+            buf.extend_from_slice(&bytes);
         })
         .expect("Failed to encode item");
-        Self::from_bytes(Bytes::from(buf)).unwrap()
+        Self::from_bytes(ByteView::from(buf)).unwrap()
     }
     pub fn with_all_added(&self, v: &[T]) -> Self {
         let mut buf = self.bytes.to_vec();
-        for v in v {
-            v.with_byte_buffer(|bytes| {
-                // Write the length prefix.
-                buf.put_u32_le(bytes.len() as u32);
-                // Write the bytes for the item.
-                buf.put_slice(bytes);
+        for i in v {
+            i.with_byte_buffer(|bytes| {
+                let len = bytes.len() as u32;
+                buf.extend_from_slice(&len.to_le_bytes());
+                buf.extend_from_slice(&bytes);
             })
             .expect("Failed to encode item");
         }
-        Self::from_bytes(Bytes::from(buf)).unwrap()
+        Self::from_bytes(ByteView::from(buf)).unwrap()
     }
     pub fn with_updated<F: Fn(&T) -> T>(&self, uuid: Uuid, f: F) -> Option<Self> {
         if !self.contains(uuid) {
@@ -231,23 +236,21 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             if v.uuid() == uuid {
                 f(&v)
                     .with_byte_buffer(|bytes| {
-                        // Write the length prefix.
-                        buf.put_u32_le(bytes.len() as u32);
-                        // Write the bytes for the item.
-                        buf.put_slice(bytes);
+                        let len = bytes.len() as u32;
+                        buf.extend_from_slice(&len.to_le_bytes());
+                        buf.extend_from_slice(bytes);
                     })
                     .expect("Failed to encode item");
             } else {
                 v.with_byte_buffer(|bytes| {
-                    // Write the length prefix.
-                    buf.put_u32_le(bytes.len() as u32);
-                    // Write the bytes for the item.
-                    buf.put_slice(bytes);
+                    let len = bytes.len() as u32;
+                    buf.extend_from_slice(&len.to_le_bytes());
+                    buf.extend_from_slice(bytes);
                 })
                 .expect("Failed to encode item");
             };
         }
-        Some(Self::from_bytes(Bytes::from(buf)).unwrap())
+        Some(Self::from_bytes(ByteView::from(buf)).unwrap())
     }
 }
 
@@ -264,14 +267,14 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> AsByteBuffer for Defs<T> {
         Ok(self.bytes.as_ref().to_vec())
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError> {
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         Ok(Self {
             bytes,
             _phantom: Default::default(),
         })
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(self.bytes.clone())
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        Ok(self.bytes.to_detached())
     }
 }

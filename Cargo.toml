@@ -88,6 +88,7 @@ tracing-subscriber = "0.3"
 binary-layout = "4.0"
 bincode = "2.0.0-rc.3"
 bytes = "1.7"
+byteview = "0.5.3"
 chrono = "0.4"
 criterion = { version = "0.5", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
@@ -99,7 +100,6 @@ itertools = "0.14"
 lazy_static = "1.5"
 num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
-regex = "1.11"
 semver = "1.0"
 shadow-rs = "0.38"
 similar = "*"
@@ -131,7 +131,7 @@ thiserror = "2.0"
 paste = "1.0"
 
 # For the DB & common layer.
-fjall = { version = "2.6", default-features = false, features = ["bytes"] }
+fjall = { version = "2.6.5", default-features = false }
 libc = "0.2"
 text_io = "0.1" # Used for reading text dumps.
 

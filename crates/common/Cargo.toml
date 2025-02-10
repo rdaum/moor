@@ -18,7 +18,7 @@ shadow-rs.workspace = true
 [dependencies]
 binary-layout.workspace = true
 bincode.workspace = true
-bytes.workspace = true
+byteview.workspace = true
 enum-primitive-derive.workspace = true
 im.workspace = true
 itertools.workspace = true

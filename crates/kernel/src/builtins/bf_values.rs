@@ -13,13 +13,13 @@
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use md5::Digest;
 use moor_compiler::{offset_for_builtin, to_literal};
 use moor_values::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
 use moor_values::Variant;
-use moor_values::{v_float, v_int, v_obj, v_objid, v_str, v_sym, v_sym_str};
 use moor_values::{AsByteBuffer, Sequence};
+use moor_values::{v_float, v_int, v_obj, v_objid, v_str, v_sym, v_sym_str};
 
 fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg = &bf_args.args[0];

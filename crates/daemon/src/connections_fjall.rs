@@ -13,7 +13,7 @@
 
 use crate::connections::{CONNECTION_TIMEOUT_DURATION, ConnectionsDB};
 use bincode::{Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use eyre::{Error, bail};
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use moor_kernel::tasks::sessions::SessionError;
@@ -97,12 +97,12 @@ impl ConnectionsFjall {
             let client_id = Uuid::from_u128(u128::from_le_bytes(
                 key[0..size_of::<u128>()].try_into().unwrap(),
             ));
-            let oid = Obj::from_bytes(Bytes::from(value)).unwrap();
+            let oid = Obj::from_bytes(ByteView::from(value.as_ref())).unwrap();
             client_players.insert(client_id, oid);
         }
         for entry in player_clients_table.iter() {
             let (key, value) = entry.unwrap();
-            let oid = Obj::from_bytes(Bytes::from(key)).unwrap();
+            let oid = Obj::from_bytes(ByteView::from(key.as_ref())).unwrap();
             let (connections_record, _) =
                 bincode::decode_from_slice(&value, *BINCODE_CONFIG).unwrap();
             player_clients.insert(oid, connections_record);

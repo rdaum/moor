@@ -14,7 +14,7 @@
 use bincode::enc::write::Writer;
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
-use bytes::Bytes;
+use byteview::ByteView;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -55,11 +55,11 @@ pub trait AsByteBuffer {
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError>;
     /// Create a value from the given bytes.
     /// Either takes ownership or moves.
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
         Self: Sized;
     /// As a Bytes...
-    fn as_bytes(&self) -> Result<Bytes, EncodingError>;
+    fn as_bytes(&self) -> Result<ByteView, EncodingError>;
 }
 
 pub struct CountingWriter {
@@ -106,7 +106,7 @@ impl<T: Encode + Decode + Sized + BincodeAsByteBufferExt> AsByteBuffer for T {
             .map_err(|e| EncodingError::CouldNotEncode(e.to_string()))
     }
 
-    fn from_bytes(bytes: Bytes) -> Result<Self, DecodingError>
+    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
@@ -115,7 +115,7 @@ impl<T: Encode + Decode + Sized + BincodeAsByteBufferExt> AsByteBuffer for T {
             .0)
     }
 
-    fn as_bytes(&self) -> Result<Bytes, EncodingError> {
-        Ok(Bytes::from(self.make_copy_as_vec()?))
+    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
+        Ok(ByteView::from(self.make_copy_as_vec()?))
     }
 }

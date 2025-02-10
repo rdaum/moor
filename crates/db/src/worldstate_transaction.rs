@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use bytes::Bytes;
+use byteview::ByteView;
 use uuid::Uuid;
 
 use moor_values::Obj;
@@ -100,7 +100,7 @@ pub trait WorldStateTransaction: Send {
     fn get_verbs(&self, obj: &Obj) -> Result<VerbDefs, WorldStateError>;
 
     /// Get the binary of the given verb.
-    fn get_verb_binary(&self, obj: &Obj, uuid: Uuid) -> Result<Bytes, WorldStateError>;
+    fn get_verb_binary(&self, obj: &Obj, uuid: Uuid) -> Result<ByteView, WorldStateError>;
 
     /// Find & get the verb with the given name on the given object.
     fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError>;

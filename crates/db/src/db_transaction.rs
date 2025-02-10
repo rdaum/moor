@@ -16,7 +16,7 @@ use crate::tx::{TransactionalCache, TransactionalTable, Tx};
 use crate::worldstate_db::WorkingSets;
 use crate::worldstate_transaction::WorldStateTransaction;
 use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
-use bytes::Bytes;
+use byteview::ByteView;
 use crossbeam_channel::Sender;
 use moor_values::model::{
     BinaryType, CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectRef, PropDef,
@@ -615,7 +615,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(r.unwrap_or_else(VerbDefs::empty))
     }
 
-    fn get_verb_binary(&self, obj: &Obj, uuid: Uuid) -> Result<Bytes, WorldStateError> {
+    fn get_verb_binary(&self, obj: &Obj, uuid: Uuid) -> Result<ByteView, WorldStateError> {
         let r = self
             .object_verbs
             .get(&ObjAndUUIDHolder::new(obj, uuid))
@@ -628,7 +628,7 @@ impl WorldStateTransaction for DbTransaction {
                 format!("{}", uuid),
             ));
         };
-        Ok(Bytes::from(binary.0))
+        Ok(ByteView::from(binary.0))
     }
 
     fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError> {
@@ -1002,7 +1002,7 @@ impl WorldStateTransaction for DbTransaction {
             })?;
         let Some(perms) = r else {
             return Err(WorldStateError::DatabaseError(
-                "Property missing perms ".to_string(),
+                format!("Property permissions not found: {} {}", obj, uuid).to_string(),
             ));
         };
         Ok(perms)
