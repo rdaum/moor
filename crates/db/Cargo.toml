@@ -28,7 +28,7 @@ indexmap.workspace = true
 lazy_static.workspace = true
 oneshot.workspace = true
 rand.workspace = true
-serde = { version = "1.0.215", features = ["derive"] }
+serde.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
