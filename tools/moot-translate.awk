@@ -6,6 +6,8 @@
 # You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
+/ *end$/ { next }
+
 {
     # Array syntax, comments, strings
     gsub(/\[/, "{");
@@ -15,9 +17,13 @@
 
     # Standard corified references
     gsub("NOTHING", "$nothing");
+    gsub(":nothing", "$nothing");
     gsub("AMBIGUOUS_MATCH", "$ambiguous_match");
     gsub("FAILED_MATCH", "$failed_match");
     gsub("INVALID_OBJECT", "$invalid_object");
+
+    # Other corified references
+    gsub(":object", "$object");
 
     # Assigment. Watch out: any variable names that are built-in MOO properties must be manually changed.
     s = gensub(/^(.*) = (.*)/, "; add_property($system, \"\\1\", \\2, {player, \"wrc\"});", "g", $0);
@@ -39,6 +45,9 @@
 
     # function calls without parens, because yay Ruby
     s = gensub(/^([a-z_]+) (.*)$/, "; \\1(\\2);", "g", s);
+
+    # run_test_as
+    s = gensub(/^run_test_as\(['"](.*)['"]\) do/, "@\\1", "g", s);
 
     # TODO: somehow rewrite common variables like `a` into `$a`, but only when used as a variable?
     #       this might be too hard to do without a full parser

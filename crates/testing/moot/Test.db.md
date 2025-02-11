@@ -7,11 +7,17 @@ Notable objects:
 - `#4`: programmer player
 - `#5`: non-programmer player
 
-Globals:
+Corified globals:
 
 - `$nothing`: `#-1`
+- `$ambiguous_match`: `#-2`
+- `$failed_match`: `#-3`
 - `$system`: `#0`
+- `$wizard_player`: `#3`
+- `$programmer_player`: `#4`
+- `$player`: `#5`
 - `$object`, `$tmp`, `$tmp1`, `$tmp2`: for use as variables that persist across commands
+- `$invalid_object`: `toobj(2142147483647)`
 
 Verbs:
 
