@@ -1,0 +1,89 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_parent_chparent_errors
+
+@wizard
+; add_property($system, "a", create($nothing), {player, "wrc"});
+; add_property($system, "b", create($nothing), {player, "wrc"});
+; add_property($system, "c", create($nothing), {player, "wrc"});
+; $object = create($nothing);
+
+; chparent($a, $b);
+; chparent($b, $c);
+
+; return parent();
+E_ARGS
+; return parent(1, 2);
+E_ARGS
+; return parent(1);
+E_TYPE
+; return parent("1");
+E_TYPE
+; return parent($nothing);
+E_INVARG
+; return parent($invalid_object);
+E_INVARG
+
+; return chparent();
+E_ARGS
+; return chparent(1);
+E_ARGS
+; return chparent(1, 2, 3);
+E_ARGS
+; return chparent(1, 2);
+E_TYPE
+; return chparent($object, 2);
+E_TYPE
+; return chparent($object, "2");
+E_TYPE
+; return chparent($nothing, $object);
+E_INVARG
+; return chparent($object, $invalid_object);
+E_INVARG
+; return chparent($object, $object);
+E_RECMOVE
+; return chparent($c, $a);
+E_RECMOVE
+
+// Test that if two objects define the same property by name, a
+// new object cannot be created using both of them as parents.
+
+; add_property($system, "d", create($nothing), {player, "wrc"});
+; add_property($system, "e", create($nothing), {player, "wrc"});
+
+; add_property($d, "foo", 123, {$d, ""});
+; add_property($e, "foo", "abc", {$e, ""});
+
+
+// A variety of tests that check permissions.
+
+@wizard
+; $a = create($nothing);
+; $b = create($a, $a);
+; $b.f = 1;
+
+; return $a.owner;
+$wizard_player
+; return $b.owner;
+$a
+
+@programmer
+; $c = create($nothing);
+; $d = create($b, $programmer_player);
+; $d.f = 1;
+
+; return chparent($c, $a);
+E_PERM
+; return E_PERM == chparent($c, $b);
+0
+
+@wizard
+; $e = create($nothing);
+
+; return E_PERM == chparent($e, $a);
+0
+; return E_PERM == chparent($e, $b);
+0
+; return E_PERM == chparent($e, $c);
+0
+; return E_PERM == chparent($e, $d);
+0
