@@ -930,14 +930,13 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
             result.push(']');
         }
         Variant::Flyweight(fl) => {
-            // If sealed, just return <sealed flyweight>
+            // TODO: sealed flyweight in object dump...
             if fl.seal().is_some() {
                 return "<sealed flyweight>".to_string();
             }
 
             // Syntax:
             // < delegate, [ s -> v, ... ], v, v, v ... >
-            let mut result = String::new();
             result.push('<');
             result.push_str(fl.delegate().to_literal().as_str());
             if !fl.slots().is_empty() {
