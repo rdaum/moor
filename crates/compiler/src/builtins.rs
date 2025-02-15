@@ -1040,6 +1040,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Any],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("salt"),
+            min_args: Q(0),
+            max_args: Q(0),
+            types: vec![],
+            implemented: true,
+        },
     ]
 }
 

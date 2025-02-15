@@ -19,7 +19,7 @@ use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::{v_int, v_str, v_string};
 use moor_values::{Sequence, Variant};
 use rand::distributions::Alphanumeric;
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use tracing::warn;
 
 use crate::bf_declare;
@@ -167,6 +167,21 @@ fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 bf_declare!(strcmp, bf_strcmp);
+
+/// Generate a random cryptographically secure salt string, for use with crypt & argon2
+/// Note: This is not (for now) compatible with the `salt` function in ToastStunt, which takes
+/// two arguments.
+fn bf_salt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let mut rng_core = thread_rng();
+    let salt = SaltString::generate(&mut rng_core);
+    let salt = v_str(salt.as_str());
+    Ok(Ret(salt))
+}
+bf_declare!(salt, bf_salt);
 
 /*
 str crypt (str text [, str salt])
@@ -336,6 +351,7 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("argon2_verify")] = Box::new(BfArgon2Verify {});
     builtins[offset_for_builtin("string_hash")] = Box::new(BfStringHash {});
     builtins[offset_for_builtin("binary_hash")] = Box::new(BfBinaryHash {});
+    builtins[offset_for_builtin("salt")] = Box::new(BfSalt {});
 }
 
 #[cfg(test)]
