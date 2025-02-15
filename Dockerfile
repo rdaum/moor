@@ -33,12 +33,15 @@ COPY ./JHCore-DEV-2.db ./JHCore-DEV-2.db
 COPY --from=build ./moor-build/moor-signing-key.pem ./moor-signing-key.pem
 COPY --from=build ./moor-build/moor-verifying-key.pem ./moor-verifying-key.pem
 
-# The compiled binaries from the build
+# The compiled service binaries from the build
 COPY --from=build /moor-build/target/release/moor-daemon /moor/moor-daemon
 COPY --from=build /moor-build/target/release/moor-web-host /moor/moor-web-host
 COPY --from=build /moor-build/target/release/moor-telnet-host /moor/moor-telnet-host
 
 # The web client source directory
 COPY --from=build /moor-build/client /moor/client
+
+# `moorc` binary can be used to compile objdef or textdump sources without running a full daemon
+COPY --from=build /moor-build/target/release/moorc /moor/moorc
 
 EXPOSE 8080
