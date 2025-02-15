@@ -20,13 +20,6 @@ COPY ./.git ./.git
 RUN CARGO_PROFILE_RELEASE_DEBUG=true cargo build --all-targets --release
 COPY ./crates/web-host/src/client ./client
 
-# moorC image is very small, just the moorC binary
-FROM linuxcontainers/debian-slim:latest AS moorc
-WORKDIR /moor
-
-# `moorc` binary can be used to compile objdef or textdump sources without running a full daemon
-COPY --from=build /moor-build/target/release/moorc /moor/moorc
-
 # But we don't need the source code and all the rust stuff and packages in our final image. Just slim.
 FROM linuxcontainers/debian-slim:latest
 
@@ -44,5 +37,8 @@ COPY --from=build /moor-build/target/release/moor-telnet-host /moor/moor-telnet-
 
 # The web client source directory
 COPY --from=build /moor-build/client /moor/client
+
+# `moorc` binary can be used to compile objdef or textdump sources without running a full daemon
+COPY --from=build /moor-build/target/release/moorc /moor/moorc
 
 EXPOSE 8080
