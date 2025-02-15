@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use bincommon::FeatureArgs;
 use clap::Parser;
 use clap_derive::Parser;
 use moor_db::{Database, DatabaseConfig, TxDB};
@@ -49,6 +50,9 @@ pub struct Args {
         help = "The output should be a LambdaMOO style 'textdump' file located at this path."
     )]
     out_textdump: Option<PathBuf>,
+
+    #[command(flatten)]
+    feature_args: Option<FeatureArgs>,
 
     #[clap(long, help = "Enable debug logging")]
     debug: bool,
@@ -98,8 +102,10 @@ fn main() {
         return;
     };
 
-    // TODO: features loading. Requires moving stuff in args.rs up into a common area.
-    let features = FeaturesConfig::default();
+    let mut features = FeaturesConfig::default();
+    args.feature_args
+        .as_ref()
+        .map(|fa| fa.merge_config(&mut features));
 
     // Compile phase.
     if let Some(textdump) = args.src_textdump {

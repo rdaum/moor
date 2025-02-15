@@ -15,6 +15,7 @@ description = "A tool for importing, compiling, and exporting mooR cores without
 moor-db = { path = "../../crates/db" }
 moor-kernel = { path = "../../crates/kernel" }
 moor-values = { path = "../../crates/common" }
+moor-daemon = { path = "../../crates/daemon" }
 
 ## Command line arguments parsing.
 clap.workspace = true

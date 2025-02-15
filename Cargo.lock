@@ -2373,6 +2373,7 @@ dependencies = [
  "clap_derive",
  "color-eyre",
  "eyre",
+ "moor-daemon",
  "moor-db",
  "moor-kernel",
  "moor-values",

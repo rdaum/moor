@@ -19,6 +19,7 @@ use moor_kernel::textdump::EncodingMode;
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[allow(dead_code)]
 #[derive(Parser, Debug)] // requires `derive` feature
 pub struct Args {
     #[command(flatten)]
@@ -220,6 +221,8 @@ impl FeatureArgs {
         }
     }
 }
+
+#[allow(dead_code)]
 #[derive(Parser, Debug)]
 pub struct TextdumpArgs {
     #[arg(short, long, value_name = "textdump", help = "Path to the textdump to import", value_hint = ValueHint::FilePath)]
@@ -296,6 +299,7 @@ impl TextdumpArgs {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Parser, Debug)]
 pub struct DatabaseArgs {
     #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
@@ -322,6 +326,7 @@ pub struct DatabaseArgs {
 }
 
 impl DatabaseArgs {
+    #[allow(dead_code)]
     pub fn merge_config(&self, config: &mut DatabaseConfig) {
         if let Some(args) = self.cache_eviction_interval {
             config.cache_eviction_interval = Duration::from_secs(args);
@@ -333,6 +338,7 @@ impl DatabaseArgs {
 }
 
 impl Args {
+    #[allow(dead_code)]
     pub fn merge_config(&self, mut config: Config) -> Config {
         if let Some(args) = self.textdump_args.as_ref() {
             args.merge_config(&mut config.textdump_config);

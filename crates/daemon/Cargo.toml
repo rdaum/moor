@@ -11,6 +11,14 @@ repository.workspace = true
 rust-version.workspace = true
 description = "The actual moor binary that runs as an RPC-accessible daemon that various frontends can connect to."
 
+[lib]
+name = "bincommon"
+path = "src/lib.rs"
+
+[[bin]]
+name = "moor-daemon"
+path = "src/main.rs"
+
 [dependencies]
 moor-db = { path = "../db" }
 moor-kernel = { path = "../kernel" }
