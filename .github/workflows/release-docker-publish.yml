@@ -1,4 +1,3 @@
-#
 name: Create and publish a Docker image
 
 # Configures this workflow to run every time a change is pushed to the branch called `release`.
@@ -9,7 +8,8 @@ on:
 # Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  MOOR_IMAGE_NAME: ${{ github.repository }}
+  MOORC_IMAGE_NAME: rdaum/moorc
 
 # There is a single job in this workflow. It's configured to run on the latest available version of Ubuntu.
 jobs:
@@ -37,7 +37,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: |
+            ${{ env.REGISTRY }}/${{ env.MOOR_IMAGE_NAME }} 
+            ${{ env.REGISTRY }}/${{ env.MOORC_IMAGE_NAME }}
       # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
       # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see [Usage](https://github.com/docker/build-push-action#usage) in the README of the `docker/build-push-action` repository.
       # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.
@@ -51,10 +53,16 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       # This step generates an artifact attestation for the image, which is an unforgeable statement about where and how it was built. It increases supply chain security for people who consume the image. For more information, see [AUTOTITLE](/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds).
-      - name: Generate artifact attestation
+      - name: Generate artifact attestation for moor
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-name: ${{ env.REGISTRY }}/${{ env.MOOR_IMAGE_NAME}}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: Generate artifact attestation for moorc
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.MOORC_IMAGE_NAME}}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
