@@ -216,6 +216,10 @@ fn set_constants(f: &mut Frame) {
     f.set_global_variable(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
     f.set_global_variable(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
     f.set_global_variable(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
+    f.set_global_variable(GlobalName::SYMBOL, v_int(VarType::TYPE_SYMBOL as i64));
+    f.set_global_variable(GlobalName::FLYWEIGHT, v_int(VarType::TYPE_FLYWEIGHT as i64));
+    f.set_global_variable(GlobalName::MAP, v_int(VarType::TYPE_MAP as i64));
+    f.set_global_variable(GlobalName::BOOLEAN, v_int(VarType::TYPE_BOOL as i64));
 }
 
 impl Activation {

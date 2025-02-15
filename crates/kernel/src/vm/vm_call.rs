@@ -42,6 +42,9 @@ lazy_static! {
     static ref INTEGER_SYM: Symbol = Symbol::mk("integer");
     static ref FLOAT_SYM: Symbol = Symbol::mk("float");
     static ref ERROR_SYM: Symbol = Symbol::mk("error");
+    static ref BOOL_SYM: Symbol = Symbol::mk("boolean");
+    static ref SYM_SYM: Symbol = Symbol::mk("symbol");
+    static ref FLYWEIGHT_SYM: Symbol = Symbol::mk("flyweight");
 }
 
 pub(crate) fn args_literal(args: &List) -> String {
@@ -109,6 +112,9 @@ impl VMExecState {
                     Variant::List(_) => *LIST_SYM,
                     Variant::Map(_) => *MAP_SYM,
                     Variant::Err(_) => *ERROR_SYM,
+                    Variant::Flyweight(_) => *FLYWEIGHT_SYM,
+                    Variant::Sym(_) => *SYM_SYM,
+                    Variant::Bool(_) => *BOOL_SYM,
                     _ => {
                         return Err(E_TYPE);
                     }
