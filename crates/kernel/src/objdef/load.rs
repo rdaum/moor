@@ -50,14 +50,15 @@ impl<'a> ObjectDefinitionLoader<'a> {
         // Constant variables will go here.
         let mut context = ObjFileContext::new();
 
-        // Collect all the file names, and if there's a "constants.moo" put that at the top to
-        // parse first.
+        // Collect all the file names,
         let filenames: Vec<_> = dirpath
             .read_dir()
-            .unwrap()
-            .filter(|e| e.as_ref().unwrap().path().extension().unwrap() == "moo")
-            .map(|e| e.unwrap().path())
+            .expect("Unable to open import directory")
+            .filter_map(|entry| entry.ok())
+            .filter_map(|e| e.path().is_file().then(|| e.path()))
+            .filter(|path| path.extension().map(|ext| ext == "moo").unwrap_or(false))
             .collect();
+        // and if there's a "constants.moo" put that at the top to parse first
         let constants_file = filenames
             .iter()
             .find(|f| f.file_name().unwrap() == "constants.moo");
