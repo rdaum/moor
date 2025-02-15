@@ -121,14 +121,19 @@ fn main() {
             .commit()
             .expect("Failure to commit loaded database...");
     } else if let Some(objdef_dir) = args.src_objdef_dir {
+        let start = std::time::Instant::now();
         let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
         od.read_dirdump(features.clone(), objdef_dir.as_ref())
             .unwrap();
+        let duration = start.elapsed();
+        info!("Loaded objdef directory in {:?}", duration);
+        loader_interface
+            .commit()
+            .expect("Failure to commit loaded database...");
     }
 
     // Dump phase.
     if let Some(textdump_path) = args.out_textdump {
-        let (database, _) = TxDB::open(Some(db_dir.path()), DatabaseConfig::default());
         let Ok(loader_interface) = database.loader_client() else {
             error!(
                 "Unable to open temporary database at {}",
@@ -167,7 +172,6 @@ fn main() {
     }
 
     if let Some(dirdump_path) = args.out_objdef_dir {
-        let (database, _) = TxDB::open(Some(db_dir.path()), DatabaseConfig::default());
         let Ok(loader_interface) = database.loader_client() else {
             error!(
                 "Unable to open temporary database at {}",
