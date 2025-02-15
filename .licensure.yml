@@ -78,4 +78,4 @@ excludes:
   - Dockerfile
   - core
   - node_modules
-  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css)
+  - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css|gz|tgz|tar|zip)
