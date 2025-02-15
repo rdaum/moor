@@ -19,8 +19,10 @@ services:
     environment:
       - RUST_BACKTRACE=1
     working_dir: /moor
+    volumes:
+      - ./:/db
     command: >
-      sh -c "./moor-daemon development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=JHCore-DEV-2.db --textdump-out=textdump-out --checkpoint-interval-seconds=360"
+      sh -c "./moor-daemon /db/development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --textdump=/db/JHCore-DEV-2.db --textdump-out=textdump-out --checkpoint-interval-seconds=360"
     ports:
       # ZMQ ports
       - "7899:7899"
