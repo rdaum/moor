@@ -28,6 +28,8 @@ And it is designed to be used for:
 
 mooR is written from the ground up, with reference to the LambdaMOO sources, but is not a fork of LambdaMOO.
 
+A "core" foundation designed expecially for mooR lives at http://github.com/rdaum/cowbell
+
 ### And enhanced...
 
 Enhancements over base the LambdaMOO 1.8.x system include (but are not limited to):
