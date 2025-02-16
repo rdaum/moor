@@ -73,6 +73,7 @@ mod tests {
                 Pop,
                 Push(a),
                 Return,
+                Pop,
                 Done
             ]
         );
@@ -111,6 +112,7 @@ mod tests {
                 If(1.into(), 0),
                 ImmInt(5),
                 Return,
+                Pop,
                 EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
                 ImmInt(2),
@@ -119,6 +121,7 @@ mod tests {
                 Eif(2.into(), 0),
                 ImmInt(3),
                 Return,
+                Pop,
                 EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
                 BeginScope {
@@ -127,6 +130,7 @@ mod tests {
                 },
                 ImmInt(6),
                 Return,
+                Pop,
                 EndScope { num_bindings: 0 },
                 Done
             ]
@@ -594,7 +598,7 @@ mod tests {
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
-            vec![Imm(0.into()), ImmInt(1), Ref, Return, Done]
+            vec![Imm(0.into()), ImmInt(1), Ref, Return, Pop, Done]
         );
     }
 
@@ -604,7 +608,15 @@ mod tests {
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
             *binary.main_vector.as_ref(),
-            vec![Imm(0.into()), ImmInt(1), ImmInt(2), RangeRef, Return, Done]
+            vec![
+                Imm(0.into()),
+                ImmInt(1),
+                ImmInt(2),
+                RangeRef,
+                Return,
+                Pop,
+                Done
+            ]
         );
     }
 
@@ -671,6 +683,7 @@ mod tests {
                 ImmInt(1),
                 Ref,
                 Return,
+                Pop,
                 Done
             ]
         );
@@ -693,6 +706,7 @@ mod tests {
                 ImmInt(2),
                 RangeRef,
                 Return,
+                Pop,
                 Done
             ]
         );
@@ -770,6 +784,7 @@ mod tests {
                 RangeRef,
                 CheckListForSplice,
                 Return,
+                Pop,
                 Done
             ]
         );
@@ -961,6 +976,7 @@ mod tests {
                 ImmInt(1),
                 Ref,
                 Return,
+                Pop,
                 Done
             ]
         )
@@ -1258,6 +1274,7 @@ mod tests {
                 Push(c),
                 ListAddTail,
                 Return,
+                Pop,
                 Done
             ]
         )
@@ -1367,6 +1384,7 @@ mod tests {
                 Imm(binary.find_literal("stack".into())),
                 GetProp,
                 Return,
+                Pop,
                 Done
             ]
         )
@@ -1393,7 +1411,7 @@ mod tests {
     fn test_0_arg_return() {
         let program = r#"return;"#;
         let binary = compile(program, CompileOptions::default()).unwrap();
-        assert_eq!(*binary.main_vector.as_ref(), vec![Return0, Done])
+        assert_eq!(*binary.main_vector.as_ref(), vec![Return0, Pop, Done])
     }
 
     #[test]
@@ -1438,6 +1456,7 @@ mod tests {
                 Pop,
                 Push(pass),
                 Return,
+                Pop,
                 Done
             ]
         )
@@ -1487,6 +1506,7 @@ mod tests {
                 Length(Offset(0)),
                 RangeRef,
                 Return,
+                Pop,
                 EndExcept(Label(1)),
                 Pop,
                 Done
@@ -1551,6 +1571,7 @@ mod tests {
                 RangeRef,
                 MapInsert,
                 Return,
+                Pop,
                 Done
             ]
         );

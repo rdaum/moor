@@ -15,10 +15,10 @@ use moor_compiler::offset_for_builtin;
 use moor_values::model::{prop_flags_string, PropAttrs, PropFlag};
 use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_values::Sequence;
 use moor_values::Variant;
 use moor_values::{v_empty_list, List};
 use moor_values::{v_list, v_none, v_obj, v_string};
-use moor_values::Sequence;
 
 use crate::bf_declare;
 use crate::builtins::BfErr::Code;

@@ -71,11 +71,7 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
             bf_args
                 .world_state
-                .get_verb(
-                    &bf_args.task_perms_who(),
-                    obj,
-                    verb_name,
-                )
+                .get_verb(&bf_args.task_perms_who(), obj, verb_name)
                 .map_err(world_state_bf_err)?
         }
     };
@@ -107,7 +103,7 @@ fn get_verbdef(obj: &Obj, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<Ve
         }
         _ => {
             let Ok(verb_desc) = verbspec.as_symbol() else {
-                return Err(BfErr::Code(E_TYPE))
+                return Err(BfErr::Code(E_TYPE));
             };
 
             bf_args
@@ -200,16 +196,11 @@ fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
         _ => {
             let Ok(verb_name) = bf_args.args[1].as_symbol() else {
-                return Err(BfErr::Code(E_TYPE))
+                return Err(BfErr::Code(E_TYPE));
             };
             bf_args
                 .world_state
-                .update_verb(
-                    &bf_args.task_perms_who(),
-                    obj,
-                    verb_name,
-                    update_attrs,
-                )
+                .update_verb(&bf_args.task_perms_who(), obj, verb_name, update_attrs)
                 .map_err(world_state_bf_err)?;
         }
     }
@@ -311,12 +302,7 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             };
             bf_args
                 .world_state
-                .update_verb(
-                    &bf_args.task_perms_who(),
-                    obj,
-                    verb_name,
-                    update_attrs,
-                )
+                .update_verb(&bf_args.task_perms_who(), obj, verb_name, update_attrs)
                 .map_err(world_state_bf_err)?;
         }
     }

@@ -428,12 +428,10 @@ impl Decompile {
             }
             Op::Return => {
                 let expr = self.pop_expr()?;
-                self.statements
-                    .push(Stmt::new(StmtNode::Return(Some(expr)), line_num));
+                self.push_expr(Expr::Return(Some(Box::new(expr))));
             }
             Op::Return0 => {
-                self.statements
-                    .push(Stmt::new(StmtNode::Return(None), line_num));
+                self.push_expr(Expr::Return(None));
             }
             Op::Done => {
                 let opcode_vector = &self.opcode_vector();

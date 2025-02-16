@@ -77,6 +77,7 @@ impl Expr {
             Expr::Pass { .. } => 1,
             Expr::Call { .. } => 1,
             Expr::Length => 1,
+            Expr::Return(_) => 1,
             Expr::TryCatch { .. } => 1,
         };
         15 - cpp_ref_prep
@@ -261,6 +262,10 @@ impl<'a> Unparse<'a> {
                 buffer.push('\'');
                 Ok(buffer)
             }
+            Expr::Return(expr) => Ok(match expr {
+                None => "return".to_string(),
+                Some(e) => format!("return {}", self.unparse_expr(e)?),
+            }),
             Expr::Index(lvalue, index) => {
                 let left = brace_if_lower(lvalue);
                 let right = self.unparse_expr(index).unwrap();
@@ -637,14 +642,6 @@ impl<'a> Unparse<'a> {
                 base_str.push(';');
                 Ok(vec![base_str])
             }
-            StmtNode::Return(expr) => Ok(match expr {
-                None => {
-                    vec![format!("{}return;", indent_frag)]
-                }
-                Some(e) => {
-                    vec![format!("{}return {};", indent_frag, self.unparse_expr(e)?)]
-                }
-            }),
             StmtNode::Expr(Expr::Assign { left, right }) => {
                 let left_frag = match left.as_ref() {
                     Expr::Id(id) => {
@@ -750,10 +747,7 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
                 // ENDFOR/ENDWHILE/ENDFORK
                 line_no += 1;
             }
-            StmtNode::Expr(_)
-            | StmtNode::Break { .. }
-            | StmtNode::Continue { .. }
-            | StmtNode::Return(_) => {
+            StmtNode::Expr(_) | StmtNode::Break { .. } | StmtNode::Continue { .. } => {
                 // All single-line statements.
                 line_no += 1;
             }

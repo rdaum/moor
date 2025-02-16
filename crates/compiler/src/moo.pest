@@ -22,7 +22,7 @@ statement  = {
   | labelled_fork_statement
   | break_statement
   | continue_statement
-  | return_statement
+  | empty_return
   | try_except_statement
   | try_finally_statement
   | begin_statement
@@ -40,6 +40,8 @@ endif_clause  = { ^"endif" }
 for_statement    = { ^"for" ~ ident ~ "in" ~ (for_range_clause | for_in_clause) ~ statements ~ ^"endfor" }
 for_range_clause = { "[" ~ expr ~ ".." ~ expr ~ "]" }
 for_in_clause    = { "(" ~ expr ~ ")" }
+
+empty_return = { ^"return" ~ ";"}
 
 labelled_while_statement = { ^"while" ~ ident ~ "(" ~ expr ~ ")" ~ statements ~ ^"endwhile" }
 while_statement          = { ^"while" ~ "(" ~ expr ~ ")" ~ statements ~ ^"endwhile" }
@@ -75,7 +77,6 @@ global_assignment = { ^"global" ~ ident ~ (ASSIGN ~ expr)? ~ ";" }
 codes   = { anycode | exprlist }
 anycode = { ^"any" }
 
-return_statement = { ^"return" ~ (expr)? ~ ";" }
 expr_statement   = { (expr)? ~ ";" }
 
 expr = { (integer | (prefix* ~ primary)) ~ postfix* ~ (infix ~ (integer | (prefix* ~ primary)) ~ postfix*)* }
@@ -135,9 +136,11 @@ prop           =  { "." ~ ident }
 prop_expr      =  { "." ~ "(" ~ expr ~ ")" }
 assign         =  { "=" ~ expr }
 cond_expr      =  { "?" ~ expr ~ "|" ~ expr }
+return_expr    =  { "return" ~ (expr)? }
 
 primary    = _{
     pass_expr
+  | return_expr
   | builtin_call
   | paren_expr
   | sysprop_call

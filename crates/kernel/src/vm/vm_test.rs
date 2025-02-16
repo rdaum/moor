@@ -1137,6 +1137,8 @@ mod tests {
         v_map(&[(v_int(1),v_int(2)), (v_int(2),v_int(3),), (v_int(3),v_int(4))]); "map range to end")]
     #[test_case("l = {1,2,3}; l[2..3] = {6, 7, 8, 9}; return l;",
          v_list(&[v_int(1), v_int(6), v_int(7), v_int(8), v_int(9)]); "list assignment to range")]
+    #[test_case("1 == 2 && return 0; 1 == 1 && return 1; return 2;", v_int(1); "short circuit return expr")]
+    #[test_case("true && return;", v_int(0); "short circuit empty return expr")]
     fn test_run(program: &str, expected_result: Var) {
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());

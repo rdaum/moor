@@ -25,7 +25,6 @@ use pest::error::LineColLocation;
 use pest::iterators::Pairs;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 pub use pest::Parser as PestParser;
-use tracing::warn;
 
 use moor_values::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
@@ -118,10 +117,10 @@ impl TreeTransformer {
             }
             Rule::integer => match pairs.as_str().parse::<i64>() {
                 Ok(int) => Ok(Expr::Value(v_int(int))),
-                Err(e) => {
-                    warn!("Failed to parse '{}' to i64: {}", pairs.as_str(), e);
-                    Ok(Expr::Value(v_err(E_INVARG)))
-                }
+                Err(e) => Err(CompileError::StringLexError(format!(
+                    "invalid integer literal '{}': {e}",
+                    pairs.as_str()
+                ))),
             },
             Rule::boolean => {
                 if !self.options.bool_type {
@@ -241,7 +240,7 @@ impl TreeTransformer {
             // Generally following C-like precedence order as described:
             //   https://en.cppreference.com/w/c/language/operator_precedence
             // Precedence from lowest to highest.
-            // 14. Assignments are lowest precedence.
+            // 14. Assignments & returns are lowest precedence.
             .op(Op::postfix(Rule::assign) | Op::prefix(Rule::scatter_assign))
             // 13. Ternary conditional
             .op(Op::postfix(Rule::cond_expr))
@@ -445,8 +444,10 @@ impl TreeTransformer {
                 Rule::integer => match primary.as_str().parse::<i64>() {
                     Ok(int) => Ok(Expr::Value(v_int(int))),
                     Err(e) => {
-                        warn!("Failed to parse '{}' to i64: {}", primary.as_str(), e);
-                        Ok(Expr::Value(v_err(E_INVARG)))
+                        return Err(CompileError::StringLexError(format!(
+                            "invalid integer literal '{}': {e}",
+                            primary.as_str()
+                        )));
                     }
                 },
                 Rule::range_comprehension => {
@@ -509,6 +510,15 @@ impl TreeTransformer {
                         }
                     }
                 }
+                Rule::return_expr => {
+                    let mut inner = primary.into_inner();
+                    let rhs = match inner.next() {
+                        Some(e) => Some(Box::new(self.clone().parse_expr(e.into_inner())?)),
+                        None => None,
+                    };
+                    Ok(Expr::Return(rhs))
+                }
+
                 _ => todo!("Unimplemented primary: {:?}", primary.as_rule()),
             })
             .map_infix(|lhs, op, rhs| match op.as_rule() {
@@ -844,13 +854,13 @@ impl TreeTransformer {
                 };
                 Ok(Some(Stmt::new(StmtNode::Continue { exit: label }, line)))
             }
-            Rule::return_statement => {
-                let mut parts = pair.into_inner();
-                let expr = parts
-                    .next()
-                    .map(|expr| self.parse_expr(expr.into_inner()).unwrap());
-                Ok(Some(Stmt::new(StmtNode::Return(expr), line)))
-            }
+            // Rule::return_statement => {
+            //     let mut parts = pair.into_inner();
+            //     let expr = parts
+            //         .next()
+            //         .map(|expr| self.parse_expr(expr.into_inner()).unwrap());
+            //     Ok(Some(Stmt::new(StmtNode::Return(expr), line)))
+            // }
             Rule::for_statement => {
                 self.enter_scope();
                 let mut parts = pair.into_inner();
@@ -1093,6 +1103,7 @@ impl TreeTransformer {
                     line,
                 )))
             }
+            Rule::empty_return => Ok(Some(Stmt::new(StmtNode::mk_return_none(), line))),
             _ => panic!("Unimplemented statement: {:?}", pair.as_rule()),
         }
     }
@@ -1379,7 +1390,7 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
 #[cfg(test)]
 mod tests {
     use moor_values::Error::{E_INVARG, E_PROPNF, E_VARNF};
-    use moor_values::{v_err, v_float, v_int, v_objid, v_str};
+    use moor_values::{v_err, v_float, v_int, v_objid, v_str, Var};
     use moor_values::{v_none, Symbol};
 
     use crate::ast::Arg::{Normal, Splice};
@@ -1416,7 +1427,9 @@ mod tests {
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
             stripped_stmts(&parse.stmts),
-            vec![StmtNode::Return(Some(Value(v_float(1e-9))))]
+            vec![StmtNode::Expr(Expr::Return(Some(Box::new(Value(
+                v_float(1e-9)
+            )))))]
         );
     }
 
@@ -1491,7 +1504,7 @@ mod tests {
                             Box::new(Value(v_int(2))),
                         ),
                         statements: vec![Stmt {
-                            node: StmtNode::Return(Some(Value(v_int(5)))),
+                            node: StmtNode::mk_return(Value(v_int(5))),
                             parser_line_no: 1,
                             tree_line_no: 2,
                         }],
@@ -1505,7 +1518,7 @@ mod tests {
                             Box::new(Value(v_int(3))),
                         ),
                         statements: vec![Stmt {
-                            node: StmtNode::Return(Some(Value(v_int(3)))),
+                            node: StmtNode::mk_return(Value(v_int(3))),
                             parser_line_no: 1,
                             tree_line_no: 4,
                         }],
@@ -1514,7 +1527,7 @@ mod tests {
 
                 otherwise: Some(ElseArm {
                     statements: vec![Stmt {
-                        node: StmtNode::Return(Some(Value(v_int(6)))),
+                        node: StmtNode::mk_return(Value(v_int(6))),
                         parser_line_no: 1,
                         tree_line_no: 6,
                     }],
@@ -1551,7 +1564,7 @@ mod tests {
                             Box::new(Value(v_int(2))),
                         ),
                         statements: vec![Stmt {
-                            node: StmtNode::Return(Some(Value(v_int(5)))),
+                            node: StmtNode::mk_return(Value(v_int(5))),
                             parser_line_no: 3,
                             tree_line_no: 2,
                         }],
@@ -1564,7 +1577,7 @@ mod tests {
                             Box::new(Value(v_int(3))),
                         ),
                         statements: vec![Stmt {
-                            node: StmtNode::Return(Some(Value(v_int(3)))),
+                            node: StmtNode::mk_return(Value(v_int(3))),
                             parser_line_no: 5,
                             tree_line_no: 4,
                         }],
@@ -1577,7 +1590,7 @@ mod tests {
                             Box::new(Value(v_int(4))),
                         ),
                         statements: vec![Stmt {
-                            node: StmtNode::Return(Some(Value(v_int(4)))),
+                            node: StmtNode::mk_return(Value(v_int(4))),
                             parser_line_no: 7,
                             tree_line_no: 6,
                         }],
@@ -1586,7 +1599,7 @@ mod tests {
 
                 otherwise: Some(ElseArm {
                     statements: vec![Stmt {
-                        node: StmtNode::Return(Some(Value(v_int(6)))),
+                        node: StmtNode::mk_return(Value(v_int(6))),
                         parser_line_no: 9,
                         tree_line_no: 8,
                     }],
@@ -1603,14 +1616,14 @@ mod tests {
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
             stripped_stmts(&parse.stmts)[0],
-            StmtNode::Return(Some(Expr::Unary(
+            StmtNode::mk_return(Expr::Unary(
                 UnaryOp::Not,
                 Box::new(Verb {
                     location: Box::new(Value(v_objid(2))),
                     verb: Box::new(Value(v_str("move"))),
                     args: vec![Normal(Value(v_int(5)))],
                 })
-            )))
+            ))
         );
     }
 
@@ -1641,7 +1654,7 @@ mod tests {
                         })
                     ),
                     statements: vec![Stmt {
-                        node: StmtNode::Return(None),
+                        node: StmtNode::mk_return_none(),
                         parser_line_no: 3,
                         tree_line_no: 2,
                     }],
@@ -1990,7 +2003,7 @@ mod tests {
                     ]),
                     body: vec![],
                 },
-                StmtNode::Return(Some(Id(i))),
+                StmtNode::mk_return(Id(i)),
             ]
         )
     }
@@ -2048,13 +2061,13 @@ mod tests {
         let args = parse.unbound_names.find_name("args").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
-            vec![StmtNode::Return(Some(Expr::List(vec![
+            vec![StmtNode::mk_return(Expr::List(vec![
                 Splice(Id(results)),
                 Normal(Call {
                     function: Symbol::mk("frozzbozz"),
                     args: vec![Splice(Id(args))],
                 }),
-            ])))]
+            ]))]
         );
     }
 
@@ -2141,14 +2154,14 @@ mod tests {
                             Box::new(Value(v_int(5))),
                         ),
                         statements: vec![Stmt {
-                            node: StmtNode::Return(Some(Value(v_int(5)))),
+                            node: StmtNode::mk_return(Value(v_int(5))),
                             parser_line_no: 2,
                             tree_line_no: 2,
                         }],
                     }],
                     otherwise: Some(ElseArm {
                         statements: vec![Stmt {
-                            node: StmtNode::Return(Some(Value(v_int(3)))),
+                            node: StmtNode::mk_return(Value(v_int(3))),
                             parser_line_no: 4,
                             tree_line_no: 4,
                         }],
@@ -2183,7 +2196,7 @@ mod tests {
                             Box::new(Value(v_int(5))),
                         ),
                         statements: vec![Stmt {
-                            node: StmtNode::Return(Some(Value(v_int(5)))),
+                            node: StmtNode::mk_return(Value(v_int(5))),
                             parser_line_no: 2,
                             tree_line_no: 2,
                         }],
@@ -2196,7 +2209,7 @@ mod tests {
                             Box::new(Value(v_int(2))),
                         ),
                         statements: vec![Stmt {
-                            node: StmtNode::Return(Some(Value(v_int(2)))),
+                            node: StmtNode::mk_return(Value(v_int(2))),
                             parser_line_no: 4,
                             tree_line_no: 4,
                         }],
@@ -2204,7 +2217,7 @@ mod tests {
                 ],
                 otherwise: Some(ElseArm {
                     statements: vec![Stmt {
-                        node: StmtNode::Return(Some(Value(v_int(3)))),
+                        node: StmtNode::mk_return(Value(v_int(3))),
                         parser_line_no: 6,
                         tree_line_no: 6,
                     }],
@@ -2263,7 +2276,7 @@ mod tests {
                     id: None,
                     codes: CatchCodes::Codes(vec![Normal(Value(v_err(E_PROPNF)))]),
                     statements: vec![Stmt {
-                        node: StmtNode::Return(None),
+                        node: StmtNode::mk_return_none(),
                         parser_line_no: 4,
                         tree_line_no: 4,
                     }],
@@ -2466,13 +2479,13 @@ mod tests {
         let varnf = Normal(Value(v_err(E_VARNF)));
         assert_eq!(
             stripped_stmts(&parse.stmts),
-            vec![StmtNode::Return(Some(Expr::List(vec![Normal(
+            vec![StmtNode::mk_return(Expr::List(vec![Normal(
                 Expr::TryCatch {
                     trye: Box::new(Id(parse.unbound_names.find_name("x").unwrap())),
                     codes: CatchCodes::Codes(vec![varnf]),
                     except: Some(Box::new(Value(v_int(666)))),
                 }
-            )],)))]
+            )],))]
         )
     }
 
@@ -2587,7 +2600,7 @@ mod tests {
                     left: Box::new(Id(parse.unbound_names.find_name("pass").unwrap())),
                     right: Box::new(Id(parse.unbound_names.find_name("blop").unwrap())),
                 }),
-                StmtNode::Return(Some(Id(parse.unbound_names.find_name("pass").unwrap()))),
+                StmtNode::mk_return(Id(parse.unbound_names.find_name("pass").unwrap())),
             ]
         );
     }
@@ -2622,7 +2635,7 @@ mod tests {
             vec![StmtNode::Scope {
                 num_bindings: 0,
                 body: vec![Stmt {
-                    node: StmtNode::Return(Some(Value(v_int(5)))),
+                    node: StmtNode::mk_return(Value(v_int(5))),
                     parser_line_no: 2,
                     tree_line_no: 2,
                 }],
@@ -2721,7 +2734,7 @@ mod tests {
                         },
                     ],
                 },
-                StmtNode::Return(Some(Id(global_x)))
+                StmtNode::mk_return(Id(global_x))
             ]
         );
     }
@@ -2997,5 +3010,20 @@ mod tests {
                 to: Box::new(Value(v_int(5)))
             })]
         )
+    }
+
+    /// Modification to the MOO syntax which allows "return" to be an expression so as to allow
+    /// the following syntax, as in Julia....
+    #[test]
+    fn test_return_as_expr() {
+        let program = r#"true && return 5;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::And(
+                Box::new(Value(Var::mk_bool(true))),
+                Box::new(Expr::Return(Some(Box::new(Value(v_int(5))))))
+            ))]
+        );
     }
 }

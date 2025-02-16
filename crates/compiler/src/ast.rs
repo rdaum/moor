@@ -182,6 +182,7 @@ pub enum Expr {
         from: Box<Expr>,
         to: Box<Expr>,
     },
+    Return(Option<Box<Expr>>),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -280,8 +281,16 @@ pub enum StmtNode {
     Continue {
         exit: Option<UnboundName>,
     },
-    Return(Option<Expr>),
     Expr(Expr),
+}
+
+impl StmtNode {
+    pub fn mk_return(expr: Expr) -> Self {
+        StmtNode::Expr(Expr::Return(Some(Box::new(expr))))
+    }
+    pub fn mk_return_none() -> Self {
+        StmtNode::Expr(Expr::Return(None))
+    }
 }
 
 // Recursive descent compare of two trees, ignoring the parser-provided line numbers, but
@@ -293,7 +302,6 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
         assert_eq!(left.tree_line_no, right.tree_line_no);
 
         match (&left.node, &right.node) {
-            (StmtNode::Return(_), StmtNode::Return(_)) => {}
             (StmtNode::Expr(e1), StmtNode::Expr(e2)) => {
                 assert_eq!(e1, e2);
             }
