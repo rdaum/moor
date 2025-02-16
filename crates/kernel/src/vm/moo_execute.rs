@@ -164,7 +164,7 @@ pub fn moo_frame_execute(
                 };
                 let count_i = *count_i as usize;
 
-                if !list.is_sequence() {
+                if !list.is_sequence() || list.type_code() == VarType::TYPE_STR {
                     f.pop();
                     f.pop();
 
