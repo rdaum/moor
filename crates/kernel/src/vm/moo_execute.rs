@@ -142,7 +142,7 @@ pub fn moo_frame_execute(
                     f.jump(end_label);
                 }
             }
-            Op::ForList {
+            Op::ForSequence {
                 end_label,
                 id,
                 environment_width,
@@ -152,7 +152,7 @@ pub fn moo_frame_execute(
                 // Pop the count and list off the stack. We push back later when we re-enter.
 
                 let (count, list) = f.peek2();
-                let Variant::Int(count) = count.variant() else {
+                let Variant::Int(count_i) = count.variant() else {
                     f.pop();
                     f.pop();
 
@@ -162,8 +162,9 @@ pub fn moo_frame_execute(
                     f.jump(end_label);
                     return ExecutionResult::RaiseError(E_TYPE);
                 };
-                let count = *count as usize;
-                let Variant::List(l) = list.variant() else {
+                let count_i = *count_i as usize;
+
+                if !list.is_sequence() {
                     f.pop();
                     f.pop();
 
@@ -171,8 +172,12 @@ pub fn moo_frame_execute(
                     return ExecutionResult::RaiseError(E_TYPE);
                 };
 
+                let Ok(list_len) = list.len() else {
+                    return ExecutionResult::RaiseError(E_TYPE);
+                };
+
                 // If we've exhausted the list, pop the count and list and jump out.
-                if count >= l.len() {
+                if count_i >= list_len {
                     f.pop();
                     f.pop();
 
@@ -183,8 +188,8 @@ pub fn moo_frame_execute(
                 // Track iteration count for range; set id to current list element for the count,
                 // then increment the count, rewind the program counter to the top of the loop, and
                 // continue.
-                f.set_env(id, l.index(count).unwrap().clone());
-                f.poke(0, v_int((count + 1) as i64));
+                f.set_env(id, list.index(count, IndexMode::ZeroBased).unwrap().clone());
+                f.poke(0, v_int((count_i + 1) as i64));
             }
             Op::ForRange {
                 end_label,

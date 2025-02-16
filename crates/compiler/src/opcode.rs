@@ -37,7 +37,7 @@ pub enum Op {
     },
     ExitId(Label),
     Exp,
-    ForList {
+    ForSequence {
         id: Name,
         end_label: Label,
         environment_width: u16,

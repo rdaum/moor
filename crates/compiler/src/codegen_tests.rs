@@ -319,7 +319,7 @@ mod tests {
                 ImmInt(3),
                 ListAddTail,
                 ImmInt(0),
-                ForList {
+                ForSequence {
                     id: x,
                     end_label: 1.into(),
                     environment_width: 0,

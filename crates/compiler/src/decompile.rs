@@ -270,7 +270,7 @@ impl Decompile {
                 };
                 arms.push(cond_arm);
             }
-            Op::ForList {
+            Op::ForSequence {
                 id,
                 end_label: label,
                 environment_width,

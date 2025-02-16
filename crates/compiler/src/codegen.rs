@@ -673,7 +673,7 @@ impl CodegenState {
                 let loop_top = self.make_jump_label(Some(self.binding_mappings[id]));
                 self.commit_jump_label(loop_top);
                 let end_label = self.make_jump_label(Some(self.binding_mappings[id]));
-                self.emit(Op::ForList {
+                self.emit(Op::ForSequence {
                     id: self.binding_mappings[id],
                     end_label,
                     environment_width: *environment_width as u16,
