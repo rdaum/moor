@@ -28,6 +28,7 @@ use moor_kernel::tasks::{NoopTasksDb, TaskResult};
 use moor_kernel::textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
 use moor_moot::MootOptions;
 use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource};
+use moor_values::tasks::SchedulerError;
 use moor_values::{List, Obj, SYSTEM_OBJECT, Symbol, Variant, build};
 use std::fs::File;
 use std::path::PathBuf;
@@ -320,8 +321,28 @@ fn main() {
                 .receiver()
                 .recv_timeout(Duration::from_secs(4))
                 .expect("Test timed out");
-            let result = result.expect("Failure to receive test results");
-            let TaskResult::Result(result_value) = result else {
+            let result_value = match result {
+                Ok(rv) => rv,
+                Err(e) => match e {
+                    SchedulerError::TaskAbortedException(e) => {
+                        error!(
+                            "Test {}:{} aborted: {} ({}): {:?}",
+                            o, verb, e.code, e.msg, e.value
+                        );
+                        for l in e.backtrace {
+                            let Variant::Str(s) = l.variant() else {
+                                continue;
+                            };
+                            error!("{s}");
+                        }
+                        return;
+                    }
+                    _ => {
+                        panic!("Test {}:{} failed: {:?}", o, verb, e);
+                    }
+                },
+            };
+            let TaskResult::Result(result_value) = result_value else {
                 panic!("Test failed to return a result");
             };
             // Result must be non-Error
