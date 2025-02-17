@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_moot::{telnet::ManagedChild, test_db_path};
+use moor_moot::{telnet::ManagedChild, test_db_path, MootOptions};
 use serial_test::serial;
 use std::net::TcpListener;
 use std::{
@@ -144,8 +144,10 @@ fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
         telnet_host_clone.lock().unwrap().assert_running()
     };
 
+    let moot_options = MootOptions::default();
     execute_moot_test(
         TelnetMootRunner::new(port),
+        &moot_options,
         &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests/moot")
             .join(moot_file)

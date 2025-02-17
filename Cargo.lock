@@ -2367,15 +2367,15 @@ dependencies = [
 name = "moorc"
 version = "0.9.0-alpha"
 dependencies = [
- "bincode",
- "bytes",
  "clap",
  "clap_derive",
  "color-eyre",
  "eyre",
+ "moor-compiler",
  "moor-daemon",
  "moor-db",
  "moor-kernel",
+ "moor-moot",
  "moor-values",
  "semver",
  "tempfile",

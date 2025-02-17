@@ -24,7 +24,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use moor_moot::{execute_moot_test, telnet::ManagedChild, telnet::TelnetMootRunner, test_db_path};
+use moor_moot::{
+    execute_moot_test, telnet::ManagedChild, telnet::TelnetMootRunner, test_db_path, MootOptions,
+};
 
 fn moo_path() -> PathBuf {
     env::var("MOOT_MOO_PATH")
@@ -67,7 +69,13 @@ fn test_moo(path: &Path) {
     let moo_clone = moo.clone();
     let validate_state = move || moo_clone.lock().unwrap().assert_running();
 
-    execute_moot_test(TelnetMootRunner::new(moo_port()), path, validate_state);
+    let moot_options = MootOptions::default();
+    execute_moot_test(
+        TelnetMootRunner::new(moo_port()),
+        &moot_options,
+        path,
+        validate_state,
+    );
 
     drop(moo);
 }

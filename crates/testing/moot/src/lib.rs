@@ -35,7 +35,10 @@ pub const NONPROGRAMMER: Obj = Obj::mk_id(5);
 #[allow(dead_code)]
 static LOGGING_INIT: Once = Once::new();
 #[allow(dead_code)]
-fn init_logging() {
+fn init_logging(options: &MootOptions) {
+    if !options.init_logging {
+        return;
+    }
     LOGGING_INIT.call_once(|| {
         let main_subscriber = tracing_subscriber::fmt()
             .compact()
@@ -46,8 +49,7 @@ fn init_logging() {
             .with_max_level(tracing::Level::WARN)
             .with_test_writer()
             .finish();
-        tracing::subscriber::set_global_default(main_subscriber)
-            .expect("Unable to configure logging");
+        tracing::subscriber::set_global_default(main_subscriber).ok();
     });
 }
 /// Look up the path to Test.db from any crate under the `moor` workspace
@@ -67,24 +69,69 @@ pub trait MootRunner {
     fn none(&self) -> Self::Value;
 }
 
+pub struct MootOptions {
+    /// Whether logging needs to be initialized, or if the host process has already initialized
+    /// logging
+    init_logging: bool,
+    wizard_object: Obj,
+    programmer_object: Obj,
+    nonprogrammer_object: Obj,
+}
+
+impl MootOptions {
+    pub fn default() -> Self {
+        Self {
+            init_logging: false,
+            wizard_object: WIZARD,
+            programmer_object: PROGRAMMER,
+            nonprogrammer_object: NONPROGRAMMER,
+        }
+    }
+
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn init_logging(mut self, yesno: bool) -> Self {
+        self.init_logging = yesno;
+        self
+    }
+
+    pub fn wizard_object(mut self, wizard_object: Obj) -> Self {
+        self.wizard_object = wizard_object;
+        self
+    }
+
+    pub fn programmer_object(mut self, programmer_object: Obj) -> Self {
+        self.programmer_object = programmer_object;
+        self
+    }
+
+    pub fn nonprogrammer_object(mut self, nonprogrammer_object: Obj) -> Self {
+        self.nonprogrammer_object = nonprogrammer_object;
+        self
+    }
+}
+
 pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
     mut runner: R,
+    options: &MootOptions,
     path: &Path,
     validate_state: F,
 ) {
-    init_logging();
+    init_logging(&options);
     eprintln!("Test definition: {}", path.display());
 
     let test = std::fs::read_to_string(path)
         .wrap_err(format!("{}", path.display()))
         .unwrap();
 
-    let mut player = WIZARD;
+    let mut player = options.wizard_object.clone();
     for span in parser::parse(&test).context("parse").unwrap() {
         eprintln!("{:?}", span);
         match &span.expr {
             MootBlock::ChangePlayer(change) => {
-                player = handle_change_player(change.name)
+                player = handle_change_player(&options, change.name)
                     .context("handle_change_player")
                     .unwrap();
             }
@@ -104,11 +151,11 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
     }
 }
 
-fn handle_change_player(name: &str) -> eyre::Result<Obj> {
+fn handle_change_player(options: &MootOptions, name: &str) -> eyre::Result<Obj> {
     Ok(match name {
-        "wizard" => WIZARD,
-        "programmer" => PROGRAMMER,
-        "nonprogrammer" => NONPROGRAMMER,
+        "wizard" => options.wizard_object.clone(),
+        "programmer" => options.programmer_object.clone(),
+        "nonprogrammer" => options.nonprogrammer_object.clone(),
         _ => return Err(eyre!("Unknown player: {}", name)),
     })
 }

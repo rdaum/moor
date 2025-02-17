@@ -11,19 +11,28 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+mod testrun;
+
+use crate::testrun::run_test;
 use bincommon::FeatureArgs;
 use clap::Parser;
 use clap_derive::Parser;
 use moor_db::{Database, DatabaseConfig, TxDB};
-use moor_kernel::config::{FeaturesConfig, TextdumpConfig};
+use moor_kernel::config::{Config, FeaturesConfig, TextdumpConfig};
 use moor_kernel::objdef::{
     collect_object_definitions, dump_object_definitions, ObjectDefinitionLoader,
 };
+use moor_kernel::tasks::scheduler::Scheduler;
+use moor_kernel::tasks::sessions::NoopSystemControl;
+use moor_kernel::tasks::NoopTasksDb;
 use moor_kernel::textdump::{make_textdump, textdump_load, EncodingMode, TextdumpWriter};
-use moor_values::build;
+use moor_moot::MootOptions;
+use moor_values::model::{PropFlag, WorldStateSource};
+use moor_values::{build, Obj, Symbol, SYSTEM_OBJECT};
 use std::fs::File;
 use std::path::PathBuf;
-use tracing::{debug, error, info, trace};
+use std::sync::Arc;
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Parser, Debug)] // requires `derive` feature
 pub struct Args {
@@ -53,6 +62,30 @@ pub struct Args {
 
     #[command(flatten)]
     feature_args: Option<FeatureArgs>,
+
+    #[clap(
+        long,
+        help = "Run the set of unit tests defined in the defined directory"
+    )]
+    test_directory: Option<PathBuf>,
+
+    #[clap(
+        long,
+        help = "The hardcoded object number to use for the wizard character in tests."
+    )]
+    test_wizard: Option<i32>,
+
+    #[clap(
+        long,
+        help = "The hardcoded object number to use for the programmer character in tests."
+    )]
+    test_programmer: Option<i32>,
+
+    #[clap(
+        long,
+        help = "The hardcoded object number to use for the non-programmer player character in tests."
+    )]
+    test_player: Option<i32>,
 
     #[clap(long, help = "Enable debug logging")]
     debug: bool,
@@ -192,5 +225,79 @@ fn main() {
         dump_object_definitions(&objects, &dirdump_path);
 
         info!(?dirdump_path, "Objdefdump written.");
+    }
+
+    if let Some(test_directory) = args.test_directory {
+        let tasks_db = Box::new(NoopTasksDb {});
+        let moot_version = semver::Version::new(0, 1, 0);
+        let db = Box::new(database);
+
+        let wizard = Obj::mk_id(args.test_wizard.expect("Must specify wizard object"));
+        let player = Obj::mk_id(args.test_player.expect("Must specify player object"));
+        let programmer = Obj::mk_id(
+            args.test_programmer
+                .expect("Must specify programmer object"),
+        );
+        let moot_options = MootOptions::default()
+            .wizard_object(wizard.clone())
+            .nonprogrammer_object(player.clone())
+            .programmer_object(programmer)
+            .init_logging(false);
+
+        {
+            // We need to create a scratch property on #0 that is used for tests to stick transient
+            // values in
+            let mut tx = db.new_world_state().unwrap();
+            tx.define_property(
+                &wizard,
+                &SYSTEM_OBJECT,
+                &SYSTEM_OBJECT,
+                Symbol::mk("scratch"),
+                &player,
+                PropFlag::rw(),
+                None,
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+        let scheduler = Scheduler::new(
+            moot_version,
+            db,
+            tasks_db,
+            Arc::new(Config::default()),
+            Arc::new(NoopSystemControl::default()),
+        );
+        let scheduler_client = scheduler.client().unwrap();
+        let session_factory = Arc::new(crate::testrun::NoopSessionFactory {});
+        let scheduler_loop_jh = std::thread::Builder::new()
+            .name("moor-scheduler".to_string())
+            .spawn(move || scheduler.run(session_factory.clone()))
+            .expect("Failed to spawn scheduler");
+
+        // Iterate all the .moot tests and run them in the context of the current database.
+        warn!("Running tests in {}", test_directory.display());
+        for entry in std::fs::read_dir(test_directory).unwrap() {
+            let Ok(entry) = entry else {
+                continue;
+            };
+
+            let path = entry.path();
+            let Some(extension) = path.extension() else {
+                continue;
+            };
+
+            if extension != "moot" {
+                continue;
+            }
+
+            run_test(&moot_options, scheduler_client.clone(), &path);
+        }
+
+        scheduler_client
+            .submit_shutdown("Test runs are done")
+            .expect("Failed to shut down scheduler");
+        scheduler_loop_jh
+            .join()
+            .expect("Failed to join() scheduler");
     }
 }

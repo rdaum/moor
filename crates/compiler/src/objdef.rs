@@ -98,7 +98,7 @@ pub enum ObjDefParseError {
     BadAttributeType(VarType),
 }
 
-fn parse_boolean_literal(pair: pest::iterators::Pair<Rule>) -> Result<bool, ObjDefParseError> {
+fn parse_boolean_literal(pair: Pair<Rule>) -> Result<bool, ObjDefParseError> {
     let str = pair.as_str();
     match str.to_lowercase().as_str() {
         "true" => Ok(true),
@@ -110,7 +110,7 @@ fn parse_boolean_literal(pair: pest::iterators::Pair<Rule>) -> Result<bool, ObjD
 }
 fn parse_literal_list(
     context: &mut ObjFileContext,
-    pairs: pest::iterators::Pairs<Rule>,
+    pairs: Pairs<Rule>,
 ) -> Result<Var, ObjDefParseError> {
     let mut list = vec![];
     for pair in pairs {
@@ -122,7 +122,7 @@ fn parse_literal_list(
 
 fn parse_literal_map(
     context: &mut ObjFileContext,
-    pairs: pest::iterators::Pairs<Rule>,
+    pairs: Pairs<Rule>,
 ) -> Result<Var, ObjDefParseError> {
     let mut elements = vec![];
     for r in pairs {
@@ -139,10 +139,7 @@ fn parse_literal_map(
     Ok(v_map(&pairs))
 }
 
-fn parse_literal(
-    context: &mut ObjFileContext,
-    pair: pest::iterators::Pair<Rule>,
-) -> Result<Var, ObjDefParseError> {
+fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, ObjDefParseError> {
     match pair.as_rule() {
         Rule::atom => {
             let pair = pair.into_inner().next().unwrap();
@@ -224,7 +221,7 @@ fn parse_literal(
     }
 }
 
-fn parse_object_literal(pair: pest::iterators::Pair<Rule>) -> Result<Obj, ObjDefParseError> {
+fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
     match pair.as_rule() {
         Rule::object => {
             let ostr = &pair.as_str()[1..];
@@ -238,15 +235,15 @@ fn parse_object_literal(pair: pest::iterators::Pair<Rule>) -> Result<Obj, ObjDef
     }
 }
 
-fn parse_string_literal(pair: pest::iterators::Pair<Rule>) -> Result<String, ObjDefParseError> {
+fn parse_string_literal(pair: Pair<Rule>) -> Result<String, ObjDefParseError> {
     let string = pair.as_str();
-    let parsed = unquote_str(string).map_err(ObjDefParseError::VerbCompileError)?;
+    let parsed = unquote_str(string).map_err(VerbCompileError)?;
     Ok(parsed)
 }
 
 fn parse_literal_atom(
     context: &mut ObjFileContext,
-    pair: pest::iterators::Pair<Rule>,
+    pair: Pair<Rule>,
 ) -> Result<Var, ObjDefParseError> {
     match pair.as_rule() {
         Rule::object => {
@@ -262,7 +259,7 @@ fn parse_literal_atom(
                         pair.as_str()
                     ))
                 })
-                .map_err(ObjDefParseError::VerbCompileError)?,
+                .map_err(VerbCompileError)?,
         )),
         Rule::float => Ok(v_float(
             pair.as_str()
@@ -273,7 +270,7 @@ fn parse_literal_atom(
                         pair.as_str()
                     ))
                 })
-                .map_err(ObjDefParseError::VerbCompileError)?,
+                .map_err(VerbCompileError)?,
         )),
         Rule::string => {
             let str = parse_string_literal(pair)?;
@@ -329,15 +326,13 @@ pub fn compile_object_definitions(
                 LineColLocation::Span(begin, end) => (begin, Some(end)),
             };
 
-            return Err(ObjDefParseError::VerbCompileError(
-                CompileError::ParseError {
-                    line,
-                    column,
-                    end_line_col,
-                    context: e.line().to_string(),
-                    message: e.variant.message().to_string(),
-                },
-            ));
+            return Err(VerbCompileError(CompileError::ParseError {
+                line,
+                column,
+                end_line_col,
+                context: e.line().to_string(),
+                message: e.variant.message().to_string(),
+            }));
         }
     };
 
@@ -724,8 +719,7 @@ fn parse_verb_decl(
     let program = match verb_body.as_rule() {
         Rule::verb_statements => {
             let inner = verb_body.into_inner();
-            compile_tree(inner, compile_options.clone())
-                .map_err(ObjDefParseError::VerbCompileError)?
+            compile_tree(inner, compile_options.clone()).map_err(VerbCompileError)?
         }
         _ => {
             panic!("Expected verb body, got {:?}", verb_body);

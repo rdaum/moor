@@ -11,32 +11,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Moot is a simple text-based test format for testing the kernel.
-//!
-//! See example.moot for a full-fledged example
-
-use std::{path::Path, sync::Arc};
-
 use eyre::Context;
-
-use common::{create_db, testsuite_dir};
 use moor_compiler::to_literal;
-use moor_db::Database;
-use moor_kernel::config::Config;
-use moor_kernel::tasks::sessions::{NoopSystemControl, SessionError, SessionFactory};
-use moor_kernel::tasks::NoopTasksDb;
-use moor_kernel::{
-    tasks::{
-        scheduler::Scheduler,
-        scheduler_test_utils,
-        sessions::{NoopClientSession, Session},
-    },
-    SchedulerClient,
-};
+use moor_kernel::tasks::scheduler_test_utils;
+use moor_kernel::tasks::sessions::{NoopClientSession, Session, SessionError, SessionFactory};
+use moor_kernel::SchedulerClient;
 use moor_moot::{execute_moot_test, MootOptions, MootRunner};
 use moor_values::{v_none, Obj, Var};
-
-mod common;
+use std::path::Path;
+use std::sync::Arc;
+// TODO: consolidate with what's in kernel/testsuite/moo_suite.rs?
 
 #[derive(Clone)]
 struct SchedulerMootRunner {
@@ -92,10 +76,6 @@ impl MootRunner for SchedulerMootRunner {
         Ok(())
     }
 
-    fn none(&self) -> Var {
-        v_none()
-    }
-
     fn read_line(&mut self, _player: &Obj) -> eyre::Result<Option<String>> {
         unimplemented!("Not supported on SchedulerMootRunner");
     }
@@ -106,14 +86,13 @@ impl MootRunner for SchedulerMootRunner {
             .take()
             .inspect(|var| eprintln!("{player} << {}", to_literal(var))))
     }
+
+    fn none(&self) -> Var {
+        v_none()
+    }
 }
 
-fn test_with_db(path: &Path) {
-    test(create_db(), path);
-}
-test_each_file::test_each_path! { in "./crates/kernel/testsuite/moot" as moot_run => test_with_db }
-
-struct NoopSessionFactory {}
+pub(crate) struct NoopSessionFactory {}
 impl SessionFactory for NoopSessionFactory {
     fn mk_background_session(
         self: Arc<Self>,
@@ -123,46 +102,11 @@ impl SessionFactory for NoopSessionFactory {
     }
 }
 
-fn test(db: Box<dyn Database>, path: &Path) {
-    if path.is_dir() {
-        return;
-    }
-    let tasks_db = Box::new(NoopTasksDb {});
-    let moot_version = semver::Version::new(0, 1, 0);
-    let scheduler = Scheduler::new(
-        moot_version,
-        db,
-        tasks_db,
-        Arc::new(Config::default()),
-        Arc::new(NoopSystemControl::default()),
-    );
-    let scheduler_client = scheduler.client().unwrap();
-    let session_factory = Arc::new(NoopSessionFactory {});
-    let scheduler_loop_jh = std::thread::Builder::new()
-        .name("moor-scheduler".to_string())
-        .spawn(move || scheduler.run(session_factory.clone()))
-        .expect("Failed to spawn scheduler");
-
-    let options = MootOptions::default();
+pub(crate) fn run_test(options: &MootOptions, scheduler_client: SchedulerClient, path: &Path) {
     execute_moot_test(
         SchedulerMootRunner::new(scheduler_client.clone(), Arc::new(NoopClientSession::new())),
-        &options,
+        options,
         path,
         || Ok(()),
     );
-
-    scheduler_client
-        .submit_shutdown("Test is done")
-        .expect("Failed to shut down scheduler");
-    scheduler_loop_jh
-        .join()
-        .expect("Failed to join() scheduler");
-}
-
-#[test]
-#[ignore = "Useful for debugging; just run a single test"]
-fn test_single() {
-    // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
-    // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    test_with_db(&testsuite_dir().join("moot/create.moot"));
 }

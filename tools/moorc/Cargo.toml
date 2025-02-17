@@ -12,18 +12,18 @@ rust-version.workspace = true
 description = "A tool for importing, compiling, and exporting mooR cores without running the full daemon"
 
 [dependencies]
+moor-compiler = { path = "../../crates/compiler" }
 moor-db = { path = "../../crates/db" }
 moor-kernel = { path = "../../crates/kernel" }
 moor-values = { path = "../../crates/common" }
 moor-daemon = { path = "../../crates/daemon" }
+moor-moot = { path = "../../crates/testing/moot" }
 
 ## Command line arguments parsing.
 clap.workspace = true
 clap_derive.workspace = true
 
 # General.
-bincode.workspace = true
-bytes.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
 semver.workspace = true
