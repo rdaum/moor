@@ -23,15 +23,16 @@ use moor_kernel::objdef::{
     collect_object_definitions, dump_object_definitions, ObjectDefinitionLoader,
 };
 use moor_kernel::tasks::scheduler::Scheduler;
-use moor_kernel::tasks::sessions::NoopSystemControl;
-use moor_kernel::tasks::NoopTasksDb;
+use moor_kernel::tasks::sessions::{NoopSystemControl, SessionFactory};
+use moor_kernel::tasks::{NoopTasksDb, TaskResult};
 use moor_kernel::textdump::{make_textdump, textdump_load, EncodingMode, TextdumpWriter};
 use moor_moot::MootOptions;
-use moor_values::model::{PropFlag, WorldStateSource};
-use moor_values::{build, Obj, Symbol, SYSTEM_OBJECT};
+use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource};
+use moor_values::{build, List, Obj, Symbol, Variant, SYSTEM_OBJECT};
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Parser, Debug)] // requires `derive` feature
@@ -65,25 +66,31 @@ pub struct Args {
 
     #[clap(
         long,
-        help = "Run the set of unit tests defined in the defined directory"
+        help = "Do a test run by executing all verbs prefixed with `test_` in all imported objects"
+    )]
+    run_tests: Option<bool>,
+
+    #[clap(
+        long,
+        help = "Run the set of integration `moot` tests defined in the defined directory"
     )]
     test_directory: Option<PathBuf>,
 
     #[clap(
         long,
-        help = "The hardcoded object number to use for the wizard character in tests."
+        help = "The hardcoded object number to use for the wizard character in integration tests."
     )]
     test_wizard: Option<i32>,
 
     #[clap(
         long,
-        help = "The hardcoded object number to use for the programmer character in tests."
+        help = "The hardcoded object number to use for the programmer character in integration tests."
     )]
     test_programmer: Option<i32>,
 
     #[clap(
         long,
-        help = "The hardcoded object number to use for the non-programmer player character in tests."
+        help = "The hardcoded object number to use for the non-programmer player character in integration tests."
     )]
     test_player: Option<i32>,
 
@@ -227,12 +234,105 @@ fn main() {
         info!(?dirdump_path, "Objdefdump written.");
     }
 
-    if let Some(test_directory) = args.test_directory {
-        let tasks_db = Box::new(NoopTasksDb {});
-        let moot_version = semver::Version::new(0, 1, 0);
-        let db = Box::new(database);
+    if args.run_tests != Some(true) && args.test_directory.is_none() {
+        return;
+    }
 
-        let wizard = Obj::mk_id(args.test_wizard.expect("Must specify wizard object"));
+    let wizard = Obj::mk_id(args.test_wizard.expect("Must specify wizard object"));
+
+    let tasks_db = Box::new(NoopTasksDb {});
+    let test_version = semver::Version::new(0, 1, 0);
+    let db = Box::new(database);
+
+    // If running integration tests, we need to create a scratch property on #0 that is used for tests to stick transient
+    // values in
+    if args.test_directory.is_some() {
+        let mut tx = db.new_world_state().unwrap();
+        tx.define_property(
+            &wizard,
+            &SYSTEM_OBJECT,
+            &SYSTEM_OBJECT,
+            Symbol::mk("scratch"),
+            &wizard,
+            PropFlag::rw(),
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+    }
+
+    // Before handing off the DB ot the scheduler, we need to find a list of all potential tests
+    // to run.
+    let mut unit_tests = vec![];
+    if args.run_tests == Some(true) {
+        let tx = db.new_world_state().unwrap();
+        let mo = tx.max_object(&wizard).unwrap().id().0;
+        for o in 0..mo {
+            let o = Obj::mk_id(o);
+            if let Ok(verbs) = tx.verbs(&wizard, &o) {
+                for verb in verbs.iter() {
+                    for name in verb.names() {
+                        if name.starts_with("test_") {
+                            unit_tests.push((o.clone(), Symbol::mk(name)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut config = Config::default();
+    config.features_config = features;
+    let scheduler = Scheduler::new(
+        test_version,
+        db,
+        tasks_db,
+        Arc::new(config),
+        Arc::new(NoopSystemControl::default()),
+    );
+    let scheduler_client = scheduler.client().unwrap();
+    let session_factory = Arc::new(crate::testrun::NoopSessionFactory {});
+    let test_session_factory = session_factory.clone();
+    let scheduler_loop_jh = std::thread::Builder::new()
+        .name("moor-scheduler".to_string())
+        .spawn(move || scheduler.run(session_factory.clone()))
+        .expect("Failed to spawn scheduler");
+
+    // Run unit tests
+    if args.run_tests == Some(true) && !unit_tests.is_empty() {
+        for (o, verb) in unit_tests {
+            let session = test_session_factory
+                .clone()
+                .mk_background_session(&wizard)
+                .unwrap();
+            let handle = scheduler_client
+                .submit_verb_task(
+                    &wizard,
+                    &ObjectRef::Id(o.clone()),
+                    verb,
+                    List::mk_list(&[]),
+                    "".to_string(),
+                    &wizard,
+                    session,
+                )
+                .unwrap();
+            let result = handle
+                .receiver()
+                .recv_timeout(Duration::from_secs(4))
+                .expect("Test timed out");
+            let result = result.expect("Failure to receive test results");
+            let TaskResult::Result(result_value) = result else {
+                panic!("Test failed to return a result");
+            };
+            // Result must be non-Error
+            if let Variant::Err(e) = result_value.variant() {
+                panic!("Test {}:{} failed: {:?}", o, verb, e);
+            }
+        }
+    }
+
+    // Perform integration test run.
+    if let Some(test_directory) = args.test_directory {
         let player = Obj::mk_id(args.test_player.expect("Must specify player object"));
         let programmer = Obj::mk_id(
             args.test_programmer
@@ -244,40 +344,8 @@ fn main() {
             .programmer_object(programmer)
             .init_logging(false);
 
-        {
-            // We need to create a scratch property on #0 that is used for tests to stick transient
-            // values in
-            let mut tx = db.new_world_state().unwrap();
-            tx.define_property(
-                &wizard,
-                &SYSTEM_OBJECT,
-                &SYSTEM_OBJECT,
-                Symbol::mk("scratch"),
-                &player,
-                PropFlag::rw(),
-                None,
-            )
-            .unwrap();
-            tx.commit().unwrap();
-        }
-        let mut config = Config::default();
-        config.features_config = features;
-        let scheduler = Scheduler::new(
-            moot_version,
-            db,
-            tasks_db,
-            Arc::new(config),
-            Arc::new(NoopSystemControl::default()),
-        );
-        let scheduler_client = scheduler.client().unwrap();
-        let session_factory = Arc::new(crate::testrun::NoopSessionFactory {});
-        let scheduler_loop_jh = std::thread::Builder::new()
-            .name("moor-scheduler".to_string())
-            .spawn(move || scheduler.run(session_factory.clone()))
-            .expect("Failed to spawn scheduler");
-
         // Iterate all the .moot tests and run them in the context of the current database.
-        warn!("Running tests in {}", test_directory.display());
+        warn!("Running integration tests in {}", test_directory.display());
         for entry in std::fs::read_dir(test_directory).unwrap() {
             let Ok(entry) = entry else {
                 continue;
@@ -294,12 +362,12 @@ fn main() {
 
             run_test(&moot_options, scheduler_client.clone(), &path);
         }
-
-        scheduler_client
-            .submit_shutdown("Test runs are done")
-            .expect("Failed to shut down scheduler");
-        scheduler_loop_jh
-            .join()
-            .expect("Failed to join() scheduler");
     }
+
+    scheduler_client
+        .submit_shutdown("Test runs are done")
+        .expect("Failed to shut down scheduler");
+    scheduler_loop_jh
+        .join()
+        .expect("Failed to join() scheduler");
 }
