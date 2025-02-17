@@ -260,11 +260,13 @@ fn main() {
             .unwrap();
             tx.commit().unwrap();
         }
+        let mut config = Config::default();
+        config.features_config = features;
         let scheduler = Scheduler::new(
             moot_version,
             db,
             tasks_db,
-            Arc::new(Config::default()),
+            Arc::new(config),
             Arc::new(NoopSystemControl::default()),
         );
         let scheduler_client = scheduler.client().unwrap();
