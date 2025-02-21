@@ -18,16 +18,16 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
-use moor_compiler::{compile, CompileOptions};
+use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::builtins::BuiltinRegistry;
 use moor_kernel::config::FeaturesConfig;
+use moor_kernel::tasks::VerbCall;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_kernel::tasks::task_scheduler_client::TaskSchedulerClient;
 use moor_kernel::tasks::vm_host::VmHost;
-use moor_kernel::tasks::VerbCall;
 use moor_kernel::vm::VMHostResponse;
 use moor_values::model::CommitResult;
 use moor_values::model::VerbArgsSpec;
@@ -35,8 +35,8 @@ use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::model::{WorldState, WorldStateSource};
 use moor_values::tasks::AbortLimitReason;
 use moor_values::util::BitEnum;
-use moor_values::{v_obj, List, Symbol};
 use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
+use moor_values::{List, Symbol, v_obj};
 
 fn create_db() -> TxDB {
     let (ws_source, _) = TxDB::open(None, DatabaseConfig::default());

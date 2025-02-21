@@ -19,7 +19,7 @@ use moor_values::tasks::{
     AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
     VerbProgramError,
 };
-use moor_values::{v_obj, Obj, Var, Variant};
+use moor_values::{Obj, Var, Variant, v_obj};
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;
@@ -264,7 +264,9 @@ impl WebSocketConnection {
             ClientEvent::TaskError(ti, te) => {
                 if let Some(pending_event) = self.pending_task.take() {
                     if pending_event.task_id != ti {
-                        error!("Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}");
+                        error!(
+                            "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
+                        );
                     }
                 }
                 self.handle_task_error(ws_sender, te)
@@ -274,7 +276,9 @@ impl WebSocketConnection {
             ClientEvent::TaskSuccess(ti, s) => {
                 if let Some(pending_event) = self.pending_task.take() {
                     if pending_event.task_id != ti {
-                        error!("Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}");
+                        error!(
+                            "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
+                        );
                     }
                 }
                 Self::emit_value(ws_sender, ValueResult(s)).await;

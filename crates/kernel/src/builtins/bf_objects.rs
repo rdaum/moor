@@ -15,19 +15,19 @@ use lazy_static::lazy_static;
 use tracing::{debug, error, trace};
 
 use moor_compiler::offset_for_builtin;
+use moor_values::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
 use moor_values::model::Named;
 use moor_values::model::WorldStateError;
 use moor_values::model::{ObjFlag, ValSet};
 use moor_values::util::BitEnum;
-use moor_values::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
-use moor_values::{v_int, v_none, v_obj, v_str, v_sym_str};
-use moor_values::{v_list, Sequence, Symbol};
-use moor_values::{v_list_iter, NOTHING};
 use moor_values::{List, Variant};
+use moor_values::{NOTHING, v_list_iter};
+use moor_values::{Sequence, Symbol, v_list};
+use moor_values::{v_int, v_none, v_obj, v_str, v_sym_str};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};
-use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use crate::tasks::VerbCall;
 use crate::vm::ExecutionResult::DispatchVerb;
 

@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::encode::{DecodingError, EncodingError};
-use crate::model::ValSet;
 use crate::AsByteBuffer;
 use crate::Symbol;
+use crate::encode::{DecodingError, EncodingError};
+use crate::model::ValSet;
 use bytes::BufMut;
 use bytes::Bytes;
 use itertools::Itertools;

@@ -14,19 +14,19 @@
 use eyre::{anyhow, bail};
 use moor_values::model::ObjectRef;
 use moor_values::tasks::VerbProgramError;
-use moor_values::{Obj, Symbol, Var, SYSTEM_OBJECT};
+use moor_values::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{ListenersClient, ListenersMessage};
 use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
 use rpc_common::{
-    AuthToken, ClientEvent, ClientToken, ClientsBroadcastEvent, DaemonToClientReply,
-    HostClientToDaemonMessage, HostType, ReplyResult, VerbProgramResponse, CLIENT_BROADCAST_TOPIC,
+    AuthToken, CLIENT_BROADCAST_TOPIC, ClientEvent, ClientToken, ClientsBroadcastEvent,
+    DaemonToClientReply, HostClientToDaemonMessage, HostType, ReplyResult, VerbProgramResponse,
 };
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Instant, SystemTime};
 use tmq::subscribe::Subscribe;
 use tmq::{request, subscribe};

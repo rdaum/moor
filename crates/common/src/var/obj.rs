@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::encode::{DecodingError, EncodingError};
 use crate::AsByteBuffer;
+use crate::encode::{DecodingError, EncodingError};
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use bytes::Bytes;

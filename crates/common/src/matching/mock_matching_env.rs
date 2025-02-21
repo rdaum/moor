@@ -13,10 +13,10 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::NOTHING;
+use crate::Obj;
 use crate::model::{ObjSet, ValSet};
 use crate::model::{ObjectRef, WorldStateError};
-use crate::Obj;
-use crate::NOTHING;
 
 use crate::matching::match_env::MatchEnvironment;
 

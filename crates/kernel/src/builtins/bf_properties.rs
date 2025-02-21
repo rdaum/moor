@@ -12,18 +12,18 @@
 //
 
 use moor_compiler::offset_for_builtin;
-use moor_values::model::{prop_flags_string, PropAttrs, PropFlag};
-use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_values::Sequence;
 use moor_values::Variant;
-use moor_values::{v_empty_list, List};
+use moor_values::model::{PropAttrs, PropFlag, prop_flags_string};
+use moor_values::util::BitEnum;
+use moor_values::{List, v_empty_list};
 use moor_values::{v_list, v_none, v_obj, v_string};
 
 use crate::bf_declare;
 use crate::builtins::BfErr::Code;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 
 // property_info (obj <object>, str <prop-name>)              => list\
 //  {<owner>, <perms> }

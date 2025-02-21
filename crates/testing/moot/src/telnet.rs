@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use eyre::{eyre, WrapErr};
+use eyre::{WrapErr, eyre};
 use moor_values::Obj;
 use std::{
     collections::HashMap,

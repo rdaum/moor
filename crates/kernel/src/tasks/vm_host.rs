@@ -24,28 +24,28 @@ use tracing::{debug, error, trace, warn};
 
 use moor_compiler::Name;
 use moor_compiler::Program;
-use moor_compiler::{compile, CompileOptions};
-use moor_values::model::{BinaryType, ObjFlag};
-use moor_values::model::{VerbDef, WorldState};
-use moor_values::tasks::{AbortLimitReason, TaskId};
+use moor_compiler::{CompileOptions, compile};
 use moor_values::Error::E_MAXREC;
 use moor_values::Obj;
 use moor_values::Var;
-use moor_values::{v_none, Symbol};
+use moor_values::model::{BinaryType, ObjFlag};
+use moor_values::model::{VerbDef, WorldState};
+use moor_values::tasks::{AbortLimitReason, TaskId};
 use moor_values::{AsByteBuffer, List};
+use moor_values::{Symbol, v_none};
 
+use crate::PhantomUnsync;
 use crate::builtins::BuiltinRegistry;
 use crate::config::FeaturesConfig;
+use crate::tasks::VerbCall;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::tasks::VerbCall;
+use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::vm::activation::Frame;
 use crate::vm::moo_execute::moo_frame_execute;
 use crate::vm::vm_call::{VerbProgram, VmExecParams};
-use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::vm::{ExecutionResult, Fork, VMHostResponse, VerbExecutionRequest};
 use crate::vm::{FinallyReason, VMExecState};
-use crate::PhantomUnsync;
 use moor_values::matching::command_parse::ParsedCommand;
 
 /// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.

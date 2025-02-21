@@ -17,13 +17,13 @@ use std::time::Duration;
 use tracing::{instrument, trace};
 use uuid::Uuid;
 
-use moor_compiler::{compile, Program};
+use moor_compiler::{Program, compile};
 use moor_values::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_values::{List, Obj, Symbol, Var};
 
 use crate::config::FeaturesConfig;
-use crate::tasks::sessions::Session;
 use crate::tasks::TaskHandle;
+use crate::tasks::sessions::Session;
 use moor_values::tasks::SchedulerError;
 use moor_values::tasks::SchedulerError::CompilationError;
 

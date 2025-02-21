@@ -12,14 +12,14 @@
 //
 
 use moor_compiler::{
-    program_to_tree, to_literal, to_literal_objsub, unparse, ObjPropDef, ObjPropOverride,
-    ObjVerbDef, ObjectDefinition, Program,
+    ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, Program, program_to_tree,
+    to_literal, to_literal_objsub, unparse,
 };
 use moor_db::loader::LoaderInterface;
 use moor_values::model::{
-    prop_flags_string, verb_perms_string, HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet,
+    HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, prop_flags_string, verb_perms_string,
 };
-use moor_values::{v_str, v_string, AsByteBuffer, Obj, Symbol, Variant, NOTHING, SYSTEM_OBJECT};
+use moor_values::{AsByteBuffer, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_str, v_string};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
@@ -338,7 +338,9 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
                 body.push('\n');
             }
             let body = body.trim_end().to_string();
-            let decl = format!("{indent}verb {names} ({verbargsspec}) owner: {owner} flags: \"{vflags}\"\n{body}\n{indent}endverb\n");
+            let decl = format!(
+                "{indent}verb {names} ({verbargsspec}) owner: {owner} flags: \"{vflags}\"\n{body}\n{indent}endverb\n"
+            );
             objstr.push_str(&decl);
         }
         objstr.push_str("endobject\n");
@@ -351,7 +353,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
 mod tests {
     use crate::config::FeaturesConfig;
     use crate::objdef::{
-        collect_object_definitions, dump_object_definitions, ObjectDefinitionLoader,
+        ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions,
     };
     use crate::textdump::textdump_load;
     use moor_db::{Database, DatabaseConfig, TxDB};

@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::var::Var;
-use crate::var::variant::Variant;
 use crate::var::Associative;
 use crate::var::Error;
 use crate::var::Error::{E_RANGE, E_TYPE};
+use crate::var::var::Var;
+use crate::var::variant::Variant;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};

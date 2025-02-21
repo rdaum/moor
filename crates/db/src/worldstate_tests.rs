@@ -14,6 +14,9 @@
 //! A set of common tests for any world state implementation.
 
 use crate::worldstate_transaction::WorldStateTransaction;
+use moor_values::NOTHING;
+use moor_values::Obj;
+use moor_values::Symbol;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbAttrs};
 use moor_values::model::{CommitResult, WorldStateError};
@@ -21,9 +24,6 @@ use moor_values::model::{HasUuid, Named};
 use moor_values::model::{ObjAttrs, PropFlag, ValSet};
 use moor_values::model::{ObjSet, ObjectRef};
 use moor_values::util::BitEnum;
-use moor_values::Obj;
-use moor_values::Symbol;
-use moor_values::NOTHING;
 use moor_values::{v_int, v_str};
 
 pub fn perform_test_create_object<F, TX>(begin_tx: F)
@@ -95,10 +95,11 @@ where
         .unwrap();
 
     assert_eq!(tx.get_object_parent(&b).unwrap(), a);
-    assert!(tx
-        .get_object_children(&a)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[b.clone()])));
+    assert!(
+        tx.get_object_children(&a)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[b.clone()]))
+    );
 
     assert_eq!(tx.get_object_parent(&a).unwrap(), NOTHING);
     assert_eq!(tx.get_object_children(&b).unwrap(), ObjSet::empty());
@@ -112,10 +113,11 @@ where
         .unwrap();
 
     assert_eq!(tx.get_object_parent(&c).unwrap(), a);
-    assert!(tx
-        .get_object_children(&a)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[b.clone(), c.clone()])));
+    assert!(
+        tx.get_object_children(&a)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[b.clone(), c.clone()]))
+    );
 
     assert_eq!(tx.get_object_parent(&a).unwrap(), NOTHING);
     assert_eq!(tx.get_object_children(&b).unwrap(), ObjSet::empty());
@@ -130,14 +132,16 @@ where
 
     tx.set_object_parent(&b, &d).unwrap();
     assert_eq!(tx.get_object_parent(&b).unwrap(), d);
-    assert!(tx
-        .get_object_children(&a)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[c.clone()])));
-    assert!(tx
-        .get_object_children(&d)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[b.clone()])));
+    assert!(
+        tx.get_object_children(&a)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[c.clone()]))
+    );
+    assert!(
+        tx.get_object_children(&d)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[b.clone()]))
+    );
 
     let objects = tx.get_objects().unwrap();
     assert!(objects.is_same(ObjSet::from_items(&[
@@ -204,10 +208,11 @@ where
 
     // Now reparent d to b
     tx.set_object_parent(&d, &b).unwrap();
-    assert!(tx
-        .get_object_children(&a)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[b.clone(), c.clone()])));
+    assert!(
+        tx.get_object_children(&a)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[b.clone(), c.clone()]))
+    );
     assert_eq!(
         tx.get_object_children(&b).unwrap(),
         ObjSet::from_items(&[d.clone()])
@@ -278,17 +283,19 @@ where
         )
         .unwrap();
     tx.set_object_location(&d, &c).unwrap();
-    assert!(tx
-        .get_object_contents(&c)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[b.clone(), d.clone()])));
+    assert!(
+        tx.get_object_contents(&c)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[b.clone(), d.clone()]))
+    );
     assert_eq!(tx.get_object_location(&d).unwrap(), c);
 
     tx.set_object_location(&a, &c).unwrap();
-    assert!(tx
-        .get_object_contents(&c)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[b.clone(), d.clone(), a.clone()])));
+    assert!(
+        tx.get_object_contents(&c)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[b.clone(), d.clone(), a.clone()]))
+    );
     assert_eq!(tx.get_object_location(&a).unwrap(), c);
 
     // Validate recursive move detection.
@@ -346,10 +353,11 @@ where
     tx.set_object_location(&c, &a).unwrap();
     assert_eq!(tx.get_object_location(&b).unwrap(), a);
     assert_eq!(tx.get_object_location(&c).unwrap(), a);
-    assert!(tx
-        .get_object_contents(&a)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[b.clone(), c.clone()])));
+    assert!(
+        tx.get_object_contents(&a)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[b.clone(), c.clone()]))
+    );
     assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
     assert_eq!(tx.get_object_contents(&c).unwrap(), ObjSet::empty());
 
@@ -686,9 +694,10 @@ where
     assert!(is_clear);
 
     // But it's illegal to try to rename it on the child who doesn't define it.
-    assert!(tx
-        .update_property_info(&b, uuid, None, None, Some("a_new_name".to_string()))
-        .is_err())
+    assert!(
+        tx.update_property_info(&b, uuid, None, None, Some("a_new_name".to_string()))
+            .is_err()
+    )
 }
 
 /// Test regression where parent properties were present via `properties()` on children.
@@ -1142,10 +1151,11 @@ where
     .unwrap();
 
     // Verify root's children list contains our object.
-    assert!(tx
-        .get_object_children(&a)
-        .unwrap()
-        .is_same(ObjSet::from_items(&[c.clone()])));
+    assert!(
+        tx.get_object_children(&a)
+            .unwrap()
+            .is_same(ObjSet::from_items(&[c.clone()]))
+    );
 
     tx.recycle_object(&c).expect("Unable to recycle object");
     let result = tx.get_object_name(&c);

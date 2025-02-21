@@ -19,7 +19,7 @@ mod tests {
     use moor_db::{DatabaseConfig, TxDB};
     use moor_values::model::{ObjFlag, PropFlag, WorldStateSource};
     use moor_values::util::BitEnum;
-    use moor_values::{v_int, Obj, Symbol, Var, NOTHING, SYSTEM_OBJECT};
+    use moor_values::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, v_int};
     use std::collections::HashMap;
     use std::path::Path;
     use std::sync::Arc;

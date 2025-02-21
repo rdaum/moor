@@ -192,15 +192,17 @@ fn main() -> Result<(), Report> {
         );
         std::thread::Builder::new()
             .name("moor-checkpoint".to_string())
-            .spawn(move || loop {
-                if checkpoint_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
-                    info!("Checkpointing thread exiting.");
-                    break;
+            .spawn(move || {
+                loop {
+                    if checkpoint_kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
+                        info!("Checkpointing thread exiting.");
+                        break;
+                    }
+                    checkpoint_scheduler_client
+                        .request_checkpoint()
+                        .expect("Failed to submit checkpoint");
+                    std::thread::sleep(checkpoint_interval);
                 }
-                checkpoint_scheduler_client
-                    .request_checkpoint()
-                    .expect("Failed to submit checkpoint");
-                std::thread::sleep(checkpoint_interval);
             })?;
     } else {
         info!("Checkpointing disabled.");

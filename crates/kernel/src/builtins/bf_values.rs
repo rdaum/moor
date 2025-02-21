@@ -13,22 +13,22 @@
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use md5::Digest;
 use moor_compiler::{offset_for_builtin, to_literal};
-use moor_values::model::WorldState;
 use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_RANGE, E_TYPE};
-use moor_values::{
-    v_float, v_int, v_list, v_obj, v_objid, v_str, v_string, v_sym, v_sym_str, Flyweight, List,
-    Map, Obj,
-};
-use moor_values::{v_flyweight, Associative};
+use moor_values::model::WorldState;
 use moor_values::{AsByteBuffer, Sequence};
-use moor_values::{Symbol, Variant, SYSTEM_OBJECT};
+use moor_values::{Associative, v_flyweight};
+use moor_values::{
+    Flyweight, List, Map, Obj, v_float, v_int, v_list, v_obj, v_objid, v_str, v_string, v_sym,
+    v_sym_str,
+};
+use moor_values::{SYSTEM_OBJECT, Symbol, Variant};
 use std::io::{BufReader, BufWriter};
 use tracing::error;
-use xml::reader::XmlEvent;
 use xml::EmitterConfig;
+use xml::reader::XmlEvent;
 
 fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg = &bf_args.args[0];

@@ -16,14 +16,14 @@ mod host;
 use crate::host::WebHost;
 use std::collections::HashMap;
 
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 use clap::Parser;
 use clap_derive::Parser;
 
 use axum::extract::State;
 use axum::handler::HandlerWithoutStateExt;
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use futures_util::future::OptionFuture;
 use moor_values::{Obj, SYSTEM_OBJECT};
@@ -32,17 +32,17 @@ use rolldown::{
     Watcher,
 };
 use rpc_async_client::{
-    make_host_token, proces_hosts_events, start_host_session, ListenersClient, ListenersMessage,
+    ListenersClient, ListenersMessage, make_host_token, proces_hosts_events, start_host_session,
 };
 use rpc_common::client_args::RpcClientArgs;
-use rpc_common::{load_keypair, HostType};
+use rpc_common::{HostType, load_keypair};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tokio::net::TcpListener;
 use tokio::select;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::Mutex;
 use tower_http::services::ServeDir;
 use tracing::{info, warn};

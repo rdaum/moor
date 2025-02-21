@@ -22,8 +22,8 @@
 //! A task is generally tied 1:1 with a player connection, and usually come from one command, but
 //! they can also be 'forked' from other tasks.
 //!
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use bincode::de::{BorrowDecoder, Decoder};
@@ -40,10 +40,10 @@ use moor_values::tasks::CommandError;
 use moor_values::tasks::CommandError::PermissionDenied;
 use moor_values::tasks::TaskId;
 use moor_values::util::parse_into_words;
-use moor_values::{v_int, v_str, List};
-use moor_values::{v_obj, Obj};
-use moor_values::{Symbol, Variant};
+use moor_values::{List, v_int, v_str};
 use moor_values::{NOTHING, SYSTEM_OBJECT};
+use moor_values::{Obj, v_obj};
+use moor_values::{Symbol, Variant};
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::{Config, FeaturesConfig};
@@ -52,7 +52,7 @@ use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::VmHost;
 use crate::tasks::{ServerOptions, TaskStart, VerbCall};
 use crate::vm::VMHostResponse;
-use moor_values::matching::command_parse::{parse_command, ParseCommandError, ParsedCommand};
+use moor_values::matching::command_parse::{ParseCommandError, ParsedCommand, parse_command};
 use moor_values::matching::match_env::MatchEnvironmentParseMatcher;
 use moor_values::matching::ws_match_env::WsMatchEnv;
 
@@ -300,7 +300,10 @@ impl Task {
 
                 let CommitResult::Success = world_state.commit().expect("Could not attempt commit")
                 else {
-                    warn!("Conflict during commit before complete, asking scheduler to retry task ({})", self.task_id);
+                    warn!(
+                        "Conflict during commit before complete, asking scheduler to retry task ({})",
+                        self.task_id
+                    );
                     task_scheduler_client.conflict_retry(self);
                     return None;
                 };
@@ -700,22 +703,22 @@ impl<'de> BorrowDecode<'de> for Task {
 //   a simple program.
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
-    use crossbeam_channel::{unbounded, Receiver};
+    use crossbeam_channel::{Receiver, unbounded};
 
-    use moor_compiler::{compile, CompileOptions, Program};
+    use moor_compiler::{CompileOptions, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
+    use moor_values::Error::E_DIV;
     use moor_values::model::{
         ArgSpec, BinaryType, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
     };
     use moor_values::tasks::{CommandError, Event, TaskId};
     use moor_values::util::BitEnum;
-    use moor_values::Error::E_DIV;
-    use moor_values::{v_int, v_str};
-    use moor_values::{v_obj, Symbol};
     use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
+    use moor_values::{Symbol, v_obj};
+    use moor_values::{v_int, v_str};
 
     use crate::builtins::BuiltinRegistry;
     use crate::config::Config;

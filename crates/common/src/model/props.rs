@@ -11,9 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::util::BitEnum;
 use crate::Obj;
 use crate::Var;
+use crate::util::BitEnum;
 use crate::{AsByteBuffer, DecodingError, EncodingError};
 use binary_layout::binary_layout;
 use bincode::{Decode, Encode};

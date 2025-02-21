@@ -11,10 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::{v_err, v_int, v_none, v_obj, Symbol, Var};
-use moor_values::{v_float, Variant};
+use moor_values::{Symbol, Var, v_err, v_int, v_none, v_obj};
+use moor_values::{Variant, v_float};
 use std::collections::{HashMap, VecDeque};
 
+use crate::BUILTINS;
 use crate::ast::Expr::ComprehendRange;
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
@@ -27,7 +28,6 @@ use crate::names::{Name, UnboundName, UnboundNames};
 use crate::opcode::{ComprehensionType, Op, ScatterLabel};
 use crate::parse::Parse;
 use crate::program::Program;
-use crate::BUILTINS;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {
@@ -1118,13 +1118,13 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::CompileOptions;
     use crate::ast::assert_trees_match_recursive;
     use crate::codegen::compile;
     use crate::decompile::program_to_tree;
-    use crate::parse::parse_program;
     use crate::parse::Parse;
+    use crate::parse::parse_program;
     use crate::unparse::annotate_line_numbers;
-    use crate::CompileOptions;
     use test_case::test_case;
 
     fn parse_decompile(program_text: &str) -> (Parse, Parse) {

@@ -19,7 +19,7 @@ use std::{
     sync::Once,
 };
 
-use eyre::{eyre, ContextCompat, WrapErr};
+use eyre::{ContextCompat, WrapErr, eyre};
 use moor_values::Obj;
 
 use parser::{MootBlock, MootBlockTest, MootBlockTestExpectedOutput, MootBlockTestKind};

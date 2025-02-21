@@ -15,11 +15,11 @@ use std::string::ToString;
 
 use bincode::{Decode, Encode};
 
+use crate::Obj;
 use crate::model::WorldStateError;
 use crate::model::{PrepSpec, Preposition};
 use crate::util;
-use crate::Obj;
-use crate::{v_str, Var};
+use crate::{Var, v_str};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct ParsedCommand {
@@ -184,14 +184,14 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::FAILED_MATCH;
     use crate::model::Preposition;
     use crate::util::parse_into_words;
     use crate::v_str;
-    use crate::FAILED_MATCH;
 
     use crate::matching::match_env::MatchEnvironmentParseMatcher;
     use crate::matching::mock_matching_env::{
-        setup_mock_environment, MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2,
+        MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
     };
 
     use super::*;

@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::common::create_db;
 use crate::common::AssertRunAsVerb;
+use crate::common::create_db;
 
 mod common;
 

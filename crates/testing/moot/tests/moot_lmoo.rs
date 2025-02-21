@@ -25,7 +25,7 @@ use std::{
 };
 
 use moor_moot::{
-    execute_moot_test, telnet::ManagedChild, telnet::TelnetMootRunner, test_db_path, MootOptions,
+    MootOptions, execute_moot_test, telnet::ManagedChild, telnet::TelnetMootRunner, test_db_path,
 };
 
 fn moo_path() -> PathBuf {

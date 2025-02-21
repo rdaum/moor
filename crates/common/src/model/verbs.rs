@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::Obj;
+use crate::Symbol;
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::r#match::VerbArgsSpec;
 use crate::util::BitEnum;
-use crate::Obj;
-use crate::Symbol;
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use enum_primitive_derive::Primitive;

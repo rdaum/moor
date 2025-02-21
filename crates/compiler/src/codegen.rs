@@ -18,8 +18,11 @@ use std::sync::Arc;
 use tracing::error;
 
 use moor_values::Variant;
-use moor_values::{v_str, Var};
+use moor_values::{Var, v_str};
 
+use crate::Op::{
+    BeginComprehension, ComprehendList, ComprehendRange, ContinueComprehension, ImmInt, Pop, Put,
+};
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
@@ -29,11 +32,8 @@ use crate::names::{Name, Names, UnboundName};
 use crate::opcode::Op::Jump;
 use crate::opcode::{ComprehensionType, Op, ScatterArgs, ScatterLabel};
 use crate::parse::moo::Rule;
-use crate::parse::{parse_program, parse_tree, CompileOptions, Parse};
+use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
 use crate::program::Program;
-use crate::Op::{
-    BeginComprehension, ComprehendList, ComprehendRange, ContinueComprehension, ImmInt, Pop, Put,
-};
 use moor_values::model::CompileError;
 use moor_values::model::CompileError::InvalidAssignemnt;
 

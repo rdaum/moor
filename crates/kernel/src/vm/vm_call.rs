@@ -15,23 +15,23 @@ use lazy_static::lazy_static;
 use std::sync::Arc;
 use tracing::trace;
 
-use moor_compiler::{to_literal, BuiltinId, Program, BUILTINS};
+use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
+use moor_values::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_values::model::VerbDef;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
-use moor_values::{v_int, v_obj, Var};
-use moor_values::{Error, Sequence, Symbol, Variant, SYSTEM_OBJECT};
+use moor_values::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_values::{List, Obj};
+use moor_values::{Var, v_int, v_obj};
 
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry};
 use crate::config::FeaturesConfig;
+use crate::tasks::VerbCall;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::tasks::VerbCall;
+use crate::vm::VMExecState;
 use crate::vm::activation::{Activation, Frame};
 use crate::vm::vm_unwind::FinallyReason;
-use crate::vm::VMExecState;
 use crate::vm::{ExecutionResult, Fork};
 use moor_values::matching::command_parse::ParsedCommand;
 

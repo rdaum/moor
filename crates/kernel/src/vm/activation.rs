@@ -22,19 +22,19 @@ use uuid::Uuid;
 use moor_compiler::Name;
 use moor_compiler::Program;
 use moor_compiler::{BuiltinId, GlobalName};
+use moor_values::Obj;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::VerbDef;
 use moor_values::model::{BinaryType, VerbFlag};
 use moor_values::util::BitEnum;
-use moor_values::Obj;
-use moor_values::{v_empty_list, v_int, v_obj, v_str, v_string, Var, VarType};
-use moor_values::{v_empty_str, Error};
 use moor_values::{AsByteBuffer, Symbol};
+use moor_values::{Error, v_empty_str};
 use moor_values::{List, NOTHING};
+use moor_values::{Var, VarType, v_empty_list, v_int, v_obj, v_str, v_string};
 
+use crate::vm::VerbExecutionRequest;
 use crate::vm::moo_frame::MooStackFrame;
 use crate::vm::vm_call::VerbProgram;
-use crate::vm::VerbExecutionRequest;
 use moor_values::matching::command_parse::ParsedCommand;
 
 lazy_static! {
@@ -173,7 +173,7 @@ impl Frame {
 
     pub fn set_return_value(&mut self, value: Var) {
         match self {
-            Frame::Moo(ref mut frame) => {
+            Frame::Moo(frame) => {
                 frame.push(value);
             }
             Frame::Bf(bf_frame) => {
@@ -184,7 +184,7 @@ impl Frame {
 
     pub fn return_value(&self) -> Var {
         match self {
-            Frame::Moo(ref frame) => frame.peek_top().clone(),
+            Frame::Moo(frame) => frame.peek_top().clone(),
             Frame::Bf(bf_frame) => bf_frame
                 .return_value
                 .clone()

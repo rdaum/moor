@@ -14,16 +14,16 @@
 extern crate core;
 
 pub use encode::{
-    AsByteBuffer, BincodeAsByteBufferExt, CountingWriter, DecodingError, EncodingError,
-    BINCODE_CONFIG,
+    AsByteBuffer, BINCODE_CONFIG, BincodeAsByteBufferExt, CountingWriter, DecodingError,
+    EncodingError,
 };
 use shadow_rs::shadow;
 
 pub use var::{
-    v_bool_int, v_empty_list, v_empty_map, v_empty_str, v_err, v_float, v_flyweight, v_int, v_list,
-    v_list_iter, v_map, v_map_iter, v_none, v_obj, v_objid, v_str, v_string, v_sym, v_sym_str,
-    Associative, ErrorPack, Flyweight, IndexMode, List, Map, Sequence, Str, Var, Variant,
-    AMBIGUOUS, FAILED_MATCH, NOTHING, SYSTEM_OBJECT,
+    AMBIGUOUS, Associative, ErrorPack, FAILED_MATCH, Flyweight, IndexMode, List, Map, NOTHING,
+    SYSTEM_OBJECT, Sequence, Str, Var, Variant, v_bool_int, v_empty_list, v_empty_map, v_empty_str,
+    v_err, v_float, v_flyweight, v_int, v_list, v_list_iter, v_map, v_map_iter, v_none, v_obj,
+    v_objid, v_str, v_string, v_sym, v_sym_str,
 };
 pub use var::{Error, Obj, Symbol, VarType};
 

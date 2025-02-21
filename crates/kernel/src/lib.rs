@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+pub use crate::tasks::ServerOptions;
 pub use crate::tasks::scheduler_client::SchedulerClient;
 pub use crate::tasks::suspension::{SuspendedTask, WakeCondition};
 pub use crate::tasks::task::Task;
-pub use crate::tasks::ServerOptions;
 pub use moor_values::tasks::TaskId;
 use std::cell::Cell;
 use std::marker::PhantomData;

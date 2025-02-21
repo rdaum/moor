@@ -15,21 +15,21 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use moor_compiler::{BuiltinId, BUILTINS};
+use moor_compiler::{BUILTINS, BuiltinId};
+use moor_values::Symbol;
+use moor_values::Var;
 use moor_values::model::Perms;
 use moor_values::model::WorldState;
 use moor_values::model::WorldStateError;
-use moor_values::Symbol;
-use moor_values::Var;
-use moor_values::{v_bool_int, Obj};
 use moor_values::{Error, List};
+use moor_values::{Obj, v_bool_int};
 
 use crate::builtins::bf_list_sets::register_bf_list_sets;
 use crate::builtins::bf_maps::register_bf_maps;
 use crate::builtins::bf_num::register_bf_num;
 use crate::builtins::bf_objects::register_bf_objects;
 use crate::builtins::bf_properties::register_bf_properties;
-use crate::builtins::bf_server::{register_bf_server, BfNoop};
+use crate::builtins::bf_server::{BfNoop, register_bf_server};
 use crate::builtins::bf_strings::register_bf_strings;
 use crate::builtins::bf_values::register_bf_values;
 use crate::builtins::bf_verbs::register_bf_verbs;

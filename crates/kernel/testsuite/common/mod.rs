@@ -19,7 +19,7 @@ use semver::Version;
 use uuid::Uuid;
 
 use moor_compiler::Program;
-use moor_compiler::{compile, CompileOptions};
+use moor_compiler::{CompileOptions, compile};
 use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::builtins::BuiltinRegistry;
 use moor_kernel::config::FeaturesConfig;
@@ -29,12 +29,12 @@ use moor_kernel::tasks::vm_test_utils;
 use moor_kernel::tasks::vm_test_utils::ExecResult;
 use moor_kernel::textdump::textdump_load;
 use moor_moot::test_db_path;
+use moor_values::Symbol;
 use moor_values::model::CommitResult;
 use moor_values::model::Named;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::WorldStateSource;
 use moor_values::model::{BinaryType, VerbFlag};
-use moor_values::Symbol;
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
 use moor_values::{List, Obj};
 

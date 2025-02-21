@@ -13,13 +13,13 @@
 //
 
 use bincode::{Decode, Encode};
-use moor_compiler::{to_literal, Label, Offset, BUILTINS};
+use moor_compiler::{BUILTINS, Label, Offset, to_literal};
+use moor_values::NOTHING;
 use moor_values::model::Named;
 use moor_values::model::VerbFlag;
 use moor_values::tasks::Exception;
-use moor_values::NOTHING;
-use moor_values::{v_err, v_int, v_list, v_none, v_obj, v_str, Var};
 use moor_values::{Error, ErrorPack};
+use moor_values::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
 use tracing::trace;
 
 use crate::vm::activation::{Activation, Frame};

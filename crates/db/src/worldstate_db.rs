@@ -23,8 +23,8 @@ use moor_values::util::BitEnum;
 use moor_values::{Obj, Var};
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
 use std::time::Duration;
 use tempfile::TempDir;
 use tracing::warn;
@@ -640,7 +640,7 @@ mod tests {
     };
     use moor_values::model::{ObjAttrs, ObjFlag, PropFlag};
     use moor_values::util::BitEnum;
-    use moor_values::{v_int, Obj, Symbol};
+    use moor_values::{Obj, Symbol, v_int};
     use std::sync::Arc;
 
     fn test_db() -> Arc<super::WorldStateDB> {

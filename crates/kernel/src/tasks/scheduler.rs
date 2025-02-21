@@ -13,8 +13,8 @@
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::yield_now;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -24,7 +24,7 @@ use lazy_static::lazy_static;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use moor_compiler::{compile, program_to_tree, to_literal, unparse, Program};
+use moor_compiler::{Program, compile, program_to_tree, to_literal, unparse};
 use moor_db::Database;
 use moor_values::model::{BinaryType, HasUuid, ObjectRef, ValSet, VerbAttrs};
 use moor_values::model::{CommitResult, Perms};
@@ -40,11 +40,12 @@ use crate::tasks::task::Task;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::{
-    ServerOptions, TaskHandle, TaskResult, TaskStart, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS,
-    DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
+    DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
+    DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart,
 };
-use crate::textdump::{make_textdump, TextdumpWriter};
+use crate::textdump::{TextdumpWriter, make_textdump};
 use crate::vm::Fork;
+use moor_values::Error::{E_INVARG, E_INVIND, E_PERM};
 use moor_values::matching::command_parse::ParseMatcher;
 use moor_values::matching::match_env::MatchEnvironmentParseMatcher;
 use moor_values::matching::ws_match_env::WsMatchEnv;
@@ -55,9 +56,8 @@ use moor_values::tasks::SchedulerError::{
 use moor_values::tasks::{
     AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError, TaskId, VerbProgramError,
 };
-use moor_values::Error::{E_INVARG, E_INVIND, E_PERM};
-use moor_values::{v_err, v_int, v_none, v_obj, v_string, List, Symbol, Var};
 use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+use moor_values::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};
 use moor_values::{Obj, Variant};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);

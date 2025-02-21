@@ -132,15 +132,15 @@ pub mod vm_test_utils {
 
     use moor_compiler::Program;
     use moor_values::model::WorldState;
-    use moor_values::{v_obj, Symbol};
     use moor_values::{List, SYSTEM_OBJECT};
     use moor_values::{Obj, Var};
+    use moor_values::{Symbol, v_obj};
 
     use crate::builtins::BuiltinRegistry;
     use crate::config::FeaturesConfig;
+    use crate::tasks::VerbCall;
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::VmHost;
-    use crate::tasks::VerbCall;
     use crate::vm::VMHostResponse;
     use moor_values::tasks::Exception;
 
@@ -253,7 +253,7 @@ pub mod scheduler_test_utils {
     use std::time::Duration;
 
     use moor_values::tasks::{CommandError, SchedulerError};
-    use moor_values::{Error::E_VERBNF, Obj, Var, SYSTEM_OBJECT};
+    use moor_values::{Error::E_VERBNF, Obj, SYSTEM_OBJECT, Var};
 
     use super::{TaskHandle, TaskResult};
     use crate::config::FeaturesConfig;

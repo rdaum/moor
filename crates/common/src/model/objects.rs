@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use binary_layout::{binary_layout, Field};
+use binary_layout::{Field, binary_layout};
 use std::fmt::{Display, Formatter};
 
 use crate::util::BitEnum;
@@ -195,11 +195,7 @@ impl ObjAttrs {
     pub fn owner(&self) -> Option<Obj> {
         let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
         let oid = objattrs_view.owner().try_read().unwrap();
-        if oid == NOTHING {
-            None
-        } else {
-            Some(oid)
-        }
+        if oid == NOTHING { None } else { Some(oid) }
     }
 
     pub fn set_owner(&mut self, o: Obj) -> &mut Self {
@@ -216,11 +212,7 @@ impl ObjAttrs {
     pub fn location(&self) -> Option<Obj> {
         let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
         let oid = objattrs_view.location().try_read().unwrap();
-        if oid == NOTHING {
-            None
-        } else {
-            Some(oid)
-        }
+        if oid == NOTHING { None } else { Some(oid) }
     }
 
     pub fn set_location(&mut self, o: Obj) -> &mut Self {
@@ -237,11 +229,7 @@ impl ObjAttrs {
     pub fn parent(&self) -> Option<Obj> {
         let objattrs_view = objattrs_buf::View::new(self.0.as_ref());
         let oid = objattrs_view.parent().try_read().unwrap();
-        if oid == NOTHING {
-            None
-        } else {
-            Some(oid)
-        }
+        if oid == NOTHING { None } else { Some(oid) }
     }
 
     pub fn set_parent(&mut self, o: Obj) -> &mut Self {

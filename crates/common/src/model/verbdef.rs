@@ -11,16 +11,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::Obj;
+use crate::Symbol;
 use crate::encode::{DecodingError, EncodingError};
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{BinaryType, VerbFlag};
-use crate::util::verbname_cmp;
 use crate::util::BitEnum;
-use crate::Obj;
-use crate::Symbol;
+use crate::util::verbname_cmp;
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
-use binary_layout::{binary_layout, Field};
+use binary_layout::{Field, binary_layout};
 use bytes::BufMut;
 use bytes::Bytes;
 use uuid::Uuid;
@@ -201,14 +201,14 @@ pub type VerbDefs = Defs<VerbDef>;
 
 #[cfg(test)]
 mod tests {
+    use crate::AsByteBuffer;
+    use crate::Obj;
+    use crate::model::ValSet;
     use crate::model::defset::{HasUuid, Named};
     use crate::model::r#match::VerbArgsSpec;
     use crate::model::verbdef::{VerbDef, VerbDefs};
     use crate::model::verbs::VerbFlag;
-    use crate::model::ValSet;
     use crate::util::BitEnum;
-    use crate::AsByteBuffer;
-    use crate::Obj;
     use bytes::Bytes;
 
     #[test]

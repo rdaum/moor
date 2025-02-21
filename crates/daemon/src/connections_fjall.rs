@@ -11,13 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::connections::{ConnectionsDB, CONNECTION_TIMEOUT_DURATION};
+use crate::connections::{CONNECTION_TIMEOUT_DURATION, ConnectionsDB};
 use bincode::{Decode, Encode};
 use bytes::Bytes;
-use eyre::{bail, Error};
+use eyre::{Error, bail};
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use moor_kernel::tasks::sessions::SessionError;
-use moor_values::{AsByteBuffer, Obj, BINCODE_CONFIG};
+use moor_values::{AsByteBuffer, BINCODE_CONFIG, Obj};
 use rpc_common::RpcMessageError;
 use std::collections::HashMap;
 use std::path::Path;

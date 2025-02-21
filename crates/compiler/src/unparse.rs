@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
-use crate::{ast, Name};
+use crate::{Name, ast};
 
 use crate::names::UnboundName;
 
@@ -716,10 +716,7 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
     for stmt in tree.iter_mut() {
         stmt.tree_line_no = line_no;
         match &mut stmt.node {
-            StmtNode::Cond {
-                ref mut arms,
-                ref mut otherwise,
-            } => {
+            StmtNode::Cond { arms, otherwise } => {
                 // IF & ELSEIFS
                 for arm in arms.iter_mut() {
                     // IF / ELSEIF line
@@ -736,10 +733,10 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
                 // ENDIF
                 line_no += 1;
             }
-            StmtNode::ForList { ref mut body, .. }
-            | StmtNode::ForRange { ref mut body, .. }
-            | StmtNode::While { ref mut body, .. }
-            | StmtNode::Fork { ref mut body, .. } => {
+            StmtNode::ForList { body, .. }
+            | StmtNode::ForRange { body, .. }
+            | StmtNode::While { body, .. }
+            | StmtNode::Fork { body, .. } => {
                 // FOR/WHILE/FORK
                 line_no += 1;
                 // Walk body ...
@@ -752,8 +749,8 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
                 line_no += 1;
             }
             StmtNode::TryExcept {
-                ref mut body,
-                ref mut excepts,
+                body,
+                excepts,
                 environment_width: _,
             } => {
                 // TRY
@@ -770,8 +767,8 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
                 line_no += 1;
             }
             StmtNode::TryFinally {
-                ref mut body,
-                ref mut handler,
+                body,
+                handler,
                 environment_width: _,
             } => {
                 // TRY
@@ -786,7 +783,7 @@ pub fn annotate_line_numbers(start_line_no: usize, tree: &mut [Stmt]) -> usize {
                 line_no += 1;
             }
             StmtNode::Scope {
-                ref mut body,
+                body,
                 num_bindings: _,
             } => {
                 // BEGIN
@@ -972,8 +969,8 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::assert_trees_match_recursive;
     use crate::CompileOptions;
+    use crate::ast::assert_trees_match_recursive;
 
     use pretty_assertions::assert_eq;
     use test_case::test_case;

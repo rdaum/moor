@@ -15,6 +15,8 @@ use bytes::Bytes;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
+use moor_values::NOTHING;
+use moor_values::Variant;
 use moor_values::model::ObjSet;
 use moor_values::model::Perms;
 use moor_values::model::WorldState;
@@ -28,11 +30,9 @@ use moor_values::model::{PropAttrs, PropFlag};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
-use moor_values::Variant;
-use moor_values::NOTHING;
-use moor_values::{v_bool_int, Obj};
-use moor_values::{v_list, Symbol};
-use moor_values::{v_obj, Var};
+use moor_values::{Obj, v_bool_int};
+use moor_values::{Symbol, v_list};
+use moor_values::{Var, v_obj};
 
 use crate::worldstate_transaction::WorldStateTransaction;
 

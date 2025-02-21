@@ -16,25 +16,25 @@
 mod setup;
 
 use crate::setup::{
-    broadcast_handle, create_user_session, initialization_session, listen_responses,
-    ExecutionContext,
+    ExecutionContext, broadcast_handle, create_user_session, initialization_session,
+    listen_responses,
 };
 use clap::Parser;
 use clap_derive::Parser;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use moor_values::model::ObjectRef;
-use moor_values::{v_int, Obj, Symbol, Var};
+use moor_values::{Obj, Symbol, Var, v_int};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{make_host_token, start_host_session};
-use rpc_common::client_args::RpcClientArgs;
 use rpc_common::DaemonToClientReply::TaskSubmitted;
+use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{
-    load_keypair, AuthToken, ClientToken, HostClientToDaemonMessage, HostType, ReplyResult,
+    AuthToken, ClientToken, HostClientToDaemonMessage, HostType, ReplyResult, load_keypair,
 };
 use std::collections::HashMap;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use tmq::request;
 use tokio::sync::Mutex;

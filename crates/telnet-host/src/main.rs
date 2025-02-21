@@ -19,12 +19,12 @@ use clap_derive::Parser;
 use moor_values::SYSTEM_OBJECT;
 use rpc_async_client::{make_host_token, proces_hosts_events, start_host_session};
 use rpc_common::client_args::RpcClientArgs;
-use rpc_common::{load_keypair, HostType};
+use rpc_common::{HostType, load_keypair};
 use std::net::SocketAddr;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tokio::select;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 use tracing::info;
 
 mod connection;

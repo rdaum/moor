@@ -25,22 +25,22 @@ use crate::setup::{
 use clap::Parser;
 use clap_derive::Parser;
 use edn_format::{Keyword, Value};
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use moor_values::model::ObjectRef;
-use moor_values::{v_int, v_list, List, Obj, Sequence, Symbol, Var, Variant};
+use moor_values::{List, Obj, Sequence, Symbol, Var, Variant, v_int, v_list};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{make_host_token, start_host_session};
-use rpc_common::client_args::RpcClientArgs;
 use rpc_common::DaemonToClientReply::TaskSubmitted;
+use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{
-    load_keypair, AuthToken, ClientToken, HostClientToDaemonMessage, HostType, ReplyResult,
+    AuthToken, ClientToken, HostClientToDaemonMessage, HostType, ReplyResult, load_keypair,
 };
 use setup::ExecutionContext;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 use tmq::request;
 use tokio::sync::Mutex;

@@ -11,28 +11,28 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::CompileOptions;
+use crate::ObjDefParseError::VerbCompileError;
 use crate::codegen::compile_tree;
 use crate::parse::moo::{MooParser, Rule};
 use crate::parse::unquote_str;
-use crate::CompileOptions;
-use crate::ObjDefParseError::VerbCompileError;
 use bytes::Bytes;
 use itertools::Itertools;
-use moor_values::model::{
-    ArgSpec, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec, VerbFlag,
-};
-use moor_values::util::BitEnum;
 use moor_values::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
     E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use moor_values::{
-    v_err, v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str, AsByteBuffer, List, Obj,
-    Symbol, Var, VarType, Variant, NOTHING,
+use moor_values::model::{
+    ArgSpec, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec, VerbFlag,
 };
+use moor_values::util::BitEnum;
+use moor_values::{
+    AsByteBuffer, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_err, v_float, v_flyweight,
+    v_int, v_list, v_map, v_obj, v_str,
+};
+use pest::Parser;
 use pest::error::LineColLocation;
 use pest::iterators::{Pair, Pairs};
-use pest::Parser;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -738,8 +738,8 @@ fn parse_verb_decl(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_values::model::Preposition;
     use moor_values::Variant;
+    use moor_values::model::Preposition;
 
     /// Just a simple objdef no verbs or props
     #[test]

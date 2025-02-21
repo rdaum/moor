@@ -11,12 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::Symbol;
+use crate::var::Associative;
 use crate::var::flyweight::Flyweight;
 use crate::var::list::List;
-use crate::var::Associative;
-use crate::var::{map, string, Sequence};
 use crate::var::{Error, Obj};
-use crate::Symbol;
+use crate::var::{Sequence, map, string};
 use bincode::{Decode, Encode};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};

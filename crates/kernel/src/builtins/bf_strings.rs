@@ -16,15 +16,15 @@ use argon2::{Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Versio
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
 use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_values::{v_int, v_str, v_string};
 use moor_values::{Sequence, Variant};
+use moor_values::{v_int, v_str, v_string};
 use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use tracing::warn;
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();

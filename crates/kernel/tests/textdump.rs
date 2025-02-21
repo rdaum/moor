@@ -26,16 +26,16 @@ mod test {
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_kernel::config::{FeaturesConfig, TextdumpVersion};
     use moor_kernel::textdump::{
-        make_textdump, read_textdump, textdump_load, EncodingMode, TextdumpReader,
+        EncodingMode, TextdumpReader, make_textdump, read_textdump, textdump_load,
     };
+    use moor_values::Symbol;
     use moor_values::model::VerbArgsSpec;
     use moor_values::model::VerbFlag;
     use moor_values::model::WorldStateSource;
     use moor_values::model::{CommitResult, ValSet};
     use moor_values::model::{HasUuid, Named};
-    use moor_values::Symbol;
     use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
-    use moor_values::{Obj, NOTHING};
+    use moor_values::{NOTHING, Obj};
 
     fn get_minimal_db() -> File {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

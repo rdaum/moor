@@ -14,8 +14,8 @@
 use rpc_common::{
     HostClientToDaemonMessage, HostToDaemonMessage, HostToken, MessageType, ReplyResult, RpcError,
 };
-use tmq::request_reply::RequestSender;
 use tmq::Multipart;
+use tmq::request_reply::RequestSender;
 use tracing::error;
 use uuid::Uuid;
 

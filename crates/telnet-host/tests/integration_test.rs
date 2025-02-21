@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_moot::{telnet::ManagedChild, test_db_path, MootOptions};
+use moor_moot::{MootOptions, telnet::ManagedChild, test_db_path};
 use serial_test::serial;
 use std::net::TcpListener;
 use std::{

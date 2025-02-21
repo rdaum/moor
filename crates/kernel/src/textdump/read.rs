@@ -22,11 +22,11 @@ use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_compiler::Label;
 use moor_values::model::CompileError;
 use moor_values::model::WorldStateError;
+use moor_values::{Error, v_list, v_map};
 use moor_values::{
-    v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str, v_sym, List, Symbol, Var, VarType,
+    List, Symbol, Var, VarType, v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str, v_sym,
 };
-use moor_values::{v_flyweight, Obj};
-use moor_values::{v_list, v_map, Error};
+use moor_values::{Obj, v_flyweight};
 
 pub const TYPE_CLEAR: i64 = 5;
 
@@ -248,7 +248,7 @@ impl<R: Read> TextdumpReader<R> {
                 return Err(TextdumpReaderError::ParseError(format!(
                     "invalid object spec: {}",
                     ospec
-                )))
+                )));
             }
         }
         // TODO: handle "recycled" flag in textdump loading.

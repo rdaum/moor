@@ -14,6 +14,9 @@
 use bytes::Bytes;
 use uuid::Uuid;
 
+use moor_values::Obj;
+use moor_values::Symbol;
+use moor_values::Var;
 use moor_values::model::PropFlag;
 use moor_values::model::VerbArgsSpec;
 use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
@@ -23,9 +26,6 @@ use moor_values::model::{ObjSet, PropPerms};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::model::{VerbDef, VerbDefs};
 use moor_values::util::BitEnum;
-use moor_values::Obj;
-use moor_values::Symbol;
-use moor_values::Var;
 
 /// A trait defining a generic interface to a database for storing the per-attribute common
 /// of our objects and their properties and verbs.  Used by DbTxWorldState.

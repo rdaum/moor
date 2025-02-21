@@ -14,6 +14,9 @@
 use bytes::Bytes;
 use uuid::Uuid;
 
+use moor_values::Obj;
+use moor_values::Symbol;
+use moor_values::Var;
 use moor_values::model::ObjAttrs;
 use moor_values::model::ObjSet;
 use moor_values::model::PropFlag;
@@ -24,9 +27,6 @@ use moor_values::model::{CommitResult, WorldStateError};
 use moor_values::model::{HasUuid, PropPerms, ValSet};
 use moor_values::model::{PropDef, PropDefs};
 use moor_values::util::BitEnum;
-use moor_values::Obj;
-use moor_values::Symbol;
-use moor_values::Var;
 
 use crate::db_worldstate::DbTxWorldState;
 use crate::loader::LoaderInterface;

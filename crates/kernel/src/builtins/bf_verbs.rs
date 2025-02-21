@@ -16,29 +16,29 @@ use tracing::{error, warn};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
-use crate::builtins::{world_state_bf_err, BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use moor_compiler::GlobalName;
+use moor_compiler::Program;
 use moor_compiler::offset_for_builtin;
 use moor_compiler::program_to_tree;
 use moor_compiler::unparse;
-use moor_compiler::GlobalName;
-use moor_compiler::Program;
 use moor_compiler::{compile, to_literal};
-use moor_values::matching::command_parse::{parse_preposition_spec, preposition_to_string};
-use moor_values::model::VerbDef;
-use moor_values::model::WorldStateError;
-use moor_values::model::{verb_perms_string, ObjFlag};
-use moor_values::model::{ArgSpec, VerbArgsSpec};
-use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
-use moor_values::model::{HasUuid, Named};
-use moor_values::util::BitEnum;
 use moor_values::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_values::List;
 use moor_values::Obj;
 use moor_values::Symbol;
 use moor_values::Variant;
-use moor_values::{v_empty_list, v_list, v_none, v_obj, v_str, v_string, Var};
-use moor_values::{v_list_iter, Error};
+use moor_values::matching::command_parse::{parse_preposition_spec, preposition_to_string};
+use moor_values::model::VerbDef;
+use moor_values::model::WorldStateError;
+use moor_values::model::{ArgSpec, VerbArgsSpec};
+use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
+use moor_values::model::{HasUuid, Named};
+use moor_values::model::{ObjFlag, verb_perms_string};
+use moor_values::util::BitEnum;
 use moor_values::{AsByteBuffer, Sequence};
+use moor_values::{Error, v_list_iter};
+use moor_values::{Var, v_empty_list, v_list, v_none, v_obj, v_str, v_string};
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {

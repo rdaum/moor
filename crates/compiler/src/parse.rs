@@ -19,12 +19,12 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use itertools::Itertools;
-use moor_values::{v_none, Symbol};
-use moor_values::{Var, SYSTEM_OBJECT};
+use moor_values::{SYSTEM_OBJECT, Var};
+use moor_values::{Symbol, v_none};
+pub use pest::Parser as PestParser;
 use pest::error::LineColLocation;
 use pest::iterators::Pairs;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
-pub use pest::Parser as PestParser;
 
 use moor_values::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
@@ -33,6 +33,7 @@ use moor_values::Error::{
 use moor_values::Obj;
 use moor_values::{v_err, v_float, v_int, v_obj, v_str, v_string};
 
+use crate::Name;
 use crate::ast::Arg::{Normal, Splice};
 use crate::ast::StmtNode::Scope;
 use crate::ast::{
@@ -42,7 +43,6 @@ use crate::ast::{
 use crate::names::{Names, UnboundName, UnboundNames};
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
-use crate::Name;
 use moor_values::model::CompileError;
 
 pub mod moo {
@@ -1368,7 +1368,7 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
                 None => {
                     return Err(CompileError::StringLexError(
                         "Unexpected end of string".to_string(),
-                    ))
+                    ));
                 }
             },
             '"' => {
@@ -1390,9 +1390,10 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
 #[cfg(test)]
 mod tests {
     use moor_values::Error::{E_INVARG, E_PROPNF, E_VARNF};
-    use moor_values::{v_err, v_float, v_int, v_objid, v_str, Var};
-    use moor_values::{v_none, Symbol};
+    use moor_values::{Symbol, v_none};
+    use moor_values::{Var, v_err, v_float, v_int, v_objid, v_str};
 
+    use crate::CompileOptions;
     use crate::ast::Arg::{Normal, Splice};
     use crate::ast::BinaryOp::Add;
     use crate::ast::Expr::{
@@ -1404,7 +1405,6 @@ mod tests {
     };
     use crate::names::UnboundName;
     use crate::parse::{parse_program, unquote_str};
-    use crate::CompileOptions;
     use moor_values::model::CompileError;
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {

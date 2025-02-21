@@ -24,10 +24,10 @@ use moor_values::model::{
     WorldStateError,
 };
 use moor_values::util::BitEnum;
-use moor_values::{v_none, AsByteBuffer, Obj, Symbol, Var, NOTHING};
+use moor_values::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
+use std::sync::atomic::AtomicI64;
 use uuid::Uuid;
 
 type LC<Domain, Codomain> = TransactionalTable<

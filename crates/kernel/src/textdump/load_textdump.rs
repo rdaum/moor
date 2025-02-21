@@ -22,20 +22,20 @@ use tracing::{info, span, trace};
 use crate::config::{FeaturesConfig, TextdumpVersion};
 use crate::textdump::read::TextdumpReaderError;
 use crate::textdump::{
-    Object, TextdumpReader, PREP_ANY, PREP_NONE, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS,
+    Object, PREP_ANY, PREP_NONE, TextdumpReader, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS,
     VF_DEBUG, VF_DOBJSHIFT, VF_EXEC, VF_IOBJSHIFT, VF_OBJMASK, VF_PERMMASK, VF_READ, VF_WRITE,
 };
-use moor_compiler::compile;
 use moor_compiler::Program;
+use moor_compiler::compile;
 use moor_db::loader::LoaderInterface;
+use moor_values::Obj;
+use moor_values::Var;
 use moor_values::model::Preposition;
 use moor_values::model::PropFlag;
 use moor_values::model::VerbFlag;
 use moor_values::model::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_values::model::{ObjAttrs, ObjFlag};
 use moor_values::util::BitEnum;
-use moor_values::Obj;
-use moor_values::Var;
 use moor_values::{AsByteBuffer, NOTHING};
 
 struct RProp {

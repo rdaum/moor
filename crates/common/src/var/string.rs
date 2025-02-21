@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::var::Var;
-use crate::var::variant::Variant;
 use crate::var::Error;
 use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::Sequence;
+use crate::var::var::Var;
+use crate::var::variant::Variant;
 use bincode::{Decode, Encode};
 use num_traits::ToPrimitive;
 use std::cmp::max;
@@ -259,9 +259,9 @@ impl Hash for Str {
 #[cfg(test)]
 mod tests {
     use crate::v_bool_int;
-    use crate::var::var::{v_int, v_str, Var};
-    use crate::var::variant::Variant;
     use crate::var::IndexMode;
+    use crate::var::var::{Var, v_int, v_str};
+    use crate::var::variant::Variant;
 
     #[test]
     fn test_str_pack_unpack() {

@@ -25,27 +25,27 @@ use crate::connections::ConnectionsDB;
 use crate::connections_fjall::ConnectionsFjall;
 use crate::rpc_hosts::Hosts;
 use crate::rpc_session::RpcSession;
+use moor_kernel::SchedulerClient;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
 use moor_kernel::tasks::{TaskHandle, TaskResult};
-use moor_kernel::SchedulerClient;
+use moor_values::SYSTEM_OBJECT;
 use moor_values::matching::command_parse::preposition_to_string;
 use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag};
 use moor_values::tasks::SchedulerError::CommandExecutionError;
 use moor_values::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
 use moor_values::util::parse_into_words;
-use moor_values::SYSTEM_OBJECT;
-use moor_values::{v_obj, v_str, Symbol};
 use moor_values::{List, Variant};
 use moor_values::{Obj, Var};
+use moor_values::{Symbol, v_obj, v_str};
 use rpc_common::DaemonToClientReply::{LoginResult, NewConnection};
 use rpc_common::{
-    AuthToken, ClientEvent, ClientToken, ClientsBroadcastEvent, ConnectType, DaemonToClientReply,
-    DaemonToHostReply, EntityType, HostBroadcastEvent, HostClientToDaemonMessage,
-    HostToDaemonMessage, HostToken, HostType, MessageType, PropInfo, ReplyResult, RpcMessageError,
-    VerbInfo, VerbProgramResponse, CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC,
-    MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER,
+    AuthToken, CLIENT_BROADCAST_TOPIC, ClientEvent, ClientToken, ClientsBroadcastEvent,
+    ConnectType, DaemonToClientReply, DaemonToHostReply, EntityType, HOST_BROADCAST_TOPIC,
+    HostBroadcastEvent, HostClientToDaemonMessage, HostToDaemonMessage, HostToken, HostType,
+    MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, MessageType,
+    PropInfo, ReplyResult, RpcMessageError, VerbInfo, VerbProgramResponse,
 };
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
@@ -150,9 +150,11 @@ impl RpcServer {
         let t_rpc_server = self.clone();
         std::thread::Builder::new()
             .name("rpc-ping-pong".to_string())
-            .spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_secs(5));
-                t_rpc_server.ping_pong().expect("Unable to play ping-pong");
+            .spawn(move || {
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    t_rpc_server.ping_pong().expect("Unable to play ping-pong");
+                }
             })?;
 
         let rpc_socket = self.zmq_context.socket(zmq::REP)?;

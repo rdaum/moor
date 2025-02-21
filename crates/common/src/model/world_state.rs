@@ -16,18 +16,18 @@ use bytes::Bytes;
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::Symbol;
+use crate::Var;
+use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::objects::ObjFlag;
 use crate::model::objset::ObjSet;
 use crate::model::propdef::{PropDef, PropDefs};
 use crate::model::props::{PropAttrs, PropFlag};
-use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};
 use crate::model::{ObjAttr, Vid};
 use crate::util::BitEnum;
-use crate::Symbol;
-use crate::Var;
 use crate::{Error, Obj};
 
 /// Errors related to the world state and operations on it.
@@ -183,7 +183,7 @@ pub trait WorldState: Send {
     /// Move an object to a new location.
     /// (Note it is the caller's responsibility to execute :accept, :enterfunc, :exitfunc, etc.)
     fn move_object(&mut self, perms: &Obj, obj: &Obj, new_loc: &Obj)
-        -> Result<(), WorldStateError>;
+    -> Result<(), WorldStateError>;
 
     /// Get the contents of a given object.
     fn contents_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError>;

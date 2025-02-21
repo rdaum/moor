@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::Obj;
 use crate::model::ObjSet;
 use crate::model::WorldState;
 use crate::model::WorldStateError;
-use crate::Obj;
 
 use crate::matching::match_env::MatchEnvironment;
 

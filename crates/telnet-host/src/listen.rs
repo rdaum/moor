@@ -13,17 +13,17 @@
 
 use crate::connection::TelnetConnection;
 use eyre::bail;
-use futures_util::stream::SplitSink;
 use futures_util::StreamExt;
+use futures_util::stream::SplitSink;
 use moor_values::Obj;
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{ListenersClient, ListenersMessage};
 use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
-use rpc_common::{DaemonToClientReply, ReplyResult, CLIENT_BROADCAST_TOPIC};
+use rpc_common::{CLIENT_BROADCAST_TOPIC, DaemonToClientReply, ReplyResult};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tmq::{request, subscribe};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;

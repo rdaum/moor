@@ -14,8 +14,8 @@
 use std::collections::BTreeMap;
 
 use crate::textdump::{
-    Object, Propval, Textdump, Verb, Verbdef, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS,
-    VF_DOBJSHIFT, VF_IOBJSHIFT,
+    Object, Propval, Textdump, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS, VF_DOBJSHIFT,
+    VF_IOBJSHIFT, Verb, Verbdef,
 };
 use moor_compiler::Program;
 use moor_db::loader::LoaderInterface;

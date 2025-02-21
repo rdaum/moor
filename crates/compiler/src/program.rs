@@ -19,7 +19,7 @@ use bincode::{Decode, Encode};
 use bytes::Bytes;
 use lazy_static::lazy_static;
 use moor_values::Var;
-use moor_values::{AsByteBuffer, CountingWriter, DecodingError, EncodingError, BINCODE_CONFIG};
+use moor_values::{AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 

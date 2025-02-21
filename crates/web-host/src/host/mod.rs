@@ -19,12 +19,12 @@ mod ws_connection;
 
 pub use auth::connect_auth_handler;
 pub use auth::create_auth_handler;
-use moor_values::{v_err, v_float, v_int, v_list, v_map, v_none, v_objid, v_str, Var, Variant};
+use moor_values::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_objid, v_str};
 pub use props::properties_handler;
 pub use props::property_retrieval_handler;
 use serde::Serialize;
 use serde_derive::Deserialize;
-use serde_json::{json, Number};
+use serde_json::{Number, json};
 pub use verbs::verb_program_handler;
 pub use verbs::verb_retrieval_handler;
 pub use verbs::verbs_handler;

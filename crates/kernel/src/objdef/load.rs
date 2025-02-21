@@ -13,10 +13,10 @@
 
 use crate::config::FeaturesConfig;
 use crate::objdef::DirDumpReaderError;
-use moor_compiler::{compile_object_definitions, CompileOptions, ObjFileContext, ObjectDefinition};
+use moor_compiler::{CompileOptions, ObjFileContext, ObjectDefinition, compile_object_definitions};
 use moor_db::loader::LoaderInterface;
 use moor_values::model::ObjAttrs;
-use moor_values::{Obj, NOTHING};
+use moor_values::{NOTHING, Obj};
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
@@ -260,7 +260,7 @@ mod tests {
     use moor_compiler::{CompileOptions, ObjFileContext};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_values::model::{Named, PrepSpec, WorldStateSource};
-    use moor_values::{v_str, Obj, Symbol, NOTHING, SYSTEM_OBJECT};
+    use moor_values::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_str};
     use std::path::Path;
     use std::sync::Arc;
 

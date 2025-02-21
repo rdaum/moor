@@ -44,7 +44,7 @@ categories = [
     "database",
     "programming-language",
 ]
-edition = "2021"
+edition = "2024"
 keywords = [
     "mud",
     "programming-language",
@@ -55,7 +55,7 @@ keywords = [
 license = "GPL-3"
 readme = "README.md"
 repository = "https://github.com/rdaum/moor.git"
-rust-version = "1.84.0"
+rust-version = "1.85.0"
 
 [workspace.dependencies]
 ## Command line arguments parsing.

@@ -12,11 +12,11 @@
 //
 
 use crate::v_list_iter;
-use crate::var::var::Var;
-use crate::var::variant::Variant;
 use crate::var::Error;
 use crate::var::Error::E_RANGE;
 use crate::var::Sequence;
+use crate::var::var::Var;
+use crate::var::variant::Variant;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -355,10 +355,10 @@ impl std::iter::FromIterator<Var> for List {
 #[cfg(test)]
 mod tests {
     use crate::v_bool_int;
-    use crate::var::var::{v_empty_list, v_int, v_list, v_str, Var};
-    use crate::var::variant::Variant;
     use crate::var::Error;
     use crate::var::Error::{E_RANGE, E_TYPE};
+    use crate::var::var::{Var, v_empty_list, v_int, v_list, v_str};
+    use crate::var::variant::Variant;
     use crate::var::{IndexMode, Sequence};
 
     #[test]

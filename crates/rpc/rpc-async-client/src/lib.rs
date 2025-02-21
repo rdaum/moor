@@ -15,13 +15,13 @@
 
 use crate::rpc_client::RpcSendClient;
 use rpc_common::{
-    DaemonToHostReply, HostBroadcastEvent, HostToDaemonMessage, HostToken, HostType, ReplyResult,
-    RpcError, HOST_BROADCAST_TOPIC, MOOR_HOST_TOKEN_FOOTER,
+    DaemonToHostReply, HOST_BROADCAST_TOPIC, HostBroadcastEvent, HostToDaemonMessage, HostToken,
+    HostType, MOOR_HOST_TOKEN_FOOTER, ReplyResult, RpcError,
 };
 use rusty_paseto::prelude::{Footer, Key, Paseto, PasetoAsymmetricPrivateKey, Payload, Public, V4};
 use std::net::SocketAddr;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 use tmq::request;
 use tracing::{error, info, warn};

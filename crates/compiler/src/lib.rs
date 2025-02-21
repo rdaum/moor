@@ -29,18 +29,18 @@ mod objdef;
 mod opcode;
 mod program;
 
-pub use crate::builtins::{offset_for_builtin, ArgCount, ArgType, Builtin, BuiltinId, BUILTINS};
+pub use crate::builtins::{ArgCount, ArgType, BUILTINS, Builtin, BuiltinId, offset_for_builtin};
 pub use crate::codegen::compile;
 pub use crate::decompile::program_to_tree;
 pub use crate::labels::{JumpLabel, Label, Offset};
 pub use crate::names::{Name, UnboundNames};
 pub use crate::objdef::{
-    compile_object_definitions, ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride,
-    ObjVerbDef, ObjectDefinition,
+    ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition,
+    compile_object_definitions,
 };
 pub use crate::opcode::{Op, ScatterLabel};
 pub use crate::parse::CompileOptions;
-pub use crate::program::{Program, EMPTY_PROGRAM};
+pub use crate::program::{EMPTY_PROGRAM, Program};
 pub use crate::unparse::{to_literal, to_literal_objsub, unparse};
 
 #[macro_use]

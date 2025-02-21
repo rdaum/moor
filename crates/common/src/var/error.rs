@@ -18,7 +18,7 @@ use bincode::{Decode, Encode};
 use strum::FromRepr;
 
 use crate::encode::{DecodingError, EncodingError};
-use crate::var::{v_none, Var};
+use crate::var::{Var, v_none};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Ord, PartialOrd, Hash, Encode, Decode)]

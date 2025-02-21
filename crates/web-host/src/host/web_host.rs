@@ -15,24 +15,24 @@
 
 use crate::host::ws_connection::WebSocketConnection;
 use crate::host::{auth, var_as_json};
+use axum::Json;
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use eyre::eyre;
 
-use moor_values::model::ObjectRef;
 use moor_values::Error::E_INVIND;
-use moor_values::{v_err, Obj, Symbol};
+use moor_values::model::ObjectRef;
+use moor_values::{Obj, Symbol, v_err};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::AuthToken;
 use rpc_common::HostClientToDaemonMessage::{Attach, ConnectionEstablish};
-use rpc_common::{ClientToken, RpcMessageError};
 use rpc_common::{
-    ConnectType, DaemonToClientReply, HostClientToDaemonMessage, ReplyResult,
-    CLIENT_BROADCAST_TOPIC,
+    CLIENT_BROADCAST_TOPIC, ConnectType, DaemonToClientReply, HostClientToDaemonMessage,
+    ReplyResult,
 };
+use rpc_common::{ClientToken, RpcMessageError};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tmq::{request, subscribe};
@@ -427,7 +427,7 @@ async fn attach(
     connect_type: ConnectType,
     host: &WebHost,
     auth_token: String,
-) -> impl IntoResponse {
+) -> impl IntoResponse + use<> {
     info!("Connection from {}", addr);
 
     let auth_token = AuthToken(auth_token);
@@ -470,11 +470,7 @@ async fn attach(
             .unwrap();
     };
 
-    ws.on_upgrade(move |socket| async move {
-        {
-            connection.handle(connect_type, socket).await
-        }
-    })
+    ws.on_upgrade(move |socket| async move { connection.handle(connect_type, socket).await })
 }
 
 /// Websocket upgrade handler for authenticated users who are connecting to an existing user
@@ -483,7 +479,7 @@ pub async fn ws_connect_attach_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
     Path(token): Path<String>,
-) -> impl IntoResponse {
+) -> impl IntoResponse + use<> {
     info!("Connection from {}", addr);
 
     attach(ws, addr, ConnectType::Connected, &ws_host, token).await
@@ -495,7 +491,7 @@ pub async fn ws_create_attach_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(ws_host): State<WebHost>,
     Path(token): Path<String>,
-) -> impl IntoResponse {
+) -> impl IntoResponse + use<> {
     info!("Connection from {}", addr);
 
     attach(ws, addr, ConnectType::Created, &ws_host, token).await

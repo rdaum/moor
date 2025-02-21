@@ -11,12 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::encode::{DecodingError, EncodingError};
-use crate::model::defset::{Defs, HasUuid, Named};
 use crate::Obj;
 use crate::Symbol;
+use crate::encode::{DecodingError, EncodingError};
+use crate::model::defset::{Defs, HasUuid, Named};
 use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
-use binary_layout::{binary_layout, Field};
+use binary_layout::{Field, binary_layout};
 use bytes::Bytes;
 use bytes::{Buf, BufMut};
 use uuid::Uuid;
@@ -140,12 +140,12 @@ pub type PropDefs = Defs<PropDef>;
 
 #[cfg(test)]
 mod tests {
-    use crate::model::defset::HasUuid;
-    use crate::model::propdef::{PropDef, PropDefs};
-    use crate::model::ValSet;
     use crate::AsByteBuffer;
     use crate::Obj;
     use crate::Symbol;
+    use crate::model::ValSet;
+    use crate::model::defset::HasUuid;
+    use crate::model::propdef::{PropDef, PropDefs};
     use bytes::Bytes;
     use uuid::Uuid;
 

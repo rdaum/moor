@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::names::Binding::{Named, Register};
 use crate::GlobalName;
+use crate::names::Binding::{Named, Register};
 use bincode::{Decode, Encode};
-use moor_values::model::CompileError;
 use moor_values::Symbol;
+use moor_values::model::CompileError;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 
