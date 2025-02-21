@@ -714,12 +714,18 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         obj: &Obj,
         new_parent: &Obj,
     ) -> Result<(), WorldStateError> {
-        if obj == new_parent {
-            return Err(WorldStateError::RecursiveMove(
-                obj.clone(),
-                new_parent.clone(),
-            ));
-        }
+        {
+            let mut curr = new_parent.clone();
+            while !curr.is_nothing() {
+                if &curr == obj {
+                    return Err(WorldStateError::RecursiveMove(
+                        obj.clone(),
+                        new_parent.clone(),
+                    ));
+                }
+                curr = self.parent_of(perms, &curr)?.clone();
+            }
+        };
 
         let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
 

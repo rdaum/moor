@@ -62,7 +62,7 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    if !obj.is_positive() {
+    if !obj.is_positive() || !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
     let parent = bf_args
@@ -83,6 +83,16 @@ fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(new_parent) = bf_args.args[1].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
+    // If object is not valid, or if new-parent is neither valid nor equal to #-1, then E_INVARG is raised.
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)?
+        || !(new_parent.is_nothing()
+            || bf_args
+                .world_state
+                .valid(new_parent)
+                .map_err(world_state_bf_err)?)
+    {
+        return Err(BfErr::Code(E_INVARG));
+    }
     bf_args
         .world_state
         .change_parent(&bf_args.task_perms_who(), obj, new_parent)
