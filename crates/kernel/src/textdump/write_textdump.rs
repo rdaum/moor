@@ -45,7 +45,7 @@ fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
         PrepSpec::Other(p) => p as i16,
     };
 
-    let arg_flags = dobjflags << VF_DOBJSHIFT | iobjflags << VF_IOBJSHIFT;
+    let arg_flags = (dobjflags << VF_DOBJSHIFT) | (iobjflags << VF_IOBJSHIFT);
     (flags | arg_flags, prepflags)
 }
 

@@ -20,16 +20,16 @@ use clap_derive::Parser;
 use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::config::{Config, FeaturesConfig, TextdumpConfig};
 use moor_kernel::objdef::{
-    collect_object_definitions, dump_object_definitions, ObjectDefinitionLoader,
+    ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions,
 };
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::sessions::{NoopSystemControl, SessionFactory};
 use moor_kernel::tasks::{NoopTasksDb, TaskResult};
-use moor_kernel::textdump::{make_textdump, textdump_load, EncodingMode, TextdumpWriter};
+use moor_kernel::textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
 use moor_moot::MootOptions;
 use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource};
 use moor_values::tasks::SchedulerError;
-use moor_values::{build, List, Obj, Symbol, Variant, SYSTEM_OBJECT};
+use moor_values::{List, Obj, SYSTEM_OBJECT, Symbol, Variant, build};
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -144,9 +144,9 @@ fn main() {
     };
 
     let mut features = FeaturesConfig::default();
-    args.feature_args
-        .as_ref()
-        .map(|fa| fa.merge_config(&mut features));
+    if let Some(fa) = args.feature_args.as_ref() {
+        fa.merge_config(&mut features)
+    }
 
     // Compile phase.
     if let Some(textdump) = args.src_textdump {
@@ -284,8 +284,10 @@ fn main() {
         info!("Found {} tests", unit_tests.len());
     }
 
-    let mut config = Config::default();
-    config.features_config = features;
+    let config = Config {
+        features_config: features,
+        ..Default::default()
+    };
     let scheduler = Scheduler::new(
         test_version,
         db,
