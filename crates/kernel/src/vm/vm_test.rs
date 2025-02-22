@@ -23,7 +23,7 @@ mod tests {
     use moor_values::Error::E_DIV;
     use moor_values::{
         v_bool_int, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_objid,
-        v_str, v_sym, v_sym_str, List, Obj, Var,
+        v_str, v_sym_str, List, Obj, Var,
     };
 
     use moor_values::NOTHING;
