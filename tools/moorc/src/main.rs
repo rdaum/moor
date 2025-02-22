@@ -20,16 +20,16 @@ use clap_derive::Parser;
 use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::config::{Config, FeaturesConfig, TextdumpConfig};
 use moor_kernel::objdef::{
-    ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions,
+    collect_object_definitions, dump_object_definitions, ObjectDefinitionLoader,
 };
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::sessions::{NoopSystemControl, SessionFactory};
 use moor_kernel::tasks::{NoopTasksDb, TaskResult};
-use moor_kernel::textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
+use moor_kernel::textdump::{make_textdump, textdump_load, EncodingMode, TextdumpWriter};
 use moor_moot::MootOptions;
 use moor_values::model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource};
 use moor_values::tasks::SchedulerError;
-use moor_values::{List, Obj, SYSTEM_OBJECT, Symbol, Variant, build};
+use moor_values::{build, List, Obj, Symbol, Variant, SYSTEM_OBJECT};
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -268,7 +268,8 @@ fn main() {
     if args.run_tests == Some(true) {
         let tx = db.new_world_state().unwrap();
         let mo = tx.max_object(&wizard).unwrap().id().0;
-        for o in 0..mo {
+        info!("Scanning objects 0..{} for tests", mo);
+        for o in 0..=mo {
             let o = Obj::mk_id(o);
             if let Ok(verbs) = tx.verbs(&wizard, &o) {
                 for verb in verbs.iter() {
@@ -280,6 +281,7 @@ fn main() {
                 }
             }
         }
+        info!("Found {} tests", unit_tests.len());
     }
 
     let mut config = Config::default();
@@ -306,6 +308,7 @@ fn main() {
                 .clone()
                 .mk_background_session(&wizard)
                 .unwrap();
+            info!("Running test {}:{}", o, verb);
             let handle = scheduler_client
                 .submit_verb_task(
                     &wizard,
