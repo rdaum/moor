@@ -305,7 +305,7 @@ fn bf_slots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let slots: Vec<_> = f
         .slots()
         .iter()
-        .map(|(k, v)| (v_sym(k.clone()), v.clone()))
+        .map(|(k, v)| (v_sym(*k), v.clone()))
         .collect();
     let map = v_map(&slots);
 
@@ -336,7 +336,7 @@ fn bf_remove_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .slots()
         .iter()
         .filter(|(k, _)| *k != s)
-        .map(|(k, v)| (k.clone(), v.clone()))
+        .map(|(k, v)| (*k, v.clone()))
         .collect();
 
     let f = v_flyweight(f.delegate().clone(), &slots, f.contents().clone(), None);
@@ -367,14 +367,14 @@ fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut slots: Vec<_> = f
         .slots()
         .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
+        .map(|(k, v)| (*k, v.clone()))
         .collect();
 
     // Add or update the slot
     if let Some(existing) = slots.iter_mut().find(|(k, _)| *k == key) {
         existing.1 = value;
     } else {
-        slots.push((key.clone(), value));
+        slots.push((key, value));
     }
     let f = v_flyweight(f.delegate().clone(), &slots, f.contents().clone(), None);
     Ok(Ret(f))

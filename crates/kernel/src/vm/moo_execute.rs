@@ -967,7 +967,7 @@ fn get_property(
                     .map(|(k, v)| {
                         (
                             if features_config.use_symbols_in_builtins {
-                                v_sym(k.clone())
+                                v_sym(*k)
                             } else {
                                 v_str(k.as_str())
                             },
