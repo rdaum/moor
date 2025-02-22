@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#![cfg(target_os = "linux")]
+
 use moor_moot::{MootOptions, telnet::ManagedChild, test_db_path};
 use serial_test::serial;
 use std::net::TcpListener;
@@ -159,21 +161,18 @@ fn test_moot_with_telnet_host<P: AsRef<Path>>(moot_file: P) {
     drop(telnet_host);
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 #[serial(telnet_host)]
 fn test_echo() {
     test_moot_with_telnet_host("echo");
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 #[serial(telnet_host)]
 fn test_suspend_read_notify() {
     test_moot_with_telnet_host("suspend_read_notify");
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 #[serial(telnet_host)]
 fn test_huh() {
