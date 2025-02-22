@@ -11,15 +11,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::list::List;
 use crate::var::variant::Variant;
-use crate::var::{Associative, string};
+use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
+use crate::var::{map, Flyweight, IndexMode, Sequence, TypeClass};
+use crate::var::{string, Associative};
 use crate::var::{Error, Obj, VarType};
-use crate::var::{Flyweight, IndexMode, Sequence, TypeClass, map};
 use crate::{BincodeAsByteBufferExt, Symbol};
 use bincode::{Decode, Encode};
-use std::cmp::{Ordering, min};
+use std::cmp::{min, Ordering};
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 
@@ -434,7 +434,11 @@ pub fn v_int(i: i64) -> Var {
 /// Produces a truthy integer, not a Variant::Bool boolean value in order to maintain
 /// backwards compatibility with LambdaMOO cores.
 pub fn v_bool_int(b: bool) -> Var {
-    if b { v_int(1) } else { v_int(0) }
+    if b {
+        v_int(1)
+    } else {
+        v_int(0)
+    }
 }
 
 pub fn v_none() -> Var {

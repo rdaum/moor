@@ -11,16 +11,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use ArgCount::{Q, U};
-use ArgType::{Any, AnyNum, Typed};
-use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_values::Symbol;
 use moor_values::VarType;
-use moor_values::VarType::{TYPE_FLYWEIGHT, TYPE_MAP};
+use moor_values::VarType::{TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL};
 /// Global registry of built-in function names.
 use std::collections::HashMap;
+use ArgCount::{Q, U};
+use ArgType::{Any, AnyNum, Typed};
+use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 
 lazy_static! {
     static ref BUILTIN_DESCRIPTORS: Vec<Builtin> = mk_builtin_table();
@@ -1045,6 +1045,27 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(0),
             max_args: Q(0),
             types: vec![],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("slots"),
+            min_args: Q(1),
+            max_args: Q(1),
+            types: vec![Typed(TYPE_FLYWEIGHT)],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("remove_slot"),
+            min_args: Q(2),
+            max_args: Q(2),
+            types: vec![Typed(TYPE_FLYWEIGHT), Typed(TYPE_SYMBOL)],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("add_slot"),
+            min_args: Q(3),
+            max_args: Q(3),
+            types: vec![Typed(TYPE_FLYWEIGHT), Typed(TYPE_SYMBOL), Any],
             implemented: true,
         },
     ]

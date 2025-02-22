@@ -201,3 +201,15 @@ Functions not part of the original LambdaMOO, but added in moor
 |-------------|------------------------------------------------------------------|-------------------------------------------------------|
 | `xml_parse` | Parse a string c ntaining XML into a tree of flyweight objects   | Available only if the flyweights feature is turned on |
 | `to_xml`    | Convert a tree of flyweight objects into a string containing XML | Available only if the flyweights feature is turned on |
+
+### Flyweights & Symbols (new types)
+
+| Name          | Description                                                             | Notes                                                 |
+|---------------|-------------------------------------------------------------------------|-------------------------------------------------------|
+| `slots`       | Returns the slots on a given flyweight                                  | Available only if the flyweights feature is turned on |
+| `remove_slot` | Returns a copy of the flyweight with the given slot removed, if present | Available only if the flyweights feature is turned on |
+| `add_slot`    | Returns a copy of the flyweight with a new slot added                   | Available only if the flyweights feature is turned on |
+| 'to_sym'      | Turns the given value into a Symbol                                     | Available only if the symbols feature is turned on    |
+
+
+

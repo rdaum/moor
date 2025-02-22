@@ -15,21 +15,13 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use moor_compiler::{BUILTINS, BuiltinId};
-use moor_values::Symbol;
-use moor_values::Var;
-use moor_values::model::Perms;
-use moor_values::model::WorldState;
-use moor_values::model::WorldStateError;
-use moor_values::{Error, List};
-use moor_values::{Obj, v_bool_int};
-
+use crate::builtins::bf_flyweights::register_bf_flyweights;
 use crate::builtins::bf_list_sets::register_bf_list_sets;
 use crate::builtins::bf_maps::register_bf_maps;
 use crate::builtins::bf_num::register_bf_num;
 use crate::builtins::bf_objects::register_bf_objects;
 use crate::builtins::bf_properties::register_bf_properties;
-use crate::builtins::bf_server::{BfNoop, register_bf_server};
+use crate::builtins::bf_server::{register_bf_server, BfNoop};
 use crate::builtins::bf_strings::register_bf_strings;
 use crate::builtins::bf_values::register_bf_values;
 use crate::builtins::bf_verbs::register_bf_verbs;
@@ -38,7 +30,16 @@ use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::activation::{BfFrame, Frame};
 use crate::vm::{ExecutionResult, VMExecState};
+use moor_compiler::{BuiltinId, BUILTINS};
+use moor_values::model::Perms;
+use moor_values::model::WorldState;
+use moor_values::model::WorldStateError;
+use moor_values::Symbol;
+use moor_values::Var;
+use moor_values::{v_bool_int, Obj};
+use moor_values::{Error, List};
 
+mod bf_flyweights;
 mod bf_list_sets;
 mod bf_maps;
 mod bf_num;
@@ -76,6 +77,7 @@ impl BuiltinRegistry {
         register_bf_objects(&mut builtins);
         register_bf_verbs(&mut builtins);
         register_bf_properties(&mut builtins);
+        register_bf_flyweights(&mut builtins);
 
         BuiltinRegistry {
             builtins: Arc::new(builtins),

@@ -15,15 +15,15 @@
 mod tests {
     use std::sync::Arc;
 
-    use moor_values::Error::E_DIV;
     use moor_values::model::PropFlag;
     use moor_values::model::VerbArgsSpec;
     use moor_values::model::{BinaryType, VerbFlag};
     use moor_values::model::{WorldState, WorldStateSource};
     use moor_values::util::BitEnum;
+    use moor_values::Error::E_DIV;
     use moor_values::{
-        List, Obj, Var, v_bool_int, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_none,
-        v_obj, v_objid, v_str,
+        v_bool_int, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_objid,
+        v_str, v_sym, v_sym_str, List, Obj, Var,
     };
 
     use moor_values::NOTHING;
@@ -35,8 +35,8 @@ mod tests {
     use moor_compiler::Op;
     use moor_compiler::Op::*;
     use moor_compiler::Program;
+    use moor_compiler::{compile, UnboundNames};
     use moor_compiler::{CompileOptions, Names};
-    use moor_compiler::{UnboundNames, compile};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_values::Symbol;
     use test_case::test_case;
@@ -1206,6 +1206,36 @@ mod tests {
             List::mk_list(&[]),
         );
         assert_eq!(result.unwrap(), v_str("123"));
+    }
+
+    /// Test the test of builtins for slots
+    #[test]
+    fn test_flyweight_builtins() {
+        let program = r#"let a = <#1, [slot -> "123"], {1, 2, 3}>;
+        let b = remove_slot(a, 'slot);
+        let c = add_slot(b, 'bananas, "456");
+        return {c, slots(c)};"#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(
+            result.unwrap(),
+            v_list(&[
+                v_flyweight(
+                    Obj::mk_id(1),
+                    &[(Symbol::mk("bananas"), v_str("456"))],
+                    List::mk_list(&[v_int(1), v_int(2), v_int(3)]),
+                    None,
+                ),
+                v_map(&[(v_sym_str("bananas"), v_str("456"))])
+            ])
+        );
     }
 
     #[test]
