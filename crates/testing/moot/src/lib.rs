@@ -78,8 +78,8 @@ pub struct MootOptions {
     nonprogrammer_object: Obj,
 }
 
-impl MootOptions {
-    pub fn default() -> Self {
+impl Default for MootOptions {
+    fn default() -> Self {
         Self {
             init_logging: false,
             wizard_object: WIZARD,
@@ -87,7 +87,9 @@ impl MootOptions {
             nonprogrammer_object: NONPROGRAMMER,
         }
     }
+}
 
+impl MootOptions {
     pub fn new() -> Self {
         Self::default()
     }
@@ -119,7 +121,7 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
     path: &Path,
     validate_state: F,
 ) {
-    init_logging(&options);
+    init_logging(options);
     eprintln!("Test definition: {}", path.display());
 
     let test = std::fs::read_to_string(path)
@@ -131,7 +133,7 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
         eprintln!("{:?}", span);
         match &span.expr {
             MootBlock::ChangePlayer(change) => {
-                player = handle_change_player(&options, change.name)
+                player = handle_change_player(options, change.name)
                     .context("handle_change_player")
                     .unwrap();
             }
