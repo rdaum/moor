@@ -182,7 +182,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             v.with_byte_buffer(|bytes| {
                 let len = bytes.len() as u32;
                 buf.extend_from_slice(&len.to_le_bytes());
-                buf.extend_from_slice(&bytes);
+                buf.extend_from_slice(bytes);
             })
             .expect("Failed to encode item");
         }
@@ -196,7 +196,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             v.with_byte_buffer(|bytes| {
                 let len = bytes.len() as u32;
                 buf.extend_from_slice(&len.to_le_bytes());
-                buf.extend_from_slice(&bytes);
+                buf.extend_from_slice(bytes);
             })
             .expect("Failed to encode item");
         }
@@ -209,7 +209,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
         v.with_byte_buffer(|bytes| {
             let len = bytes.len() as u32;
             buf.extend_from_slice(&len.to_le_bytes());
-            buf.extend_from_slice(&bytes);
+            buf.extend_from_slice(bytes);
         })
         .expect("Failed to encode item");
         Self::from_bytes(ByteView::from(buf)).unwrap()
@@ -220,7 +220,7 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> Defs<T> {
             i.with_byte_buffer(|bytes| {
                 let len = bytes.len() as u32;
                 buf.extend_from_slice(&len.to_le_bytes());
-                buf.extend_from_slice(&bytes);
+                buf.extend_from_slice(bytes);
             })
             .expect("Failed to encode item");
         }

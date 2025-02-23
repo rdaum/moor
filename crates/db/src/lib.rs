@@ -215,9 +215,7 @@ pub struct ObjAndUUIDHolder {
 
 impl PartialOrd for ObjAndUUIDHolder {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.uuid
-            .partial_cmp(&other.uuid)
-            .or_else(|| self.obj.partial_cmp(&other.obj))
+        Some(self.cmp(other))
     }
 }
 
