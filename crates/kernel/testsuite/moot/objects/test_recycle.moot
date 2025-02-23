@@ -1,0 +1,166 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_recycle 
+@wizard
+// e = kahuna($nothing, $nothing, 'e')
+; add_property($system, "e", create($nothing), {player, "wrc"});
+; move($e, $nothing);
+; $e.name = "e";
+; add_property($e, "e", "e", {player, ""});
+; add_verb($e, {player, "xd", "e"}, {"this", "none", "this"});
+; set_verb_code($e, "e", {"return this.e;"});
+// EOF e = kahuna($nothing, $nothing, 'e')
+
+// b = kahuna(e, e, 'b')
+; add_property($system, "b", create($e), {player, "wrc"});
+; move($b, $e);
+; $b.name = "b";
+; add_property($b, "b", "b", {player, ""});
+; add_verb($b, {player, "xd", "b"}, {"this", "none", "this"});
+; set_verb_code($b, "b", {"return this.b;"});
+// EOF b = kahuna(e, e, 'b')
+
+// m = kahuna(b, b, 'm')
+; add_property($system, "m", create($b), {player, "wrc"});
+; move($m, $b);
+; $m.name = "m";
+; add_property($m, "m", "m", {player, ""});
+; add_verb($m, {player, "xd", "m"}, {"this", "none", "this"});
+; set_verb_code($m, "m", {"return this.m;"});
+// EOF m = kahuna(b, b, 'm')
+
+// n = kahuna(b, b, 'n')
+; add_property($system, "n", create($b), {player, "wrc"});
+; move($n, $b);
+; $n.name = "n";
+; add_property($n, "n", "n", {player, ""});
+; add_verb($n, {player, "xd", "n"}, {"this", "none", "this"});
+; set_verb_code($n, "n", {"return this.n;"});
+// EOF n = kahuna(b, b, 'n')
+
+
+; return parent($e);
+$nothing
+; return parent($b);
+$e
+; return parent($m);
+$b
+; return parent($n);
+$b
+
+; return children($e);
+{$b}
+; return children($b);
+{$m, $n}
+; return children($m);
+{}
+; return children($n);
+{}
+
+; return $e.location;
+$nothing
+; return $b.location;
+$e
+; return $m.location;
+$b
+; return $n.location;
+$b
+
+; return $e.contents;
+{$b}
+; return $b.contents;
+{$m, $n}
+; return $m.contents;
+{}
+; return $n.contents;
+{}
+
+; recycle($b);
+
+; return parent($e);
+$nothing
+; return parent($b);
+E_INVARG
+; return parent($m);
+$e
+; return parent($n);
+$e
+
+; return children($e);
+{$m, $n}
+; return children($b);
+E_INVARG
+; return children($m);
+{}
+; return children($n);
+{}
+
+; return $e.location;
+$nothing
+; return $b.location;
+E_INVIND
+; return $m.location;
+$nothing
+; return $n.location;
+$nothing
+
+; return $e.contents;
+{}
+; return $b.contents;
+E_INVIND
+; return $m.contents;
+{}
+; return $n.contents;
+{}
+
+; return $e:e();
+"e"
+; return $m:e();
+"e"
+; return $n:e();
+"e"
+; return $m:m();
+"m"
+; return $n:n();
+"n"
+
+; return $e.e;
+"e"
+; return $m.e;
+"e"
+; return $n.e;
+"e"
+; return $m.m;
+"m"
+; return $n.n;
+"n"
+
+; return children($b);
+E_INVARG
+; return children($m);
+{}
+; return children($n);
+{}
+
+; return $b.location;
+E_INVIND
+; return $m.location;
+$nothing
+; return $n.location;
+$nothing
+
+; return $b.contents;
+E_INVIND
+; return $m.contents;
+{}
+; return $n.contents;
+{}
+
+; return $m:m();
+"m"
+; return $n:n();
+"n"
+
+; return $m.m;
+"m"
+; return $n.n;
+"n"
