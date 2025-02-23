@@ -108,6 +108,9 @@ fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
+        return Err(BfErr::Code(E_INVARG));
+    }
     let children = bf_args
         .world_state
         .children_of(&bf_args.task_perms_who(), obj)
