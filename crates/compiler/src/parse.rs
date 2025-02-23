@@ -443,12 +443,10 @@ impl TreeTransformer {
                 }
                 Rule::integer => match primary.as_str().parse::<i64>() {
                     Ok(int) => Ok(Expr::Value(v_int(int))),
-                    Err(e) => {
-                        Err(CompileError::StringLexError(format!(
-                            "invalid integer literal '{}': {e}",
-                            primary.as_str()
-                        )))
-                    }
+                    Err(e) => Err(CompileError::StringLexError(format!(
+                        "invalid integer literal '{}': {e}",
+                        primary.as_str()
+                    ))),
                 },
                 Rule::range_comprehension => {
                     if !self.options.list_comprehensions {

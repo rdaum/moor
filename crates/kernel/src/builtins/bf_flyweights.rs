@@ -364,11 +364,7 @@ fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let value = bf_args.args[2].clone();
 
-    let mut slots: Vec<_> = f
-        .slots()
-        .iter()
-        .map(|(k, v)| (*k, v.clone()))
-        .collect();
+    let mut slots: Vec<_> = f.slots().iter().map(|(k, v)| (*k, v.clone())).collect();
 
     // Add or update the slot
     if let Some(existing) = slots.iter_mut().find(|(k, _)| *k == key) {
