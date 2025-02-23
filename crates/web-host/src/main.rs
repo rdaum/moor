@@ -28,8 +28,8 @@ use axum::response::IntoResponse;
 use futures_util::future::OptionFuture;
 use moor_values::{Obj, SYSTEM_OBJECT};
 use rolldown::{
-    Bundler, BundlerOptions, ExperimentalOptions, InputItem, OutputFormat, Platform, SourceMapType,
-    Watcher,
+    Bundler, BundlerOptions, ExperimentalOptions, InputItem, OutputFormat, Platform,
+    RawMinifyOptions, SourceMapType, Watcher,
 };
 use rpc_async_client::{
     ListenersClient, ListenersMessage, make_host_token, proces_hosts_events, start_host_session,
@@ -323,7 +323,7 @@ fn mk_js_bundler(src_dir: &Path) -> Arc<Mutex<Bundler>> {
     let bundler = Bundler::new(BundlerOptions {
         input: Some(input),
         sourcemap: Some(SourceMapType::File),
-        minify: Some(false),
+        minify: Some(RawMinifyOptions::Bool(false)),
         format: Some(OutputFormat::Esm),
         platform: Some(Platform::Browser),
         experimental: Some(ExperimentalOptions {
