@@ -29,8 +29,7 @@ pub struct Map(Box<im::Vector<(Var, Var)>>);
 impl Map {
     // Construct from an Iterator of paris
     pub(crate) fn build<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
-        // Our maps don't use the flexbuffers map type because that only allows strings for keys.
-        // Instead, we just use a vector of pairs, sorted, so binary search can be used to find
+        // We use a vector of pairs, sorted, so binary search can be used to find
         // keys in O(log n) time.
         // Construction, however, is O(n) because we need to insert the pairs in sorted order.
         // And make a copy, to boot.
