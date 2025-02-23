@@ -259,6 +259,16 @@ impl WorldStateTransaction for DbTransaction {
                 WorldStateError::DatabaseError(format!("Error updating parent children: {:?}", e))
             })?;
 
+        // Make sure we are removed from the location's contents list.
+        let location = self.get_object_location(obj)?;
+        let location_contents = self.get_object_contents(&location)?;
+        let location_contents = location_contents.with_removed(obj.clone());
+        self.object_contents
+            .upsert(location.clone(), location_contents)
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error updating location contents: {:?}", e))
+            })?;
+
         // Now we can remove this object from all relevant relations
         // First the simple ones which are keyed on the object id.
         self.object_flags.delete(obj).map_err(|e| {
