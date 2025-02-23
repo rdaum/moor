@@ -171,18 +171,14 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         owner: &Obj,
         flags: BitEnum<ObjFlag>,
     ) -> Result<Obj, WorldStateError> {
-        /*
-           if ((valid(parent) ? !db_object_allows(parent, progr, FLAG_FERTILE)
-                              : (parent != NOTHING)) || (owner != progr && !is_wizard(progr)))
-               return make_error_pack(E_PERM);
+        let is_wizard = self.perms(perms)?.check_is_wizard()?;
+        if !self.valid(parent)? && (!parent.is_nothing() || (owner != perms && !is_wizard)) {
+            return Err(WorldStateError::ObjectPermissionDenied);
+        }
 
-           bool pe;
-           if (valid(parent)) {
-               pe = !db_object_allows(parent, progr, FLAG_FERTILE)
-           } else {
-               pe = (parent != NOTHING)) || (owner != progr && !is_wizard(progr)))
-           }
-        */
+        if !is_wizard && owner != perms {
+            return Err(WorldStateError::ObjectPermissionDenied);
+        }
 
         self.check_parent(perms, parent, owner)?;
 

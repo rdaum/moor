@@ -164,5 +164,5 @@ fn test(db: Box<dyn Database>, path: &Path) {
 fn test_single() {
     // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
     // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    test_with_db(&testsuite_dir().join("moot/objects/test_create.moot"));
+    test_with_db(&testsuite_dir().join("moot/objects/test_create_errors.moot"));
 }
