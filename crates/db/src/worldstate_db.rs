@@ -640,7 +640,7 @@ mod tests {
     };
     use moor_values::model::{ObjAttrs, ObjFlag, PropFlag};
     use moor_values::util::BitEnum;
-    use moor_values::{Obj, Symbol, v_int};
+    use moor_values::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_int, v_str};
     use std::sync::Arc;
 
     fn test_db() -> Arc<super::WorldStateDB> {
@@ -844,6 +844,45 @@ mod tests {
         assert_eq!(
             tx.retrieve_property(&user, uuid).unwrap().0.unwrap(),
             v_int(1234567890)
+        );
+    }
+
+    #[test]
+    fn test_regression_recycle_parent_lose_prop() {
+        let db = test_db();
+        let mut tx = begin_tx(&db);
+        let a = tx
+            .create_object(
+                None,
+                ObjAttrs::new(Obj::mk_id(1), NOTHING, NOTHING, BitEnum::all(), "a"),
+            )
+            .unwrap();
+        let b = tx
+            .create_object(
+                None,
+                ObjAttrs::new(Obj::mk_id(1), a.clone(), NOTHING, BitEnum::all(), "b"),
+            )
+            .unwrap();
+        tx.define_property(
+            &b,
+            &b,
+            Symbol::mk("b"),
+            &SYSTEM_OBJECT,
+            BitEnum::new(),
+            Some(v_str("b")),
+        )
+        .unwrap();
+
+        assert_eq!(
+            tx.resolve_property(&b, Symbol::mk("b")).unwrap().1,
+            v_str("b")
+        );
+
+        tx.recycle_object(&a).unwrap();
+
+        assert_eq!(
+            tx.resolve_property(&b, Symbol::mk("b")).unwrap().1,
+            v_str("b")
         );
     }
 }

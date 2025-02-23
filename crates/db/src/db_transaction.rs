@@ -335,7 +335,7 @@ impl WorldStateTransaction for DbTransaction {
         let mut dead_properties = vec![];
         if let Some(old_props) = old_props {
             for prop in old_props.iter() {
-                if !unshared_ancestors.contains(&prop.definer()) {
+                if prop.definer() != *o && !unshared_ancestors.contains(&prop.definer()) {
                     dead_properties.push(prop.uuid());
                 }
             }
@@ -345,8 +345,8 @@ impl WorldStateTransaction for DbTransaction {
                 .expect("Unable to update propdefs");
 
             // Remove their values and flags.
-            for prop in old_props.iter() {
-                let holder = ObjAndUUIDHolder::new(o, prop.uuid());
+            for prop in dead_properties.iter() {
+                let holder = ObjAndUUIDHolder::new(o, *prop);
                 self.object_propvalues.delete(&holder).ok();
             }
         }
@@ -362,7 +362,7 @@ impl WorldStateTransaction for DbTransaction {
             let old_props = self.get_properties(o)?;
             if !old_props.is_empty() {
                 for p in old_props.iter() {
-                    if new_ancestors.contains(&p.definer()) {
+                    if new_ancestors.contains(&p.definer()) || p.definer().eq(o) {
                         continue;
                     }
                     if old_ancestors.contains(&p.definer()) {
