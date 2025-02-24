@@ -1,0 +1,124 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_pass
+
+@wizard
+// e = kahuna($nothing, $nothing, 'e')
+; add_property($system, "e", create($nothing), {player, "wrc"});
+; move($e, $nothing);
+; $e.name = "e";
+; add_property($e, "e", "e", {player, ""});
+; add_verb($e, {player, "xd", "e"}, {"this", "none", "this"});
+; set_verb_code($e, "e", {"return this.e;"});
+// EOF e = kahuna($nothing, $nothing, 'e')
+
+// b = kahuna(e, $nothing, 'b')
+; add_property($system, "b", create($e), {player, "wrc"});
+; move($b, $nothing);
+; $b.name = "b";
+; add_property($b, "b", "b", {player, ""});
+; add_verb($b, {player, "xd", "b"}, {"this", "none", "this"});
+; set_verb_code($b, "b", {"return this.b;"});
+// EOF b = kahuna(e, $nothing, 'b')
+
+// c = kahuna(b, $nothing, 'c')
+; add_property($system, "c", create($b), {player, "wrc"});
+; move($c, $nothing);
+; $c.name = "c";
+; add_property($c, "c", "c", {player, ""});
+; add_verb($c, {player, "xd", "c"}, {"this", "none", "this"});
+; set_verb_code($c, "c", {"return this.c;"});
+// EOF c = kahuna(b, $nothing, 'c')
+
+
+; add_verb($e, {player, "xd", "foo"}, {"this", "none", "this"});
+; set_verb_code($e, "foo", {"return {\"e\", @`pass() ! ANY => {}'};"});
+
+; return $e:foo();
+{"e"}
+; return $b:foo();
+{"e"}
+; return $c:foo();
+{"e"}
+
+; add_verb($b, {player, "xd", "foo"}, {"this", "none", "this"});
+; set_verb_code($b, "foo", {"return {\"b\", @`pass() ! ANY => {}'};"});
+
+; return $e:foo();
+{"e"}
+; return $b:foo();
+{"b", "e"}
+; return $c:foo();
+{"b", "e"}
+
+; add_verb($c, {player, "xd", "foo"}, {"this", "none", "this"});
+; set_verb_code($c, "foo", {"return {\"c\", @`pass() ! ANY => {}'};"});
+
+; return $e:foo();
+{"e"}
+; return $b:foo();
+{"b", "e"}
+; return $c:foo();
+{"c", "b", "e"}
+
+; add_verb($c, {player, "xd", "boo"}, {"this", "none", "this"});
+; set_verb_code($c, "boo", {"return {\"c\", @pass()};"});
+
+; return $c:boo();
+E_VERBNF
+
+; add_verb($e, {player, "xd", "hoo"}, {"this", "none", "this"});
+; set_verb_code($e, "hoo", {"return {\"e\", @pass()};"});
+
+; return $e:hoo();
+E_INVIND
+
+; chparent($c, $e);
+
+; return $e:foo();
+{"e"}
+; return $b:foo();
+{"b", "e"}
+; return $c:foo();
+{"c", "e"}
+
+; chparent($c, $b);
+
+; return $e:foo();
+{"e"}
+; return $b:foo();
+{"b", "e"}
+; return $c:foo();
+{"c", "b", "e"}
+
+; chparent($b, $nothing);
+
+; return $e:foo();
+{"e"}
+; return $b:foo();
+{"b"}
+; return $c:foo();
+{"c", "b"}
+
+; delete_verb($b, "foo");
+
+; return $e:foo();
+{"e"}
+; return $b:foo();
+E_VERBNF
+; return $c:foo();
+{"c"}
+
+; delete_verb($e, "foo");
+
+; return $e:foo();
+E_VERBNF
+; return $b:foo();
+E_VERBNF
+; return $c:foo();
+{"c"}
+
+; return parent($c);
+$b
+
+; return $c:goo();
+E_VERBNF
