@@ -85,6 +85,6 @@ fn test_moo(path: &Path) {
 fn test_single() {
     test_moo(
         &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../kernel/testsuite/moot/objects/test_pass.moot"),
+            .join("../../kernel/testsuite/moot/regression/pass_invind.moot"),
     );
 }

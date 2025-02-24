@@ -223,6 +223,14 @@ impl VMExecState {
         };
         let verb = self.top().verb_name;
 
+        // if `parent` is not a valid object, raise E_INVIND
+        if !world_state
+            .valid(&parent)
+            .expect("Error checking object validity")
+        {
+            return self.push_error(E_INVIND);
+        }
+
         // call verb on parent, but with our current 'this'
         trace!(task_id = self.task_id, ?verb, ?definer, ?parent);
 
