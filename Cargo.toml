@@ -36,6 +36,7 @@ default-members = [
 authors = [
     "Ryan Daum <ryan.daum@gmail.com>",
     "Norman Nunley <nnunley@gmail.com>",
+    "Zoltán Nagy <abesto0@gmail.com>"
 ]
 categories = [
     "game",
