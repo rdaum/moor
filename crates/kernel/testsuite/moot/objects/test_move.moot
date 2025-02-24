@@ -1,0 +1,38 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_move
+
+@wizard
+; add_property($system, "a", create($nothing), {player, "wrc"});
+; add_property($system, "b", create($nothing), {player, "wrc"});
+; add_property($system, "c", create($nothing), {player, "wrc"});
+
+; return $a.location;
+$nothing
+; return $b.location;
+$nothing
+; return $c.location;
+$nothing
+
+; return $a.contents;
+{}
+; return $b.contents;
+{}
+; return $c.contents;
+{}
+
+; move($b, $a);
+; move($c, $b);
+
+; return $a.location;
+$nothing
+; return $b.location;
+$a
+; return $c.location;
+$b
+
+; return $a.contents;
+{$b}
+; return $b.contents;
+{$c}
+; return $c.contents;
+{}
