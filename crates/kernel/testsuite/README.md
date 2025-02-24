@@ -48,6 +48,7 @@ https://github.com/toddsundsted/stunt/tree/master/test
   - https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb#L84-L94
   - https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb#L106-L111
   - https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb#L164-L169
+- `renumber` is not currently implemented in `moor`
 
 ## Useful Vim commands
 
