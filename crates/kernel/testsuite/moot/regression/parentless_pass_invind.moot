@@ -1,0 +1,6 @@
+@wizard
+; add_property($system, "a", create($nothing), {player, "wrc"});
+; add_verb($a, {player, "xd", "boo"}, {"this", "none", "this"});
+; set_verb_code($a, "boo", {"return {\"a\", @pass()};"});
+; return $a:boo();
+E_INVIND
