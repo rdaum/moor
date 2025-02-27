@@ -83,8 +83,7 @@ fn test_moo(path: &Path) {
 #[test]
 #[ignore = "Useful for debugging; just run a single test against 'real' MOO"]
 fn test_single() {
-    test_moo(
-        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../kernel/testsuite/moot/regression/pass_invind.moot"),
-    );
+    test_moo(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+        "../../kernel/testsuite/moot/objects/test_verbs_and_invocation_and_inheritance.moot",
+    ));
 }
