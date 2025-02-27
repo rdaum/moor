@@ -76,7 +76,7 @@ impl MootRunner for SchedulerMootRunner {
 
     fn command<S: AsRef<str>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command: &str = command.as_ref();
-        eprintln!("{player} >> ; {}", command);
+        eprintln!("{player} >> {}", command);
         self.eval_result = Some(
             scheduler_test_utils::call_command(
                 self.scheduler.clone(),
@@ -105,6 +105,10 @@ impl MootRunner for SchedulerMootRunner {
             .eval_result
             .take()
             .inspect(|var| eprintln!("{player} << {}", to_literal(var))))
+    }
+
+    fn read_command_result(&mut self, player: &Obj) -> eyre::Result<Option<Self::Value>> {
+        self.read_eval_result(player)
     }
 }
 
@@ -164,7 +168,5 @@ fn test(db: Box<dyn Database>, path: &Path) {
 fn test_single() {
     // cargo test -p moor-kernel --test moot-suite test_single -- --ignored
     // CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --test moot-suite -- test_single --ignored
-    test_with_db(
-        &testsuite_dir().join("moot/objects/test_verbs_and_invocation_and_inheritance.moot"),
-    );
+    test_with_db(&testsuite_dir().join("moot/objects/test_command_verbs_and_inheritance.moot"));
 }

@@ -60,7 +60,7 @@ impl MootRunner for SchedulerMootRunner {
 
     fn command<S: AsRef<str>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command: &str = command.as_ref();
-        eprintln!("{player} >> ; {}", command);
+        eprintln!("{player} >> {}", command);
         self.eval_result = Some(
             scheduler_test_utils::call_command(
                 self.scheduler.clone(),
@@ -85,6 +85,10 @@ impl MootRunner for SchedulerMootRunner {
             .eval_result
             .take()
             .inspect(|var| eprintln!("{player} << {}", to_literal(var))))
+    }
+
+    fn read_command_result(&mut self, player: &Obj) -> eyre::Result<Option<Var>> {
+        self.read_eval_result(player)
     }
 
     fn none(&self) -> Var {
