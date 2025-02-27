@@ -1,0 +1,39 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_command_verbs_and_inheritance
+
+@wizard
+; add_property($system, "a", create(#2), {player, "wrc"});
+; add_property($system, "b", create($a), {player, "wrc"});
+; add_property($system, "c", create($b), {player, "wrc"});
+; add_property($system, "d", create($c), {player, "wrc"});
+
+; add_verb($a, {player, "d", "baz"}, {"none", "none", "none"});
+; set_verb_code($a, "baz", {"notify(player, \"baz\"); return \"baz\";"});
+; add_verb($b, {player, "d", "bar"}, {"none", "none", "none"});
+; set_verb_code($b, "bar", {"notify(player, \"bar\"); return \"bar\";"});
+; add_verb($c, {player, "d", "foo"}, {"none", "none", "none"});
+; set_verb_code($c, "foo", {"notify(player, \"foo\"); return \"foo\";"});
+; add_verb($d, {player, "d", "qnz"}, {"none", "none", "none"});
+; set_verb_code($d, "qnz", {"notify(player, \"qnz\"); return \"qnz\";"});
+
+; move(player, $d);
+
+% foo
+"foo"
+% bar
+"bar"
+% baz
+"baz"
+% qnz
+"qnz"
+
+; chparent($d, $c);
+
+% foo
+"foo"
+% bar
+"bar"
+% baz
+"baz"
+% qnz
+"qnz"

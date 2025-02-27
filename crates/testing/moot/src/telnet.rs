@@ -215,4 +215,11 @@ impl MootRunner for TelnetMootRunner {
             Ok(None)
         }
     }
+
+    fn read_command_result(&mut self, player: &Obj) -> eyre::Result<Option<Self::Value>> {
+        self.client(player)
+            .read_line()
+            .map(|maybe_line| maybe_line.map(|line| format!("{line:?}")))
+            .with_context(|| format!("TelnetMootRunner::read_command_result({player}) / read raw"))
+    }
 }

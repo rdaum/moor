@@ -65,6 +65,7 @@ pub trait MootRunner {
 
     fn read_line(&mut self, player: &Obj) -> eyre::Result<Option<String>>;
     fn read_eval_result(&mut self, player: &Obj) -> eyre::Result<Option<Self::Value>>;
+    fn read_command_result(&mut self, player: &Obj) -> eyre::Result<Option<Self::Value>>;
 
     fn none(&self) -> Self::Value;
 }
@@ -178,11 +179,18 @@ fn handle_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
             runner.read_eval_result(player)?;
         } else if test.kind == MootBlockTestKind::Eval {
             // Assert that we got the empty result
-            assert_eval_result(runner, player, None, path, line_no)?;
+            assert_result(runner, player, &test.kind, None, path, line_no)?;
         }
     } else {
         for expectation in &test.expected_output {
-            execute_test_expectation(runner, player, &validate_state, expectation, path)?;
+            execute_test_expectation(
+                runner,
+                player,
+                &validate_state,
+                &test.kind,
+                expectation,
+                path,
+            )?;
         }
     }
 
@@ -193,6 +201,7 @@ fn execute_test_expectation<R: MootRunner, F: Fn() -> eyre::Result<()>>(
     runner: &mut R,
     player: &Obj,
     validate_state: &F,
+    kind: &MootBlockTestKind,
     expectation: &MootBlockTestExpectedOutput,
     path: &Path,
 ) -> Result<(), eyre::Error> {
@@ -212,14 +221,15 @@ fn execute_test_expectation<R: MootRunner, F: Fn() -> eyre::Result<()>>(
             expectation.line_no,
         )?;
     } else {
-        assert_eval_result(
+        assert_result(
             runner,
             player,
+            kind,
             Some(expectation.expected_output),
             path,
             expectation.line_no,
         )?;
-    };
+    }
 
     Ok(())
 }
@@ -247,17 +257,23 @@ fn execute_test_prog<R: MootRunner, F: Fn() -> eyre::Result<()>>(
     Ok(())
 }
 
-fn assert_eval_result<R: MootRunner>(
+fn assert_result<R: MootRunner>(
     runner: &mut R,
     player: &Obj,
+    kind: &MootBlockTestKind,
     expectation: Option<&str>,
     path: &Path,
     line_no: usize,
 ) -> eyre::Result<()> {
     let err_prefix = || format!("assert_eval_result({player}, {expectation:?}, {line_no})");
-    let actual = runner
-        .read_eval_result(player)?
-        .ok_or_else(|| eyre!("{}/actual: got no eval result", err_prefix()))?;
+    let actual = match kind {
+        MootBlockTestKind::Eval | MootBlockTestKind::EvalBg => runner
+            .read_eval_result(player)?
+            .ok_or_else(|| eyre!("{}/actual: got no eval result", err_prefix()))?,
+        MootBlockTestKind::Command => runner
+            .read_command_result(player)?
+            .ok_or_else(|| eyre!("{}/actual: got no command result", err_prefix()))?,
+    };
 
     let expected = if let Some(expectation) = expectation {
         runner
