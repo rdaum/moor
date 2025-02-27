@@ -1,0 +1,110 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_verbs_and_invocation_and_inheritance 
+
+@wizard
+; add_property($system, "a", create($nothing), {player, "wrc"});
+; add_property($system, "b", create($a), {player, "wrc"});
+; add_property($system, "c", create($b), {player, "wrc"});
+
+; add_verb($a, {player, "xd", "foo"}, {"this", "none", "this"});
+; set_verb_code($a, "foo", {"return \"foo\";"});
+; add_verb($a, {player, "xd", "a"}, {"this", "none", "this"});
+; set_verb_code($a, "a", {"return \"a\";"});
+
+; add_verb($b, {player, "xd", "b"}, {"this", "none", "this"});
+; set_verb_code($b, "b", {"return \"b\";"});
+
+; add_verb($c, {player, "xd", "c"}, {"this", "none", "this"});
+; set_verb_code($c, "c", {"return \"c\";"});
+
+; return $a:foo();
+"foo"
+; return $b:foo();
+"foo"
+; return $c:foo();
+"foo"
+
+; return $a:a();
+"a"
+; return $b:b();
+"b"
+; return $c:c();
+"c"
+
+; chparent($c, $a);
+; chparent($b, $nothing);
+; chparent($a, $b);
+
+; return $a:foo();
+"foo"
+; return $b:foo();
+E_VERBNF
+; return $c:foo();
+"foo"
+
+; delete_verb($a, "foo");
+
+; return $a:foo();
+E_VERBNF
+; return $b:foo();
+E_VERBNF
+; return $c:foo();
+E_VERBNF
+
+; return $a:a();
+"a"
+; return $b:b();
+"b"
+; return $c:c();
+"c"
+
+; add_verb($a, {player, "xd", "foo"}, {"this", "none", "this"});
+; set_verb_code($a, "foo", {"return \"foo\";"});
+
+; chparent($c, $a);
+
+; return $a:foo();
+"foo"
+; return $b:foo();
+E_VERBNF
+; return $c:foo();
+"foo"
+
+; return $c:a();
+"a"
+; return $c:b();
+"b"
+; return $c:c();
+"c"
+
+; chparent($c, $b);
+
+; return $a:foo();
+"foo"
+; return $b:foo();
+E_VERBNF
+; return $c:foo();
+E_VERBNF
+
+; return $c:a();
+E_VERBNF
+; return $c:b();
+"b"
+; return $c:c();
+"c"
+
+; delete_verb($a, "foo");
+
+; return $a:foo();
+E_VERBNF
+; return $b:foo();
+E_VERBNF
+; return $c:foo();
+E_VERBNF
+
+; return $a:a();
+"a"
+; return $b:b();
+"b"
+; return $c:c();
+"c"
