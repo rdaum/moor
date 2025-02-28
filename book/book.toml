@@ -1,0 +1,10 @@
+[book]
+authors = ["Zoltán Nagy"]
+language = "en"
+multilingual = false
+src = "src"
+title = "The moor Book"
+
+[output.html]
+additional-js = ["theme/moo-syntax-highlight.js"]
+additional-css = ["theme/style.css"]
