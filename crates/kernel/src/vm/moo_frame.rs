@@ -322,11 +322,10 @@ impl MooStackFrame {
         self.valstack.truncate(scope.valstack_pos);
 
         // Clear out the environment for the scope that is being exited.
-        // Everything in environment after old width - new-width should be set to v_none
+        // Everything in environment after old width - new-width should be unset.
         let old_width = self.environment_width;
-        for i in old_width - scope.environment_width..self.environment_width {
-            self.environment.set(i, v_none());
-        }
+        let truncate_after = old_width - scope.environment_width;
+        self.environment.truncate(truncate_after);
         self.environment_width -= scope.environment_width;
         Some(scope)
     }

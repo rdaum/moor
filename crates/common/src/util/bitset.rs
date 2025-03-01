@@ -32,6 +32,7 @@ pub trait BitsetTrait: Default {
     fn first_set(&self) -> Option<usize>;
     fn set(&mut self, pos: usize);
     fn unset(&mut self, pos: usize);
+    fn unset_from(&mut self, pos: usize);
     fn check(&self, pos: usize) -> bool;
     fn clear(&mut self);
     fn last(&self) -> Option<usize>;
@@ -121,6 +122,24 @@ where
         let shift = StorageType::one() << (pos % Self::STORAGE_BIT_WIDTH);
         let v = v & shift.not();
         self.bitset[pos >> Self::BIT_SHIFT] = v;
+    }
+
+    /// Clear all bits from `pos` forward
+    #[inline]
+    fn unset_from(&mut self, pos: usize) {
+        assert!(pos < Self::BITSET_WIDTH);
+
+        let start_index = pos >> Self::BIT_SHIFT;
+        let start_bit = pos % Self::STORAGE_BIT_WIDTH;
+
+        // Clear the bits within the initial StorageType
+        if start_bit != 0 {
+            let mask = (StorageType::one() << start_bit) - StorageType::one();
+            self.bitset[start_index] = self.bitset[start_index] & mask;
+        }
+
+        // Clear all subsequent StorageType slices
+        self.bitset[start_index + 1..].fill(StorageType::zero());
     }
 
     #[inline]
@@ -304,5 +323,17 @@ mod tests {
         bs.set(127);
         let v: Vec<usize> = bs.iter().collect();
         assert_eq!(v, vec![0, 1, 2, 4, 8, 16, 32, 47, 48, 49, 127]);
+    }
+
+    #[test]
+    fn test_unset_from() {
+        let mut bs = super::Bitset8::<4>::new();
+        bs.set(0);
+        bs.set(1);
+        bs.set(5);
+        bs.set(6);
+        bs.unset_from(5);
+        let items: Vec<_> = bs.iter().collect();
+        assert_eq!(items, vec![0, 1]);
     }
 }

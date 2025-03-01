@@ -139,6 +139,17 @@ where
         Some(old)
     }
 
+    /// Unset everything after and including `pos`
+    #[inline]
+    pub fn truncate(&mut self, pos: usize) {
+        for i in pos..RANGE_WIDTH {
+            if self.bitset.check(i) {
+                unsafe { self.storage[i].assume_init_drop() }
+            }
+        }
+        self.bitset.unset_from(pos);
+    }
+
     // Erase without updating index, used by update and erase
     #[inline]
     fn take_internal(&mut self, pos: usize) -> Option<X> {
@@ -312,5 +323,20 @@ mod test {
         vec.set(0, 126);
         assert_eq!(vec.get(0), Some(&126));
         assert_eq!(vec.update(0, 123), Some(126));
+    }
+
+    #[test]
+    fn u8_vector_truncate() {
+        let mut vec: BitArray<u8, 48, Bitset16<3>> = BitArray::new();
+        vec.set(0, 1);
+        vec.set(5, 2);
+        vec.set(10, 3);
+        vec.set(15, 4);
+        vec.truncate(10);
+        assert_eq!(vec.len(), 2);
+        assert!(vec.get(0).is_some());
+        assert!(vec.get(5).is_some());
+        assert!(vec.get(10).is_none());
+        assert!(vec.get(15).is_none());
     }
 }
