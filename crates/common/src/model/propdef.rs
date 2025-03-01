@@ -26,8 +26,8 @@ pub struct PropDef(ByteView);
 binary_layout!(propdef, LittleEndian, {
     data_version: u8,
     uuid: [u8; 16],
-    definer: Obj as i32,
-    location: Obj as i32,
+    definer: Obj as u64,
+    location: Obj as u64,
     name: [u8],
 });
 

@@ -36,8 +36,8 @@ impl Clone for VerbDef {
 binary_layout!(verbdef, LittleEndian, {
     data_version: u8,
     uuid: [u8; 16],
-    location: Obj as i32,
-    owner: Obj as i32,
+    location: Obj as u64,
+    owner: Obj as u64,
     flags: BitEnum::<VerbFlag> as u16,
     binary_type: BinaryType as u8,
     args: VerbArgsSpec as u32,

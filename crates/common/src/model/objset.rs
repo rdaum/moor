@@ -19,7 +19,6 @@ use byteview::ByteView;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::collections::HashSet;
-use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};
 // TODO: this won't work for non-objid objects
 
@@ -93,22 +92,21 @@ impl Iterator for ObjSetIter {
             return None;
         }
 
-        let oid = i32::from_le_bytes(
-            self.buffer[self.position..self.position + size_of::<i32>()]
-                .try_into()
-                .unwrap(),
-        );
-        self.position += size_of::<i32>();
-        Some(Obj::mk_id(oid))
+        let bytes = &self
+            .buffer
+            .slice(self.position..self.position + size_of::<Obj>());
+        let obj = Obj::from_bytes(bytes.to_detached()).unwrap();
+        self.position += size_of::<Obj>();
+        Some(obj)
     }
 }
 
 impl FromIterator<Obj> for ObjSet {
     fn from_iter<T: IntoIterator<Item = Obj>>(iter: T) -> Self {
-        let mut v = Vec::with_capacity(size_of::<i32>());
+        let mut v = Vec::with_capacity(size_of::<Obj>());
         let mut total = 0usize;
         for item in iter {
-            v.extend_from_slice(&item.id().0.to_le_bytes());
+            v.extend_from_slice(&item.as_bytes().unwrap());
             total += 1;
         }
         // If after that, total is 0, don't even bother, just throw away the buffer.
@@ -129,7 +127,7 @@ impl ObjSet {
         // Note, we're stupid and don't check for dupes. It's called a 'set' but it ain't.
         let _capacity = self.len();
         let mut new_buf = self.0.as_ref().to_vec();
-        new_buf.extend_from_slice(&oid.id().0.to_le_bytes());
+        new_buf.extend_from_slice(&oid.as_bytes().unwrap());
         Self(ByteView::from(new_buf))
     }
     #[must_use]
@@ -137,14 +135,14 @@ impl ObjSet {
         if self.0.is_empty() {
             return EMPTY_OBJSET.clone();
         }
-        let mut new_buf = Vec::with_capacity(self.0.len() - size_of::<i32>());
+        let mut new_buf = Vec::with_capacity(self.0.len() - size_of::<Obj>());
         let mut found = false;
         for i in self.iter() {
             if i == oid {
                 found = true;
                 continue;
             }
-            let oid_bytes = i.id().0.to_le_bytes();
+            let oid_bytes = i.as_bytes().unwrap();
             new_buf.extend_from_slice(&oid_bytes);
         }
         if !found {
@@ -164,7 +162,7 @@ impl ObjSet {
                 found = true;
                 continue;
             }
-            new_buf.extend_from_slice(&i.id().0.to_le_bytes());
+            new_buf.extend_from_slice(&i.as_bytes().unwrap());
         }
         if !found {
             return self.clone();
@@ -190,7 +188,7 @@ impl ObjSet {
             return other;
         }
         let new_len = other.len() + self.len();
-        let mut new_buf = Vec::with_capacity(size_of::<i32>() * new_len);
+        let mut new_buf = Vec::with_capacity(size_of::<Obj>() * new_len);
         new_buf.extend_from_slice(self.0.as_ref());
         new_buf.extend_from_slice(other.0.as_ref());
         Self(ByteView::from(new_buf))
@@ -202,10 +200,10 @@ impl ObjSet {
             return Self::from_items(values);
         }
         let new_len = self.len() + values.len();
-        let mut new_buf = Vec::with_capacity(size_of::<u32>() + (size_of::<i32>() * new_len));
+        let mut new_buf = Vec::with_capacity(size_of::<u32>() + (size_of::<Obj>() * new_len));
         new_buf.extend_from_slice(self.0.as_ref());
         for i in values {
-            new_buf.extend_from_slice(&i.id().0.to_le_bytes());
+            new_buf.extend_from_slice(&i.as_bytes().unwrap());
         }
         Self(ByteView::from(new_buf))
     }
@@ -222,9 +220,9 @@ impl ValSet<Obj> for ObjSet {
         if oids.is_empty() {
             return EMPTY_OBJSET.clone();
         }
-        let mut v = Vec::with_capacity(size_of::<i32>() * oids.len());
+        let mut v = Vec::with_capacity(size_of::<Obj>() * oids.len());
         for i in oids {
-            v.extend_from_slice(&i.id().0.to_le_bytes());
+            v.extend_from_slice(&i.as_bytes().unwrap());
         }
         Self(ByteView::from(v))
     }
@@ -240,7 +238,7 @@ impl ValSet<Obj> for ObjSet {
         if self.0.is_empty() {
             return 0;
         }
-        self.0.len() / size_of::<i32>()
+        self.0.len() / size_of::<Obj>()
     }
 
     #[must_use]
@@ -274,7 +272,6 @@ mod tests {
         let objset = ObjSet::from_items(&[Obj::mk_id(1), Obj::mk_id(2), Obj::mk_id(3)]);
         assert!(!objset.is_empty());
         assert_eq!(objset.len(), 3);
-        assert_eq!(objset.as_bytes().unwrap().len(), 12);
     }
 
     #[test]

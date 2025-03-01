@@ -124,9 +124,9 @@ impl Display for ObjAttr {
 }
 
 binary_layout!(objattrs_buf, LittleEndian, {
-    owner: Obj as i32,
-    parent: Obj as i32,
-    location: Obj as i32,
+    owner: Obj as u64,
+    parent: Obj as u64,
+    location: Obj as u64,
     flags: BitEnum<ObjFlag> as u16,
     name: [u8],
 });

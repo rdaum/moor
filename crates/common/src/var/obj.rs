@@ -66,16 +66,16 @@ impl Obj {
     }
 }
 
-impl LayoutAs<i32> for Obj {
+impl LayoutAs<u64> for Obj {
     type ReadError = DecodingError;
     type WriteError = EncodingError;
 
-    fn try_read(v: i32) -> Result<Self, Self::ReadError> {
-        Ok(Self::mk_id(v))
+    fn try_read(v: u64) -> Result<Self, Self::ReadError> {
+        Ok(Self::from_bytes(v.to_le_bytes().into()).unwrap())
     }
 
-    fn try_write(v: Self) -> Result<i32, Self::WriteError> {
-        Ok(v.id().0)
+    fn try_write(v: Self) -> Result<u64, Self::WriteError> {
+        Ok(v.0)
     }
 }
 
@@ -128,37 +128,9 @@ impl Obj {
     }
 }
 
-// TODO: will not encode for non-objid objects
-
 impl AsByteBuffer for Obj {
     fn size_bytes(&self) -> usize {
-        4
-    }
-
-    fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, f: F) -> Result<R, EncodingError> {
-        self.id().with_byte_buffer(f)
-    }
-
-    fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        self.id().make_copy_as_vec()
-    }
-
-    fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
-    where
-        Self: Sized,
-    {
-        let id = Objid::from_bytes(bytes)?;
-        Ok(Self::mk_id(id.0))
-    }
-
-    fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        self.id().as_bytes()
-    }
-}
-
-impl AsByteBuffer for Objid {
-    fn size_bytes(&self) -> usize {
-        4
+        size_of::<u64>()
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
@@ -173,20 +145,12 @@ impl AsByteBuffer for Objid {
     where
         Self: Sized,
     {
-        let bytes = bytes.as_ref();
-        if bytes.len() != 4 {
-            return Err(DecodingError::CouldNotDecode(format!(
-                "Expected 8 bytes, got {}",
-                bytes.len()
-            )));
-        }
-        let mut buf = [0u8; 4];
-        buf.copy_from_slice(bytes);
-        Ok(Self(i32::from_le_bytes(buf)))
+        let content = u64::from_le_bytes(bytes.as_ref().try_into().unwrap());
+        Ok(Self(content))
     }
 
     fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(ByteView::from(self.make_copy_as_vec()?))
+        Ok(ByteView::from(self.0.to_le_bytes()))
     }
 }
 

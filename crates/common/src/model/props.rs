@@ -114,7 +114,7 @@ impl Default for PropAttrs {
 }
 
 binary_layout!(prop_perms_buf, LittleEndian, {
-    owner: Obj as i32,
+    owner: Obj as u64,
     flags: BitEnum<PropFlag> as u16,
 });
 
