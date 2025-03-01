@@ -54,7 +54,7 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         None
     };
 
-    let reader = BufReader::new(xml.as_string().as_bytes());
+    let reader = BufReader::new(xml.as_str().as_bytes());
     let parser = xml::EventReader::new(reader);
     let mut output_tree = Vec::new();
 
@@ -166,7 +166,7 @@ fn flyweight_to_xml_tag(
             let Variant::Str(s) = tag.variant() else {
                 return Err(BfErr::Code(E_INVARG));
             };
-            s.as_string().to_string()
+            s.as_str().to_string()
         }
         None => {
             let key = Symbol::mk("tag");
@@ -178,7 +178,7 @@ fn flyweight_to_xml_tag(
                 return Err(BfErr::Code(E_TYPE));
             };
 
-            s.as_string().to_string()
+            s.as_str().to_string()
         }
     };
 
@@ -186,7 +186,7 @@ fn flyweight_to_xml_tag(
     for (key, value) in fl.slots() {
         let key = key.to_string();
         let value = match value.variant() {
-            Variant::Str(s) => s.as_string().to_string(),
+            Variant::Str(s) => s.as_str().to_string(),
             Variant::Int(i) => i.to_string(),
             Variant::Float(f) => f.to_string(),
             _ => {
@@ -206,7 +206,7 @@ fn flyweight_to_xml_tag(
                 tags.extend(child_tags);
             }
             Variant::Str(s) => {
-                tags.push(Tag::Text(s.as_string().to_string()));
+                tags.push(Tag::Text(s.as_str().to_string()));
             }
             _ => {
                 error!("Invalid child type");

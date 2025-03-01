@@ -132,7 +132,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
     ) {
         (Variant::Obj(owner), Variant::Str(perms_str), Variant::Str(names)) => {
             let mut perms = BitEnum::new();
-            for c in perms_str.as_string().chars() {
+            for c in perms_str.as_str().chars() {
                 match c {
                     'r' => perms |= VerbFlag::Read,
                     'w' => perms |= VerbFlag::Write,
@@ -144,7 +144,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
 
             // Split the names string into a list of symbols
             let name_strings = names
-                .as_string()
+                .as_str()
                 .split(' ')
                 .map(Symbol::mk_case_insensitive)
                 .collect::<Vec<_>>();
@@ -244,9 +244,9 @@ fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
     ) {
         (Variant::Str(dobj_str), Variant::Str(prep_str), Variant::Str(iobj_str)) => {
             let (Some(dobj), Some(prep), Some(iobj)) = (
-                ArgSpec::from_string(dobj_str.as_string()),
-                parse_preposition_spec(prep_str.as_string()),
-                ArgSpec::from_string(iobj_str.as_string()),
+                ArgSpec::from_string(dobj_str.as_str()),
+                parse_preposition_spec(prep_str.as_str()),
+                ArgSpec::from_string(iobj_str.as_str()),
             ) else {
                 return Err(E_INVARG);
             };
@@ -420,7 +420,7 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::Str(line) => line,
             _ => return Err(BfErr::Code(E_TYPE)),
         };
-        code_string.push_str(line.as_string());
+        code_string.push_str(line.as_str());
         code_string.push('\n');
     }
     // Now try to compile...

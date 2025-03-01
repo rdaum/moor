@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::Associative;
 use crate::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::list::List;
 use crate::variant::Variant;
-use crate::{Associative, string};
 use crate::{BincodeAsByteBufferExt, Symbol};
 use crate::{Error, Obj, VarType};
 use crate::{Flyweight, IndexMode, Sequence, TypeClass, map};
@@ -49,7 +49,11 @@ impl Var {
     }
 
     pub fn mk_str(s: &str) -> Self {
-        Var(Variant::Str(string::Str::mk_str(s)))
+        Var(Variant::Str(s.into()))
+    }
+
+    pub fn mk_string(s: String) -> Self {
+        Var(Variant::Str(s.into()))
     }
 
     pub fn mk_float(f: f64) -> Self {
@@ -112,7 +116,7 @@ impl Var {
     /// Otherwise, E_TYPE
     pub fn as_symbol(&self) -> Result<Symbol, Error> {
         match self.variant() {
-            Variant::Str(s) => Ok(Symbol::mk_case_insensitive(s.as_string())),
+            Variant::Str(s) => Ok(Symbol::mk_case_insensitive(s.as_str())),
             Variant::Sym(s) => Ok(*s),
             _ => Err(E_TYPE),
         }
@@ -370,7 +374,7 @@ impl Var {
 
     pub fn eq_case_sensitive(&self, other: &Var) -> bool {
         match (self.variant(), other.variant()) {
-            (Variant::Str(s1), Variant::Str(s2)) => s1.as_string() == s2.as_string(),
+            (Variant::Str(s1), Variant::Str(s2)) => s1.as_str() == s2.as_str(),
             (Variant::List(l1), Variant::List(l2)) => {
                 if l1.len() != l2.len() {
                     return false;
@@ -403,7 +407,7 @@ impl Var {
 
     pub fn cmp_case_sensitive(&self, other: &Var) -> Ordering {
         match (self.variant(), other.variant()) {
-            (Variant::Str(s1), Variant::Str(s2)) => s1.as_string().cmp(s2.as_string()),
+            (Variant::Str(s1), Variant::Str(s2)) => s1.as_str().cmp(s2.as_str()),
             _ => self.cmp(other),
         }
     }

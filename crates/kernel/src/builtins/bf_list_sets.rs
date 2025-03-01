@@ -279,13 +279,9 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Bf
     };
 
     // TODO: Regex pattern cache?
-    let Some((overall, match_vec)) = perform_regex_match(
-        pattern.as_string(),
-        subject.as_string(),
-        case_matters,
-        reverse,
-    )
-    .map_err(BfErr::Code)?
+    let Some((overall, match_vec)) =
+        perform_regex_match(pattern.as_str(), subject.as_str(), case_matters, reverse)
+            .map_err(BfErr::Code)?
     else {
         return Ok(Ret(v_empty_list()));
     };
@@ -436,8 +432,8 @@ fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let result = perform_pcre_match(
         map_support,
         case_matters,
-        pattern.as_string(),
-        subject.as_string(),
+        pattern.as_str(),
+        subject.as_str(),
         repeat,
     );
     Ok(Ret(Var::from_variant(Variant::List(result))))
@@ -554,7 +550,7 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         mysubs.push((*start as isize, *end as isize));
     }
 
-    match substitute(template.as_string(), &mysubs, source.as_string()) {
+    match substitute(template.as_str(), &mysubs, source.as_str()) {
         Ok(r) => Ok(Ret(v_string(r))),
         Err(e) => Err(BfErr::Code(e)),
     }

@@ -859,7 +859,7 @@ mod tests {
         else {
             panic!("Expected string value");
         };
-        assert_eq!(s.as_string(), "This is a test object");
+        assert_eq!(s.as_str(), "This is a test object");
 
         assert_eq!(odef.property_definitions[1].name, Symbol::mk("other"));
         assert_eq!(odef.property_definitions[1].perms.owner(), Obj::mk_id(2));
@@ -893,13 +893,13 @@ mod tests {
         let Variant::Str(s) = odef.property_overrides[0].value.as_ref().unwrap().variant() else {
             panic!("Expected string value");
         };
-        assert_eq!(s.as_string(), "This is a test object");
+        assert_eq!(s.as_str(), "This is a test object");
 
         assert_eq!(odef.property_overrides[1].name, Symbol::mk("other"));
         let Variant::Str(s) = odef.property_overrides[1].value.as_ref().unwrap().variant() else {
             panic!("Expected string value");
         };
-        assert_eq!(s.as_string(), "test");
+        assert_eq!(s.as_str(), "test");
     }
 
     #[test]

@@ -69,13 +69,7 @@ fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     );
     match (subject, what, with) {
         (Variant::Str(subject), Variant::Str(what), Variant::Str(with)) => Ok(Ret(v_str(
-            strsub(
-                subject.as_string().as_str(),
-                what.as_string().as_str(),
-                with.as_string().as_str(),
-                case_matters,
-            )
-            .as_str(),
+            strsub(subject.as_str(), what.as_str(), with.as_str(), case_matters).as_str(),
         ))),
         _ => Err(BfErr::Code(E_TYPE)),
     }
@@ -121,8 +115,8 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (subject, what) {
         (Variant::Str(subject), Variant::Str(what)) => Ok(Ret(v_int(str_index(
-            subject.as_string().as_str(),
-            what.as_string().as_str(),
+            subject.as_str(),
+            what.as_str(),
             case_matters,
         )))),
         _ => Err(BfErr::Code(E_TYPE)),
@@ -145,8 +139,8 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let (subject, what) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (subject, what) {
         (Variant::Str(subject), Variant::Str(what)) => Ok(Ret(v_int(str_rindex(
-            subject.as_string().as_str(),
-            what.as_string().as_str(),
+            subject.as_str(),
+            what.as_str(),
             case_matters,
         )))),
         _ => Err(BfErr::Code(E_TYPE)),
@@ -160,9 +154,9 @@ fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let (str1, str2) = (bf_args.args[0].variant(), bf_args.args[1].variant());
     match (str1, str2) {
-        (Variant::Str(str1), Variant::Str(str2)) => Ok(Ret(v_int(
-            str1.as_string().as_str().cmp(str2.as_string().as_str()) as i64,
-        ))),
+        (Variant::Str(str1), Variant::Str(str2)) => {
+            Ok(Ret(v_int(str1.as_str().cmp(str2.as_str()) as i64)))
+        }
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
@@ -209,10 +203,10 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(salt) = bf_args.args[1].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        String::from(salt.as_string().as_str())
+        String::from(salt.as_str())
     };
     if let Variant::Str(text) = bf_args.args[0].variant() {
-        let crypted = pwhash::unix::crypt(text.as_string().as_str(), salt.as_str()).unwrap();
+        let crypted = pwhash::unix::crypt(text.as_str(), salt.as_str()).unwrap();
         Ok(Ret(v_string(crypted)))
     } else {
         Err(BfErr::Code(E_TYPE))
@@ -226,7 +220,7 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     match bf_args.args[0].variant() {
         Variant::Str(s) => {
-            let hash_digest = md5::Md5::digest(s.as_string().as_bytes());
+            let hash_digest = md5::Md5::digest(s.as_str().as_bytes());
             Ok(Ret(v_str(
                 format!("{:x}", hash_digest).to_uppercase().as_str(),
             )))
@@ -294,14 +288,13 @@ fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-    let salt_string =
-        SaltString::encode_b64(salt.as_string().as_str().as_bytes()).map_err(|e| {
-            warn!("Failed to encode salt: {}", e);
-            BfErr::Code(E_INVARG)
-        })?;
+    let salt_string = SaltString::encode_b64(salt.as_str().as_bytes()).map_err(|e| {
+        warn!("Failed to encode salt: {}", e);
+        BfErr::Code(E_INVARG)
+    })?;
 
     let hash = argon2
-        .hash_password(password.as_string().as_bytes(), &salt_string)
+        .hash_password(password.as_str().as_bytes(), &salt_string)
         .map_err(|e| {
             warn!("Failed to hash password: {}", e);
             BfErr::Code(E_INVARG)
@@ -330,12 +323,12 @@ fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, Params::default());
-    let Ok(hashed_password) = argon2::PasswordHash::new(hashed_password.as_string()) else {
+    let Ok(hashed_password) = argon2::PasswordHash::new(hashed_password.as_str()) else {
         return Err(BfErr::Code(E_INVARG));
     };
 
     let validated = argon2
-        .verify_password(password.as_string().as_bytes(), &hashed_password)
+        .verify_password(password.as_str().as_bytes(), &hashed_password)
         .is_ok();
     Ok(Ret(bf_args.v_bool(validated)))
 }

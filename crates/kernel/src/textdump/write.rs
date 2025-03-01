@@ -70,7 +70,7 @@ impl<W: io::Write> TextdumpWriter<W> {
                     EncodingMode::ISO8859_1 => {
                         //
                         let encoding = encoding_rs::WINDOWS_1252;
-                        let s = s.as_string();
+                        let s = s.as_str();
                         let s = encoding.encode(s);
                         let written = self.writer.write(&s.0).unwrap();
                         assert_eq!(written, s.0.len());

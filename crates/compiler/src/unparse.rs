@@ -119,7 +119,7 @@ impl<'a> Unparse<'a> {
         }
 
         if let Variant::Str(s) = var.variant() {
-            let s = s.as_string();
+            let s = s.as_str();
 
             // If the string contains anything that isn't alphanumeric and _, it's
             // not a valid ident and needs to be quoted. Likewise if it begins with a non-alpha/underscore
@@ -127,7 +127,7 @@ impl<'a> Unparse<'a> {
                 || (s.chars().next().unwrap().is_numeric() && !s.starts_with('_'));
 
             if !needs_quotes {
-                s.clone()
+                s.to_string()
             } else {
                 format!("({})", quote_str(s))
             }
@@ -826,7 +826,7 @@ pub fn to_literal(v: &Var) -> String {
             result.push('}');
             result
         }
-        Variant::Str(s) => quote_str(s.as_string()),
+        Variant::Str(s) => quote_str(s.as_str()),
         Variant::Map(m) => {
             let mut result = String::new();
             result.push('[');

@@ -128,7 +128,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // This is unpresent
     if bf_args.args.len() == 2 {
-        let event = Unpresent(id.as_string().clone());
+        let event = Unpresent(id.as_str().to_string());
         let event = NarrativeEvent {
             timestamp: SystemTime::now(),
             author: bf_args.exec_state.this(),
@@ -174,7 +174,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 Variant::Str(s) => s,
                                 _ => return Err(BfErr::Code(E_TYPE)),
                             };
-                            attributes.push((key.as_string().clone(), value.as_string().clone()));
+                            attributes.push((key.as_str().to_string(), value.as_str().to_string()));
                         }
                         _ => {
                             return Err(BfErr::Code(E_TYPE));
@@ -192,7 +192,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         Variant::Str(s) => s,
                         _ => return Err(BfErr::Code(E_TYPE)),
                     };
-                    attributes.push((key.as_string().clone(), value.as_string().clone()));
+                    attributes.push((key.as_str().to_string(), value.as_str().to_string()));
                 }
             }
             _ => {
@@ -202,10 +202,10 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     let event = Presentation {
-        id: id.as_string().clone(),
-        content_type: content_type.as_string().clone(),
-        content: content.as_string().clone(),
-        target: target.as_string().clone(),
+        id: id.as_str().to_string(),
+        content_type: content_type.as_str().to_string(),
+        content: content.as_str().to_string(),
+        target: target.as_str().to_string(),
         attributes,
     };
 
@@ -402,7 +402,7 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(msg) = bf_args.args[0].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        Some(msg.as_string().clone())
+        Some(msg.as_str().to_string())
     };
 
     bf_args
@@ -479,7 +479,7 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(msg) = bf_args.args[1].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        Some(msg.as_string().clone())
+        Some(msg.as_str().to_string())
     } else {
         None
     };
@@ -946,7 +946,7 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(host_type) = bf_args.args[3].variant().clone() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        host_type.as_string().clone()
+        host_type.as_str().to_string()
     } else {
         "tcp".to_string()
     };
@@ -1022,7 +1022,7 @@ fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let Variant::Str(host_type) = bf_args.args[3].variant().clone() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        host_type.as_string().clone()
+        host_type.as_str().to_string()
     } else {
         "tcp".to_string()
     };
@@ -1059,7 +1059,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match tramp {
         BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE => {
-            let program_code = program_code.as_string().clone();
+            let program_code = program_code.as_str().to_string();
             let program = match compile(&program_code, bf_args.config.compile_options()) {
                 Ok(program) => program,
                 Err(e) => return Ok(Ret(v_list(&[v_int(0), v_string(e.to_string())]))),

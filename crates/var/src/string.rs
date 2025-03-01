@@ -28,10 +28,14 @@ pub struct Str(Arc<String>);
 
 impl Str {
     pub fn mk_str(s: &str) -> Self {
-        Str(Arc::new(s.to_string()))
+        Str(Arc::new(s.into()))
     }
 
-    pub fn as_string(&self) -> &String {
+    pub fn mk_string(s: String) -> Self {
+        Str(Arc::new(s))
+    }
+
+    pub fn as_str(&self) -> &str {
         self.0.as_ref()
     }
 
@@ -44,7 +48,7 @@ impl Str {
             return Err(E_RANGE);
         }
         let mut s = string.clone();
-        s.replace_range(index..=index, value.as_string());
+        s.replace_range(index..=index, value.as_str());
         let s = Str(Arc::new(s));
         let v = Variant::Str(s);
         Ok(Var::from_variant(v))
@@ -52,7 +56,7 @@ impl Str {
 
     pub fn append(&self, other: &Self) -> Var {
         let mut s = self.0.as_ref().clone();
-        s.push_str(other.as_string());
+        s.push_str(other.as_str());
         let s = Str(Arc::new(s));
         let v = Variant::Str(s);
         Var::from_variant(v)
@@ -61,25 +65,25 @@ impl Str {
 
 impl Sequence for Str {
     fn is_empty(&self) -> bool {
-        self.as_string().is_empty()
+        self.as_str().is_empty()
     }
 
     fn len(&self) -> usize {
-        self.as_string().len()
+        self.as_str().len()
     }
 
     fn index(&self, index: usize) -> Result<Var, Error> {
-        if index >= self.as_string().len() {
+        if index >= self.as_str().len() {
             return Err(E_RANGE);
         }
-        let c = self.as_string().chars().nth(index).unwrap();
+        let c = self.as_str().chars().nth(index).unwrap();
         let c_str = c.to_string();
         let v = Var::mk_str(&c_str);
         Ok(v)
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
-        if index >= self.as_string().len() {
+        if index >= self.as_str().len() {
             return Err(E_RANGE);
         }
 
@@ -95,9 +99,9 @@ impl Sequence for Str {
             return Err(E_INVARG);
         }
 
-        let mut s = self.as_string().clone();
-        s.replace_range(index..=index, value.as_string().as_str());
-        Ok(Var::mk_str(&s))
+        let mut s = self.as_str().to_string();
+        s.replace_range(index..=index, value.as_str());
+        Ok(Var::mk_string(s))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -107,16 +111,16 @@ impl Sequence for Str {
             _ => return Err(E_TYPE),
         };
 
-        let mut new_copy = self.as_string().clone();
-        new_copy.insert_str(index, value.as_string().as_str());
-        Ok(Var::mk_str(&new_copy))
+        let mut new_copy = self.as_str().to_string();
+        new_copy.insert_str(index, value.as_str());
+        Ok(Var::mk_string(new_copy))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
         if to < from {
             return Ok(Var::mk_str(""));
         }
-        let s = self.as_string();
+        let s = self.as_str();
         let start = max(from, 0) as usize;
         let to = to as usize;
         if start >= s.len() || to >= s.len() {
@@ -132,7 +136,7 @@ impl Sequence for Str {
             _ => return Err(Error::E_TYPE),
         };
 
-        let base_str = self.as_string().as_str();
+        let base_str = self.as_str();
         let from = max(from, 0) as usize;
 
         let mut result_str = if from > 0 {
@@ -140,7 +144,7 @@ impl Sequence for Str {
         } else {
             "".to_string()
         };
-        result_str.push_str(with_val.as_string().as_str());
+        result_str.push_str(with_val.as_str());
 
         match to.to_usize() {
             Some(to) => {
@@ -160,9 +164,9 @@ impl Sequence for Str {
             _ => return Err(E_TYPE),
         };
 
-        let mut new_copy = self.as_string().clone();
-        new_copy.push_str(value.as_string().as_str());
-        Ok(Var::mk_str(&new_copy))
+        let mut new_copy = self.as_str().to_string();
+        new_copy.push_str(value.as_str());
+        Ok(Var::mk_string(new_copy))
     }
 
     fn append(&self, other: &Var) -> Result<Var, Error> {
@@ -171,19 +175,19 @@ impl Sequence for Str {
             _ => return Err(E_TYPE),
         };
 
-        let mut new_copy = self.as_string().clone();
-        new_copy.push_str(other.as_string().as_str());
-        Ok(Var::mk_str(&new_copy))
+        let mut new_copy = self.as_str().to_string();
+        new_copy.push_str(other.as_str());
+        Ok(Var::mk_string(new_copy))
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
-        if index >= self.as_string().len() {
+        if index >= self.as_str().len() {
             return Err(E_RANGE);
         }
 
-        let mut new_copy = self.as_string().clone();
+        let mut new_copy = self.as_str().to_string();
         new_copy.remove(index);
-        Ok(Var::mk_str(&new_copy))
+        Ok(Var::mk_string(new_copy))
     }
 
     fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
@@ -192,8 +196,8 @@ impl Sequence for Str {
             _ => return Err(E_TYPE),
         };
 
-        let s = self.as_string();
-        let value = value.as_string();
+        let s = self.as_str();
+        let value = value.as_str();
         let contains = if case_sensitive {
             s.contains(value)
         } else {
@@ -208,8 +212,8 @@ impl Sequence for Str {
             _ => return Err(E_TYPE),
         };
 
-        let s = self.as_string();
-        let value = value.as_string();
+        let s = self.as_str();
+        let value = value.as_str();
         let contains = if case_sensitive {
             // Get the index of the substring in the string.
             s.find(value)
@@ -223,14 +227,14 @@ impl Sequence for Str {
 
 impl Display for Str {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_string())
+        write!(f, "{}", self.as_str())
     }
 }
 impl PartialEq for Str {
     // MOO strings are case-insensitive on comparison unless an explicit case sensitive comparison
     // is needed.
     fn eq(&self, other: &Self) -> bool {
-        self.as_string().to_lowercase() == other.as_string().to_lowercase()
+        self.as_str().to_lowercase() == other.as_str().to_lowercase()
     }
 }
 
@@ -244,15 +248,27 @@ impl PartialOrd for Str {
 
 impl Ord for Str {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.as_string()
+        self.as_str()
             .to_lowercase()
-            .cmp(&other.as_string().to_lowercase())
+            .cmp(&other.as_str().to_lowercase())
     }
 }
 
 impl Hash for Str {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_string().to_lowercase().hash(state)
+        self.as_str().to_lowercase().hash(state)
+    }
+}
+
+impl From<&str> for Str {
+    fn from(s: &str) -> Self {
+        Str::mk_str(s)
+    }
+}
+
+impl From<String> for Str {
+    fn from(s: String) -> Self {
+        Str::mk_string(s)
     }
 }
 
@@ -267,7 +283,7 @@ mod tests {
     fn test_str_pack_unpack() {
         let s = Var::mk_str("hello");
         match s.variant() {
-            Variant::Str(s) => assert_eq!(s.as_string().as_str(), "hello"),
+            Variant::Str(s) => assert_eq!(s.as_str(), "hello"),
             _ => panic!("Expected string"),
         }
     }
@@ -309,7 +325,7 @@ mod tests {
         let r = s.index(&Var::mk_integer(1), IndexMode::ZeroBased).unwrap();
         let r = r.variant();
         match r {
-            Variant::Str(s) => assert_eq!(s.as_string().as_str(), "e"),
+            Variant::Str(s) => assert_eq!(s.as_str(), "e"),
             _ => panic!("Expected string, got {:?}", r),
         }
     }
@@ -322,7 +338,7 @@ mod tests {
             .unwrap();
         let r = r.variant();
         match r {
-            Variant::Str(s) => assert_eq!(s.as_string().as_str(), "hallo"),
+            Variant::Str(s) => assert_eq!(s.as_str(), "hallo"),
             _ => panic!("Expected string, got {:?}", r),
         }
 
@@ -404,7 +420,7 @@ mod tests {
         let r = s.push(&Var::mk_str(" world")).unwrap();
         let r = r.variant();
         match r {
-            Variant::Str(s) => assert_eq!(s.as_string().as_str(), "hello world"),
+            Variant::Str(s) => assert_eq!(s.as_str(), "hello world"),
             _ => panic!("Expected string, got {:?}", r),
         }
     }
@@ -416,7 +432,7 @@ mod tests {
         let r = s1.append(&s2).unwrap();
         let r = r.variant();
         match r {
-            Variant::Str(s) => assert_eq!(s.as_string().as_str(), "hello world"),
+            Variant::Str(s) => assert_eq!(s.as_str(), "hello world"),
             _ => panic!("Expected string, got {:?}", r),
         }
     }
@@ -429,7 +445,7 @@ mod tests {
             .unwrap();
         let r = r.variant();
         match r {
-            Variant::Str(s) => assert_eq!(s.as_string().as_str(), "hllo"),
+            Variant::Str(s) => assert_eq!(s.as_str(), "hllo"),
             _ => panic!("Expected string, got {:?}", r),
         }
 

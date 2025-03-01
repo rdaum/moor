@@ -367,7 +367,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
                 self.get_tx_mut()
-                    .set_object_name(obj, name.as_string().clone())?;
+                    .set_object_name(obj, name.as_str().to_string())?;
                 return Ok(());
             }
 
@@ -751,7 +751,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
                 Variant::List(a) => a
                     .iter()
                     .map(|v| match v.variant() {
-                        Variant::Str(s) => s.as_string().clone(),
+                        Variant::Str(s) => s.as_str().to_string(),
                         _ => "".to_string(),
                     })
                     .collect(),

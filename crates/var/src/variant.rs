@@ -117,7 +117,7 @@ impl Debug for Variant {
                 let i: Vec<_> = r.collect();
                 write!(f, "List([size = {}, items = {:?}])", l.len(), i)
             }
-            Variant::Str(s) => write!(f, "String({:?})", s.as_string()),
+            Variant::Str(s) => write!(f, "String({:?})", s.as_str()),
             Variant::Map(m) => {
                 // Items...
                 let r = m.iter();

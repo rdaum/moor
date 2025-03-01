@@ -72,13 +72,13 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
         let Variant::Str(name) = name.variant() else {
             return InfoParseResult::Fail(E_TYPE);
         };
-        Some(name.as_string().clone())
+        Some(name.as_str().to_string())
     } else {
         None
     };
 
     let mut flags = BitEnum::new();
-    for c in perms.as_string().chars() {
+    for c in perms.as_str().chars() {
         match c {
             'r' => flags |= PropFlag::Read,
             'w' => flags |= PropFlag::Write,

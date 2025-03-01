@@ -180,7 +180,7 @@ impl TelnetConnection {
         match event {
             Event::Notify(msg, content_type) => match msg.variant() {
                 Variant::Str(msg_text) => {
-                    let formatted = output_format(msg_text.as_string(), content_type);
+                    let formatted = output_format(msg_text.as_str(), content_type);
                     self.write
                         .send(formatted)
                         .await
@@ -192,7 +192,7 @@ impl TelnetConnection {
                             trace!("Non-string in list output");
                             continue;
                         };
-                        let formatted = output_format(line.as_string(), content_type);
+                        let formatted = output_format(line.as_str(), content_type);
                         self.write
                             .send(formatted)
                             .await

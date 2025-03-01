@@ -626,7 +626,7 @@ impl Decompile {
                     let v = self.pop_expr()?;
                     let k = match k {
                         Expr::Value(s) => match s.variant() {
-                            Variant::Str(s) => Symbol::mk(s.as_string().as_str()),
+                            Variant::Str(s) => Symbol::mk(s.as_str()),
                             _ => {
                                 return Err(MalformedProgram(
                                     "expected string for flyweight slot name".to_string(),
