@@ -15,7 +15,7 @@ use crate::connection::TelnetConnection;
 use eyre::bail;
 use futures_util::StreamExt;
 use futures_util::stream::SplitSink;
-use moor_values::Obj;
+use moor_var::Obj;
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{ListenersClient, ListenersMessage};
 use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;

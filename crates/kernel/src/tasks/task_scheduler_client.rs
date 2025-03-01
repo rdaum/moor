@@ -18,11 +18,11 @@ use crossbeam_channel::Sender;
 use crate::tasks::TaskDescription;
 use crate::tasks::task::Task;
 use crate::vm::Fork;
-use moor_values::Symbol;
-use moor_values::Var;
-use moor_values::model::Perms;
-use moor_values::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
-use moor_values::{Error, Obj};
+use moor_common::model::Perms;
+use moor_common::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
+use moor_var::Symbol;
+use moor_var::Var;
+use moor_var::{Error, Obj};
 
 /// A handle for talking to the scheduler from within a task.
 #[derive(Clone)]

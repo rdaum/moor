@@ -17,9 +17,9 @@ use axum::body::Bytes;
 use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use moor_values::Symbol;
-use moor_values::model::ObjectRef;
-use moor_values::tasks::VerbProgramError;
+use moor_common::model::ObjectRef;
+use moor_common::tasks::VerbProgramError;
+use moor_var::Symbol;
 use rpc_common::{
     DaemonToClientReply, EntityType, HostClientToDaemonMessage, VerbInfo, VerbProgramResponse,
 };

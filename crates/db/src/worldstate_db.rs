@@ -18,9 +18,9 @@ use crate::tx::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
 use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
-use moor_values::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
-use moor_values::util::BitEnum;
-use moor_values::{Obj, Var};
+use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
+use moor_common::util::BitEnum;
+use moor_var::{Obj, Var};
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
@@ -638,9 +638,9 @@ mod tests {
         perform_test_verb_resolve, perform_test_verb_resolve_inherited,
         perform_test_verb_resolve_wildcard,
     };
-    use moor_values::model::{ObjAttrs, ObjFlag, PropFlag};
-    use moor_values::util::BitEnum;
-    use moor_values::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_int, v_str};
+    use moor_common::model::{ObjAttrs, ObjFlag, PropFlag};
+    use moor_common::util::BitEnum;
+    use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_int, v_str};
     use std::sync::Arc;
 
     fn test_db() -> Arc<super::WorldStateDB> {

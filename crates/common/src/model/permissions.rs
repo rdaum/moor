@@ -11,12 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Obj;
 use crate::model::objects::ObjFlag;
 use crate::model::props::PropFlag;
 use crate::model::verbs::VerbFlag;
 use crate::model::{PropPerms, WorldStateError};
 use crate::util::BitEnum;
+use moor_var::Obj;
 
 /// Combination of who a set of permissions is for, and what permissions they have.
 #[derive(Debug, Clone, Eq, PartialEq)]

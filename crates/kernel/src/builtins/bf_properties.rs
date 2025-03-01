@@ -11,14 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_common::model::{PropAttrs, PropFlag, prop_flags_string};
+use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
-use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_values::Sequence;
-use moor_values::Variant;
-use moor_values::model::{PropAttrs, PropFlag, prop_flags_string};
-use moor_values::util::BitEnum;
-use moor_values::{List, v_empty_list};
-use moor_values::{v_list, v_none, v_obj, v_string};
+use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_var::Sequence;
+use moor_var::Variant;
+use moor_var::{List, v_empty_list};
+use moor_var::{v_list, v_none, v_obj, v_string};
 
 use crate::bf_declare;
 use crate::builtins::BfErr::Code;
@@ -50,7 +50,7 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(property_info, bf_property_info);
 
 enum InfoParseResult {
-    Fail(moor_values::Error),
+    Fail(moor_var::Error),
     Success(PropAttrs),
 }
 

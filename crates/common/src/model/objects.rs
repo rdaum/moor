@@ -15,11 +15,11 @@ use binary_layout::{Field, binary_layout};
 use std::fmt::{Display, Formatter};
 
 use crate::util::BitEnum;
-use crate::var::{Obj, Symbol};
-use crate::{AsByteBuffer, DecodingError, EncodingError, NOTHING};
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use enum_primitive_derive::Primitive;
+use moor_var::{AsByteBuffer, DecodingError, EncodingError, NOTHING};
+use moor_var::{Obj, Symbol};
 use serde::{Deserialize, Serialize};
 
 /// A reference to an object in the system, used in external interface (RPC, etc.) to refer to

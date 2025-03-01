@@ -14,17 +14,17 @@
 //! A set of common tests for any world state implementation.
 
 use crate::worldstate_transaction::WorldStateTransaction;
-use moor_values::NOTHING;
-use moor_values::Obj;
-use moor_values::Symbol;
-use moor_values::model::VerbArgsSpec;
-use moor_values::model::{BinaryType, VerbAttrs};
-use moor_values::model::{CommitResult, WorldStateError};
-use moor_values::model::{HasUuid, Named};
-use moor_values::model::{ObjAttrs, PropFlag, ValSet};
-use moor_values::model::{ObjSet, ObjectRef};
-use moor_values::util::BitEnum;
-use moor_values::{v_int, v_str};
+use moor_common::model::VerbArgsSpec;
+use moor_common::model::{BinaryType, VerbAttrs};
+use moor_common::model::{CommitResult, WorldStateError};
+use moor_common::model::{HasUuid, Named};
+use moor_common::model::{ObjAttrs, PropFlag, ValSet};
+use moor_common::model::{ObjSet, ObjectRef};
+use moor_common::util::BitEnum;
+use moor_var::NOTHING;
+use moor_var::Obj;
+use moor_var::Symbol;
+use moor_var::{v_int, v_str};
 
 pub fn perform_test_create_object<F, TX>(begin_tx: F)
 where

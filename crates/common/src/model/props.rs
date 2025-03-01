@@ -11,14 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Obj;
-use crate::Var;
 use crate::util::BitEnum;
-use crate::{AsByteBuffer, DecodingError, EncodingError};
 use binary_layout::binary_layout;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use enum_primitive_derive::Primitive;
+use moor_var::Obj;
+use moor_var::Var;
+use moor_var::{AsByteBuffer, DecodingError, EncodingError};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive, Encode, Decode)]
 pub enum PropFlag {
@@ -180,7 +180,6 @@ impl AsByteBuffer for PropPerms {
 
 #[cfg(test)]
 mod test {
-
     use super::*;
 
     #[test]

@@ -19,11 +19,11 @@ mod tests {
     use crate::labels::{Label, Offset};
     use crate::opcode::Op::*;
     use crate::opcode::{ScatterArgs, ScatterLabel};
-    use moor_values::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
-    use moor_values::Obj;
-    use moor_values::SYSTEM_OBJECT;
-    use moor_values::Symbol;
-    use moor_values::model::CompileError;
+    use moor_common::model::CompileError;
+    use moor_var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
+    use moor_var::Obj;
+    use moor_var::SYSTEM_OBJECT;
+    use moor_var::Symbol;
 
     #[test]
     fn test_simple_add_expr() {

@@ -14,18 +14,18 @@
 use byteview::ByteView;
 use uuid::Uuid;
 
-use moor_values::Obj;
-use moor_values::Symbol;
-use moor_values::Var;
-use moor_values::model::PropFlag;
-use moor_values::model::VerbArgsSpec;
-use moor_values::model::{BinaryType, VerbAttrs, VerbFlag};
-use moor_values::model::{CommitResult, WorldStateError};
-use moor_values::model::{ObjAttrs, ObjFlag};
-use moor_values::model::{ObjSet, PropPerms};
-use moor_values::model::{PropDef, PropDefs};
-use moor_values::model::{VerbDef, VerbDefs};
-use moor_values::util::BitEnum;
+use moor_common::model::PropFlag;
+use moor_common::model::VerbArgsSpec;
+use moor_common::model::{BinaryType, VerbAttrs, VerbFlag};
+use moor_common::model::{CommitResult, WorldStateError};
+use moor_common::model::{ObjAttrs, ObjFlag};
+use moor_common::model::{ObjSet, PropPerms};
+use moor_common::model::{PropDef, PropDefs};
+use moor_common::model::{VerbDef, VerbDefs};
+use moor_common::util::BitEnum;
+use moor_var::Obj;
+use moor_var::Symbol;
+use moor_var::Var;
 
 /// A trait defining a generic interface to a database for storing the per-attribute common
 /// of our objects and their properties and verbs.  Used by DbTxWorldState.

@@ -16,8 +16,6 @@ use byteview::ByteView;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::Symbol;
-use crate::Var;
 use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::objects::ObjFlag;
 use crate::model::objset::ObjSet;
@@ -28,7 +26,9 @@ use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};
 use crate::model::{ObjAttr, Vid};
 use crate::util::BitEnum;
-use crate::{Error, Obj};
+use moor_var::Symbol;
+use moor_var::Var;
+use moor_var::{Error, Obj};
 
 /// Errors related to the world state and operations on it.
 #[derive(Error, Debug, Eq, PartialEq, Clone, Decode, Encode)]

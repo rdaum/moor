@@ -14,16 +14,16 @@
 use lazy_static::lazy_static;
 use tracing::{debug, error, trace};
 
+use moor_common::model::Named;
+use moor_common::model::WorldStateError;
+use moor_common::model::{ObjFlag, ValSet};
+use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
-use moor_values::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
-use moor_values::model::Named;
-use moor_values::model::WorldStateError;
-use moor_values::model::{ObjFlag, ValSet};
-use moor_values::util::BitEnum;
-use moor_values::{List, Variant};
-use moor_values::{NOTHING, v_list_iter};
-use moor_values::{Sequence, Symbol, v_list};
-use moor_values::{v_int, v_none, v_obj, v_str, v_sym_str};
+use moor_var::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
+use moor_var::{List, Variant};
+use moor_var::{NOTHING, v_list_iter};
+use moor_var::{Sequence, Symbol, v_list};
+use moor_var::{v_int, v_none, v_obj, v_str, v_sym_str};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::{Ret, VmInstr};

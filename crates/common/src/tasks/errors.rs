@@ -13,8 +13,8 @@
 
 use crate::model::{CompileError, WorldStateError};
 use crate::tasks::TaskId;
-use crate::{Error, Var};
 use bincode::{Decode, Encode};
+use moor_var::{Error, Var};
 use std::fmt::Display;
 use std::time::Duration;
 use strum::Display;

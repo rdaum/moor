@@ -21,11 +21,11 @@ use eyre::bail;
 use futures_util::SinkExt;
 use futures_util::StreamExt;
 use futures_util::stream::{SplitSink, SplitStream};
+use moor_common::model::{CompileError, ObjectRef};
+use moor_common::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
+use moor_common::util::parse_into_words;
 use moor_compiler::to_literal;
-use moor_values::model::{CompileError, ObjectRef};
-use moor_values::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
-use moor_values::util::parse_into_words;
-use moor_values::{Obj, Symbol, Variant};
+use moor_var::{Obj, Symbol, Variant};
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::{

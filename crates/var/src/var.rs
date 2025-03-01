@@ -11,13 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
-use crate::var::list::List;
-use crate::var::variant::Variant;
-use crate::var::{Associative, string};
-use crate::var::{Error, Obj, VarType};
-use crate::var::{Flyweight, IndexMode, Sequence, TypeClass, map};
+use crate::Error::{E_INVARG, E_RANGE, E_TYPE};
+use crate::list::List;
+use crate::variant::Variant;
+use crate::{Associative, string};
 use crate::{BincodeAsByteBufferExt, Symbol};
+use crate::{Error, Obj, VarType};
+use crate::{Flyweight, IndexMode, Sequence, TypeClass, map};
 use bincode::{Decode, Encode};
 use std::cmp::{Ordering, min};
 use std::fmt::{Debug, Formatter};
@@ -573,8 +573,8 @@ impl Hash for Var {
 
 #[cfg(test)]
 mod tests {
-    use crate::var::var::Var;
-    use crate::var::variant::Variant;
+    use crate::var::Var;
+    use crate::variant::Variant;
 
     #[test]
     fn test_int_pack_unpack() {

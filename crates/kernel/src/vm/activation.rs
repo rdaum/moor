@@ -19,23 +19,23 @@ use byteview::ByteView;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
+use moor_common::model::VerbArgsSpec;
+use moor_common::model::VerbDef;
+use moor_common::model::{BinaryType, VerbFlag};
+use moor_common::util::BitEnum;
 use moor_compiler::Name;
 use moor_compiler::Program;
 use moor_compiler::{BuiltinId, GlobalName};
-use moor_values::Obj;
-use moor_values::model::VerbArgsSpec;
-use moor_values::model::VerbDef;
-use moor_values::model::{BinaryType, VerbFlag};
-use moor_values::util::BitEnum;
-use moor_values::{AsByteBuffer, Symbol};
-use moor_values::{Error, v_empty_str};
-use moor_values::{List, NOTHING};
-use moor_values::{Var, VarType, v_empty_list, v_int, v_obj, v_str, v_string};
+use moor_var::Obj;
+use moor_var::{AsByteBuffer, Symbol};
+use moor_var::{Error, v_empty_str};
+use moor_var::{List, NOTHING};
+use moor_var::{Var, VarType, v_empty_list, v_int, v_obj, v_str, v_string};
 
 use crate::vm::VerbExecutionRequest;
 use crate::vm::moo_frame::MooStackFrame;
 use crate::vm::vm_call::VerbProgram;
-use moor_values::matching::command_parse::ParsedCommand;
+use moor_common::matching::command_parse::ParsedCommand;
 
 lazy_static! {
     static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");

@@ -12,9 +12,9 @@
 //
 
 use byteview::ByteView;
-use moor_values::model::WorldStateSource;
-use moor_values::model::{WorldState, WorldStateError};
-use moor_values::{AsByteBuffer, DecodingError, EncodingError, Obj};
+use moor_common::model::WorldStateSource;
+use moor_common::model::{WorldState, WorldStateError};
+use moor_var::{AsByteBuffer, DecodingError, EncodingError, Obj};
 use std::cmp::Ordering;
 use std::path::Path;
 use std::sync::Arc;
@@ -281,7 +281,7 @@ impl AsByteBuffer for ObjAndUUIDHolder {
 #[cfg(test)]
 mod tests {
     use crate::ObjAndUUIDHolder;
-    use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+    use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
     use std::collections::BTreeSet;
     use std::hash::{Hash, Hasher};
     use uuid::Uuid;

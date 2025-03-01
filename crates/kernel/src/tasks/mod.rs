@@ -17,12 +17,12 @@ use std::time::SystemTime;
 use bincode::{Decode, Encode};
 
 use moor_compiler::Program;
-use moor_values::{List, Obj};
-use moor_values::{Symbol, Var};
+use moor_var::{List, Obj};
+use moor_var::{Symbol, Var};
 
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
 use crate::vm::Fork;
-use moor_values::tasks::{SchedulerError, TaskId};
+use moor_common::tasks::{SchedulerError, TaskId};
 
 pub mod scheduler;
 pub mod sessions;
@@ -130,11 +130,11 @@ pub mod vm_test_utils {
     use std::sync::Arc;
     use std::time::Duration;
 
+    use moor_common::model::WorldState;
     use moor_compiler::Program;
-    use moor_values::model::WorldState;
-    use moor_values::{List, SYSTEM_OBJECT};
-    use moor_values::{Obj, Var};
-    use moor_values::{Symbol, v_obj};
+    use moor_var::{List, SYSTEM_OBJECT};
+    use moor_var::{Obj, Var};
+    use moor_var::{Symbol, v_obj};
 
     use crate::builtins::BuiltinRegistry;
     use crate::config::FeaturesConfig;
@@ -142,7 +142,7 @@ pub mod vm_test_utils {
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::VmHost;
     use crate::vm::VMHostResponse;
-    use moor_values::tasks::Exception;
+    use moor_common::tasks::Exception;
 
     pub type ExecResult = Result<Var, Exception>;
 
@@ -252,15 +252,15 @@ pub mod scheduler_test_utils {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use moor_values::tasks::{CommandError, SchedulerError};
-    use moor_values::{Error::E_VERBNF, Obj, SYSTEM_OBJECT, Var};
+    use moor_common::tasks::{CommandError, SchedulerError};
+    use moor_var::{Error::E_VERBNF, Obj, SYSTEM_OBJECT, Var};
 
     use super::{TaskHandle, TaskResult};
     use crate::config::FeaturesConfig;
     use crate::tasks::scheduler_client::SchedulerClient;
     use crate::tasks::sessions::Session;
-    use moor_values::tasks::Exception;
-    use moor_values::tasks::SchedulerError::{CommandExecutionError, TaskAbortedException};
+    use moor_common::tasks::Exception;
+    use moor_common::tasks::SchedulerError::{CommandExecutionError, TaskAbortedException};
 
     pub type ExecResult = Result<Var, Exception>;
 

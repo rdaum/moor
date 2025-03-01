@@ -14,8 +14,8 @@
 use crate::GlobalName;
 use crate::names::Binding::{Named, Register};
 use bincode::{Decode, Encode};
-use moor_values::Symbol;
-use moor_values::model::CompileError;
+use moor_common::model::CompileError;
+use moor_var::Symbol;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 

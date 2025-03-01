@@ -34,7 +34,7 @@ use moor_kernel::{
     },
 };
 use moor_moot::{MootOptions, MootRunner, execute_moot_test};
-use moor_values::{Obj, Var, v_none};
+use moor_var::{Obj, Var, v_none};
 
 mod common;
 

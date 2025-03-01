@@ -12,9 +12,9 @@
 //
 
 use eyre::{anyhow, bail};
-use moor_values::model::ObjectRef;
-use moor_values::tasks::VerbProgramError;
-use moor_values::{Obj, SYSTEM_OBJECT, Symbol, Var};
+use moor_common::model::ObjectRef;
+use moor_common::tasks::VerbProgramError;
+use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use rpc_async_client::pubsub_client::{broadcast_recv, events_recv};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{ListenersClient, ListenersMessage};

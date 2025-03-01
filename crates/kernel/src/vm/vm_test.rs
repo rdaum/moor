@@ -15,19 +15,19 @@
 mod tests {
     use std::sync::Arc;
 
-    use moor_values::Error::E_DIV;
-    use moor_values::model::PropFlag;
-    use moor_values::model::VerbArgsSpec;
-    use moor_values::model::{BinaryType, VerbFlag};
-    use moor_values::model::{WorldState, WorldStateSource};
-    use moor_values::util::BitEnum;
-    use moor_values::{
+    use moor_common::model::PropFlag;
+    use moor_common::model::VerbArgsSpec;
+    use moor_common::model::{BinaryType, VerbFlag};
+    use moor_common::model::{WorldState, WorldStateSource};
+    use moor_common::util::BitEnum;
+    use moor_var::{
         List, Obj, Var, v_bool_int, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_none,
         v_obj, v_objid, v_str, v_sym_str,
     };
 
-    use moor_values::NOTHING;
-    use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
+    use moor_var::Error::*;
+    use moor_var::NOTHING;
+    use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
 
     use crate::builtins::BuiltinRegistry;
     use crate::tasks::sessions::NoopClientSession;
@@ -38,7 +38,7 @@ mod tests {
     use moor_compiler::{CompileOptions, Names};
     use moor_compiler::{UnboundNames, compile};
     use moor_db::{DatabaseConfig, TxDB};
-    use moor_values::Symbol;
+    use moor_var::Symbol;
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {

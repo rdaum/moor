@@ -15,18 +15,18 @@ use crate::vm::ExecutionResult;
 use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
 use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
+use moor_common::model::WorldState;
 use moor_compiler::{Op, ScatterLabel};
-use moor_values::model::WorldState;
 use std::ops::Add;
 use std::time::Duration;
 
 use crate::config::FeaturesConfig;
-use moor_values::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
-use moor_values::{
+use moor_var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
+use moor_var::{
     Error, IndexMode, Obj, Sequence, Var, Variant, v_bool_int, v_empty_list, v_empty_map, v_err,
     v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_sym,
 };
-use moor_values::{Symbol, VarType};
+use moor_var::{Symbol, VarType};
 
 lazy_static! {
     static ref DELEGATE_SYM: Symbol = Symbol::mk("delegate");

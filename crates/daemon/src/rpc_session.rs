@@ -17,9 +17,9 @@ use std::sync::Mutex;
 use tracing::trace;
 use uuid::Uuid;
 
+use moor_common::tasks::NarrativeEvent;
 use moor_kernel::tasks::sessions::{Session, SessionError, SessionFactory};
-use moor_values::Obj;
-use moor_values::tasks::NarrativeEvent;
+use moor_var::Obj;
 
 use crate::rpc_server::RpcServer;
 

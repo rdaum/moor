@@ -20,6 +20,12 @@ use std::time::Duration;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
+use moor_common::model::CommitResult;
+use moor_common::model::VerbArgsSpec;
+use moor_common::model::{BinaryType, VerbFlag};
+use moor_common::model::{WorldState, WorldStateSource};
+use moor_common::tasks::AbortLimitReason;
+use moor_common::util::BitEnum;
 use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
 use moor_kernel::builtins::BuiltinRegistry;
@@ -29,14 +35,8 @@ use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_kernel::tasks::task_scheduler_client::TaskSchedulerClient;
 use moor_kernel::tasks::vm_host::VmHost;
 use moor_kernel::vm::VMHostResponse;
-use moor_values::model::CommitResult;
-use moor_values::model::VerbArgsSpec;
-use moor_values::model::{BinaryType, VerbFlag};
-use moor_values::model::{WorldState, WorldStateSource};
-use moor_values::tasks::AbortLimitReason;
-use moor_values::util::BitEnum;
-use moor_values::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
-use moor_values::{List, Symbol, v_obj};
+use moor_var::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
+use moor_var::{List, Symbol, v_obj};
 
 fn create_db() -> TxDB {
     let (ws_source, _) = TxDB::open(None, DatabaseConfig::default());

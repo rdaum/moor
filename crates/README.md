@@ -18,8 +18,8 @@ Binaries:
 
 Libraries:
 
-- `values` - crate that implements the core MOO discriminated union (`Var`) value type,
-  plus all associated types and traits.
+- `var` - implements the basic moor/MOO value types and exports common constants and error structs associated with them
+- `common` - common model objects and utilities such as WorldState, command matching, and utilities
 - `db` - implementation of the `WorldState` object database overtop of `rdb`
 - `compiler` - the MOO language grammar, parser, AST, and codegen, as well as the decompiler & unparser
 - `kernel` - the kernel of the MOO driver: virtual machine, task scheduler, implementations of all builtin\

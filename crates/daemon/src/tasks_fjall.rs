@@ -12,10 +12,10 @@
 //
 
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
+use moor_common::tasks::TaskId;
 use moor_kernel::SuspendedTask;
 use moor_kernel::tasks::{TasksDb, TasksDbError};
-use moor_values::BINCODE_CONFIG;
-use moor_values::tasks::TaskId;
+use moor_var::BINCODE_CONFIG;
 use std::path::Path;
 use tracing::error;
 
@@ -111,7 +111,7 @@ mod tests {
     use moor_kernel::tasks::sessions::NoopClientSession;
     use moor_kernel::tasks::{ServerOptions, TaskStart, TasksDb};
     use moor_kernel::{SuspendedTask, Task, WakeCondition};
-    use moor_values::SYSTEM_OBJECT;
+    use moor_var::SYSTEM_OBJECT;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
 

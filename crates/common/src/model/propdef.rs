@@ -11,13 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Obj;
-use crate::Symbol;
-use crate::encode::{DecodingError, EncodingError};
+use crate::DATA_LAYOUT_VERSION;
 use crate::model::defset::{Defs, HasUuid, Named};
-use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{Field, binary_layout};
 use byteview::ByteView;
+use moor_var::AsByteBuffer;
+use moor_var::Obj;
+use moor_var::Symbol;
+use moor_var::encode::{DecodingError, EncodingError};
 use uuid::Uuid;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -147,11 +148,11 @@ pub type PropDefs = Defs<PropDef>;
 
 #[cfg(test)]
 mod tests {
-    use crate::AsByteBuffer;
-    use crate::Obj;
-    use crate::Symbol;
     use crate::model::{HasUuid, PropDef, PropDefs, ValSet};
     use byteview::ByteView;
+    use moor_var::AsByteBuffer;
+    use moor_var::Obj;
+    use moor_var::Symbol;
     use uuid::Uuid;
 
     #[test]

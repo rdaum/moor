@@ -15,11 +15,11 @@ use crate::host::{serialize_var, var_as_json};
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use moor_values::tasks::{
+use moor_common::tasks::{
     AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
     VerbProgramError,
 };
-use moor_values::{Obj, Var, Variant, v_obj};
+use moor_var::{Obj, Var, Variant, v_obj};
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;

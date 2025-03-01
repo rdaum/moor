@@ -14,9 +14,9 @@
 use std::ops::BitOr;
 
 use moor_compiler::offset_for_builtin;
-use moor_values::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_values::{Error, Variant};
-use moor_values::{
+use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_var::{Error, Variant};
+use moor_var::{
     IndexMode, List, Sequence, Var, VarType, v_empty_list, v_int, v_list, v_list_iter, v_map,
     v_str, v_string,
 };
@@ -579,7 +579,7 @@ pub(crate) fn register_bf_list_sets(builtins: &mut [Box<dyn BuiltinFunction>]) {
 mod tests {
     use crate::builtins::bf_list_sets::{perform_pcre_match, perform_regex_match, substitute};
     use moor_compiler::to_literal;
-    use moor_values::{Var, Variant, v_int, v_list, v_map, v_str};
+    use moor_var::{Var, Variant, v_int, v_list, v_map, v_str};
 
     #[test]
     fn test_match_substitute() {

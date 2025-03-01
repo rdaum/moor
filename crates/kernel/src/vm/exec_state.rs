@@ -15,13 +15,13 @@ use std::time::{Duration, SystemTime};
 
 use bincode::{Decode, Encode};
 
-use moor_values::NOTHING;
-use moor_values::{Obj, Symbol};
-use moor_values::{Var, v_obj};
+use moor_var::NOTHING;
+use moor_var::{Obj, Symbol};
+use moor_var::{Var, v_obj};
 
 use crate::PhantomUnsync;
 use crate::vm::activation::{Activation, Frame};
-use moor_values::tasks::TaskId;
+use moor_common::tasks::TaskId;
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]

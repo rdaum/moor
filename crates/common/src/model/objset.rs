@@ -11,13 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::AsByteBuffer;
-use crate::Obj;
-use crate::encode::{DecodingError, EncodingError};
 use crate::model::ValSet;
 use byteview::ByteView;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use moor_var::AsByteBuffer;
+use moor_var::Obj;
+use moor_var::encode::{DecodingError, EncodingError};
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 // TODO: this won't work for non-objid objects
@@ -220,7 +220,7 @@ impl ValSet<Obj> for ObjSet {
         if oids.is_empty() {
             return EMPTY_OBJSET.clone();
         }
-        let mut v = Vec::with_capacity(size_of::<Obj>() * oids.len());
+        let mut v = Vec::with_capacity(std::mem::size_of_val(oids));
         for i in oids {
             v.extend_from_slice(&i.as_bytes().unwrap());
         }
@@ -256,7 +256,7 @@ impl Default for ObjSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AsByteBuffer;
+    use moor_var::AsByteBuffer;
     use std::collections::HashSet;
 
     #[test]

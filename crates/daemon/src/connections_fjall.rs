@@ -17,7 +17,7 @@ use byteview::ByteView;
 use eyre::{Error, bail};
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use moor_kernel::tasks::sessions::SessionError;
-use moor_values::{AsByteBuffer, BINCODE_CONFIG, Obj};
+use moor_var::{AsByteBuffer, BINCODE_CONFIG, Obj};
 use rpc_common::RpcMessageError;
 use std::collections::HashMap;
 use std::path::Path;
@@ -437,7 +437,7 @@ impl ConnectionsDB for ConnectionsFjall {
 mod tests {
     use std::sync::Arc;
 
-    use moor_values::Obj;
+    use moor_var::Obj;
 
     use crate::connections::ConnectionsDB;
     use crate::connections_fjall::ConnectionsFjall;

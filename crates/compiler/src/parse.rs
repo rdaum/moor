@@ -19,19 +19,19 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use itertools::Itertools;
-use moor_values::{SYSTEM_OBJECT, Var};
-use moor_values::{Symbol, v_none};
+use moor_var::{SYSTEM_OBJECT, Var};
+use moor_var::{Symbol, v_none};
 pub use pest::Parser as PestParser;
 use pest::error::LineColLocation;
 use pest::iterators::Pairs;
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 
-use moor_values::Error::{
+use moor_var::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
     E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use moor_values::Obj;
-use moor_values::{v_err, v_float, v_int, v_obj, v_str, v_string};
+use moor_var::Obj;
+use moor_var::{v_err, v_float, v_int, v_obj, v_str, v_string};
 
 use crate::Name;
 use crate::ast::Arg::{Normal, Splice};
@@ -43,7 +43,7 @@ use crate::ast::{
 use crate::names::{Names, UnboundName, UnboundNames};
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
-use moor_values::model::CompileError;
+use moor_common::model::CompileError;
 
 pub mod moo {
     #[derive(Parser)]
@@ -1387,9 +1387,9 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
 
 #[cfg(test)]
 mod tests {
-    use moor_values::Error::{E_INVARG, E_PROPNF, E_VARNF};
-    use moor_values::{Symbol, v_none};
-    use moor_values::{Var, v_err, v_float, v_int, v_objid, v_str};
+    use moor_var::Error::{E_INVARG, E_PROPNF, E_VARNF};
+    use moor_var::{Symbol, v_none};
+    use moor_var::{Var, v_err, v_float, v_int, v_objid, v_str};
 
     use crate::CompileOptions;
     use crate::ast::Arg::{Normal, Splice};
@@ -1403,7 +1403,7 @@ mod tests {
     };
     use crate::names::UnboundName;
     use crate::parse::{parse_program, unquote_str};
-    use moor_values::model::CompileError;
+    use moor_common::model::CompileError;
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()

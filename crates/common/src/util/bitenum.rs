@@ -15,11 +15,11 @@ use binary_layout::LayoutAs;
 use std::marker::PhantomData;
 use std::ops::{BitOr, BitOrAssign};
 
-use crate::encode::{DecodingError, EncodingError};
+use moor_var::encode::{DecodingError, EncodingError};
 
-use crate::AsByteBuffer;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
+use moor_var::AsByteBuffer;
 /// A barebones minimal custom bitset enum, to replace use of `EnumSet` crate which was not rkyv'able.
 use num_traits::ToPrimitive;
 

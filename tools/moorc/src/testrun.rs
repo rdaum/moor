@@ -17,7 +17,7 @@ use moor_kernel::SchedulerClient;
 use moor_kernel::tasks::scheduler_test_utils;
 use moor_kernel::tasks::sessions::{NoopClientSession, Session, SessionError, SessionFactory};
 use moor_moot::{MootOptions, MootRunner, execute_moot_test};
-use moor_values::{Obj, Var, v_none};
+use moor_var::{Obj, Var, v_none};
 use std::path::Path;
 use std::sync::Arc;
 // TODO: consolidate with what's in kernel/testsuite/moo_suite.rs?

@@ -14,17 +14,17 @@
 use byteview::ByteView;
 use uuid::Uuid;
 
-use moor_values::Obj;
-use moor_values::Var;
-use moor_values::model::ObjSet;
-use moor_values::model::PropFlag;
-use moor_values::model::VerbArgsSpec;
-use moor_values::model::VerbDefs;
-use moor_values::model::VerbFlag;
-use moor_values::model::{CommitResult, WorldStateError};
-use moor_values::model::{ObjAttrs, PropPerms};
-use moor_values::model::{PropDef, PropDefs};
-use moor_values::util::BitEnum;
+use moor_common::model::ObjSet;
+use moor_common::model::PropFlag;
+use moor_common::model::VerbArgsSpec;
+use moor_common::model::VerbDefs;
+use moor_common::model::VerbFlag;
+use moor_common::model::{CommitResult, WorldStateError};
+use moor_common::model::{ObjAttrs, PropPerms};
+use moor_common::model::{PropDef, PropDefs};
+use moor_common::util::BitEnum;
+use moor_var::Obj;
+use moor_var::Var;
 
 /// Interface exposed to be used by the textdump loader. Overlap of functionality with what
 /// WorldState could provide, but potentially different constraints/semantics (e.g. no perms checks)

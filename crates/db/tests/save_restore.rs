@@ -16,10 +16,10 @@
 
 #[cfg(test)]
 mod tests {
+    use moor_common::model::{ObjFlag, PropFlag, WorldStateSource};
+    use moor_common::util::BitEnum;
     use moor_db::{DatabaseConfig, TxDB};
-    use moor_values::model::{ObjFlag, PropFlag, WorldStateSource};
-    use moor_values::util::BitEnum;
-    use moor_values::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, v_int};
+    use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Var, v_int};
     use std::collections::HashMap;
     use std::path::Path;
     use std::sync::Arc;

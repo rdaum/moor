@@ -17,15 +17,15 @@ use std::time::Duration;
 use tracing::{instrument, trace};
 use uuid::Uuid;
 
+use moor_common::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
 use moor_compiler::{Program, compile};
-use moor_values::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
-use moor_values::{List, Obj, Symbol, Var};
+use moor_var::{List, Obj, Symbol, Var};
 
 use crate::config::FeaturesConfig;
 use crate::tasks::TaskHandle;
 use crate::tasks::sessions::Session;
-use moor_values::tasks::SchedulerError;
-use moor_values::tasks::SchedulerError::CompilationError;
+use moor_common::tasks::SchedulerError;
+use moor_common::tasks::SchedulerError::CompilationError;
 
 /// A handle for talking to the scheduler from the outside world.
 /// This is not meant to be used by running tasks, but by the rpc daemon, tests, etc.

@@ -12,8 +12,8 @@
 //
 
 use crate::tasks::Exception;
-use crate::{Symbol, Var};
 use bincode::{Decode, Encode};
+use moor_var::{Symbol, Var};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 

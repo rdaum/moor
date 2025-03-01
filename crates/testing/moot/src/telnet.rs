@@ -12,7 +12,7 @@
 //
 
 use eyre::{WrapErr, eyre};
-use moor_values::Obj;
+use moor_var::Obj;
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader, BufWriter, Write},

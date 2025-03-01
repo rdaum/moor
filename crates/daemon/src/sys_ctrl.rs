@@ -14,13 +14,13 @@
 use crate::rpc_server::RpcServer;
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::SystemControl;
-use moor_values::Obj;
+use moor_var::Obj;
 use rpc_common::{HOST_BROADCAST_TOPIC, HostBroadcastEvent, HostType};
 use std::sync::atomic::Ordering;
 use tracing::{error, warn};
 
 impl SystemControl for RpcServer {
-    fn shutdown(&self, msg: Option<String>) -> Result<(), moor_values::Error> {
+    fn shutdown(&self, msg: Option<String>) -> Result<(), moor_var::Error> {
         warn!("Shutting down server: {}", msg.unwrap_or_default());
         self.kill_switch.store(true, Ordering::SeqCst);
         Ok(())
@@ -32,10 +32,10 @@ impl SystemControl for RpcServer {
         host_type: &str,
         port: u16,
         print_messages: bool,
-    ) -> Result<(), moor_values::Error> {
+    ) -> Result<(), moor_var::Error> {
         let host_type = match host_type {
             "tcp" => HostType::TCP,
-            _ => return Err(moor_values::Error::E_INVARG),
+            _ => return Err(moor_var::Error::E_INVARG),
         };
 
         let event = HostBroadcastEvent::Listen {
@@ -59,17 +59,17 @@ impl SystemControl for RpcServer {
                 })
                 .map_err(|e| {
                     error!("Could not send Listen event: {}", e);
-                    moor_values::Error::E_INVARG
+                    moor_var::Error::E_INVARG
                 })?;
         }
 
         Ok(())
     }
 
-    fn unlisten(&self, port: u16, host_type: &str) -> Result<(), moor_values::Error> {
+    fn unlisten(&self, port: u16, host_type: &str) -> Result<(), moor_var::Error> {
         let host_type = match host_type {
             "tcp" => HostType::TCP,
-            _ => return Err(moor_values::Error::E_INVARG),
+            _ => return Err(moor_var::Error::E_INVARG),
         };
 
         let event = HostBroadcastEvent::Unlisten { host_type, port };
@@ -88,13 +88,13 @@ impl SystemControl for RpcServer {
                 })
                 .map_err(|e| {
                     error!("Could not send Unlisten event: {}", e);
-                    moor_values::Error::E_INVARG
+                    moor_var::Error::E_INVARG
                 })?;
         }
         Ok(())
     }
 
-    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, moor_values::Error> {
+    fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, moor_var::Error> {
         let hosts = self.hosts.lock().unwrap();
         let listeners = hosts
             .listeners()

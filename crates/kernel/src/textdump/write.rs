@@ -11,14 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::{Obj, Sequence};
-use moor_values::{Var, VarType, Variant};
+use moor_var::{Obj, Sequence};
+use moor_var::{Var, VarType, Variant};
 use std::collections::BTreeMap;
 use std::io;
 
 use crate::textdump::read::TYPE_CLEAR;
 use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
-use moor_values::Associative;
+use moor_var::Associative;
 
 pub struct TextdumpWriter<W: io::Write> {
     writer: W,

@@ -18,6 +18,11 @@ use pretty_assertions::assert_eq;
 use semver::Version;
 use uuid::Uuid;
 
+use moor_common::model::CommitResult;
+use moor_common::model::Named;
+use moor_common::model::VerbArgsSpec;
+use moor_common::model::WorldStateSource;
+use moor_common::model::{BinaryType, VerbFlag};
 use moor_compiler::Program;
 use moor_compiler::{CompileOptions, compile};
 use moor_db::{Database, DatabaseConfig, TxDB};
@@ -29,14 +34,9 @@ use moor_kernel::tasks::vm_test_utils;
 use moor_kernel::tasks::vm_test_utils::ExecResult;
 use moor_kernel::textdump::textdump_load;
 use moor_moot::test_db_path;
-use moor_values::Symbol;
-use moor_values::model::CommitResult;
-use moor_values::model::Named;
-use moor_values::model::VerbArgsSpec;
-use moor_values::model::WorldStateSource;
-use moor_values::model::{BinaryType, VerbFlag};
-use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
-use moor_values::{List, Obj};
+use moor_var::Symbol;
+use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
+use moor_var::{List, Obj};
 
 #[allow(dead_code)]
 pub fn testsuite_dir() -> PathBuf {

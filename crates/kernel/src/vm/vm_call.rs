@@ -15,14 +15,14 @@ use lazy_static::lazy_static;
 use std::sync::Arc;
 use tracing::trace;
 
+use moor_common::model::VerbDef;
+use moor_common::model::WorldState;
+use moor_common::model::WorldStateError;
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
-use moor_values::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
-use moor_values::model::VerbDef;
-use moor_values::model::WorldState;
-use moor_values::model::WorldStateError;
-use moor_values::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
-use moor_values::{List, Obj};
-use moor_values::{Var, v_int, v_obj};
+use moor_var::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
+use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
+use moor_var::{List, Obj};
+use moor_var::{Var, v_int, v_obj};
 
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry};
 use crate::config::FeaturesConfig;
@@ -33,7 +33,7 @@ use crate::vm::VMExecState;
 use crate::vm::activation::{Activation, Frame};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork};
-use moor_values::matching::command_parse::ParsedCommand;
+use moor_common::matching::command_parse::ParsedCommand;
 
 lazy_static! {
     static ref LIST_SYM: Symbol = Symbol::mk("list");

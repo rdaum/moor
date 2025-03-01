@@ -16,11 +16,11 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
+use moor_common::util::{BitArray, Bitset16};
 use moor_compiler::Name;
 use moor_compiler::{GlobalName, Label, Op, Program};
-use moor_values::Error::E_VARNF;
-use moor_values::util::{BitArray, Bitset16};
-use moor_values::{Error, Var, v_none};
+use moor_var::Error::E_VARNF;
+use moor_var::{Error, Var, v_none};
 
 /// The MOO stack-frame specific portions of the activation:
 ///   the value stack, local variables, program, program counter, handler stack, etc.

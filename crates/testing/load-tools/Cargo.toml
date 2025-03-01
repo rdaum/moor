@@ -20,7 +20,8 @@ name = "load-test"
 path = "src/verb-dispatch-load-test.rs"
 
 [dependencies]
-moor-values = { path = "../../common" }
+moor-var = { path = "../../var" }
+moor-common = { path = "../../common" }
 rpc-async-client = { path = "../../rpc/rpc-async-client" }
 rpc-common = { path = "../../rpc/rpc-common" }
 

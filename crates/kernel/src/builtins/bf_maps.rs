@@ -14,9 +14,9 @@
 use crate::bf_declare;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
-use moor_values::Error::{E_ARGS, E_RANGE, E_TYPE};
-use moor_values::{Associative, Sequence};
-use moor_values::{Var, Variant, v_list};
+use moor_var::Error::{E_ARGS, E_RANGE, E_TYPE};
+use moor_var::{Associative, Sequence};
+use moor_var::{Var, Variant, v_list};
 /// Returns a copy of map with the value corresponding to key removed. If key is not a valid key, then E_RANGE is raised.
 fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {

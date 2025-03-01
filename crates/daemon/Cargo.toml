@@ -22,7 +22,8 @@ path = "src/main.rs"
 [dependencies]
 moor-db = { path = "../db" }
 moor-kernel = { path = "../kernel" }
-moor-values = { path = "../common" }
+moor-var = { path = "../var" }
+moor-common = { path = "../common" }
 rpc-common = { path = "../rpc/rpc-common" }
 
 ## Command line arguments parsing.

@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::Obj;
+use moor_var::Obj;
 use std::net::SocketAddr;
 
 #[derive(Debug, thiserror::Error)]

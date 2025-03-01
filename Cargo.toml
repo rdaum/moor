@@ -2,6 +2,7 @@
 resolver = "2"
 
 members = [
+    "crates/var",
     "crates/common",
     "crates/compiler",
     "crates/daemon",
@@ -17,6 +18,7 @@ members = [
     "tools/moorc",
 ]
 default-members = [
+    "crates/var",
     "crates/common",
     "crates/compiler",
     "crates/kernel",
@@ -88,7 +90,6 @@ tracing-subscriber = "0.3"
 # General usefulness
 binary-layout = "4.0"
 bincode = "2.0.0-rc.3"
-bytes = "1.7"
 byteview = "0.5.3"
 chrono = "0.4"
 criterion = { version = "0.5", features = ["async_tokio"] }

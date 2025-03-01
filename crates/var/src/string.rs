@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::Error;
-use crate::var::Error::{E_INVARG, E_RANGE, E_TYPE};
-use crate::var::Sequence;
-use crate::var::var::Var;
-use crate::var::variant::Variant;
+use crate::Error;
+use crate::Error::{E_INVARG, E_RANGE, E_TYPE};
+use crate::Sequence;
+use crate::var::Var;
+use crate::variant::Variant;
 use bincode::{Decode, Encode};
 use num_traits::ToPrimitive;
 use std::cmp::max;
@@ -258,10 +258,10 @@ impl Hash for Str {
 
 #[cfg(test)]
 mod tests {
+    use crate::IndexMode;
     use crate::v_bool_int;
-    use crate::var::IndexMode;
-    use crate::var::var::{Var, v_int, v_str};
-    use crate::var::variant::Variant;
+    use crate::var::{Var, v_int, v_str};
+    use crate::variant::Variant;
 
     #[test]
     fn test_str_pack_unpack() {
@@ -332,7 +332,7 @@ mod tests {
             IndexMode::ZeroBased,
         );
         assert!(fail_bad_index.is_err());
-        assert_eq!(fail_bad_index.unwrap_err(), crate::var::Error::E_RANGE);
+        assert_eq!(fail_bad_index.unwrap_err(), crate::Error::E_RANGE);
     }
 
     #[test]
@@ -435,7 +435,7 @@ mod tests {
 
         let fail_bad_index = s.remove_at(&Var::mk_integer(10), IndexMode::ZeroBased);
         assert!(fail_bad_index.is_err());
-        assert_eq!(fail_bad_index.unwrap_err(), crate::var::Error::E_RANGE);
+        assert_eq!(fail_bad_index.unwrap_err(), crate::Error::E_RANGE);
     }
 
     #[test]

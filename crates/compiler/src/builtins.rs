@@ -16,9 +16,9 @@ use ArgType::{Any, AnyNum, Typed};
 use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
-use moor_values::Symbol;
-use moor_values::VarType;
-use moor_values::VarType::{TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL};
+use moor_var::Symbol;
+use moor_var::VarType;
+use moor_var::VarType::{TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL};
 /// Global registry of built-in function names.
 use std::collections::HashMap;
 

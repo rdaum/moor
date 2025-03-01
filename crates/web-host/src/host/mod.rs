@@ -19,7 +19,7 @@ mod ws_connection;
 
 pub use auth::connect_auth_handler;
 pub use auth::create_auth_handler;
-use moor_values::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_objid, v_str};
+use moor_var::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_objid, v_str};
 pub use props::properties_handler;
 pub use props::property_retrieval_handler;
 use serde::Serialize;
@@ -175,7 +175,7 @@ pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
 
             if let Some(error_name) = o.get("error") {
                 // Match against the symbols in Error
-                let e = moor_values::Error::parse_str(
+                let e = moor_var::Error::parse_str(
                     error_name
                         .as_str()
                         .ok_or(JsonParseError::InvalidRepresentation)?,
@@ -208,7 +208,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use moor_values::{v_err, v_float, v_int, v_str};
+    use moor_var::{v_err, v_float, v_int, v_str};
 
     #[test]
     fn test_int_to_fro() {
@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_error_to_fro() {
-        let n = v_err(moor_values::Error::E_ARGS);
+        let n = v_err(moor_var::Error::E_ARGS);
         let j = super::var_as_json(&n);
         let n2 = super::json_as_var(&j).unwrap();
         assert_eq!(n, n2);
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_list_to_fro() {
-        let n = moor_values::v_list(&[v_int(42), v_float(42.0), v_str("hello")]);
+        let n = moor_var::v_list(&[v_int(42), v_float(42.0), v_str("hello")]);
         let j = super::var_as_json(&n);
         let n2 = super::json_as_var(&j).unwrap();
         assert_eq!(n, n2);
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_map_to_fro() {
-        let n = moor_values::v_map(&[(v_int(42), v_float(42.0)), (v_str("hello"), v_str("world"))]);
+        let n = moor_var::v_map(&[(v_int(42), v_float(42.0)), (v_str("hello"), v_str("world"))]);
         let j = super::var_as_json(&n);
         let n2 = super::json_as_var(&j).unwrap();
         assert_eq!(n, n2);
@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_obj_to_fro() {
-        let n = moor_values::v_objid(42);
+        let n = moor_var::v_objid(42);
         let j = super::var_as_json(&n);
         let n2 = super::json_as_var(&j).unwrap();
         assert_eq!(n, n2);

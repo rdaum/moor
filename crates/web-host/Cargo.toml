@@ -12,7 +12,8 @@ rust-version.workspace = true
 description = "A RESTful web front end for interacting with the moor system"
 
 [dependencies]
-moor-values = { path = "../common" }
+moor-var = { path = "../var" }
+moor-common = { path = "../common" }
 rpc-async-client = { path = "../rpc/rpc-async-client" }
 rpc-common = { path = "../rpc/rpc-common" }
 

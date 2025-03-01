@@ -14,9 +14,9 @@
 use bincode::{Decode, Encode};
 use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey};
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use moor_values::model::ObjectRef;
-use moor_values::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
-use moor_values::{Obj, Symbol, Var};
+use moor_common::model::ObjectRef;
+use moor_common::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
+use moor_var::{Obj, Symbol, Var};
 use rusty_paseto::prelude::Key;
 use std::net::SocketAddr;
 use std::path::Path;

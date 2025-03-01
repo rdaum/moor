@@ -21,12 +21,12 @@ use std::time::Duration;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 pub use exec_state::VMExecState;
+use moor_common::matching::command_parse::ParsedCommand;
+use moor_common::model::VerbDef;
+use moor_common::tasks::{AbortLimitReason, Exception};
 use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
-use moor_values::matching::command_parse::ParsedCommand;
-use moor_values::model::VerbDef;
-use moor_values::tasks::{AbortLimitReason, Exception};
-use moor_values::{Error, List, Obj, Symbol, Var};
+use moor_var::{Error, List, Obj, Symbol, Var};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 

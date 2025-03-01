@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::AsByteBuffer;
 pub use crate::model::defset::{Defs, DefsIter, HasUuid, Named};
 pub use crate::model::r#match::{ArgSpec, PrepSpec, Preposition, VerbArgsSpec};
 pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, ObjectRef};
@@ -23,6 +22,7 @@ pub use crate::model::verbdef::{VerbDef, VerbDefs};
 pub use crate::model::verbs::{BinaryType, VerbAttr, VerbAttrs, VerbFlag, Vid, verb_perms_string};
 pub use crate::model::world_state::{WorldState, WorldStateSource};
 use bincode::{Decode, Encode};
+use moor_var::AsByteBuffer;
 use serde::Serialize;
 use std::fmt::Debug;
 use thiserror::Error;
@@ -38,7 +38,7 @@ mod verbdef;
 mod verbs;
 mod world_state;
 
-use crate::Symbol;
+use moor_var::Symbol;
 pub use world_state::WorldStateError;
 
 /// The result code from a commit/complete operation on the world's state.

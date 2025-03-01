@@ -14,7 +14,7 @@
 use crate::tx::{Error, Provider, Timestamp};
 use byteview::ByteView;
 use fjall::UserValue;
-use moor_values::AsByteBuffer;
+use moor_var::AsByteBuffer;
 use std::marker::PhantomData;
 
 /// A provider that fills the DB cache from a Fjall partition.

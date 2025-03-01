@@ -18,7 +18,8 @@ tempfile.workspace = true
 
 [dependencies]
 ## Own
-moor-values = { path = "../common" }
+moor-common = { path = "../common" }
+moor-var = { path = "../var" }
 
 byteview.workspace = true
 crossbeam-channel.workspace = true

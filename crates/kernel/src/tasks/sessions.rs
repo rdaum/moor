@@ -16,8 +16,8 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 use uuid::Uuid;
 
-use moor_values::tasks::NarrativeEvent;
-use moor_values::{Error, Obj, SYSTEM_OBJECT};
+use moor_common::tasks::NarrativeEvent;
+use moor_var::{Error, Obj, SYSTEM_OBJECT};
 
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.

@@ -22,9 +22,9 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use eyre::eyre;
 
-use moor_values::Error::E_INVIND;
-use moor_values::model::ObjectRef;
-use moor_values::{Obj, Symbol, v_err};
+use moor_common::model::ObjectRef;
+use moor_var::Error::E_INVIND;
+use moor_var::{Obj, Symbol, v_err};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::AuthToken;
 use rpc_common::HostClientToDaemonMessage::{Attach, ConnectionEstablish};

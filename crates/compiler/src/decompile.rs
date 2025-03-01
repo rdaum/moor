@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::{Symbol, Var, v_err, v_int, v_none, v_obj};
-use moor_values::{Variant, v_float};
+use moor_var::{Symbol, Var, v_err, v_int, v_none, v_obj};
+use moor_var::{Variant, v_float};
 use std::collections::{HashMap, VecDeque};
 
 use crate::BUILTINS;

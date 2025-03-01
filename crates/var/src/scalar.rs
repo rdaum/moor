@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::var::Error;
-use crate::var::Error::{E_INVARG, E_TYPE};
-use crate::var::var::{Var, v_err, v_float, v_int};
-use crate::var::variant::Variant;
+use crate::Error;
+use crate::Error::{E_INVARG, E_TYPE};
+use crate::var::{Var, v_err, v_float, v_int};
+use crate::variant::Variant;
 use num_traits::ToPrimitive;
 use paste::paste;
 use std::ops::{Div, Mul, Neg, Sub};
@@ -97,9 +97,9 @@ impl Var {
 
 #[cfg(test)]
 mod tests {
-    use crate::var::Error;
-    use crate::var::Error::{E_RANGE, E_TYPE};
-    use crate::var::var::{v_err, v_float, v_int, v_list, v_objid, v_str};
+    use crate::Error;
+    use crate::Error::{E_RANGE, E_TYPE};
+    use crate::var::{v_err, v_float, v_int, v_list, v_objid, v_str};
 
     #[test]
     fn test_add() {

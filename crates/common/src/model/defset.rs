@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Symbol;
 use crate::model::ValSet;
-use crate::{AsByteBuffer, DecodingError, EncodingError};
 use byteview::ByteView;
 use itertools::Itertools;
+use moor_var::Symbol;
+use moor_var::{AsByteBuffer, DecodingError, EncodingError};
 use std::convert::TryInto;
 use std::fmt::{Debug, Display, Formatter};
 use uuid::Uuid;

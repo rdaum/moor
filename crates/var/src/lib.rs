@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+pub mod encode;
 mod error;
 mod flyweight;
 mod list;
@@ -38,6 +39,11 @@ pub use var::{
     v_sym_str,
 };
 pub use variant::Variant;
+
+pub use encode::{
+    AsByteBuffer, BINCODE_CONFIG, BincodeAsByteBufferExt, CountingWriter, DecodingError,
+    EncodingError,
+};
 
 /// Integer encoding of common as represented in a `LambdaMOO` textdump, and by `bf_typeof`
 #[repr(u8)]

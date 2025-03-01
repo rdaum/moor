@@ -14,9 +14,9 @@
 mod dump;
 mod load;
 
+use moor_common::model::WorldStateError;
 use moor_compiler::ObjDefParseError;
-use moor_values::model::WorldStateError;
-use moor_values::{Obj, Symbol};
+use moor_var::{Obj, Symbol};
 use std::io;
 use std::path::PathBuf;
 

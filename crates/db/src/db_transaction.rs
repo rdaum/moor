@@ -18,13 +18,13 @@ use crate::worldstate_transaction::WorldStateTransaction;
 use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
 use byteview::ByteView;
 use crossbeam_channel::Sender;
-use moor_values::model::{
+use moor_common::model::{
     BinaryType, CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectRef, PropDef,
     PropDefs, PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
     WorldStateError,
 };
-use moor_values::util::BitEnum;
-use moor_values::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
+use moor_common::util::BitEnum;
+use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::AtomicI64;

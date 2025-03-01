@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#[macro_use]
+extern crate pest_derive;
 pub use names::Names;
 
 use strum::{Display, EnumCount, EnumIter, FromRepr};
@@ -42,9 +44,6 @@ pub use crate::opcode::{Op, ScatterLabel};
 pub use crate::parse::CompileOptions;
 pub use crate::program::{EMPTY_PROGRAM, Program};
 pub use crate::unparse::{to_literal, to_literal_objsub, unparse};
-
-#[macro_use]
-extern crate pest_derive;
 
 /// The set of known variable names that are always set for every verb invocation.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FromRepr, EnumCount, Display, EnumIter)]

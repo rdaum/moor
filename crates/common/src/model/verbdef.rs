@@ -11,17 +11,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Obj;
-use crate::Symbol;
-use crate::encode::{DecodingError, EncodingError};
+use crate::DATA_LAYOUT_VERSION;
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::r#match::VerbArgsSpec;
 use crate::model::verbs::{BinaryType, VerbFlag};
 use crate::util::BitEnum;
 use crate::util::verbname_cmp;
-use crate::{AsByteBuffer, DATA_LAYOUT_VERSION};
 use binary_layout::{Field, binary_layout};
 use byteview::ByteView;
+use moor_var::AsByteBuffer;
+use moor_var::Obj;
+use moor_var::Symbol;
+use moor_var::encode::{DecodingError, EncodingError};
 use uuid::Uuid;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -210,8 +211,6 @@ pub type VerbDefs = Defs<VerbDef>;
 
 #[cfg(test)]
 mod tests {
-    use crate::AsByteBuffer;
-    use crate::Obj;
     use crate::model::ValSet;
     use crate::model::defset::{HasUuid, Named};
     use crate::model::r#match::VerbArgsSpec;
@@ -219,6 +218,8 @@ mod tests {
     use crate::model::verbs::VerbFlag;
     use crate::util::BitEnum;
     use byteview::ByteView;
+    use moor_var::AsByteBuffer;
+    use moor_var::Obj;
 
     #[test]
     fn test_bitflags() {

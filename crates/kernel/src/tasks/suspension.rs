@@ -22,12 +22,12 @@ use bincode::{BorrowDecode, Decode, Encode};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use moor_values::Obj;
+use moor_var::Obj;
 
 use crate::tasks::sessions::{NoopClientSession, Session, SessionFactory};
 use crate::tasks::task::Task;
 use crate::tasks::{TaskDescription, TaskResult, TasksDb};
-use moor_values::tasks::{SchedulerError, TaskId};
+use moor_common::tasks::{SchedulerError, TaskId};
 
 /// State a suspended task sits in inside the `suspended` side of the task queue.
 /// When tasks are not running they are moved into these.

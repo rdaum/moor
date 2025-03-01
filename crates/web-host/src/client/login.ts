@@ -12,10 +12,11 @@
 //
 
 // Handle the connect phase in response to a user clicking the "Connect" button.
-import { Context, Player } from "./model";
+import {Context, Player} from "./model";
 
-import van, { State } from "vanjs-core";
-import { displayDjot, handleEvent } from "./narrative";
+import van, {State} from "vanjs-core";
+import {displayDjot, handleEvent} from "./narrative";
+
 const { button, div, input, select, option, br, label } = van.tags;
 
 async function connect(context: Context, player: State<Player>, mode, username, password) {

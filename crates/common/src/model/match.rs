@@ -15,8 +15,8 @@ use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use strum::FromRepr;
 
-use crate::encode::{DecodingError, EncodingError};
 use crate::model::PrepSpec::Other;
+use moor_var::encode::{DecodingError, EncodingError};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Hash, Ord, PartialOrd, Encode, Decode)]
 #[repr(u8)]

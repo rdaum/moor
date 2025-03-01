@@ -20,7 +20,7 @@ use std::{
 };
 
 use eyre::{ContextCompat, WrapErr, eyre};
-use moor_values::Obj;
+use moor_var::Obj;
 
 use parser::{MootBlock, MootBlockTest, MootBlockTestExpectedOutput, MootBlockTestKind};
 use pretty_assertions::assert_eq;

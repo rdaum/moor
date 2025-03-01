@@ -12,8 +12,8 @@
 //
 
 pub use load_textdump::{read_textdump, textdump_load};
-use moor_values::Obj;
-use moor_values::Var;
+use moor_var::Obj;
+use moor_var::Var;
 pub use read::TextdumpReader;
 use serde::{Deserialize, Serialize};
 /// Representation of the structure of objects verbs etc as read from a LambdaMOO textdump'd db

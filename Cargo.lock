@@ -2169,6 +2169,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-common"
+version = "0.9.0-alpha"
+dependencies = [
+ "binary-layout",
+ "bincode",
+ "byteview",
+ "enum-primitive-derive",
+ "itertools 0.14.0",
+ "lazy_static",
+ "moor-var",
+ "num-traits",
+ "serde",
+ "shadow-rs",
+ "strum",
+ "thiserror 2.0.11",
+ "uuid 1.14.0",
+]
+
+[[package]]
 name = "moor-compiler"
 version = "0.9.0-alpha"
 dependencies = [
@@ -2176,7 +2195,8 @@ dependencies = [
  "byteview",
  "itertools 0.14.0",
  "lazy_static",
- "moor-values",
+ "moor-common",
+ "moor-var",
  "pest",
  "pest_derive",
  "pretty_assertions",
@@ -2198,9 +2218,10 @@ dependencies = [
  "color-eyre",
  "eyre",
  "fjall",
+ "moor-common",
  "moor-db",
  "moor-kernel",
- "moor-values",
+ "moor-var",
  "oneshot",
  "rpc-common",
  "rusty_paseto",
@@ -2225,7 +2246,8 @@ dependencies = [
  "fjall",
  "indexmap",
  "lazy_static",
- "moor-values",
+ "moor-common",
+ "moor-var",
  "oneshot",
  "rand 0.8.5",
  "serde",
@@ -2252,10 +2274,11 @@ dependencies = [
  "lazy_static",
  "libc",
  "md-5 0.10.6",
+ "moor-common",
  "moor-compiler",
  "moor-db",
  "moor-moot",
- "moor-values",
+ "moor-var",
  "oneshot",
  "onig",
  "paste",
@@ -2287,7 +2310,8 @@ dependencies = [
  "edn-format",
  "eyre",
  "futures",
- "moor-values",
+ "moor-common",
+ "moor-var",
  "rand 0.8.5",
  "rpc-async-client",
  "rpc-common",
@@ -2303,7 +2327,7 @@ name = "moor-moot"
 version = "0.9.0-alpha"
 dependencies = [
  "eyre",
- "moor-values",
+ "moor-var",
  "pest",
  "pest_derive",
  "pretty_assertions",
@@ -2321,9 +2345,10 @@ dependencies = [
  "escargot",
  "eyre",
  "futures-util",
+ "moor-common",
  "moor-compiler",
  "moor-moot",
- "moor-values",
+ "moor-var",
  "rpc-async-client",
  "rpc-common",
  "serial_test",
@@ -2338,24 +2363,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "moor-values"
+name = "moor-var"
 version = "0.9.0-alpha"
 dependencies = [
  "binary-layout",
  "bincode",
  "byteview",
- "enum-primitive-derive",
  "im",
- "itertools 0.14.0",
  "lazy_static",
  "num-traits",
  "paste",
  "serde",
- "shadow-rs",
  "strum",
  "thiserror 2.0.11",
  "ustr",
- "uuid 1.14.0",
 ]
 
 [[package]]
@@ -2368,7 +2389,8 @@ dependencies = [
  "color-eyre",
  "eyre",
  "futures-util",
- "moor-values",
+ "moor-common",
+ "moor-var",
  "rolldown",
  "rpc-async-client",
  "rpc-common",
@@ -2392,12 +2414,13 @@ dependencies = [
  "clap_derive",
  "color-eyre",
  "eyre",
+ "moor-common",
  "moor-compiler",
  "moor-daemon",
  "moor-db",
  "moor-kernel",
  "moor-moot",
- "moor-values",
+ "moor-var",
  "semver",
  "tempfile",
  "tracing",
@@ -3788,7 +3811,7 @@ version = "0.9.0-alpha"
 dependencies = [
  "bincode",
  "futures-util",
- "moor-values",
+ "moor-var",
  "rpc-common",
  "rusty_paseto",
  "thiserror 2.0.11",
@@ -3806,7 +3829,8 @@ dependencies = [
  "clap",
  "clap_derive",
  "ed25519-dalek",
- "moor-values",
+ "moor-common",
+ "moor-var",
  "rusty_paseto",
  "thiserror 2.0.11",
 ]

@@ -17,8 +17,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::error;
 
-use moor_values::Variant;
-use moor_values::{Var, v_str};
+use moor_var::Variant;
+use moor_var::{Var, v_str};
 
 use crate::Op::{
     BeginComprehension, ComprehendList, ComprehendRange, ContinueComprehension, ImmInt, Pop, Put,
@@ -34,8 +34,8 @@ use crate::opcode::{ComprehensionType, Op, ScatterArgs, ScatterLabel};
 use crate::parse::moo::Rule;
 use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
 use crate::program::Program;
-use moor_values::model::CompileError;
-use moor_values::model::CompileError::InvalidAssignemnt;
+use moor_common::model::CompileError;
+use moor_common::model::CompileError::InvalidAssignemnt;
 
 pub struct Loop {
     loop_name: Option<Name>,

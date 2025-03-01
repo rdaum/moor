@@ -42,7 +42,8 @@ harness = false
 moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
 moor-moot = { path = "../testing/moot" }
-moor-values = { path = "../common" }
+moor-common = { path = "../common" }
+moor-var = { path = "../var" }
 
 ## General usefulness
 byteview.workspace = true

@@ -11,15 +11,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_common::model::{
+    HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, prop_flags_string, verb_perms_string,
+};
 use moor_compiler::{
     ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, Program, program_to_tree,
     to_literal, to_literal_objsub, unparse,
 };
 use moor_db::loader::LoaderInterface;
-use moor_values::model::{
-    HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, prop_flags_string, verb_perms_string,
-};
-use moor_values::{AsByteBuffer, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_str, v_string};
+use moor_var::{AsByteBuffer, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_str, v_string};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
@@ -356,8 +356,8 @@ mod tests {
         ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions,
     };
     use crate::textdump::textdump_load;
+    use moor_common::model::CommitResult;
     use moor_db::{Database, DatabaseConfig, TxDB};
-    use moor_values::model::CommitResult;
     use semver::Version;
     use std::path::PathBuf;
     use std::sync::Arc;

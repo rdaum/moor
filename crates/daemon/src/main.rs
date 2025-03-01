@@ -17,12 +17,12 @@ use crate::args::Args;
 use crate::rpc_server::RpcServer;
 use clap::Parser;
 use eyre::Report;
+use moor_common::build;
 use moor_db::{Database, TxDB};
 use moor_kernel::objdef::ObjectDefinitionLoader;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_kernel::textdump::textdump_load;
-use moor_values::build;
 use rpc_common::load_keypair;
 use tracing::{debug, info, warn};
 

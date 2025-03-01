@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::Obj;
 use crate::matching::command_parse::ParseMatcher;
 use crate::model::WorldStateError;
 use crate::model::{ObjSet, ValSet};
-use crate::{AMBIGUOUS, FAILED_MATCH, NOTHING};
+use moor_var::Obj;
+use moor_var::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 
 // This is the interface that the matching code needs to be able to call into the world state.
 // Separated out so can be more easily mocked.
@@ -146,7 +146,6 @@ impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
 
 #[cfg(test)]
 mod tests {
-    use crate::Obj;
     use crate::matching::command_parse::ParseMatcher;
     use crate::matching::match_env::{
         MatchData, MatchEnvironmentParseMatcher, do_match_object_names,
@@ -154,7 +153,8 @@ mod tests {
     use crate::matching::mock_matching_env::{
         MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
     };
-    use crate::{FAILED_MATCH, NOTHING};
+    use moor_var::Obj;
+    use moor_var::{FAILED_MATCH, NOTHING};
 
     #[test]
     fn test_match_object_names_fail() {

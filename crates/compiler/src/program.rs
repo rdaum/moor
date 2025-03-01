@@ -18,8 +18,8 @@ use crate::unparse::to_literal;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use lazy_static::lazy_static;
-use moor_values::Var;
-use moor_values::{AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError};
+use moor_var::Var;
+use moor_var::{AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 

@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_values::util::quote_str;
-use moor_values::{Obj, Sequence, Var, Variant};
+use moor_common::util::quote_str;
+use moor_var::{Obj, Sequence, Var, Variant};
 use std::collections::HashMap;
 
 use crate::ast::{Expr, Stmt, StmtNode};
@@ -113,7 +113,7 @@ impl<'a> Unparse<'a> {
         }
     }
 
-    fn unparse_var(&self, var: &moor_values::Var, aggressive: bool) -> String {
+    fn unparse_var(&self, var: &moor_var::Var, aggressive: bool) -> String {
         if !aggressive {
             return to_literal(var);
         }

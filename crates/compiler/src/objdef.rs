@@ -18,15 +18,15 @@ use crate::parse::moo::{MooParser, Rule};
 use crate::parse::unquote_str;
 use byteview::ByteView;
 use itertools::Itertools;
-use moor_values::Error::{
+use moor_common::model::{
+    ArgSpec, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec, VerbFlag,
+};
+use moor_common::util::BitEnum;
+use moor_var::Error::{
     E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
     E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
-use moor_values::model::{
-    ArgSpec, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec, VerbFlag,
-};
-use moor_values::util::BitEnum;
-use moor_values::{
+use moor_var::{
     AsByteBuffer, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_err, v_float, v_flyweight,
     v_int, v_list, v_map, v_obj, v_str,
 };
@@ -738,8 +738,8 @@ fn parse_verb_decl(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_values::Variant;
-    use moor_values::model::Preposition;
+    use moor_common::model::Preposition;
+    use moor_var::Variant;
 
     /// Just a simple objdef no verbs or props
     #[test]

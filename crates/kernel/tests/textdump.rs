@@ -21,6 +21,11 @@ mod test {
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    use moor_common::model::VerbArgsSpec;
+    use moor_common::model::VerbFlag;
+    use moor_common::model::WorldStateSource;
+    use moor_common::model::{CommitResult, ValSet};
+    use moor_common::model::{HasUuid, Named};
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::{Database, DatabaseConfig, TxDB};
@@ -28,14 +33,9 @@ mod test {
     use moor_kernel::textdump::{
         EncodingMode, TextdumpReader, make_textdump, read_textdump, textdump_load,
     };
-    use moor_values::Symbol;
-    use moor_values::model::VerbArgsSpec;
-    use moor_values::model::VerbFlag;
-    use moor_values::model::WorldStateSource;
-    use moor_values::model::{CommitResult, ValSet};
-    use moor_values::model::{HasUuid, Named};
-    use moor_values::{AsByteBuffer, SYSTEM_OBJECT};
-    use moor_values::{NOTHING, Obj};
+    use moor_var::Symbol;
+    use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
+    use moor_var::{NOTHING, Obj};
 
     fn get_minimal_db() -> File {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

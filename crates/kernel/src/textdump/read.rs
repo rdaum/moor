@@ -19,14 +19,14 @@ use tracing::info;
 
 use crate::config::TextdumpVersion;
 use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
+use moor_common::model::CompileError;
+use moor_common::model::WorldStateError;
 use moor_compiler::Label;
-use moor_values::model::CompileError;
-use moor_values::model::WorldStateError;
-use moor_values::{Error, v_list, v_map};
-use moor_values::{
+use moor_var::{Error, v_list, v_map};
+use moor_var::{
     List, Symbol, Var, VarType, v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str, v_sym,
 };
-use moor_values::{Obj, v_flyweight};
+use moor_var::{Obj, v_flyweight};
 
 pub const TYPE_CLEAR: i64 = 5;
 

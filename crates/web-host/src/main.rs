@@ -26,7 +26,7 @@ use axum::handler::HandlerWithoutStateExt;
 use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use futures_util::future::OptionFuture;
-use moor_values::{Obj, SYSTEM_OBJECT};
+use moor_var::{Obj, SYSTEM_OBJECT};
 use rolldown::{
     Bundler, BundlerOptions, ExperimentalOptions, InputItem, OutputFormat, Platform,
     RawMinifyOptions, SourceMapType, Watcher,
