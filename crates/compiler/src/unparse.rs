@@ -566,7 +566,7 @@ impl<'a> Unparse<'a> {
                 let mut stmt_lines = Vec::with_capacity(body.len() + 3);
 
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
-                stmt_lines.push("try".to_string());
+                stmt_lines.push(format!("{}try", indent_frag));
                 stmt_lines.append(&mut stmt_frag);
                 for except in excepts {
                     let mut stmt_frag =
@@ -586,7 +586,7 @@ impl<'a> Unparse<'a> {
                     }
                     let catch_codes = self.unparse_catch_codes(&except.codes)?;
                     base_str.push_str(format!("({catch_codes})").as_str());
-                    stmt_lines.push(base_str);
+                    stmt_lines.push(format!("{indent_frag}{base_str}"));
                     stmt_lines.append(&mut stmt_frag);
                 }
                 stmt_lines.push(format!("{}endtry", indent_frag));
