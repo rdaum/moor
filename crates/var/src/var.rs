@@ -441,6 +441,10 @@ pub fn v_bool_int(b: bool) -> Var {
     if b { v_int(1) } else { v_int(0) }
 }
 
+pub fn v_bool(b: bool) -> Var {
+    Var::mk_bool(b)
+}
+
 pub fn v_none() -> Var {
     // TODO lazy_static singleton
     Var::mk_none()

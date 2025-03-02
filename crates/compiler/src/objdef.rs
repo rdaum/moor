@@ -27,8 +27,8 @@ use moor_var::Error::{
     E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
 };
 use moor_var::{
-    AsByteBuffer, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_err, v_float, v_flyweight,
-    v_int, v_list, v_map, v_obj, v_str,
+    AsByteBuffer, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_err, v_float,
+    v_flyweight, v_int, v_list, v_map, v_obj, v_str,
 };
 use pest::Parser;
 use pest::error::LineColLocation;
@@ -306,6 +306,10 @@ fn parse_literal_atom(
                 return Err(ObjDefParseError::ConstantNotFound(sym.to_string()));
             };
             Ok(value.clone())
+        }
+        Rule::boolean => {
+            let bool = pair.as_str() == "true";
+            Ok(v_bool(bool))
         }
         _ => {
             panic!("Unimplemented atom: {:?}", pair);
