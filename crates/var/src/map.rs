@@ -22,9 +22,10 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use std::cmp::Ordering;
 use std::hash::Hash;
+use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct Map(Box<im::Vector<(Var, Var)>>);
+pub struct Map(Arc<Vec<(Var, Var)>>);
 
 impl Map {
     // Construct from an Iterator of paris
@@ -40,12 +41,10 @@ impl Map {
     }
 
     pub(crate) fn build_presorted<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
-        let l = im::Vector::from(
-            pairs
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect::<Vec<_>>(),
-        );
-        let m = Map(Box::new(l));
+        let l = pairs
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect::<Vec<_>>();
+        let m = Map(Arc::new(l));
         Var::from_variant(Variant::Map(m))
     }
 
@@ -280,24 +279,24 @@ impl Encode for Map {
 impl Decode for Map {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
+        let mut l = Vec::with_capacity(len);
         for _ in 0..len {
             let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
-            l.push_back(pair);
+            l.push(pair);
         }
-        Ok(Map(Box::new(l)))
+        Ok(Map(Arc::new(l)))
     }
 }
 
 impl<'de> BorrowDecode<'de> for Map {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
+        let mut l = Vec::with_capacity(len);
         for _ in 0..len {
             let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
-            l.push_back(pair);
+            l.push(pair);
         }
-        Ok(Map(Box::new(l)))
+        Ok(Map(Arc::new(l)))
     }
 }
 
