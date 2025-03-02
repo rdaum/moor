@@ -189,7 +189,7 @@ impl Flyweight {
     }
 
     pub fn slots(&self) -> &Vec<(Symbol, Var)> {
-        &self.0.slots.as_ref()
+        self.0.slots.as_ref()
     }
 
     pub fn delegate(&self) -> &Obj {
