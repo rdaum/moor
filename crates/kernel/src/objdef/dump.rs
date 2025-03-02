@@ -220,7 +220,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         let owner = canon_name(&o.owner, &index_names);
 
         let name = v_str(&o.name);
-        let indent = "    ";
+        let indent = "  ";
 
         objstr.push_str(&format!("object {}\n", canon_name(&o.oid, &index_names)));
         objstr.push_str(&format!("{indent}name: {}\n", to_literal(&name)));
