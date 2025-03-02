@@ -474,6 +474,9 @@ impl VmHost {
     pub fn reset_ticks(&mut self) {
         self.vm_exec_state.tick_count = 0;
     }
+    pub fn tick_count(&self) -> usize {
+        self.vm_exec_state.tick_count
+    }
     pub fn reset_time(&mut self) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
     }
