@@ -18,7 +18,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 use moor_common::model::CommitResult;
 use moor_common::model::VerbArgsSpec;
@@ -54,7 +54,7 @@ pub fn prepare_call_verb(
     args: List,
     max_ticks: usize,
 ) -> VmHost {
-    let mut vm_host = VmHost::new(0, 20, max_ticks, Duration::from_secs(15));
+    let mut vm_host = VmHost::new(0, 20, max_ticks, Duration::from_secs(1000));
 
     let verb_name = Symbol::mk(verb_name);
     let vi = world_state
@@ -106,7 +106,7 @@ fn execute(
     task_scheduler_client: TaskSchedulerClient,
     session: Arc<dyn Session>,
     vm_host: &mut VmHost,
-) -> bool {
+) -> usize {
     vm_host.reset_ticks();
     vm_host.reset_time();
 
@@ -125,11 +125,11 @@ fn execute(
             VMHostResponse::ContinueOk => {
                 continue;
             }
-            VMHostResponse::AbortLimit(AbortLimitReason::Ticks(_)) => {
-                return true;
+            VMHostResponse::AbortLimit(AbortLimitReason::Ticks(t)) => {
+                return t;
             }
             VMHostResponse::CompleteSuccess(_) => {
-                return false;
+                panic!("Unexpected success");
             }
             VMHostResponse::AbortLimit(AbortLimitReason::Time(time)) => {
                 panic!("Unexpected abort: {:?}", time);
@@ -156,9 +156,14 @@ fn execute(
     }
 }
 
-fn do_program(state_source: TxDB, program: &str, max_ticks: usize, iters: u64) -> Duration {
-    let mut cumulative = Duration::new(0, 0);
-
+fn do_program(
+    state_source: TxDB,
+    program: &str,
+    max_ticks: usize,
+    iters: u64,
+) -> (Duration, usize) {
+    let mut cumulative_time = Duration::new(0, 0);
+    let mut cumulative_ticks = 0;
     let mut vm_host = prepare_vm_execution(&state_source, program, max_ticks);
     let mut tx = state_source.new_world_state().unwrap();
     let session = Arc::new(NoopClientSession::new());
@@ -167,32 +172,31 @@ fn do_program(state_source: TxDB, program: &str, max_ticks: usize, iters: u64) -
 
     for _ in 0..iters {
         let start = std::time::Instant::now();
-        let _ = execute(
+        let t = black_box(execute(
             tx.as_mut(),
             task_scheduler_client.clone(),
             session.clone(),
             &mut vm_host,
-        );
-        let end = std::time::Instant::now();
-        cumulative += end - start;
+        ));
+        cumulative_ticks += t;
+        cumulative_time += start.elapsed();
     }
     tx.rollback().unwrap();
 
     drop(state_source);
-    cumulative
+    (cumulative_time, cumulative_ticks)
 }
 
 fn opcode_throughput(c: &mut Criterion) {
     let db = create_db();
 
     let mut group = c.benchmark_group("opcode_throughput");
-    group.sample_size(50);
-    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(20);
 
-    let num_ticks = 300000;
+    let num_ticks = 100000000;
     group.throughput(criterion::Throughput::Elements(num_ticks as u64));
     group.bench_function("while_loop", |b| {
-        b.iter_custom(|iters| do_program(db.clone(), "while (1) endwhile", num_ticks, iters));
+        b.iter_custom(|iters| do_program(db.clone(), "while (1) endwhile", num_ticks, iters).0);
     });
     group.bench_function("while_increment_var_loop", |b| {
         b.iter_custom(|iters| {
@@ -202,6 +206,7 @@ fn opcode_throughput(c: &mut Criterion) {
                 num_ticks,
                 iters,
             )
+            .0
         });
     });
     group.bench_function("for_in_range_loop", |b| {
@@ -212,6 +217,7 @@ fn opcode_throughput(c: &mut Criterion) {
                 num_ticks,
                 iters,
             )
+            .0
         });
     });
     // Measure range iteration over a static list
@@ -225,7 +231,7 @@ fn opcode_throughput(c: &mut Criterion) {
                           endwhile"#,
                 num_ticks,
                 iters,
-            )
+            )    .0
         });
     });
     // Measure how costly it is to append to a list
@@ -242,6 +248,7 @@ fn opcode_throughput(c: &mut Criterion) {
                 num_ticks,
                 iters,
             )
+            .0
         });
     });
     // Measure how costly it is to append to a list
@@ -258,6 +265,7 @@ fn opcode_throughput(c: &mut Criterion) {
                 num_ticks,
                 iters,
             )
+            .0
         });
     });
     group.finish();
