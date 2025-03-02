@@ -21,6 +21,7 @@ use std::ops::{Div, Mul, Neg, Sub};
 
 macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
+        #[inline]
         pub fn $op(&self, v: &Var) -> Result<Var, Error> {
             match (self.variant(), v.variant()) {
                 (Variant::Float(l), Variant::Float(r)) => {
@@ -46,6 +47,7 @@ impl Var {
     binary_numeric_coercion_op!(div);
     binary_numeric_coercion_op!(sub);
 
+    #[inline]
     pub fn add(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => {
@@ -59,6 +61,7 @@ impl Var {
         }
     }
 
+    #[inline]
     pub fn negative(&self) -> Result<Self, Error> {
         match self.variant() {
             Variant::Int(l) => l.checked_neg().map(v_int).ok_or(E_INVARG),
@@ -67,6 +70,7 @@ impl Var {
         }
     }
 
+    #[inline]
     pub fn modulus(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l % r)),
@@ -77,6 +81,7 @@ impl Var {
         }
     }
 
+    #[inline]
     pub fn pow(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.powf(*r))),
@@ -90,6 +95,7 @@ impl Var {
         }
     }
 
+    #[inline]
     pub fn is_sysobj(&self) -> bool {
         matches!(self.variant(), Variant::Obj(o) if o.is_sysobj())
     }
