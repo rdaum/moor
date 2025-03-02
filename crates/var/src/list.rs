@@ -17,28 +17,24 @@ use crate::Sequence;
 use crate::Var;
 use crate::v_list_iter;
 use crate::variant::Variant;
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
+use bincode::{Decode, Encode};
 use num_traits::ToPrimitive;
 use std::cmp::max;
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 use std::ops::Index;
+use std::sync::Arc;
 
-#[derive(Clone)]
-pub struct List(Box<im::Vector<Var>>);
+#[derive(Clone, Encode, Decode)]
+pub struct List(Arc<Vec<Var>>);
 
 impl List {
     pub fn build(values: &[Var]) -> Var {
-        let l = im::Vector::from(values.to_vec());
-        Var::from_variant(Variant::List(List(Box::new(l))))
+        Var::from_variant(Variant::List(values.into()))
     }
 
     pub fn mk_list(values: &[Var]) -> List {
-        let l = im::Vector::from(values.to_vec());
-        List(Box::new(l))
+        values.into()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Var> + '_ {
@@ -47,35 +43,59 @@ impl List {
 
     /// Remove the first found instance of `item` from the list.
     pub fn set_remove(&self, item: &Var) -> Result<Var, Error> {
-        let idx = self.0.iter().position(|v| *v == *item);
-        let result = if let Some(idx) = idx {
-            let mut new = self.0.clone();
-            new.remove(idx);
-            List(new)
-        } else {
-            self.clone()
-        };
-        Ok(Var::from_variant(Variant::List(result)))
+        let it = self.0.iter();
+        let mut found = false;
+        let without = it
+            .filter(|&x| {
+                found || {
+                    if *x == *item {
+                        found = true;
+                        return false;
+                    }
+                    true
+                }
+            })
+            .cloned();
+        let result = without.collect::<Vec<_>>();
+        Ok(Var::from_variant(Variant::List(result.into())))
     }
 
     /// Add `item` to the list but only if it's not already there.
     pub fn set_add(&self, item: &Var) -> Result<Var, Error> {
-        // Is the item already in the list? If so, just clone self
-        if self.iter().any(|v| v == *item) {
-            return Ok(Var::from_variant(Variant::List(self.clone())));
+        if self.0.contains(item) {
+            return Ok(Var::from_variant(Variant::List(self.0.clone().into())));
         }
-        let mut l = self.0.clone();
-        l.push_back(item.clone());
-        Ok(Var::from_variant(Variant::List(List(l))))
+        let mut result = self.0.as_ref().clone();
+        result.push(item.clone());
+        Ok(Var::from_variant(Variant::List(result.into())))
     }
 
     pub fn pop_front(&self) -> Result<(Var, Var), Error> {
         if self.is_empty() {
             return Err(E_RANGE);
         }
-        let mut l = self.0.clone();
-        let first = l.pop_front().unwrap();
-        Ok((first, Var::from_variant(Variant::List(List(l)))))
+        let mut i = self.0.iter().cloned();
+        let head = i.next().unwrap();
+        let tail: Vec<_> = i.collect();
+        Ok((head, Var::from_variant(Variant::List(tail.into()))))
+    }
+}
+
+impl From<&[Var]> for List {
+    fn from(value: &[Var]) -> Self {
+        Self(Arc::new(value.to_vec()))
+    }
+}
+
+impl From<Vec<Var>> for List {
+    fn from(value: Vec<Var>) -> Self {
+        Self(Arc::new(value))
+    }
+}
+
+impl From<Arc<Vec<Var>>> for List {
+    fn from(value: Arc<Vec<Var>>) -> Self {
+        Self(value)
     }
 }
 
@@ -129,15 +149,15 @@ impl Sequence for List {
         if index >= self.len() {
             return Err(E_RANGE);
         }
-        let mut new = self.0.clone();
+        let mut new = self.0.as_ref().clone();
         new[index] = value.clone();
-        Ok(Var::from_variant(Variant::List(List(new))))
+        Ok(Var::from_variant(Variant::List(new.into())))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
-        let mut new = self.0.clone();
-        new.push_back(value.clone());
-        Ok(Var::from_variant(Variant::List(List(new))))
+        let mut new = self.0.as_ref().clone();
+        new.push(value.clone());
+        Ok(Var::from_variant(Variant::List(new.into())))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -250,6 +270,7 @@ impl Index<usize> for List {
         &self.0[index]
     }
 }
+
 impl PartialEq for List {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
@@ -307,48 +328,15 @@ impl Hash for List {
 
 impl FromIterator<Var> for Var {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
-        let l: im::Vector<Var> = im::Vector::from_iter(iter);
-        Var::from_variant(Variant::List(List(Box::new(l))))
+        let l = List::from_iter(iter);
+        Var::from(l)
     }
 }
 
-impl Encode for List {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        // encode the length followed by the elements in sequence
-        self.len().encode(encoder)?;
-        for v in self.iter() {
-            v.encode(encoder)?;
-        }
-        Ok(())
-    }
-}
-
-impl Decode for List {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
-        for _ in 0..len {
-            l.push_back(Var::decode(decoder)?);
-        }
-        Ok(List(Box::new(l)))
-    }
-}
-
-impl<'de> BorrowDecode<'de> for List {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
-        for _ in 0..len {
-            l.push_back(Var::borrow_decode(decoder)?);
-        }
-        Ok(List(Box::new(l)))
-    }
-}
-
-impl std::iter::FromIterator<Var> for List {
+impl FromIterator<Var> for List {
     fn from_iter<T: IntoIterator<Item = Var>>(iter: T) -> Self {
-        let l: im::Vector<Var> = im::Vector::from_iter(iter);
-        List(Box::new(l))
+        let v = iter.into_iter().collect::<Vec<Var>>();
+        v.into()
     }
 }
 
