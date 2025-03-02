@@ -118,8 +118,7 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
             }
         }
 
-        // Alphabetize verbs and properties
-        od.verbs.sort_by(|a, b| a.names[0].cmp(&b.names[0]));
+        // Alphabetize properties. Verbs should remain in their original order.
         od.property_definitions.sort_by(|a, b| a.name.cmp(&b.name));
         od.property_overrides.sort_by(|a, b| a.name.cmp(&b.name));
 
