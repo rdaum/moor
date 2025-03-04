@@ -968,15 +968,13 @@ impl WorldStateTransaction for DbTransaction {
         let locations = ObjSet::from_items(&[obj.clone()]).with_concatenated(descendants);
         for location in locations.iter() {
             let props: PropDefs = self.get_properties(&location)?;
-            let props = props
-                .with_removed(uuid)
-                .expect("Unable to remove property definition");
-
-            self.object_propdefs
-                .upsert(location.clone(), props)
-                .map_err(|e| {
-                    WorldStateError::DatabaseError(format!("Error deleting property: {:?}", e))
-                })?;
+            if let Some(props) = props.with_removed(uuid) {
+                self.object_propdefs
+                    .upsert(location.clone(), props)
+                    .map_err(|e| {
+                        WorldStateError::DatabaseError(format!("Error deleting property: {:?}", e))
+                    })?;
+            }
         }
         Ok(())
     }
