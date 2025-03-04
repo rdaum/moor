@@ -638,7 +638,7 @@ mod tests {
         perform_test_verb_resolve, perform_test_verb_resolve_inherited,
         perform_test_verb_resolve_wildcard,
     };
-    use moor_common::model::{ObjAttrs, ObjFlag, PropFlag};
+    use moor_common::model::{HasUuid, ObjAttrs, ObjFlag, PropFlag};
     use moor_common::util::BitEnum;
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_int, v_str};
     use std::sync::Arc;
@@ -884,5 +884,30 @@ mod tests {
             tx.resolve_property(&b, Symbol::mk("b")).unwrap().1,
             v_str("b")
         );
+    }
+
+    #[test]
+    fn test_regression_missing_child_propdef() {
+        let db = test_db();
+        let mut tx = begin_tx(&db);
+        let object_e = tx.create_object(None, Default::default()).unwrap();
+        let object_c = tx.create_object(None, Default::default()).unwrap();
+        tx.define_property(
+            &object_c,
+            &object_c,
+            Symbol::mk("c"),
+            &SYSTEM_OBJECT,
+            BitEnum::new(),
+            Some(v_str("c")),
+        )
+        .unwrap();
+        tx.set_object_parent(&object_e, &object_c).unwrap();
+
+        let c_uuid = tx
+            .resolve_property(&object_c, Symbol::mk("c"))
+            .unwrap()
+            .0
+            .uuid();
+        tx.delete_property(&object_c, c_uuid).unwrap();
     }
 }
