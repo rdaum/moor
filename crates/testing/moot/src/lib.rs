@@ -12,7 +12,12 @@
 //
 
 mod parser;
+pub mod stylesheet;
 pub mod telnet;
+
+#[cfg(feature = "colors")]
+use anstream::eprintln;
+use stylesheet::MOOT_STYLESHEET;
 
 use std::{
     path::{Path, PathBuf},
@@ -123,7 +128,12 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
     validate_state: F,
 ) {
     init_logging(options);
-    eprintln!("Test definition: {}", path.display());
+    eprintln!(
+        "{}Test definition: {}{:#}",
+        MOOT_STYLESHEET.test_header,
+        path.display(),
+        MOOT_STYLESHEET.test_header
+    );
 
     let test = std::fs::read_to_string(path)
         .wrap_err(format!("{}", path.display()))
@@ -131,7 +141,10 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
 
     let mut player = options.wizard_object.clone();
     for span in parser::parse(&test).context("parse").unwrap() {
-        eprintln!("{:?}", span);
+        eprintln!(
+            "{}{:?}{:#}",
+            MOOT_STYLESHEET.block_header, span, MOOT_STYLESHEET.block_header
+        );
         match &span.expr {
             MootBlock::ChangePlayer(change) => {
                 player = handle_change_player(options, change.name)
