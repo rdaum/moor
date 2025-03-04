@@ -664,9 +664,12 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
             return Ok(None);
         }
 
-        let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
-        self.perms(perms)?
-            .check_object_allows(&owner, objflags, ObjFlag::Read.into())?;
+        // TODO: LambdaMOO does not enforce a readability check on the object itself before
+        //  resolving verbs on it. So this code is commented out.  However I can see an argument
+        //  for keeping this functionality as a toggle-able option.
+        // let (objflags, owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
+        // self.perms(perms)?
+        //     .check_object_allows(&owner, objflags, ObjFlag::Read.into())?;
 
         let spec_for_fn = |oid, pco: &Obj| -> ArgSpec {
             if pco == oid {
