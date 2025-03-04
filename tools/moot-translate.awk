@@ -72,6 +72,9 @@
     # set(obj, field, value)
     s = gensub(/^set\((.*), ['"](.*)['"], (.*)\)/, "; $\\1.\\2 = \\3;", "g", s);
 
+    # return set(obj, field, value)
+    s = gensub(/^return set\((.*), ['"](.*)['"], (.*)\)/, "; return \\1.\\2 = \\3;", "g", s);
+
     # get(obj, field)
     s = gensub(/^get\((.*), ['"](.*)['"]\)/, "; return $\\1.\\2;", "g", s);
 

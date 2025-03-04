@@ -1,0 +1,257 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_properties_and_inheritance
+
+@wizard
+; add_property($system, "e", create($nothing), {player, "wrc"});
+; add_property($system, "b", create($nothing), {player, "wrc"});
+; add_property($system, "c", create($nothing), {player, "wrc"});
+
+; add_property($system, "m", create($e), {player, "wrc"});
+; add_property($system, "n", create($e), {player, "wrc"});
+
+; add_property($e, "e1", "e1", {player, ""});
+; add_property($e, "e", "e", {player, ""});
+; add_property($b, "b1", {"b1"}, {player, "r"});
+; add_property($b, "b", {"b"}, {player, "r"});
+; add_property($c, "c", player.location, {player, "w"});
+
+; return property_info($e, "e");
+{player, ""}
+; return property_info($e, "e1");
+{player, ""}
+; return property_info($e, "b");
+E_PROPNF
+; return property_info($e, "b1");
+E_PROPNF
+; return property_info($e, "c");
+E_PROPNF
+; return property_info($m, "e1");
+{player, ""}
+; return property_info($m, "e");
+{player, ""}
+; return property_info($n, "b1");
+E_PROPNF
+; return property_info($n, "b");
+E_PROPNF
+
+; return $e.e;
+"e"
+; return $e.e1;
+"e1"
+; return $e.b;
+E_PROPNF
+; return $e.b1;
+E_PROPNF
+; return $e.c;
+E_PROPNF
+; return $m.e;
+"e"
+; return $m.e1;
+"e1"
+; return $n.e;
+"e"
+; return $n.e1;
+"e1"
+
+; return $e.e = "ee";
+"ee"
+; return $e.b = "bb";
+E_PROPNF
+; return $e.c = "cc";
+E_PROPNF
+; return $m.e = "11";
+"11"
+; return $n.e = "ee";
+"ee"
+
+; return $e.e;
+"ee"
+; return $e.b;
+E_PROPNF
+; return $e.c;
+E_PROPNF
+; return $m.e;
+"11"
+; return $n.e;
+"ee"
+
+; return $e.e = "e";
+"e"
+
+; return $e.e;
+"e"
+; return $e.b;
+E_PROPNF
+; return $e.c;
+E_PROPNF
+; return $m.e;
+"11"
+; return $n.e;
+"ee"
+
+; clear_property($m, "e");
+; clear_property($n, "e");
+
+; chparent($e, $b);
+
+; return property_info($e, "e");
+{player, ""}
+; return property_info($e, "e1");
+{player, ""}
+; return property_info($e, "b");
+{player, "r"}
+; return property_info($e, "b1");
+{player, "r"}
+; return property_info($e, "c");
+E_PROPNF
+; return property_info($m, "e1");
+{player, ""}
+; return property_info($m, "e");
+{player, ""}
+; return property_info($n, "b1");
+{player, "r"}
+; return property_info($n, "b");
+{player, "r"}
+
+; return $e.e;
+"e"
+; return $e.e1;
+"e1"
+; return $e.b;
+{"b"}
+; return $e.b1;
+{"b1"}
+; return $e.c;
+E_PROPNF
+; return $m.e;
+"e"
+; return $m.e1;
+"e1"
+; return $n.e;
+"e"
+; return $n.e1;
+"e1"
+
+; chparent($e, $c);
+
+; return property_info($e, "e");
+{player, ""}
+; return property_info($e, "e1");
+{player, ""}
+; return property_info($e, "b");
+E_PROPNF
+; return property_info($e, "b1");
+E_PROPNF
+; return property_info($e, "c");
+{player, "w"}
+; return property_info($m, "e1");
+{player, ""}
+; return property_info($m, "e");
+{player, ""}
+; return property_info($n, "b1");
+E_PROPNF
+; return property_info($n, "b");
+E_PROPNF
+; return property_info($m, "c");
+{player, "w"}
+; return property_info($n, "c");
+{player, "w"}
+
+; return $e.e;
+"e"
+; return $e.e1;
+"e1"
+; return $e.b;
+E_PROPNF
+; return $e.b1;
+E_PROPNF
+; return $e.c;
+player.location
+; return $m.e;
+"e"
+; return $m.e1;
+"e1"
+; return $n.e;
+"e"
+; return $n.e1;
+"e1"
+; return $m.c;
+player.location
+; return $n.c;
+player.location
+
+; delete_property($c, "c");
+; add_property($c, "c", "c", {player, "c"});
+
+; return property_info($e, "e");
+{player, ""}
+; return property_info($e, "e1");
+{player, ""}
+; return property_info($e, "b");
+E_PROPNF
+; return property_info($e, "b1");
+E_PROPNF
+; return property_info($e, "c");
+{player, "c"}
+; return property_info($m, "e1");
+{player, ""}
+; return property_info($m, "e");
+{player, ""}
+; return property_info($n, "b1");
+E_PROPNF
+; return property_info($n, "b");
+E_PROPNF
+; return property_info($m, "c");
+{player, "c"}
+; return property_info($n, "c");
+{player, "c"}
+
+; return $e.e;
+"e"
+; return $e.e1;
+"e1"
+; return $e.b;
+E_PROPNF
+; return $e.b1;
+E_PROPNF
+; return $e.c;
+"c"
+; return $m.e;
+"e"
+; return $m.e1;
+"e1"
+; return $n.e;
+"e"
+; return $n.e1;
+"e1"
+; return $m.c;
+"c"
+; return $n.c;
+"c"
+
+; return delete_property($m, "e");
+E_PROPNF
+; return delete_property($n, "e");
+E_PROPNF
+
+; delete_property($c, "c");
+
+; return $e.e;
+"e"
+; return $e.b;
+E_PROPNF
+; return $e.c;
+E_PROPNF
+; return $m.e;
+"e"
+; return $n.e;
+"e"
+
+; add_property($c, "c", player.location, {player, "w"});
+; clear_property($m, "e");
+; clear_property($n, "e");
+
+; return delete_property($m, "e");
+E_PROPNF
+; return delete_property($n, "e");
+E_PROPNF
