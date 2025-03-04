@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#[cfg(feature = "colors")]
+use anstream::eprintln;
 use eyre::{WrapErr, eyre};
 use moor_var::Obj;
 use std::{
@@ -22,7 +24,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::MootRunner;
+use crate::{MootRunner, stylesheet::MOOT_STYLESHEET};
 
 pub struct ManagedChild {
     name: &'static str,
@@ -105,7 +107,16 @@ impl MootClient {
             .write_all(s.as_ref().as_bytes())
             .and_then(|_| writer.write_all(b"\n"))
             .wrap_err_with(|| format!("writing port={port}"));
-        eprintln!("{} >> {}", port, s.as_ref());
+        let s = s.as_ref();
+        eprintln!(
+            "{}{port}{:#} {}>>{:#} {}{s}{:#}",
+            MOOT_STYLESHEET.remote,
+            MOOT_STYLESHEET.remote,
+            MOOT_STYLESHEET.arrows,
+            MOOT_STYLESHEET.arrows,
+            MOOT_STYLESHEET.request,
+            MOOT_STYLESHEET.request,
+        );
         result
     }
 
@@ -113,7 +124,14 @@ impl MootClient {
         let mut buf = String::new();
         match BufReader::new(&self.stream).read_line(&mut buf) {
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                eprintln!("{} read timeout", self.port());
+                let port = self.port();
+                eprintln!(
+                    "{}{port}{:#} {}(no response){:#}",
+                    MOOT_STYLESHEET.remote,
+                    MOOT_STYLESHEET.remote,
+                    MOOT_STYLESHEET.response,
+                    MOOT_STYLESHEET.response
+                );
                 Ok(None)
             }
             Err(e) => {
@@ -122,7 +140,16 @@ impl MootClient {
             Ok(0) => Ok(None),
             Ok(_) => {
                 let line = buf.trim_end_matches(['\r', '\n']).to_string();
-                eprintln!("{} << {}", self.port(), line);
+                let port = self.port();
+                eprintln!(
+                    "{}{port}{:#} {}<<{:#} {}{line}{:#}",
+                    MOOT_STYLESHEET.remote,
+                    MOOT_STYLESHEET.remote,
+                    MOOT_STYLESHEET.arrows,
+                    MOOT_STYLESHEET.arrows,
+                    MOOT_STYLESHEET.response,
+                    MOOT_STYLESHEET.response,
+                );
                 Ok(Some(line))
             }
         }

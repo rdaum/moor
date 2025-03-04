@@ -25,6 +25,13 @@ test-case.workspace = true
 test_each_file.workspace = true
 tracing.workspace = true
 
+# SOURCE OF TRUTH FOR VERSIONS: crates/testing/moot/Cargo.toml
+# Optional dependencies are not supported for workspace-inherited dependencies.
+# Alternative to optional color support is enforced color support; then we can move `anstream`
+# and `anstyle` to the top level as usual.
+anstream = { version = "0.6.18", features = ["test"] }
+anstyle = { version = "1.0.10" }
+
 [[test]]
 name = "regression-suite"
 path = "testsuite/regression_suite.rs"
@@ -39,10 +46,10 @@ harness = false
 
 [dependencies]
 ## Own
+moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
-moor-moot = { path = "../testing/moot" }
-moor-common = { path = "../common" }
+moor-moot = { path = "../testing/moot", features = ["colors"] }
 moor-var = { path = "../var" }
 
 ## General usefulness

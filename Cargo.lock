@@ -2238,6 +2238,8 @@ dependencies = [
 name = "moor-kernel"
 version = "0.9.0-alpha"
 dependencies = [
+ "anstream",
+ "anstyle",
  "argon2",
  "bincode",
  "byteview",
@@ -2303,6 +2305,8 @@ dependencies = [
 name = "moor-moot"
 version = "0.9.0-alpha"
 dependencies = [
+ "anstream",
+ "anstyle",
  "eyre",
  "moor-var",
  "pest",

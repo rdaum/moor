@@ -17,6 +17,7 @@
 
 use std::{path::Path, sync::Arc};
 
+use anstream::eprintln;
 use eyre::Context;
 
 use common::{create_db, testsuite_dir};
@@ -33,6 +34,7 @@ use moor_kernel::{
         sessions::{NoopClientSession, Session},
     },
 };
+use moor_moot::stylesheet::MOOT_STYLESHEET;
 use moor_moot::{MootOptions, MootRunner, execute_moot_test};
 use moor_var::{Obj, Var, v_none};
 
@@ -58,7 +60,15 @@ impl MootRunner for SchedulerMootRunner {
 
     fn eval<S: Into<String>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command = command.into();
-        eprintln!("{player} >> ; {command}");
+        eprintln!(
+            "{}{player}{:#} {}>>{:#} {}; {command}{:#}",
+            MOOT_STYLESHEET.remote,
+            MOOT_STYLESHEET.remote,
+            MOOT_STYLESHEET.arrows,
+            MOOT_STYLESHEET.arrows,
+            MOOT_STYLESHEET.request,
+            MOOT_STYLESHEET.request
+        );
         self.eval_result = Some(
             scheduler_test_utils::call_eval(
                 self.scheduler.clone(),
@@ -76,7 +86,15 @@ impl MootRunner for SchedulerMootRunner {
 
     fn command<S: AsRef<str>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command: &str = command.as_ref();
-        eprintln!("{player} >> {}", command);
+        eprintln!(
+            "{}{player}{:#} {}>>{:#} {}{command}{:#}",
+            MOOT_STYLESHEET.remote,
+            MOOT_STYLESHEET.remote,
+            MOOT_STYLESHEET.arrows,
+            MOOT_STYLESHEET.arrows,
+            MOOT_STYLESHEET.request,
+            MOOT_STYLESHEET.request
+        );
         self.eval_result = Some(
             scheduler_test_utils::call_command(
                 self.scheduler.clone(),
@@ -101,10 +119,18 @@ impl MootRunner for SchedulerMootRunner {
     }
 
     fn read_eval_result(&mut self, player: &Obj) -> eyre::Result<Option<Var>> {
-        Ok(self
-            .eval_result
-            .take()
-            .inspect(|var| eprintln!("{player} << {}", to_literal(var))))
+        Ok(self.eval_result.take().inspect(|var| {
+            eprintln!(
+                "{}{player}{:#} {}<<{:#} {}{}{:#}",
+                MOOT_STYLESHEET.remote,
+                MOOT_STYLESHEET.remote,
+                MOOT_STYLESHEET.arrows,
+                MOOT_STYLESHEET.arrows,
+                MOOT_STYLESHEET.response,
+                to_literal(var),
+                MOOT_STYLESHEET.response,
+            )
+        }))
     }
 
     fn read_command_result(&mut self, player: &Obj) -> eyre::Result<Option<Self::Value>> {
