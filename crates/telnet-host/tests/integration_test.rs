@@ -12,7 +12,8 @@
 //
 
 #![cfg(target_os = "linux")]
-
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 use moor_moot::{MootOptions, telnet::ManagedChild, test_db_path};
 use serial_test::serial;
 use std::net::TcpListener;

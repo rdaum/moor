@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod testrun;
 
 use crate::testrun::run_test;

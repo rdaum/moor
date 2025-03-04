@@ -11,6 +11,9 @@ repository.workspace = true
 rust-version.workspace = true
 description = "A tool for importing, compiling, and exporting mooR cores without running the full daemon"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
+
 [dependencies]
 moor-compiler = { path = "../../crates/compiler" }
 moor-db = { path = "../../crates/db" }

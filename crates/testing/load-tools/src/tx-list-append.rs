@@ -17,6 +17,8 @@
 //! The results are written to a file in the EDN format that `elle-cli` can consume.
 //! See: https://github.com/ligurio/elle-cli
 
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod setup;
 
 use crate::setup::{

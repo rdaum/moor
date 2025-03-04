@@ -11,6 +11,9 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Load testing and transaction model checking"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
+
 [[bin]]
 name = "moor-model-checker"
 path = "src/tx-list-append.rs"

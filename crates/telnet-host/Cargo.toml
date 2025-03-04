@@ -11,6 +11,9 @@ repository.workspace = true
 rust-version.workspace = true
 description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a moor daemon."
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
+
 [dependencies]
 moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
