@@ -355,12 +355,21 @@ impl WorldStateDB {
     }
 
     /// Provide a rough estimate of memory usage in bytes.
-    #[allow(dead_code)]
     pub fn cache_usage_bytes(&self) -> usize {
         self.caches()
             .iter()
             .map(|c| c.cache_usage_bytes())
             .sum::<usize>()
+    }
+
+    pub fn process_cache_evictions(&self) -> (usize, usize) {
+        let (mut total_before, mut total_after) = (0, 0);
+        for c in self.caches().iter() {
+            let (before, after) = c.process_cache_evictions();
+            total_before += before;
+            total_after += after;
+        }
+        (total_before, total_after)
     }
 
     pub fn stop(&self) {
@@ -909,5 +918,13 @@ mod tests {
             .0
             .uuid();
         tx.delete_property(&object_c, c_uuid).unwrap();
+    }
+
+    /// Simple provocation of cache eviction function on empty caches.
+    /// Just here to double-check the simplest no-flush scenario.
+    #[test]
+    fn test_trigger_cache_evictions() {
+        let db = test_db();
+        db.process_cache_evictions();
     }
 }

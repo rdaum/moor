@@ -490,4 +490,57 @@ mod tests {
             assert!(matches!(check_result, Err(Error::Conflict)));
         }
     }
+
+    #[test]
+    fn test_simple_cache_evict() {
+        let backing = HashMap::new();
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let global_cache = Arc::new(TransactionalCache::new(provider, 2048));
+
+        global_cache.process_cache_evictions();
+
+        // Fill up with some stuff greater than the threshold of 2048 bytes. Then initiate the evict cycle
+        // twice, and verify that some stuff got evictinated.
+
+        // Fill up the cache with entries exceeding the threshold of 2048 bytes.
+        let tx = Tx { ts: Timestamp(1) };
+        let mut lc = global_cache.clone().start(&tx);
+
+        for i in 0..3000 {
+            let domain = TestDomain(i);
+            let codomain = TestCodomain(i);
+
+            lc.insert(domain, codomain).unwrap();
+        }
+        let ws = lc.working_set();
+
+        {
+            let lock = global_cache.lock();
+            let lock = global_cache.check(lock, &ws).unwrap();
+            let _ = global_cache.apply(lock, ws).unwrap();
+        }
+
+        let bytes_usage = global_cache.cache_usage_bytes();
+        assert!(
+            bytes_usage > 2048,
+            "Cache usage below threshold {bytes_usage} < 2048"
+        );
+        // Force eviction cycle.  Have to do this twice, because second-chance.
+        global_cache.process_cache_evictions();
+        let (before_bytes, after_bytes) = global_cache.process_cache_evictions();
+
+        // Verify that items were evicted.
+        assert!(
+            before_bytes < after_bytes,
+            "After bytes ({after_bytes} >= before bytes {before_bytes})"
+        );
+
+        // Confirm that the cache is within the size threshold after eviction.
+        let current_usage = global_cache.cache_usage_bytes();
+        assert!(
+            current_usage <= 2048,
+            "Cache usage exceeded threshold after eviction"
+        );
+    }
 }
