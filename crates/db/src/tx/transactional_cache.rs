@@ -109,7 +109,7 @@ where
             if let Some(e) = lock.0.index.get(d) {
                 match &e.datum {
                     Datum::Value(c) => {
-                        preseed_tuples.push((e.ts, d.clone(), c.clone()));
+                        preseed_tuples.push((e.ts, d.clone(), c.clone(), e.size_bytes));
                     }
                     Datum::Tombstone => continue,
                 }
@@ -182,7 +182,12 @@ where
             match op.to_type {
                 OpType::Insert | OpType::Update => {
                     let codomain = op.value.unwrap();
-                    inner.insert_entry(op.write_ts, domain.clone(), codomain.clone(), 0);
+                    inner.insert_entry(
+                        op.write_ts,
+                        domain.clone(),
+                        codomain.clone(),
+                        op.size_bytes,
+                    );
                     self.source.put(op.write_ts, domain.clone(), codomain).ok();
                 }
                 OpType::Delete => {
@@ -297,14 +302,15 @@ where
         for (domain, hits) in evict_q {
             if let Some(e) = self.index.get(&domain) {
                 if e.hits == hits {
-                    victims.push(domain);
-                    self.used_bytes -= e.size_bytes;
-                    num_evicted += 1;
+                    victims.push((domain, e.size_bytes));
                 }
             }
         }
-        for v in victims {
-            self.index.swap_remove(&v);
+        for (v, size_bytes) in victims {
+            if self.index.swap_remove(&v).is_some() {
+                self.used_bytes -= size_bytes;
+                num_evicted += 1;
+            }
         }
         (num_evicted, before_eviction - self.used_bytes)
     }
@@ -317,18 +323,19 @@ where
     Codomain: Clone + PartialEq + Eq,
     Source: Provider<Domain, Codomain>,
 {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
+    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error> {
         let mut inner = self.index.lock().unwrap();
         if let Some(entry) = inner.index_lookup(domain) {
             match &entry.datum {
-                Datum::Value(codomain) => Ok(Some((entry.ts, codomain.clone()))),
+                Datum::Value(codomain) => Ok(Some((entry.ts, codomain.clone(), entry.size_bytes))),
                 Datum::Tombstone => Ok(None),
             }
         } else {
             // Pull from backing store.
             if let Some((ts, codomain, bytes)) = self.source.get(domain)? {
                 inner.insert_entry(ts, domain.clone(), codomain.clone(), bytes);
-                Ok(Some((ts, codomain)))
+                inner.used_bytes += bytes;
+                Ok(Some((ts, codomain, bytes)))
             } else {
                 Ok(None)
             }
@@ -343,6 +350,7 @@ where
         for (ts, domain, codomain, size) in &results {
             let mut index = self.index.lock().unwrap();
             index.insert_entry(*ts, domain.clone(), codomain.clone(), *size);
+            index.used_bytes += *size;
         }
 
         Ok(results)
@@ -441,7 +449,7 @@ mod tests {
 
         let tx = Tx { ts: Timestamp(0) };
         let mut lc = global_cache.clone().start(&tx);
-        lc.insert(domain.clone(), codomain.clone()).unwrap();
+        lc.insert(domain.clone(), codomain.clone(), 16).unwrap();
         assert_eq!(lc.get(&domain).unwrap(), Some(codomain.clone()));
         assert_eq!(lc.get(&TestDomain(0)).unwrap(), Some(TestCodomain(0)));
         let ws = lc.working_set();
@@ -472,9 +480,9 @@ mod tests {
 
         let mut lc_a = global_cache.clone().start(&tx_a);
 
-        lc_a.insert(domain.clone(), codomain_a).unwrap();
+        lc_a.insert(domain.clone(), codomain_a, 16).unwrap();
         let mut lc_b = global_cache.clone().start(&tx_b);
-        lc_b.insert(domain.clone(), codomain_b).unwrap();
+        lc_b.insert(domain.clone(), codomain_b, 16).unwrap();
         let ws_a = lc_a.working_set();
         let ws_b = lc_b.working_set();
         {
@@ -489,5 +497,54 @@ mod tests {
             let check_result = global_cache.check(lock_b, &ws_b);
             assert!(matches!(check_result, Err(Error::Conflict)));
         }
+    }
+
+    #[test]
+    fn test_simple_cache_evict() {
+        let backing = HashMap::new();
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let global_cache = Arc::new(TransactionalCache::new(provider, 2048));
+
+        global_cache.process_cache_evictions();
+
+        // Fill up with some stuff greater than the threshold of 2048 bytes. Then initiate the evict cycle
+        // twice, and verify that some stuff got evictinated.
+
+        // Fill up the cache with entries exceeding the threshold of 2048 bytes.
+        let tx = Tx { ts: Timestamp(1) };
+        let mut lc = global_cache.clone().start(&tx);
+
+        for i in 0..3000 {
+            let domain = TestDomain(i);
+            let codomain = TestCodomain(i);
+
+            lc.insert(domain, codomain, 16).unwrap();
+        }
+        let ws = lc.working_set();
+
+        {
+            let lock = global_cache.lock();
+            let lock = global_cache.check(lock, &ws).unwrap();
+            let _ = global_cache.apply(lock, ws).unwrap();
+        }
+
+        let bytes_usage = global_cache.cache_usage_bytes();
+        assert!(
+            bytes_usage > 2048,
+            "Cache usage below threshold {bytes_usage} < 2048"
+        );
+        let (num_evicted, freed_bytes) = global_cache.process_cache_evictions();
+
+        assert!(num_evicted > 0, "No items evicted");
+        assert!(freed_bytes > 0, "No bytes freed");
+        assert!(
+            global_cache.cache_usage_bytes() < bytes_usage,
+            "Cache usage above threshold"
+        );
+        assert!(
+            global_cache.cache_usage_bytes() < 2048,
+            "Cache usage above threshold"
+        );
     }
 }

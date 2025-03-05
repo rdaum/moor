@@ -15,7 +15,7 @@ use crate::fjall_provider::FjallProvider;
 use crate::tx::{TransactionalCache, TransactionalTable, Tx};
 use crate::worldstate_db::WorkingSets;
 use crate::worldstate_transaction::WorldStateTransaction;
-use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
+use crate::{BytesHolder, Error, ObjAndUUIDHolder, StringHolder};
 use byteview::ByteView;
 use crossbeam_channel::Sender;
 use moor_common::model::{
@@ -26,6 +26,7 @@ use moor_common::model::{
 use moor_common::util::BitEnum;
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::hash::Hash;
 use std::sync::Arc;
 use std::sync::atomic::AtomicI64;
 use uuid::Uuid;
@@ -65,6 +66,19 @@ pub struct DbTransaction {
     pub(crate) object_propflags: LC<ObjAndUUIDHolder, PropPerms>,
 
     pub(crate) sequences: [Arc<AtomicI64>; 16],
+}
+
+fn upsert<Domain, Codomain>(
+    table: &mut LC<Domain, Codomain>,
+    d: Domain,
+    c: Codomain,
+) -> Result<Option<Codomain>, Error>
+where
+    Domain: AsByteBuffer + Clone + Eq + Hash,
+    Codomain: AsByteBuffer + Clone + Eq,
+{
+    let size = d.size_bytes() + c.size_bytes();
+    table.upsert(d, c, size)
 }
 
 impl WorldStateTransaction for DbTransaction {
@@ -146,7 +160,7 @@ impl WorldStateTransaction for DbTransaction {
 
     fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
         self.object_owner
-            .upsert(obj.clone(), owner.clone())
+            .upsert(obj.clone(), owner.clone(), obj.size_bytes())
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error setting object owner: {:?}", e))
             })?;
@@ -158,7 +172,7 @@ impl WorldStateTransaction for DbTransaction {
         obj: &Obj,
         flags: BitEnum<ObjFlag>,
     ) -> Result<(), WorldStateError> {
-        self.object_flags.upsert(obj.clone(), flags).map_err(|e| {
+        upsert(&mut self.object_flags, obj.clone(), flags).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object flags: {:?}", e))
         })?;
         Ok(())
@@ -175,11 +189,9 @@ impl WorldStateTransaction for DbTransaction {
     }
 
     fn set_object_name(&mut self, obj: &Obj, name: String) -> Result<(), WorldStateError> {
-        self.object_name
-            .upsert(obj.clone(), StringHolder(name))
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting object name: {:?}", e))
-            })?;
+        upsert(&mut self.object_name, obj.clone(), StringHolder(name)).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting object name: {:?}", e))
+        })?;
         Ok(())
     }
 
@@ -201,14 +213,11 @@ impl WorldStateTransaction for DbTransaction {
         };
 
         let owner = attrs.owner().unwrap_or(id.clone());
-        self.object_owner
-            .upsert(id.clone(), owner)
-            .expect("Unable to insert initial owner");
+        upsert(&mut self.object_owner, id.clone(), owner).expect("Unable to insert initial owner");
 
         // Set initial name
         let name = attrs.name().unwrap_or_default();
-        self.object_name
-            .upsert(id.clone(), StringHolder(name))
+        upsert(&mut self.object_name, id.clone(), StringHolder(name))
             .expect("Unable to insert initial name");
 
         // We use our own setters for these, since there's biz-logic attached here...
@@ -221,8 +230,7 @@ impl WorldStateTransaction for DbTransaction {
                 .expect("Unable to set location");
         }
 
-        self.object_flags
-            .upsert(id.clone(), attrs.flags())
+        upsert(&mut self.object_flags, id.clone(), attrs.flags())
             .expect("Unable to insert initial flags");
 
         // Update the maximum object number if ours is higher than the current one. This is for the
@@ -253,21 +261,22 @@ impl WorldStateTransaction for DbTransaction {
         // Make sure we are removed from the parent's children list.
         let parent_children = self.get_object_children(&parent)?;
         let parent_children = parent_children.with_removed(obj.clone());
-        self.object_children
-            .upsert(parent.clone(), parent_children)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error updating parent children: {:?}", e))
-            })?;
+        upsert(&mut self.object_children, parent.clone(), parent_children).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error updating parent children: {:?}", e))
+        })?;
 
         // Make sure we are removed from the location's contents list.
         let location = self.get_object_location(obj)?;
         let location_contents = self.get_object_contents(&location)?;
         let location_contents = location_contents.with_removed(obj.clone());
-        self.object_contents
-            .upsert(location.clone(), location_contents)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error updating location contents: {:?}", e))
-            })?;
+        upsert(
+            &mut self.object_contents,
+            location.clone(),
+            location_contents,
+        )
+        .map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error updating location contents: {:?}", e))
+        })?;
 
         // Now we can remove this object from all relevant relations
         // First the simple ones which are keyed on the object id.
@@ -350,8 +359,7 @@ impl WorldStateTransaction for DbTransaction {
                 }
             }
             let new_props = old_props.with_all_removed(&dead_properties);
-            self.object_propdefs
-                .upsert(o.clone(), new_props)
+            upsert(&mut self.object_propdefs, o.clone(), new_props)
                 .expect("Unable to update propdefs");
 
             // Remove their values and flags.
@@ -397,16 +405,18 @@ impl WorldStateTransaction for DbTransaction {
             return Ok(());
         };
 
-        self.object_parent
-            .upsert(o.clone(), new_parent.clone())
+        upsert(&mut self.object_parent, o.clone(), new_parent.clone())
             .expect("Unable to update parent");
 
         // Make sure the old_parent's children now have use removed.
         let old_parent_children = self.get_object_children(&old_parent)?;
         let old_parent_children = old_parent_children.with_removed(o.clone());
-        self.object_children
-            .upsert(old_parent.clone(), old_parent_children)
-            .expect("Unable to update children");
+        upsert(
+            &mut self.object_children,
+            old_parent.clone(),
+            old_parent_children,
+        )
+        .expect("Unable to update children");
 
         if new_parent.is_nothing() {
             return Ok(());
@@ -415,9 +425,12 @@ impl WorldStateTransaction for DbTransaction {
         // And add to the new parent's children.
         let new_parent_children = self.get_object_children(new_parent)?;
         let new_parent_children = new_parent_children.with_appended(&[o.clone()]);
-        self.object_children
-            .upsert(new_parent.clone(), new_parent_children)
-            .expect("Unable to update children");
+        upsert(
+            &mut self.object_children,
+            new_parent.clone(),
+            new_parent_children,
+        )
+        .expect("Unable to update children");
 
         // Now walk all my new descendants and give them the properties that derive from any
         // ancestors they don't already share.
@@ -463,9 +476,12 @@ impl WorldStateTransaction for DbTransaction {
                 } else {
                     propperms.clone()
                 };
-                self.object_propflags
-                    .upsert(ObjAndUUIDHolder::new(&c, p.uuid()), propperms)
-                    .expect("Unable to update property flags");
+                upsert(
+                    &mut self.object_propflags,
+                    ObjAndUUIDHolder::new(&c, p.uuid()),
+                    propperms,
+                )
+                .expect("Unable to update property flags");
             }
         }
         Ok(())
@@ -574,11 +590,14 @@ impl WorldStateTransaction for DbTransaction {
         }
 
         // Set new location.
-        self.object_location
-            .upsert(what.clone(), new_location.clone())
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting object location: {:?}", e))
-            })?;
+        upsert(
+            &mut self.object_location,
+            what.clone(),
+            new_location.clone(),
+        )
+        .map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting object location: {:?}", e))
+        })?;
 
         // Now need to update contents in both.
         if let Some(old_location) = old_location {
@@ -588,14 +607,14 @@ impl WorldStateTransaction for DbTransaction {
 
             let old_contents = old_contents.unwrap_or_default().with_removed(what.clone());
 
-            self.object_contents
-                .upsert(old_location.clone(), old_contents)
-                .map_err(|e| {
-                    WorldStateError::DatabaseError(format!(
-                        "Error setting object contents: {:?}",
-                        e
-                    ))
-                })?;
+            upsert(
+                &mut self.object_contents,
+                old_location.clone(),
+                old_contents,
+            )
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting object contents: {:?}", e))
+            })?;
         }
 
         let new_contents = self.object_contents.get(new_location).map_err(|e| {
@@ -604,11 +623,14 @@ impl WorldStateTransaction for DbTransaction {
         let new_contents = new_contents
             .unwrap_or_default()
             .with_appended(&[what.clone()]);
-        self.object_contents
-            .upsert(new_location.clone(), new_contents)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting object contents: {:?}", e))
-            })?;
+        upsert(
+            &mut self.object_contents,
+            new_location.clone(),
+            new_contents,
+        )
+        .map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting object contents: {:?}", e))
+        })?;
 
         if new_location.is_nothing() {
             return Ok(());
@@ -727,21 +749,19 @@ impl WorldStateTransaction for DbTransaction {
             ));
         };
 
-        self.object_verbdefs
-            .upsert(obj.clone(), verbdefs)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
-            })?;
+        upsert(&mut self.object_verbdefs, obj.clone(), verbdefs).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
+        })?;
 
         if verb_attrs.binary.is_some() {
-            self.object_verbs
-                .upsert(
-                    ObjAndUUIDHolder::new(obj, uuid),
-                    BytesHolder(verb_attrs.binary.unwrap()),
-                )
-                .map_err(|e| {
-                    WorldStateError::DatabaseError(format!("Error setting verb binary: {:?}", e))
-                })?;
+            upsert(
+                &mut self.object_verbs,
+                ObjAndUUIDHolder::new(obj, uuid),
+                BytesHolder(verb_attrs.binary.unwrap()),
+            )
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting verb binary: {:?}", e))
+            })?;
         }
         Ok(())
     }
@@ -771,17 +791,18 @@ impl WorldStateTransaction for DbTransaction {
 
         let verbdefs = verbdefs.with_added(verbdef);
 
-        self.object_verbdefs
-            .upsert(oid.clone(), verbdefs)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
-            })?;
+        upsert(&mut self.object_verbdefs, oid.clone(), verbdefs).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
+        })?;
 
-        self.object_verbs
-            .upsert(ObjAndUUIDHolder::new(oid, uuid), BytesHolder(binary))
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting verb binary: {:?}", e))
-            })?;
+        upsert(
+            &mut self.object_verbs,
+            ObjAndUUIDHolder::new(oid, uuid),
+            BytesHolder(binary),
+        )
+        .map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting verb binary: {:?}", e))
+        })?;
 
         Ok(())
     }
@@ -792,11 +813,9 @@ impl WorldStateTransaction for DbTransaction {
             .with_removed(uuid)
             .ok_or_else(|| WorldStateError::VerbNotFound(location.clone(), format!("{}", uuid)))?;
 
-        self.object_verbdefs
-            .upsert(location.clone(), verbdefs)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
-            })?;
+        upsert(&mut self.object_verbdefs, location.clone(), verbdefs).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
+        })?;
 
         self.object_verbs
             .delete(&ObjAndUUIDHolder::new(location, uuid))
@@ -814,11 +833,14 @@ impl WorldStateTransaction for DbTransaction {
     }
 
     fn set_property(&mut self, obj: &Obj, uuid: Uuid, value: Var) -> Result<(), WorldStateError> {
-        self.object_propvalues
-            .upsert(ObjAndUUIDHolder::new(obj, uuid), value)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting property value: {:?}", e))
-            })?;
+        upsert(
+            &mut self.object_propvalues,
+            ObjAndUUIDHolder::new(obj, uuid),
+            value,
+        )
+        .map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting property value: {:?}", e))
+        })?;
         Ok(())
     }
 
@@ -860,14 +882,14 @@ impl WorldStateTransaction for DbTransaction {
         let u = Uuid::new_v4();
 
         let prop = PropDef::new(u, definer.clone(), location.clone(), name.as_str());
-        self.object_propdefs
-            .upsert(location.clone(), props.with_added(prop))
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!(
-                    "Error setting property definition: {:?}",
-                    e
-                ))
-            })?;
+        upsert(
+            &mut self.object_propdefs,
+            location.clone(),
+            props.with_added(prop),
+        )
+        .map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting property definition: {:?}", e))
+        })?;
 
         // If we have an initial value, set it, but just on ourselves. Descendants start out clear.
         if let Some(value) = value {
@@ -885,14 +907,14 @@ impl WorldStateTransaction for DbTransaction {
             } else {
                 owner.clone()
             };
-            self.object_propflags
-                .upsert(
-                    ObjAndUUIDHolder::new(&proploc, u),
-                    PropPerms::new(actual_owner, perms),
-                )
-                .map_err(|e| {
-                    WorldStateError::DatabaseError(format!("Error setting property owner: {:?}", e))
-                })?;
+            upsert(
+                &mut self.object_propflags,
+                ObjAndUUIDHolder::new(&proploc, u),
+                PropPerms::new(actual_owner, perms),
+            )
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error setting property owner: {:?}", e))
+            })?;
         }
 
         Ok(u)
@@ -923,11 +945,9 @@ impl WorldStateTransaction for DbTransaction {
                 ));
             };
 
-            self.object_propdefs
-                .upsert(obj.clone(), props)
-                .map_err(|e| {
-                    WorldStateError::DatabaseError(format!("Error updating property: {:?}", e))
-                })?;
+            upsert(&mut self.object_propdefs, obj.clone(), props).map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error updating property: {:?}", e))
+            })?;
         }
 
         // If flags or perms updated, do that.
@@ -942,11 +962,14 @@ impl WorldStateTransaction for DbTransaction {
                 perms = perms.with_owner(new_owner);
             }
 
-            self.object_propflags
-                .upsert(ObjAndUUIDHolder::new(obj, uuid), perms)
-                .map_err(|e| {
-                    WorldStateError::DatabaseError(format!("Error updating property: {:?}", e))
-                })?;
+            upsert(
+                &mut self.object_propflags,
+                ObjAndUUIDHolder::new(obj, uuid),
+                perms,
+            )
+            .map_err(|e| {
+                WorldStateError::DatabaseError(format!("Error updating property: {:?}", e))
+            })?;
         }
 
         Ok(())
@@ -969,11 +992,9 @@ impl WorldStateTransaction for DbTransaction {
         for location in locations.iter() {
             let props: PropDefs = self.get_properties(&location)?;
             if let Some(props) = props.with_removed(uuid) {
-                self.object_propdefs
-                    .upsert(location.clone(), props)
-                    .map_err(|e| {
-                        WorldStateError::DatabaseError(format!("Error deleting property: {:?}", e))
-                    })?;
+                upsert(&mut self.object_propdefs, location.clone(), props).map_err(|e| {
+                    WorldStateError::DatabaseError(format!("Error deleting property: {:?}", e))
+                })?;
             }
         }
         Ok(())

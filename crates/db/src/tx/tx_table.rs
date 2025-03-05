@@ -57,6 +57,7 @@ pub struct Op<Datum: Clone> {
     pub(crate) from_type: OpType,
     pub(crate) to_type: OpType,
     pub(crate) value: Option<Datum>,
+    pub(crate) size_bytes: usize,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -85,9 +86,9 @@ where
     }
 
     /// Preseed the cache with a set of tuples.
-    pub(crate) fn preseed(&mut self, tuples: &[(Timestamp, Domain, Codomain)]) {
+    pub(crate) fn preseed(&mut self, tuples: &[(Timestamp, Domain, Codomain, usize)]) {
         let index = self.index.get_mut();
-        for (ts, domain, value) in tuples {
+        for (ts, domain, value, size_bytes) in tuples {
             index.insert(
                 domain.clone(),
                 Entry::Present(Op {
@@ -97,12 +98,18 @@ where
                     from_type: OpType::Cached,
                     to_type: OpType::Cached,
                     value: Some(value.clone()),
+                    size_bytes: *size_bytes,
                 }),
             );
         }
     }
 
-    pub fn insert(&mut self, domain: Domain, value: Codomain) -> Result<(), Error> {
+    pub fn insert(
+        &mut self,
+        domain: Domain,
+        value: Codomain,
+        size_bytes: usize,
+    ) -> Result<(), Error> {
         let mut index = self.index.borrow_mut();
 
         // Check if the domain is already in the index.
@@ -121,12 +128,12 @@ where
             };
             old_entry.source = DatumSource::Local;
             old_entry.value = Some(value.clone());
-
+            old_entry.size_bytes = size_bytes;
             return Ok(());
         }
 
         // Not in the index, we check the backing source.
-        if let Some((read_ts, backing_value)) = self.backing_source.get(&domain)? {
+        if let Some((read_ts, backing_value, size_bytes)) = self.backing_source.get(&domain)? {
             // If the backing source has a value, we can't insert.
             // But let's cache this value in our local.
             index.insert(
@@ -138,6 +145,7 @@ where
                     from_type: OpType::Cached,
                     to_type: OpType::Cached,
                     value: Some(backing_value.clone()),
+                    size_bytes,
                 }),
             );
             return Err(Error::Duplicate);
@@ -153,13 +161,19 @@ where
                 from_type: OpType::Insert,
                 to_type: OpType::Insert,
                 value: Some(value),
+                size_bytes,
             }),
         );
 
         Ok(())
     }
 
-    pub fn update(&mut self, domain: &Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
+    pub fn update(
+        &mut self,
+        domain: &Domain,
+        value: Codomain,
+        size_bytes: usize,
+    ) -> Result<Option<Codomain>, Error> {
         let mut index = self.index.borrow_mut();
 
         // Check if the domain is already in the _local_ index.
@@ -182,12 +196,12 @@ where
             };
             old_entry.value = Some(value.clone());
             old_entry.write_ts = self.tx.ts;
-
+            old_entry.size_bytes = size_bytes;
             return Ok(old_value);
         }
 
         // Not in the index, we check the backing source.
-        let Some((read_ts, backing_value)) = self.backing_source.get(domain)? else {
+        let Some((read_ts, backing_value, _)) = self.backing_source.get(domain)? else {
             index.insert(domain.clone(), Entry::NotPresent(self.tx.ts));
             return Ok(None);
         };
@@ -202,19 +216,25 @@ where
                 from_type: OpType::Cached,
                 to_type: OpType::Update,
                 value: Some(value.clone()),
+                size_bytes,
             }),
         );
 
         Ok(Some(backing_value))
     }
 
-    pub fn upsert(&mut self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
+    pub fn upsert(
+        &mut self,
+        domain: Domain,
+        value: Codomain,
+        size_bytes: usize,
+    ) -> Result<Option<Codomain>, Error> {
         // TODO: We could probably more efficient about this, but there we bugs here before and this
         //   fixed them.
         if self.has_tuple(&domain)? {
-            return self.update(&domain, value);
+            return self.update(&domain, value, size_bytes);
         }
-        self.insert(domain, value)?;
+        self.insert(domain, value, size_bytes)?;
         Ok(None)
     }
 
@@ -231,7 +251,7 @@ where
         }
 
         let backing_value = self.backing_source.get(domain)?;
-        let Some((read_ts, backing_value)) = backing_value else {
+        let Some((read_ts, backing_value, size_bytes)) = backing_value else {
             return Ok(false);
         };
 
@@ -244,6 +264,7 @@ where
                 from_type: OpType::Cached,
                 to_type: OpType::Cached,
                 value: Some(backing_value.clone()),
+                size_bytes,
             }),
         );
 
@@ -263,7 +284,7 @@ where
         }
 
         let backing_value = self.backing_source.get(domain)?;
-        let Some((read_ts, backing_value)) = backing_value else {
+        let Some((read_ts, backing_value, size_bytes)) = backing_value else {
             index.insert(domain.clone(), Entry::NotPresent(self.tx.ts));
             return Ok(None);
         };
@@ -277,6 +298,7 @@ where
                 from_type: OpType::Cached,
                 to_type: OpType::Cached,
                 value: Some(backing_value.clone()),
+                size_bytes,
             }),
         );
 
@@ -310,6 +332,7 @@ where
                                 from_type: op.from_type,
                                 to_type: OpType::Delete,
                                 value: None,
+                                size_bytes: 0,
                             }),
                             op.value.clone(),
                         )
@@ -320,7 +343,7 @@ where
                 // Fill cache from upstream...
                 match self.backing_source.get(domain)? {
                     None => (Entry::NotPresent(*read_ts), None),
-                    Some((read_ts, value)) => {
+                    Some((read_ts, value, _)) => {
                         let new_entry = Entry::Present(Op {
                             read_ts,
                             write_ts: self.tx.ts,
@@ -328,6 +351,7 @@ where
                             from_type: OpType::Cached,
                             to_type: OpType::Delete,
                             value: None,
+                            size_bytes: 0,
                         });
                         (new_entry, Some(value))
                     }
@@ -335,7 +359,7 @@ where
             }
             None => match self.backing_source.get(domain)? {
                 None => (Entry::NotPresent(self.tx.ts), None),
-                Some((read_ts, value)) => {
+                Some((read_ts, value, _)) => {
                     let new_entry = Entry::Present(Op {
                         read_ts,
                         write_ts: self.tx.ts,
@@ -343,6 +367,7 @@ where
                         from_type: OpType::Cached,
                         to_type: OpType::Delete,
                         value: None,
+                        size_bytes: 0,
                     });
                     (new_entry, Some(value))
                 }
@@ -364,7 +389,7 @@ where
 
         // This is basically like going a `get` on each entry, we're filling our cache with
         // all the upstream common.
-        for (ts, d, c, _) in upstream {
+        for (ts, d, c, size_bytes) in upstream {
             let entry = index.get_mut(&d);
             match entry {
                 Some(_) => continue,
@@ -378,6 +403,7 @@ where
                             from_type: OpType::Cached,
                             to_type: OpType::Cached,
                             value: Some(c),
+                            size_bytes,
                         }),
                     );
                 }
@@ -442,9 +468,9 @@ mod tests {
         }
     }
     impl Canonical<u64, u64> for TestBackingStore {
-        fn get(&self, domain: &u64) -> Result<Option<(Timestamp, u64)>, Error> {
+        fn get(&self, domain: &u64) -> Result<Option<(Timestamp, u64, usize)>, Error> {
             let store = self.store.lock().unwrap();
-            Ok(store.get(domain).cloned().map(|v| (Timestamp(0), v)))
+            Ok(store.get(domain).cloned().map(|v| (Timestamp(0), v, 16)))
         }
 
         fn scan<F: Fn(&u64, &u64) -> bool>(
@@ -461,7 +487,7 @@ mod tests {
     }
 
     impl TestBackingStore {
-        fn apply(&self, working_set: Vec<(u64, Op<u64>)>) {
+        fn apply(&self, working_set: WorkingSet<u64, u64>) {
             let mut store = self.store.lock().unwrap();
             for op in working_set {
                 match op.1.to_type {
@@ -501,6 +527,7 @@ mod tests {
                 from_type: OpType::Cached,
                 to_type: OpType::Cached,
                 value: Some(1),
+                size_bytes: 16,
             })
         );
 
@@ -514,6 +541,7 @@ mod tests {
                 source: DatumSource::Upstream,
                 from_type: OpType::Cached,
                 to_type: OpType::Delete,
+                size_bytes: 0,
                 value: None,
             })
         );
@@ -528,12 +556,13 @@ mod tests {
                 source: DatumSource::Upstream,
                 from_type: OpType::Cached,
                 to_type: OpType::Delete,
+                size_bytes: 0,
                 value: None,
             })
         );
 
         // Insert a new local value is ok because it's been locally tombstoned.
-        let result = cache.insert(1, 456);
+        let result = cache.insert(1, 456, 16);
         assert_eq!(result, Ok(()));
         assert_eq!(
             cache.retrieve_index_entry(&1),
@@ -543,16 +572,17 @@ mod tests {
                 source: DatumSource::Local,
                 from_type: OpType::Cached,
                 to_type: OpType::Update,
+                size_bytes: 16,
                 value: Some(456),
             })
         );
 
         // But inserting over a present value is a dupe.
-        let result = cache.insert(2, 1);
+        let result = cache.insert(2, 1, 16);
         assert_eq!(result, Err(Error::Duplicate));
 
         // Updating should work though.
-        let old_value = cache.update(&2, 3).unwrap();
+        let old_value = cache.update(&2, 3, 16).unwrap();
         assert_eq!(old_value, Some(2));
         assert_eq!(
             cache.retrieve_index_entry(&2),
@@ -562,12 +592,13 @@ mod tests {
                 source: DatumSource::Upstream,
                 from_type: OpType::Cached,
                 to_type: OpType::Update,
+                size_bytes: 16,
                 value: Some(3),
             })
         );
 
         // Updating a non-present value should not work.
-        let old_value = cache.update(&4, 4).unwrap();
+        let old_value = cache.update(&4, 4, 16).unwrap();
         assert_eq!(old_value, None);
         assert_eq!(
             cache.retrieve_index_entry(&4),
@@ -583,7 +614,7 @@ mod tests {
         );
 
         // Inserting brand new common...
-        let result = cache.insert(6, 6);
+        let result = cache.insert(6, 6, 16);
         assert_eq!(result, Ok(()));
         assert_eq!(
             cache.retrieve_index_entry(&6),
@@ -593,6 +624,7 @@ mod tests {
                 source: DatumSource::Local,
                 from_type: OpType::Insert,
                 to_type: OpType::Insert,
+                size_bytes: 16,
                 value: Some(6),
             })
         );
@@ -600,7 +632,7 @@ mod tests {
         // Upsert should work for new common and old...
 
         // Not present local or upstream.
-        let old_value = cache.upsert(7, 7).unwrap();
+        let old_value = cache.upsert(7, 7, 16).unwrap();
         assert_eq!(old_value, None);
         assert_eq!(
             cache.retrieve_index_entry(&7),
@@ -610,12 +642,13 @@ mod tests {
                 source: DatumSource::Local,
                 from_type: OpType::Insert,
                 to_type: OpType::Insert,
+                size_bytes: 16,
                 value: Some(7),
             })
         );
 
         // A value that is present local...
-        let old_value = cache.upsert(6, 8).unwrap();
+        let old_value = cache.upsert(6, 8, 16).unwrap();
         assert_eq!(old_value, Some(6));
         assert_eq!(
             cache.retrieve_index_entry(&6),
@@ -625,12 +658,13 @@ mod tests {
                 source: DatumSource::Local,
                 from_type: OpType::Insert,
                 to_type: OpType::Insert,
+                size_bytes: 16,
                 value: Some(8),
             })
         );
 
         // A value that is present upstream but not yet seen locally.
-        let old_value = cache.upsert(9, 10).unwrap();
+        let old_value = cache.upsert(9, 10, 16).unwrap();
         assert_eq!(old_value, Some(9));
         assert_eq!(
             // cache.index[&9],
@@ -641,6 +675,7 @@ mod tests {
                 source: DatumSource::Upstream,
                 from_type: OpType::Cached,
                 to_type: OpType::Update,
+                size_bytes: 16,
                 value: Some(10),
             })
         );

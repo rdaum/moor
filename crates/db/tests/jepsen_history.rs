@@ -246,7 +246,7 @@ mod tests {
                                     cache.get(&key).unwrap().unwrap_or(TestCodomain(vec![]));
                                 codomain.0.push(*value);
                                 cache
-                                    .upsert(key, codomain)
+                                    .upsert(key, codomain, 1)
                                     .map_err(|_| eyre::eyre!("append failed"))?;
                             }
                             Operation::Read(key, _) => {

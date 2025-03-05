@@ -55,14 +55,16 @@ pub trait Provider<Domain, Codomain> {
 /// A `SizedCache` is a cache that has a maximum size in bytes, and will attempt to evict entries
 /// when the cache size exceeds the maximum size.
 pub trait SizedCache {
+    #[allow(dead_code)]
     fn process_cache_evictions(&self) -> (usize, usize);
+    #[allow(dead_code)]
     fn cache_usage_bytes(&self) -> usize;
 }
 
 /// Represents a "canonical" source for some domain/codomain pair, to be supplied to a
 /// transaction.
 pub trait Canonical<Domain, Codomain> {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error>;
+    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error>;
     fn scan<F>(&self, f: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool;
