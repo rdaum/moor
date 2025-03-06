@@ -28,6 +28,32 @@ use uuid::Uuid;
 static DAEMON_HOST_BIN: OnceLock<PathBuf> = OnceLock::new();
 fn daemon_host_bin() -> &'static PathBuf {
     DAEMON_HOST_BIN.get_or_init(|| {
+        // If `moor-daemon` already exists, use it.
+        // This is potentially misleading: if you change daemon code, then re-run an integration test,
+        // then you won't automatically get a new build. You'll need to manually build the daemon binary.
+        // This is not a common workflow, and instead rebuilding the daemon all the time is a problem.
+        //
+        // This horribleness can be dropped whenever https://rust-lang.github.io/rfcs/3028-cargo-binary-dependencies.html
+        // is implemented.
+        //
+        // Approach adopted from snapbox: https://docs.rs/snapbox/0.6.21/src/snapbox/cmd.rs.html#853-872
+        let moor_daemon_path = std::env::current_exe()
+            .ok()
+            .map(|mut path| {
+                path.pop();
+                if path.ends_with("deps") {
+                    path.pop();
+                }
+                path
+            })
+            .unwrap()
+            .join(format!("moor-daemon{}", std::env::consts::EXE_SUFFIX));
+        if moor_daemon_path.exists() {
+            eprintln!("Using existing moor-daemon binary: {:?}", moor_daemon_path);
+            return moor_daemon_path;
+        }
+
+        // If `moor-daemon` doesn't exist, build it.
         escargot::CargoBuild::new()
             .bin("moor-daemon")
             .manifest_path("../daemon/Cargo.toml")
