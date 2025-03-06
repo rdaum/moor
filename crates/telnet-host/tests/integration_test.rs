@@ -17,10 +17,11 @@
 use moor_moot::{MootOptions, telnet::ManagedChild, test_db_path};
 use serial_test::serial;
 use std::net::TcpListener;
+use std::sync::OnceLock;
 use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Mutex},
 };
 use uuid::Uuid;
 
@@ -62,18 +63,8 @@ fn start_daemon(workdir: &Path, uuid: Uuid) -> ManagedChild {
     )
 }
 
-static TELNET_HOST_BIN: OnceLock<PathBuf> = OnceLock::new();
-fn telnet_host_bin() -> &'static PathBuf {
-    TELNET_HOST_BIN.get_or_init(|| {
-        escargot::CargoBuild::new()
-            .bin("moor-telnet-host")
-            .manifest_path("../telnet-host/Cargo.toml")
-            .current_release()
-            .run()
-            .expect("Failed to build moor-telnet-host")
-            .path()
-            .to_owned()
-    })
+fn telnet_host_bin() -> &'static str {
+    env!("CARGO_BIN_EXE_moor-telnet-host")
 }
 
 fn start_telnet_host(workdir: &Path, uuid: Uuid, port: u16) -> ManagedChild {
