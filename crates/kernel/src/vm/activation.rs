@@ -85,7 +85,7 @@ impl Encode for Activation {
     }
 }
 
-impl Decode for Activation {
+impl<C> Decode<C> for Activation {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let frame = Frame::decode(decoder)?;
         let this = Var::decode(decoder)?;
@@ -112,7 +112,7 @@ impl Decode for Activation {
     }
 }
 
-impl<'de> BorrowDecode<'de> for Activation {
+impl<'de, C> BorrowDecode<'de, C> for Activation {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let frame = Frame::decode(decoder)?;
         let this = Var::decode(decoder)?;

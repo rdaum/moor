@@ -146,7 +146,7 @@ impl AsByteBuffer for Program {
 
     fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
-        Self: Sized + Decode,
+        Self: Sized + Decode<()>,
     {
         Ok(bincode::decode_from_slice(bytes.as_ref(), *BINCODE_CONFIG)
             .map_err(|e| DecodingError::CouldNotDecode(e.to_string()))?

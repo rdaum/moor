@@ -276,7 +276,7 @@ impl Encode for Map {
     }
 }
 
-impl Decode for Map {
+impl<C> Decode<C> for Map {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = usize::decode(decoder)?;
         let mut l = Vec::with_capacity(len);
@@ -288,7 +288,7 @@ impl Decode for Map {
     }
 }
 
-impl<'de> BorrowDecode<'de> for Map {
+impl<'de, C> BorrowDecode<'de, C> for Map {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = usize::decode(decoder)?;
         let mut l = Vec::with_capacity(len);

@@ -277,7 +277,7 @@ impl Encode for SuspendedTask {
     }
 }
 
-impl Decode for SuspendedTask {
+impl<C> Decode<C> for SuspendedTask {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let wake_condition = WakeCondition::decode(decoder)?;
         let task = Task::decode(decoder)?;
@@ -290,7 +290,7 @@ impl Decode for SuspendedTask {
     }
 }
 
-impl<'de> BorrowDecode<'de> for SuspendedTask {
+impl<'de, C> BorrowDecode<'de, C> for SuspendedTask {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let wake_condition = WakeCondition::borrow_decode(decoder)?;
         let task = Task::borrow_decode(decoder)?;
@@ -322,7 +322,7 @@ impl Encode for WakeCondition {
     }
 }
 
-impl Decode for WakeCondition {
+impl<C> Decode<C> for WakeCondition {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let type_code: WakeConditionType = Decode::decode(decoder)?;
         match type_code {
@@ -340,7 +340,7 @@ impl Decode for WakeCondition {
     }
 }
 
-impl<'de> BorrowDecode<'de> for WakeCondition {
+impl<'de, C> BorrowDecode<'de, C> for WakeCondition {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let type_code: WakeConditionType = Decode::decode(decoder)?;
         match type_code {

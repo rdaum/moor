@@ -79,7 +79,7 @@ impl Encode for Symbol {
     }
 }
 
-impl Decode for Symbol {
+impl<C> Decode<C> for Symbol {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         // Decode string and then intern to get the symbol
         let s: String = Decode::decode(decoder)?;
@@ -87,7 +87,7 @@ impl Decode for Symbol {
     }
 }
 
-impl<'de> BorrowDecode<'de> for Symbol {
+impl<'de, C> BorrowDecode<'de, C> for Symbol {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let s: String = BorrowDecode::borrow_decode(decoder)?;
         Ok(Symbol(Ustr::from(&s)))
