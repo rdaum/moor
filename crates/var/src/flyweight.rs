@@ -109,7 +109,7 @@ impl Encode for Inner {
     }
 }
 
-impl Decode for Inner {
+impl<C> Decode<C> for Inner {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let delegate = Obj::decode(decoder)?;
         let len = usize::decode(decoder)?;
@@ -131,7 +131,7 @@ impl Decode for Inner {
     }
 }
 
-impl<'a> BorrowDecode<'a> for Inner {
+impl<'a, C> BorrowDecode<'a, C> for Inner {
     fn borrow_decode<D: BorrowDecoder<'a>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let delegate = Obj::borrow_decode(decoder)?;
         let len = usize::borrow_decode(decoder)?;

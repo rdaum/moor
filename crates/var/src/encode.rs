@@ -75,7 +75,7 @@ impl Writer for CountingWriter {
 pub trait BincodeAsByteBufferExt {}
 
 /// Implementation of `AsByteBuffer` for all types that are binpackable.
-impl<T: Encode + Decode + Sized + BincodeAsByteBufferExt> AsByteBuffer for T {
+impl<T: Encode + Decode<()> + Sized + BincodeAsByteBufferExt> AsByteBuffer for T {
     fn size_bytes(&self) -> usize
     where
         Self: Encode,

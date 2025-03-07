@@ -499,7 +499,7 @@ impl Encode for VmHost {
     }
 }
 
-impl Decode for VmHost {
+impl<C> Decode<C> for VmHost {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vm_exec_state = VMExecState::decode(decoder)?;
         let max_stack_depth = Decode::decode(decoder)?;
@@ -517,7 +517,7 @@ impl Decode for VmHost {
     }
 }
 
-impl<'de> BorrowDecode<'de> for VmHost {
+impl<'de, C> BorrowDecode<'de, C> for VmHost {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vm_exec_state = VMExecState::borrow_decode(decoder)?;
         let max_stack_depth = BorrowDecode::borrow_decode(decoder)?;

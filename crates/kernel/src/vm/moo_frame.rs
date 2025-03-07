@@ -104,7 +104,7 @@ impl Encode for MooStackFrame {
     }
 }
 
-impl Decode for MooStackFrame {
+impl<C> Decode<C> for MooStackFrame {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let program = Program::decode(decoder)?;
         let pc = usize::decode(decoder)?;
@@ -136,7 +136,7 @@ impl Decode for MooStackFrame {
     }
 }
 
-impl<'de> BorrowDecode<'de> for MooStackFrame {
+impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let program = Program::borrow_decode(decoder)?;
         let pc = usize::borrow_decode(decoder)?;

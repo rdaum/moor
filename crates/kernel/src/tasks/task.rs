@@ -659,7 +659,7 @@ impl Encode for Task {
     }
 }
 
-impl Decode for Task {
+impl<C> Decode<C> for Task {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let task_id = TaskId::decode(decoder)?;
         let player = Obj::decode(decoder)?;
@@ -681,7 +681,7 @@ impl Decode for Task {
     }
 }
 
-impl<'de> BorrowDecode<'de> for Task {
+impl<'de, C> BorrowDecode<'de, C> for Task {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let task_id = TaskId::borrow_decode(decoder)?;
         let player = Obj::borrow_decode(decoder)?;
