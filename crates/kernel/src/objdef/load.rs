@@ -18,12 +18,12 @@ use moor_compiler::{CompileOptions, ObjFileContext, ObjectDefinition, compile_ob
 use moor_db::loader::LoaderInterface;
 use moor_var::{NOTHING, Obj};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tracing::info;
 
 pub struct ObjectDefinitionLoader<'a> {
-    object_definitions: HashMap<Obj, ObjectDefinition>,
+    object_definitions: HashMap<Obj, (PathBuf, ObjectDefinition)>,
     loader: &'a mut dyn LoaderInterface,
 }
 
@@ -64,8 +64,9 @@ impl<'a> ObjectDefinitionLoader<'a> {
             .find(|f| f.file_name().unwrap() == "constants.moo");
         if let Some(constants_file) = constants_file {
             let constants_file_contents = std::fs::read_to_string(constants_file)
-                .map_err(DirDumpReaderError::ObjectFileReadError)?;
+                .map_err(|e| DirDumpReaderError::ObjectFileReadError(constants_file.clone(), e))?;
             self.parse_objects(
+                &constants_file,
                 &mut context,
                 &constants_file_contents,
                 &features_config.compile_options(),
@@ -83,26 +84,31 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 continue;
             }
 
-            let object_file_contents = std::fs::read_to_string(object_file)
-                .map_err(DirDumpReaderError::ObjectFileReadError)?;
+            let object_file_contents = std::fs::read_to_string(object_file.clone())
+                .map_err(|e| DirDumpReaderError::ObjectFileReadError(object_file.clone(), e))?;
 
-            self.parse_objects(&mut context, &object_file_contents, &compile_options)?;
+            self.parse_objects(
+                &object_file,
+                &mut context,
+                &object_file_contents,
+                &compile_options,
+            )?;
         }
 
         let num_total_verbs = self
             .object_definitions
             .values()
-            .map(|d| d.verbs.len())
+            .map(|(_, d)| d.verbs.len())
             .sum::<usize>();
         let num_total_properties = self
             .object_definitions
             .values()
-            .map(|d| d.property_definitions.len())
+            .map(|(_, d)| d.property_definitions.len())
             .sum::<usize>();
         let num_total_property_overrides = self
             .object_definitions
             .values()
-            .map(|d| d.property_overrides.len())
+            .map(|(_, d)| d.property_overrides.len())
             .sum::<usize>();
 
         info!(
@@ -134,13 +140,14 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
     fn parse_objects(
         &mut self,
+        path: &Path,
         context: &mut ObjFileContext,
         object_file_contents: &str,
         compile_options: &CompileOptions,
     ) -> Result<(), DirDumpReaderError> {
         let compiled_defs =
             compile_object_definitions(object_file_contents, compile_options, context)
-                .map_err(DirDumpReaderError::ObjectFileParseError)?;
+                .map_err(|e| DirDumpReaderError::ObjectFileParseError(path.to_path_buf(), e))?;
 
         for compiled_def in compiled_defs {
             let oid = compiled_def.oid.clone();
@@ -156,36 +163,39 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         &compiled_def.name,
                     ),
                 )
-                .map_err(|wse| DirDumpReaderError::CouldNotCreateObject(oid.clone(), wse))?;
+                .map_err(|wse| {
+                    DirDumpReaderError::CouldNotCreateObject(path.to_path_buf(), oid.clone(), wse)
+                })?;
 
-            self.object_definitions.insert(oid, compiled_def);
+            self.object_definitions
+                .insert(oid, (path.to_path_buf(), compiled_def));
         }
         Ok(())
     }
 
     pub fn apply_attributes(&mut self) -> Result<(), DirDumpReaderError> {
-        for (obj, def) in &self.object_definitions {
+        for (obj, (path, def)) in &self.object_definitions {
             if def.parent != NOTHING {
                 self.loader
                     .set_object_parent(obj, &def.parent)
-                    .map_err(DirDumpReaderError::CouldNotSetObjectParent)?;
+                    .map_err(|e| DirDumpReaderError::CouldNotSetObjectParent(path.clone(), e))?;
             }
             if def.location != NOTHING {
                 self.loader
                     .set_object_location(obj, &def.location)
-                    .map_err(DirDumpReaderError::CouldNotSetObjectLocation)?;
+                    .map_err(|e| DirDumpReaderError::CouldNotSetObjectLocation(path.clone(), e))?;
             }
             if def.owner != NOTHING {
                 self.loader
                     .set_object_owner(obj, &def.owner)
-                    .map_err(DirDumpReaderError::CouldNotSetObjectOwner)?;
+                    .map_err(|e| DirDumpReaderError::CouldNotSetObjectOwner(path.clone(), e))?;
             }
         }
         Ok(())
     }
 
     pub fn define_verbs(&mut self) -> Result<(), DirDumpReaderError> {
-        for (obj, def) in &self.object_definitions {
+        for (obj, (path, def)) in &self.object_definitions {
             for v in &def.verbs {
                 let names = v.names.iter().map(|s| s.as_str());
                 self.loader
@@ -198,14 +208,19 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         v.binary.to_vec(),
                     )
                     .map_err(|wse| {
-                        DirDumpReaderError::CouldNotDefineVerb(obj.clone(), v.names.clone(), wse)
+                        DirDumpReaderError::CouldNotDefineVerb(
+                            path.clone(),
+                            obj.clone(),
+                            v.names.clone(),
+                            wse,
+                        )
                     })?;
             }
         }
         Ok(())
     }
     pub fn define_properties(&mut self) -> Result<(), DirDumpReaderError> {
-        for (obj, def) in &self.object_definitions {
+        for (obj, (path, def)) in &self.object_definitions {
             for pd in &def.property_definitions {
                 self.loader
                     .define_property(
@@ -218,6 +233,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     )
                     .map_err(|wse| {
                         DirDumpReaderError::CouldNotDefineProperty(
+                            path.clone(),
                             obj.clone(),
                             pd.name.as_str().to_string(),
                             wse,
@@ -230,7 +246,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
     }
 
     fn set_properties(&mut self) -> Result<(), DirDumpReaderError> {
-        for (obj, def) in &self.object_definitions {
+        for (obj, (path, def)) in &self.object_definitions {
             for pv in &def.property_overrides {
                 let pu = &pv.perms_update;
                 self.loader
@@ -243,6 +259,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     )
                     .map_err(|wse| {
                         DirDumpReaderError::CouldNotOverrideProperty(
+                            path.clone(),
                             obj.clone(),
                             pv.name.as_str().to_string(),
                             wse,
@@ -298,8 +315,9 @@ mod tests {
                     endverb
                 endobject"#;
         let mut context = ObjFileContext::new();
+        let mock_path = Path::new("mock_path.moo");
         parser
-            .parse_objects(&mut context, spec, &CompileOptions::default())
+            .parse_objects(&mock_path, &mut context, spec, &CompileOptions::default())
             .unwrap();
 
         parser.apply_attributes().unwrap();
@@ -364,8 +382,9 @@ mod tests {
                 endobject"#;
 
         let mut context = ObjFileContext::new();
+        let mock_path = Path::new("mock_path.moo");
         parser
-            .parse_objects(&mut context, spec, &CompileOptions::default())
+            .parse_objects(&mock_path, &mut context, spec, &CompileOptions::default())
             .unwrap();
         parser.apply_attributes().unwrap();
         parser.define_verbs().unwrap();

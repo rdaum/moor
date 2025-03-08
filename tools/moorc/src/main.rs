@@ -38,6 +38,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, trace, warn};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser, Debug)] // requires `derive` feature
 pub struct Args {
@@ -103,14 +104,17 @@ pub struct Args {
 }
 
 fn main() {
+    color_eyre::install().unwrap();
     let args: Args = Args::parse();
 
     let main_subscriber = tracing_subscriber::fmt()
         .compact()
         .with_ansi(true)
-        .with_file(true)
-        .with_line_number(true)
-        .with_thread_names(true)
+        .with_span_events(FmtSpan::NONE)
+        .with_target(false)
+        .with_file(false)
+        .with_line_number(false)
+        .with_thread_names(false)
         .with_max_level(if args.debug {
             tracing::Level::DEBUG
         } else {
@@ -173,8 +177,12 @@ fn main() {
     } else if let Some(objdef_dir) = args.src_objdef_dir {
         let start = std::time::Instant::now();
         let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
-        od.read_dirdump(features.clone(), objdef_dir.as_ref())
-            .unwrap();
+
+        if let Err(e) = od.read_dirdump(features.clone(), objdef_dir.as_ref()) {
+            error!("Compilation failure @ {}", e.path().display());
+            error!("{:#}", e);
+            return;
+        }
         let duration = start.elapsed();
         info!("Loaded objdef directory in {:?}", duration);
         loader_interface

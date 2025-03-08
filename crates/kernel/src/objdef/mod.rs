@@ -28,23 +28,41 @@ pub enum DirDumpReaderError {
     #[error("Directory not found: {0}")]
     DirectoryNotFound(PathBuf),
     #[error("Invalid object file name: {0} (should be number)")]
-    InvalidObjectFilename(String),
-    #[error("Error reading object file: {0}")]
-    ObjectFileReadError(#[from] io::Error),
-    #[error("Could not parse object file: {0}")]
-    ObjectFileParseError(ObjDefParseError),
-    #[error("Could not create object: {0}")]
-    CouldNotCreateObject(Obj, WorldStateError),
-    #[error("Could not set object parent: {0}")]
-    CouldNotSetObjectParent(WorldStateError),
-    #[error("Could not set object location: {0}")]
-    CouldNotSetObjectLocation(WorldStateError),
-    #[error("Could not set object owner: {0}")]
-    CouldNotSetObjectOwner(WorldStateError),
-    #[error("Could not define property: {0}:{1}: {2}")]
-    CouldNotDefineProperty(Obj, String, WorldStateError),
-    #[error("Could not override property: {0}:{1}: {2}")]
-    CouldNotOverrideProperty(Obj, String, WorldStateError),
-    #[error("Could not define verb: {0}{1:?}: {2}")]
-    CouldNotDefineVerb(Obj, Vec<Symbol>, WorldStateError),
+    InvalidObjectFilename(PathBuf),
+    #[error("Error reading object file: {1}")]
+    ObjectFileReadError(PathBuf, io::Error),
+    #[error("Could not parse object file {0}: {1}")]
+    ObjectFileParseError(PathBuf, ObjDefParseError),
+    #[error("Could not create object in {0}: {1}")]
+    CouldNotCreateObject(PathBuf, Obj, WorldStateError),
+    #[error("Could not set object parent in {0}: {1}")]
+    CouldNotSetObjectParent(PathBuf, WorldStateError),
+    #[error("Could not set object location in {0}: {1}")]
+    CouldNotSetObjectLocation(PathBuf, WorldStateError),
+    #[error("Could not set object owner in {0}: {1}")]
+    CouldNotSetObjectOwner(PathBuf, WorldStateError),
+    #[error("Could not define property in {0}: {1}:{2}: {3}")]
+    CouldNotDefineProperty(PathBuf, Obj, String, WorldStateError),
+    #[error("Could not override property in {0}: {1}:{2}: {3}")]
+    CouldNotOverrideProperty(PathBuf, Obj, String, WorldStateError),
+    #[error("Could not define verb in {0}: {1}{2:?}: {3}")]
+    CouldNotDefineVerb(PathBuf, Obj, Vec<Symbol>, WorldStateError),
+}
+
+impl DirDumpReaderError {
+    pub fn path(&self) -> &PathBuf {
+        match self {
+            DirDumpReaderError::DirectoryNotFound(path)
+            | DirDumpReaderError::InvalidObjectFilename(path)
+            | DirDumpReaderError::ObjectFileReadError(path, _)
+            | DirDumpReaderError::ObjectFileParseError(path, _)
+            | DirDumpReaderError::CouldNotCreateObject(path, _, _)
+            | DirDumpReaderError::CouldNotSetObjectParent(path, _)
+            | DirDumpReaderError::CouldNotSetObjectLocation(path, _)
+            | DirDumpReaderError::CouldNotSetObjectOwner(path, _)
+            | DirDumpReaderError::CouldNotDefineProperty(path, _, _, _)
+            | DirDumpReaderError::CouldNotOverrideProperty(path, _, _, _)
+            | DirDumpReaderError::CouldNotDefineVerb(path, _, _, _) => path,
+        }
+    }
 }
