@@ -75,19 +75,18 @@ enum LineMode {
 
 fn describe_compile_error(compile_error: CompileError) -> String {
     match compile_error {
-        CompileError::StringLexError(le) => {
+        CompileError::StringLexError(_, le) => {
             format!("String format error: {}", le)
         }
         CompileError::ParseError {
-            line,
-            column,
+            error_position,
             context: _,
             end_line_col,
             message,
         } => {
             let mut err = format!(
                 "Parse error at line {} column {}: {}",
-                line, column, message
+                error_position.line_col.0, error_position.line_col.1, message
             );
             if let Some(end_line_col) = end_line_col {
                 err.push_str(&format!(
@@ -98,25 +97,25 @@ fn describe_compile_error(compile_error: CompileError) -> String {
             err.push_str(format!(": {}", message).as_str());
             err
         }
-        CompileError::UnknownBuiltinFunction(bf) => {
+        CompileError::UnknownBuiltinFunction(_, bf) => {
             format!("Unknown builtin function: {}", bf)
         }
-        CompileError::UnknownLoopLabel(ll) => {
+        CompileError::UnknownLoopLabel(_, ll) => {
             format!("Unknown break/loop label: {}", ll)
         }
-        CompileError::DuplicateVariable(dv) => {
+        CompileError::DuplicateVariable(_, dv) => {
             format!("Duplicate variable: {}", dv)
         }
-        CompileError::AssignToConst(ac) => {
+        CompileError::AssignToConst(_, ac) => {
             format!("Assignment to constant: {}", ac)
         }
-        CompileError::DisabledFeature(df) => {
+        CompileError::DisabledFeature(_, df) => {
             format!("Disabled feature: {}", df)
         }
-        CompileError::BadSlotName(bs) => {
+        CompileError::BadSlotName(_, bs) => {
             format!("Bad slot name in flyweight: {}", bs)
         }
-        CompileError::InvalidAssignemnt => "Invalid l-value for assignment".to_string(),
+        CompileError::InvalidAssignemnt(_) => "Invalid l-value for assignment".to_string(),
     }
 }
 

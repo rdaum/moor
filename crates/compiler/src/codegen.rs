@@ -34,8 +34,8 @@ use crate::opcode::{ComprehensionType, Op, ScatterArgs, ScatterLabel};
 use crate::parse::moo::Rule;
 use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
 use crate::program::Program;
-use moor_common::model::CompileError;
 use moor_common::model::CompileError::InvalidAssignemnt;
+use moor_common::model::{CompileContext, CompileError};
 
 pub struct Loop {
     loop_name: Option<Name>,
@@ -58,6 +58,7 @@ pub struct CodegenState {
     pub(crate) max_stack: usize,
     pub(crate) fork_vectors: Vec<Vec<Op>>,
     pub(crate) line_number_spans: Vec<(usize, usize)>,
+    pub(crate) current_line_col: (usize, usize),
 }
 
 impl CodegenState {
@@ -74,6 +75,7 @@ impl CodegenState {
             max_stack: 0,
             fork_vectors: vec![],
             line_number_spans: vec![],
+            current_line_col: (0, 0),
         }
     }
 
@@ -120,7 +122,10 @@ impl CodegenState {
             }
         }) else {
             let loop_name = self.var_names.name_of(loop_label).unwrap();
-            return Err(CompileError::UnknownLoopLabel(loop_name.to_string()));
+            return Err(CompileError::UnknownLoopLabel(
+                CompileContext::new(self.current_line_col),
+                loop_name.to_string(),
+            ));
         };
         Ok(l)
     }
@@ -292,7 +297,9 @@ impl CodegenState {
                 }
             }
             _ => {
-                return Err(InvalidAssignemnt);
+                return Err(InvalidAssignemnt(CompileContext::new(
+                    self.current_line_col,
+                )));
             }
         }
         Ok(())
@@ -421,7 +428,10 @@ impl CodegenState {
                 // Lookup builtin.
                 let Some(id) = BUILTINS.find_builtin(*function) else {
                     error!("Unknown builtin function: {}({:?}", function, args);
-                    return Err(CompileError::UnknownBuiltinFunction(function.to_string()));
+                    return Err(CompileError::UnknownBuiltinFunction(
+                        CompileContext::new(self.current_line_col),
+                        function.to_string(),
+                    ));
                 };
                 self.generate_arg_list(args)?;
                 self.emit(Op::FuncCall { id });
@@ -621,6 +631,7 @@ impl CodegenState {
         // TODO In theory we could actually provide both and generate spans for both for situations
         //   where the user is looking at their own not-decompiled copy of the source.
         let line_number = stmt.tree_line_no;
+        self.current_line_col = stmt.line_col;
         self.line_number_spans.push((self.ops.len(), line_number));
         match &stmt.node {
             StmtNode::Cond { arms, otherwise } => {

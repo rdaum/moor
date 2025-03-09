@@ -24,7 +24,7 @@ pub use crate::model::world_state::{WorldState, WorldStateSource};
 use bincode::{Decode, Encode};
 use moor_var::AsByteBuffer;
 use serde::Serialize;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use thiserror::Error;
 
 mod defset;
@@ -57,29 +57,45 @@ pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {
 }
 
 #[derive(Debug, Error, Clone, Decode, Encode, PartialEq, Eq, Serialize)]
+pub struct CompileContext {
+    pub line_col: (usize, usize),
+}
+
+impl CompileContext {
+    pub fn new(line_col: (usize, usize)) -> Self {
+        Self { line_col }
+    }
+}
+impl Display for CompileContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.line_col.0, self.line_col.1)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error, Clone, Decode, Encode, PartialEq, Eq, Serialize)]
 pub enum CompileError {
-    #[error("Failure to parse string: {0}")]
-    StringLexError(String),
-    #[error("Failure to parse program @ {line}/{column}: {message}")]
+    #[error("Failure to parse string @ {0}: {1}")]
+    StringLexError(CompileContext, String),
+    #[error("Failure to parse program @ {error_position}: {message}")]
     ParseError {
-        line: usize,
-        column: usize,
+        error_position: CompileContext,
         context: String,
         end_line_col: Option<(usize, usize)>,
         message: String,
     },
-    #[error("Unknown built-in function: {0}")]
-    UnknownBuiltinFunction(String),
-    #[error("Could not find loop with id: {0}")]
-    UnknownLoopLabel(String),
-    #[error("Duplicate variable in scope: {0}")]
-    DuplicateVariable(Symbol),
-    #[error("Cannot assign to const: {0}")]
-    AssignToConst(Symbol),
-    #[error("Disabled feature: {0}")]
-    DisabledFeature(String),
-    #[error("Bad slot name on flyweight: {0}")]
-    BadSlotName(String),
-    #[error("Invalid l-value for assignment")]
-    InvalidAssignemnt,
+    #[error("Unknown built-in function @ {0}: {1}")]
+    UnknownBuiltinFunction(CompileContext, String),
+    #[error("Could not find loop with id @ {0}: {1}")]
+    UnknownLoopLabel(CompileContext, String),
+    #[error("Duplicate variable in scope @ {0}: {1}")]
+    DuplicateVariable(CompileContext, Symbol),
+    #[error("Cannot assign to const @ {0}: {1}")]
+    AssignToConst(CompileContext, Symbol),
+    #[error("Disabled feature @ {0}: {1}")]
+    DisabledFeature(CompileContext, String),
+    #[error("Bad slot name on flyweight @ {0}: {1}")]
+    BadSlotName(CompileContext, String),
+    #[error("Invalid l-value for assignment @ {0}")]
+    InvalidAssignemnt(CompileContext),
 }

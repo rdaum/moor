@@ -23,7 +23,7 @@ use moor_var::{SYSTEM_OBJECT, Var};
 use moor_var::{Symbol, v_none};
 pub use pest::Parser as PestParser;
 use pest::error::LineColLocation;
-use pest::iterators::Pairs;
+use pest::iterators::{Pair, Pairs};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 
 use moor_var::Error::{
@@ -43,7 +43,8 @@ use crate::ast::{
 use crate::names::{Names, UnboundName, UnboundNames};
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
-use moor_common::model::CompileError;
+use moor_common::model::CompileError::DuplicateVariable;
+use moor_common::model::{CompileContext, CompileError};
 
 pub mod moo {
     #[derive(Parser)]
@@ -97,56 +98,77 @@ impl TreeTransformer {
         })
     }
 
-    fn parse_atom(
-        self: Rc<Self>,
-        pairs: pest::iterators::Pair<Rule>,
-    ) -> Result<Expr, CompileError> {
-        match pairs.as_rule() {
+    fn compile_context(&self, pair: &Pair<Rule>) -> CompileContext {
+        CompileContext::new(pair.line_col())
+    }
+
+    fn parse_atom(self: Rc<Self>, pair: Pair<Rule>) -> Result<Expr, CompileError> {
+        match pair.as_rule() {
             Rule::ident => {
-                let name = self
+                let Some(name) = self
                     .names
                     .borrow_mut()
-                    .find_or_add_name_global(pairs.as_str().trim())?;
+                    .find_or_add_name_global(pair.as_str().trim())
+                else {
+                    return Err(DuplicateVariable(
+                        self.compile_context(&pair),
+                        pair.as_str().into(),
+                    ));
+                };
                 Ok(Expr::Id(name))
             }
             Rule::object => {
-                let ostr = &pairs.as_str()[1..];
+                let ostr = &pair.as_str()[1..];
                 let oid = i32::from_str(ostr).unwrap();
                 let objid = Obj::mk_id(oid);
                 Ok(Expr::Value(v_obj(objid)))
             }
-            Rule::integer => match pairs.as_str().parse::<i64>() {
+            Rule::integer => match pair.as_str().parse::<i64>() {
                 Ok(int) => Ok(Expr::Value(v_int(int))),
-                Err(e) => Err(CompileError::StringLexError(format!(
-                    "invalid integer literal '{}': {e}",
-                    pairs.as_str()
-                ))),
+                Err(e) => Err(CompileError::StringLexError(
+                    self.compile_context(&pair),
+                    format!("invalid integer literal '{}': {e}", pair.as_str()),
+                )),
             },
             Rule::boolean => {
                 if !self.options.bool_type {
-                    return Err(CompileError::DisabledFeature("Booleans".to_string()));
+                    return Err(CompileError::DisabledFeature(
+                        self.compile_context(&pair),
+                        "Booleans".to_string(),
+                    ));
                 }
-                let b = pairs.as_str().trim() == "true";
+                let b = pair.as_str().trim() == "true";
                 Ok(Expr::Value(Var::mk_bool(b)))
             }
             Rule::symbol => {
                 if !self.options.symbol_type {
-                    return Err(CompileError::DisabledFeature("Symbols".to_string()));
+                    return Err(CompileError::DisabledFeature(
+                        self.compile_context(&pair),
+                        "Symbols".to_string(),
+                    ));
                 }
-                let s = Symbol::mk(&pairs.as_str()[1..]);
+                let s = Symbol::mk(&pair.as_str()[1..]);
                 Ok(Expr::Value(Var::mk_symbol(s)))
             }
             Rule::float => {
-                let float = pairs.as_str().parse::<f64>().unwrap();
+                let float = pair.as_str().parse::<f64>().unwrap();
                 Ok(Expr::Value(v_float(float)))
             }
             Rule::string => {
-                let string = pairs.as_str();
-                let parsed = unquote_str(string)?;
+                let string = pair.as_str();
+                let parsed = match unquote_str(string) {
+                    Ok(str) => str,
+                    Err(e) => {
+                        return Err(CompileError::StringLexError(
+                            self.compile_context(&pair),
+                            format!("invalid string literal '{}': {e}", string),
+                        ));
+                    }
+                };
                 Ok(Expr::Value(v_str(&parsed)))
             }
             Rule::err => {
-                let e = pairs.as_str();
+                let e = pair.as_str();
                 Ok(Expr::Value(match e.to_lowercase().as_str() {
                     "e_args" => v_err(E_ARGS),
                     "e_div" => v_err(E_DIV),
@@ -170,15 +192,12 @@ impl TreeTransformer {
                 }))
             }
             _ => {
-                panic!("Unimplemented atom: {:?}", pairs);
+                panic!("Unimplemented atom: {:?}", pair);
             }
         }
     }
 
-    fn parse_exprlist(
-        self: Rc<Self>,
-        pairs: pest::iterators::Pairs<Rule>,
-    ) -> Result<Vec<Arg>, CompileError> {
+    fn parse_exprlist(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Vec<Arg>, CompileError> {
         let mut args = vec![];
         for pair in pairs {
             match pair.as_rule() {
@@ -204,10 +223,7 @@ impl TreeTransformer {
         Ok(args)
     }
 
-    fn parse_arglist(
-        self: Rc<Self>,
-        pairs: pest::iterators::Pairs<Rule>,
-    ) -> Result<Vec<Arg>, CompileError> {
+    fn parse_arglist(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Vec<Arg>, CompileError> {
         let Some(first) = pairs.peek() else {
             return Ok(vec![]);
         };
@@ -219,10 +235,7 @@ impl TreeTransformer {
         self.parse_exprlist(first.into_inner())
     }
 
-    fn parse_except_codes(
-        self: Rc<Self>,
-        pairs: pest::iterators::Pair<Rule>,
-    ) -> Result<CatchCodes, CompileError> {
+    fn parse_except_codes(self: Rc<Self>, pairs: Pair<Rule>) -> Result<CatchCodes, CompileError> {
         match pairs.as_rule() {
             Rule::anycode => Ok(CatchCodes::Any),
             Rule::exprlist => Ok(CatchCodes::Codes(self.parse_exprlist(pairs.into_inner())?)),
@@ -232,10 +245,7 @@ impl TreeTransformer {
         }
     }
 
-    fn parse_expr(
-        self: Rc<Self>,
-        pairs: pest::iterators::Pairs<Rule>,
-    ) -> Result<Expr, CompileError> {
+    fn parse_expr(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Expr, CompileError> {
         let pratt = PrattParser::new()
             // Generally following C-like precedence order as described:
             //   https://en.cppreference.com/w/c/language/operator_precedence
@@ -281,243 +291,263 @@ impl TreeTransformer {
         let primary_self = self.clone();
         let postfix_self = self.clone();
 
-        return pratt
-            .map_primary(|primary| match primary.as_rule() {
-                Rule::atom => {
-                    let mut inner = primary.into_inner();
-                    let expr = primary_self.clone().parse_atom(inner.next().unwrap())?;
-                    Ok(expr)
-                }
-                Rule::sysprop => {
-                    let mut inner = primary.into_inner();
-                    let property = inner.next().unwrap().as_str();
-                    Ok(Expr::Prop {
-                        location: Box::new(Expr::Value(v_obj(SYSTEM_OBJECT))),
-                        property: Box::new(Expr::Value(v_str(property))),
-                    })
-                }
-                Rule::sysprop_call => {
-                    let mut inner = primary.into_inner();
-                    let verb = inner.next().unwrap().as_str()[1..].to_string();
-                    let args = primary_self
-                        .clone()
-                        .parse_arglist(inner.next().unwrap().into_inner())?;
-                    Ok(Expr::Verb {
-                        location: Box::new(Expr::Value(v_obj(SYSTEM_OBJECT))),
-                        verb: Box::new(Expr::Value(v_string(verb))),
-                        args,
-                    })
-                }
-                Rule::list => {
-                    let mut inner = primary.into_inner();
-                    if let Some(arglist) = inner.next() {
-                        let args = primary_self.clone().parse_exprlist(arglist.into_inner())?;
-                        Ok(Expr::List(args))
-                    } else {
-                        Ok(Expr::List(vec![]))
+        pratt
+            .map_primary(|primary| {
+                match primary.as_rule() {
+                    Rule::atom => {
+                        let mut inner = primary.into_inner();
+                        let expr = primary_self.clone().parse_atom(inner.next().unwrap())?;
+                        Ok(expr)
                     }
-                }
-                Rule::map => {
-                    if !self.options.map_type {
-                        return Err(CompileError::DisabledFeature("Maps".to_string()));
-                    }
-
-                    let inner = primary.into_inner();
-                    // Parse each key, value as a separate expression which we will pair-up later.
-                    let mut elements = vec![];
-                    for r in inner {
-                        elements.push(primary_self.clone().parse_expr(r.into_inner()).unwrap());
-                    }
-                    let pairs = elements
-                        .chunks(2)
-                        .map(|pair| {
-                            let key = pair[0].clone();
-                            let value = pair[1].clone();
-                            (key, value)
+                    Rule::sysprop => {
+                        let mut inner = primary.into_inner();
+                        let property = inner.next().unwrap().as_str();
+                        Ok(Expr::Prop {
+                            location: Box::new(Expr::Value(v_obj(SYSTEM_OBJECT))),
+                            property: Box::new(Expr::Value(v_str(property))),
                         })
-                        .collect();
-                    Ok(Expr::Map(pairs))
-                }
-                Rule::flyweight => {
-                    if !self.options.flyweight_type {
-                        return Err(CompileError::DisabledFeature("Maps".to_string()));
                     }
-                    let mut parts = primary.into_inner();
+                    Rule::sysprop_call => {
+                        let mut inner = primary.into_inner();
+                        let verb = inner.next().unwrap().as_str()[1..].to_string();
+                        let args = primary_self
+                            .clone()
+                            .parse_arglist(inner.next().unwrap().into_inner())?;
+                        Ok(Expr::Verb {
+                            location: Box::new(Expr::Value(v_obj(SYSTEM_OBJECT))),
+                            verb: Box::new(Expr::Value(v_string(verb))),
+                            args,
+                        })
+                    }
+                    Rule::list => {
+                        let mut inner = primary.into_inner();
+                        if let Some(arglist) = inner.next() {
+                            let args = primary_self.clone().parse_exprlist(arglist.into_inner())?;
+                            Ok(Expr::List(args))
+                        } else {
+                            Ok(Expr::List(vec![]))
+                        }
+                    }
+                    Rule::map => {
+                        if !self.options.map_type {
+                            return Err(CompileError::DisabledFeature(
+                                self.compile_context(&primary),
+                                "Maps".to_string(),
+                            ));
+                        }
 
-                    // Three components:
-                    // 1. The delegate object
-                    // 2. The slots
-                    // 3. The contents
-                    let delegate = primary_self
-                        .clone()
-                        .parse_expr(parts.next().unwrap().into_inner())?;
+                        let inner = primary.into_inner();
+                        // Parse each key, value as a separate expression which we will pair-up later.
+                        let mut elements = vec![];
+                        for r in inner {
+                            elements.push(primary_self.clone().parse_expr(r.into_inner()).unwrap());
+                        }
+                        let pairs = elements
+                            .chunks(2)
+                            .map(|pair| {
+                                let key = pair[0].clone();
+                                let value = pair[1].clone();
+                                (key, value)
+                            })
+                            .collect();
+                        Ok(Expr::Map(pairs))
+                    }
+                    Rule::flyweight => {
+                        if !self.options.flyweight_type {
+                            return Err(CompileError::DisabledFeature(
+                                self.compile_context(&primary),
+                                "Maps".to_string(),
+                            ));
+                        }
+                        let mut parts = primary.into_inner();
 
-                    let mut slots = vec![];
-                    let mut contents = vec![];
+                        // Three components:
+                        // 1. The delegate object
+                        // 2. The slots
+                        // 3. The contents
+                        let delegate = primary_self
+                            .clone()
+                            .parse_expr(parts.next().unwrap().into_inner())?;
 
-                    // If the next is `flyweight_slots`, parse the pairs inside it
-                    for next in parts {
-                        match next.as_rule() {
-                            Rule::flyweight_slots => {
-                                // Parse the slots, they're a sequence of ident, expr pairs.
-                                // Collect them into two iterators,
-                                let slot_pairs = next.into_inner().chunks(2);
-                                for mut pair in &slot_pairs {
-                                    let slot_name =
-                                        Symbol::mk_case_insensitive(pair.next().unwrap().as_str());
+                        let mut slots = vec![];
+                        let mut contents = vec![];
 
-                                    // "delegate" and "slots" are forbidden slot names.
-                                    if slot_name == Symbol::mk_case_insensitive("delegate")
-                                        || slot_name == Symbol::mk_case_insensitive("slots")
-                                    {
-                                        return Err(CompileError::BadSlotName(
-                                            slot_name.to_string(),
-                                        ));
+                        // If the next is `flyweight_slots`, parse the pairs inside it
+                        for next in parts {
+                            match next.as_rule() {
+                                Rule::flyweight_slots => {
+                                    // Parse the slots, they're a sequence of ident, expr pairs.
+                                    // Collect them into two iterators,
+                                    let slot_pairs = next.clone().into_inner().chunks(2);
+                                    for mut pair in &slot_pairs {
+                                        let slot_name = Symbol::mk_case_insensitive(
+                                            pair.next().unwrap().as_str(),
+                                        );
+
+                                        // "delegate" and "slots" are forbidden slot names.
+                                        if slot_name == Symbol::mk_case_insensitive("delegate")
+                                            || slot_name == Symbol::mk_case_insensitive("slots")
+                                        {
+                                            return Err(CompileError::BadSlotName(
+                                                self.compile_context(&next),
+                                                slot_name.to_string(),
+                                            ));
+                                        }
+
+                                        let slot_expr = primary_self
+                                            .clone()
+                                            .parse_expr(pair.next().unwrap().into_inner())?;
+                                        slots.push((slot_name, slot_expr));
                                     }
+                                }
+                                Rule::flyweight_contents => {
+                                    if let Some(exprlist) = next.into_inner().next() {
+                                        let exprlist = exprlist.into_inner();
+                                        contents = primary_self.clone().parse_exprlist(exprlist)?;
+                                    }
+                                }
+                                _ => {
+                                    panic!("Unexpected rule: {:?}", next.as_rule());
+                                }
+                            };
+                        }
+                        Ok(Expr::Flyweight(Box::new(delegate), slots, contents))
+                    }
+                    Rule::builtin_call => {
+                        let mut inner = primary.into_inner();
+                        let bf = inner.next().unwrap().as_str();
+                        let args = primary_self
+                            .clone()
+                            .parse_arglist(inner.next().unwrap().into_inner())?;
+                        Ok(Expr::Call {
+                            function: Symbol::mk_case_insensitive(bf),
+                            args,
+                        })
+                    }
+                    Rule::pass_expr => {
+                        let mut inner = primary.into_inner();
+                        let args = if let Some(arglist) = inner.next() {
+                            primary_self.clone().parse_exprlist(arglist.into_inner())?
+                        } else {
+                            vec![]
+                        };
+                        Ok(Expr::Pass { args })
+                    }
+                    Rule::range_end => Ok(Expr::Length),
+                    Rule::try_expr => {
+                        let mut inner = primary.into_inner();
+                        let try_expr = primary_self
+                            .clone()
+                            .parse_expr(inner.next().unwrap().into_inner())?;
+                        let codes = inner.next().unwrap();
+                        let catch_codes = primary_self
+                            .clone()
+                            .parse_except_codes(codes.into_inner().next().unwrap())?;
+                        let except = inner.next().map(|e| {
+                            Box::new(primary_self.clone().parse_expr(e.into_inner()).unwrap())
+                        });
+                        Ok(Expr::TryCatch {
+                            trye: Box::new(try_expr),
+                            codes: catch_codes,
+                            except,
+                        })
+                    }
 
-                                    let slot_expr = primary_self
-                                        .clone()
-                                        .parse_expr(pair.next().unwrap().into_inner())?;
-                                    slots.push((slot_name, slot_expr));
-                                }
-                            }
-                            Rule::flyweight_contents => {
-                                if let Some(exprlist) = next.into_inner().next() {
-                                    let exprlist = exprlist.into_inner();
-                                    contents = primary_self.clone().parse_exprlist(exprlist)?;
-                                }
+                    Rule::paren_expr => {
+                        let mut inner = primary.into_inner();
+                        let expr = primary_self
+                            .clone()
+                            .parse_expr(inner.next().unwrap().into_inner())?;
+                        Ok(expr)
+                    }
+                    Rule::integer => match primary.as_str().parse::<i64>() {
+                        Ok(int) => Ok(Expr::Value(v_int(int))),
+                        Err(e) => Err(CompileError::StringLexError(
+                            self.compile_context(&primary),
+                            format!("invalid integer literal '{}': {e}", primary.as_str()),
+                        )),
+                    },
+                    Rule::range_comprehension => {
+                        if !self.options.list_comprehensions {
+                            return Err(CompileError::DisabledFeature(
+                                self.compile_context(&primary),
+                                "ListComprehension".to_string(),
+                            ));
+                        }
+                        let mut inner = primary.into_inner();
+
+                        let producer_expr = primary_self
+                            .clone()
+                            .parse_expr(inner.next().unwrap().into_inner())?;
+
+                        let variable_ident = inner.next().unwrap();
+                        let varname = variable_ident.as_str().trim();
+                        let variable = match variable_ident.as_rule() {
+                            Rule::ident => {
+                                let Some(name) =
+                                    self.names.borrow_mut().find_or_add_name_global(varname)
+                                else {
+                                    return Err(DuplicateVariable(
+                                        self.compile_context(&variable_ident),
+                                        varname.into(),
+                                    ));
+                                };
+                                name
                             }
                             _ => {
-                                panic!("Unexpected rule: {:?}", next.as_rule());
+                                panic!("Unexpected rule: {:?}", variable_ident.as_rule());
                             }
                         };
-                    }
-                    Ok(Expr::Flyweight(Box::new(delegate), slots, contents))
-                }
-                Rule::builtin_call => {
-                    let mut inner = primary.into_inner();
-                    let bf = inner.next().unwrap().as_str();
-                    let args = primary_self
-                        .clone()
-                        .parse_arglist(inner.next().unwrap().into_inner())?;
-                    Ok(Expr::Call {
-                        function: Symbol::mk_case_insensitive(bf),
-                        args,
-                    })
-                }
-                Rule::pass_expr => {
-                    let mut inner = primary.into_inner();
-                    let args = if let Some(arglist) = inner.next() {
-                        primary_self.clone().parse_exprlist(arglist.into_inner())?
-                    } else {
-                        vec![]
-                    };
-                    Ok(Expr::Pass { args })
-                }
-                Rule::range_end => Ok(Expr::Length),
-                Rule::try_expr => {
-                    let mut inner = primary.into_inner();
-                    let try_expr = primary_self
-                        .clone()
-                        .parse_expr(inner.next().unwrap().into_inner())?;
-                    let codes = inner.next().unwrap();
-                    let catch_codes = primary_self
-                        .clone()
-                        .parse_except_codes(codes.into_inner().next().unwrap())?;
-                    let except = inner.next().map(|e| {
-                        Box::new(primary_self.clone().parse_expr(e.into_inner()).unwrap())
-                    });
-                    Ok(Expr::TryCatch {
-                        trye: Box::new(try_expr),
-                        codes: catch_codes,
-                        except,
-                    })
-                }
+                        let clause = inner.next().unwrap();
 
-                Rule::paren_expr => {
-                    let mut inner = primary.into_inner();
-                    let expr = primary_self
-                        .clone()
-                        .parse_expr(inner.next().unwrap().into_inner())?;
-                    Ok(expr)
-                }
-                Rule::integer => match primary.as_str().parse::<i64>() {
-                    Ok(int) => Ok(Expr::Value(v_int(int))),
-                    Err(e) => Err(CompileError::StringLexError(format!(
-                        "invalid integer literal '{}': {e}",
-                        primary.as_str()
-                    ))),
-                },
-                Rule::range_comprehension => {
-                    if !self.options.list_comprehensions {
-                        return Err(CompileError::DisabledFeature(
-                            "ListComprehension".to_string(),
-                        ));
-                    }
-                    let mut inner = primary.into_inner();
-
-                    let producer_expr = primary_self
-                        .clone()
-                        .parse_expr(inner.next().unwrap().into_inner())?;
-
-                    let variable_ident = inner.next().unwrap();
-                    let variable = match variable_ident.as_rule() {
-                        Rule::ident => self
-                            .names
-                            .borrow_mut()
-                            .find_or_add_name_global(variable_ident.as_str().trim())?,
-                        _ => {
-                            panic!("Unexpected rule: {:?}", variable_ident.as_rule());
-                        }
-                    };
-                    let clause = inner.next().unwrap();
-
-                    match clause.as_rule() {
-                        Rule::for_range_clause => {
-                            let mut clause_inner = clause.into_inner();
-                            let from_rule = clause_inner.next().unwrap();
-                            let to_rule = clause_inner.next().unwrap();
-                            let from = self.clone().parse_expr(from_rule.into_inner())?;
-                            let to = self.clone().parse_expr(to_rule.into_inner())?;
-                            let end_of_range_register =
-                                self.names.borrow_mut().declare_register()?;
-                            Ok(Expr::ComprehendRange {
-                                variable,
-                                end_of_range_register,
-                                producer_expr: Box::new(producer_expr),
-                                from: Box::new(from),
-                                to: Box::new(to),
-                            })
-                        }
-                        Rule::for_in_clause => {
-                            let mut clause_inner = clause.into_inner();
-                            let in_rule = clause_inner.next().unwrap();
-                            let expr = self.clone().parse_expr(in_rule.into_inner())?;
-                            let position_register = self.names.borrow_mut().declare_register()?;
-                            let list_register = self.names.borrow_mut().declare_register()?;
-                            Ok(Expr::ComprehendList {
-                                list_register,
-                                variable,
-                                position_register,
-                                producer_expr: Box::new(producer_expr),
-                                list: Box::new(expr),
-                            })
-                        }
-                        _ => {
-                            todo!("unhandled rule: {:?}", clause.as_rule())
+                        match clause.as_rule() {
+                            Rule::for_range_clause => {
+                                let mut clause_inner = clause.into_inner();
+                                let from_rule = clause_inner.next().unwrap();
+                                let to_rule = clause_inner.next().unwrap();
+                                let from = self.clone().parse_expr(from_rule.into_inner())?;
+                                let to = self.clone().parse_expr(to_rule.into_inner())?;
+                                let end_of_range_register =
+                                    self.names.borrow_mut().declare_register()?;
+                                Ok(Expr::ComprehendRange {
+                                    variable,
+                                    end_of_range_register,
+                                    producer_expr: Box::new(producer_expr),
+                                    from: Box::new(from),
+                                    to: Box::new(to),
+                                })
+                            }
+                            Rule::for_in_clause => {
+                                let mut clause_inner = clause.into_inner();
+                                let in_rule = clause_inner.next().unwrap();
+                                let expr = self.clone().parse_expr(in_rule.into_inner())?;
+                                let position_register =
+                                    self.names.borrow_mut().declare_register()?;
+                                let list_register = self.names.borrow_mut().declare_register()?;
+                                Ok(Expr::ComprehendList {
+                                    list_register,
+                                    variable,
+                                    position_register,
+                                    producer_expr: Box::new(producer_expr),
+                                    list: Box::new(expr),
+                                })
+                            }
+                            _ => {
+                                todo!("unhandled rule: {:?}", clause.as_rule())
+                            }
                         }
                     }
-                }
-                Rule::return_expr => {
-                    let mut inner = primary.into_inner();
-                    let rhs = match inner.next() {
-                        Some(e) => Some(Box::new(self.clone().parse_expr(e.into_inner())?)),
-                        None => None,
-                    };
-                    Ok(Expr::Return(rhs))
-                }
+                    Rule::return_expr => {
+                        let mut inner = primary.into_inner();
+                        let rhs = match inner.next() {
+                            Some(e) => Some(Box::new(self.clone().parse_expr(e.into_inner())?)),
+                            None => None,
+                        };
+                        Ok(Expr::Return(rhs))
+                    }
 
-                _ => todo!("Unimplemented primary: {:?}", primary.as_rule()),
+                    _ => todo!("Unimplemented primary: {:?}", primary.as_rule()),
+                }
             })
             .map_infix(|lhs, op, rhs| match op.as_rule() {
                 Rule::add => Ok(Expr::Binary(
@@ -645,7 +675,7 @@ impl TreeTransformer {
                         })
                     }
                     Rule::assign => {
-                        let mut parts = op.into_inner();
+                        let mut parts = op.clone().into_inner();
                         let right = postfix_self
                             .clone()
                             .parse_expr(parts.next().unwrap().into_inner())?;
@@ -657,6 +687,7 @@ impl TreeTransformer {
                             let decl = names.decl_for(name);
                             if decl.constant {
                                 return Err(CompileError::AssignToConst(
+                                    self.compile_context(&op),
                                     decl.identifier.to_symbol(),
                                 ));
                             }
@@ -704,20 +735,18 @@ impl TreeTransformer {
                     _ => todo!("Unimplemented postfix: {:?}", op.as_rule()),
                 }
             })
-            .parse(pairs);
+            .parse(pairs)
     }
 
-    fn parse_statement(
-        self: Rc<Self>,
-        pair: pest::iterators::Pair<Rule>,
-    ) -> Result<Option<Stmt>, CompileError> {
-        let line = pair.line_col().0;
+    fn parse_statement(self: Rc<Self>, pair: Pair<Rule>) -> Result<Option<Stmt>, CompileError> {
+        let line_col = pair.line_col();
+        let context = self.compile_context(&pair);
         match pair.as_rule() {
             Rule::expr_statement => {
                 let mut inner = pair.into_inner();
                 if let Some(rule) = inner.next() {
                     let expr = self.parse_expr(rule.into_inner())?;
-                    return Ok(Some(Stmt::new(StmtNode::Expr(expr), line)));
+                    return Ok(Some(Stmt::new(StmtNode::Expr(expr), line_col)));
                 }
                 Ok(None)
             }
@@ -738,17 +767,16 @@ impl TreeTransformer {
                         body,
                         environment_width,
                     },
-                    line,
+                    line_col,
                 )))
             }
             Rule::labelled_while_statement => {
                 self.enter_scope();
                 let mut parts = pair.into_inner();
-                let id = self
-                    .clone()
-                    .names
-                    .borrow_mut()
-                    .find_or_add_name_global(parts.next().unwrap().as_str())?;
+                let varname = parts.next().unwrap().as_str();
+                let Some(id) = self.names.borrow_mut().find_or_add_name_global(varname) else {
+                    return Err(DuplicateVariable(context, varname.into()));
+                };
                 let condition = self
                     .clone()
                     .parse_expr(parts.next().unwrap().into_inner())?;
@@ -763,7 +791,7 @@ impl TreeTransformer {
                         body,
                         environment_width,
                     },
-                    line,
+                    line_col,
                 )))
             }
             Rule::if_statement => {
@@ -822,51 +850,63 @@ impl TreeTransformer {
                         _ => panic!("Unimplemented if clause: {:?}", remainder),
                     }
                 }
-                Ok(Some(Stmt::new(StmtNode::Cond { arms, otherwise }, line)))
+                Ok(Some(Stmt::new(
+                    StmtNode::Cond { arms, otherwise },
+                    line_col,
+                )))
             }
             Rule::break_statement => {
-                let mut parts = pair.into_inner();
+                let mut parts = pair.clone().into_inner();
                 let label = match parts.next() {
                     None => None,
                     Some(s) => {
                         let label = s.as_str();
                         let Some(label) = self.names.borrow_mut().find_name(label) else {
-                            return Err(CompileError::UnknownLoopLabel(label.to_string()));
+                            return Err(CompileError::UnknownLoopLabel(
+                                self.compile_context(&pair),
+                                label.to_string(),
+                            ));
                         };
                         Some(label)
                     }
                 };
-                Ok(Some(Stmt::new(StmtNode::Break { exit: label }, line)))
+                Ok(Some(Stmt::new(StmtNode::Break { exit: label }, line_col)))
             }
             Rule::continue_statement => {
-                let mut parts = pair.into_inner();
+                let mut parts = pair.clone().into_inner();
                 let label = match parts.next() {
                     None => None,
                     Some(s) => {
                         let label = s.as_str();
                         let Some(label) = self.names.borrow_mut().find_name(label) else {
-                            return Err(CompileError::UnknownLoopLabel(label.to_string()));
+                            return Err(CompileError::UnknownLoopLabel(
+                                self.compile_context(&pair),
+                                label.to_string(),
+                            ));
                         };
                         Some(label)
                     }
                 };
-                Ok(Some(Stmt::new(StmtNode::Continue { exit: label }, line)))
+                Ok(Some(Stmt::new(
+                    StmtNode::Continue { exit: label },
+                    line_col,
+                )))
             }
             // Rule::return_statement => {
             //     let mut parts = pair.into_inner();
             //     let expr = parts
             //         .next()
             //         .map(|expr| self.parse_expr(expr.into_inner()).unwrap());
-            //     Ok(Some(Stmt::new(StmtNode::Return(expr), line)))
+            //     Ok(Some(Stmt::new(StmtNode::Return(expr), line_col)))
             // }
             Rule::for_statement => {
                 self.enter_scope();
                 let mut parts = pair.into_inner();
-                let id = self
-                    .clone()
-                    .names
-                    .borrow_mut()
-                    .find_or_add_name_global(parts.next().unwrap().as_str())?;
+
+                let varname = parts.next().unwrap().as_str();
+                let Some(id) = self.names.borrow_mut().find_or_add_name_global(varname) else {
+                    return Err(DuplicateVariable(context, varname.into()));
+                };
                 let clause = parts.next().unwrap();
                 let body = self
                     .clone()
@@ -887,7 +927,7 @@ impl TreeTransformer {
                                 body,
                                 environment_width,
                             },
-                            line,
+                            line_col,
                         )))
                     }
                     Rule::for_in_clause => {
@@ -902,7 +942,7 @@ impl TreeTransformer {
                                 body,
                                 environment_width,
                             },
-                            line,
+                            line_col,
                         )))
                     }
                     _ => panic!("Unimplemented for clause: {:?}", clause),
@@ -924,7 +964,7 @@ impl TreeTransformer {
                         handler,
                         environment_width,
                     },
-                    line,
+                    line_col,
                 )))
             }
             Rule::try_except_statement => {
@@ -946,11 +986,7 @@ impl TreeTransformer {
                                         self.names.borrow_mut().find_or_add_name_global(id.as_str())
                                     });
 
-                                    let exception = match exception {
-                                        None => None,
-                                        Some(Err(e)) => return Err(e),
-                                        Some(Ok(id)) => Some(id),
-                                    };
+                                    let exception = exception.map(|id| id.unwrap());
 
                                     let codes = self.clone().parse_except_codes(
                                         my_parts.next().unwrap().into_inner().next().unwrap(),
@@ -986,7 +1022,7 @@ impl TreeTransformer {
                         excepts,
                         environment_width,
                     },
-                    line,
+                    line_col,
                 )))
             }
             Rule::fork_statement => {
@@ -1001,15 +1037,15 @@ impl TreeTransformer {
                         time,
                         body,
                     },
-                    line,
+                    line_col,
                 )))
             }
             Rule::labelled_fork_statement => {
                 let mut parts = pair.into_inner();
-                let id = self
-                    .names
-                    .borrow_mut()
-                    .find_or_add_name_global(parts.next().unwrap().as_str())?;
+                let varname = parts.next().unwrap().as_str();
+                let Some(id) = self.names.borrow_mut().find_or_add_name_global(varname) else {
+                    return Err(DuplicateVariable(context, varname.into()));
+                };
                 let time = self
                     .clone()
                     .parse_expr(parts.next().unwrap().into_inner())?;
@@ -1020,12 +1056,15 @@ impl TreeTransformer {
                         time,
                         body,
                     },
-                    line,
+                    line_col,
                 )))
             }
             Rule::begin_statement => {
                 if !self.options.lexical_scopes {
-                    return Err(CompileError::DisabledFeature("lexical_scopes".to_string()));
+                    return Err(CompileError::DisabledFeature(
+                        self.compile_context(&pair),
+                        "lexical_scopes".to_string(),
+                    ));
                 }
                 let mut parts = pair.into_inner();
 
@@ -1040,12 +1079,15 @@ impl TreeTransformer {
                         num_bindings: num_total_bindings,
                         body,
                     },
-                    line,
+                    line_col,
                 )))
             }
             Rule::local_assignment | Rule::const_assignment => {
                 if !self.options.lexical_scopes {
-                    return Err(CompileError::DisabledFeature("lexical_scopes".to_string()));
+                    return Err(CompileError::DisabledFeature(
+                        self.compile_context(&pair),
+                        "lexical_scopes".to_string(),
+                    ));
                 }
 
                 // Scatter, or local, we'll then go match on that...
@@ -1053,7 +1095,7 @@ impl TreeTransformer {
                 match parts.as_rule() {
                     Rule::local_assign_single | Rule::const_assign_single => Ok(Some(Stmt::new(
                         self.clone().parse_decl_assign(parts)?,
-                        line,
+                        line_col,
                     ))),
                     Rule::local_assign_scatter | Rule::const_assign_scatter => {
                         let is_const = parts.as_rule() == Rule::const_assign_scatter;
@@ -1062,7 +1104,7 @@ impl TreeTransformer {
                         let rhs = parts.next().unwrap();
                         let rhs = self.clone().parse_expr(rhs.into_inner())?;
                         let expr = self.parse_scatter_assign(op, rhs, true, is_const)?;
-                        Ok(Some(Stmt::new(StmtNode::Expr(expr), line)))
+                        Ok(Some(Stmt::new(StmtNode::Expr(expr), line_col)))
                     }
                     _ => {
                         unimplemented!("Unimplemented assignment: {:?}", parts.as_rule())
@@ -1072,16 +1114,19 @@ impl TreeTransformer {
 
             Rule::global_assignment => {
                 if !self.options.lexical_scopes {
-                    return Err(CompileError::DisabledFeature("lexical_scopes".to_string()));
+                    return Err(CompileError::DisabledFeature(
+                        self.compile_context(&pair),
+                        "lexical_scopes".to_string(),
+                    ));
                 }
 
                 // An explicit global-declaration.
                 // global x, or global x = y
                 let mut parts = pair.into_inner();
-                let id = self
-                    .names
-                    .borrow_mut()
-                    .find_or_add_name_global(parts.next().unwrap().as_str())?;
+                let varname = parts.next().unwrap().as_str();
+                let Some(id) = self.names.borrow_mut().find_or_add_name_global(varname) else {
+                    return Err(DuplicateVariable(context, varname.into()));
+                };
                 let expr = parts
                     .next()
                     .map(|e| self.parse_expr(e.into_inner()).unwrap());
@@ -1098,18 +1143,15 @@ impl TreeTransformer {
                         left: Box::new(Expr::Id(id)),
                         right: Box::new(expr.unwrap_or(Expr::Value(v_none()))),
                     }),
-                    line,
+                    line_col,
                 )))
             }
-            Rule::empty_return => Ok(Some(Stmt::new(StmtNode::mk_return_none(), line))),
+            Rule::empty_return => Ok(Some(Stmt::new(StmtNode::mk_return_none(), line_col))),
             _ => panic!("Unimplemented statement: {:?}", pair.as_rule()),
         }
     }
 
-    fn parse_statements(
-        self: Rc<Self>,
-        pairs: pest::iterators::Pairs<Rule>,
-    ) -> Result<Vec<Stmt>, CompileError> {
+    fn parse_statements(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Vec<Stmt>, CompileError> {
         let mut statements = vec![];
         for pair in pairs {
             match pair.as_rule() {
@@ -1129,20 +1171,18 @@ impl TreeTransformer {
         Ok(statements)
     }
 
-    fn parse_decl_assign(
-        self: Rc<Self>,
-        pair: pest::iterators::Pair<Rule>,
-    ) -> Result<StmtNode, CompileError> {
+    fn parse_decl_assign(self: Rc<Self>, pair: Pair<Rule>) -> Result<StmtNode, CompileError> {
+        let context = self.compile_context(&pair);
         let is_const = pair.as_rule() == Rule::const_assign_single;
 
         // An assignment declaration that introduces a locally lexically scoped variable.
         // May be of form `let x = expr` or just `let x`
         let mut parts = pair.into_inner();
 
-        let id =
-            self.names
-                .borrow_mut()
-                .declare(parts.next().unwrap().as_str(), is_const, false)?;
+        let varname = parts.next().unwrap().as_str();
+        let Some(id) = self.names.borrow_mut().declare(varname, is_const, false) else {
+            return Err(DuplicateVariable(context, varname.into()));
+        };
         let expr = parts
             .next()
             .map(|e| self.parse_expr(e.into_inner()).unwrap());
@@ -1159,11 +1199,12 @@ impl TreeTransformer {
 
     fn parse_scatter_assign(
         self: Rc<Self>,
-        op: pest::iterators::Pair<Rule>,
+        op: Pair<Rule>,
         rhs: Expr,
         local_scope: bool,
         is_const: bool,
     ) -> Result<Expr, CompileError> {
+        let context = self.compile_context(&op);
         let inner = op.into_inner();
         let mut items = vec![];
         for scatter_item in inner {
@@ -1171,11 +1212,14 @@ impl TreeTransformer {
                 Rule::scatter_optional => {
                     let mut inner = scatter_item.into_inner();
                     let id = inner.next().unwrap().as_str();
-                    let id = self
-                        .clone()
-                        .names
-                        .borrow_mut()
-                        .declare(id, is_const, !local_scope)?;
+                    let Some(id) =
+                        self.clone()
+                            .names
+                            .borrow_mut()
+                            .declare(id, is_const, !local_scope)
+                    else {
+                        return Err(DuplicateVariable(context, id.into()));
+                    };
 
                     let expr = inner
                         .next()
@@ -1189,11 +1233,14 @@ impl TreeTransformer {
                 Rule::scatter_target => {
                     let mut inner = scatter_item.into_inner();
                     let id = inner.next().unwrap().as_str();
-                    let id = self
-                        .clone()
-                        .names
-                        .borrow_mut()
-                        .declare(id, is_const, !local_scope)?;
+                    let Some(id) =
+                        self.clone()
+                            .names
+                            .borrow_mut()
+                            .declare(id, is_const, !local_scope)
+                    else {
+                        return Err(DuplicateVariable(context, id.into()));
+                    };
                     items.push(ScatterItem {
                         kind: ScatterKind::Required,
                         id,
@@ -1203,11 +1250,14 @@ impl TreeTransformer {
                 Rule::scatter_rest => {
                     let mut inner = scatter_item.into_inner();
                     let id = inner.next().unwrap().as_str();
-                    let id = self
-                        .clone()
-                        .names
-                        .borrow_mut()
-                        .declare(id, is_const, !local_scope)?;
+                    let Some(id) =
+                        self.clone()
+                            .names
+                            .borrow_mut()
+                            .declare(id, is_const, !local_scope)
+                    else {
+                        return Err(DuplicateVariable(context, id.into()));
+                    };
                     items.push(ScatterItem {
                         kind: ScatterKind::Rest,
                         id,
@@ -1222,10 +1272,7 @@ impl TreeTransformer {
         Ok(Expr::Scatter(items, Box::new(rhs)))
     }
 
-    fn compile_program(
-        self: Rc<Self>,
-        pairs: pest::iterators::Pairs<Rule>,
-    ) -> Result<Parse, CompileError> {
+    fn compile_program(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
         let mut program = Vec::new();
         for pair in pairs {
             match pair.as_rule() {
@@ -1253,10 +1300,7 @@ impl TreeTransformer {
         self.do_compile(program)
     }
 
-    fn compile_statements(
-        self: Rc<Self>,
-        pairs: pest::iterators::Pairs<Rule>,
-    ) -> Result<Parse, CompileError> {
+    fn compile_statements(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
         let mut program = Vec::new();
         for pair in pairs {
             match pair.as_rule() {
@@ -1322,9 +1366,9 @@ pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Pars
                 LineColLocation::Span(begin, end) => (begin, Some(end)),
             };
 
+            let context = CompileContext::new((line, column));
             return Err(CompileError::ParseError {
-                line,
-                column,
+                error_position: context,
                 end_line_col,
                 context: e.line().to_string(),
                 message: e.variant.message().to_string(),
@@ -1342,19 +1386,17 @@ pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, 
     tree_transform.compile_statements(pairs)
 }
 
-// Lex a simpe MOO string literal.  Expectation is:
+// Lex a simple MOO string literal.  Expectation is:
 //   " and " at beginning and end
 //   \" is "
 //   \\ is \
 //   \n is just n
 // That's it. MOO has no tabs, newlines, etc. quoting.
-pub fn unquote_str(s: &str) -> Result<String, CompileError> {
+pub fn unquote_str(s: &str) -> Result<String, String> {
     let mut output = String::new();
     let mut chars = s.chars().peekable();
     let Some('"') = chars.next() else {
-        return Err(CompileError::StringLexError(
-            "Expected \" at beginning of string".to_string(),
-        ));
+        return Err("Expected \" at beginning of string".to_string());
     };
     // Proceed until second-last. Last has to be '"'
     while let Some(c) = chars.next() {
@@ -1364,25 +1406,19 @@ pub fn unquote_str(s: &str) -> Result<String, CompileError> {
                 Some('"') => output.push('"'),
                 Some(c) => output.push(c),
                 None => {
-                    return Err(CompileError::StringLexError(
-                        "Unexpected end of string".to_string(),
-                    ));
+                    return Err("Unexpected end of string".to_string());
                 }
             },
             '"' => {
                 if chars.peek().is_some() {
-                    return Err(CompileError::StringLexError(
-                        "Unexpected \" in string".to_string(),
-                    ));
+                    return Err("Unexpected \" in string".to_string());
                 }
                 return Ok(output);
             }
             c => output.push(c),
         }
     }
-    Err(CompileError::StringLexError(
-        "Unexpected end of string".to_string(),
-    ))
+    Err("Unexpected end of string".to_string())
 }
 
 #[cfg(test)]
@@ -1399,10 +1435,11 @@ mod tests {
     };
     use crate::ast::{
         BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
-        StmtNode, UnaryOp,
+        StmtNode, UnaryOp, assert_trees_match_recursive,
     };
     use crate::names::UnboundName;
     use crate::parse::{parse_program, unquote_str};
+    use crate::unparse::annotate_line_numbers;
     use moor_common::model::CompileError;
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
@@ -1463,7 +1500,7 @@ mod tests {
             StmtNode::Expr(Expr::Assign {
                 left: Box::new(Id(a)),
                 right: Box::new(Expr::Binary(
-                    BinaryOp::Add,
+                    Add,
                     Box::new(Value(v_int(1))),
                     Box::new(Value(v_int(2))),
                 )),
@@ -1486,13 +1523,32 @@ mod tests {
         );
     }
 
+    fn assert_same_single(tree_a: &[Stmt], tree_b: StmtNode) {
+        let mut tree_a = tree_a.to_vec();
+        let mut tree_b = vec![Stmt::new(tree_b, (1, 1))];
+        annotate_line_numbers(1, &mut tree_a);
+        annotate_line_numbers(1, &mut tree_b);
+        assert_trees_match_recursive(&tree_a, &tree_b);
+    }
+
+    fn assert_same(tree_a: &[Stmt], tree_b: &[StmtNode]) {
+        let mut tree_a = tree_a.to_vec();
+        let mut tree_b: Vec<_> = tree_b
+            .iter()
+            .map(|s| Stmt::new(s.clone(), (1, 1)))
+            .collect();
+        annotate_line_numbers(1, &mut tree_a);
+        annotate_line_numbers(1, &mut tree_b);
+        assert_trees_match_recursive(&tree_a, &tree_b);
+    }
+
     #[test]
     fn test_parse_if_stmt() {
         let program = "if (1 == 2) return 5; elseif (2 == 3) return 3; else return 6; endif";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         assert_eq!(parse.stmts.len(), 1);
-        assert_eq!(
-            stripped_stmts(&parse.stmts)[0],
+        assert_same_single(
+            &parse.stmts,
             StmtNode::Cond {
                 arms: vec![
                     CondArm {
@@ -1503,7 +1559,7 @@ mod tests {
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::mk_return(Value(v_int(5))),
-                            parser_line_no: 1,
+                            line_col: (1, 0),
                             tree_line_no: 2,
                         }],
                         environment_width: 0,
@@ -1517,7 +1573,7 @@ mod tests {
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::mk_return(Value(v_int(3))),
-                            parser_line_no: 1,
+                            line_col: (1, 0),
                             tree_line_no: 4,
                         }],
                     },
@@ -1526,12 +1582,12 @@ mod tests {
                 otherwise: Some(ElseArm {
                     statements: vec![Stmt {
                         node: StmtNode::mk_return(Value(v_int(6))),
-                        parser_line_no: 1,
+                        line_col: (1, 0),
                         tree_line_no: 6,
                     }],
                     environment_width: 0,
                 }),
-            }
+            },
         );
     }
 
@@ -1550,8 +1606,8 @@ mod tests {
         "#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         assert_eq!(parse.stmts.len(), 1);
-        assert_eq!(
-            stripped_stmts(&parse.stmts)[0],
+        assert_same_single(
+            &parse.stmts,
             StmtNode::Cond {
                 arms: vec![
                     CondArm {
@@ -1563,7 +1619,7 @@ mod tests {
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::mk_return(Value(v_int(5))),
-                            parser_line_no: 3,
+                            line_col: (3, 0),
                             tree_line_no: 2,
                         }],
                     },
@@ -1576,7 +1632,7 @@ mod tests {
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::mk_return(Value(v_int(3))),
-                            parser_line_no: 5,
+                            line_col: (5, 0),
                             tree_line_no: 4,
                         }],
                     },
@@ -1589,7 +1645,7 @@ mod tests {
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::mk_return(Value(v_int(4))),
-                            parser_line_no: 7,
+                            line_col: (7, 0),
                             tree_line_no: 6,
                         }],
                     },
@@ -1598,12 +1654,12 @@ mod tests {
                 otherwise: Some(ElseArm {
                     statements: vec![Stmt {
                         node: StmtNode::mk_return(Value(v_int(6))),
-                        parser_line_no: 9,
+                        line_col: (9, 0),
                         tree_line_no: 8,
                     }],
                     environment_width: 0,
                 }),
-            }
+            },
         );
     }
 
@@ -1611,17 +1667,16 @@ mod tests {
     fn test_not_precedence() {
         let program = "return !(#2:move(5));";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        assert_eq!(parse.stmts.len(), 1);
-        assert_eq!(
-            stripped_stmts(&parse.stmts)[0],
+        assert_same_single(
+            &parse.stmts,
             StmtNode::mk_return(Expr::Unary(
                 UnaryOp::Not,
                 Box::new(Verb {
                     location: Box::new(Value(v_objid(2))),
                     verb: Box::new(Value(v_str("move"))),
                     args: vec![Normal(Value(v_int(5)))],
-                })
-            ))
+                }),
+            )),
         );
     }
 
@@ -1634,9 +1689,8 @@ mod tests {
             endif
         "#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        assert_eq!(parse.stmts.len(), 1);
-        assert_eq!(
-            stripped_stmts(&parse.stmts)[0],
+        assert_same_single(
+            &parse.stmts,
             StmtNode::Cond {
                 arms: vec![CondArm {
                     environment_width: 0,
@@ -1648,17 +1702,17 @@ mod tests {
                                 property: Box::new(Value(v_str("network"))),
                             }),
                             verb: Box::new(Value(v_str("is_connected"))),
-                            args: vec![Normal(Id(parse.unbound_names.find_name("this").unwrap())),],
-                        })
+                            args: vec![Normal(Id(parse.unbound_names.find_name("this").unwrap()))],
+                        }),
                     ),
                     statements: vec![Stmt {
                         node: StmtNode::mk_return_none(),
-                        parser_line_no: 3,
+                        line_col: (3, 17),
                         tree_line_no: 2,
                     }],
                 }],
                 otherwise: None,
-            }
+            },
         );
     }
 
@@ -1668,9 +1722,8 @@ mod tests {
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         let x = parse.unbound_names.find_name("x").unwrap();
         let b = parse.unbound_names.find_name("b").unwrap();
-        assert_eq!(parse.stmts.len(), 1);
-        assert_eq!(
-            stripped_stmts(&parse.stmts)[0],
+        assert_same_single(
+            &parse.stmts,
             StmtNode::ForList {
                 environment_width: 0,
                 id: x,
@@ -1683,15 +1736,15 @@ mod tests {
                     node: StmtNode::Expr(Expr::Assign {
                         left: Box::new(Id(b)),
                         right: Box::new(Expr::Binary(
-                            BinaryOp::Add,
+                            Add,
                             Box::new(Id(x)),
                             Box::new(Value(v_int(5))),
                         )),
                     }),
-                    parser_line_no: 1,
+                    line_col: (1, 20),
                     tree_line_no: 2,
                 }],
-            }
+            },
         )
     }
 
@@ -1702,8 +1755,8 @@ mod tests {
         assert_eq!(parse.stmts.len(), 1);
         let x = parse.unbound_names.find_name("x").unwrap();
         let b = parse.unbound_names.find_name("b").unwrap();
-        assert_eq!(
-            stripped_stmts(&parse.stmts)[0],
+        assert_same_single(
+            &parse.stmts,
             StmtNode::ForRange {
                 environment_width: 0,
                 id: x,
@@ -1713,15 +1766,15 @@ mod tests {
                     node: StmtNode::Expr(Expr::Assign {
                         left: Box::new(Id(b)),
                         right: Box::new(Expr::Binary(
-                            BinaryOp::Add,
+                            Add,
                             Box::new(Id(x)),
                             Box::new(Value(v_int(5))),
                         )),
                     }),
-                    parser_line_no: 1,
+                    line_col: (1, 17),
                     tree_line_no: 2,
                 }],
-            }
+            },
         )
     }
 
@@ -1773,12 +1826,12 @@ mod tests {
                         node: StmtNode::Expr(Expr::Assign {
                             left: Box::new(Id(x)),
                             right: Box::new(Expr::Binary(
-                                BinaryOp::Add,
+                                Add,
                                 Box::new(Id(x)),
                                 Box::new(Value(v_int(1))),
                             )),
                         }),
-                        parser_line_no: 1,
+                        line_col: (1, 11),
                         tree_line_no: 2,
                     },
                     Stmt {
@@ -1792,13 +1845,13 @@ mod tests {
                                 ),
                                 statements: vec![Stmt {
                                     node: StmtNode::Break { exit: None },
-                                    parser_line_no: 1,
+                                    line_col: (1, 33),
                                     tree_line_no: 4,
                                 }],
                             }],
                             otherwise: None,
                         },
-                        parser_line_no: 1,
+                        line_col: (1, 22),
                         tree_line_no: 3,
                     },
                 ],
@@ -1812,10 +1865,9 @@ mod tests {
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         let chuckles = parse.unbound_names.find_name("chuckles").unwrap();
         let x = parse.unbound_names.find_name("x").unwrap();
-
-        assert_eq!(
-            stripped_stmts(&parse.stmts),
-            vec![StmtNode::While {
+        assert_same_single(
+            &parse.stmts,
+            StmtNode::While {
                 environment_width: 0,
                 id: Some(chuckles),
                 condition: Value(v_int(1)),
@@ -1824,12 +1876,12 @@ mod tests {
                         node: StmtNode::Expr(Expr::Assign {
                             left: Box::new(Id(x)),
                             right: Box::new(Expr::Binary(
-                                BinaryOp::Add,
+                                Add,
                                 Box::new(Id(x)),
                                 Box::new(Value(v_int(1))),
                             )),
                         }),
-                        parser_line_no: 1,
+                        line_col: (1, 0),
                         tree_line_no: 2,
                     },
                     Stmt {
@@ -1843,19 +1895,19 @@ mod tests {
                                 ),
                                 statements: vec![Stmt {
                                     node: StmtNode::Break {
-                                        exit: Some(chuckles)
+                                        exit: Some(chuckles),
                                     },
-                                    parser_line_no: 1,
+                                    line_col: (1, 0),
                                     tree_line_no: 4,
                                 }],
                             }],
                             otherwise: None,
                         },
-                        parser_line_no: 1,
+                        line_col: (1, 0),
                         tree_line_no: 3,
                     },
                 ],
-            }]
+            },
         )
     }
 
@@ -2153,20 +2205,20 @@ mod tests {
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::mk_return(Value(v_int(5))),
-                            parser_line_no: 2,
+                            line_col: (2, 25),
                             tree_line_no: 2,
                         }],
                     }],
                     otherwise: Some(ElseArm {
                         statements: vec![Stmt {
                             node: StmtNode::mk_return(Value(v_int(3))),
-                            parser_line_no: 4,
+                            line_col: (4, 25),
                             tree_line_no: 4,
                         }],
                         environment_width: 0,
                     }),
                 },
-                parser_line_no: 1,
+                line_col: (1, 1),
                 tree_line_no: 1,
             }]
         );
@@ -2195,7 +2247,7 @@ mod tests {
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::mk_return(Value(v_int(5))),
-                            parser_line_no: 2,
+                            line_col: (2, 25),
                             tree_line_no: 2,
                         }],
                     },
@@ -2208,7 +2260,7 @@ mod tests {
                         ),
                         statements: vec![Stmt {
                             node: StmtNode::mk_return(Value(v_int(2))),
-                            parser_line_no: 4,
+                            line_col: (4, 25),
                             tree_line_no: 4,
                         }],
                     },
@@ -2216,7 +2268,7 @@ mod tests {
                 otherwise: Some(ElseArm {
                     statements: vec![Stmt {
                         node: StmtNode::mk_return(Value(v_int(3))),
-                        parser_line_no: 6,
+                        line_col: (6, 25),
                         tree_line_no: 6,
                     }],
                     environment_width: 0,
@@ -2267,7 +2319,7 @@ mod tests {
                 environment_width: 0,
                 body: vec![Stmt {
                     node: StmtNode::Expr(Value(v_int(5))),
-                    parser_line_no: 2,
+                    line_col: (2, 29),
                     tree_line_no: 2,
                 }],
                 excepts: vec![ExceptArm {
@@ -2275,7 +2327,7 @@ mod tests {
                     codes: CatchCodes::Codes(vec![Normal(Value(v_err(E_PROPNF)))]),
                     statements: vec![Stmt {
                         node: StmtNode::mk_return_none(),
-                        parser_line_no: 4,
+                        line_col: (4, 29),
                         tree_line_no: 4,
                     }],
                 }],
@@ -2611,14 +2663,14 @@ mod tests {
             endwhile
         "#;
         let parse = parse_program(program, CompileOptions::default());
-        assert!(matches!(parse, Err(CompileError::UnknownLoopLabel(_))));
+        assert!(matches!(parse, Err(CompileError::UnknownLoopLabel(_, _))));
 
         let program = r#"
             while (1)
                 continue unknown;
             endwhile"#;
         let parse = parse_program(program, CompileOptions::default());
-        assert!(matches!(parse, Err(CompileError::UnknownLoopLabel(_))));
+        assert!(matches!(parse, Err(CompileError::UnknownLoopLabel(_, _))));
     }
 
     #[test]
@@ -2634,7 +2686,7 @@ mod tests {
                 num_bindings: 0,
                 body: vec![Stmt {
                     node: StmtNode::mk_return(Value(v_int(5))),
-                    parser_line_no: 2,
+                    line_col: (2, 17),
                     tree_line_no: 2,
                 }],
             }]
@@ -2667,9 +2719,9 @@ mod tests {
         // Declared first, so appears in unbound names first, though in the bound names it will
         // appear second.
         let inner_x = x_names[0];
-        assert_eq!(
-            stripped_stmts(&parse.stmts),
-            vec![
+        assert_same(
+            &parse.stmts,
+            &[
                 StmtNode::Scope {
                     num_bindings: 4,
                     body: vec![
@@ -2679,7 +2731,7 @@ mod tests {
                                 left: Box::new(Id(inner_x)),
                                 right: Box::new(Value(v_int(5))),
                             }),
-                            parser_line_no: 2,
+                            line_col: (2, 0),
                             tree_line_no: 2,
                         },
                         // Declaration of y
@@ -2688,19 +2740,19 @@ mod tests {
                                 left: Box::new(Id(inner_y)),
                                 right: Box::new(Value(v_int(6))),
                             }),
-                            parser_line_no: 3,
+                            line_col: (3, 0),
                             tree_line_no: 3,
                         },
                         Stmt {
                             node: StmtNode::Expr(Expr::Assign {
                                 left: Box::new(Id(inner_x)),
                                 right: Box::new(Expr::Binary(
-                                    BinaryOp::Add,
+                                    Add,
                                     Box::new(Id(inner_x)),
                                     Box::new(Value(v_int(6))),
                                 )),
                             }),
-                            parser_line_no: 4,
+                            line_col: (4, 0),
                             tree_line_no: 4,
                         },
                         // Asssignment to z.
@@ -2709,7 +2761,7 @@ mod tests {
                                 left: Box::new(Id(inner_z)),
                                 right: Box::new(Value(v_int(7))),
                             }),
-                            parser_line_no: 5,
+                            line_col: (5, 0),
                             tree_line_no: 5,
                         },
                         // Declaration of o (o = v_none)
@@ -2718,7 +2770,7 @@ mod tests {
                                 left: Box::new(Id(inner_o)),
                                 right: Box::new(Value(v_none())),
                             }),
-                            parser_line_no: 6,
+                            line_col: (6, 0),
                             tree_line_no: 6,
                         },
                         // Assignment to global a
@@ -2727,13 +2779,13 @@ mod tests {
                                 left: Box::new(Id(global_a)),
                                 right: Box::new(Value(v_int(1))),
                             }),
-                            parser_line_no: 7,
+                            line_col: (7, 0),
                             tree_line_no: 7,
                         },
                     ],
                 },
-                StmtNode::mk_return(Id(global_x))
-            ]
+                StmtNode::mk_return(Id(global_x)),
+            ],
         );
     }
 
@@ -2757,7 +2809,7 @@ mod tests {
         x = 6;
         "#;
         let parse = parse_program(program, CompileOptions::default());
-        assert!(matches!(parse, Err(CompileError::AssignToConst(_))));
+        assert!(matches!(parse, Err(CompileError::AssignToConst(_, _))));
     }
 
     #[test]
@@ -2777,7 +2829,7 @@ mod tests {
                 ..CompileOptions::default()
             },
         );
-        assert!(matches!(parse, Err(CompileError::DisabledFeature(_))));
+        assert!(matches!(parse, Err(CompileError::DisabledFeature(_, _))));
     }
 
     #[test]
@@ -2792,7 +2844,7 @@ mod tests {
                 ..CompileOptions::default()
             },
         );
-        assert!(matches!(parse, Err(CompileError::DisabledFeature(_))));
+        assert!(matches!(parse, Err(CompileError::DisabledFeature(_, _))));
     }
 
     #[test]
@@ -2835,7 +2887,7 @@ mod tests {
                             left: Box::new(Id(a_outer)),
                             right: Box::new(Value(v_int(3))),
                         }),
-                        parser_line_no: 2,
+                        line_col: (2, 13),
                         tree_line_no: 2,
                     },
                     Stmt {
@@ -2860,11 +2912,11 @@ mod tests {
                                         Normal(Value(v_int(2))),
                                     ])),
                                 )),
-                                parser_line_no: 4,
+                                line_col: (4, 17),
                                 tree_line_no: 4,
                             }],
                         },
-                        parser_line_no: 3,
+                        line_col: (3, 13),
                         tree_line_no: 3,
                     },
                 ],
@@ -2881,7 +2933,7 @@ mod tests {
         end
         "#;
         let parse = parse_program(program, CompileOptions::default());
-        assert!(matches!(parse, Err(CompileError::AssignToConst(_))));
+        assert!(matches!(parse, Err(CompileError::AssignToConst(_, _))));
     }
 
     /// And same for if two scatter assigns are done, though in this case the error takes the form of
@@ -2894,7 +2946,7 @@ mod tests {
         end
         "#;
         let parse = parse_program(program, CompileOptions::default());
-        assert!(matches!(parse, Err(CompileError::DuplicateVariable(_))));
+        assert!(matches!(parse, Err(CompileError::DuplicateVariable(_, _))));
     }
 
     #[test]

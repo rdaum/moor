@@ -66,7 +66,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
             let constants_file_contents = std::fs::read_to_string(constants_file)
                 .map_err(|e| DirDumpReaderError::ObjectFileReadError(constants_file.clone(), e))?;
             self.parse_objects(
-                &constants_file,
+                constants_file,
                 &mut context,
                 &constants_file_contents,
                 &features_config.compile_options(),
@@ -317,7 +317,7 @@ mod tests {
         let mut context = ObjFileContext::new();
         let mock_path = Path::new("mock_path.moo");
         parser
-            .parse_objects(&mock_path, &mut context, spec, &CompileOptions::default())
+            .parse_objects(mock_path, &mut context, spec, &CompileOptions::default())
             .unwrap();
 
         parser.apply_attributes().unwrap();
@@ -384,7 +384,7 @@ mod tests {
         let mut context = ObjFileContext::new();
         let mock_path = Path::new("mock_path.moo");
         parser
-            .parse_objects(&mock_path, &mut context, spec, &CompileOptions::default())
+            .parse_objects(mock_path, &mut context, spec, &CompileOptions::default())
             .unwrap();
         parser.apply_attributes().unwrap();
         parser.define_verbs().unwrap();

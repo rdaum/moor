@@ -19,7 +19,8 @@ use crate::parse::unquote_str;
 use byteview::ByteView;
 use itertools::Itertools;
 use moor_common::model::{
-    ArgSpec, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec, VerbFlag,
+    ArgSpec, CompileContext, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec,
+    VerbFlag,
 };
 use moor_common::util::BitEnum;
 use moor_var::Error::{
@@ -178,7 +179,7 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
                     Rule::literal_flyweight_slots => {
                         // Parse the slots, they're a sequence of ident, expr pairs.
                         // Collect them into two iterators,
-                        let slot_pairs = next.into_inner().chunks(2);
+                        let slot_pairs = next.clone().into_inner().chunks(2);
                         for mut pair in &slot_pairs {
                             let slot_name =
                                 Symbol::mk_case_insensitive(pair.next().unwrap().as_str());
@@ -188,6 +189,7 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
                                 || slot_name == Symbol::mk_case_insensitive("slots")
                             {
                                 return Err(VerbCompileError(CompileError::BadSlotName(
+                                    CompileContext::new(next.line_col()),
                                     slot_name.to_string(),
                                 )));
                             }
@@ -237,7 +239,12 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
 
 fn parse_string_literal(pair: Pair<Rule>) -> Result<String, ObjDefParseError> {
     let string = pair.as_str();
-    let parsed = unquote_str(string).map_err(VerbCompileError)?;
+    let parsed = unquote_str(string).map_err(|e| {
+        VerbCompileError(CompileError::StringLexError(
+            CompileContext::new(pair.line_col()),
+            e,
+        ))
+    })?;
     Ok(parsed)
 }
 
@@ -254,10 +261,10 @@ fn parse_literal_atom(
             pair.as_str()
                 .parse::<i64>()
                 .map_err(|e| {
-                    CompileError::StringLexError(format!(
-                        "Failed to parse '{}' to i64: {e}",
-                        pair.as_str()
-                    ))
+                    CompileError::StringLexError(
+                        CompileContext::new(pair.line_col()),
+                        format!("Failed to parse '{}' to i64: {e}", pair.as_str()),
+                    )
                 })
                 .map_err(VerbCompileError)?,
         )),
@@ -265,10 +272,10 @@ fn parse_literal_atom(
             pair.as_str()
                 .parse::<f64>()
                 .map_err(|e| {
-                    CompileError::StringLexError(format!(
-                        "Failed to parse '{}' to f64: {e}",
-                        pair.as_str()
-                    ))
+                    CompileError::StringLexError(
+                        CompileContext::new(pair.line_col()),
+                        format!("Failed to parse '{}' to f64: {e}", pair.as_str()),
+                    )
                 })
                 .map_err(VerbCompileError)?,
         )),
@@ -331,8 +338,7 @@ pub fn compile_object_definitions(
             };
 
             return Err(VerbCompileError(CompileError::ParseError {
-                line,
-                column,
+                error_position: CompileContext::new((line, column)),
                 end_line_col,
                 context: e.line().to_string(),
                 message: e.variant.message().to_string(),

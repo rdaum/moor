@@ -189,7 +189,7 @@ impl Decompile {
     fn decompile(&mut self) -> Result<(), DecompileError> {
         let opcode = self.next()?;
 
-        let line_num = self.line_num_for_position();
+        let line_num = (self.line_num_for_position(), 0);
         match opcode {
             Op::If(otherwise_label, environment_width) => {
                 let cond = self.pop_expr()?;
@@ -1087,9 +1087,12 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
             None => unbound_names
                 .declare_register()
                 .map_err(|_| DecompileError::NameNotFound(bound_name))?,
-            Some(n) => unbound_names
-                .find_or_add_name_global(n.as_str())
-                .map_err(|_| DecompileError::NameNotFound(bound_name))?,
+            Some(n) => {
+                let Some(n) = unbound_names.find_or_add_name_global(n.as_str()) else {
+                    return Err(DecompileError::NameNotFound(bound_name));
+                };
+                n
+            }
         };
         bound_to_unbound.insert(bound_name, ub);
         unbound_to_bound.insert(ub, bound_name);

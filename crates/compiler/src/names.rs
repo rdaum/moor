@@ -83,13 +83,13 @@ impl UnboundNames {
     }
 
     /// Find a variable name, or declare in global scope.
-    pub fn find_or_add_name_global(&mut self, name: &str) -> Result<UnboundName, CompileError> {
+    pub fn find_or_add_name_global(&mut self, name: &str) -> Option<UnboundName> {
         let name = Symbol::mk_case_insensitive(name);
 
         // Check the scopes, starting at the back (innermost scope)
         for scope in self.scope.iter().rev() {
             if let Some(n) = scope.get(&name) {
-                return Ok(*n);
+                return Some(*n);
             }
         }
 
@@ -99,7 +99,7 @@ impl UnboundNames {
         // maintain existing MOO language semantics.
         let unbound_name = self.new_unbound_named(name, 0, false, BindMode::Reuse)?;
         self.scope[0].insert(name, unbound_name);
-        Ok(unbound_name)
+        Some(unbound_name)
     }
 
     /// Start a new lexical scope.
@@ -119,29 +119,24 @@ impl UnboundNames {
     }
 
     /// Declare a (mutable) name in the current lexical scope.
-    pub fn declare_name(&mut self, name: &str) -> Result<UnboundName, CompileError> {
+    pub fn declare_name(&mut self, name: &str) -> Option<UnboundName> {
         let name = Symbol::mk_case_insensitive(name);
         let unbound_name =
             self.new_unbound_named(name, self.scope.len() - 1, false, BindMode::New)?;
         self.scope.last_mut().unwrap().insert(name, unbound_name);
-        Ok(unbound_name)
+        Some(unbound_name)
     }
 
     /// Declare a (mutable) name in the current lexical scope.
-    pub fn declare_const(&mut self, name: &str) -> Result<UnboundName, CompileError> {
+    pub fn declare_const(&mut self, name: &str) -> Option<UnboundName> {
         let name = Symbol::mk_case_insensitive(name);
         let unbound_name =
             self.new_unbound_named(name, self.scope.len() - 1, true, BindMode::New)?;
         self.scope.last_mut().unwrap().insert(name, unbound_name);
-        Ok(unbound_name)
+        Some(unbound_name)
     }
 
-    pub fn declare(
-        &mut self,
-        name: &str,
-        constant: bool,
-        global: bool,
-    ) -> Result<UnboundName, CompileError> {
+    pub fn declare(&mut self, name: &str, constant: bool, global: bool) -> Option<UnboundName> {
         if global {
             return self.find_or_add_name_global(name);
         }
@@ -188,10 +183,10 @@ impl UnboundNames {
         scope: usize,
         constant: bool,
         bind_mode: BindMode,
-    ) -> Result<UnboundName, CompileError> {
-        // If the variable already exists in this scope, return an error.
+    ) -> Option<UnboundName> {
+        // If the variable already exists in this scope, return None
         if bind_mode == BindMode::New && self.scope[scope].contains_key(&name) {
-            return Err(CompileError::DuplicateVariable(name));
+            return None;
         }
         let idx = self.unbound_names.len();
         self.unbound_names.push(Decl {
@@ -199,7 +194,7 @@ impl UnboundNames {
             depth: scope,
             constant,
         });
-        Ok(UnboundName { offset: idx })
+        Some(UnboundName { offset: idx })
     }
 
     fn new_unbound_register(

@@ -208,12 +208,11 @@ pub struct ExceptArm {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Stmt {
     pub node: StmtNode,
-    /// The line number from the physical source code.
+    /// The position from the physical source code.
     /// Note that this is not necessarily the same as the line number that will be reported into
     /// codegen, and may not correspond to what shows as a result of `unparse`; that line number
     /// is derived from the AST, not the parser.
-    /// TODO: I may or may not keep this field around.
-    pub parser_line_no: usize,
+    pub line_col: (usize, usize),
     /// This line number is generated during a second pass over the tree, and is used to generate
     /// the line number spans in the bytecode.
     /// On first pass, this is set to 0.
@@ -221,10 +220,10 @@ pub struct Stmt {
 }
 
 impl Stmt {
-    pub fn new(node: StmtNode, line: usize) -> Self {
+    pub fn new(node: StmtNode, line_col: (usize, usize)) -> Self {
         Stmt {
             node,
-            parser_line_no: line,
+            line_col,
             tree_line_no: 0,
         }
     }

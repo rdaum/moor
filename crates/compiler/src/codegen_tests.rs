@@ -492,7 +492,7 @@ mod tests {
         let parse = compile(program, CompileOptions::default());
         assert!(matches!(
             parse,
-            Err(CompileError::UnknownBuiltinFunction(_))
+            Err(CompileError::UnknownBuiltinFunction(_, _))
         ));
     }
 
