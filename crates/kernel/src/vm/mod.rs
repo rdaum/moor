@@ -54,6 +54,8 @@ pub enum ExecutionResult {
     /// An error occurred during execution, that we might need to push to the stack and
     /// potentially resume or unwind, depending on the context.
     PushError(Error),
+    /// As above, but with extra meta-data.
+    PushErrorPack(Error, String, Var),
     /// An error occurred during execution, that should definitely be treated as a proper "raise"
     /// and unwind event unless there's a catch handler in place
     RaiseError(Error),

@@ -132,7 +132,20 @@ impl VMExecState {
         self.unwind_stack(FinallyReason::Raise(exception))
     }
 
-    /// Push an error to the stack and raise it.
+    /// Push/raise a full error pack and raise it depending on the `d` flag
+    pub(crate) fn push_error_pack(&mut self, p: ErrorPack) -> ExecutionResult {
+        trace!(error = ?p, "push_error");
+        self.set_return_value(v_err(p.code));
+        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
+        if let Some(activation) = self.stack.last() {
+            if activation.verbdef.flags().contains(VerbFlag::Debug) {
+                return self.raise_error_pack(p);
+            }
+        }
+        ExecutionResult::More
+    }
+
+    /// Push an error to the stack and raise it depending on the `d` flag
     pub(crate) fn push_error(&mut self, code: Error) -> ExecutionResult {
         trace!(?code, "push_error");
         self.set_return_value(v_err(code));

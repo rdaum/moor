@@ -29,9 +29,9 @@ use moor_compiler::Name;
 use moor_compiler::Program;
 use moor_compiler::{CompileOptions, compile};
 use moor_var::Error::E_MAXREC;
-use moor_var::Obj;
 use moor_var::Var;
 use moor_var::{AsByteBuffer, List};
+use moor_var::{ErrorPack, Obj};
 use moor_var::{Symbol, v_none};
 
 use crate::PhantomUnsync;
@@ -231,6 +231,10 @@ impl VmHost {
                 ExecutionResult::More => return ContinueOk,
                 ExecutionResult::PushError(e) => {
                     result = self.vm_exec_state.push_error(e);
+                    continue;
+                }
+                ExecutionResult::PushErrorPack(e, m, v) => {
+                    result = self.vm_exec_state.push_error_pack(ErrorPack::new(e, m, v));
                     continue;
                 }
                 ExecutionResult::RaiseError(e) => {
