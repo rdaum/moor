@@ -1318,7 +1318,9 @@ mod tests {
     fn test_for_list_comprehension_scope_regression() {
         let program = r#"
             let x = {1,2,3};
-            y = {v * 2 for v in (x)};
+            if (false)
+                y = {v * 2 for v in (x)};
+            endif
             let z = 1;
             if (false)
             endif

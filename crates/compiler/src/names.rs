@@ -117,11 +117,9 @@ impl UnboundNames {
     }
 
     pub fn declare_register(&mut self) -> Result<UnboundName, CompileError> {
-        let (unbound_name, r_num) = self.new_unbound_register(self.scope.len() - 1, false)?;
-        self.scope
-            .last_mut()
-            .unwrap()
-            .insert(Register(r_num), unbound_name);
+        // Registers always exist at the global level, but are unique.
+        let (unbound_name, r_num) = self.new_unbound_register(0, false)?;
+        self.scope[0].insert(Register(r_num), unbound_name);
         Ok(unbound_name)
     }
 
@@ -322,10 +320,7 @@ impl Names {
             .iter()
             .map(|b| match b {
                 Named(s) => *s,
-                Register(r_num) => {
-                    
-                    Symbol::mk(&format!("<register_{r_num}>"))
-                }
+                Register(r_num) => Symbol::mk(&format!("<register_{r_num}>")),
             })
             .collect()
     }
@@ -394,6 +389,37 @@ mod tests {
         assert_eq!(bound_names.depth_of(&bfoo).unwrap(), 0);
         assert_eq!(bound_names.depth_of(&bfob).unwrap(), 0);
         assert_eq!(bound_names.depth_of(b_reg).unwrap(), 0);
+        assert_eq!(bound_names.global_width as u16, before_width + 3);
+    }
+
+    #[test]
+    fn test_register_inside_scope() {
+        let mut unbound_names = UnboundNames::new();
+        let before_width = unbound_names.unbound_names.len() as u16;
+
+        let x = unbound_names.declare_name("x").unwrap();
+        unbound_names.push_scope();
+        let v = unbound_names.declare_register().unwrap();
+        let y = unbound_names.declare_name("y").unwrap();
+        assert_eq!(unbound_names.find_name("y").unwrap(), y);
+        unbound_names.pop_scope();
+        let z = unbound_names.declare_name("z").unwrap();
+
+        assert_eq!(unbound_names.find_name("x").unwrap(), x);
+        assert_eq!(unbound_names.find_name("z").unwrap(), z);
+
+        let (bound_names, mappings) = unbound_names.bind();
+        let bx = bound_names.find_name("x").unwrap();
+        let by = bound_names.find_name("y").unwrap();
+        let bz = bound_names.find_name("z").unwrap();
+        let bv = mappings.get(&v).unwrap();
+
+        assert_eq!(bound_names.scope_depth[bx.0 as usize], 0);
+        assert_eq!(bound_names.scope_depth[by.0 as usize], 1);
+        assert_eq!(bound_names.scope_depth[bv.0 as usize], 0);
+        assert_eq!(bound_names.scope_depth[bz.0 as usize], 0);
+
+        assert_eq!(bx.0, before_width);
         assert_eq!(bound_names.global_width as u16, before_width + 3);
     }
 
