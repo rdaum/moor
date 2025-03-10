@@ -359,7 +359,6 @@ mod tests {
             }
             _ => panic!("Expected list, got {:?}", l.variant()),
         }
-        eprintln!("List: {:?}", l.variant());
         let r = l.index(&Var::mk_integer(1), IndexMode::ZeroBased).unwrap();
         let r = r.variant();
         match r {

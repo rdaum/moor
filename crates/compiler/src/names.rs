@@ -22,20 +22,21 @@ use strum::IntoEnumIterator;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UnboundNames {
     unbound_names: Vec<Decl>,
-    scope: Vec<HashMap<Symbol, UnboundName>>,
+    scope: Vec<HashMap<Binding, UnboundName>>,
+    num_registers: u16,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Encode, Decode)]
 pub enum Binding {
     Named(Symbol),
-    Register,
+    Register(u16),
 }
 
 impl Binding {
     pub fn to_symbol(&self) -> Symbol {
         match self {
             Binding::Named(sym) => *sym,
-            Binding::Register => Symbol::mk("<register>"),
+            Binding::Register(r) => Symbol::mk(&format!("<register_{}>", r)),
         }
     }
 }
@@ -73,6 +74,7 @@ impl UnboundNames {
             unbound_names: vec![],
             // Start with a global scope.
             scope: vec![HashMap::new()],
+            num_registers: 0,
         };
         for global in GlobalName::iter() {
             names
@@ -85,10 +87,11 @@ impl UnboundNames {
     /// Find a variable name, or declare in global scope.
     pub fn find_or_add_name_global(&mut self, name: &str) -> Option<UnboundName> {
         let name = Symbol::mk_case_insensitive(name);
+        let bname = Named(name);
 
         // Check the scopes, starting at the back (innermost scope)
         for scope in self.scope.iter().rev() {
-            if let Some(n) = scope.get(&name) {
+            if let Some(n) = scope.get(&bname) {
                 return Some(*n);
             }
         }
@@ -98,7 +101,7 @@ impl UnboundNames {
         // These types of variables are always mutable, and always re-use a variable name, to
         // maintain existing MOO language semantics.
         let unbound_name = self.new_unbound_named(name, 0, false, BindMode::Reuse)?;
-        self.scope[0].insert(name, unbound_name);
+        self.scope[0].insert(bname, unbound_name);
         Some(unbound_name)
     }
 
@@ -114,7 +117,11 @@ impl UnboundNames {
     }
 
     pub fn declare_register(&mut self) -> Result<UnboundName, CompileError> {
-        let unbound_name = self.new_unbound_register(self.scope.len() - 1, false)?;
+        let (unbound_name, r_num) = self.new_unbound_register(self.scope.len() - 1, false)?;
+        self.scope
+            .last_mut()
+            .unwrap()
+            .insert(Register(r_num), unbound_name);
         Ok(unbound_name)
     }
 
@@ -123,7 +130,10 @@ impl UnboundNames {
         let name = Symbol::mk_case_insensitive(name);
         let unbound_name =
             self.new_unbound_named(name, self.scope.len() - 1, false, BindMode::New)?;
-        self.scope.last_mut().unwrap().insert(name, unbound_name);
+        self.scope
+            .last_mut()
+            .unwrap()
+            .insert(Named(name), unbound_name);
         Some(unbound_name)
     }
 
@@ -132,7 +142,10 @@ impl UnboundNames {
         let name = Symbol::mk_case_insensitive(name);
         let unbound_name =
             self.new_unbound_named(name, self.scope.len() - 1, true, BindMode::New)?;
-        self.scope.last_mut().unwrap().insert(name, unbound_name);
+        self.scope
+            .last_mut()
+            .unwrap()
+            .insert(Named(name), unbound_name);
         Some(unbound_name)
     }
 
@@ -167,7 +180,7 @@ impl UnboundNames {
 
     /// Find the first scoped name in the name table, if it exists.
     pub fn find_name(&self, name: &str) -> Option<UnboundName> {
-        let name = Symbol::mk_case_insensitive(name);
+        let name = Named(Symbol::mk_case_insensitive(name));
         for scope in self.scope.iter().rev() {
             if let Some(n) = scope.get(&name) {
                 return Some(*n);
@@ -185,7 +198,7 @@ impl UnboundNames {
         bind_mode: BindMode,
     ) -> Option<UnboundName> {
         // If the variable already exists in this scope, return None
-        if bind_mode == BindMode::New && self.scope[scope].contains_key(&name) {
+        if bind_mode == BindMode::New && self.scope[scope].contains_key(&Named(name)) {
             return None;
         }
         let idx = self.unbound_names.len();
@@ -201,14 +214,16 @@ impl UnboundNames {
         &mut self,
         scope: usize,
         constant: bool,
-    ) -> Result<UnboundName, CompileError> {
+    ) -> Result<(UnboundName, u16), CompileError> {
         let idx = self.unbound_names.len();
+        let r_num = self.num_registers;
+        self.num_registers += 1;
         self.unbound_names.push(Decl {
-            identifier: Register,
+            identifier: Register(r_num),
             depth: scope,
             constant,
         });
-        Ok(UnboundName { offset: idx })
+        Ok((UnboundName { offset: idx }, r_num))
     }
 
     pub fn decl_for(&self, name: &UnboundName) -> &Decl {
@@ -305,11 +320,12 @@ impl Names {
     pub fn symbols(&self) -> Vec<Symbol> {
         self.bound
             .iter()
-            .filter_map(|b| {
-                let Named(name) = b else {
-                    return None;
-                };
-                Some(*name)
+            .map(|b| match b {
+                Named(s) => *s,
+                Register(r_num) => {
+                    
+                    Symbol::mk(&format!("<register_{r_num}>"))
+                }
             })
             .collect()
     }
@@ -331,5 +347,76 @@ impl Names {
             return None;
         }
         Some(name.0 as usize)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::UnboundNames;
+
+    /// Verify simple binding of variables with just one scope.
+    #[test]
+    fn test_bind_global_scope() {
+        let mut unbound_names = UnboundNames::new();
+        let before_width = unbound_names.unbound_names.len() as u16;
+        let ufoo = unbound_names.declare_name("foo").unwrap();
+        let ufob = unbound_names.declare_name("fob").unwrap();
+        assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
+        assert_eq!(unbound_names.find_name("fob").unwrap(), ufob);
+
+        let (bound_names, _) = unbound_names.bind();
+        let bfoo = bound_names.find_name("foo").unwrap();
+        let bfob = bound_names.find_name("fob").unwrap();
+        assert_eq!(bfoo.0, before_width);
+        assert_eq!(bfob.0, before_width + 1);
+        assert_eq!(bound_names.depth_of(&bfoo).unwrap(), 0);
+        assert_eq!(bound_names.depth_of(&bfob).unwrap(), 0);
+        assert_eq!(bound_names.global_width as u16, before_width + 2);
+    }
+
+    #[test]
+    fn test_bind_global_scope_w_register() {
+        let mut unbound_names = UnboundNames::new();
+        let before_width = unbound_names.unbound_names.len() as u16;
+        let ufoo = unbound_names.declare_name("foo").unwrap();
+        let ufob = unbound_names.declare_name("fob").unwrap();
+        let u_reg = unbound_names.declare_register().unwrap();
+        assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
+        assert_eq!(unbound_names.find_name("fob").unwrap(), ufob);
+
+        let (bound_names, mappings) = unbound_names.bind();
+        let bfoo = bound_names.find_name("foo").unwrap();
+        let bfob = bound_names.find_name("fob").unwrap();
+        let b_reg = mappings.get(&u_reg).unwrap();
+        assert_eq!(bfoo.0, before_width);
+        assert_eq!(bfob.0, before_width + 1);
+        assert_eq!(b_reg.0, before_width + 2);
+        assert_eq!(bound_names.depth_of(&bfoo).unwrap(), 0);
+        assert_eq!(bound_names.depth_of(&bfob).unwrap(), 0);
+        assert_eq!(bound_names.depth_of(b_reg).unwrap(), 0);
+        assert_eq!(bound_names.global_width as u16, before_width + 3);
+    }
+
+    #[test]
+    fn test_bind_simple_nested_scope() {
+        let mut unbound_names = UnboundNames::new();
+        let before_width = unbound_names.unbound_names.len() as u16;
+        let ufoo = unbound_names.declare_name("foo").unwrap();
+        unbound_names.push_scope();
+        let ufob = unbound_names.declare_name("fob").unwrap();
+        assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
+        assert_eq!(unbound_names.find_name("fob").unwrap(), ufob);
+        unbound_names.pop_scope();
+        assert!(unbound_names.find_name("fob").is_none());
+        assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
+
+        let (bound_names, _) = unbound_names.bind();
+        let bfoo = bound_names.find_name("foo").unwrap();
+        let bfob = bound_names.find_name("fob").unwrap();
+        assert_eq!(bfoo.0, before_width);
+        assert_eq!(bfob.0, before_width + 1);
+        assert_eq!(bound_names.depth_of(&bfoo).unwrap(), 0);
+        assert_eq!(bound_names.depth_of(&bfob).unwrap(), 1);
+        assert_eq!(bound_names.global_width as u16, before_width + 1);
     }
 }
