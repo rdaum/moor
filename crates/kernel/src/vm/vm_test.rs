@@ -756,7 +756,6 @@ mod tests {
         except (E_RANGE)
         endtry"#;
         let compiled = compile(program, CompileOptions::default()).unwrap();
-        eprintln!("{}", compiled);
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
         let builtin_registry = Arc::new(BuiltinRegistry::new());
@@ -1313,5 +1312,27 @@ mod tests {
             List::mk_list(&[]),
         );
         assert_eq!(result.unwrap(), v_list(&[v_int(2), v_int(4), v_int(6)]));
+    }
+
+    #[test]
+    fn test_for_list_comprehension_scope_regression() {
+        let program = r#"
+            let x = {1,2,3};
+            y = {v * 2 for v in (x)};
+            let z = 1;
+            if (false)
+            endif
+            return z;
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_int(1));
     }
 }
