@@ -69,6 +69,18 @@ pub struct ErrorPack {
     pub value: Var,
 }
 
+impl ErrorPack {
+    pub fn new(code: Error, msg: String, value: Var) -> Self {
+        Self { code, msg, value }
+    }
+}
+
+impl From<Error> for ErrorPack {
+    fn from(value: Error) -> Self {
+        ErrorPack::new(value, value.message().to_string(), v_none())
+    }
+}
+
 impl Error {
     #[must_use]
     pub fn message(&self) -> &str {

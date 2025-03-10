@@ -488,7 +488,15 @@ pub fn moo_frame_execute(
             }
             Op::Push(ident) => {
                 let Some(v) = f.get_env(ident) else {
-                    return ExecutionResult::PushError(E_VARNF);
+                    if let Some(var_name) = f.program.var_names.name_of(ident) {
+                        return ExecutionResult::PushErrorPack(
+                            E_VARNF,
+                            format!("Variable `{var_name}` not found"),
+                            v_none(),
+                        );
+                    } else {
+                        return ExecutionResult::PushError(E_VARNF);
+                    }
                 };
                 f.push(v.clone());
             }
