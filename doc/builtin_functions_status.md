@@ -200,6 +200,7 @@ Functions not in the original LambdaMOO, but were in Toast, and ported over
 | `age_decrypt`          | &check;  | Decrypts an age-encrypted message using one or more private keys.   |
 | `argon2`               | &check;  | Same signature as function in ToastSunt                             |
 | `arong2_verify`        | &check;  | Same signature as function in ToastSunt                             |
+| `ftime`                | &check;  | Slight differents in return value, see notes in BfFtime             |
 
 ## Extensions
 

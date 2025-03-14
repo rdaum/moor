@@ -412,6 +412,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             implemented: true,
         },
         Builtin {
+            name: Symbol::mk("ftime"),
+            min_args: Q(0),
+            max_args: Q(1),
+            types: vec![Typed(TYPE_INT)],
+            implemented: true,
+        },
+        Builtin {
             name: Symbol::mk("ctime"),
             min_args: Q(0),
             max_args: Q(1),

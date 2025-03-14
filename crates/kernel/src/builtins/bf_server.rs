@@ -12,7 +12,7 @@
 //
 
 use std::io::Read;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local, TimeZone};
 use chrono_tz::{OffsetName, Tz};
@@ -36,7 +36,7 @@ use moor_var::Sequence;
 use moor_var::VarType::TYPE_STR;
 use moor_var::Variant;
 use moor_var::{Error, v_list_iter};
-use moor_var::{Var, v_int, v_list, v_none, v_obj, v_str, v_string};
+use moor_var::{Var, v_float, v_int, v_list, v_none, v_obj, v_str, v_string};
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(
@@ -429,6 +429,46 @@ fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 bf_declare!(time, bf_time);
+
+fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() > 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    // If argument is provided and equals 1, return uptime
+    if bf_args.args.len() == 1 {
+        let Variant::Int(arg) = bf_args.args[0].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+
+        if *arg == 1 {
+            // Use Instant::now() to get the current monotonic time
+            // We need to use a static to track the start time
+            use std::sync::OnceLock;
+            static START_TIME: OnceLock<Instant> = OnceLock::new();
+
+            // Initialize on first call
+            let start = START_TIME.get_or_init(Instant::now);
+            let uptime = start.elapsed().as_secs_f64();
+
+            return Ok(Ret(v_float(uptime)));
+        } else if *arg == 0 {
+            // ftime(0) behaves the same as ftime()
+            // Fall through to the default case
+        } else {
+            return Err(BfErr::Code(E_INVARG));
+        }
+    }
+
+    // Default: return time since Unix epoch as a float
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+
+    let seconds = duration.as_secs() as f64;
+    let nanos = duration.subsec_nanos() as f64 / 1_000_000_000.0;
+
+    Ok(Ret(v_float(seconds + nanos)))
+}
+bf_declare!(ftime, bf_ftime);
 
 fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
@@ -1211,6 +1251,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("connected_seconds")] = Box::new(BfConnectedSeconds {});
     builtins[offset_for_builtin("connection_name")] = Box::new(BfConnectionName {});
     builtins[offset_for_builtin("time")] = Box::new(BfTime {});
+    builtins[offset_for_builtin("ftime")] = Box::new(BfFtime {});
     builtins[offset_for_builtin("ctime")] = Box::new(BfCtime {});
     builtins[offset_for_builtin("raise")] = Box::new(BfRaise {});
     builtins[offset_for_builtin("server_version")] = Box::new(BfServerVersion {});
