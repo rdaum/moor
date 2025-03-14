@@ -57,6 +57,10 @@ pub struct FeaturesConfig {
     ///
     /// This can break backwards compatibility with existing cores, so is off by default.
     pub use_boolean_returns: bool,
+    /// Whether to support any arbitrary "custom" errors beyond the builtin set.
+    /// These errors cannot be converted to/from integers, and using them in existing cores can
+    /// cause problems.  Example  `return E_EXAMPLE;`
+    pub custom_errors: bool,
     /// Whether to support a symbol literal type in the compiler
     pub symbol_type: bool,
     /// Whether to have certain builtins use or return symbols instead of strings for things like property
@@ -80,6 +84,7 @@ impl Default for FeaturesConfig {
             list_comprehensions: true,
             use_boolean_returns: false,
             use_symbols_in_builtins: false,
+            custom_errors: false,
         }
     }
 }
@@ -93,6 +98,7 @@ impl FeaturesConfig {
             list_comprehensions: self.list_comprehensions,
             bool_type: self.bool_type,
             symbol_type: self.symbol_type,
+            custom_errors: self.custom_errors,
         }
     }
 
@@ -107,6 +113,7 @@ impl FeaturesConfig {
             && !self.list_comprehensions
             && !self.use_boolean_returns
             && !self.symbol_type
+            && !self.custom_errors
             && self.persistent_tasks
     }
 
@@ -126,6 +133,7 @@ impl FeaturesConfig {
             && (!other.flyweight_type || self.flyweight_type)
             && (!other.symbol_type || self.symbol_type)
             && (!other.list_comprehensions || self.list_comprehensions)
+            && (!other.custom_errors || self.custom_errors)
     }
 }
 

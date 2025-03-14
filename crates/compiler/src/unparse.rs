@@ -254,7 +254,7 @@ impl<'a> Unparse<'a> {
                 buffer.push('`');
                 buffer.push_str(self.unparse_expr(trye)?.as_str());
                 buffer.push_str(" ! ");
-                buffer.push_str(self.unparse_catch_codes(codes)?.as_str());
+                buffer.push_str(self.unparse_catch_codes(codes)?.to_uppercase().as_str());
                 if let Some(except) = except {
                     buffer.push_str(" => ");
                     buffer.push_str(self.unparse_expr(except)?.as_str());
@@ -584,7 +584,7 @@ impl<'a> Unparse<'a> {
                         );
                         base_str.push(' ');
                     }
-                    let catch_codes = self.unparse_catch_codes(&except.codes)?;
+                    let catch_codes = self.unparse_catch_codes(&except.codes)?.to_uppercase();
                     base_str.push_str(format!("({catch_codes})").as_str());
                     stmt_lines.push(format!("{indent_frag}{base_str}"));
                     stmt_lines.append(&mut stmt_frag);
@@ -841,7 +841,7 @@ pub fn to_literal(v: &Var) -> String {
             result.push(']');
             result
         }
-        Variant::Err(e) => e.name().to_string(),
+        Variant::Err(e) => e.name().to_string().to_uppercase(),
         Variant::Flyweight(fl) => {
             // If sealed, just return <sealed flyweight>
             if fl.seal().is_some() {

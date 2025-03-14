@@ -44,11 +44,16 @@ mod test {
     }
 
     fn load_textdump_file(mut tx: Box<dyn LoaderInterface>, path: &str) {
+        let feaures_config = FeaturesConfig {
+            // JHCore has an erroneous "E_PERMS" in it, which causes confusions.
+            custom_errors: true,
+            ..Default::default()
+        };
         textdump_load(
             tx.as_mut(),
             PathBuf::from(path),
             Version::new(0, 1, 0),
-            FeaturesConfig::default(),
+            feaures_config,
         )
         .expect("Could not load textdump");
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);

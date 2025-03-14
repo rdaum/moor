@@ -118,6 +118,7 @@ impl Var {
         match self.variant() {
             Variant::Str(s) => Ok(Symbol::mk_case_insensitive(s.as_str())),
             Variant::Sym(s) => Ok(*s),
+            Variant::Err(e) => Ok(e.name()),
             _ => Err(E_TYPE),
         }
     }

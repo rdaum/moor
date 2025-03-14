@@ -626,7 +626,7 @@ impl WebSocketConnection {
                 present: None,
                 unpresent: None,
                 traceback: Some(Traceback {
-                    error: exception.code.message().into(),
+                    error: exception.code.message(),
                     traceback,
                     msg: exception.msg.clone(),
                 }),

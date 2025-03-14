@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_var::{Obj, Sequence};
+use moor_var::{Error, Obj, Sequence};
 use moor_var::{Var, VarType, Variant};
 use std::collections::BTreeMap;
 use std::io;
@@ -82,7 +82,17 @@ impl<W: io::Write> TextdumpWriter<W> {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_STR as i64, s)?;
             }
             Variant::Err(e) => {
-                writeln!(self.writer, "{}\n{}", VarType::TYPE_ERR as i64, *e as u8)?;
+                // integer form errors get written with their classic MOO repr
+                // "custom" we write the string literal
+                match e {
+                    Error::Custom(s) => {
+                        writeln!(self.writer, "{}\n{}", VarType::TYPE_ERR as i64, s)?;
+                    }
+                    e => {
+                        let v = e.to_int().unwrap();
+                        writeln!(self.writer, "{}\n{}", VarType::TYPE_ERR as i64, v)?;
+                    }
+                }
             }
             Variant::List(l) => {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_LIST as i64, l.len())?;

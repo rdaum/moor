@@ -19,17 +19,13 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use itertools::Itertools;
-use moor_var::{SYSTEM_OBJECT, Var};
+use moor_var::{Error, SYSTEM_OBJECT, Var};
 use moor_var::{Symbol, v_none};
 pub use pest::Parser as PestParser;
 use pest::error::LineColLocation;
 use pest::iterators::{Pair, Pairs};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 
-use moor_var::Error::{
-    E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
-    E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
-};
 use moor_var::Obj;
 use moor_var::{v_err, v_float, v_int, v_obj, v_str, v_string};
 
@@ -68,6 +64,8 @@ pub struct CompileOptions {
     pub bool_type: bool,
     /// Whether to support symbol types ('sym) in compilation
     pub symbol_type: bool,
+    /// Whether to support non-stanard custom error values.
+    pub custom_errors: bool,
 }
 
 impl Default for CompileOptions {
@@ -79,6 +77,7 @@ impl Default for CompileOptions {
             list_comprehensions: true,
             bool_type: true,
             symbol_type: true,
+            custom_errors: true,
         }
     }
 }
@@ -169,27 +168,18 @@ impl TreeTransformer {
             }
             Rule::err => {
                 let e = pair.as_str();
-                Ok(Expr::Value(match e.to_lowercase().as_str() {
-                    "e_args" => v_err(E_ARGS),
-                    "e_div" => v_err(E_DIV),
-                    "e_float" => v_err(E_FLOAT),
-                    "e_invarg" => v_err(E_INVARG),
-                    "e_invind" => v_err(E_INVIND),
-                    "e_maxrec" => v_err(E_MAXREC),
-                    "e_nacc" => v_err(E_NACC),
-                    "e_none" => v_err(E_NONE),
-                    "e_perm" => v_err(E_PERM),
-                    "e_propnf" => v_err(E_PROPNF),
-                    "e_quota" => v_err(E_QUOTA),
-                    "e_range" => v_err(E_RANGE),
-                    "e_recmove" => v_err(E_RECMOVE),
-                    "e_type" => v_err(E_TYPE),
-                    "e_varnf" => v_err(E_VARNF),
-                    "e_verbnf" => v_err(E_VERBNF),
-                    &_ => {
-                        panic!("unknown error")
+                let Some(e) = Error::parse_str(e) else {
+                    panic!("invalid error value: {e}");
+                };
+                if let Error::Custom(_) = &e {
+                    if !self.options.custom_errors {
+                        return Err(CompileError::DisabledFeature(
+                            self.compile_context(&pair),
+                            "CustomErrors".to_string(),
+                        ));
                     }
-                }))
+                }
+                Ok(Expr::Value(v_err(e)))
             }
             _ => {
                 panic!("Unimplemented atom: {:?}", pair);
@@ -1423,7 +1413,7 @@ pub fn unquote_str(s: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use moor_var::Error::{E_INVARG, E_PROPNF, E_VARNF};
+    use moor_var::Error::{Custom, E_INVARG, E_PROPNF, E_VARNF};
     use moor_var::{Symbol, v_none};
     use moor_var::{Var, v_err, v_float, v_int, v_objid, v_str};
 
@@ -2479,24 +2469,6 @@ mod tests {
     }
 
     #[test]
-    fn test_raise_bf_call_incorrect_err() {
-        // detect ambiguous match on E_PERMS != E_PERM
-        let program = "raise(E_PERMS);";
-        let parse = parse_program(program, CompileOptions::default()).unwrap();
-
-        assert_eq!(
-            stripped_stmts(&parse.stmts),
-            vec![StmtNode::Expr(Call {
-                function: Symbol::mk("raise"),
-                args: vec![Normal(Id(parse
-                    .unbound_names
-                    .find_name("E_PERMS")
-                    .unwrap()))]
-            })]
-        );
-    }
-
-    #[test]
     fn test_keyword_disambig_call() {
         let program = r#"
             for line in ({1,2,3})
@@ -3075,5 +3047,24 @@ mod tests {
                 Box::new(Expr::Return(Some(Box::new(Value(v_int(5))))))
             ))]
         );
+    }
+
+    /// Test both traditional and custom error parsing
+    #[test]
+    fn test_errors_parsing() {
+        let program = r#"return {e_invarg, e_propnf, e_custom, e__ultra_long_custom, e_unknown};"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Return(Some(Box::new(Expr::List(
+                vec![
+                    Normal(Value(v_err(E_INVARG))),
+                    Normal(Value(v_err(E_PROPNF))),
+                    Normal(Value(v_err(Custom("e_custom".into())))),
+                    Normal(Value(v_err(Custom("e__ultra_long_custom".into())))),
+                    Normal(Value(v_err(Custom("e_unknown".into())))),
+                ]
+            )))))]
+        )
     }
 }
