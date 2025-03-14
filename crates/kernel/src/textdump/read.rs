@@ -153,9 +153,19 @@ impl<R: Read> TextdumpReader<R> {
             VarType::TYPE_OBJ => v_obj(self.read_objid()?),
             VarType::TYPE_STR => v_str(&self.read_string()?),
             VarType::TYPE_ERR => {
-                let e_num = self.read_num()?;
-                let etype: Error = Error::from_repr(e_num as u8).expect("Invalid error code");
-                v_err(etype)
+                let s = self.read_string()?;
+                // If it's a number, parse as classic LambdaMOO errir
+                match s.parse::<i64>() {
+                    Ok(e_num) => {
+                        let etype: Error =
+                            Error::from_repr(e_num as u8).expect("Invalid error code");
+                        v_err(etype)
+                    }
+                    Err(..) => {
+                        let s = Symbol::mk_case_insensitive(&s);
+                        v_err(Error::Custom(s))
+                    }
+                }
             }
             VarType::TYPE_LIST => {
                 let l_size = self.read_num()?;

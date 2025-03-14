@@ -40,7 +40,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::List(_) => result.push_str("{list}"),
             Variant::Map(_) => result.push_str("[map]"),
             Variant::Sym(s) => result.push_str(&s.to_string()),
-            Variant::Err(e) => result.push_str(e.name()),
+            Variant::Err(e) => result.push_str(e.name().as_str()),
             Variant::Flyweight(fl) => {
                 if fl.is_sealed() {
                     result.push_str("<sealed flyweight>")
@@ -66,7 +66,7 @@ fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Ok(Ret(v_sym_str(&s)))
         }
         Variant::Str(s) => Ok(Ret(v_sym_str(s.as_str()))),
-        Variant::Err(e) => Ok(Ret(v_sym_str(e.name()))),
+        Variant::Err(e) => Ok(Ret(v_sym(e.name()))),
         Variant::Sym(s) => Ok(Ret(v_sym(*s))),
         _ => Err(BfErr::Code(E_TYPE)),
     }
@@ -97,7 +97,13 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 Err(_) => Ok(Ret(v_int(0))),
             }
         }
-        Variant::Err(e) => Ok(Ret(v_int(*e as i64))),
+        Variant::Err(e) => {
+            let Some(v) = e.to_int() else {
+                return Err(BfErr::Code(E_INVARG));
+            };
+
+            Ok(Ret(v_int(v as i64)))
+        }
         _ => Err(BfErr::Code(E_INVARG)),
     }
 }
@@ -158,7 +164,14 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 Err(_) => Ok(Ret(v_float(0.0))),
             }
         }
-        Variant::Err(e) => Ok(Ret(v_float(*e as u8 as f64))),
+
+        Variant::Err(e) => {
+            let Some(v) = e.to_int() else {
+                return Err(BfErr::Code(E_INVARG));
+            };
+
+            Ok(Ret(v_float(v as f64)))
+        }
         _ => Err(BfErr::Code(E_INVARG)),
     }
 }

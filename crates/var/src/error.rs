@@ -13,45 +13,76 @@
 
 use std::fmt::{Display, Formatter};
 
-use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
-use strum::FromRepr;
 
-use crate::encode::{DecodingError, EncodingError};
+use crate::Symbol;
 use crate::var::{Var, v_none};
 
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr, Ord, PartialOrd, Hash, Encode, Decode)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode)]
 #[allow(non_camel_case_types)]
 pub enum Error {
-    E_NONE = 0,
-    E_TYPE = 1,
-    E_DIV = 2,
-    E_PERM = 3,
-    E_PROPNF = 4,
-    E_VERBNF = 5,
-    E_VARNF = 6,
-    E_INVIND = 7,
-    E_RECMOVE = 8,
-    E_MAXREC = 9,
-    E_RANGE = 10,
-    E_ARGS = 11,
-    E_NACC = 12,
-    E_INVARG = 13,
-    E_QUOTA = 14,
-    E_FLOAT = 15,
+    E_NONE,
+    E_TYPE,
+    E_DIV,
+    E_PERM,
+    E_PROPNF,
+    E_VERBNF,
+    E_VARNF,
+    E_INVIND,
+    E_RECMOVE,
+    E_MAXREC,
+    E_RANGE,
+    E_ARGS,
+    E_NACC,
+    E_INVARG,
+    E_QUOTA,
+    E_FLOAT,
+    Custom(Symbol),
 }
 
-impl LayoutAs<u8> for Error {
-    type ReadError = DecodingError;
-    type WriteError = EncodingError;
-
-    fn try_read(v: u8) -> Result<Self, Self::ReadError> {
-        Self::from_repr(v).ok_or(DecodingError::InvalidErrorValue(v))
+impl Error {
+    pub fn from_repr(v: u8) -> Option<Self> {
+        match v {
+            0 => Some(Self::E_NONE),
+            1 => Some(Self::E_TYPE),
+            2 => Some(Self::E_DIV),
+            3 => Some(Self::E_PERM),
+            4 => Some(Self::E_PROPNF),
+            5 => Some(Self::E_VERBNF),
+            6 => Some(Self::E_VARNF),
+            7 => Some(Self::E_INVIND),
+            8 => Some(Self::E_RECMOVE),
+            9 => Some(Self::E_MAXREC),
+            10 => Some(Self::E_RANGE),
+            11 => Some(Self::E_ARGS),
+            12 => Some(Self::E_NACC),
+            13 => Some(Self::E_INVARG),
+            14 => Some(Self::E_QUOTA),
+            15 => Some(Self::E_FLOAT),
+            _ => None,
+        }
     }
 
-    fn try_write(v: Self) -> Result<u8, Self::WriteError> {
-        Ok(v as u8)
+    pub fn to_int(&self) -> Option<u8> {
+        match self {
+            Self::E_NONE => Some(0),
+            Self::E_TYPE => Some(1),
+            Self::E_DIV => Some(2),
+            Self::E_PERM => Some(3),
+            Self::E_PROPNF => Some(4),
+            Self::E_VERBNF => Some(5),
+            Self::E_VARNF => Some(6),
+            Self::E_INVIND => Some(7),
+            Self::E_RECMOVE => Some(8),
+            Self::E_MAXREC => Some(9),
+            Self::E_RANGE => Some(10),
+            Self::E_ARGS => Some(11),
+            Self::E_NACC => Some(12),
+            Self::E_INVARG => Some(13),
+            Self::E_QUOTA => Some(14),
+            Self::E_FLOAT => Some(15),
+            _ => None,
+        }
     }
 }
 
@@ -83,46 +114,48 @@ impl From<Error> for ErrorPack {
 
 impl Error {
     #[must_use]
-    pub fn message(&self) -> &str {
+    pub fn message(&self) -> String {
         match self {
-            Self::E_NONE => "No error",
-            Self::E_TYPE => "Type mismatch",
-            Self::E_DIV => "Division by zero",
-            Self::E_PERM => "Permission denied",
-            Self::E_PROPNF => "Property not found",
-            Self::E_VERBNF => "Verb not found",
-            Self::E_VARNF => "Variable not found",
-            Self::E_INVIND => "Invalid indirection",
-            Self::E_RECMOVE => "Recursive move",
-            Self::E_MAXREC => "Too many verb calls",
-            Self::E_RANGE => "Range error",
-            Self::E_ARGS => "Incorrect number of arguments",
-            Self::E_NACC => "Move refused by destination",
-            Self::E_INVARG => "Invalid argument",
-            Self::E_QUOTA => "Resource limit exceeded",
-            Self::E_FLOAT => "Floating-point arithmetic error",
+            Self::E_NONE => "No error".into(),
+            Self::E_TYPE => "Type mismatch".into(),
+            Self::E_DIV => "Division by zero".into(),
+            Self::E_PERM => "Permission denied".into(),
+            Self::E_PROPNF => "Property not found".into(),
+            Self::E_VERBNF => "Verb not found".into(),
+            Self::E_VARNF => "Variable not found".into(),
+            Self::E_INVIND => "Invalid indirection".into(),
+            Self::E_RECMOVE => "Recursive move".into(),
+            Self::E_MAXREC => "Too many verb calls".into(),
+            Self::E_RANGE => "Range error".into(),
+            Self::E_ARGS => "Incorrect number of arguments".into(),
+            Self::E_NACC => "Move refused by destination".into(),
+            Self::E_INVARG => "Invalid argument".into(),
+            Self::E_QUOTA => "Resource limit exceeded".into(),
+            Self::E_FLOAT => "Floating-point arithmetic error".into(),
+            Self::Custom(sym) => format!("Error: {}", sym.as_str().to_uppercase()),
         }
     }
 
     #[must_use]
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> Symbol {
         match self {
-            Self::E_NONE => "E_NONE",
-            Self::E_TYPE => "E_TYPE",
-            Self::E_DIV => "E_DIV",
-            Self::E_PERM => "E_PERM",
-            Self::E_PROPNF => "E_PROPNF",
-            Self::E_VERBNF => "E_VERBNF",
-            Self::E_VARNF => "E_VARNF",
-            Self::E_INVIND => "E_INVIND",
-            Self::E_RECMOVE => "E_RECMOVE",
-            Self::E_MAXREC => "E_MAXREC",
-            Self::E_RANGE => "E_RANGE",
-            Self::E_ARGS => "E_ARGS",
-            Self::E_NACC => "E_NACC",
-            Self::E_INVARG => "E_INVARG",
-            Self::E_QUOTA => "E_QUOTA",
-            Self::E_FLOAT => "E_FLOAT",
+            Self::E_NONE => "E_NONE".into(),
+            Self::E_TYPE => "E_TYPE".into(),
+            Self::E_DIV => "E_DIV".into(),
+            Self::E_PERM => "E_PERM".into(),
+            Self::E_PROPNF => "E_PROPNF".into(),
+            Self::E_VERBNF => "E_VERBNF".into(),
+            Self::E_VARNF => "E_VARNF".into(),
+            Self::E_INVIND => "E_INVIND".into(),
+            Self::E_RECMOVE => "E_RECMOVE".into(),
+            Self::E_MAXREC => "E_MAXREC".into(),
+            Self::E_RANGE => "E_RANGE".into(),
+            Self::E_ARGS => "E_ARGS".into(),
+            Self::E_NACC => "E_NACC".into(),
+            Self::E_INVARG => "E_INVARG".into(),
+            Self::E_QUOTA => "E_QUOTA".into(),
+            Self::E_FLOAT => "E_FLOAT".into(),
+            Self::Custom(sym) => *sym,
         }
     }
 
@@ -162,7 +195,7 @@ impl Error {
             "E_INVARG" => Some(Self::E_INVARG),
             "E_QUOTA" => Some(Self::E_QUOTA),
             "E_FLOAT" => Some(Self::E_FLOAT),
-            _ => None,
+            s => Some(Self::Custom(Symbol::mk_case_insensitive(s))),
         }
     }
 }

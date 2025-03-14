@@ -166,6 +166,12 @@ pub struct FeatureArgs {
 
     #[arg(
         long,
+        help = "Enable error symbols beyond the standard builtin set, with no integer conversions for them."
+    )]
+    pub custom_errors: Option<bool>,
+
+    #[arg(
+        long,
         help = "Whether to have certain builtins use or return symbols instead of strings for things like property names, etc."
     )]
     pub use_symbols_in_builtins: Option<bool>,
@@ -206,6 +212,9 @@ impl FeatureArgs {
         }
         if let Some(args) = self.use_boolean_returns {
             config.use_boolean_returns = args;
+        }
+        if let Some(args) = self.custom_errors {
+            config.custom_errors = args;
         }
         if let Some(args) = self.symbol_type {
             config.symbol_type = args;

@@ -179,26 +179,7 @@ range_end = { "$" }
 // An unambiguous assignment operator, for use in scatter assignments where list comparison could be a false match.
 ASSIGN = _{ "=" ~ !("=") }
 
-ERR = @{
-    ^"e_type"
-  | ^"e_div"
-  | ^"e_perm"
-  | ^"e_propnf"
-  | ^"e_verbnf"
-  | ^"e_varnf"
-  | ^"e_invind"
-  | ^"e_recmove"
-  | ^"e_maxrec"
-  | ^"e_range"
-  | ^"e_args"
-  | ^"e_nacc"
-  | ^"e_invarg"
-  | ^"e_quota"
-  | ^"e_float"
-  | ^"e_none"
-}
-
-err = @{ ERR ~ !ident_continue+ }
+err = @{ ^"e_" ~ ident_continue+ }
 
 object  = @{ "#" ~ integer }
 keyword = @{

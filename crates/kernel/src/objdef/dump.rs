@@ -372,16 +372,21 @@ mod tests {
 
         let tmpdir = tempfile::tempdir().unwrap();
         let tmpdir_path = tmpdir.path();
-
+        let feaures_config = FeaturesConfig {
+            // JHCore has an erroneous "E_PERMS" in it, which causes confusions.
+            custom_errors: true,
+            ..Default::default()
+        };
         {
             let (db, _) = TxDB::open(None, DatabaseConfig::default());
             let db = Arc::new(db);
             let mut loader_client = db.clone().loader_client().unwrap();
+
             textdump_load(
                 loader_client.as_mut(),
                 jhcore,
                 Version::new(0, 1, 0),
-                FeaturesConfig::default(),
+                feaures_config.clone(),
             )
             .unwrap();
             assert_eq!(loader_client.commit().unwrap(), CommitResult::Success);
@@ -398,9 +403,7 @@ mod tests {
         // Now load
         let mut loader = db.loader_client().unwrap();
         let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
-        defloader
-            .read_dirdump(FeaturesConfig::default(), tmpdir_path)
-            .unwrap();
+        defloader.read_dirdump(feaures_config, tmpdir_path).unwrap();
 
         // Round trip worked, so we'll just leave it at that for now. A more anal retentive test
         // would go look at known objects and props etc and compare.
