@@ -680,7 +680,9 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(kill_task, bf_kill_task);
 
 fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 2 {
+    // Syntax: resume(INT task-ID[, ANY value])
+    // Resumes a previously suspended task, optionally with a value to pass back to the suspend() call
+    if bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
     }
 
