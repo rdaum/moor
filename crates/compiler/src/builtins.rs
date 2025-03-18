@@ -1068,6 +1068,27 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Typed(TYPE_FLYWEIGHT), Typed(TYPE_SYMBOL), Any],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("age_encrypt"),
+            min_args: Q(2),
+            max_args: Q(2),
+            types: vec![Typed(TYPE_STR), Typed(TYPE_STR)],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("age_decrypt"),
+            min_args: Q(2),
+            max_args: Q(2),
+            types: vec![Typed(TYPE_STR), Typed(TYPE_STR)],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("age_generate_keypair"),
+            min_args: Q(0),
+            max_args: Q(0),
+            types: vec![],
+            implemented: true,
+        },
     ]
 }
 
