@@ -401,6 +401,9 @@ const OutputWindow = (player: State<Player>) => {
     return div({
         id: "output_window",
         class: "output_window",
+        role: "log",
+        "aria-live": "polite",
+        "aria-atomic": "false",
     });
 };
 
