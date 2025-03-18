@@ -311,7 +311,7 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Ok(decrypted_str) => Ok(Ret(v_string(decrypted_str))),
         Err(_) => {
             warn!("Decrypted data is not valid UTF-8");
-            return Err(BfErr::Code(E_INVARG));
+            Err(BfErr::Code(E_INVARG))
         }
     }
 }
