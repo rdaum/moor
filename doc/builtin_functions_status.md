@@ -201,8 +201,9 @@ Functions not in the original LambdaMOO, but were in Toast, and ported over
 | `argon2`               | &check;  | Same signature as function in ToastSunt                             |
 | `arong2_verify`        | &check;  | Same signature as function in ToastSunt                             |
 | `ftime`                | &check;  | Slight differents in return value, see notes in BfFtime             |
-| `encode_base64`        | &check;  |
-| `decode_base64`        | &check;  |
+| `encode_base64`        | &check;  |                                                                     |
+| `decode_base64`        | &check;  |                                                                     |
+| `slice`                | &check;  |                                                                     |
 
 ## Extensions
 
