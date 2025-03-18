@@ -12,4 +12,7 @@ target/
 connections.json
 development.db
 connections.db
+tasks.db
+textdumps
 *.pem
+.aider*
