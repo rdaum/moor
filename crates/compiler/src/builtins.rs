@@ -1110,6 +1110,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Typed(TYPE_STR)],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("slice"),
+            min_args: Q(1),
+            max_args: Q(3),
+            types: vec![Any, Any, Any],
+            implemented: true,
+        },
     ]
 }
 

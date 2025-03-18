@@ -434,23 +434,23 @@ fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(BfErr::Code(E_ARGS));
     }
-
+    
     // If argument is provided and equals 1, return uptime
     if bf_args.args.len() == 1 {
         let Variant::Int(arg) = bf_args.args[0].variant() else {
             return Err(BfErr::Code(E_TYPE));
         };
-
+        
         if *arg == 1 {
             // Use Instant::now() to get the current monotonic time
             // We need to use a static to track the start time
             use std::sync::OnceLock;
             static START_TIME: OnceLock<Instant> = OnceLock::new();
-
+            
             // Initialize on first call
             let start = START_TIME.get_or_init(Instant::now);
             let uptime = start.elapsed().as_secs_f64();
-
+            
             return Ok(Ret(v_float(uptime)));
         } else if *arg == 0 {
             // ftime(0) behaves the same as ftime()
@@ -459,13 +459,15 @@ fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             return Err(BfErr::Code(E_INVARG));
         }
     }
-
+    
     // Default: return time since Unix epoch as a float
-    let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap();
+    
     let seconds = duration.as_secs() as f64;
     let nanos = duration.subsec_nanos() as f64 / 1_000_000_000.0;
-
+    
     Ok(Ret(v_float(seconds + nanos)))
 }
 bf_declare!(ftime, bf_ftime);
@@ -1238,6 +1240,7 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_none()))
 }
 bf_declare!(load_server_options, load_server_options);
+
 
 pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(BfNotify {});
