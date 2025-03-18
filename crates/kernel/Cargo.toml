@@ -75,6 +75,9 @@ onig.workspace = true
 pwhash.workspace = true
 rand.workspace = true
 xml-rs.workspace = true
+age = { workspace = true, features = ["ssh"] }
+base64 = "0.21.7"
+ssh-key = "0.6.5"
 
 ## Error declaration/ handling
 thiserror.workspace = true

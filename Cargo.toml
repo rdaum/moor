@@ -156,5 +156,10 @@ signal-hook = "0.3"
 # For the telnet host
 termimad = "0.31"
 
+# For age encryption
+age = "0.9"
+base64 = "0.21"
+ssh-key = "0.6"
+
 # For the consistency checker in `load-tools`
 edn-format = "3.3"

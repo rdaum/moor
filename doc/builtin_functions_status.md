@@ -26,18 +26,16 @@ included in the notes column.
 
 ### Strings
 
-| Name            | Complete | Notes                                                                                                |
-|-----------------|----------|------------------------------------------------------------------------------------------------------|
-| `tostr`         | &check;  |                                                                                                      |
-| `toliteral`     | &check;  |                                                                                                      |
-| `crypt`         | &check;  | Pretty damned insecure, only here to support existing core password functions.                       |
-| `index`         | &check;  |                                                                                                      |
-| `rindex`        | &check;  |                                                                                                      |
-| `strcmp`        | &check;  |                                                                                                      |
-| `strsub`        | &check;  |                                                                                                      |
-| `argon2`        | &check;  | Same signature as function in ToastSunt                                                              |
-| `arong2_verify` | &check;  | Same signature as function in ToastSunt                                                              |
-| `salt`          | &check;  | Generate a random crypto-secure salt for password. Not compatible with toast's function of same name |
+| Name        | Complete | Notes                                                                                                |
+|-------------|----------|------------------------------------------------------------------------------------------------------|
+| `tostr`     | &check;  |                                                                                                      |
+| `toliteral` | &check;  |                                                                                                      |
+| `crypt`     | &check;  | Pretty damned insecure, only here to support existing core password functions.                       |
+| `index`     | &check;  |                                                                                                      |
+| `rindex`    | &check;  |                                                                                                      |
+| `strcmp`    | &check;  |                                                                                                      |
+| `strsub`    | &check;  |                                                                                                      |
+| `salt`      | &check;  | Generate a random crypto-secure salt for password. Not compatible with toast's function of same name |
 
 ### Numbers
 
@@ -190,6 +188,18 @@ included in the notes column.
 | `listeners`               | &check;  |                                                                                                      |
 | `output_delimiters`       |          |                                                                                                      |
 | `buffered_output_length`  |          |                                                                                                      |
+
+## Extension from Toast
+
+Functions not in the original LambdaMOO, but were in Toast, and ported over
+
+| Name                   | Complete | Notes                                                               |
+|------------------------|----------|---------------------------------------------------------------------|
+| `age_generate_keypair` | &check;  | Generates a new X25519 keypair for use with age encryption.         |
+| `age_encrypt`          | &check;  | Encrypts a message using age encryption for one or more recipients. |
+| `age_decrypt`          | &check;  | Decrypts an age-encrypted message using one or more private keys.   |
+| `argon2`               | &check;  | Same signature as function in ToastSunt                             |
+| `arong2_verify`        | &check;  | Same signature as function in ToastSunt                             |
 
 ## Extensions
 

@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
+use crate::builtins::bf_age_crypto::register_bf_age_crypto;
 use crate::builtins::bf_flyweights::register_bf_flyweights;
 use crate::builtins::bf_list_sets::register_bf_list_sets;
 use crate::builtins::bf_maps::register_bf_maps;
@@ -39,6 +40,7 @@ use moor_var::Var;
 use moor_var::{Error, List};
 use moor_var::{Obj, v_bool_int};
 
+mod bf_age_crypto;
 mod bf_flyweights;
 mod bf_list_sets;
 mod bf_maps;
@@ -78,6 +80,7 @@ impl BuiltinRegistry {
         register_bf_verbs(&mut builtins);
         register_bf_properties(&mut builtins);
         register_bf_flyweights(&mut builtins);
+        register_bf_age_crypto(&mut builtins);
 
         BuiltinRegistry {
             builtins: Arc::new(builtins),
