@@ -13,6 +13,8 @@
 
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version};
+use base64::Engine;
+use base64::engine::general_purpose;
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
 use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
@@ -334,6 +336,49 @@ fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(argon2_verify, bf_argon2_verify);
 
+/// Function: str encode_base64(str text)
+///
+/// Encodes the given string using Base64 encoding.
+/// Returns the Base64-encoded string.
+fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Variant::Str(text) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let encoded = general_purpose::STANDARD.encode(text.as_str().as_bytes());
+    Ok(Ret(v_string(encoded)))
+}
+bf_declare!(encode_base64, bf_encode_base64);
+
+/// Function: str decode_base64(str encoded_text)
+///
+/// Decodes the given Base64-encoded string.
+/// Returns the decoded string. If the input is not valid Base64, E_INVARG is raised.
+fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Variant::Str(encoded_text) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let decoded = match general_purpose::STANDARD.decode(encoded_text.as_str().as_bytes()) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => return Err(BfErr::Code(E_INVARG)),
+        },
+        Err(_) => return Err(BfErr::Code(E_INVARG)),
+    };
+
+    Ok(Ret(v_string(decoded)))
+}
+bf_declare!(decode_base64, bf_decode_base64);
+
 pub(crate) fn register_bf_strings(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("strsub")] = Box::new(BfStrsub {});
     builtins[offset_for_builtin("index")] = Box::new(BfIndex {});
@@ -345,6 +390,8 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("string_hash")] = Box::new(BfStringHash {});
     builtins[offset_for_builtin("binary_hash")] = Box::new(BfBinaryHash {});
     builtins[offset_for_builtin("salt")] = Box::new(BfSalt {});
+    builtins[offset_for_builtin("encode_base64")] = Box::new(BfEncodeBase64 {});
+    builtins[offset_for_builtin("decode_base64")] = Box::new(BfDecodeBase64 {});
 }
 
 #[cfg(test)]
