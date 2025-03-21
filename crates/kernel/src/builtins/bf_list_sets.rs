@@ -554,7 +554,6 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(substitute, bf_substitute);
 
-
 /// Function: list slice(list|map alist [, int|list|str index [, any default_value]])
 ///
 /// Returns a list containing elements from `alist` based on the `index` parameter:
@@ -631,7 +630,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         // MOO is 1-indexed, so subtract 1
                         Ok(Ret(list.index(idx - 1).map_err(BfErr::Code)?))
                     }
-                },
+                }
 
                 // Case 2: List + List of indices
                 Variant::List(indices) => {
@@ -646,13 +645,13 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 }
                                 // MOO is 1-indexed, so subtract 1
                                 result.push(list.index(idx - 1).map_err(BfErr::Code)?);
-                            },
+                            }
                             _ => return Err(BfErr::Code(E_TYPE)),
                         }
                     }
 
                     Ok(Ret(v_list(&result)))
-                },
+                }
 
                 // Case 3: List of maps + String key
                 Variant::Str(key) => {
@@ -676,22 +675,20 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                         }
                                     }
                                 }
-                            },
+                            }
                             _ => return Err(BfErr::Code(E_TYPE)),
                         }
                     }
 
                     Ok(Ret(v_list(&result)))
-                },
+                }
 
                 _ => Err(BfErr::Code(E_TYPE)),
             }
-        },
+        }
 
         // If the collection is a map, we don't support this yet
-        Variant::Map(_) => {
-            Err(BfErr::Code(E_TYPE))
-        },
+        Variant::Map(_) => Err(BfErr::Code(E_TYPE)),
 
         _ => Err(BfErr::Code(E_TYPE)),
     }

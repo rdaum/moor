@@ -90,3 +90,4 @@ tracing.workspace = true
 
 # For the DB layer.
 bincode.workspace = true
+serde_json.workspace = true
