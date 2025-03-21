@@ -1117,6 +1117,20 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Any, Any, Any],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("generate_json"),
+            min_args: Q(1),
+            max_args: Q(1),
+            types: vec![Any],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("parse_json"),
+            min_args: Q(1),
+            max_args: Q(1),
+            types: vec![Typed(TYPE_STR)],
+            implemented: true,
+        },
     ]
 }
 

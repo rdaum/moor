@@ -204,6 +204,8 @@ Functions not in the original LambdaMOO, but were in Toast, and ported over
 | `encode_base64`        | &check;  |                                                                     |
 | `decode_base64`        | &check;  |                                                                     |
 | `slice`                | &check;  |                                                                     |
+| `generate_json`        | &check;  |                                                                     |
+| `parse_json`           | &check;  |                                                                     |
 
 ## Extensions
 

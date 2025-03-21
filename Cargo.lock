@@ -2797,6 +2797,7 @@ dependencies = [
  "rand 0.8.5",
  "semver",
  "serde",
+ "serde_json",
  "similar",
  "similar-asserts",
  "ssh-key",
