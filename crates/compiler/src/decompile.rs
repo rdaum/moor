@@ -788,7 +788,7 @@ impl Decompile {
                     let end_label_position = self.find_jump(&end_label)?.position.0;
                     let (statements, _) =
                         self.decompile_statements_until_match(|position, o| {
-                            if position == end_label_position as _ {
+                            if position == (end_label_position as usize) {
                                 return true;
                             }
                             if let Op::Jump { label } = o {
