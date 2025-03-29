@@ -239,7 +239,9 @@ impl WorldStateTransaction for DbTransaction {
 
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
-        self.update_sequence_max(SEQUENCE_MAX_OBJECT, id.id().0 as i64);
+        if let Some(id) = id.id() {
+            self.update_sequence_max(SEQUENCE_MAX_OBJECT, id.0 as i64);
+        }
 
         Ok(id)
     }

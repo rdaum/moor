@@ -806,7 +806,7 @@ mod tests {
             .create_object(
                 None,
                 ObjAttrs::new(
-                    Obj::mk_id(obj4.id().0 + 1),
+                    Obj::mk_id(obj4.id().unwrap().0 + 1),
                     obj.clone(),
                     obj,
                     BitEnum::new_with(ObjFlag::Read),

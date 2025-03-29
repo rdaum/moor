@@ -278,7 +278,7 @@ fn main() {
     let mut unit_tests = vec![];
     if args.run_tests == Some(true) {
         let tx = db.new_world_state().unwrap();
-        let mo = tx.max_object(&wizard).unwrap().id().0;
+        let mo = tx.max_object(&wizard).unwrap().id().unwrap().0;
         info!("Scanning objects 0..{} for tests", mo);
         for o in 0..=mo {
             let o = Obj::mk_id(o);

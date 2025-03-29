@@ -42,7 +42,7 @@ pub enum ObjectRef {
 impl ObjectRef {
     pub fn to_curie(&self) -> String {
         match self {
-            ObjectRef::Id(oid) => format!("oid:{}", oid.id()),
+            ObjectRef::Id(oid) => format!("oid:{}", oid.to_literal()),
             ObjectRef::SysObj(symbols) => {
                 let mut s = String::new();
                 for sym in symbols {

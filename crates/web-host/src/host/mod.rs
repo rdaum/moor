@@ -19,7 +19,7 @@ mod ws_connection;
 
 pub use auth::connect_auth_handler;
 pub use auth::create_auth_handler;
-use moor_var::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_objid, v_str};
+use moor_var::{Obj, Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_obj, v_str};
 pub use props::properties_handler;
 pub use props::property_retrieval_handler;
 use serde::Serialize;
@@ -36,7 +36,7 @@ pub use web_host::{
 
 #[derive(serde_derive::Serialize, Deserialize)]
 struct Oid {
-    oid: i64,
+    oid: String,
 }
 
 #[derive(serde_derive::Serialize, Deserialize)]
@@ -68,7 +68,7 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
         Variant::Bool(b) => serde_json::Value::Bool(*b),
         Variant::Str(s) => serde_json::Value::String(s.to_string()),
         Variant::Obj(o) => json!(Oid {
-            oid: o.id().0 as i64
+            oid: o.to_literal()
         }),
         Variant::Int(i) => serde_json::Value::Number(Number::from(*i)),
         Variant::Float(f) => json!(*f),
@@ -140,18 +140,12 @@ pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
             // - An error, which can be error_code: <number>, error_name: <string>, error_msg: <string>
             // - A map, which is a list of key-value pairs in the "pairs" field.
             if let Some(oid) = o.get("oid") {
-                let Some(oid) = oid.as_number() else {
+                let Some(oid) = oid.as_str() else {
                     return Err(JsonParseError::InvalidRepresentation);
                 };
-                let Some(oid) = oid.as_i64() else {
-                    return Err(JsonParseError::InvalidRepresentation);
-                };
-                let oid = if oid < i32::MIN as i64 || oid > i32::MAX as i64 {
-                    return Err(JsonParseError::InvalidRepresentation);
-                } else {
-                    oid as i32
-                };
-                return Ok(v_objid(oid));
+                return Obj::from_literal(oid)
+                    .ok_or(JsonParseError::InvalidRepresentation)
+                    .map(v_obj);
             }
 
             if let Some(pairs) = o.get("map_pairs") {

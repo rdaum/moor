@@ -1302,7 +1302,7 @@ impl RpcServer {
             .set_footer(Footer::from(MOOR_AUTH_TOKEN_FOOTER))
             .set_payload(Payload::from(
                 json!({
-                    "player": oid.id().0,
+                    "player": oid.to_literal(),
                 })
                 .to_string()
                 .as_str(),
@@ -1453,22 +1453,22 @@ impl RpcServer {
             .unwrap();
 
         let Some(token_player) = verified_token.get("player") else {
-            debug!("Token does not contain player");
+            error!("Token does not contain player");
             return Err(RpcMessageError::PermissionDenied);
         };
-        let Some(token_player) = token_player.as_i64() else {
-            debug!("Token player is not valid");
+        // Parse the token player as an Obj, and it better be valid.
+        let Some(token_player) = token_player.as_str() else {
+            error!(?token_player, "Token player is not valid");
             return Err(RpcMessageError::PermissionDenied);
         };
-        if token_player < i32::MIN as i64 || token_player > i32::MAX as i64 {
-            debug!("Token player is not a valid objid");
+        let Some(token_player) = Obj::from_literal(token_player) else {
+            error!(?token_player, "Token player is not valid");
             return Err(RpcMessageError::PermissionDenied);
-        }
-        let token_player = Obj::mk_id(token_player as i32);
+        };
         if let Some(objid) = objid {
             // Does the 'player' match objid? If not, reject it.
             if objid.ne(&token_player) {
-                debug!(?objid, ?token_player, "Token player does not match objid");
+                error!(?objid, ?token_player, "Token player does not match objid");
                 return Err(RpcMessageError::PermissionDenied);
             }
         }

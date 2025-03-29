@@ -11,13 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::AsByteBuffer;
 use crate::encode::{DecodingError, EncodingError};
+use crate::{AsByteBuffer, Symbol};
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::Add;
+use ustr::Ustr;
 
 /// The "system" object in MOO is a place where a bunch of basic sys functionality hangs off of, and
 /// from where $name style references hang off of. A bit like the Lobby in Self.
@@ -40,6 +40,7 @@ pub const FAILED_MATCH: Obj = Obj::mk_id(-3);
 pub struct Obj(u64);
 
 const OBJID_TYPE_CODE: u8 = 0;
+const OBJLABEL_TYPE_CODE: u8 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Objid(pub i32);
@@ -49,7 +50,13 @@ pub struct Objid(pub i32);
 impl Obj {
     fn decode_as_objid(&self) -> i32 {
         // Mask out upper 32 bits
-        (self.0 & 0x0000_ffff_ffff) as i32
+        (self.0 & 0x0000_0000_ffff_ffff) as i32
+    }
+
+    fn decode_as_objlabel(&self) -> Ustr {
+        // Mask off upper 3 bits, we only need the first 61 bits
+        let lower_bits = self.0 & 0x0000_7fff_ffff_ffff;
+        unsafe { std::mem::transmute::<u64, Ustr>(lower_bits) }
     }
 
     const fn encode_as_objid(id: i32) -> Self {
@@ -60,22 +67,23 @@ impl Obj {
         Self((as_u64 & 0x0000_ffff_ffff) | ((OBJID_TYPE_CODE as u64) << 61))
     }
 
+    fn encode_as_objlabel(label: Ustr) -> Self {
+        let as_u64 = unsafe { std::mem::transmute::<Ustr, u64>(label) };
+        Self(as_u64 | ((OBJLABEL_TYPE_CODE as u64) << 61))
+    }
+
     fn object_type_code(&self) -> u8 {
         (self.0 >> 61) as u8
     }
 }
 
-impl Add for Obj {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self::mk_id(self.id().0 + rhs.id().0)
-    }
-}
-
 impl Display for Obj {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("#{}", self.decode_as_objid()))
+        match self.object_type_code() {
+            OBJID_TYPE_CODE => f.write_fmt(format_args!("#{}", self.decode_as_objid())),
+            OBJLABEL_TYPE_CODE => f.write_fmt(format_args!("#{}", self.decode_as_objlabel())),
+            _ => panic!("Invalid object type code"),
+        }
     }
 }
 
@@ -90,9 +98,32 @@ impl Obj {
         Self::encode_as_objid(id)
     }
 
+    pub fn mk_label(label: &str) -> Self {
+        Self::encode_as_objlabel(Ustr::from(label))
+    }
+
+    pub fn from_literal(literal: &str) -> Option<Self> {
+        // First part must be #
+        if !literal.starts_with('#') {
+            return None;
+        }
+        // If it's an integer, then it's an Objid, otherwise a label
+        match literal[1..].parse::<i32>() {
+            Ok(n) => Some(Self::mk_id(n)),
+            Err(_) => {
+                // If it's not an integer, then it's a label
+                Some(Self::mk_label(&literal[1..]))
+            }
+        }
+    }
+
     #[must_use]
     pub fn to_literal(&self) -> String {
-        format!("#{}", self.decode_as_objid())
+        match self.object_type_code() {
+            OBJID_TYPE_CODE => format!("#{}", self.decode_as_objid()),
+            OBJLABEL_TYPE_CODE => format!("#{}", self.decode_as_objlabel()),
+            _ => panic!("Invalid object type code"),
+        }
     }
 
     #[must_use]
@@ -101,16 +132,26 @@ impl Obj {
     }
 
     pub fn is_nothing(&self) -> bool {
-        self.decode_as_objid() == -1
+        self.object_type_code() == OBJID_TYPE_CODE && self.decode_as_objid() == -1
     }
 
     pub fn is_positive(&self) -> bool {
-        self.decode_as_objid() >= 0
+        self.object_type_code() == OBJLABEL_TYPE_CODE
+            || (self.object_type_code() == OBJID_TYPE_CODE && self.decode_as_objid() >= 0)
     }
 
-    pub fn id(&self) -> Objid {
-        assert_eq!(self.object_type_code(), OBJID_TYPE_CODE);
-        Objid(self.decode_as_objid())
+    pub fn to_sym(&self) -> Symbol {
+        match self.object_type_code() {
+            OBJID_TYPE_CODE => Symbol::mk(&format!("{}", self.decode_as_objid())),
+            OBJLABEL_TYPE_CODE => Symbol::mk(&format!("{}", self.decode_as_objlabel())),
+            _ => panic!("Invalid object type code"),
+        }
+    }
+    pub fn id(&self) -> Option<Objid> {
+        if self.object_type_code() != OBJID_TYPE_CODE {
+            return None;
+        }
+        Some(Objid(self.decode_as_objid()))
     }
 }
 
@@ -145,13 +186,17 @@ impl TryFrom<&str> for Obj {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         if let Some(value) = value.strip_prefix('#') {
-            let value = value.parse::<i32>().map_err(|e| {
-                DecodingError::CouldNotDecode(format!("Could not parse Objid: {}", e))
-            })?;
-            Ok(Self::mk_id(value))
+            // If value is an integer, then it's an Objid, otherwise a label
+            match value.parse::<i32>() {
+                Ok(n) => Ok(Self::mk_id(n)),
+                Err(_) => {
+                    // If it's not an integer, then it's a label
+                    Ok(Self::mk_label(value))
+                }
+            }
         } else {
             Err(DecodingError::CouldNotDecode(format!(
-                "Expected Objid to start with '#', got {}",
+                "Expected object id to start with '#', got {}",
                 value
             )))
         }
@@ -163,25 +208,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_obj() {
+    fn test_objid() {
         let obj = Obj::mk_id(0);
-        assert_eq!(obj.id(), Objid(0));
+        assert_eq!(obj.id(), Some(Objid(0)));
         assert_eq!(obj.to_literal(), "#0");
 
         let obj = Obj::mk_id(1);
-        assert_eq!(obj.id(), Objid(1));
+        assert_eq!(obj.id(), Some(Objid(1)));
         assert_eq!(obj.to_literal(), "#1");
 
         let obj = Obj::mk_id(-1);
-        assert_eq!(obj.id(), Objid(-1));
+        assert_eq!(obj.id(), Some(Objid(-1)));
         assert_eq!(obj.to_literal(), "#-1");
 
         let obj = Obj::mk_id(-2);
-        assert_eq!(obj.id(), Objid(-2));
+        assert_eq!(obj.id(), Some(Objid(-2)));
         assert_eq!(obj.to_literal(), "#-2");
 
         let obj = Obj::mk_id(0x7fff_ffff);
-        assert_eq!(obj.id(), Objid(0x7fff_ffff));
+        assert_eq!(obj.id(), Some(Objid(0x7fff_ffff)));
         assert_eq!(obj.to_literal(), "#2147483647");
+    }
+
+    #[test]
+    fn test_objlabel() {
+        let obj = Obj::mk_label("test");
+        assert_eq!(obj.to_literal(), "#test");
     }
 }

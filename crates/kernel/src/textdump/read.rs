@@ -13,7 +13,6 @@
 
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read};
-
 use text_io::scan;
 use tracing::info;
 
@@ -102,13 +101,12 @@ impl<R: Read> TextdumpReader<R> {
     }
     fn read_objid(&mut self) -> Result<Obj, TextdumpReaderError> {
         let buf = self.read_next_line()?;
-        let Ok(u) = buf.trim().parse() else {
-            return Err(TextdumpReaderError::ParseError(format!(
-                "invalid objid: {}",
-                buf
-            )));
-        };
-        Ok(Obj::mk_id(u))
+        let line = buf.trim();
+        // Content is either a label or a number, handle accordingly
+        match line.parse::<i32>() {
+            Ok(numeric) => Ok(Obj::mk_id(numeric)),
+            Err(_) => Ok(Obj::mk_label(line)),
+        }
     }
     fn read_float(&mut self) -> Result<f64, TextdumpReaderError> {
         let buf = self.read_next_line()?;

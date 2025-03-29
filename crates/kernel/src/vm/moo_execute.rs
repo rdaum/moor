@@ -17,7 +17,6 @@ use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
 use moor_common::model::WorldState;
 use moor_compiler::{Op, ScatterLabel};
-use std::ops::Add;
 use std::time::Duration;
 
 use crate::config::FeaturesConfig;
@@ -225,7 +224,13 @@ pub fn moo_frame_execute(
 
                                 continue;
                             }
-                            v_obj(from_o.clone().add(Obj::mk_id(1)))
+                            match from_o.id() {
+                                None => {
+                                    // can't add to a non-numeric object
+                                    return ExecutionResult::RaiseError(E_TYPE);
+                                }
+                                Some(id) => v_obj(Obj::mk_id(id.0 + 1)),
+                            }
                         }
                         (_, _) => {
                             f.pop();

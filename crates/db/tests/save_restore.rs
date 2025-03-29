@@ -106,7 +106,7 @@ mod tests {
 
         // Max object should be consistent
         assert_eq!(
-            tx.max_object(&SYSTEM_OBJECT).unwrap().id().0,
+            tx.max_object(&SYSTEM_OBJECT).unwrap().id().unwrap().0,
             (objects.len() as i32) - 1
         );
     }
@@ -139,7 +139,7 @@ mod tests {
 
         // Max object should be consistent
         assert_eq!(
-            tx.max_object(&SYSTEM_OBJECT).unwrap().id().0,
+            tx.max_object(&SYSTEM_OBJECT).unwrap().id().unwrap().0,
             (objects.len() as i32) - 1
         );
     }

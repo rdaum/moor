@@ -194,7 +194,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         let mut constants = String::new();
         // Sort incrementall by object id.
         let mut objects: Vec<_> = index_names.iter().collect();
-        objects.sort_by(|a, b| a.0.id().0.cmp(&b.0.id().0));
+        objects.sort_by(|a, b| a.0.id().cmp(&b.0.id()));
         for i in objects {
             constants.push_str(&format!("define {} = {};\n", i.1.to_ascii_uppercase(), i.0));
         }
@@ -207,7 +207,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         // Pick a file name.
         let file_name = match file_names.get(&o.oid) {
             Some(name) => format!("{}.moo", name),
-            None => format!("object_{}.moo", o.oid.id().0),
+            None => format!("object_{}.moo", o.oid.to_sym()),
         };
         let file_path = directory_path.join(file_name);
         let mut file = std::fs::File::create(file_path).unwrap();
