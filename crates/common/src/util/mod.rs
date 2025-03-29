@@ -23,6 +23,8 @@ pub use bitset::*;
 /// e.g. "dname*c" will match for any of 'dname', 'dnamec'
 #[must_use]
 pub fn verbname_cmp(vname: &str, candidate: &str) -> bool {
+    let vname = vname.to_lowercase();
+    let candidate = candidate.to_lowercase();
     let mut v_iter = vname.chars().peekable();
     let mut w_iter = candidate.chars().peekable();
 
