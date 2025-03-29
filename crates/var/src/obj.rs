@@ -13,7 +13,6 @@
 
 use crate::AsByteBuffer;
 use crate::encode::{DecodingError, EncodingError};
-use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use serde::{Deserialize, Serialize};
@@ -63,19 +62,6 @@ impl Obj {
 
     fn object_type_code(&self) -> u8 {
         (self.0 >> 61) as u8
-    }
-}
-
-impl LayoutAs<u64> for Obj {
-    type ReadError = DecodingError;
-    type WriteError = EncodingError;
-
-    fn try_read(v: u64) -> Result<Self, Self::ReadError> {
-        Ok(Self::from_bytes(v.to_le_bytes().into()).unwrap())
-    }
-
-    fn try_write(v: Self) -> Result<u64, Self::WriteError> {
-        Ok(v.0)
     }
 }
 
