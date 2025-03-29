@@ -57,7 +57,13 @@ mod tests {
         let (state, _) = TxDB::open(None, DatabaseConfig::default());
         let mut tx = state.new_world_state().unwrap();
         let sysobj = tx
-            .create_object(&SYSTEM_OBJECT, &NOTHING, &SYSTEM_OBJECT, BitEnum::all())
+            .create_object(
+                None,
+                &SYSTEM_OBJECT,
+                &NOTHING,
+                &SYSTEM_OBJECT,
+                BitEnum::all(),
+            )
             .unwrap();
         tx.update_property(
             &SYSTEM_OBJECT,

@@ -39,8 +39,8 @@ pub const FAILED_MATCH: Obj = Obj::mk_id(-3);
 )]
 pub struct Obj(u64);
 
-const OBJID_TYPE_CODE: u8 = 0;
-const OBJLABEL_TYPE_CODE: u8 = 1;
+const OBJID_TYPE_CODE: u8 = 1;
+const OBJLABEL_TYPE_CODE: u8 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Objid(pub i32);
@@ -157,27 +157,70 @@ impl Obj {
 
 impl AsByteBuffer for Obj {
     fn size_bytes(&self) -> usize {
-        size_of::<u64>()
+        if self.object_type_code() == OBJID_TYPE_CODE {
+            8
+        } else {
+            // Size of the internal string
+            self.decode_as_objlabel().len() + 8
+        }
     }
 
     fn with_byte_buffer<R, F: FnMut(&[u8]) -> R>(&self, mut f: F) -> Result<R, EncodingError> {
-        Ok(f(&self.0.to_le_bytes()))
+        let bytes = self.as_bytes()?;
+        Ok(f(bytes.as_ref()))
     }
 
     fn make_copy_as_vec(&self) -> Result<Vec<u8>, EncodingError> {
-        Ok(self.0.to_le_bytes().to_vec())
+        let bytes = self.as_bytes()?;
+        Ok(bytes.to_vec())
     }
 
     fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError>
     where
         Self: Sized,
     {
-        let content = u64::from_le_bytes(bytes.as_ref().try_into().unwrap());
-        Ok(Self(content))
+        // Representation
+        // Load first 8 bytes, and if it's OBJID_TYPE_CODE, then it's an Objid, otherwise a label,
+        // which means the 8 bytes are size of the string to read
+        let initial = &bytes[0..8];
+        // Only the top 3 bits of the first byte are used to indicate the type code
+        let potential_type_code = initial[7] >> 5;
+        if potential_type_code == OBJID_TYPE_CODE {
+            // If it's an Objid, then consume as is.
+            let repr = u64::from_le_bytes(initial.try_into().unwrap());
+            Ok(Self(repr))
+        } else {
+            // If it's a label, then the first 8 bytes are the size of the string
+            let size = u64::from_le_bytes(initial.try_into().unwrap());
+            let label_bytes = &bytes[8..8 + size as usize];
+            let label_str = std::str::from_utf8(label_bytes).map_err(|_| {
+                DecodingError::CouldNotDecode(format!(
+                    "Could not decode label from bytes: {}",
+                    String::from_utf8_lossy(label_bytes)
+                ))
+            })?;
+            Ok(Self::mk_label(label_str))
+        }
     }
 
     fn as_bytes(&self) -> Result<ByteView, EncodingError> {
-        Ok(ByteView::from(self.0.to_le_bytes()))
+        if self.object_type_code() == OBJID_TYPE_CODE {
+            let bytes = self.0.to_le_bytes().to_vec();
+            Ok(bytes.into())
+        } else if self.object_type_code() == OBJLABEL_TYPE_CODE {
+            let label = self.decode_as_objlabel();
+            let label_bytes = label.as_bytes();
+            let size = label_bytes.len() as u64;
+            let mut bytes = vec![0; self.size_bytes()];
+            bytes[0..8].copy_from_slice(&size.to_le_bytes());
+            bytes[8..8 + size as usize].copy_from_slice(label_bytes);
+            Ok(ByteView::from(bytes))
+        } else {
+            Err(EncodingError::CouldNotEncode(format!(
+                "Invalid object type code: {}",
+                self.object_type_code()
+            )))
+        }
     }
 }
 
@@ -234,5 +277,21 @@ mod tests {
     fn test_objlabel() {
         let obj = Obj::mk_label("test");
         assert_eq!(obj.to_literal(), "#test");
+    }
+
+    #[test]
+    fn encode_decode_oid() {
+        let obj = Obj::mk_id(0);
+        let encoded = obj.as_bytes().unwrap();
+        let decoded = Obj::from_bytes(encoded).unwrap();
+        assert_eq!(obj, decoded);
+    }
+
+    #[test]
+    fn encode_decode_label() {
+        let obj = Obj::mk_label("test");
+        let encoded = obj.as_bytes().unwrap();
+        let decoded = Obj::from_bytes(encoded).unwrap();
+        assert_eq!(obj, decoded);
     }
 }

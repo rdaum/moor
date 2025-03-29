@@ -181,7 +181,7 @@ ASSIGN = _{ "=" ~ !("=") }
 
 err = @{ ^"e_" ~ ident_continue+ }
 
-object  = @{ "#" ~ integer }
+object  = { "#" ~ ( integer | ident ) }
 keyword = @{
     ^"for"
   | ^"endfor"

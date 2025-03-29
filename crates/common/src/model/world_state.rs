@@ -98,6 +98,7 @@ impl WorldStateError {
             Self::PropertyDefinitionNotFound(_, _) => Error::E_PROPNF,
             Self::DuplicatePropertyDefinition(_, _) => Error::E_INVARG,
             Self::PropertyTypeMismatch => Error::E_TYPE,
+            Self::ObjectAlreadyExists(_) => Error::E_INVARG,
             _ => {
                 panic!("Unhandled error code: {:?}", self);
             }
@@ -165,6 +166,7 @@ pub trait WorldState: Send {
     /// Note it is the caller's responsibility to execute :initialize).
     fn create_object(
         &mut self,
+        id: Option<Obj>,
         perms: &Obj,
         parent: &Obj,
         owner: &Obj,

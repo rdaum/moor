@@ -212,6 +212,11 @@ impl WorldStateTransaction for DbTransaction {
             }
         };
 
+        // If this id (which may have been specified) is already being used, we can't create it.
+        if self.object_valid(&id)? {
+            return Err(WorldStateError::ObjectAlreadyExists(id));
+        }
+
         let owner = attrs.owner().unwrap_or(id.clone());
         upsert(&mut self.object_owner, id.clone(), owner).expect("Unable to insert initial owner");
 

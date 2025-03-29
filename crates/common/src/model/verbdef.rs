@@ -67,7 +67,7 @@ impl VerbDef {
     }
     #[must_use]
     pub fn flags(&self) -> BitEnum<VerbFlag> {
-        self.flags.clone()
+        self.flags
     }
 
     #[must_use]
@@ -76,7 +76,7 @@ impl VerbDef {
     }
     #[must_use]
     pub fn args(&self) -> VerbArgsSpec {
-        self.args.clone()
+        self.args
     }
 }
 
@@ -95,7 +95,7 @@ impl Named for VerbDef {
 
 impl HasUuid for VerbDef {
     fn uuid(&self) -> Uuid {
-        self.uuid.clone()
+        self.uuid
     }
 }
 

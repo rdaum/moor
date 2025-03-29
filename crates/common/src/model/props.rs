@@ -129,7 +129,7 @@ impl PropPerms {
 
     #[must_use]
     pub fn flags(&self) -> BitEnum<PropFlag> {
-        self.flags.clone()
+        self.flags
     }
 
     pub fn with_owner(self, owner: Obj) -> Self {

@@ -122,13 +122,17 @@ fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(children, bf_children);
 
 /*
-Syntax:  create (obj <parent> [, obj <owner>])   => obj
+Syntax:  create (obj <parent> [, obj <owner>, [use_id]])   => obj
  */
 const BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE: usize = 0;
 const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
 fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+    // Third argument (mandated `use_id`) is only available if the player is a wizard.
+    let perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+    let is_wizard = perms.check_is_wizard().unwrap();
+    let max_args = if is_wizard { 3 } else { 2 };
+    if bf_args.args.is_empty() || bf_args.args.len() > max_args {
         return Err(BfErr::Code(E_ARGS));
     }
     let Variant::Obj(parent) = bf_args.args[0].variant().clone() else {
@@ -142,7 +146,14 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     } else {
         bf_args.task_perms_who()
     };
-
+    let use_id = if is_wizard && bf_args.args.len() == 3 {
+        let Variant::Obj(use_id) = bf_args.args[2].variant().clone() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        Some(use_id)
+    } else {
+        None
+    };
     let tramp = bf_args
         .bf_frame_mut()
         .bf_trampoline
@@ -153,7 +164,13 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE => {
             let new_obj = bf_args
                 .world_state
-                .create_object(&bf_args.task_perms_who(), &parent, &owner, BitEnum::new())
+                .create_object(
+                    use_id,
+                    &bf_args.task_perms_who(),
+                    &parent,
+                    &owner,
+                    BitEnum::new(),
+                )
                 .map_err(world_state_bf_err)?;
 
             // We're going to try to call :initialize on the new object.

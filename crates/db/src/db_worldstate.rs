@@ -166,6 +166,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
 
     fn create_object(
         &mut self,
+        id: Option<Obj>,
         perms: &Obj,
         parent: &Obj,
         owner: &Obj,
@@ -193,7 +194,7 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
             flags,
             Symbol::mk(""),
         );
-        self.get_tx_mut().create_object(None, attrs)
+        self.get_tx_mut().create_object(id, attrs)
     }
 
     fn recycle_object(&mut self, perms: &Obj, obj: &Obj) -> Result<(), WorldStateError> {

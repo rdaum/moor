@@ -198,7 +198,7 @@ impl ObjAttrs {
     }
 
     pub fn flags(&self) -> BitEnum<ObjFlag> {
-        self.flags.clone()
+        self.flags
     }
 
     pub fn set_flags(&mut self, flags: BitEnum<ObjFlag>) -> &mut Self {
@@ -207,7 +207,7 @@ impl ObjAttrs {
     }
 
     pub fn name(&self) -> Symbol {
-        self.name.clone()
+        self.name
     }
 
     pub fn set_name(&mut self, s: &str) -> &mut Self {

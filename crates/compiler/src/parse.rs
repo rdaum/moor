@@ -117,10 +117,23 @@ impl TreeTransformer {
                 Ok(Expr::Id(name))
             }
             Rule::object => {
-                let ostr = &pair.as_str()[1..];
-                let oid = i32::from_str(ostr).unwrap();
-                let objid = Obj::mk_id(oid);
-                Ok(Expr::Value(v_obj(objid)))
+                let inner = pair.into_inner().next().unwrap();
+                match inner.as_rule() {
+                    Rule::ident => {
+                        // TODO: add a new compile option and check if this is permitted
+                        let ostr = inner.as_str();
+                        Ok(Expr::Value(v_obj(Obj::mk_label(ostr))))
+                    }
+                    Rule::integer => {
+                        let ostr = inner.as_str();
+                        let oid = i32::from_str(ostr).unwrap();
+                        let objid = Obj::mk_id(oid);
+                        Ok(Expr::Value(v_obj(objid)))
+                    }
+                    _ => {
+                        panic!("Unimplemented object: {:?}", inner);
+                    }
+                }
             }
             Rule::integer => match pair.as_str().parse::<i64>() {
                 Ok(int) => Ok(Expr::Value(v_int(int))),
@@ -1414,7 +1427,7 @@ pub fn unquote_str(s: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use moor_var::Error::{Custom, E_INVARG, E_PROPNF, E_VARNF};
-    use moor_var::{Symbol, v_none};
+    use moor_var::{Obj, Symbol, v_none, v_obj};
     use moor_var::{Var, v_err, v_float, v_int, v_objid, v_str};
 
     use crate::CompileOptions;
@@ -3065,6 +3078,18 @@ mod tests {
                     Normal(Value(v_err(Custom("e_unknown".into())))),
                 ]
             )))))]
+        )
+    }
+
+    #[test]
+    fn test_object_labels() {
+        let program = r#"return #fantastic;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Return(Some(Box::new(Value(v_obj(
+                Obj::mk_label("fantastic")
+            ))))))]
         )
     }
 }

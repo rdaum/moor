@@ -2,7 +2,6 @@
 resolver = "2"
 
 members = [
-    "crates/var",
     "crates/common",
     "crates/compiler",
     "crates/daemon",
@@ -14,6 +13,7 @@ members = [
     "crates/telnet-host",
     "crates/testing/load-tools",
     "crates/testing/moot",
+    "crates/var",
     "crates/web-host",
     "tools/moorc",
 ]
@@ -38,7 +38,7 @@ default-members = [
 authors = [
     "Ryan Daum <ryan.daum@gmail.com>",
     "Norman Nunley <nnunley@gmail.com>",
-    "Zoltán Nagy <abesto0@gmail.com>"
+    "Zoltán Nagy <abesto0@gmail.com>",
 ]
 categories = [
     "game",

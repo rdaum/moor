@@ -92,9 +92,11 @@ fn main() -> Result<(), Report> {
         std::fs::write(write_config, merged_config_json).expect("Unable to write merged config");
     }
 
+    // Get absolute path of database
+    let abs_db_path = args.db_args.db.as_path().to_path_buf();
     info!(
         "moor {} daemon starting. Using database at {:?}",
-        version, args.db_args.db
+        version, abs_db_path
     );
     let (database, freshly_made) =
         TxDB::open(Some(&args.db_args.db), config.database_config.clone());

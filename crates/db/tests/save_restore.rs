@@ -43,6 +43,7 @@ mod tests {
         for _ in 0..num_objects {
             let o = tx
                 .create_object(
+                    None,
                     &SYSTEM_OBJECT,
                     &NOTHING,
                     &SYSTEM_OBJECT,
