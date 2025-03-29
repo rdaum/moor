@@ -238,7 +238,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
             parent,
             child,
             sibling,
-            name: db_obj.name().clone().unwrap_or("".to_string()),
+            name: db_obj.name().to_string(),
             flags: db_obj.flags().to_u16() as _,
             verbdefs,
             propdefs,

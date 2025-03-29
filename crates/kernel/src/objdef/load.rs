@@ -160,7 +160,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         NOTHING,
                         NOTHING,
                         compiled_def.flags,
-                        &compiled_def.name,
+                        compiled_def.name,
                     ),
                 )
                 .map_err(|wse| {
@@ -327,7 +327,7 @@ mod tests {
 
         let o = loader.get_object(&Obj::mk_id(1)).unwrap();
         assert_eq!(o.owner().unwrap(), SYSTEM_OBJECT);
-        assert_eq!(o.name().unwrap(), "Test Object");
+        assert_eq!(o.name().as_str(), "Test Object");
         assert_eq!(o.parent(), None);
         assert_eq!(o.location(), None);
     }

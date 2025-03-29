@@ -141,7 +141,7 @@ impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
             self.get_tx().get_object_parent(objid)?,
             self.get_tx().get_object_location(objid)?,
             self.get_tx().get_object_flags(objid)?,
-            &self.get_tx().get_object_name(objid)?,
+            Symbol::mk(&self.get_tx().get_object_name(objid)?),
         ))
     }
 

@@ -810,7 +810,7 @@ mod tests {
                     obj.clone(),
                     obj,
                     BitEnum::new_with(ObjFlag::Read),
-                    "zoinks",
+                    Symbol::mk("zoinks"),
                 ),
             )
             .unwrap();
@@ -865,13 +865,25 @@ mod tests {
         let a = tx
             .create_object(
                 None,
-                ObjAttrs::new(Obj::mk_id(1), NOTHING, NOTHING, BitEnum::all(), "a"),
+                ObjAttrs::new(
+                    Obj::mk_id(1),
+                    NOTHING,
+                    NOTHING,
+                    BitEnum::all(),
+                    Symbol::mk("a"),
+                ),
             )
             .unwrap();
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(Obj::mk_id(1), a.clone(), NOTHING, BitEnum::all(), "b"),
+                ObjAttrs::new(
+                    Obj::mk_id(1),
+                    a.clone(),
+                    NOTHING,
+                    BitEnum::all(),
+                    Symbol::mk("b"),
+                ),
             )
             .unwrap();
         tx.define_property(

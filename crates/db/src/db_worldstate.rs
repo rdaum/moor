@@ -186,7 +186,13 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         //    If the intended owner of the new object has a property named `ownership_quota' and the value of that property is an integer, then `create()' treats that value
         //    as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
         //    object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
-        let attrs = ObjAttrs::new(owner.clone(), parent.clone(), NOTHING, flags, "");
+        let attrs = ObjAttrs::new(
+            owner.clone(),
+            parent.clone(),
+            NOTHING,
+            flags,
+            Symbol::mk(""),
+        );
         self.get_tx_mut().create_object(None, attrs)
     }
 

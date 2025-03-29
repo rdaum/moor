@@ -42,7 +42,7 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
 
         let mut od = ObjectDefinition {
             oid: o.clone(),
-            name: obj_attrs.name().unwrap_or("".to_string()),
+            name: obj_attrs.name(),
             parent: obj_attrs.parent().unwrap_or(NOTHING),
             owner: obj_attrs.owner().unwrap_or(NOTHING),
             location: obj_attrs.location().unwrap_or(NOTHING),
@@ -218,7 +218,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         let location = canon_name(&o.location, &index_names);
         let owner = canon_name(&o.owner, &index_names);
 
-        let name = v_str(&o.name);
+        let name = v_str(o.name.as_str());
         let indent = "  ";
 
         objstr.push_str(&format!("object {}\n", canon_name(&o.oid, &index_names)));

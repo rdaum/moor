@@ -52,7 +52,7 @@ impl ObjFileContext {
 
 pub struct ObjectDefinition {
     pub oid: Obj,
-    pub name: String,
+    pub name: Symbol,
     pub parent: Obj,
     pub owner: Obj,
     pub location: Obj,
@@ -410,7 +410,7 @@ fn compile_object_definition(
     // also attempting to compile each verb.
     let mut objdef = ObjectDefinition {
         oid: NOTHING,
-        name: "".to_string(),
+        name: "".into(),
         parent: NOTHING,
         owner: NOTHING,
         location: NOTHING,
@@ -439,7 +439,7 @@ fn compile_object_definition(
                     }
                     Rule::name_attr => {
                         let inner = attr_pair.into_inner().next().unwrap();
-                        objdef.name = parse_str_attr(context, inner)?
+                        objdef.name = Symbol::mk(&parse_str_attr(context, inner)?);
                     }
                     Rule::owner_attr => {
                         let inner = attr_pair.into_inner().next().unwrap();
@@ -771,7 +771,7 @@ mod tests {
         let odef =
             &compile_object_definitions(spec, &CompileOptions::default(), &mut context).unwrap()[0];
         assert_eq!(odef.oid, Obj::mk_id(1));
-        assert_eq!(odef.name, "Test Object");
+        assert_eq!(odef.name.as_str(), "Test Object");
         assert_eq!(odef.parent, Obj::mk_id(1));
         assert_eq!(odef.location, Obj::mk_id(3));
         assert!(!odef.flags.contains(ObjFlag::Wizard));

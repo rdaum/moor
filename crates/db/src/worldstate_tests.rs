@@ -35,7 +35,13 @@ where
     let oid = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
     assert_eq!(oid, Obj::mk_id(0));
@@ -83,14 +89,26 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
 
@@ -108,7 +126,13 @@ where
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test3"),
+            ),
         )
         .unwrap();
 
@@ -126,7 +150,13 @@ where
     let d = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test4"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test4"),
+            ),
         )
         .unwrap();
 
@@ -164,7 +194,13 @@ where
     let a = tx
         .create_object(
             Some(Obj::mk_id(0)),
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
     assert_eq!(a, Obj::mk_id(0));
@@ -172,7 +208,13 @@ where
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
     assert_eq!(b, Obj::mk_id(1));
@@ -180,7 +222,13 @@ where
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test3"),
+            ),
         )
         .unwrap();
     assert_eq!(c, Obj::mk_id(2));
@@ -188,7 +236,13 @@ where
     let d = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, c.clone(), NOTHING, BitEnum::new(), "test4"),
+            ObjAttrs::new(
+                NOTHING,
+                c.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test4"),
+            ),
         )
         .unwrap();
     assert_eq!(d, Obj::mk_id(3));
@@ -241,14 +295,26 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, a.clone(), BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                a.clone(),
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
 
@@ -264,7 +330,13 @@ where
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test3"),
+            ),
         )
         .unwrap();
 
@@ -279,7 +351,13 @@ where
     let d = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test4"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test4"),
+            ),
         )
         .unwrap();
     tx.set_object_location(&d, &c).unwrap();
@@ -331,21 +409,39 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, a.clone(), BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                a.clone(),
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
 
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test3"),
+            ),
         )
         .unwrap();
 
@@ -414,7 +510,13 @@ where
     let oid = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
@@ -447,7 +549,13 @@ where
     let oid = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
     tx.add_object_verb(
@@ -510,14 +618,26 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
 
@@ -543,7 +663,13 @@ where
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test3"),
+            ),
         )
         .unwrap();
 
@@ -567,14 +693,26 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
 
@@ -658,14 +796,26 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
 
@@ -711,14 +861,26 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
 
@@ -771,7 +933,13 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
@@ -858,14 +1026,26 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
 
@@ -915,7 +1095,13 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
@@ -973,19 +1159,37 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, b.clone(), NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(
+                NOTHING,
+                b.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test3"),
+            ),
         )
         .unwrap();
 
@@ -1021,7 +1225,13 @@ where
     let d = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test4"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test4"),
+            ),
         )
         .unwrap();
 
@@ -1090,7 +1300,13 @@ where
     let tobj = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
 
@@ -1107,13 +1323,25 @@ where
     let a = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
     let b = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test2"),
+            ),
         )
         .unwrap();
 
@@ -1137,7 +1365,13 @@ where
     let c = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test3"),
+            ),
         )
         .unwrap();
     tx.define_property(
@@ -1176,7 +1410,13 @@ where
     let d = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test4"),
+            ObjAttrs::new(
+                NOTHING,
+                a.clone(),
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test4"),
+            ),
         )
         .unwrap();
     tx.define_property(
@@ -1224,7 +1464,13 @@ where
     let obj = tx
         .create_object(
             None,
-            ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            ObjAttrs::new(
+                NOTHING,
+                NOTHING,
+                NOTHING,
+                BitEnum::new(),
+                Symbol::mk("test"),
+            ),
         )
         .unwrap();
     assert_eq!(tx.get_max_object().unwrap(), obj);

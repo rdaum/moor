@@ -34,9 +34,9 @@ use moor_common::util::BitEnum;
 use moor_compiler::Program;
 use moor_compiler::compile;
 use moor_db::loader::LoaderInterface;
-use moor_var::Obj;
 use moor_var::Var;
 use moor_var::{AsByteBuffer, NOTHING};
+use moor_var::{Obj, Symbol};
 
 struct RProp {
     definer: Obj,
@@ -152,7 +152,7 @@ pub fn read_textdump<T: io::Read>(
         loader
             .create_object(
                 Some(objid.clone()),
-                &ObjAttrs::new(NOTHING, NOTHING, NOTHING, flags, &o.name),
+                &ObjAttrs::new(NOTHING, NOTHING, NOTHING, flags, Symbol::mk(&o.name)),
             )
             .unwrap();
     }

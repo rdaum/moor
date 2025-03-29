@@ -216,9 +216,13 @@ impl WorldStateTransaction for DbTransaction {
         upsert(&mut self.object_owner, id.clone(), owner).expect("Unable to insert initial owner");
 
         // Set initial name
-        let name = attrs.name().unwrap_or_default();
-        upsert(&mut self.object_name, id.clone(), StringHolder(name))
-            .expect("Unable to insert initial name");
+        let name = attrs.name();
+        upsert(
+            &mut self.object_name,
+            id.clone(),
+            StringHolder(name.to_string()),
+        )
+        .expect("Unable to insert initial name");
 
         // We use our own setters for these, since there's biz-logic attached here...
         if let Some(parent) = attrs.parent() {
