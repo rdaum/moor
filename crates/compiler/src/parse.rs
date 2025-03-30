@@ -64,8 +64,10 @@ pub struct CompileOptions {
     pub bool_type: bool,
     /// Whether to support symbol types ('sym) in compilation
     pub symbol_type: bool,
-    /// Whether to support non-stanard custom error values.
+    /// Whether to support non-standard custom error values.
     pub custom_errors: bool,
+    /// whether to allow arbitrary identifiers as #object #references, in addition to numbers
+    pub object_labels: bool,
 }
 
 impl Default for CompileOptions {
@@ -78,6 +80,7 @@ impl Default for CompileOptions {
             bool_type: true,
             symbol_type: true,
             custom_errors: true,
+            object_labels: true,
         }
     }
 }
@@ -120,7 +123,12 @@ impl TreeTransformer {
                 let inner = pair.into_inner().next().unwrap();
                 match inner.as_rule() {
                     Rule::ident => {
-                        // TODO: add a new compile option and check if this is permitted
+                        if !self.options.custom_errors {
+                            return Err(CompileError::DisabledFeature(
+                                self.compile_context(&inner),
+                                "ObjectLabels".to_string(),
+                            ));
+                        }
                         let ostr = inner.as_str();
                         Ok(Expr::Value(v_obj(Obj::mk_label(ostr))))
                     }

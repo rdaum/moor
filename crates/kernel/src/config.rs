@@ -61,6 +61,9 @@ pub struct FeaturesConfig {
     /// These errors cannot be converted to/from integers, and using them in existing cores can
     /// cause problems.  Example  `return E_EXAMPLE;`
     pub custom_errors: bool,
+    /// Whether to permit arbitrary identifiers for object IDs, instead of restricting to numeric
+    /// identifiers.  E.g. #foobar in addition to #123.
+    pub object_labels: bool,
     /// Whether to support a symbol literal type in the compiler
     pub symbol_type: bool,
     /// Whether to have certain builtins use or return symbols instead of strings for things like property
@@ -85,6 +88,7 @@ impl Default for FeaturesConfig {
             use_boolean_returns: false,
             use_symbols_in_builtins: false,
             custom_errors: false,
+            object_labels: false,
         }
     }
 }
@@ -99,6 +103,7 @@ impl FeaturesConfig {
             bool_type: self.bool_type,
             symbol_type: self.symbol_type,
             custom_errors: self.custom_errors,
+            object_labels: self.object_labels,
         }
     }
 

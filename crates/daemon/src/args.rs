@@ -184,6 +184,12 @@ pub struct FeatureArgs {
 
     #[arg(
         long,
+        help = "Whether to permit arbitrary identifiers for object IDs, instead of restricting to numeric identifiers.  E.g. #foobar in addition to #123."
+    )]
+    pub object_labels: Option<bool>,
+
+    #[arg(
+        long,
         help = "Enable persistent tasks, which persist the state of suspended/forked tasks between restarts. \
                 Note that this is the default behaviour in LambdaMOO."
     )]
@@ -227,6 +233,9 @@ impl FeatureArgs {
         }
         if let Some(args) = self.list_comprehensions {
             config.list_comprehensions = args;
+        }
+        if let Some(args) = self.object_labels {
+            config.object_labels = args;
         }
     }
 }
