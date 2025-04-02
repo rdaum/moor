@@ -58,7 +58,6 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
-use std::sync::Arc;
 
 #[derive(Clone, Encode, Decode, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Flyweight(Box<Inner>);
@@ -66,7 +65,7 @@ pub struct Flyweight(Box<Inner>);
 #[derive(Clone, PartialOrd, Ord, Eq)]
 struct Inner {
     delegate: Obj,
-    slots: Arc<Vec<(Symbol, Var)>>,
+    slots: im::Vector<(Symbol, Var)>,
     contents: List,
     /// If `secret` is present it's a string signed with a key-pair that can be used to unseal
     /// the flyweight.
@@ -100,7 +99,7 @@ impl Encode for Inner {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         self.delegate.encode(encoder)?;
         self.slots.len().encode(encoder)?;
-        for (k, v) in self.slots.as_ref() {
+        for (k, v) in &self.slots {
             k.encode(encoder)?;
             v.encode(encoder)?;
         }
@@ -113,13 +112,12 @@ impl<C> Decode<C> for Inner {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let delegate = Obj::decode(decoder)?;
         let len = usize::decode(decoder)?;
-        let mut slots = Vec::with_capacity(len);
+        let mut slots = im::Vector::new();
         for _ in 0..len {
             let k = Symbol::decode(decoder)?;
             let v = Var::decode(decoder)?;
-            slots.push((k, v));
+            slots.push_back((k, v));
         }
-        let slots = Arc::new(slots);
         let contents = List::decode(decoder)?;
         let seal = Option::<String>::decode(decoder)?;
         Ok(Self {
@@ -135,13 +133,12 @@ impl<'a, C> BorrowDecode<'a, C> for Inner {
     fn borrow_decode<D: BorrowDecoder<'a>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let delegate = Obj::borrow_decode(decoder)?;
         let len = usize::borrow_decode(decoder)?;
-        let mut slots = Vec::with_capacity(len);
+        let mut slots = im::Vector::new();
         for _ in 0..len {
             let k = Symbol::borrow_decode(decoder)?;
             let v = Var::borrow_decode(decoder)?;
-            slots.push((k, v));
+            slots.push_back((k, v));
         }
-        let slots = Arc::new(slots);
         let contents = List::borrow_decode(decoder)?;
         let seal = Option::<String>::borrow_decode(decoder)?;
         Ok(Self {
@@ -175,7 +172,7 @@ impl Flyweight {
     ) -> Self {
         Self(Box::new(Inner {
             delegate,
-            slots: Arc::new(slots.to_vec()),
+            slots: im::Vector::from(slots),
             contents,
             seal,
         }))
@@ -188,8 +185,8 @@ impl Flyweight {
         self.0.slots.iter().find(|(k, _)| k == key).map(|(_, v)| v)
     }
 
-    pub fn slots(&self) -> &Vec<(Symbol, Var)> {
-        self.0.slots.as_ref()
+    pub fn slots(&self) -> Vec<(Symbol, Var)> {
+        self.0.slots.iter().cloned().collect()
     }
 
     pub fn delegate(&self) -> &Obj {
