@@ -13,12 +13,11 @@
 
 use lazy_static::lazy_static;
 use std::sync::Arc;
-use tracing::trace;
 
 use moor_common::model::VerbDef;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
-use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
+use moor_compiler::{BUILTINS, BuiltinId, Program};
 use moor_var::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_var::{List, Obj};
@@ -45,13 +44,6 @@ lazy_static! {
     static ref BOOL_SYM: Symbol = Symbol::mk("boolean");
     static ref SYM_SYM: Symbol = Symbol::mk("symbol");
     static ref FLYWEIGHT_SYM: Symbol = Symbol::mk("flyweight");
-}
-
-pub(crate) fn args_literal(args: &List) -> String {
-    args.iter()
-        .map(|v| to_literal(&v))
-        .collect::<Vec<String>>()
-        .join(", ")
 }
 
 /// The set of parameters for a scheduler-requested *resolved* verb method dispatch.
@@ -232,8 +224,6 @@ impl VMExecState {
         }
 
         // call verb on parent, but with our current 'this'
-        trace!(task_id = self.task_id, ?verb, ?definer, ?parent);
-
         let (binary, resolved_verb) =
             match world_state.find_method_verb_on(permissions, &parent, verb) {
                 Ok(vi) => vi,
@@ -318,13 +308,6 @@ impl VMExecState {
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
         let bf_desc = BUILTINS.description_for(bf_id).expect("Builtin not found");
         let bf_name = bf_desc.name;
-        trace!(
-            "Calling builtin: {}({}) caller_perms: {}",
-            bf_name,
-            args_literal(&args),
-            self.top().permissions
-        );
-
         // Push an activation frame for the builtin function.
         let flags = self.top().verbdef.flags();
         self.stack.push(Activation::for_bf_call(
@@ -355,7 +338,6 @@ impl VMExecState {
             Ok(BfRet::VmInstr(vmi)) => vmi,
         };
 
-        trace!(?call_results, "Builtin function call complete");
         call_results
     }
 
@@ -371,7 +353,6 @@ impl VMExecState {
             _ => panic!("Expected a BF frame at the top of the stack"),
         };
 
-        trace!(bf_index = ?bf_frame.bf_id, "Reentering builtin function");
         // Functions that did not set a trampoline are assumed to be complete, so we just unwind.
         // Note: If there was an error that required unwinding, we'll have already done that, so
         // we can assume a *value* here not, an error.

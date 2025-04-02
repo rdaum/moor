@@ -20,7 +20,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use byteview::ByteView;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, warn};
 
 use moor_common::model::{BinaryType, ObjFlag};
 use moor_common::model::{VerbDef, WorldState};
@@ -275,8 +275,6 @@ impl VmHost {
                     call,
                     command,
                 } => {
-                    trace!(task_id, call = ?call, "Task continue, call into verb");
-
                     let program = Self::decode_program(resolved_verb.binary_type(), binary);
 
                     let call_request = VerbExecutionRequest {
@@ -337,12 +335,9 @@ impl VmHost {
                     return VMHostResponse::SuspendNeedInput;
                 }
                 ExecutionResult::Complete(a) => {
-                    trace!(task_id, "Task completed");
                     return VMHostResponse::CompleteSuccess(a);
                 }
                 ExecutionResult::Exception(fr) => {
-                    trace!(task_id, result = ?fr, "Task exception");
-
                     return match &fr {
                         FinallyReason::Abort => VMHostResponse::CompleteAbort,
                         FinallyReason::Raise(exception) => {
@@ -357,7 +352,6 @@ impl VmHost {
                     };
                 }
                 ExecutionResult::TaskRollbackRestart => {
-                    trace!(task_id, "Task rollback-restart");
                     return VMHostResponse::RollbackRetry;
                 }
             }
@@ -439,7 +433,6 @@ impl VmHost {
     }
 
     pub fn stop(&mut self) {
-        trace!(task_id = self.vm_exec_state.task_id, "Stopping VMHost");
         self.running = false;
     }
 

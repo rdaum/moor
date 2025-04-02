@@ -218,11 +218,8 @@ fn perform_regex_match(
     );
     syntax.set_behavior(SyntaxBehavior::SYNTAX_BEHAVIOR_ALLOW_DOUBLE_RANGE_OP_IN_CC);
 
-    let regex =
-        onig::Regex::with_options(translated_pattern.as_str(), options, &syntax).map_err(|e| {
-            eprintln!("Error in regex: {:?}", e);
-            E_INVARG
-        })?;
+    let regex = onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
+        .map_err(|_| E_INVARG)?;
 
     let (search_start, search_end) = if reverse {
         (subject.len(), 0)
