@@ -163,7 +163,7 @@ impl Task {
             self.task_id,
             world_state.as_mut(),
             task_scheduler_client.clone(),
-            session,
+            session.clone(),
             builtin_registry,
             config,
         );
@@ -193,6 +193,7 @@ impl Task {
                     .expect("Could not commit world state before suspend");
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
+                    session.rollback().unwrap();
                     task_scheduler_client.conflict_retry(self);
                     return None;
                 }
@@ -221,6 +222,7 @@ impl Task {
                     .expect("Could not commit world state before suspend");
                 if let CommitResult::ConflictRetry = commit_result {
                     warn!("Conflict during commit before suspend");
+                    session.rollback().unwrap();
                     task_scheduler_client.conflict_retry(self);
                     return None;
                 }
@@ -267,6 +269,7 @@ impl Task {
                 let CommitResult::Success = world_state.commit().expect("Could not attempt commit")
                 else {
                     warn!("Conflict during commit before complete, asking scheduler to retry task");
+                    session.rollback().unwrap();
                     task_scheduler_client.conflict_retry(self);
                     return None;
                 };
@@ -304,6 +307,7 @@ impl Task {
                         "Conflict during commit before complete, asking scheduler to retry task ({})",
                         self.task_id
                     );
+                    session.rollback().unwrap();
                     task_scheduler_client.conflict_retry(self);
                     return None;
                 };
