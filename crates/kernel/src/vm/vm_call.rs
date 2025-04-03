@@ -12,16 +12,15 @@
 //
 
 use lazy_static::lazy_static;
-use std::sync::Arc;
-
-use moor_common::model::VerbDef;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
+use moor_common::model::{VerbDef, VerbFlag};
 use moor_compiler::{BUILTINS, BuiltinId, Program};
 use moor_var::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_var::{List, Obj};
 use moor_var::{Var, v_int, v_obj};
+use std::sync::Arc;
 
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry};
 use crate::config::FeaturesConfig;
@@ -296,6 +295,49 @@ impl VMExecState {
         self.stack = vec![a];
     }
 
+    /// If a bf_<xxx> wrapper function is present on #0, invoke that instead.
+    fn maybe_invoke_bf_proxy(
+        &mut self,
+        bf_name: Symbol,
+        args: &List,
+        world_state: &mut dyn WorldState,
+    ) -> Option<ExecutionResult> {
+        let bf_override_name = Symbol::mk(&format!("bf_{}", bf_name));
+
+        // Don't let the wrapper recursively call the wrapper. Instead, it will just call the builtin
+        // as usual.
+        if self.top().verb_name == bf_override_name && self.top().this == v_obj(SYSTEM_OBJECT) {
+            return None;
+        }
+
+        // Look for it...
+        let (binary, resolved_verb) = world_state
+            .find_method_verb_on(&self.top().permissions, &SYSTEM_OBJECT, bf_override_name)
+            .ok()?;
+
+        // Not executable, no go.
+        if !resolved_verb.flags().contains(VerbFlag::Exec) {
+            return None;
+        }
+
+        let call = VerbCall {
+            verb_name: bf_override_name,
+            location: v_obj(SYSTEM_OBJECT),
+            this: self.top().this.clone(),
+            player: self.top().player.clone(),
+            args: args.iter().collect(),
+            argstr: "".to_string(),
+            caller: self.caller(),
+        };
+        Some(ExecutionResult::DispatchVerb {
+            permissions: self.top().permissions.clone(),
+            resolved_verb,
+            binary,
+            call,
+            command: self.top().command.clone(),
+        })
+    }
+
     /// Call into a builtin function.
     pub(crate) fn call_builtin_function(
         &mut self,
@@ -308,6 +350,13 @@ impl VMExecState {
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
         let bf_desc = BUILTINS.description_for(bf_id).expect("Builtin not found");
         let bf_name = bf_desc.name;
+
+        // TODO: check for $server_options.protect_[func]
+        // Check for builtin override at #0.
+        if let Some(proxy_result) = self.maybe_invoke_bf_proxy(bf_name, &args, world_state) {
+            return proxy_result;
+        }
+
         // Push an activation frame for the builtin function.
         let flags = self.top().verbdef.flags();
         self.stack.push(Activation::for_bf_call(
