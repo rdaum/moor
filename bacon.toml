@@ -24,7 +24,7 @@ command = [
     "--checkpoint-interval-seconds",
     "360",
     "--use-boolean-returns",
-    "true",
+    "false",
     "--custom-errors",
     "true"
 ]
