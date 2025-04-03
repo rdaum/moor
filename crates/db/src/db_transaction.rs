@@ -350,6 +350,8 @@ impl WorldStateTransaction for DbTransaction {
         // We may or may not have propdefs yet...
         self.object_propdefs.delete(obj).ok();
 
+        self.verb_resolution_cache.flush();
+
         Ok(())
     }
 
@@ -517,6 +519,9 @@ impl WorldStateTransaction for DbTransaction {
                 .expect("Unable to update property flags");
             }
         }
+
+        self.verb_resolution_cache.flush();
+
         Ok(())
     }
 
