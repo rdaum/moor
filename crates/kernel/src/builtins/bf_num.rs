@@ -15,7 +15,7 @@ use rand::Rng;
 
 use moor_compiler::offset_for_builtin;
 use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_var::{Sequence, Variant};
+use moor_var::{Sequence, Var, Variant};
 use moor_var::{v_float, v_int, v_str};
 
 use crate::bf_declare;
@@ -114,15 +114,22 @@ fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(floatstr, bf_floatstr);
 
+fn numeric_arg(arg: &Var) -> Result<f64, BfErr> {
+    let x = match arg.variant() {
+        Variant::Int(i) => *i as f64,
+        Variant::Float(f) => *f,
+        _ => return Err(BfErr::Code(E_TYPE)),
+    };
+
+    Ok(x)
+}
+
 fn bf_sin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.sin())))
 }
@@ -133,10 +140,7 @@ fn bf_cos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.cos())))
 }
@@ -147,10 +151,7 @@ fn bf_tan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.tan())))
 }
@@ -161,12 +162,9 @@ fn bf_sqrt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
-    if *x < 0.0 {
+    if x < 0.0 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -179,12 +177,9 @@ fn bf_asin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
-    if !(-1.0..=1.0).contains(x) {
+    if !(-1.0..=1.0).contains(&x) {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -197,12 +192,9 @@ fn bf_acos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
-    if !(-1.0..=1.0).contains(x) {
+    if !(-1.0..=1.0).contains(&x) {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -215,17 +207,10 @@ fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let y = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
+    let y = numeric_arg(&bf_args.args[1])?;
 
-    let x = match bf_args.args[1].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
-
-    Ok(Ret(v_float(y.atan2(*x))))
+    Ok(Ret(v_float(y.atan2(x))))
 }
 bf_declare!(atan, bf_atan);
 
@@ -234,10 +219,7 @@ fn bf_sinh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.sinh())))
 }
@@ -248,10 +230,7 @@ fn bf_cosh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.cosh())))
 }
@@ -262,10 +241,7 @@ fn bf_tanh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.tanh())))
 }
@@ -276,10 +252,7 @@ fn bf_exp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.exp())))
 }
@@ -290,12 +263,9 @@ fn bf_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
-    if *x <= 0.0 {
+    if x <= 0.0 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -308,12 +278,9 @@ fn bf_log10(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
-    if *x <= 0.0 {
+    if x <= 0.0 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -326,10 +293,7 @@ fn bf_ceil(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.ceil())))
 }
@@ -340,10 +304,7 @@ fn bf_floor(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.floor())))
 }
@@ -354,10 +315,7 @@ fn bf_trunc(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let x = match bf_args.args[0].variant() {
-        Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let x = numeric_arg(&bf_args.args[0])?;
 
     Ok(Ret(v_float(x.trunc())))
 }
