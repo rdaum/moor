@@ -504,7 +504,7 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<dyn BuiltinFunction>]) {
 #[cfg(test)]
 mod tests {
     use crate::builtins::bf_strings::{json_value_to_moo, moo_value_to_json, strsub};
-    use moor_var::{Associative, v_int, v_map, v_str, v_list};
+    use moor_var::{Associative, v_int, v_list, v_map, v_str};
     use serde_json::json;
 
     #[test]
