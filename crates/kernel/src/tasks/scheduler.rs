@@ -1291,7 +1291,7 @@ impl Scheduler {
         let mut to_remove = vec![];
 
         // Fork the session.
-        let forked_session = session.clone();
+        let forked_session = session.fork().unwrap();
 
         let suspended = fork_request.delay.is_some();
         let player = fork_request.player.clone();
@@ -1385,6 +1385,8 @@ impl TaskQ {
         builtin_registry: Arc<BuiltinRegistry>,
         config: Arc<Config>,
     ) -> Result<TaskHandle, SchedulerError> {
+        let is_background = task_start.is_background();
+
         let (sender, receiver) = oneshot::channel();
 
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
@@ -1439,7 +1441,7 @@ impl TaskQ {
             player: player.clone(),
             kill_switch,
             session: session.clone(),
-            result_sender: Some(sender),
+            result_sender: (!is_background).then_some(sender),
         };
 
         // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
@@ -1610,11 +1612,13 @@ impl TaskQ {
         // task_id.
         let task_start = task.task_start.clone();
 
+        let new_session = old_tc.session.fork().unwrap();
+
         match self.start_task_thread(
             task.task_id,
             task_start,
             &old_tc.player,
-            old_tc.session,
+            new_session,
             None,
             &task.perms,
             server_options,
@@ -1626,12 +1630,11 @@ impl TaskQ {
             Ok(th) => {
                 // Replacement task handle now exists, we need to send a message to the daemon to
                 // let it know that, otherwise it will sit hanging waiting on the old one forever.
-                if let Err(e) = old_tc
-                    .result_sender
-                    .expect("No result sender for retry")
-                    .send(Ok(TaskResult::Restarted(th)))
-                {
-                    error!(error = ?e, "Could not send retry result to requester, could not retry task");
+                // This does not apply if the task is backgrounded. (e.g. fork)
+                if let Some(result_sender) = old_tc.result_sender {
+                    if let Err(e) = result_sender.send(Ok(TaskResult::Restarted(th))) {
+                        warn!(error = ?e, "Could not send retry result to requester, could not issue new task handle");
+                    }
                 }
             }
             Err(e) => {

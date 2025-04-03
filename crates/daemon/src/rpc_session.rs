@@ -64,6 +64,10 @@ impl Session for RpcSession {
 
     fn rollback(&self) -> Result<(), SessionError> {
         let mut session_buffer = self.session_buffer.lock().unwrap();
+        trace!(
+            "Rolling back {} events from session buffer",
+            session_buffer.len()
+        );
         session_buffer.clear();
         Ok(())
     }
