@@ -22,7 +22,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use num_traits::ToPrimitive;
-use std::cmp::max;
+use std::cmp::{max, min};
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 use std::ops::Index;
@@ -141,12 +141,10 @@ impl Sequence for List {
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
-        let inserted_iter = self
-            .iter()
-            .take(index)
-            .chain(std::iter::once(value.clone()))
-            .chain(self.iter().skip(index));
-        Ok(v_list_iter(inserted_iter))
+        let index = min(index, self.len());
+        let mut result = self.0.clone();
+        result.insert(index, value.clone());
+        Ok(Var::from_variant(Variant::List(List(result))))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
@@ -220,8 +218,9 @@ impl Sequence for List {
             _ => return Err(Error::E_TYPE),
         };
 
-        let combined_iter = self.iter().chain(other.iter());
-        Ok(Var::mk_list_iter(combined_iter))
+        let mut result = self.0.clone();
+        result.append(other.0.as_ref().clone());
+        Ok(Var::from_variant(Variant::List(List(result))))
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
@@ -229,11 +228,9 @@ impl Sequence for List {
             return Err(E_RANGE);
         }
 
-        let new = self
-            .iter()
-            .enumerate()
-            .filter_map(|(i, v)| if i == index { None } else { Some(v) });
-        Ok(Var::mk_list_iter(new))
+        let mut new = self.0.clone();
+        new.remove(index);
+        Ok(Var::from_variant(Variant::List(List(new))))
     }
 }
 
