@@ -11,17 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use lazy_static::lazy_static;
-use moor_common::model::WorldState;
-use moor_common::model::WorldStateError;
-use moor_common::model::{VerbDef, VerbFlag};
-use moor_compiler::{BUILTINS, BuiltinId, Program};
-use moor_var::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
-use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
-use moor_var::{List, Obj};
-use moor_var::{Var, v_int, v_obj};
-use std::sync::Arc;
-
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry};
 use crate::config::FeaturesConfig;
 use crate::tasks::VerbCall;
@@ -31,7 +20,17 @@ use crate::vm::VMExecState;
 use crate::vm::activation::{Activation, Frame};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork};
+use lazy_static::lazy_static;
 use moor_common::matching::command_parse::ParsedCommand;
+use moor_common::model::WorldState;
+use moor_common::model::WorldStateError;
+use moor_common::model::{VerbDef, VerbFlag};
+use moor_compiler::{BUILTINS, BuiltinId, Program};
+use moor_var::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
+use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
+use moor_var::{List, Obj};
+use moor_var::{Var, v_int, v_obj};
+use std::sync::Arc;
 
 lazy_static! {
     static ref LIST_SYM: Symbol = Symbol::mk("list");
@@ -302,13 +301,16 @@ impl VMExecState {
         args: &List,
         world_state: &mut dyn WorldState,
     ) -> Option<ExecutionResult> {
-        let bf_override_name = Symbol::mk(&format!("bf_{}", bf_name));
+        // Reject invocations of maybe-wrapper functions if the caller is #0.
+        // This prevents recursion through them.
+        // TODO: This is a copy of LambdaMOO's logic, and is maybe a bit over-zealous as it will prevent
+        //  one wrapped builtin from calling the wrapper on another builtin. We can revist later.
 
-        // Don't let the wrapper recursively call the wrapper. Instead, it will just call the builtin
-        // as usual.
-        if self.top().verb_name == bf_override_name && self.top().this == v_obj(SYSTEM_OBJECT) {
+        if self.caller() == v_obj(SYSTEM_OBJECT) {
             return None;
         }
+
+        let bf_override_name = Symbol::mk(&format!("bf_{}", bf_name));
 
         // Look for it...
         let (binary, resolved_verb) = world_state
@@ -322,8 +324,8 @@ impl VMExecState {
 
         let call = VerbCall {
             verb_name: bf_override_name,
-            location: v_obj(SYSTEM_OBJECT),
-            this: self.top().this.clone(),
+            location: v_obj(resolved_verb.location()),
+            this: v_obj(SYSTEM_OBJECT),
             player: self.top().player.clone(),
             args: args.iter().collect(),
             argstr: "".to_string(),
