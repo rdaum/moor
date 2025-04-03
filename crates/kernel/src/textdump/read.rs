@@ -51,8 +51,8 @@ pub enum TextdumpReaderError {
     CouldNotOpenFile(String),
     #[error("io error: {0} @ line {1}")]
     IoError(std::io::Error, usize),
-    #[error("parse error: {0}")]
-    ParseError(String),
+    #[error("parse error: {0} @ line {1}")]
+    ParseError(String, usize),
     #[error("db error while {0}: {1}")]
     LoadError(String, WorldStateError),
     #[error("compile error while {0}: {1}")]
@@ -93,30 +93,30 @@ impl<R: Read> TextdumpReader<R> {
     fn read_num(&mut self) -> Result<i64, TextdumpReaderError> {
         let buf = self.read_next_line()?;
         let Ok(i) = buf.trim().parse() else {
-            return Err(TextdumpReaderError::ParseError(format!(
-                "invalid number: {}",
-                buf
-            )));
+            return Err(TextdumpReaderError::ParseError(
+                format!("invalid number: {}", buf),
+                self.line_num,
+            ));
         };
         Ok(i)
     }
     fn read_objid(&mut self) -> Result<Obj, TextdumpReaderError> {
         let buf = self.read_next_line()?;
         let Ok(u) = buf.trim().parse() else {
-            return Err(TextdumpReaderError::ParseError(format!(
-                "invalid objid: {}",
-                buf
-            )));
+            return Err(TextdumpReaderError::ParseError(
+                format!("invalid objid: {}", buf),
+                self.line_num,
+            ));
         };
         Ok(Obj::mk_id(u))
     }
     fn read_float(&mut self) -> Result<f64, TextdumpReaderError> {
         let buf = self.read_next_line()?;
         let Ok(f) = buf.trim().parse() else {
-            return Err(TextdumpReaderError::ParseError(format!(
-                "invalid float: {}",
-                buf
-            )));
+            return Err(TextdumpReaderError::ParseError(
+                format!("invalid float: {}", buf),
+                self.line_num,
+            ));
         };
         Ok(f)
     }
@@ -255,19 +255,19 @@ impl<R: Read> TextdumpReader<R> {
         match ospec.chars().next() {
             Some('#') => {}
             _ => {
-                return Err(TextdumpReaderError::ParseError(format!(
-                    "invalid object spec: {}",
-                    ospec
-                )));
+                return Err(TextdumpReaderError::ParseError(
+                    format!("invalid object spec: {}", ospec),
+                    self.line_num,
+                ));
             }
         }
         // TODO: handle "recycled" flag in textdump loading.
         let oid_str = &ospec[1..];
         let Ok(oid) = oid_str.trim().parse() else {
-            return Err(TextdumpReaderError::ParseError(format!(
-                "invalid objid: {}",
-                oid_str
-            )));
+            return Err(TextdumpReaderError::ParseError(
+                format!("invalid objid: {}", oid_str),
+                self.line_num,
+            ));
         };
         let oid = Obj::mk_id(oid);
         let name = self.read_string()?;
@@ -340,8 +340,9 @@ impl<R: Read> TextdumpReader<R> {
         info!("version {}", version_string);
 
         // Parse the version, and we will use that to determine the encoding mode.
-        let version = TextdumpVersion::parse(&version_string)
-            .ok_or_else(|| TextdumpReaderError::ParseError("parsing version string".to_string()))?;
+        let version = TextdumpVersion::parse(&version_string).ok_or_else(|| {
+            TextdumpReaderError::ParseError("parsing version string".to_string(), self.line_num)
+        })?;
 
         self.encoding_mode = match version {
             TextdumpVersion::LambdaMOO(_) => EncodingMode::ISO8859_1,
