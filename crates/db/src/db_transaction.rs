@@ -87,10 +87,7 @@ pub(crate) struct VerbResolutionCache {
 
 impl VerbResolutionCache {
     pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Vec<VerbDef>> {
-        self.entries
-            .borrow()
-            .get(&(obj.clone(), *verb))
-            .cloned()
+        self.entries.borrow().get(&(obj.clone(), *verb)).cloned()
     }
 
     pub(crate) fn flush(&self) {
