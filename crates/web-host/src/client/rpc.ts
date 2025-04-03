@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import {context} from "./moor";
-import {matchRef, ObjectRef, oidRef, ORefKind, sysobjRef} from "./var";
+import { context } from "./moor";
+import { matchRef, ObjectRef, oidRef, ORefKind, sysobjRef } from "./var";
 
 function translateJsonToMOO(json: any): any {
     if (typeof json === "number") {

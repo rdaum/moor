@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import van, {State} from "vanjs-core";
+import van, { State } from "vanjs-core";
 
-import {FloatingWindow} from "van-ui";
-import {curieORef, MoorRemoteObject} from "./rpc";
+import { FloatingWindow } from "van-ui";
+import { curieORef, MoorRemoteObject } from "./rpc";
 
 import {
     Context,
@@ -25,10 +25,10 @@ import {
     Spool,
     SpoolType,
     SystemEvent,
-    Traceback
+    Traceback,
 } from "./model";
-import {matchRef} from "./var";
-import {launchVerbEditor, showVerbEditor} from "./verb_edit";
+import { matchRef } from "./var";
+import { launchVerbEditor, showVerbEditor } from "./verb_edit";
 
 // import sanitize html
 import DOMPurify from "dompurify";

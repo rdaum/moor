@@ -9,7 +9,7 @@ included in the notes column.
 ### Lists
 
 | Name         | Complete | Notes                     |
-|--------------|----------|---------------------------|
+| ------------ | -------- | ------------------------- |
 | `length`     | &check;  |                           |
 | `setadd`     | &check;  |                           |
 | `setremove`  | &check;  |                           |
@@ -27,7 +27,7 @@ included in the notes column.
 ### Strings
 
 | Name        | Complete | Notes                                                                                                |
-|-------------|----------|------------------------------------------------------------------------------------------------------|
+| ----------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `tostr`     | &check;  |                                                                                                      |
 | `toliteral` | &check;  |                                                                                                      |
 | `crypt`     | &check;  | Pretty damned insecure, only here to support existing core password functions.                       |
@@ -40,7 +40,7 @@ included in the notes column.
 ### Numbers
 
 | Name       | Complete | Notes |
-|------------|----------|-------|
+| ---------- | -------- | ----- |
 | `toint`    | &check;  |       |
 | `tonum`    | &check;  |       |
 | `tofloat`  | &check;  |       |
@@ -71,7 +71,7 @@ included in the notes column.
 ### Objects
 
 | Name              | Complete | Notes                              |
-|-------------------|----------|------------------------------------|
+| ----------------- | -------- | ---------------------------------- |
 | `toobj`           | &check;  |                                    |
 | `typeof`          | &check;  |                                    |
 | `create`          | &check;  | Quota support not implemented yet. |
@@ -89,7 +89,7 @@ included in the notes column.
 ### Properties
 
 | Name                | Complete | Notes |
-|---------------------|----------|-------|
+| ------------------- | -------- | ----- |
 | `properties`        | &check;  |       |
 | `property_info`     | &check;  |       |
 | `set_property_info` | &check;  |       |
@@ -101,7 +101,7 @@ included in the notes column.
 ### Verbs
 
 | Name            | Complete | Notes                                 |
-|-----------------|----------|---------------------------------------|
+| --------------- | -------- | ------------------------------------- |
 | `verbs`         | &check;  |                                       |
 | `verb_info`     | &check;  |                                       |
 | `set_verb_info` | &check;  |                                       |
@@ -117,7 +117,7 @@ included in the notes column.
 ### Values / encoding
 
 | Name            | Complete | Notes                                                                              |
-|-----------------|----------|------------------------------------------------------------------------------------|
+| --------------- | -------- | ---------------------------------------------------------------------------------- |
 | `value_bytes`   | &check;  |                                                                                    |
 | `value_hash`    |          |                                                                                    |
 | `string_hash`   | &check;  |                                                                                    |
@@ -129,7 +129,7 @@ included in the notes column.
 ### Server
 
 | Name                  | Complete | Notes                                                                    |
-|-----------------------|----------|--------------------------------------------------------------------------|
+| --------------------- | -------- | ------------------------------------------------------------------------ |
 | `server_version`      | &check;  | Crate version + short commit hash, for now                               |
 | `renumber`            |          |                                                                          |
 | `reset_max_object`    |          |                                                                          |
@@ -151,7 +151,7 @@ included in the notes column.
 ### Tasks
 
 | Name           | Complete | Notes |
-|----------------|----------|-------|
+| -------------- | -------- | ----- |
 | `task_id`      | &check;  |       |
 | `queued_tasks` | &check;  |       |
 | `kill_task`    | &check;  |       |
@@ -163,7 +163,7 @@ included in the notes column.
 ### Execution
 
 | Name             | Complete | Notes        |
-|------------------|----------|--------------|
+| ---------------- | -------- | ------------ |
 | `call_function`  | &check;  |              |
 | `raise`          | &check;  |              |
 | `suspend`        | &check;  |              |
@@ -178,7 +178,7 @@ included in the notes column.
 ### Network connections
 
 | Name                      | Complete | Notes                                                                                                |
-|---------------------------|----------|------------------------------------------------------------------------------------------------------|
+| ------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `set_connection_option`   |          |                                                                                                      |
 | `connection_option`       |          |                                                                                                      |
 | `connection_options`      |          |                                                                                                      |
@@ -194,7 +194,7 @@ included in the notes column.
 Functions not in the original LambdaMOO, but were in Toast, and ported over
 
 | Name                   | Complete | Notes                                                               |
-|------------------------|----------|---------------------------------------------------------------------|
+| ---------------------- | -------- | ------------------------------------------------------------------- |
 | `age_generate_keypair` | &check;  | Generates a new X25519 keypair for use with age encryption.         |
 | `age_encrypt`          | &check;  | Encrypts a message using age encryption for one or more recipients. |
 | `age_decrypt`          | &check;  | Decrypts an age-encrypted message using one or more private keys.   |
@@ -214,18 +214,15 @@ Functions not part of the original LambdaMOO, but added in moor
 ### XML / HTML content management
 
 | Name        | Description                                                      | Notes                                                 |
-|-------------|------------------------------------------------------------------|-------------------------------------------------------|
+| ----------- | ---------------------------------------------------------------- | ----------------------------------------------------- |
 | `xml_parse` | Parse a string c ntaining XML into a tree of flyweight objects   | Available only if the flyweights feature is turned on |
 | `to_xml`    | Convert a tree of flyweight objects into a string containing XML | Available only if the flyweights feature is turned on |
 
 ### Flyweights & Symbols (new types)
 
 | Name          | Description                                                             | Notes                                                 |
-|---------------|-------------------------------------------------------------------------|-------------------------------------------------------|
+| ------------- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
 | `slots`       | Returns the slots on a given flyweight                                  | Available only if the flyweights feature is turned on |
 | `remove_slot` | Returns a copy of the flyweight with the given slot removed, if present | Available only if the flyweights feature is turned on |
 | `add_slot`    | Returns a copy of the flyweight with a new slot added                   | Available only if the flyweights feature is turned on |
 | 'to_sym'      | Turns the given value into a Symbol                                     | Available only if the symbols feature is turned on    |
-
-
-

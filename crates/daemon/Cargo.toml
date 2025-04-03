@@ -20,10 +20,10 @@ name = "moor-daemon"
 path = "src/main.rs"
 
 [dependencies]
+moor-common = { path = "../common" }
 moor-db = { path = "../db" }
 moor-kernel = { path = "../kernel" }
 moor-var = { path = "../var" }
-moor-common = { path = "../common" }
 rpc-common = { path = "../rpc/rpc-common" }
 
 ## Command line arguments parsing.

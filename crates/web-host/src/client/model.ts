@@ -11,9 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import van, {State} from "vanjs-core";
-import {Notice} from "./moor";
-import {ObjectRef} from "./var";
+import van, { State } from "vanjs-core";
+import { Notice } from "./moor";
+import { ObjectRef } from "./var";
 
 export class Player {
     connected: boolean;

@@ -11,13 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import {FloatingWindow} from "van-ui";
+import { FloatingWindow } from "van-ui";
 import van from "vanjs-core";
 
-import {createEditor, updateEditor} from "./editor";
-import {Context} from "./model";
-import {MoorRemoteObject} from "./rpc";
-import {ObjectRef} from "./var";
+import { createEditor, updateEditor } from "./editor";
+import { Context } from "./model";
+import { MoorRemoteObject } from "./rpc";
+import { ObjectRef } from "./var";
 
 const { button, div, span, input, select, option, br, pre, form, a, p } = van.tags;
 

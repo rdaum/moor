@@ -67,17 +67,17 @@ text_io.workspace = true
 uuid.workspace = true
 
 ## Required for MOO builtins.
+age = { workspace = true, features = ["ssh"] }
 argon2.workspace = true
+base64 = "0.21.7"
 chrono-tz.workspace = true
 iana-time-zone.workspace = true
 md-5.workspace = true
 onig.workspace = true
 pwhash.workspace = true
 rand.workspace = true
-xml-rs.workspace = true
-age = { workspace = true, features = ["ssh"] }
-base64 = "0.21.7"
 ssh-key = "0.6.5"
+xml-rs.workspace = true
 
 ## Error declaration/ handling
 thiserror.workspace = true
