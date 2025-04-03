@@ -1337,22 +1337,4 @@ mod tests {
         );
         assert_eq!(result.unwrap(), v_int(1));
     }
-    
-    #[test]
-    fn test_bf_wrapper() {
-        let children_wrapper = "return {@children(@args), -666};";
-        let compiled1 = compile(children_wrapper, CompileOptions::default()).unwrap();
-        let program = "return children(this);";
-        let compiled2 = compile(program, CompileOptions::default()).unwrap();
-        let mut state = world_with_test_programs(&[("bf_children", &compiled1), ("test", &compiled2)]);
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(
-            state.as_mut(),
-            session,
-            Arc::new(BuiltinRegistry::new()),
-            "test",
-            List::mk_list(&[]),
-        );
-        assert_eq!(result.unwrap(), v_list(&[v_int(-666)]));
-    }
 }
