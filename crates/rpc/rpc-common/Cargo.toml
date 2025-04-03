@@ -13,8 +13,8 @@ description = "Common entities used for 0MQ based RPC communication with the dae
 
 [dependencies]
 # Own
-moor-var = { path = "../../var" }
 moor-common = { path = "../../common" }
+moor-var = { path = "../../var" }
 
 bincode.workspace = true
 clap.workspace = true

@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-import van, {State} from "vanjs-core";
-import {Login} from "./login";
-import {Context, PresentationModel, Presentations} from "./model";
-import {htmlPurifySetup, Narrative} from "./narrative";
-import {retrieveWelcome} from "./rpc";
+import van, { State } from "vanjs-core";
+import { Login } from "./login";
+import { Context, PresentationModel, Presentations } from "./model";
+import { htmlPurifySetup, Narrative } from "./narrative";
+import { retrieveWelcome } from "./rpc";
 
 const { button, div, span, input, select, option, br, pre, form, a, p } = van.tags;
 

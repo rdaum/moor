@@ -15,13 +15,13 @@ description = "A tool for importing, compiling, and exporting mooR cores without
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
 
 [dependencies]
+moor-common = { path = "../../crates/common" }
 moor-compiler = { path = "../../crates/compiler" }
+moor-daemon = { path = "../../crates/daemon" }
 moor-db = { path = "../../crates/db" }
 moor-kernel = { path = "../../crates/kernel" }
-moor-var = { path = "../../crates/var" }
-moor-common = { path = "../../crates/common" }
-moor-daemon = { path = "../../crates/daemon" }
 moor-moot = { path = "../../crates/testing/moot" }
+moor-var = { path = "../../crates/var" }
 
 ## Command line arguments parsing.
 clap.workspace = true
