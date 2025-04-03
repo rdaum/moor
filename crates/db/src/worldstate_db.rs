@@ -330,6 +330,7 @@ impl WorldStateDB {
             object_propvalues: self.object_propvalues.clone().start(&tx),
             object_propflags: self.object_propflags.clone().start(&tx),
             sequences: self.sequences.clone(),
+            verb_resolution_cache: Default::default(),
         }
     }
 

@@ -25,6 +25,7 @@ use moor_common::model::{
 };
 use moor_common::util::BitEnum;
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::sync::Arc;
@@ -66,6 +67,41 @@ pub struct DbTransaction {
     pub(crate) object_propflags: LC<ObjAndUUIDHolder, PropPerms>,
 
     pub(crate) sequences: [Arc<AtomicI64>; 16],
+
+    pub(crate) verb_resolution_cache: VerbResolutionCache,
+}
+
+/// Very naive per-tx verb resolution cache.
+/// Not very aggressive here, it flushes on every verbdef mutation on any object, regardless of
+/// inheritance chain.
+/// It's net-new empty for every transaction every time.
+/// The goal is really just to optimize tight-loop verb lookups
+/// Lots of room for improvement here:
+///     Keep a separate global cache which can be shared between transactions
+///     Flush entries for an object only if inheritance chain touched
+///     Speed up named lookups more for when verbs have many names
+#[derive(Default)]
+pub(crate) struct VerbResolutionCache {
+    entries: RefCell<HashMap<(Obj, Symbol), Vec<VerbDef>>>,
+}
+
+impl VerbResolutionCache {
+    pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Vec<VerbDef>> {
+        self.entries
+            .borrow()
+            .get(&(obj.clone(), *verb))
+            .cloned()
+    }
+
+    pub(crate) fn flush(&self) {
+        self.entries.borrow_mut().clear();
+    }
+
+    pub(crate) fn fill(&self, obj: &Obj, verb: &Symbol, verbs: &[VerbDef]) {
+        self.entries
+            .borrow_mut()
+            .insert((obj.clone(), *verb), verbs.to_vec());
+    }
 }
 
 fn upsert<Domain, Codomain>(
@@ -693,6 +729,21 @@ impl WorldStateTransaction for DbTransaction {
         name: Symbol,
         argspec: Option<VerbArgsSpec>,
     ) -> Result<VerbDef, WorldStateError> {
+        // Check the cache first.
+        if let Some(named) = self.verb_resolution_cache.lookup(obj, &name) {
+            let verb = named.first();
+            if let Some(verb) = verb {
+                let Some(argspec) = argspec else {
+                    return Ok(verb.clone());
+                };
+
+                if verb.args().matches(&argspec) {
+                    return Ok(verb.clone());
+                }
+            }
+            return Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()));
+        }
+
         let mut search_o = obj.clone();
         loop {
             let verbdefs = self.object_verbdefs.get(&search_o).map_err(|e| {
@@ -700,6 +751,9 @@ impl WorldStateTransaction for DbTransaction {
             })?;
             if let Some(verbdefs) = verbdefs {
                 let named = verbdefs.find_named(name);
+
+                // Fill the verb cache.
+                self.verb_resolution_cache.fill(obj, &name, &named);
                 let verb = named.first();
                 if let Some(verb) = verb {
                     let Some(argspec) = argspec else {
@@ -749,6 +803,7 @@ impl WorldStateTransaction for DbTransaction {
             ));
         };
 
+        self.verb_resolution_cache.flush();
         upsert(&mut self.object_verbdefs, obj.clone(), verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
         })?;
@@ -789,8 +844,9 @@ impl WorldStateTransaction for DbTransaction {
             args,
         );
 
-        let verbdefs = verbdefs.with_added(verbdef);
+        self.verb_resolution_cache.flush();
 
+        let verbdefs = verbdefs.with_added(verbdef);
         upsert(&mut self.object_verbdefs, oid.clone(), verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
         })?;
@@ -812,7 +868,7 @@ impl WorldStateTransaction for DbTransaction {
         let verbdefs = verbdefs
             .with_removed(uuid)
             .ok_or_else(|| WorldStateError::VerbNotFound(location.clone(), format!("{}", uuid)))?;
-
+        self.verb_resolution_cache.flush();
         upsert(&mut self.object_verbdefs, location.clone(), verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
         })?;
