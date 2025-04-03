@@ -330,8 +330,6 @@ impl VMExecState {
             config: exec_args.config.clone(),
         };
 
-        
-
         match bf.call(&mut bf_args) {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
