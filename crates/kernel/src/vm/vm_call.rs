@@ -330,15 +330,15 @@ impl VMExecState {
             config: exec_args.config.clone(),
         };
 
-        let call_results = match bf.call(&mut bf_args) {
+        
+
+        match bf.call(&mut bf_args) {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
             Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(e, msg, value),
             Err(BfErr::Rollback) => ExecutionResult::TaskRollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
-        };
-
-        call_results
+        }
     }
 
     /// We're returning into a builtin function, which is all set up at the top of the stack.
