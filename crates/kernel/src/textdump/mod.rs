@@ -114,7 +114,7 @@ pub struct Verb {
 }
 
 pub struct Textdump {
-    pub version: String,
+    pub version_string: String,
     pub objects: BTreeMap<Obj, Object>,
     #[allow(dead_code)]
     pub users: Vec<Obj>,

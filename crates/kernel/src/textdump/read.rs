@@ -31,18 +31,42 @@ use moor_var::{Obj, v_flyweight};
 pub const TYPE_CLEAR: i64 = 5;
 
 pub struct TextdumpReader<R: Read> {
-    line_num: usize,
-    reader: BufReader<R>,
-    encoding_mode: EncodingMode,
+    pub line_num: usize,
+    pub version: TextdumpVersion,
+    pub version_string: String,
+    pub reader: BufReader<R>,
+    pub encoding_mode: EncodingMode,
 }
 
 impl<R: Read> TextdumpReader<R> {
-    pub fn new(reader: BufReader<R>) -> Self {
-        Self {
+    pub fn new(mut reader: BufReader<R>) -> Result<Self, TextdumpReaderError> {
+        // Read the first line from the file to pull out the version information.
+        let mut version_string = String::new();
+        reader.read_line(&mut version_string).map_err(|e| {
+            TextdumpReaderError::VersionError(format!("could not read textdump version: {}", e))
+        })?;
+        // Strip linefeeds/carriage returns from the end of the version string.
+        version_string.retain(|c| c != '\n' && c != '\r');
+
+        info!("version {}", version_string);
+
+        // Parse the version, and we will use that to determine the encoding mode.
+        let version = TextdumpVersion::parse(&version_string).ok_or_else(|| {
+            TextdumpReaderError::ParseError(format!("invalid version: {}", version_string), 1)
+        })?;
+
+        let encoding_mode = match version {
+            TextdumpVersion::LambdaMOO(_) => EncodingMode::ISO8859_1,
+            TextdumpVersion::Moor(_, _, encoding) => encoding,
+        };
+
+        Ok(Self {
+            version,
+            version_string,
+            encoding_mode,
             reader,
-            line_num: 0,
-            encoding_mode: EncodingMode::UTF8,
-        }
+            line_num: 2,
+        })
     }
 }
 #[derive(Debug, thiserror::Error)]
@@ -335,20 +359,7 @@ impl<R: Read> TextdumpReader<R> {
         })
     }
 
-    pub fn read_textdump(&mut self) -> Result<(Textdump, TextdumpVersion), TextdumpReaderError> {
-        let version_string = self.read_string()?;
-        info!("version {}", version_string);
-
-        // Parse the version, and we will use that to determine the encoding mode.
-        let version = TextdumpVersion::parse(&version_string).ok_or_else(|| {
-            TextdumpReaderError::ParseError("parsing version string".to_string(), self.line_num)
-        })?;
-
-        self.encoding_mode = match version {
-            TextdumpVersion::LambdaMOO(_) => EncodingMode::ISO8859_1,
-            TextdumpVersion::Moor(_, _, encoding) => encoding,
-        };
-
+    pub fn read_textdump(&mut self) -> Result<Textdump, TextdumpReaderError> {
         let nobjs = self.read_num()? as usize;
         info!("# objs: {}", nobjs);
         let nprogs = self.read_num()? as usize;
@@ -377,14 +388,11 @@ impl<R: Read> TextdumpReader<R> {
             verbs.insert((verb.objid.clone(), verb.verbnum), verb);
         }
 
-        Ok((
-            Textdump {
-                version: version_string,
-                objects,
-                users,
-                verbs,
-            },
-            version,
-        ))
+        Ok(Textdump {
+            version_string: self.version_string.clone(),
+            objects,
+            users,
+            verbs,
+        })
     }
 }

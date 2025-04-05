@@ -19,6 +19,7 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use tracing::{info, span, trace};
 
+use crate::config::LambdaToastVersions::DbvBfbugFixed;
 use crate::config::{FeaturesConfig, TextdumpVersion};
 use crate::textdump::read::TextdumpReaderError;
 use crate::textdump::{
@@ -109,16 +110,16 @@ pub fn read_textdump<T: io::Read>(
     moo_version: Version,
     features_config: FeaturesConfig,
 ) -> Result<(), TextdumpReaderError> {
-    let mut tdr = TextdumpReader::new(reader);
-    let (td, version) = tdr.read_textdump()?;
-
+    let mut tdr = TextdumpReader::new(reader)?;
     // Validate the textdumps' version string against the configuration of the server.
-    match &version {
+    match &tdr.version {
         TextdumpVersion::LambdaMOO(u) => {
-            if *u > 4 {
-                return Err(TextdumpReaderError::VersionError(
-                    "Unsupported LambdaMOO textdump version".to_string(),
-                ));
+            // We don't support any of the "Toast" versions, which use a new DB format, for now.
+            if *u > DbvBfbugFixed {
+                return Err(TextdumpReaderError::VersionError(format!(
+                    "Unsupported textdump version {}",
+                    u
+                )));
             }
         }
         TextdumpVersion::Moor(v, features, _encoding) => {
@@ -140,6 +141,7 @@ pub fn read_textdump<T: io::Read>(
         }
     }
 
+    let td = tdr.read_textdump()?;
     let compile_options = features_config.compile_options();
 
     info!("Instantiating objects");
