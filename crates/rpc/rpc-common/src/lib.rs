@@ -21,8 +21,8 @@ pub use client::{
 };
 pub use host::{DaemonToHostReply, HostBroadcastEvent, HostToDaemonMessage, HostType};
 pub use tokens::{
-    load_keypair, parse_keypair, AuthToken, ClientToken, HostToken, KeyError,
-    MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER,
+    AuthToken, ClientToken, HostToken, KeyError, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,
+    MOOR_SESSION_TOKEN_FOOTER, load_keypair, parse_keypair,
 };
 mod client;
 pub mod client_args;
