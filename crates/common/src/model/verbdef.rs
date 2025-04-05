@@ -148,6 +148,23 @@ impl VerbDef {
             .try_read()
             .expect("Failed to decode verb args spec")
     }
+
+    pub fn matches_spec(
+        &self,
+        argspec: &Option<VerbArgsSpec>,
+        flagspec: &Option<BitEnum<VerbFlag>>,
+    ) -> bool {
+        if let Some(argspec) = argspec {
+            if !self.args().matches(argspec) {
+                return false;
+            }
+        }
+        if let Some(flagspec) = flagspec {
+            return self.flags().contains_all(*flagspec);
+        }
+
+        true
+    }
 }
 
 impl Named for VerbDef {

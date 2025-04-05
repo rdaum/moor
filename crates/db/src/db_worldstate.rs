@@ -643,7 +643,12 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         obj: &Obj,
         vname: Symbol,
     ) -> Result<(ByteView, VerbDef), WorldStateError> {
-        let vh = self.get_tx().resolve_verb(obj, vname, None)?;
+        let vh = self.get_tx().resolve_verb(
+            obj,
+            vname,
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec)),
+        )?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
 
@@ -685,7 +690,9 @@ impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
         let iobj = spec_for_fn(obj, iobj);
         let argspec = VerbArgsSpec { dobj, prep, iobj };
 
-        let vh = self.get_tx().resolve_verb(obj, command_verb, Some(argspec));
+        let vh = self
+            .get_tx()
+            .resolve_verb(obj, command_verb, Some(argspec), None);
         let vh = match vh {
             Ok(vh) => vh,
             Err(WorldStateError::VerbNotFound(_, _)) => {
