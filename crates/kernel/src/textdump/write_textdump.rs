@@ -255,7 +255,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
         .collect();
 
     Textdump {
-        version,
+        version_string: version,
         objects,
         users,
         verbs,

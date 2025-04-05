@@ -29,7 +29,7 @@ mod test {
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::{Database, DatabaseConfig, TxDB};
-    use moor_kernel::config::{FeaturesConfig, TextdumpVersion};
+    use moor_kernel::config::{FeaturesConfig, LambdaToastVersions, TextdumpVersion};
     use moor_kernel::textdump::{
         EncodingMode, TextdumpReader, make_textdump, read_textdump, textdump_load,
     };
@@ -80,12 +80,18 @@ mod test {
         let corefile = get_minimal_db();
 
         let br = BufReader::new(corefile);
-        let mut tdr = TextdumpReader::new(br);
-        let (td, parsed_version) = tdr.read_textdump().expect("Failed to read textdump");
+        let mut tdr = TextdumpReader::new(br).unwrap();
+        let td = tdr.read_textdump().expect("Failed to read textdump");
 
         // Version spec
-        assert_eq!(td.version, "** LambdaMOO Database, Format Version 1 **");
-        assert_eq!(parsed_version, TextdumpVersion::LambdaMOO(1));
+        assert_eq!(
+            td.version_string,
+            "** LambdaMOO Database, Format Version 1 **"
+        );
+        assert_eq!(
+            tdr.version,
+            TextdumpVersion::LambdaMOO(LambdaToastVersions::DbvExceptions)
+        );
 
         // Minimal DB has 1 user, #3,
         assert_eq!(td.users, vec![Obj::mk_id(3)]);
@@ -169,8 +175,8 @@ mod test {
         let minimal_db = manifest_dir.join("tests/Minimal.db");
         let corefile = File::open(minimal_db.clone()).unwrap();
         let br = BufReader::new(corefile);
-        let mut tdr = TextdumpReader::new(br);
-        let (td, _) = tdr.read_textdump().expect("Failed to read textdump");
+        let mut tdr = TextdumpReader::new(br).unwrap();
+        let td = tdr.read_textdump().expect("Failed to read textdump");
 
         let mut output = Vec::new();
         let mut writer =
