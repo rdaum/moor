@@ -115,6 +115,7 @@ pub trait WorldStateTransaction: Send {
         obj: &Obj,
         name: Symbol,
         argspec: Option<VerbArgsSpec>,
+        flagspec: Option<BitEnum<VerbFlag>>,
     ) -> Result<VerbDef, WorldStateError>;
 
     /// Update the provided attributes for the given verb.

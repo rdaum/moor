@@ -14,12 +14,12 @@
 //! A set of common tests for any world state implementation.
 
 use crate::worldstate_transaction::WorldStateTransaction;
-use moor_common::model::VerbArgsSpec;
 use moor_common::model::{BinaryType, VerbAttrs};
 use moor_common::model::{CommitResult, WorldStateError};
 use moor_common::model::{HasUuid, Named};
 use moor_common::model::{ObjAttrs, PropFlag, ValSet};
 use moor_common::model::{ObjSet, ObjectRef};
+use moor_common::model::{VerbArgsSpec, VerbFlag};
 use moor_common::util::BitEnum;
 use moor_var::NOTHING;
 use moor_var::Obj;
@@ -456,13 +456,18 @@ where
         vec![Symbol::mk_case_insensitive("test")],
         vec![],
         BinaryType::LambdaMoo18X,
-        BitEnum::new(),
+        BitEnum::new_with(VerbFlag::Exec),
         VerbArgsSpec::this_none_this(),
     )
     .unwrap();
     // resolve the verb to its vh.
     let vh = tx
-        .resolve_verb(&oid, Symbol::mk_case_insensitive("test"), None)
+        .resolve_verb(
+            &oid,
+            Symbol::mk_case_insensitive("test"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec)),
+        )
         .unwrap();
     assert_eq!(vh.names(), vec!["test"]);
     // Verify it's actually on the object when we get verbs.
@@ -486,7 +491,12 @@ where
     .unwrap();
     // resolve with the new name.
     let vh = tx
-        .resolve_verb(&oid, Symbol::mk_case_insensitive("test2"), None)
+        .resolve_verb(
+            &oid,
+            Symbol::mk_case_insensitive("test2"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec)),
+        )
         .unwrap();
     assert_eq!(vh.names(), vec!["test2"]);
 
@@ -494,7 +504,12 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
     let tx = begin_tx();
     let vh = tx
-        .resolve_verb(&oid, Symbol::mk_case_insensitive("test2"), None)
+        .resolve_verb(
+            &oid,
+            Symbol::mk_case_insensitive("test2"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec)),
+        )
         .unwrap();
     assert_eq!(vh.names(), vec!["test2"]);
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
@@ -781,15 +796,20 @@ where
         vec![Symbol::mk_case_insensitive("test")],
         vec![],
         BinaryType::LambdaMoo18X,
-        BitEnum::new(),
+        BitEnum::new_with(VerbFlag::Exec),
         VerbArgsSpec::this_none_this(),
     )
     .unwrap();
 
     assert_eq!(
-        tx.resolve_verb(&a, Symbol::mk_case_insensitive("test"), None)
-            .unwrap()
-            .names(),
+        tx.resolve_verb(
+            &a,
+            Symbol::mk_case_insensitive("test"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec))
+        )
+        .unwrap()
+        .names(),
         vec!["test"]
     );
 
@@ -797,7 +817,8 @@ where
         tx.resolve_verb(
             &a,
             Symbol::mk_case_insensitive("test"),
-            Some(VerbArgsSpec::this_none_this())
+            Some(VerbArgsSpec::this_none_this()),
+            Some(BitEnum::new_with(VerbFlag::Exec))
         )
         .unwrap()
         .names(),
@@ -805,7 +826,12 @@ where
     );
 
     let v_uuid = tx
-        .resolve_verb(&a, Symbol::mk_case_insensitive("test"), None)
+        .resolve_verb(
+            &a,
+            Symbol::mk_case_insensitive("test"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec)),
+        )
         .unwrap()
         .uuid();
     assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![].into());
@@ -817,16 +843,21 @@ where
         vec![Symbol::mk_case_insensitive("test2")],
         vec![],
         BinaryType::LambdaMoo18X,
-        BitEnum::new(),
+        BitEnum::new_with(VerbFlag::Exec),
         VerbArgsSpec::this_none_this(),
     )
     .unwrap();
 
     // Verify we can get it
     assert_eq!(
-        tx.resolve_verb(&a, Symbol::mk_case_insensitive("test2"), None)
-            .unwrap()
-            .names(),
+        tx.resolve_verb(
+            &a,
+            Symbol::mk_case_insensitive("test2"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec))
+        )
+        .unwrap()
+        .names(),
         vec!["test2"]
     );
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
@@ -834,15 +865,25 @@ where
     // Verify existence in a new transaction.
     let tx = begin_tx();
     assert_eq!(
-        tx.resolve_verb(&a, Symbol::mk_case_insensitive("test"), None)
-            .unwrap()
-            .names(),
+        tx.resolve_verb(
+            &a,
+            Symbol::mk_case_insensitive("test"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec))
+        )
+        .unwrap()
+        .names(),
         vec!["test"]
     );
     assert_eq!(
-        tx.resolve_verb(&a, Symbol::mk_case_insensitive("test2"), None)
-            .unwrap()
-            .names(),
+        tx.resolve_verb(
+            &a,
+            Symbol::mk_case_insensitive("test2"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec))
+        )
+        .unwrap()
+        .names(),
         vec!["test2"]
     );
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
@@ -875,15 +916,20 @@ where
         vec![Symbol::mk_case_insensitive("test")],
         vec![],
         BinaryType::LambdaMoo18X,
-        BitEnum::new(),
+        BitEnum::new_with(VerbFlag::Exec),
         VerbArgsSpec::this_none_this(),
     )
     .unwrap();
 
     assert_eq!(
-        tx.resolve_verb(&b, Symbol::mk_case_insensitive("test"), None)
-            .unwrap()
-            .names(),
+        tx.resolve_verb(
+            &b,
+            Symbol::mk_case_insensitive("test"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec))
+        )
+        .unwrap()
+        .names(),
         vec!["test"]
     );
 
@@ -891,7 +937,8 @@ where
         tx.resolve_verb(
             &b,
             Symbol::mk_case_insensitive("test"),
-            Some(VerbArgsSpec::this_none_this())
+            Some(VerbArgsSpec::this_none_this()),
+            Some(BitEnum::new_with(VerbFlag::Exec))
         )
         .unwrap()
         .names(),
@@ -899,7 +946,12 @@ where
     );
 
     let v_uuid = tx
-        .resolve_verb(&b, Symbol::mk_case_insensitive("test"), None)
+        .resolve_verb(
+            &b,
+            Symbol::mk_case_insensitive("test"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec)),
+        )
         .unwrap()
         .uuid();
     assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![].into());
@@ -929,36 +981,56 @@ where
             .collect(),
         vec![],
         BinaryType::LambdaMoo18X,
-        BitEnum::new(),
+        BitEnum::new_with(VerbFlag::Exec),
         VerbArgsSpec::this_none_this(),
     )
     .unwrap();
 
     assert_eq!(
-        tx.resolve_verb(&a, Symbol::mk_case_insensitive("dname"), None)
-            .unwrap()
-            .names(),
+        tx.resolve_verb(
+            &a,
+            Symbol::mk_case_insensitive("dname"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec))
+        )
+        .unwrap()
+        .names(),
         verb_names
     );
 
     assert_eq!(
-        tx.resolve_verb(&a, Symbol::mk_case_insensitive("dnamec"), None)
-            .unwrap()
-            .names(),
+        tx.resolve_verb(
+            &a,
+            Symbol::mk_case_insensitive("dnamec"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec))
+        )
+        .unwrap()
+        .names(),
         verb_names
     );
 
     assert_eq!(
-        tx.resolve_verb(&a, Symbol::mk_case_insensitive("iname"), None)
-            .unwrap()
-            .names(),
+        tx.resolve_verb(
+            &a,
+            Symbol::mk_case_insensitive("iname"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec))
+        )
+        .unwrap()
+        .names(),
         verb_names
     );
 
     assert_eq!(
-        tx.resolve_verb(&a, Symbol::mk_case_insensitive("inamec"), None)
-            .unwrap()
-            .names(),
+        tx.resolve_verb(
+            &a,
+            Symbol::mk_case_insensitive("inamec"),
+            None,
+            Some(BitEnum::new_with(VerbFlag::Exec))
+        )
+        .unwrap()
+        .names(),
         verb_names
     );
     assert_eq!(tx.commit(), Ok(CommitResult::Success));

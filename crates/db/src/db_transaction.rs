@@ -730,20 +730,15 @@ impl WorldStateTransaction for DbTransaction {
         obj: &Obj,
         name: Symbol,
         argspec: Option<VerbArgsSpec>,
+        flagspec: Option<BitEnum<VerbFlag>>,
     ) -> Result<VerbDef, WorldStateError> {
         // Check the cache first.
         if let Some(named) = self.verb_resolution_cache.lookup(obj, &name) {
-            let verb = named.first();
-            if let Some(verb) = verb {
-                let Some(argspec) = argspec else {
-                    return Ok(verb.clone());
-                };
-
-                if verb.args().matches(&argspec) {
+            for verb in named.iter() {
+                if verb.matches_spec(&argspec, &flagspec) {
                     return Ok(verb.clone());
                 }
             }
-            return Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()));
         }
 
         let mut search_o = obj.clone();
@@ -758,11 +753,7 @@ impl WorldStateTransaction for DbTransaction {
                 self.verb_resolution_cache.fill(obj, &name, &named);
                 let verb = named.first();
                 if let Some(verb) = verb {
-                    let Some(argspec) = argspec else {
-                        return Ok(verb.clone());
-                    };
-
-                    if verb.args().matches(&argspec) {
+                    if verb.matches_spec(&argspec, &flagspec) {
                         return Ok(verb.clone());
                     }
                 }

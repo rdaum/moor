@@ -22,9 +22,9 @@ use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork};
 use lazy_static::lazy_static;
 use moor_common::matching::command_parse::ParsedCommand;
+use moor_common::model::VerbDef;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
-use moor_common::model::{VerbDef, VerbFlag};
 use moor_compiler::{BUILTINS, BuiltinId, Program};
 use moor_var::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
@@ -316,11 +316,6 @@ impl VMExecState {
         let (binary, resolved_verb) = world_state
             .find_method_verb_on(&self.top().permissions, &SYSTEM_OBJECT, bf_override_name)
             .ok()?;
-
-        // Not executable, no go.
-        if !resolved_verb.flags().contains(VerbFlag::Exec) {
-            return None;
-        }
 
         let call = VerbCall {
             verb_name: bf_override_name,
