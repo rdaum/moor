@@ -1,0 +1,13 @@
+// Tests various time functions
+
+@programmer
+// ftime as an int should be the same as regular time()
+// test_time
+; return toint(ftime()) == time();
+1
+
+// The first call to ftime(1) stores the current (starting) monotonic time,
+// and subsequent calls return a delta from that
+; return ftime(1) >= 0.0;
+1
+
