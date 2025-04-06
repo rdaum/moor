@@ -15,14 +15,21 @@ use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read};
 
 use text_io::scan;
-use tracing::info;
+use tracing::{info, warn};
+
+use crate::config::LambdaMOODBVersion::DbvFloat;
 
 use crate::config::TextdumpVersion;
+use crate::config::TextdumpVersion::{LambdaMOO, ToastStunt};
+use crate::config::ToastStuntDBVersion::{
+    ToastDbvAnon, ToastDbvInterrupt, ToastDbvLastMove, ToastDbvNextGen, ToastDbvTaskLocal,
+    ToastDbvThis, ToastDbvThreaded,
+};
 use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_common::model::CompileError;
 use moor_common::model::WorldStateError;
 use moor_compiler::Label;
-use moor_var::{Error, v_list, v_map};
+use moor_var::{Error, NOTHING, Sequence, Variant, v_list, v_map};
 use moor_var::{
     List, Symbol, Var, VarType, v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str, v_sym,
 };
@@ -56,7 +63,9 @@ impl<R: Read> TextdumpReader<R> {
         })?;
 
         let encoding_mode = match version {
-            TextdumpVersion::LambdaMOO(_) => EncodingMode::ISO8859_1,
+            TextdumpVersion::LambdaMOO(_) | TextdumpVersion::ToastStunt(_) => {
+                EncodingMode::ISO8859_1
+            }
             TextdumpVersion::Moor(_, _, encoding) => encoding,
         };
 
@@ -234,6 +243,40 @@ impl<R: Read> TextdumpReader<R> {
 
                 v_flyweight(delegate, &slots, List::from_iter(contents), seal)
             }
+            VarType::_TOAST_TYPE_WAIF => {
+                warn!("found ToastStunt WAIF type; treating as None");
+                // We turn WAIFs into nothing, but have to parse them enough to skip past them.
+                let ref_index = self.read_string()?;
+                if &ref_index[0..1] == "r" {
+                    let _terminator = self.read_string()?;
+                    return Ok(v_none());
+                }
+                let _class = self.read_objid()?;
+                let _owner = self.read_objid()?;
+                let _propdefs_length = self.read_num()? as usize;
+                loop {
+                    let cur = self.read_num()?;
+                    if cur == -1 {
+                        break;
+                    }
+                    let _val = self.read_var()?;
+                }
+                let _terminator = self.read_string()?;
+                v_none()
+            }
+            VarType::_TOAST_TYPE_ANON => {
+                warn!("found ToastStunt ANON type; treating as None");
+                // We turn ANONs into nothing, but have to parse them enough to skip past them.
+                let _oid = self.read_num()?;
+
+                v_none()
+            }
+            _ => {
+                return Err(TextdumpReaderError::ParseError(
+                    format!("invalid var type: {:?}", vtype),
+                    self.line_num,
+                ));
+            }
         };
         Ok(v)
     }
@@ -295,15 +338,91 @@ impl<R: Read> TextdumpReader<R> {
         };
         let oid = Obj::mk_id(oid);
         let name = self.read_string()?;
-        let _ohandles_string = self.read_string()?;
+        match self.version {
+            ToastStunt(v) if v >= ToastDbvNextGen => {}
+            _ => {
+                let _ohandles_string = self.read_string()?;
+            }
+        }
+
         let flags = self.read_num()? as u8;
         let owner = self.read_objid()?;
-        let location = self.read_objid()?;
-        let contents = self.read_objid()?;
-        let next = self.read_objid()?;
-        let parent = self.read_objid()?;
-        let child = self.read_objid()?;
-        let sibling = self.read_objid()?;
+        let location = match self.version {
+            ToastStunt(_) => {
+                let location = self.read_var()?;
+                let Variant::Obj(location) = location.variant() else {
+                    return Err(TextdumpReaderError::ParseError(
+                        format!("invalid location: {:?}", location),
+                        self.line_num,
+                    ));
+                };
+                location.clone()
+            }
+            _ => self.read_objid()?,
+        };
+        if let ToastStunt(v) = self.version {
+            if v >= ToastDbvLastMove {
+                let _last_move = self.read_var()?;
+            }
+        }
+        let (contents, next, parent, child, sibling) = match self.version {
+            ToastStunt(_) => {
+                let _contents = self.read_var()?;
+                let Variant::List(_contents) = _contents.variant() else {
+                    return Err(TextdumpReaderError::ParseError(
+                        format!("invalid contents list: {:?}", _contents),
+                        self.line_num,
+                    ));
+                };
+                let parents = self.read_var()?;
+                let parent = match parents.variant() {
+                    Variant::Obj(parent) => parent.clone(),
+                    Variant::List(parents) => {
+                        if parents.is_empty() {
+                            NOTHING
+                        } else {
+                            let Ok(first) = parents.index(0) else {
+                                return Err(TextdumpReaderError::ParseError(
+                                    format!("invalid parent: {:?}", parents),
+                                    self.line_num,
+                                ));
+                            };
+
+                            let Variant::Obj(parent) = first.variant() else {
+                                return Err(TextdumpReaderError::ParseError(
+                                    format!("invalid parent: {:?}", parents),
+                                    self.line_num,
+                                ));
+                            };
+
+                            parent.clone()
+                        }
+                    }
+                    _ => {
+                        return Err(TextdumpReaderError::ParseError(
+                            format!("invalid parent: {:?}", parents),
+                            self.line_num,
+                        ));
+                    }
+                };
+                let _children = self.read_var()?;
+                let Variant::List(_children) = _children.variant() else {
+                    return Err(TextdumpReaderError::ParseError(
+                        format!("invalid children list: {:?}", _children),
+                        self.line_num,
+                    ));
+                };
+                (NOTHING, NOTHING, parent, NOTHING, NOTHING)
+            }
+            _ => {
+                let contents = self.read_objid()?;
+                let next = self.read_objid()?;
+                let parent = self.read_objid()?;
+                let child = self.read_objid()?;
+                let sibling = self.read_objid()?;
+                (contents, next, parent, child, sibling)
+            }
+        };
         let num_verbs = self.read_num()? as usize;
         let mut verbdefs = Vec::with_capacity(num_verbs);
         for _ in 0..num_verbs {
@@ -337,20 +456,24 @@ impl<R: Read> TextdumpReader<R> {
         }))
     }
 
+    fn read_program(&mut self) -> Result<Vec<String>, TextdumpReaderError> {
+        let mut program = vec![];
+        loop {
+            let line = self.read_string()?;
+            if line.trim() == "." {
+                break;
+            }
+            program.push(line);
+        }
+        Ok(program)
+    }
     fn read_verb(&mut self) -> Result<Verb, TextdumpReaderError> {
         let header = self.read_string()?;
         let (oid, verbnum): (i32, usize);
         scan!(header.bytes() => "#{}:{}", oid, verbnum);
 
         // Collect lines
-        let mut program_lines = vec![];
-        loop {
-            let line = self.read_string()?;
-            if line.trim() == "." {
-                break;
-            }
-            program_lines.push(line);
-        }
+        let program_lines = self.read_program()?;
         let program = program_lines.join("\n");
         Ok(Verb {
             objid: Obj::mk_id(oid),
@@ -359,34 +482,316 @@ impl<R: Read> TextdumpReader<R> {
         })
     }
 
-    pub fn read_textdump(&mut self) -> Result<Textdump, TextdumpReaderError> {
-        let nobjs = self.read_num()? as usize;
-        info!("# objs: {}", nobjs);
-        let nprogs = self.read_num()? as usize;
-        info!("# progs: {}", nprogs);
-        let _dummy = self.read_num()?;
-        let nusers = self.read_num()? as usize;
-        info!("# users: {}", nusers);
-
-        let mut users = Vec::with_capacity(nusers);
-        for _ in 0..nusers {
-            users.push(self.read_objid()?);
+    /// Read a line which is a series of numbers.
+    fn read_number_line(&mut self, expected_count: usize) -> Result<Vec<i64>, TextdumpReaderError> {
+        let line = self.read_string()?;
+        let mut numbers = Vec::with_capacity(expected_count);
+        for n in line.split_whitespace() {
+            let n = n.parse::<i64>().map_err(|e| {
+                TextdumpReaderError::ParseError(format!("invalid number: {}", e), self.line_num)
+            })?;
+            numbers.push(n);
         }
+        if numbers.len() != expected_count {
+            return Err(TextdumpReaderError::ParseError(
+                format!("expected {} numbers, got {}", expected_count, numbers.len()),
+                self.line_num,
+            ));
+        }
+        Ok(numbers)
+    }
 
-        info!("Parsing objects...");
-        let mut objects = BTreeMap::new();
-        for _i in 0..nobjs {
-            if let Some(o) = self.read_object()? {
-                objects.insert(o.id.clone(), o);
+    fn read_vm(&mut self) -> Result<(), TextdumpReaderError> {
+        let has_task_local = matches!(self.version, ToastStunt(v) if v >= ToastDbvTaskLocal);
+
+        if has_task_local {
+            let _local = self.read_string()?;
+        }
+        let vm_header = self.read_number_line(3)?;
+        let top = vm_header[0] as usize;
+
+        for _ in 0..top {
+            self.read_activ()?;
+        }
+        Ok(())
+    }
+
+    fn read_rt_env(&mut self) -> Result<Vec<(Symbol, Var)>, TextdumpReaderError> {
+        let num_variables_line = self.read_string()?;
+        let num_variables = num_variables_line.trim_end_matches(" variables");
+        let num_variables = num_variables.parse::<usize>().map_err(|e| {
+            TextdumpReaderError::ParseError(
+                format!("invalid number of variables: {}", e),
+                self.line_num,
+            )
+        })?;
+        let mut rt_env = Vec::with_capacity(num_variables);
+        for _ in 0..num_variables {
+            rt_env.push((Symbol::mk(&self.read_string()?), self.read_var()?));
+        }
+        Ok(rt_env)
+    }
+
+    fn read_activ(&mut self) -> Result<(), TextdumpReaderError> {
+        match self.version {
+            LambdaMOO(v) if v > DbvFloat => {
+                let _lang_version_str = self.read_string()?;
+            }
+            ToastStunt(_) => {
+                let _lang_version_str = self.read_string()?;
+            }
+            _ => {}
+        }
+        let _program = self.read_program()?;
+        let _env = self.read_rt_env()?;
+
+        let stack_in_use_line = self.read_string()?;
+        let stack_in_use_str = stack_in_use_line.trim_end_matches(" rt_stack slots in use");
+        let stack_in_use = stack_in_use_str.parse::<usize>().map_err(|e| {
+            TextdumpReaderError::ParseError(
+                format!("invalid stack in use string: {}", e),
+                self.line_num,
+            )
+        })?;
+        for _ in 0..stack_in_use {
+            let _entry = self.read_var()?;
+        }
+        let _ = self.read_activ_as_pi();
+        let _ = self.read_var();
+
+        Ok(())
+    }
+
+    fn read_activ_as_pi(&mut self) -> Result<(), TextdumpReaderError> {
+        let _ = self.read_var()?;
+        if let ToastStunt(v) = self.version {
+            if v >= ToastDbvThis {
+                let _this = self.read_var()?;
+            }
+            if v >= ToastDbvAnon {
+                let _vloc = self.read_var()?;
+            }
+            if v >= ToastDbvThreaded {
+                let _threaded = self.read_num()?;
             }
         }
+        let _a_line = self.read_number_line(9);
+        let _argstr = self.read_string()?;
+        let _dobjstr = self.read_string()?;
+        let _iobjstr = self.read_string()?;
+        let _prepstr = self.read_string()?;
+        let _verb = self.read_string()?;
+        let _verbname = self.read_string()?;
 
-        info!("Reading verbs...");
-        let mut verbs = BTreeMap::new();
-        for _p in 0..nprogs {
-            let verb = self.read_verb()?;
-            verbs.insert((verb.objid.clone(), verb.verbnum), verb);
+        Ok(())
+    }
+
+    // TODO: we just throw away the task information for now
+    fn read_task_queue(&mut self) -> Result<(), TextdumpReaderError> {
+        let clocks_line = self.read_string()?;
+        let clocks_str = clocks_line.trim_end_matches(" clocks");
+        let clocks = clocks_str.parse::<usize>().map_err(|e| {
+            TextdumpReaderError::ParseError(format!("invalid clocks string: {}", e), self.line_num)
+        })?;
+
+        for _ in 0..clocks {
+            let _ = self.read_string();
         }
+
+        let queued_tasks_line = self.read_string()?;
+        let queued_tasks_str = queued_tasks_line.trim_end_matches(" queued tasks");
+        let num_queued_tasks = queued_tasks_str.parse::<usize>().map_err(|e| {
+            TextdumpReaderError::ParseError(
+                format!("invalid queued tasks string: {}", e),
+                self.line_num,
+            )
+        })?;
+
+        for _ in 0..num_queued_tasks {
+            let task_desc = self.read_number_line(4)?;
+            let (_first_line_no, _st, _id) = (
+                task_desc[1] as usize,
+                task_desc[2] as usize,
+                task_desc[3] as usize,
+            );
+            // Read (and throw away) activation.
+            self.read_activ_as_pi()?
+        }
+
+        let suspended_tasks_line = self.read_string()?;
+        let suspended_tasks_str = suspended_tasks_line.trim_end_matches(" suspended tasks");
+        let num_suspended_tasks = suspended_tasks_str.parse::<usize>().map_err(|e| {
+            TextdumpReaderError::ParseError(
+                format!("invalid suspended tasks string: {}", e),
+                self.line_num,
+            )
+        })?;
+        for _ in 0..num_suspended_tasks {
+            let _task_line = self.read_string();
+            self.read_vm()?;
+        }
+
+        let has_interrupted_tasks = matches!(self.version, ToastStunt(v) if v >= ToastDbvInterrupt);
+        if !has_interrupted_tasks {
+            return Ok(());
+        }
+
+        let interrupted_tasks_line = self.read_string()?;
+        let interrupted_tasks_str = interrupted_tasks_line.trim_end_matches(" interrupted tasks");
+        let num_interrupted_tasks = interrupted_tasks_str.parse::<usize>().map_err(|e| {
+            TextdumpReaderError::ParseError(
+                format!("invalid interrupted tasks string: {}", e),
+                self.line_num,
+            )
+        })?;
+        for _ in 0..num_interrupted_tasks {
+            let _task_line = self.read_string();
+        }
+
+        Ok(())
+    }
+
+    fn read_active_connections(&mut self) -> Result<(), TextdumpReaderError> {
+        let active_connections_line = self.read_string()?;
+        let has_listeners = active_connections_line.ends_with(" with listeners");
+        let active_connections_str = if has_listeners {
+            active_connections_line.trim_end_matches(" active connections with listeners")
+        } else {
+            active_connections_line.trim_end_matches(" active connections")
+        };
+        let num_active_connections = active_connections_str.parse::<i64>().map_err(|e| {
+            TextdumpReaderError::ParseError(
+                format!(
+                    "invalid active connections string ({}): {}",
+                    active_connections_str, e
+                ),
+                self.line_num,
+            )
+        })?;
+        for _ in 0..num_active_connections {
+            if has_listeners {
+                let listener_items = self.read_number_line(2)?;
+                let (_who, _listener) = (listener_items[0], listener_items[1]);
+            } else {
+                let _who = self.read_num()?;
+            }
+        }
+        Ok(())
+    }
+    pub fn read_textdump(&mut self) -> Result<Textdump, TextdumpReaderError> {
+        let (objects, users, verbs) = match &self.version {
+            TextdumpVersion::ToastStunt(_) => {
+                // The Toast versions of the textdump have a different format, where a bunch of stuff
+                // (like tasks, etc. are mixed inline)
+                let nusers = self.read_num()?;
+                info!("# users: {}", nusers);
+                let mut users = Vec::with_capacity(nusers as usize);
+                for _ in 0..nusers {
+                    users.push(self.read_objid()?);
+                }
+
+                // Now "values pending finalization" which we ignore for now.
+                let pending_finalization_str = self.read_string()?;
+                if !pending_finalization_str.ends_with("values pending finalization") {
+                    return Err(TextdumpReaderError::ParseError(
+                        format!(
+                            "invalid pending finalization string: {}",
+                            pending_finalization_str
+                        ),
+                        self.line_num,
+                    ));
+                }
+
+                let mut pending_finalization_pieces = pending_finalization_str.split(" ");
+                let Some(pending_finalization) = pending_finalization_pieces.next() else {
+                    return Err(TextdumpReaderError::ParseError(
+                        format!("invalid pending finalization string: {pending_finalization_str}",),
+                        self.line_num,
+                    ));
+                };
+                let num_pending = pending_finalization.trim().parse::<usize>().map_err(|e| {
+                    TextdumpReaderError::ParseError(
+                        format!("invalid pending finalization string: {}", e),
+                        self.line_num,
+                    )
+                })?;
+                for _ in 0..num_pending {
+                    self.read_var()?;
+                }
+
+                warn!("Skipped {num_pending} ToastStunt 'pending finalization' values");
+
+                // Now read the forked and suspended tasks
+                self.read_task_queue()?;
+
+                // Now read 'formerly active connections'
+                self.read_active_connections()?;
+
+                // Now read nbjs
+                let nobjs = self.read_num()?;
+                info!("# objs: {}", nobjs);
+                info!("Parsing objects...");
+                let mut objects = BTreeMap::new();
+                for _i in 0..nobjs {
+                    if let Some(o) = self.read_object()? {
+                        objects.insert(o.id.clone(), o);
+                    }
+                }
+
+                // Now read some anon objects? and throw away. Toast stuff.
+                loop {
+                    let nobjs = self.read_num()?;
+                    if nobjs == 0 {
+                        break;
+                    }
+                    for _i in 0..nobjs {
+                        let _anon = self.read_object()?;
+                    }
+                }
+
+                let nprogs = self.read_num()?;
+                info!("# progs: {}", nprogs);
+                let mut verbs = BTreeMap::new();
+                for _p in 0..nprogs {
+                    let verb = self.read_verb()?;
+                    verbs.insert((verb.objid.clone(), verb.verbnum), verb);
+                }
+                (objects, users, verbs)
+            }
+            // LambdaMOO <= 1.8 and mooR compatible textdumps
+            _ => {
+                let (nobjs, nprogs, _, nusers) = (
+                    self.read_num()?,
+                    self.read_num()?,
+                    self.read_num()?,
+                    self.read_num()?,
+                );
+                info!("# users: {}", nusers);
+                let mut users = Vec::with_capacity(nusers as usize);
+                for _ in 0..nusers {
+                    users.push(self.read_objid()?);
+                }
+
+                info!("# objs: {}", nobjs);
+                info!("# progs: {}", nprogs);
+
+                info!("Parsing objects...");
+                let mut objects = BTreeMap::new();
+                for _i in 0..nobjs {
+                    if let Some(o) = self.read_object()? {
+                        objects.insert(o.id.clone(), o);
+                    }
+                }
+
+                info!("Reading verbs...");
+                let mut verbs = BTreeMap::new();
+                for _p in 0..nprogs {
+                    let verb = self.read_verb()?;
+                    verbs.insert((verb.objid.clone(), verb.verbnum), verb);
+                }
+                (objects, users, verbs)
+            }
+        };
 
         Ok(Textdump {
             version_string: self.version_string.clone(),

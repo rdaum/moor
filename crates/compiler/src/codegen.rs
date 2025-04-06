@@ -15,10 +15,10 @@ use pest::iterators::Pairs;
 /// Takes the AST and turns it into a list of opcodes.
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::error;
+use tracing::warn;
 
-use moor_var::Variant;
 use moor_var::{Var, v_str};
+use moor_var::{Variant, v_sym};
 
 use crate::Op::{
     BeginComprehension, ComprehendList, ComprehendRange, ContinueComprehension, ImmInt, Pop, Put,
@@ -59,10 +59,15 @@ pub struct CodegenState {
     pub(crate) fork_vectors: Vec<Vec<Op>>,
     pub(crate) line_number_spans: Vec<(usize, usize)>,
     pub(crate) current_line_col: (usize, usize),
+    pub(crate) compile_options: CompileOptions,
 }
 
 impl CodegenState {
-    pub fn new(var_names: Names, binding_mappings: HashMap<UnboundName, Name>) -> Self {
+    pub fn new(
+        compile_options: CompileOptions,
+        var_names: Names,
+        binding_mappings: HashMap<UnboundName, Name>,
+    ) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
@@ -76,6 +81,7 @@ impl CodegenState {
             fork_vectors: vec![],
             line_number_spans: vec![],
             current_line_col: (0, 0),
+            compile_options,
         }
     }
 
@@ -426,15 +432,32 @@ impl CodegenState {
             }
             Expr::Call { function, args } => {
                 // Lookup builtin.
-                let Some(id) = BUILTINS.find_builtin(*function) else {
-                    error!("Unknown builtin function: {}({:?}", function, args);
-                    return Err(CompileError::UnknownBuiltinFunction(
-                        CompileContext::new(self.current_line_col),
-                        function.to_string(),
-                    ));
+                match BUILTINS.find_builtin(*function) {
+                    Some(id) => {
+                        self.generate_arg_list(args)?;
+                        self.emit(Op::FuncCall { id });
+                    }
+                    None => {
+                        if self.compile_options.call_unsupported_builtins {
+                            warn!(
+                                "Unable to resolve builtin function: {function}. Transforming into `call_function({function}, ...)`."
+                            );
+                            let call_function_id =
+                                BUILTINS.find_builtin("call_function".into()).unwrap();
+                            let mut new_args = vec![Arg::Normal(Expr::Value(v_sym(*function)))];
+                            new_args.extend_from_slice(args);
+                            self.generate_arg_list(&new_args)?;
+                            self.emit(Op::FuncCall {
+                                id: call_function_id,
+                            });
+                        } else {
+                            return Err(CompileError::UnknownBuiltinFunction(
+                                CompileContext::new(self.current_line_col),
+                                function.to_string(),
+                            ));
+                        }
+                    }
                 };
-                self.generate_arg_list(args)?;
-                self.emit(Op::FuncCall { id });
             }
             Expr::Verb {
                 args,
@@ -964,9 +987,9 @@ impl CodegenState {
     }
 }
 
-fn do_compile(parse: Parse) -> Result<Program, CompileError> {
+fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, CompileError> {
     // Generate the code into 'cg_state'.
-    let mut cg_state = CodegenState::new(parse.names, parse.names_mapping);
+    let mut cg_state = CodegenState::new(compile_options, parse.names, parse.names_mapping);
     for x in parse.stmts {
         cg_state.generate_stmt(&x)?;
     }
@@ -993,16 +1016,16 @@ fn do_compile(parse: Parse) -> Result<Program, CompileError> {
 
 /// Compile from a program string, starting at the "program" rule.
 pub fn compile(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
-    let parse = parse_program(program, options)?;
+    let parse = parse_program(program, options.clone())?;
 
-    do_compile(parse)
+    do_compile(parse, options)
 }
 
 /// Compile from an already-parsed tree stating at the `statements` rule.
 pub fn compile_tree(tree: Pairs<Rule>, options: CompileOptions) -> Result<Program, CompileError> {
-    let parse = parse_tree(tree, options)?;
+    let parse = parse_tree(tree, options.clone())?;
 
     // TODO: we'll have to adjust line numbers accordingly to who called us?
 
-    do_compile(parse)
+    do_compile(parse, options)
 }

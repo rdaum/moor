@@ -17,9 +17,8 @@ use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::path::PathBuf;
-use tracing::{info, span, trace};
+use tracing::{info, span, trace, warn};
 
-use crate::config::LambdaToastVersions::DbvBfbugFixed;
 use crate::config::{FeaturesConfig, TextdumpVersion};
 use crate::textdump::read::TextdumpReaderError;
 use crate::textdump::{
@@ -113,14 +112,22 @@ pub fn read_textdump<T: io::Read>(
     let mut tdr = TextdumpReader::new(reader)?;
     // Validate the textdumps' version string against the configuration of the server.
     match &tdr.version {
-        TextdumpVersion::LambdaMOO(u) => {
-            // We don't support any of the "Toast" versions, which use a new DB format, for now.
-            if *u > DbvBfbugFixed {
+        TextdumpVersion::LambdaMOO(v) => {
+            if (*v as u16) > 4 {
                 return Err(TextdumpReaderError::VersionError(format!(
-                    "Unsupported textdump version {}",
-                    u
+                    "Unsupported LambdaMOO DB version: {}",
+                    v
                 )));
             }
+        }
+        TextdumpVersion::ToastStunt(v) => {
+            // We don't support a lot of "Toast" features, but we'll try to import the textdump
+            // as best we can and then things fail at the compile or runtime level for features
+            // we don't support.
+            warn!(
+                "Importing a ToastStunt textdump version ({v}), which may contain features, builtins,\
+                     and datatypes unsupported by mooR. This may cause errors requiring manual intervention."
+            );
         }
         TextdumpVersion::Moor(v, features, _encoding) => {
             // Semver major versions must match.
@@ -142,7 +149,9 @@ pub fn read_textdump<T: io::Read>(
     }
 
     let td = tdr.read_textdump()?;
-    let compile_options = features_config.compile_options();
+    let mut compile_options = features_config.compile_options();
+    // For textdump imports we wrap unknown functions up in `call_function`...
+    compile_options.call_unsupported_builtins = true;
 
     info!("Instantiating objects");
     for (objid, o) in &td.objects {
