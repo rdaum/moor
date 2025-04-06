@@ -223,3 +223,8 @@ E_TYPE
 // test_that_inverted_ranged_set_does_not_crash_the_server
 ; x = []; for i in [1..10]; x[1..0] = [i -> i]; endfor; return length(x);
 E_TYPE
+
+// test_map_slicing
+; return slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6], ["b" -> 8]}, "a", 0);
+{1, 5, 0}
+
