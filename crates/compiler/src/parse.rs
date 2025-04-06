@@ -66,6 +66,9 @@ pub struct CompileOptions {
     pub symbol_type: bool,
     /// Whether to support non-stanard custom error values.
     pub custom_errors: bool,
+    /// Whether to turn unsupported builtins into `call_function` invocations.
+    /// Useful for textdump imports from other MOO dialects.
+    pub call_unsupported_builtins: bool,
 }
 
 impl Default for CompileOptions {
@@ -78,6 +81,7 @@ impl Default for CompileOptions {
             bool_type: true,
             symbol_type: true,
             custom_errors: true,
+            call_unsupported_builtins: false,
         }
     }
 }

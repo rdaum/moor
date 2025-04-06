@@ -55,13 +55,18 @@ pub enum VarType {
     TYPE_STR = 2,
     TYPE_ERR = 3,
     TYPE_LIST = 4,
+    _TYPE_CLEAR = 5,
     TYPE_NONE = 6,  // in uninitialized MOO variables */
-    TYPE_LABEL = 7, // present only in textdump */
+    TYPE_LABEL = 7, // present only in textdump as TYPE_CATCH but it's a label*/
+    _TYPE_FINALLY = 8,
     TYPE_FLOAT = 9,
     TYPE_MAP = 10,
-    TYPE_FLYWEIGHT = 11,
-    TYPE_BOOL = 12,
-    TYPE_SYMBOL = 13,
+    _TOAST_TYPE_ITER = 11,
+    _TOAST_TYPE_ANON = 12,
+    _TOAST_TYPE_WAIF = 13,
+    TYPE_BOOL = 14,
+    TYPE_FLYWEIGHT = 15,
+    TYPE_SYMBOL = 16,
 }
 
 /// Sequence index modes: 0 or 1 indexed.

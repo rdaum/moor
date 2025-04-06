@@ -37,6 +37,10 @@ pub enum Error {
     E_INVARG,
     E_QUOTA,
     E_FLOAT,
+    // Toast extensions:
+    E_FILE,
+    E_EXEC,
+    E_INTRPT,
     Custom(Symbol),
 }
 
@@ -59,6 +63,9 @@ impl Error {
             13 => Some(Self::E_INVARG),
             14 => Some(Self::E_QUOTA),
             15 => Some(Self::E_FLOAT),
+            16 => Some(Self::E_FILE),
+            17 => Some(Self::E_EXEC),
+            18 => Some(Self::E_INTRPT),
             _ => None,
         }
     }
@@ -81,6 +88,9 @@ impl Error {
             Self::E_INVARG => Some(13),
             Self::E_QUOTA => Some(14),
             Self::E_FLOAT => Some(15),
+            Self::E_FILE => Some(16),
+            Self::E_EXEC => Some(17),
+            Self::E_INTRPT => Some(18),
             _ => None,
         }
     }
@@ -132,6 +142,9 @@ impl Error {
             Self::E_INVARG => "Invalid argument".into(),
             Self::E_QUOTA => "Resource limit exceeded".into(),
             Self::E_FLOAT => "Floating-point arithmetic error".into(),
+            Self::E_FILE => "File error".into(),
+            Self::E_EXEC => "Execution error".into(),
+            Self::E_INTRPT => "Interruption".into(),
             Self::Custom(sym) => format!("Error: {}", sym.as_str().to_uppercase()),
         }
     }
@@ -155,6 +168,9 @@ impl Error {
             Self::E_INVARG => "E_INVARG".into(),
             Self::E_QUOTA => "E_QUOTA".into(),
             Self::E_FLOAT => "E_FLOAT".into(),
+            Self::E_FILE => "E_FILE".into(),
+            Self::E_EXEC => "E_EXEC".into(),
+            Self::E_INTRPT => "E_INTRPT".into(),
             Self::Custom(sym) => *sym,
         }
     }

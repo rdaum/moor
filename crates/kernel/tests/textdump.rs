@@ -29,7 +29,7 @@ mod test {
     use moor_compiler::Program;
     use moor_db::loader::LoaderInterface;
     use moor_db::{Database, DatabaseConfig, TxDB};
-    use moor_kernel::config::{FeaturesConfig, LambdaToastVersions, TextdumpVersion};
+    use moor_kernel::config::{FeaturesConfig, LambdaMOODBVersion, TextdumpVersion};
     use moor_kernel::textdump::{
         EncodingMode, TextdumpReader, make_textdump, read_textdump, textdump_load,
     };
@@ -90,7 +90,7 @@ mod test {
         );
         assert_eq!(
             tdr.version,
-            TextdumpVersion::LambdaMOO(LambdaToastVersions::DbvExceptions)
+            TextdumpVersion::LambdaMOO(LambdaMOODBVersion::DbvExceptions)
         );
 
         // Minimal DB has 1 user, #3,

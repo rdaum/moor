@@ -100,6 +100,7 @@ impl FeaturesConfig {
             bool_type: self.bool_type,
             symbol_type: self.symbol_type,
             custom_errors: self.custom_errors,
+            call_unsupported_builtins: false,
         }
     }
 
@@ -197,32 +198,38 @@ impl TextdumpConfig {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum TextdumpVersion {
-    LambdaMOO(LambdaToastVersions),
+    LambdaMOO(LambdaMOODBVersion),
+    ToastStunt(ToastStuntDBVersion),
     Moor(Version, FeaturesConfig, EncodingMode),
 }
 
 /// Versions corresponding to ToastStunt's version.h
 #[repr(u16)]
 #[derive(Debug, Eq, PartialEq, Display, Ord, PartialOrd, Copy, Clone, FromRepr)]
-pub enum LambdaToastVersions {
+pub enum LambdaMOODBVersion {
     DbvPrehistory = 0, // Before format versions
     DbvExceptions = 1, // Addition of the `try', `except', `finally', and `endtry' keywords.
     DbvBreakCont = 2,  // Addition of the `break' and `continue' keywords.
     DbvFloat = 3, // Addition of `FLOAT' and `INT' variables and the `E_FLOAT' keyword, along with version numbers on each frame of a suspended task.
     DbvBfbugFixed = 4, // Bug in built-in function overrides fixed by making it use tail-calling. This DB_Version change exists solely to turn off special bug handling in read_bi_func_data().
-    DbvNextGen = 5, // Introduced the next-generation database format which fixes the data locality problems in the v4 format.
-    DbvTaskLocal = 6, // Addition of task local value.
-    DbvMap = 7,     // Addition of `MAP' variables
-    DbvFileIo = 8,  // Includes addition of the 'E_FILE' keyword.
-    DbvExec = 9,    // Includes addition of the 'E_EXEC' keyword.
-    DbvInterrupt = 10, // Includes addition of the 'E_INTRPT' keyword.
-    DbvThis = 11,   // Varification of `this'.
-    DbvIter = 12,   // Addition of map iterator
-    DbvAnon = 13,   // Addition of anonymous objects
-    DbvWaif = 14,   // Addition of waifs
-    DbvLastMove = 15, // Addition of the 'last_move' built-in property
-    DbvThreaded = 16, // Store threading information
-    DbvBool = 17,   // Boolean type
+}
+
+#[repr(u16)]
+#[derive(Debug, Eq, PartialEq, Display, Ord, PartialOrd, Copy, Clone, FromRepr)]
+pub enum ToastStuntDBVersion {
+    ToastDbvNextGen = 5, // Introduced the next-generation database format which fixes the data locality problems in the v4 format.
+    ToastDbvTaskLocal = 6, // Addition of task local value.
+    ToastDbvMap = 7,     // Addition of `MAP' variables
+    ToastDbvFileIo = 8,  // Includes addition of the 'E_FILE' keyword.
+    ToastDbvExec = 9,    // Includes addition of the 'E_EXEC' keyword.
+    ToastDbvInterrupt = 10, // Includes addition of the 'E_INTRPT' keyword.
+    ToastDbvThis = 11,   // Varification of `this'.
+    ToastDbvIter = 12,   // Addition of map iterator
+    ToastDbvAnon = 13,   // Addition of anonymous objects
+    ToastDbvWaif = 14,   // Addition of waifs
+    ToastDbvLastMove = 15, // Addition of the 'last_move' built-in property
+    ToastDbvThreaded = 16, // Store threading information
+    ToastDbvBool = 17,   // Boolean type
 }
 
 impl TextdumpVersion {
@@ -232,9 +239,16 @@ impl TextdumpVersion {
                 .trim_start_matches("** LambdaMOO Database, Format Version ")
                 .trim_end_matches(" **");
             let version = version.parse::<u16>().ok()?;
-            return Some(TextdumpVersion::LambdaMOO(LambdaToastVersions::from_repr(
-                version,
-            )?));
+            // For now anything over 4 is assumed to be ToastStunt
+            if version > 4 {
+                return Some(TextdumpVersion::ToastStunt(ToastStuntDBVersion::from_repr(
+                    version,
+                )?));
+            } else {
+                return Some(TextdumpVersion::LambdaMOO(LambdaMOODBVersion::from_repr(
+                    version,
+                )?));
+            }
         } else if s.starts_with("Moor ") {
             let parts = s.split(", ").collect::<Vec<_>>();
             let version = parts.iter().find(|s| s.starts_with("Moor "))?;
@@ -266,6 +280,9 @@ impl TextdumpVersion {
             TextdumpVersion::LambdaMOO(v) => {
                 format!("** LambdaMOO Database, Format Version {} **", v)
             }
+            TextdumpVersion::ToastStunt(v) => {
+                unimplemented!("ToastStunt dump format ({v}) not supported for output");
+            }
             TextdumpVersion::Moor(v, features, encoding) => {
                 let features = format!(
                     "flyweight_type={} lexical_scopes={} map_type={}",
@@ -282,7 +299,7 @@ impl TextdumpVersion {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{LambdaToastVersions, TextdumpVersion};
+    use crate::config::{LambdaMOODBVersion, TextdumpVersion};
 
     #[test]
     fn parse_textdump_version_lambda() {
@@ -290,7 +307,7 @@ mod tests {
         assert_eq!(
             version,
             Some(super::TextdumpVersion::LambdaMOO(
-                LambdaToastVersions::DbvBfbugFixed
+                LambdaMOODBVersion::DbvBfbugFixed
             ))
         );
     }
