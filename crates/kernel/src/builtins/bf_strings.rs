@@ -629,8 +629,8 @@ mod tests {
             moor_var::Variant::Map(map) => {
                 assert_eq!(map.len(), 2);
                 // Check keys and values exist
-                assert_eq!(map.index(&v_str("key1")).unwrap(), v_int(1));
-                assert_eq!(map.index(&v_str("key2")).unwrap(), v_str("value"));
+                assert_eq!(map.get(&v_str("key1")).unwrap(), v_int(1));
+                assert_eq!(map.get(&v_str("key2")).unwrap(), v_str("value"));
             }
             _ => panic!("Expected map"),
         };

@@ -80,15 +80,6 @@ impl Associative for Map {
         self.0.len()
     }
 
-    fn index(&self, key: &Var) -> Result<Var, Error> {
-        // Binary search for the key.
-        let pos = self.0.binary_search_by(|(k, _)| k.cmp(key));
-        match pos {
-            Ok(pos) => Ok(self.0[pos].1.clone()),
-            Err(_) => Err(E_RANGE),
-        }
-    }
-
     fn index_in(&self, key: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
         // Check the common in the key-value pairs and return the index of the first match.
         // Linear O(N) operation.
@@ -102,7 +93,19 @@ impl Associative for Map {
         Ok(pos)
     }
 
-    fn index_set(&self, key: &Var, value: &Var) -> Result<Var, Error> {
+    fn get(&self, key: &Var) -> Result<Var, Error> {
+        // Binary search for the key.
+        let pos = self.0.binary_search_by(|(k, _)| k.cmp(key));
+        match pos {
+            Ok(pos) => {
+                let entry = &self.0[pos];
+                Ok(entry.1.clone())
+            }
+            Err(_) => Err(E_RANGE),
+        }
+    }
+
+    fn set(&self, key: &Var, value: &Var) -> Result<Var, Error> {
         // Stunt has a restriction that non-scalars cannot be keys (unless they're strings).
         // So we enforce that here, even though it's not strictly necessary.
         if !key.is_scalar() && !key.is_string() {
@@ -130,6 +133,11 @@ impl Associative for Map {
             new_vec.push((key.clone(), value.clone()));
         }
         Ok(Self::build(new_vec.iter()))
+    }
+
+    fn index(&self, index: usize) -> Result<(Var, Var), Error> {
+        let (k, v) = &self.0[index];
+        Ok((k.clone(), v.clone()))
     }
 
     /// Return the range of key-value pairs between the two keys.
@@ -324,7 +332,7 @@ mod tests {
         }
 
         let key = Var::mk_str("a");
-        let value = m.index(&key, IndexMode::ZeroBased).unwrap();
+        let value = m.get(&key, IndexMode::ZeroBased).unwrap();
         match value.variant() {
             Variant::Int(i) => assert_eq!(*i, 1),
             _ => panic!("Expected integer"),
@@ -394,7 +402,7 @@ mod tests {
     }
 
     #[test]
-    fn test_map_index() {
+    fn test_map_get() {
         let m = Var::mk_map(&[
             (Var::mk_str("a"), Var::mk_integer(1)),
             (Var::mk_str("b"), Var::mk_integer(2)),
@@ -402,7 +410,7 @@ mod tests {
         ]);
 
         let key = Var::mk_str("b");
-        let value = m.index(&key, IndexMode::ZeroBased).unwrap();
+        let value = m.get(&key, IndexMode::OneBased).unwrap();
         match value.variant() {
             Variant::Int(i) => assert_eq!(*i, 2),
             _ => panic!("Expected integer"),
@@ -410,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn test_map_index_set() {
+    fn test_map_set() {
         let m = Var::mk_map(&[
             (Var::mk_str("a"), Var::mk_integer(1)),
             (Var::mk_str("b"), Var::mk_integer(2)),
@@ -418,16 +426,12 @@ mod tests {
         ]);
 
         let r = m
-            .index_set(
-                &Var::mk_str("b"),
-                &Var::mk_integer(42),
-                IndexMode::ZeroBased,
-            )
+            .set(&Var::mk_str("b"), &Var::mk_integer(42), IndexMode::OneBased)
             .unwrap();
         let r = r.variant();
         match r {
             Variant::Map(m) => {
-                let r = m.index(&Var::mk_str("b")).unwrap();
+                let r = m.get(&Var::mk_str("b")).unwrap();
                 match r.variant() {
                     Variant::Int(i) => assert_eq!(*i, 42),
                     _ => panic!("Expected integer, got {:?}", r),
@@ -438,16 +442,12 @@ mod tests {
 
         // Insert new item
         let r = m
-            .index_set(
-                &Var::mk_str("d"),
-                &Var::mk_integer(42),
-                IndexMode::ZeroBased,
-            )
+            .set(&Var::mk_str("d"), &Var::mk_integer(42), IndexMode::OneBased)
             .unwrap();
         let r = r.variant();
         match r {
             Variant::Map(m) => {
-                let r = m.index(&Var::mk_str("d")).unwrap();
+                let r = m.get(&Var::mk_str("d")).unwrap();
                 match r.variant() {
                     Variant::Int(i) => assert_eq!(*i, 42),
                     _ => panic!("Expected integer, got {:?}", r),
@@ -614,10 +614,10 @@ mod tests {
         ]);
 
         let m = m
-            .index_set(&Var::mk_str("a"), &Var::mk_str("a"), IndexMode::OneBased)
+            .set(&Var::mk_str("a"), &Var::mk_str("a"), IndexMode::OneBased)
             .unwrap();
         let m = m
-            .index_set(
+            .set(
                 &Var::mk_integer(6),
                 &Var::mk_integer(6),
                 IndexMode::OneBased,

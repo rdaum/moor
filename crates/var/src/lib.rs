@@ -163,15 +163,17 @@ pub trait Associative {
     fn is_empty(&self) -> bool;
     /// Return the number of key-value pairs in the associative container.
     fn len(&self) -> usize;
-    /// Get the value associated with the given key.
-    fn index(&self, key: &Var) -> Result<Var, Error>;
     /// Find the position of the key in the associative container, that is, the offset of the key in
     /// the list of keys.
     /// `case_sensitive` is used to determine if the comparison should be case-sensitive.
     /// (MOO case sensitivity is often false)
     fn index_in(&self, key: &Var, case_sensitive: bool) -> Result<Option<usize>, Error>;
-    /// Assign a new value to the given key.
-    fn index_set(&self, key: &Var, value: &Var) -> Result<Var, Error>;
+    /// Get the key-value pair associated with the given key.
+    fn get(&self, key: &Var) -> Result<Var, Error>;
+    /// Update the key-value pair associated with the given key.
+    fn set(&self, key: &Var, value: &Var) -> Result<Var, Error>;
+    /// Get the `index`nth element of the sequence.
+    fn index(&self, index: usize) -> Result<(Var, Var), Error>;
     /// Return the key-value pairs in the associative container between the given `from` and `to`
     fn range(&self, from: &Var, to: &Var) -> Result<Var, Error>;
     /// Assign new common to the key-value pairs in the associative container between the given `from` and `to`

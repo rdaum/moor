@@ -664,7 +664,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 let key_var = v_str(key.as_str());
 
                                 // Try to get the value for this key
-                                match map.index(&key_var) {
+                                match map.get(&key_var) {
                                     Ok(value) => result.push(value),
                                     Err(_) => {
                                         // Use default value if provided, otherwise error

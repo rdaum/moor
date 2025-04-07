@@ -139,35 +139,70 @@ impl Var {
         }
     }
 
-    /// 0-based index into a sequence type, or map lookup by key
-    /// If not a sequence, returns Err(E_INVARG)
-    /// For strings and lists, the index must be a positive integer, or Err(E_TYPE)
+    /// Index into a sequence type, or get Nth element of an association set
+    /// If not a sequence, or association, returns Err(E_INVARG)
+    /// The index must be a positive integer, or Err(E_TYPE).
+    /// Associations return the key-value pair.
     /// Range errors are Err(E_RANGE)
     /// Otherwise returns the value
     pub fn index(&self, index: &Var, index_mode: IndexMode) -> Result<Self, Error> {
-        match self.type_class() {
-            TypeClass::Sequence(s) => {
-                let idx = match index.variant() {
-                    Variant::Int(i) => {
-                        let i = index_mode.adjust_i64(*i);
-                        if i < 0 {
-                            return Err(E_RANGE);
-                        }
-                        i as usize
-                    }
-                    _ => {
-                        return Err(E_TYPE);
-                    }
-                };
-
-                if idx >= s.len() {
+        if self.type_class().is_scalar() {
+            return Err(E_TYPE);
+        }
+        let idx = match index.variant() {
+            Variant::Int(i) => {
+                let i = index_mode.adjust_i64(*i);
+                if i < 0 {
                     return Err(E_RANGE);
                 }
-
-                s.index(idx)
+                i as usize
             }
-            TypeClass::Associative(a) => a.index(index),
-            TypeClass::Scalar => Err(E_TYPE),
+            _ => {
+                return Err(E_TYPE);
+            }
+        };
+
+        match self.type_class() {
+            TypeClass::Sequence(s) => {
+                let value = s.index(idx)?;
+                Ok(value)
+            }
+            TypeClass::Associative(a) => {
+                let value = a.index(idx)?;
+                Ok(value.1)
+            }
+            _ => Err(E_TYPE),
+        }
+    }
+
+    /// Return the associative key at `key`, or the Nth element of a sequence.
+    /// If not a sequence or associative, returns Err(E_INVARG)
+    /// For strings and lists, the index must be a positive integer, or Err(E_TYPE)
+    /// Range errors are Err(E_RANGE)
+    /// Otherwise returns the value
+    pub fn get(&self, key: &Var, index_mode: IndexMode) -> Result<Self, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(_) => {
+                let value = self.index(key, index_mode)?;
+                Ok(value)
+            }
+            TypeClass::Associative(a) => {
+                let value = a.get(key)?;
+                Ok(value)
+            }
+            _ => Err(E_TYPE),
+        }
+    }
+
+    /// Update the associative key at `key` to `value` and return the modification.
+    pub fn set(&self, key: &Var, value: &Var, index_mode: IndexMode) -> Result<Self, Error> {
+        match self.type_class() {
+            TypeClass::Sequence(_) => {
+                let value = self.index_set(key, value, index_mode)?;
+                Ok(value)
+            }
+            TypeClass::Associative(s) => s.set(key, value),
+            _ => Err(E_TYPE),
         }
     }
 
@@ -193,8 +228,7 @@ impl Var {
                 };
                 s.index_set(idx, value)
             }
-            TypeClass::Associative(a) => a.index_set(idx, value),
-            TypeClass::Scalar => Err(E_TYPE),
+            _ => Err(E_TYPE),
         }
     }
 
