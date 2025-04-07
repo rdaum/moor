@@ -70,7 +70,7 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     Some(m) => {
                         let key = tag.to_string();
                         let key = v_str(key.as_str());
-                        let Ok(obj) = m.index(&key) else {
+                        let Ok(obj) = m.get(&key) else {
                             return Err(BfErr::Code(E_INVARG));
                         };
                         let Variant::Obj(o) = obj.variant() else {
@@ -160,7 +160,7 @@ fn flyweight_to_xml_tag(
     let tag_name = match map {
         Some(m) => {
             let key = v_obj(fl.delegate().clone());
-            let Ok(tag) = m.index(&key) else {
+            let Ok(tag) = m.get(&key) else {
                 return Err(BfErr::Code(E_INVARG));
             };
             let Variant::Str(s) = tag.variant() else {

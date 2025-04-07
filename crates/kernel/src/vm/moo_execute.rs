@@ -23,8 +23,8 @@ use std::time::Duration;
 use crate::config::FeaturesConfig;
 use moor_var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_var::{
-    Error, IndexMode, Obj, Sequence, Var, Variant, v_bool_int, v_empty_list, v_empty_map, v_err,
-    v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_sym,
+    Error, IndexMode, Obj, Sequence, TypeClass, Var, Variant, v_bool_int, v_empty_list,
+    v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_sym,
 };
 use moor_var::{Symbol, VarType};
 
@@ -151,7 +151,7 @@ pub fn moo_frame_execute(
 
                 // Pop the count and list off the stack. We push back later when we re-enter.
 
-                let (count, list) = f.peek2();
+                let (count, seq) = f.peek2();
                 let Variant::Int(count_i) = count.variant() else {
                     f.pop();
                     f.pop();
@@ -164,7 +164,9 @@ pub fn moo_frame_execute(
                 };
                 let count_i = *count_i as usize;
 
-                if !list.is_sequence() || list.type_code() == VarType::TYPE_STR {
+                if (!seq.is_sequence() && !seq.is_associative())
+                    || seq.type_code() == VarType::TYPE_STR
+                {
                     f.pop();
                     f.pop();
 
@@ -172,7 +174,7 @@ pub fn moo_frame_execute(
                     return ExecutionResult::RaiseError(E_TYPE);
                 };
 
-                let Ok(list_len) = list.len() else {
+                let Ok(list_len) = seq.len() else {
                     return ExecutionResult::RaiseError(E_TYPE);
                 };
 
@@ -188,7 +190,23 @@ pub fn moo_frame_execute(
                 // Track iteration count for range; set id to current list element for the count,
                 // then increment the count, rewind the program counter to the top of the loop, and
                 // continue.
-                f.set_env(id, list.index(count, IndexMode::ZeroBased).unwrap().clone());
+                let v = match seq.type_class() {
+                    TypeClass::Sequence(s) => s.index(count_i),
+                    TypeClass::Associative(a) => a.index(count_i).map(|(_, v)| v.clone()),
+                    TypeClass::Scalar => {
+                        return ExecutionResult::RaiseError(E_TYPE);
+                    }
+                };
+                let v = match v {
+                    Ok(v) => v,
+                    Err(e) => {
+                        f.pop();
+                        f.pop();
+                        f.jump(end_label);
+                        return ExecutionResult::RaiseError(e);
+                    }
+                };
+                f.set_env(id, v);
                 f.poke(0, v_int((count_i + 1) as i64));
             }
             Op::ForRange {
@@ -328,7 +346,7 @@ pub fn moo_frame_execute(
             }
             Op::IndexSet => {
                 let (rhs, index, lhs) = (f.pop(), f.pop(), f.peek_top_mut());
-                let result = lhs.index_set(&index, &rhs, IndexMode::OneBased);
+                let result = lhs.set(&index, &rhs, IndexMode::OneBased);
                 match result {
                     Ok(v) => {
                         f.poke(0, v);
@@ -348,14 +366,22 @@ pub fn moo_frame_execute(
             }
             Op::MapInsert => {
                 let (value, key, map) = (f.pop(), f.pop(), f.peek_top_mut());
-                let result = map.index_set(&key, &value, IndexMode::OneBased);
-                match result {
-                    Ok(v) => {
-                        f.poke(0, v);
+                match map.type_class() {
+                    TypeClass::Associative(a) => {
+                        let result = a.set(&key, &value);
+                        match result {
+                            Ok(v) => {
+                                f.poke(0, v);
+                            }
+                            Err(e) => {
+                                f.pop();
+                                return ExecutionResult::PushError(e);
+                            }
+                        }
                     }
-                    Err(e) => {
+                    _ => {
                         f.pop();
-                        return ExecutionResult::PushError(e);
+                        return ExecutionResult::PushError(E_TYPE);
                     }
                 }
             }
@@ -505,8 +531,8 @@ pub fn moo_frame_execute(
                 f.set_env(ident, v.clone());
             }
             Op::PushRef => {
-                let (index, value) = f.peek2();
-                let result = value.index(index, IndexMode::OneBased);
+                let (key_or_index, value) = f.peek2();
+                let result = value.get(key_or_index, IndexMode::OneBased);
                 match result {
                     Ok(v) => f.push(v),
                     Err(e) => {
@@ -516,9 +542,9 @@ pub fn moo_frame_execute(
                 }
             }
             Op::Ref => {
-                let (index, value) = (f.pop(), f.peek_top());
+                let (key_or_index, value) = (f.pop(), f.peek_top());
 
-                let result = value.index(&index, IndexMode::OneBased);
+                let result = value.get(&key_or_index, IndexMode::OneBased);
                 match result {
                     Ok(v) => f.poke(0, v),
                     Err(e) => {
