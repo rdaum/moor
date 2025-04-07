@@ -701,7 +701,8 @@ impl CodegenState {
                 self.commit_jump_label(end_label);
             }
             StmtNode::ForList {
-                id,
+                value_binding,
+                key_binding,
                 expr,
                 body,
                 environment_width,
@@ -712,16 +713,19 @@ impl CodegenState {
                 // we use 0 here to make it easier to implement the ForList instruction.
                 self.emit(Op::ImmInt(0)); /* loop list index... */
                 self.push_stack(1);
-                let loop_top = self.make_jump_label(Some(self.binding_mappings[id]));
+                let value_bind = self.binding_mappings[value_binding];
+                let key_bind = key_binding.map(|id| self.binding_mappings[&id]);
+                let loop_top = self.make_jump_label(Some(value_bind));
                 self.commit_jump_label(loop_top);
-                let end_label = self.make_jump_label(Some(self.binding_mappings[id]));
+                let end_label = self.make_jump_label(Some(value_bind));
                 self.emit(Op::ForSequence {
-                    id: self.binding_mappings[id],
+                    value_bind,
+                    key_bind,
                     end_label,
                     environment_width: *environment_width as u16,
                 });
                 self.loops.push(Loop {
-                    loop_name: Some(self.binding_mappings[id]),
+                    loop_name: Some(value_bind),
                     top_label: loop_top,
                     top_stack: self.cur_stack.into(),
                     bottom_label: end_label,

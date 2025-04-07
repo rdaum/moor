@@ -144,7 +144,8 @@ pub fn moo_frame_execute(
             }
             Op::ForSequence {
                 end_label,
-                id,
+                value_bind,
+                key_bind,
                 environment_width,
             } => {
                 f.push_scope(ScopeType::For, *environment_width, end_label);
@@ -190,15 +191,17 @@ pub fn moo_frame_execute(
                 // Track iteration count for range; set id to current list element for the count,
                 // then increment the count, rewind the program counter to the top of the loop, and
                 // continue.
-                let v = match seq.type_class() {
-                    TypeClass::Sequence(s) => s.index(count_i),
-                    TypeClass::Associative(a) => a.index(count_i).map(|(_, v)| v.clone()),
+                let k_v = match seq.type_class() {
+                    TypeClass::Sequence(s) => s
+                        .index(count_i)
+                        .map(|v| (count.add(&v_int(1)).unwrap(), v.clone())),
+                    TypeClass::Associative(a) => a.index(count_i),
                     TypeClass::Scalar => {
                         return ExecutionResult::RaiseError(E_TYPE);
                     }
                 };
-                let v = match v {
-                    Ok(v) => v,
+                let k_v = match k_v {
+                    Ok(k_v) => k_v,
                     Err(e) => {
                         f.pop();
                         f.pop();
@@ -206,7 +209,10 @@ pub fn moo_frame_execute(
                         return ExecutionResult::RaiseError(e);
                     }
                 };
-                f.set_env(id, v);
+                f.set_env(value_bind, k_v.1);
+                if let Some(key_bind) = key_bind {
+                    f.set_env(key_bind, k_v.0.clone());
+                }
                 f.poke(0, v_int((count_i + 1) as i64));
             }
             Op::ForRange {

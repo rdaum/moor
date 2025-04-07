@@ -324,7 +324,8 @@ mod tests {
                 ListAddTail,
                 ImmInt(0),
                 ForSequence {
-                    id: x,
+                    value_bind: x,
+                    key_bind: None,
                     end_label: 1.into(),
                     environment_width: 0,
                 },

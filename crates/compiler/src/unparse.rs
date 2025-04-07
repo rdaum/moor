@@ -454,7 +454,8 @@ impl<'a> Unparse<'a> {
                 Ok(stmt_lines)
             }
             StmtNode::ForList {
-                id,
+                value_binding,
+                key_binding,
                 expr,
                 body,
                 environment_width: _,
@@ -464,16 +465,27 @@ impl<'a> Unparse<'a> {
                 let expr_frag = self.unparse_expr(expr)?;
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
 
-                let name = self.unparse_name(id);
-
+                let v_name = self.unparse_name(value_binding);
+                let v_sym = self
+                    .tree
+                    .names
+                    .name_of(&v_name)
+                    .ok_or(DecompileError::NameNotFound(v_name))?;
+                let idx_clause = match key_binding {
+                    None => v_sym.to_string(),
+                    Some(key_binding) => {
+                        let k_name = self.unparse_name(key_binding);
+                        let k_sym = self
+                            .tree
+                            .names
+                            .name_of(&k_name)
+                            .ok_or(DecompileError::NameNotFound(v_name))?;
+                        format!("{}, {}", v_sym, k_sym)
+                    }
+                };
                 stmt_lines.push(format!(
-                    "{}for {} in ({})",
-                    indent_frag,
-                    self.tree
-                        .names
-                        .name_of(&name)
-                        .ok_or(DecompileError::NameNotFound(name))?,
-                    expr_frag
+                    "{}for {idx_clause} in ({})",
+                    indent_frag, expr_frag
                 ));
                 stmt_lines.append(&mut stmt_frag);
                 stmt_lines.push(format!("{}endfor", indent_frag));
@@ -1178,6 +1190,24 @@ mod tests {
     #[test]
     fn for_list_comprehension() {
         let program = r#"return { x * 2 for x in ({1, 2, 3}) };"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn for_v_x_in_map() {
+        let program = r#" for v, k in (["a" -> "b", "c" -> "d"])
+        endfor"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn for_v_x_in_list() {
+        let program = r#" for v, k in ({1, 2, 3})
+        endfor"#;
         let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());

@@ -38,7 +38,8 @@ pub enum Op {
     ExitId(Label),
     Exp,
     ForSequence {
-        id: Name,
+        value_bind: Name,
+        key_bind: Option<Name>,
         end_label: Label,
         environment_width: u16,
     },
@@ -182,13 +183,15 @@ mod tests {
     use crate::names::Name;
     use crate::{Label, Offset};
 
-    /// Verify we don't go over our 16 byte budget for opcodes.
+    /// Verify we don't go over our 24 byte budget for opcodes.
     // TODO: This is still rather bloated.
+    //  and was 16, until we widened ForSequence
+    //  we need to come up with a more compact representation
     #[test]
     fn size_opcode() {
         use crate::opcode::Op;
         use std::mem::size_of;
-        assert_eq!(size_of::<Op>(), 16);
+        assert_eq!(size_of::<Op>(), 24);
         assert_eq!(size_of::<Name>(), 2);
         assert_eq!(size_of::<Offset>(), 2);
         assert_eq!(size_of::<Label>(), 2);

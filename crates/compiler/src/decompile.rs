@@ -271,7 +271,8 @@ impl Decompile {
                 arms.push(cond_arm);
             }
             Op::ForSequence {
-                id,
+                value_bind,
+                key_bind,
                 end_label: label,
                 environment_width,
             } => {
@@ -288,10 +289,16 @@ impl Decompile {
                 };
                 let list = self.pop_expr()?;
                 let body = self.decompile_statements_until(&label)?;
-                let id = self.decompile_name(&id)?;
+                let value_id = self.decompile_name(&value_bind)?;
+                let key_id = match key_bind {
+                    None => None,
+                    Some(key_bind) => Some(self.decompile_name(&key_bind)?),
+                };
+
                 self.statements.push(Stmt::new(
                     StmtNode::ForList {
-                        id,
+                        value_binding: value_id,
+                        key_binding: key_id,
                         expr: list,
                         body,
                         environment_width: environment_width as usize,
