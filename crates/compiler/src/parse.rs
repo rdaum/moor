@@ -893,12 +893,13 @@ impl TreeTransformer {
             //         .map(|expr| self.parse_expr(expr.into_inner()).unwrap());
             //     Ok(Some(Stmt::new(StmtNode::Return(expr), line_col)))
             // }
-            Rule::for_statement => {
+            Rule::for_range_statement => {
                 self.enter_scope();
                 let mut parts = pair.into_inner();
 
                 let varname = parts.next().unwrap().as_str();
-                let Some(id) = self.names.borrow_mut().find_or_add_name_global(varname) else {
+                let Some(value_binding) = self.names.borrow_mut().find_or_add_name_global(varname)
+                else {
                     return Err(DuplicateVariable(context, varname.into()));
                 };
                 let clause = parts.next().unwrap();
@@ -915,7 +916,7 @@ impl TreeTransformer {
                         let environment_width = self.exit_scope();
                         Ok(Some(Stmt::new(
                             StmtNode::ForRange {
-                                id,
+                                id: value_binding,
                                 from,
                                 to,
                                 body,
@@ -924,6 +925,39 @@ impl TreeTransformer {
                             line_col,
                         )))
                     }
+                    _ => panic!("Unimplemented for clause: {:?}", clause),
+                }
+            }
+            Rule::for_in_statement => {
+                self.enter_scope();
+                let mut parts = pair.into_inner();
+
+                let mut index_clause = parts.next().unwrap().into_inner();
+                // index_clause can have 1 or 2 elements, if there's 2 then there's a "key" as well as a "value" var
+                let first_index_rule = index_clause.next().unwrap();
+                let varname = first_index_rule.as_str();
+                let Some(value_binding) = self.names.borrow_mut().find_or_add_name_global(varname)
+                else {
+                    return Err(DuplicateVariable(context, varname.into()));
+                };
+                let key_binding = match index_clause.next() {
+                    None => None,
+                    Some(s) => {
+                        let varname = s.as_str();
+                        let Some(key_var) =
+                            self.names.borrow_mut().find_or_add_name_global(varname)
+                        else {
+                            return Err(DuplicateVariable(context, varname.into()));
+                        };
+                        Some(key_var)
+                    }
+                };
+
+                let clause = parts.next().unwrap();
+                let body = self
+                    .clone()
+                    .parse_statements(parts.next().unwrap().into_inner())?;
+                match clause.as_rule() {
                     Rule::for_in_clause => {
                         let mut clause_inner = clause.into_inner();
                         let in_rule = clause_inner.next().unwrap();
@@ -931,7 +965,8 @@ impl TreeTransformer {
                         let environment_width = self.exit_scope();
                         Ok(Some(Stmt::new(
                             StmtNode::ForList {
-                                id,
+                                value_binding,
+                                key_binding,
                                 expr,
                                 body,
                                 environment_width,
@@ -1720,7 +1755,8 @@ mod tests {
             &parse.stmts,
             StmtNode::ForList {
                 environment_width: 0,
-                id: x,
+                value_binding: x,
+                key_binding: None,
                 expr: Expr::List(vec![
                     Normal(Value(v_int(1))),
                     Normal(Value(v_int(2))),
@@ -2039,7 +2075,8 @@ mod tests {
             vec![
                 StmtNode::ForList {
                     environment_width: 0,
-                    id: i,
+                    value_binding: i,
+                    key_binding: None,
                     expr: Expr::List(vec![
                         Normal(Value(v_int(1))),
                         Normal(Value(v_int(2))),
@@ -2158,7 +2195,8 @@ mod tests {
             vec![
                 StmtNode::ForList {
                     environment_width: 0,
-                    id: a,
+                    value_binding: a,
+                    key_binding: None,
                     expr: Expr::List(vec![
                         Normal(Value(v_int(1))),
                         Normal(Value(v_int(2))),
@@ -2484,7 +2522,8 @@ mod tests {
             vec![
                 StmtNode::ForList {
                     environment_width: 0,
-                    id: parse.unbound_names.find_name("line").unwrap(),
+                    value_binding: parse.unbound_names.find_name("line").unwrap(),
+                    key_binding: None,
                     expr: Expr::List(vec![
                         Normal(Value(v_int(1))),
                         Normal(Value(v_int(2))),
@@ -3069,6 +3108,25 @@ mod tests {
                     Normal(Value(v_err(Custom("e_unknown".into())))),
                 ]
             )))))]
+        )
+    }
+
+    #[test]
+    fn test_for_value_key() {
+        let program = r#"for v, k in ([1->2, 3->4]) endfor"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::ForList {
+                value_binding: UnboundName { offset: 22 },
+                key_binding: Some(UnboundName { offset: 23 }),
+                expr: Expr::Map(vec![
+                    (Value(v_int(1)), Value(v_int(2))),
+                    (Value(v_int(3)), Value(v_int(4)))
+                ]),
+                body: vec![],
+                environment_width: 0,
+            }]
         )
     }
 }

@@ -235,7 +235,8 @@ pub enum StmtNode {
         otherwise: Option<ElseArm>,
     },
     ForList {
-        id: UnboundName,
+        value_binding: UnboundName,
+        key_binding: Option<UnboundName>,
         expr: Expr,
         body: Vec<Stmt>,
         environment_width: usize,

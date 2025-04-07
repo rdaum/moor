@@ -1337,4 +1337,52 @@ mod tests {
         );
         assert_eq!(result.unwrap(), v_int(1));
     }
+
+    #[test]
+    fn test_for_v_k_in_map() {
+        let program = r#"
+        let result = {};
+        for v, k in (["a" -> "b", "c" -> "d"])
+            result = {@result, @{k, v}};
+        endfor
+        return result;
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(
+            result.unwrap(),
+            v_list(&[v_str("a"), v_str("b"), v_str("c"), v_str("d")])
+        );
+    }
+
+    #[test]
+    fn test_for_v_k_in_list() {
+        let program = r#"
+        let result = {};
+        for v, k in ({"a", "b"})
+            result = {@result, @{k, v}};
+        endfor
+        return result;
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            Arc::new(BuiltinRegistry::new()),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(
+            result.unwrap(),
+            v_list(&[v_int(1), v_str("a"), v_int(2), v_str("b")])
+        );
+    }
 }

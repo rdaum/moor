@@ -14,12 +14,13 @@ E_TYPE
 ; x = {}; for i in ({1, 2, 3, 4, 5}); if (i < 3); continue i; endif; x = {@x, i}; endfor; return x;
 {3, 4, 5}
 
+// test that value, key iteration works now
+; x = {}; for i, j in ({1, 2, 3}); x = {@x, @{j, i}}; endfor; return x;
+{1, 1, 2, 2, 3, 3}
+
 // test_that_invalid_for_loops_do_not_compile
 ; return eval("x = {}; for in ({1, 2, 3}); endfor; return x;");
 <{0, "Failure to parse program @ 1/13: expected ident"}
-
-; return eval("x = {}; for i, j in ({1, 2, 3}); endfor; return x;");
-<{0, "Failure to parse program @ 1/9: expected EOI or statement"}
 
 ; return eval("x = {}; for i in ({1, 2, 3}); continue foo; endfor; return x;");
 {0, "Could not find loop with id @ 1/31: foo"}
