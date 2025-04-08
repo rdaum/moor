@@ -1188,6 +1188,8 @@ impl WorldStateTransaction for DbTransaction {
             object_propflags,
         };
 
+        let tuple_count = ws.total_tuples();
+
         // Send the working sets to the commit processing thread
         let (send, reply) = oneshot::channel();
         self.commit_channel.send((ws, send)).unwrap();
@@ -1202,8 +1204,8 @@ impl WorldStateTransaction for DbTransaction {
                 Err(TryRecvError::Empty) => {
                     if last_check_time.elapsed() > Duration::from_secs(5) {
                         warn!(
-                            "Transaction commit (started {}s ago) taking a long time to commit...",
-                            commit_start.elapsed().as_secs_f32()
+                            "Transaction commit (started {}s ago) taking a long time to commit. Contains {tuple_count} total tuples.",
+                            commit_start.elapsed().as_secs_f32(),
                         );
                     }
                     last_check_time = Instant::now();

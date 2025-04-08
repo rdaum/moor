@@ -49,6 +49,22 @@ pub(crate) struct WorkingSets {
     pub(crate) object_propflags: WorkingSet<ObjAndUUIDHolder, PropPerms>,
 }
 
+impl WorkingSets {
+    pub fn total_tuples(&self) -> usize {
+        self.object_location.len()
+            + self.object_contents.len()
+            + self.object_flags.len()
+            + self.object_parent.len()
+            + self.object_children.len()
+            + self.object_owner.len()
+            + self.object_name.len()
+            + self.object_verbdefs.len()
+            + self.object_verbs.len()
+            + self.object_propdefs.len()
+            + self.object_propvalues.len()
+            + self.object_propflags.len()
+    }
+}
 pub struct WorldStateDB {
     monotonic: AtomicU64,
 
