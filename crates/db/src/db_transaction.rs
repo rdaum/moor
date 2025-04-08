@@ -25,11 +25,14 @@ use moor_common::model::{
 };
 use moor_common::util::BitEnum;
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
+use oneshot::TryRecvError;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::sync::Arc;
 use std::sync::atomic::AtomicI64;
+use std::time::{Duration, Instant};
+use tracing::warn;
 use uuid::Uuid;
 
 type LC<Domain, Codomain> = TransactionalTable<
@@ -1153,6 +1156,8 @@ impl WorldStateTransaction for DbTransaction {
     }
 
     fn commit(self) -> Result<CommitResult, WorldStateError> {
+        let commit_start = Instant::now();
+
         // Pull out the working sets
         let object_location = self.object_location.working_set();
         let object_contents = self.object_contents.working_set();
@@ -1187,8 +1192,28 @@ impl WorldStateTransaction for DbTransaction {
         let (send, reply) = oneshot::channel();
         self.commit_channel.send((ws, send)).unwrap();
 
-        // Wait for the reply
-        Ok(reply.recv().expect("Error waiting for commit reply"))
+        // Wait for the reply.
+        let mut last_check_time = Instant::now();
+        loop {
+            match reply.try_recv() {
+                Ok(reply) => {
+                    return Ok(reply);
+                }
+                Err(TryRecvError::Empty) => {
+                    if last_check_time.elapsed() > Duration::from_secs(5) {
+                        warn!(
+                            "Transaction commit (started {}s ago) taking a long time to commit...",
+                            commit_start.elapsed().as_secs_f32()
+                        );
+                    }
+                    last_check_time = Instant::now();
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(TryRecvError::Disconnected) => {
+                    panic!("Commit channel disconnected!");
+                }
+            }
+        }
     }
 
     fn rollback(self) -> Result<(), WorldStateError> {

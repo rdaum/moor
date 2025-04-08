@@ -157,6 +157,7 @@ fn main() {
     if let Some(fa) = args.feature_args.as_ref() {
         fa.merge_config(&mut features)
     }
+    info!("Importing with features: {features:?}");
 
     // Compile phase.
     if let Some(textdump) = args.src_textdump {
