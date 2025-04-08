@@ -12,9 +12,9 @@
 //
 
 use crate::config::DatabaseConfig;
-use crate::db_transaction::WorldStateTransaction;
 use crate::fjall_provider::FjallProvider;
-use crate::tx::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
+use crate::tx_management::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
+use crate::ws_transaction::WorldStateTransaction;
 use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
@@ -28,6 +28,33 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
 use std::time::Duration;
 use tempfile::TempDir;
 use tracing::warn;
+
+pub struct MoorDB {
+    monotonic: AtomicU64,
+
+    keyspace: fjall::Keyspace,
+
+    object_location: GC<Obj, Obj>,
+    object_contents: GC<Obj, ObjSet>,
+    object_flags: GC<Obj, BitEnum<ObjFlag>>,
+    object_parent: GC<Obj, Obj>,
+    object_children: GC<Obj, ObjSet>,
+    object_owner: GC<Obj, Obj>,
+    object_name: GC<Obj, StringHolder>,
+
+    object_verbdefs: GC<Obj, VerbDefs>,
+    object_verbs: GC<ObjAndUUIDHolder, BytesHolder>,
+    object_propdefs: GC<Obj, PropDefs>,
+    object_propvalues: GC<ObjAndUUIDHolder, Var>,
+    object_propflags: GC<ObjAndUUIDHolder, PropPerms>,
+
+    sequences: [Arc<AtomicI64>; 16],
+    sequences_partition: PartitionHandle,
+
+    kill_switch: Arc<AtomicBool>,
+    commit_channel: Sender<(WorkingSets, oneshot::Sender<CommitResult>)>,
+    usage_send: crossbeam_channel::Sender<oneshot::Sender<usize>>,
+}
 
 type GC<Domain, Codomain> =
     Arc<TransactionalCache<Domain, Codomain, FjallProvider<Domain, Codomain>>>;
@@ -65,34 +92,8 @@ impl WorkingSets {
             + self.object_propflags.len()
     }
 }
-pub struct WorldStateDB {
-    monotonic: AtomicU64,
 
-    keyspace: fjall::Keyspace,
-
-    object_location: GC<Obj, Obj>,
-    object_contents: GC<Obj, ObjSet>,
-    object_flags: GC<Obj, BitEnum<ObjFlag>>,
-    object_parent: GC<Obj, Obj>,
-    object_children: GC<Obj, ObjSet>,
-    object_owner: GC<Obj, Obj>,
-    object_name: GC<Obj, StringHolder>,
-
-    object_verbdefs: GC<Obj, VerbDefs>,
-    object_verbs: GC<ObjAndUUIDHolder, BytesHolder>,
-    object_propdefs: GC<Obj, PropDefs>,
-    object_propvalues: GC<ObjAndUUIDHolder, Var>,
-    object_propflags: GC<ObjAndUUIDHolder, PropPerms>,
-
-    sequences: [Arc<AtomicI64>; 16],
-    sequences_partition: PartitionHandle,
-
-    kill_switch: Arc<AtomicBool>,
-    commit_channel: Sender<(WorkingSets, oneshot::Sender<CommitResult>)>,
-    usage_send: crossbeam_channel::Sender<oneshot::Sender<usize>>,
-}
-
-impl WorldStateDB {
+impl MoorDB {
     pub fn open(path: Option<&Path>, config: DatabaseConfig) -> (Arc<Self>, bool) {
         let tmpdir = if path.is_none() {
             Some(TempDir::new().unwrap())
@@ -644,7 +645,7 @@ impl WorldStateDB {
     }
 }
 
-impl Drop for WorldStateDB {
+impl Drop for MoorDB {
     fn drop(&mut self) {
         self.stop();
     }

@@ -26,7 +26,7 @@ use moor_common::util::BitEnum;
 use moor_var::Obj;
 use moor_var::Var;
 
-/// Interface exposed to be used by the textdump loader. Overlap of functionality with what
+/// Interface exposed to be used by the textdump/objdef loader. Overlap of functionality with what
 /// WorldState could provide, but potentially different constraints/semantics (e.g. no perms checks)
 pub trait LoaderInterface: Send {
     /// For reading textdumps...

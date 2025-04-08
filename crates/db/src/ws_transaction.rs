@@ -12,8 +12,8 @@
 //
 
 use crate::fjall_provider::FjallProvider;
-use crate::tx::{TransactionalCache, TransactionalTable, Tx};
-use crate::worldstate_db::WorkingSets;
+use crate::moor_db::WorkingSets;
+use crate::tx_management::{TransactionalCache, TransactionalTable, Tx};
 use crate::{BytesHolder, Error, ObjAndUUIDHolder, StringHolder};
 use byteview::ByteView;
 use crossbeam_channel::Sender;
@@ -73,7 +73,7 @@ pub struct WorldStateTransaction {
     pub(crate) verb_resolution_cache: VerbResolutionCache,
 }
 
-/// Very naive per-tx verb resolution cache.
+/// Very naive per-tx_management verb resolution cache.
 /// Not very aggressive here, it flushes on every verbdef mutation on any object, regardless of
 /// inheritance chain.
 /// It's net-new empty for every transaction every time.

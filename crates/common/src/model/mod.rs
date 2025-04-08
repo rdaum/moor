@@ -45,7 +45,7 @@ pub use world_state::WorldStateError;
 #[derive(Debug, Eq, PartialEq)]
 pub enum CommitResult {
     Success,       // Value was committed
-    ConflictRetry, // Value was not committed due to conflict, caller should abort and retry tx
+    ConflictRetry, // Value was not committed due to conflict, caller should abort and retry tx_management
 }
 
 pub trait ValSet<V: AsByteBuffer>: FromIterator<V> {

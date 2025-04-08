@@ -13,8 +13,8 @@
 
 //! Global cache is a cache that acts as an origin for all local caches.
 
-use crate::tx::tx_table::{OpType, TransactionalTable, WorkingSet};
-use crate::tx::{Canonical, Error, Provider, SizedCache, Timestamp, Tx};
+use crate::tx_management::tx_table::{OpType, TransactionalTable, WorkingSet};
+use crate::tx_management::{Canonical, Error, Provider, SizedCache, Timestamp, Tx};
 use indexmap::IndexMap;
 use std::collections::HashSet;
 use std::hash::Hash;
@@ -376,7 +376,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::tx::Tx;
+    use crate::tx_management::Tx;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 

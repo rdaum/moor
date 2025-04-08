@@ -14,7 +14,7 @@
 #[cfg(test)]
 mod tests {
     use crate::DatabaseConfig;
-    use crate::worldstate_db::WorldStateDB;
+    use crate::moor_db::MoorDB;
     use moor_common::model::{BinaryType, ObjFlag, VerbAttrs};
     use moor_common::model::{CommitResult, WorldStateError};
     use moor_common::model::{HasUuid, Named};
@@ -28,8 +28,8 @@ mod tests {
     use moor_var::{v_int, v_str};
     use std::sync::Arc;
 
-    fn test_db() -> Arc<WorldStateDB> {
-        WorldStateDB::open(None, DatabaseConfig::default()).0
+    fn test_db() -> Arc<MoorDB> {
+        MoorDB::open(None, DatabaseConfig::default()).0
     }
 
     #[test]

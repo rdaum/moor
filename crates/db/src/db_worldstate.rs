@@ -15,7 +15,7 @@ use byteview::ByteView;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-use crate::db_transaction::WorldStateTransaction;
+use crate::ws_transaction::WorldStateTransaction;
 use moor_common::model::ObjSet;
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
@@ -50,11 +50,11 @@ lazy_static! {
     static ref ALIASES_SYM: Symbol = Symbol::mk("aliases");
 }
 
-pub struct DbTxWorldState {
+pub struct DbWorldState {
     pub tx: WorldStateTransaction,
 }
 
-impl DbTxWorldState {
+impl DbWorldState {
     pub(crate) fn get_tx(&self) -> &WorldStateTransaction {
         &self.tx
     }
@@ -109,7 +109,7 @@ impl DbTxWorldState {
     }
 }
 
-impl WorldState for DbTxWorldState {
+impl WorldState for DbWorldState {
     fn players(&self) -> Result<ObjSet, WorldStateError> {
         self.get_tx().get_players()
     }

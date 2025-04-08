@@ -23,21 +23,21 @@ use uuid::Uuid;
 use crate::loader::LoaderInterface;
 
 mod db_loader_client;
-mod db_transaction;
 pub mod db_worldstate;
 mod fjall_provider;
 pub mod loader;
-pub(crate) mod worldstate_db;
-mod worldstate_tests;
+pub(crate) mod moor_db;
+mod moor_db_tests;
+mod ws_transaction;
 
-use crate::db_worldstate::DbTxWorldState;
-use crate::worldstate_db::WorldStateDB;
+use crate::db_worldstate::DbWorldState;
+use crate::moor_db::MoorDB;
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
-mod tx;
+mod tx_management;
 
-pub use tx::Provider;
-pub use tx::{Error, Timestamp, TransactionalCache, TransactionalTable, Tx, WorkingSet};
+pub use tx_management::Provider;
+pub use tx_management::{Error, Timestamp, TransactionalCache, TransactionalTable, Tx, WorkingSet};
 
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
@@ -45,19 +45,19 @@ pub trait Database: Send + WorldStateSource {
 
 #[derive(Clone)]
 pub struct TxDB {
-    storage: Arc<WorldStateDB>,
+    storage: Arc<MoorDB>,
 }
 
 impl TxDB {
     pub fn open(path: Option<&Path>, database_config: DatabaseConfig) -> (Self, bool) {
-        let (storage, fresh) = WorldStateDB::open(path, database_config);
+        let (storage, fresh) = MoorDB::open(path, database_config);
         (Self { storage }, fresh)
     }
 }
 impl WorldStateSource for TxDB {
     fn new_world_state(&self) -> Result<Box<dyn WorldState>, WorldStateError> {
         let tx = self.storage.start_transaction();
-        let tx = DbTxWorldState { tx };
+        let tx = DbWorldState { tx };
         Ok(Box::new(tx))
     }
 
@@ -71,7 +71,7 @@ impl WorldStateSource for TxDB {
 impl Database for TxDB {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError> {
         let tx = self.storage.start_transaction();
-        let tx = DbTxWorldState { tx };
+        let tx = DbWorldState { tx };
         Ok(Box::new(tx))
     }
 }

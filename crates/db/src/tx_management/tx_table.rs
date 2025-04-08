@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tx::{Canonical, Error, Timestamp, Tx};
+use crate::tx_management::{Canonical, Error, Timestamp, Tx};
 use indexmap::IndexMap;
 use std::cell::RefCell;
 use std::hash::Hash;
