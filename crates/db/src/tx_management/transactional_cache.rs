@@ -95,6 +95,20 @@ where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq;
 
+impl<'a, Domain, Codomain> CacheLock<'a, Domain, Codomain>
+where
+    Domain: Hash + PartialEq + Eq + Clone,
+    Codomain: Clone + PartialEq + Eq,
+{
+    pub fn num_entries(&self) -> usize {
+        self.0.index.len()
+    }
+
+    pub fn used_bytes(&self) -> usize {
+        self.0.used_bytes
+    }
+}
+
 impl<Domain, Codomain, Source> TransactionalCache<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,

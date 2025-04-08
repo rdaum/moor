@@ -25,7 +25,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tracing::warn;
 
@@ -452,6 +452,8 @@ impl MoorDB {
                         }
                     };
 
+                    let start_time = Instant::now();
+
                     let object_flags = this.object_flags.lock();
                     let object_parent = this.object_parent.lock();
                     let object_children = this.object_children.lock();
@@ -551,7 +553,31 @@ impl MoorDB {
                         reply.send(CommitResult::ConflictRetry).unwrap();
                         continue;
                     };
-                    //
+
+                    // Sum up num entries in all locks
+                    let num_entries = ol_lock.num_entries()
+                        + op_lock.num_entries()
+                        + oc_lock.num_entries()
+                        + oo_lock.num_entries()
+                        + oloc_lock.num_entries()
+                        + ocont_lock.num_entries()
+                        + on_lock.num_entries()
+                        + ovd_lock.num_entries()
+                        + ov_lock.num_entries()
+                        + opd_lock.num_entries()
+                        + opv_lock.num_entries()
+                        + opf_lock.num_entries();
+
+                    // Warn if the duration of the check phase took a really long time...
+                    let apply_start = Instant::now();
+                    if start_time.elapsed() > Duration::from_secs(5) {
+                        warn!(
+                            "Long running commit; check phase took {}s for {num_entries} tuples",
+                            start_time.elapsed().as_secs_f32()
+                        );
+                    }
+
+                    // Apply phase
                     let Ok(_unused) = this.object_flags.apply(ol_lock, ws.object_flags) else {
                         reply.send(CommitResult::ConflictRetry).unwrap();
                         continue;
@@ -619,6 +645,14 @@ impl MoorDB {
                         continue;
                     };
 
+                    // And if the commit took a long time, warn before the write to disk is begun.
+                    if start_time.elapsed() > Duration::from_secs(5) {
+                        warn!(
+                            "Long running commit, apply phase took {}s for {num_entries} tuples",
+                            apply_start.elapsed().as_secs_f32()
+                        );
+                    }
+
                     // Now write out the current state of the sequences to the seq partition.
                     // Start by making sure that the monotonic sequence is written out.
                     self.sequences[15].store(
@@ -634,11 +668,20 @@ impl MoorDB {
                             .unwrap();
                     }
 
+                    let write_start = Instant::now();
                     self.keyspace
                         .persist(PersistMode::SyncAll)
                         .expect("persist failed");
 
                     reply.send(CommitResult::Success).unwrap();
+
+                    if start_time.elapsed() > Duration::from_secs(5) {
+                        warn!(
+                            "Long running commit, write phase took {}s; total commit time {}s for {num_entries} tuples",
+                            write_start.elapsed().as_secs_f32(),
+                            start_time.elapsed().as_secs_f32()
+                        );
+                    }
                 }
             })
             .expect("failed to start DB processing thread");
