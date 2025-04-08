@@ -23,12 +23,8 @@ use moor_common::model::{
     VerbFlag,
 };
 use moor_common::util::BitEnum;
-use moor_var::Error::{
-    E_ARGS, E_DIV, E_FLOAT, E_INVARG, E_INVIND, E_MAXREC, E_NACC, E_NONE, E_PERM, E_PROPNF,
-    E_QUOTA, E_RANGE, E_RECMOVE, E_TYPE, E_VARNF, E_VERBNF,
-};
 use moor_var::{
-    AsByteBuffer, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_err, v_float,
+    AsByteBuffer, Error, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_err, v_float,
     v_flyweight, v_int, v_list, v_map, v_obj, v_str,
 };
 use pest::Parser;
@@ -285,27 +281,15 @@ fn parse_literal_atom(
         }
         Rule::err => {
             let e = pair.as_str();
-            Ok(match e.to_lowercase().as_str() {
-                "e_args" => v_err(E_ARGS),
-                "e_div" => v_err(E_DIV),
-                "e_float" => v_err(E_FLOAT),
-                "e_invarg" => v_err(E_INVARG),
-                "e_invind" => v_err(E_INVIND),
-                "e_maxrec" => v_err(E_MAXREC),
-                "e_nacc" => v_err(E_NACC),
-                "e_none" => v_err(E_NONE),
-                "e_perm" => v_err(E_PERM),
-                "e_propnf" => v_err(E_PROPNF),
-                "e_quota" => v_err(E_QUOTA),
-                "e_range" => v_err(E_RANGE),
-                "e_recmove" => v_err(E_RECMOVE),
-                "e_type" => v_err(E_TYPE),
-                "e_varnf" => v_err(E_VARNF),
-                "e_verbnf" => v_err(E_VERBNF),
-                &_ => {
-                    panic!("unknown error")
-                }
-            })
+            let Some(e) = Error::parse_str(e) else {
+                return Err(VerbCompileError(CompileError::ParseError {
+                    error_position: CompileContext::new(pair.line_col()),
+                    end_line_col: None,
+                    context: e.to_string(),
+                    message: e.to_string(),
+                }));
+            };
+            Ok(v_err(e))
         }
         Rule::ident | Rule::variable => {
             let sym = Symbol::mk(pair.as_str());
@@ -749,6 +733,7 @@ fn parse_verb_decl(
 mod tests {
     use super::*;
     use moor_common::model::Preposition;
+    use moor_var::Error::E_INVIND;
     use moor_var::Variant;
 
     /// Just a simple objdef no verbs or props

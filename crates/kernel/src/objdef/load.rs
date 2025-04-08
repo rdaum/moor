@@ -50,6 +50,10 @@ impl<'a> ObjectDefinitionLoader<'a> {
         // Constant variables will go here.
         let mut context = ObjFileContext::new();
 
+        // Verb compilation options
+        let mut compile_options = features_config.compile_options();
+        compile_options.call_unsupported_builtins = true;
+
         // Collect all the file names,
         let filenames: Vec<_> = dirpath
             .read_dir()
@@ -69,12 +73,11 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 constants_file,
                 &mut context,
                 &constants_file_contents,
-                &features_config.compile_options(),
+                &compile_options,
             )?;
         }
 
         // Read the objects first, going through and creating them all
-        let compile_options = features_config.compile_options();
         // Create all the objects first with no attributes, and then update after, so that the
         // inheritance/location etc hierarchy is set up right
         for object_file in filenames {

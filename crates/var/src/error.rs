@@ -211,6 +211,9 @@ impl Error {
             "E_INVARG" => Some(Self::E_INVARG),
             "E_QUOTA" => Some(Self::E_QUOTA),
             "E_FLOAT" => Some(Self::E_FLOAT),
+            "E_FILE" => Some(Self::E_FILE),
+            "E_EXEC" => Some(Self::E_EXEC),
+            "E_INTRPT" => Some(Self::E_INTRPT),
             s => Some(Self::Custom(Symbol::mk_case_insensitive(s))),
         }
     }
