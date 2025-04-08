@@ -12,7 +12,7 @@
 //
 
 use crate::config::DatabaseConfig;
-use crate::db_transaction::DbTransaction;
+use crate::db_transaction::WorldStateTransaction;
 use crate::fjall_provider::FjallProvider;
 use crate::tx::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
 use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
@@ -321,7 +321,7 @@ impl WorldStateDB {
         (s, fresh)
     }
 
-    pub(crate) fn start_transaction(&self) -> DbTransaction {
+    pub(crate) fn start_transaction(&self) -> WorldStateTransaction {
         let tx = Tx {
             ts: Timestamp(
                 self.monotonic
@@ -329,7 +329,7 @@ impl WorldStateDB {
             ),
         };
 
-        DbTransaction {
+        WorldStateTransaction {
             tx,
             commit_channel: self.commit_channel.clone(),
             usage_channel: self.usage_send.clone(),
@@ -653,8 +653,7 @@ impl Drop for WorldStateDB {
 #[cfg(test)]
 mod tests {
     use crate::config::DatabaseConfig;
-    use crate::db_transaction::DbTransaction;
-    use crate::worldstate_transaction::WorldStateTransaction;
+    use crate::db_transaction::WorldStateTransaction;
     use crate::{
         perform_reparent_props, perform_test_create_object, perform_test_create_object_fixed_id,
         perform_test_descendants, perform_test_location_contents, perform_test_max_object,
@@ -675,7 +674,7 @@ mod tests {
         super::WorldStateDB::open(None, DatabaseConfig::default()).0
     }
 
-    fn begin_tx(db: &Arc<super::WorldStateDB>) -> DbTransaction {
+    fn begin_tx(db: &Arc<super::WorldStateDB>) -> WorldStateTransaction {
         db.start_transaction()
     }
 

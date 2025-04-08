@@ -23,12 +23,10 @@ use uuid::Uuid;
 use crate::loader::LoaderInterface;
 
 mod db_loader_client;
-pub mod db_worldstate;
-pub mod loader;
-pub mod worldstate_transaction;
-
 mod db_transaction;
+pub mod db_worldstate;
 mod fjall_provider;
+pub mod loader;
 pub(crate) mod worldstate_db;
 mod worldstate_tests;
 

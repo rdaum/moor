@@ -14,6 +14,8 @@
 use byteview::ByteView;
 use uuid::Uuid;
 
+use crate::db_worldstate::DbTxWorldState;
+use crate::loader::LoaderInterface;
 use moor_common::model::ObjAttrs;
 use moor_common::model::ObjSet;
 use moor_common::model::PropFlag;
@@ -28,12 +30,8 @@ use moor_var::Obj;
 use moor_var::Symbol;
 use moor_var::Var;
 
-use crate::db_worldstate::DbTxWorldState;
-use crate::loader::LoaderInterface;
-use crate::worldstate_transaction::WorldStateTransaction;
-
 /// A loader client which uses a database transaction to load the world state.
-impl<TX: WorldStateTransaction> LoaderInterface for DbTxWorldState<TX> {
+impl LoaderInterface for DbTxWorldState {
     fn create_object(
         &mut self,
         objid: Option<Obj>,

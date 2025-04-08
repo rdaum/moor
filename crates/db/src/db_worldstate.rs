@@ -15,6 +15,7 @@ use byteview::ByteView;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
+use crate::db_transaction::WorldStateTransaction;
 use moor_common::model::ObjSet;
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
@@ -34,8 +35,6 @@ use moor_var::{Obj, v_bool_int};
 use moor_var::{Symbol, v_list};
 use moor_var::{Var, v_obj};
 
-use crate::worldstate_transaction::WorldStateTransaction;
-
 lazy_static! {
     static ref NAME_SYM: Symbol = Symbol::mk("name");
     static ref LOCATION_SYM: Symbol = Symbol::mk("location");
@@ -51,19 +50,16 @@ lazy_static! {
     static ref ALIASES_SYM: Symbol = Symbol::mk("aliases");
 }
 
-pub struct DbTxWorldState<TX: WorldStateTransaction> {
-    pub tx: TX,
+pub struct DbTxWorldState {
+    pub tx: WorldStateTransaction,
 }
 
-impl<TX> DbTxWorldState<TX>
-where
-    TX: WorldStateTransaction,
-{
-    pub(crate) fn get_tx(&self) -> &dyn WorldStateTransaction {
+impl DbTxWorldState {
+    pub(crate) fn get_tx(&self) -> &WorldStateTransaction {
         &self.tx
     }
 
-    pub(crate) fn get_tx_mut(&mut self) -> &mut dyn WorldStateTransaction {
+    pub(crate) fn get_tx_mut(&mut self) -> &mut WorldStateTransaction {
         &mut self.tx
     }
     fn perms(&self, who: &Obj) -> Result<Perms, WorldStateError> {
@@ -113,7 +109,7 @@ where
     }
 }
 
-impl<TX: WorldStateTransaction> WorldState for DbTxWorldState<TX> {
+impl WorldState for DbTxWorldState {
     fn players(&self) -> Result<ObjSet, WorldStateError> {
         self.get_tx().get_players()
     }

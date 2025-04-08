@@ -13,7 +13,7 @@
 
 //! A set of common tests for any world state implementation.
 
-use crate::worldstate_transaction::WorldStateTransaction;
+use crate::db_transaction::WorldStateTransaction;
 use moor_common::model::{BinaryType, VerbAttrs};
 use moor_common::model::{CommitResult, WorldStateError};
 use moor_common::model::{HasUuid, Named};
@@ -26,10 +26,9 @@ use moor_var::Obj;
 use moor_var::Symbol;
 use moor_var::{v_int, v_str};
 
-pub fn perform_test_create_object<F, TX>(begin_tx: F)
+pub fn perform_test_create_object<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
     let oid = tx
@@ -54,10 +53,9 @@ where
     assert_eq!(tx.get_objects().unwrap(), ObjSet::from_items(&[oid]));
 }
 
-pub fn perform_test_create_object_fixed_id<F, TX>(begin_tx: F)
+pub fn perform_test_create_object_fixed_id<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -72,10 +70,9 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
-pub fn perform_test_parent_children<F, TX>(begin_tx: F)
+pub fn perform_test_parent_children<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -154,10 +151,9 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
-pub fn perform_test_descendants<F, TX>(begin_tx: F)
+pub fn perform_test_descendants<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -231,10 +227,9 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
-pub fn perform_test_location_contents<F, TX>(begin_tx: F)
+pub fn perform_test_location_contents<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -321,10 +316,9 @@ where
 }
 
 /// Test data integrity of object moves between commits.
-pub fn perform_test_object_move_commits<F, TX>(begin_tx: F)
+pub fn perform_test_object_move_commits<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -404,10 +398,9 @@ where
     );
 }
 
-pub fn perform_test_simple_property<F, TX>(begin_tx: F)
+pub fn perform_test_simple_property<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -438,10 +431,9 @@ where
 }
 
 /// Regression test for updating-verbs failing.
-pub fn perform_test_verb_add_update<F, TX>(begin_tx: F)
+pub fn perform_test_verb_add_update<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
     let oid = tx
@@ -515,10 +507,9 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
-pub fn perform_test_transitive_property_resolution<F, TX>(begin_tx: F)
+pub fn perform_test_transitive_property_resolution<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -572,10 +563,9 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
-pub fn perform_test_transitive_property_resolution_clear_property<F, TX>(begin_tx: F)
+pub fn perform_test_transitive_property_resolution_clear_property<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -664,10 +654,9 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
-pub fn perform_test_rename_property<F, TX>(begin_tx: F)
+pub fn perform_test_rename_property<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
     let a = tx
@@ -716,10 +705,9 @@ where
 }
 
 /// Test regression where parent properties were present via `properties()` on children.
-pub fn perform_test_regression_properties<F, TX>(begin_tx: F)
+pub fn perform_test_regression_properties<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -776,10 +764,9 @@ where
     assert_eq!(props.len(), 1);
 }
 
-pub fn perform_test_verb_resolve<F, TX>(begin_tx: F)
+pub fn perform_test_verb_resolve<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -889,10 +876,9 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
-pub fn perform_test_verb_resolve_inherited<F, TX>(begin_tx: F)
+pub fn perform_test_verb_resolve_inherited<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
 
@@ -958,10 +944,9 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
-pub fn perform_test_verb_resolve_wildcard<F, TX>(begin_tx: F)
+pub fn perform_test_verb_resolve_wildcard<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
     let a = tx
@@ -1036,10 +1021,9 @@ where
     assert_eq!(tx.commit(), Ok(CommitResult::Success));
 }
 
-pub fn perform_reparent_props<F, TX>(begin_tx: F)
+pub fn perform_reparent_props<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
     let a = tx
@@ -1152,10 +1136,9 @@ where
     assert!(is_clear);
 }
 
-pub fn perform_test_recycle_object<F, TX>(begin_tx: F)
+pub fn perform_test_recycle_object<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     // Simple: property-less, #-1 located, #-1 parented object.
     let mut tx = begin_tx();
@@ -1284,10 +1267,9 @@ where
 }
 
 // Verify that 'max_object' is the highest object id in the database, not one higher.
-pub fn perform_test_max_object<F, TX>(begin_tx: F)
+pub fn perform_test_max_object<F>(begin_tx: F)
 where
-    F: Fn() -> TX,
-    TX: WorldStateTransaction,
+    F: Fn() -> WorldStateTransaction,
 {
     let mut tx = begin_tx();
     // Max object in a virgin DB should return #-1

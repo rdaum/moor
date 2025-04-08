@@ -14,7 +14,6 @@
 use crate::fjall_provider::FjallProvider;
 use crate::tx::{TransactionalCache, TransactionalTable, Tx};
 use crate::worldstate_db::WorkingSets;
-use crate::worldstate_transaction::WorldStateTransaction;
 use crate::{BytesHolder, Error, ObjAndUUIDHolder, StringHolder};
 use byteview::ByteView;
 use crossbeam_channel::Sender;
@@ -43,7 +42,7 @@ type LC<Domain, Codomain> = TransactionalTable<
 
 pub const SEQUENCE_MAX_OBJECT: usize = 0;
 
-pub struct DbTransaction {
+pub struct WorldStateTransaction {
     #[allow(dead_code)]
     pub(crate) tx: Tx,
 
@@ -117,8 +116,8 @@ where
     table.upsert(d, c, size)
 }
 
-impl WorldStateTransaction for DbTransaction {
-    fn object_valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
+impl WorldStateTransaction {
+    pub fn object_valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
         match self.object_flags.get(obj) {
             Ok(Some(_)) => Ok(true),
             Ok(None) => Ok(false),
@@ -129,7 +128,7 @@ impl WorldStateTransaction for DbTransaction {
         }
     }
 
-    fn ancestors(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+    pub fn ancestors(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
         let mut ancestors = vec![];
         let mut current = obj.clone();
         loop {
@@ -146,21 +145,21 @@ impl WorldStateTransaction for DbTransaction {
         Ok(ancestors.into_iter().collect())
     }
 
-    fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
+    pub fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
         let objects = self.object_flags.scan(&|_, _| true).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting objects: {:?}", e))
         })?;
         Ok(ObjSet::from_iter(objects.iter().map(|(k, _)| k.clone())))
     }
 
-    fn get_object_flags(&self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
+    pub fn get_object_flags(&self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
         let r = self.object_flags.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object flags: {:?}", e))
         })?;
         Ok(r.unwrap_or_default())
     }
 
-    fn get_players(&self) -> Result<ObjSet, WorldStateError> {
+    pub fn get_players(&self) -> Result<ObjSet, WorldStateError> {
         let players = self
             .object_flags
             .scan(&|_, flags| flags.contains(ObjFlag::User))
@@ -170,7 +169,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(ObjSet::from_iter(players.iter().map(|(k, _)| k.clone())))
     }
 
-    fn get_max_object(&self) -> Result<Obj, WorldStateError> {
+    pub fn get_max_object(&self) -> Result<Obj, WorldStateError> {
         let seq_max = self.get_sequence(SEQUENCE_MAX_OBJECT);
 
         // Turn to i32, but check bounds against MAX_INT
@@ -186,7 +185,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(Obj::mk_id(seq_max))
     }
 
-    fn get_object_owner(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
+    pub fn get_object_owner(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
         let r = self.object_owner.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object owner: {:?}", e))
         })?;
@@ -194,7 +193,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(r.unwrap_or(NOTHING))
     }
 
-    fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
+    pub fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
         self.object_owner
             .upsert(obj.clone(), owner.clone(), obj.size_bytes())
             .map_err(|e| {
@@ -203,7 +202,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn set_object_flags(
+    pub fn set_object_flags(
         &mut self,
         obj: &Obj,
         flags: BitEnum<ObjFlag>,
@@ -214,7 +213,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn get_object_name(&self, obj: &Obj) -> Result<String, WorldStateError> {
+    pub fn get_object_name(&self, obj: &Obj) -> Result<String, WorldStateError> {
         let r = self.object_name.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object name: {:?}", e))
         })?;
@@ -224,14 +223,18 @@ impl WorldStateTransaction for DbTransaction {
         Ok(r.0)
     }
 
-    fn set_object_name(&mut self, obj: &Obj, name: String) -> Result<(), WorldStateError> {
+    pub fn set_object_name(&mut self, obj: &Obj, name: String) -> Result<(), WorldStateError> {
         upsert(&mut self.object_name, obj.clone(), StringHolder(name)).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object name: {:?}", e))
         })?;
         Ok(())
     }
 
-    fn create_object(&mut self, id: Option<Obj>, attrs: ObjAttrs) -> Result<Obj, WorldStateError> {
+    pub fn create_object(
+        &mut self,
+        id: Option<Obj>,
+        attrs: ObjAttrs,
+    ) -> Result<Obj, WorldStateError> {
         let id = match id {
             Some(id) => id,
             None => {
@@ -276,7 +279,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(id)
     }
 
-    fn recycle_object(&mut self, obj: &Obj) -> Result<(), WorldStateError> {
+    pub fn recycle_object(&mut self, obj: &Obj) -> Result<(), WorldStateError> {
         // First go through and move all objects that are in this object's contents to the
         // to #-1.  It's up to the caller here to execute :exitfunc on all of them before invoking
         // this method.
@@ -358,14 +361,14 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn get_object_parent(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
+    pub fn get_object_parent(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
         let r = self.object_parent.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object parent: {:?}", e))
         })?;
         Ok(r.unwrap_or(NOTHING))
     }
 
-    fn set_object_parent(&mut self, o: &Obj, new_parent: &Obj) -> Result<(), WorldStateError> {
+    pub fn set_object_parent(&mut self, o: &Obj, new_parent: &Obj) -> Result<(), WorldStateError> {
         // Find the set of old ancestors (terminating at "new_parent" if they intersect, before
         // changing the inheritance graph
         let old_ancestors = self.ancestors_up_to(o, new_parent)?;
@@ -528,28 +531,28 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn get_object_children(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+    pub fn get_object_children(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
         let r = self.object_children.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object children: {:?}", e))
         })?;
         Ok(r.unwrap_or_default())
     }
 
-    fn get_object_location(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
+    pub fn get_object_location(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
         let r = self.object_location.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object location: {:?}", e))
         })?;
         Ok(r.unwrap_or(NOTHING))
     }
 
-    fn get_object_contents(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+    pub fn get_object_contents(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
         let r = self.object_contents.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object contents: {:?}", e))
         })?;
         Ok(r.unwrap_or_default())
     }
 
-    fn get_object_size_bytes(&self, obj: &Obj) -> Result<usize, WorldStateError> {
+    pub fn get_object_size_bytes(&self, obj: &Obj) -> Result<usize, WorldStateError> {
         // Means retrieving the common for all of the objects attributes, and then summing their sizes.
         // This is remarkably inefficient.
 
@@ -590,7 +593,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(size)
     }
 
-    fn set_object_location(
+    pub fn set_object_location(
         &mut self,
         what: &Obj,
         new_location: &Obj,
@@ -680,7 +683,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn get_verbs(&self, obj: &Obj) -> Result<VerbDefs, WorldStateError> {
+    pub fn get_verbs(&self, obj: &Obj) -> Result<VerbDefs, WorldStateError> {
         let r = self
             .object_verbdefs
             .get(obj)
@@ -688,7 +691,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(r.unwrap_or_else(VerbDefs::empty))
     }
 
-    fn get_verb_binary(&self, obj: &Obj, uuid: Uuid) -> Result<ByteView, WorldStateError> {
+    pub fn get_verb_binary(&self, obj: &Obj, uuid: Uuid) -> Result<ByteView, WorldStateError> {
         let r = self
             .object_verbs
             .get(&ObjAndUUIDHolder::new(obj, uuid))
@@ -704,7 +707,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(ByteView::from(binary.0))
     }
 
-    fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError> {
+    pub fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError> {
         let verbdefs = self.get_verbs(obj)?;
         let named = verbdefs.find_named(name);
         let verb = named
@@ -713,7 +716,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(verb.clone())
     }
 
-    fn get_verb_by_index(&self, obj: &Obj, index: usize) -> Result<VerbDef, WorldStateError> {
+    pub fn get_verb_by_index(&self, obj: &Obj, index: usize) -> Result<VerbDef, WorldStateError> {
         let verbs = self.get_verbs(obj)?;
         if index >= verbs.len() {
             return Err(WorldStateError::VerbNotFound(
@@ -728,7 +731,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(verb.clone())
     }
 
-    fn resolve_verb(
+    pub fn resolve_verb(
         &self,
         obj: &Obj,
         name: Symbol,
@@ -770,7 +773,7 @@ impl WorldStateTransaction for DbTransaction {
         Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()))
     }
 
-    fn update_verb(
+    pub fn update_verb(
         &mut self,
         obj: &Obj,
         uuid: Uuid,
@@ -817,7 +820,8 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn add_object_verb(
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_object_verb(
         &mut self,
         oid: &Obj,
         owner: &Obj,
@@ -859,7 +863,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn delete_verb(&mut self, location: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
+    pub fn delete_verb(&mut self, location: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         let verbdefs = self.get_verbs(location)?;
         let verbdefs = verbdefs
             .with_removed(uuid)
@@ -877,14 +881,19 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn get_properties(&self, obj: &Obj) -> Result<PropDefs, WorldStateError> {
+    pub fn get_properties(&self, obj: &Obj) -> Result<PropDefs, WorldStateError> {
         let r = self.object_propdefs.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting properties: {:?}", e))
         })?;
         Ok(r.unwrap_or_else(PropDefs::empty))
     }
 
-    fn set_property(&mut self, obj: &Obj, uuid: Uuid, value: Var) -> Result<(), WorldStateError> {
+    pub fn set_property(
+        &mut self,
+        obj: &Obj,
+        uuid: Uuid,
+        value: Var,
+    ) -> Result<(), WorldStateError> {
         upsert(
             &mut self.object_propvalues,
             ObjAndUUIDHolder::new(obj, uuid),
@@ -896,7 +905,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn define_property(
+    pub fn define_property(
         &mut self,
         definer: &Obj,
         location: &Obj,
@@ -972,7 +981,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(u)
     }
 
-    fn update_property_info(
+    pub fn update_property_info(
         &mut self,
         obj: &Obj,
         uuid: Uuid,
@@ -1027,7 +1036,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn clear_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
+    pub fn clear_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         // remove property value
         self.object_propvalues
             .delete(&ObjAndUUIDHolder::new(obj, uuid))
@@ -1037,7 +1046,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn delete_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
+    pub fn delete_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         // delete propdef from self and all descendants
         let descendants = self.descendants(obj)?;
         let locations = ObjSet::from_items(&[obj.clone()]).with_concatenated(descendants);
@@ -1052,7 +1061,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(())
     }
 
-    fn retrieve_property(
+    pub fn retrieve_property(
         &self,
         obj: &Obj,
         uuid: Uuid,
@@ -1070,7 +1079,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok((value, perms))
     }
 
-    fn retrieve_property_permissions(
+    pub fn retrieve_property_permissions(
         &self,
         obj: &Obj,
         uuid: Uuid,
@@ -1089,7 +1098,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(perms)
     }
 
-    fn resolve_property(
+    pub fn resolve_property(
         &self,
         obj: &Obj,
         name: Symbol,
@@ -1147,7 +1156,7 @@ impl WorldStateTransaction for DbTransaction {
         }
     }
 
-    fn db_usage(&self) -> Result<usize, WorldStateError> {
+    pub fn db_usage(&self) -> Result<usize, WorldStateError> {
         let (send, receive) = oneshot::channel();
         self.usage_channel
             .send(send)
@@ -1155,7 +1164,7 @@ impl WorldStateTransaction for DbTransaction {
         Ok(receive.recv().expect("Unable to receive usage response"))
     }
 
-    fn commit(self) -> Result<CommitResult, WorldStateError> {
+    pub fn commit(self) -> Result<CommitResult, WorldStateError> {
         let commit_start = Instant::now();
 
         // Pull out the working sets
@@ -1218,12 +1227,12 @@ impl WorldStateTransaction for DbTransaction {
         }
     }
 
-    fn rollback(self) -> Result<(), WorldStateError> {
+    pub fn rollback(self) -> Result<(), WorldStateError> {
         // Just drop the transaction, it will be cleaned up by the drop impl.
         Ok(())
     }
 
-    fn descendants(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+    pub fn descendants(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
         let children = self
             .object_children
             .get(obj)
@@ -1253,7 +1262,7 @@ impl WorldStateTransaction for DbTransaction {
     }
 }
 
-impl DbTransaction {
+impl WorldStateTransaction {
     /// Increment the given sequence, return the new value.
     fn increment_sequence(&self, seq: usize) -> i64 {
         self.sequences[seq].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
