@@ -68,7 +68,7 @@ enum LineMode {
     /// Typical command input mode.
     Input,
     /// Waiting for a reply to a prompt.
-    WaitingReply(u128),
+    WaitingReply(Uuid),
     /// Spooling up .program input.
     SpoolingProgram(String, String),
 }

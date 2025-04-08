@@ -86,6 +86,22 @@ pub struct Args {
 
     #[arg(
         long,
+        value_name = "workers-response-listen",
+        help = "Workers server RPC address for receiving attachment, responses, and pings etc",
+        default_value = "ipc:///tmp/moor_workers_response.sock"
+    )]
+    pub workers_response_listen: String,
+
+    #[arg(
+        long,
+        value_name = "workers-request-listen",
+        help = "Workers server pub-sub address for broadcasting dispatch requests",
+        default_value = "ipc:///tmp/moor_workers_request.sock"
+    )]
+    pub workers_request_listen: String,
+
+    #[arg(
+        long,
         value_name = "public_key",
         help = "file containing the PEM encoded public key (shared with the daemon), used for authenticating client & host connections",
         default_value = "moor-verifying-key.pem"

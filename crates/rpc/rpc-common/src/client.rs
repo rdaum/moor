@@ -19,6 +19,7 @@ use moor_common::tasks::{NarrativeEvent, SchedulerError, VerbProgramError};
 use moor_var::{Obj, Symbol, Var};
 use std::net::SocketAddr;
 use std::time::SystemTime;
+use uuid::Uuid;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Encode, Decode)]
 #[repr(u8)]
@@ -90,7 +91,7 @@ pub enum HostClientToDaemonMessage {
     /// Attempt to program the object with the given verb code
     Program(ClientToken, AuthToken, ObjectRef, Symbol, Vec<String>),
     /// Respond to a request for input.
-    RequestedInput(ClientToken, AuthToken, u128, String),
+    RequestedInput(ClientToken, AuthToken, #[bincode(with_serde)] Uuid, String),
     /// Send an "out of band" command to be executed.
     OutOfBand(ClientToken, AuthToken, Obj, String),
     /// Evaluate a MOO expression.
@@ -164,7 +165,7 @@ pub enum ClientEvent {
     /// The server wants the client to prompt the user for input, and the task this session is
     /// attached to will suspend until the client sends an RPC with a `RequestedInput` message and
     /// the attached request id.
-    RequestInput(u128),
+    RequestInput(#[bincode(with_serde)] Uuid),
     /// The system wants to send a message to the given object on its current active connections.
     SystemMessage(Obj, String),
     /// The system wants to disconnect the given object from all its current active connections.
