@@ -171,11 +171,11 @@ fn main() {
         )
         .unwrap();
 
-        let duration = start.elapsed();
-        info!("Loaded textdump in {:?}", duration);
+        info!("Loaded textdump in {:?}", start.elapsed());
         loader_interface
             .commit()
             .expect("Failure to commit loaded database...");
+        info!("Committed. Total time: {:?}", start.elapsed());
     } else if let Some(objdef_dir) = args.src_objdef_dir {
         let start = std::time::Instant::now();
         let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
@@ -185,12 +185,17 @@ fn main() {
             error!("{:#}", e);
             return;
         }
-        let duration = start.elapsed();
-        info!("Loaded objdef directory in {:?}", duration);
+        info!("Loaded objdef directory in {:?}", start.elapsed());
         loader_interface
             .commit()
             .expect("Failure to commit loaded database...");
+        info!("Committed. Total time: {:?}", start.elapsed());
     }
+
+    info!(
+        "Database loaded. out_textdump?: {:?} out_objdef_dir?: {:?} test_directory?: {:?} run_tests?: {:?}",
+        args.out_textdump, args.out_objdef_dir, args.test_directory, args.run_tests
+    );
 
     // Dump phase.
     if let Some(textdump_path) = args.out_textdump {
@@ -249,6 +254,7 @@ fn main() {
     }
 
     if args.run_tests != Some(true) && args.test_directory.is_none() {
+        info!("No tests to run. Exiting.");
         return;
     }
 
