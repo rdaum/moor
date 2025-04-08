@@ -618,15 +618,15 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     let mut result = Vec::with_capacity(list.len());
 
                     for item in list.iter() {
-                        if let Variant::List(sublist) = item.variant() {
-                            if idx < 1 || idx > sublist.len() {
-                                return Err(BfErr::Code(E_RANGE));
-                            }
-                            // MOO is 1-indexed, so subtract 1
-                            result.push(sublist.index(idx - 1).map_err(BfErr::Code)?);
-                        } else {
+                        let Variant::List(sublist) = item.variant() else {
                             return Err(BfErr::Code(E_TYPE));
+                        };
+                        
+                        if idx < 1 || idx > sublist.len() {
+                            return Err(BfErr::Code(E_RANGE));
                         }
+                        // MOO is 1-indexed, so subtract 1
+                        result.push(sublist.index(idx - 1).map_err(BfErr::Code)?);
                     }
 
                     Ok(Ret(v_list(&result)))
@@ -644,27 +644,26 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         // For each sublist in the input list, create a new list containing
                         // the elements at the positions specified in 'indices'
                         for item in list.iter() {
-                            if let Variant::List(sublist) = item.variant() {
-                                let mut subresult = Vec::with_capacity(indices.len());
-                                
-                                for idx_var in indices.iter() {
-                                    match idx_var.variant() {
-                                        Variant::Int(idx) => {
-                                            let idx = *idx as usize;
-                                            if idx < 1 || idx > sublist.len() {
-                                                return Err(BfErr::Code(E_RANGE));
-                                            }
-                                            // MOO is 1-indexed, so subtract 1
-                                            subresult.push(sublist.index(idx - 1).map_err(BfErr::Code)?);
-                                        }
-                                        _ => return Err(BfErr::Code(E_TYPE)),
-                                    }
-                                }
-                                
-                                result.push(v_list(&subresult));
-                            } else {
+                            let Variant::List(sublist) = item.variant() else {
                                 return Err(BfErr::Code(E_TYPE));
+                            };
+                            
+                            let mut subresult = Vec::with_capacity(indices.len());
+                            
+                            for idx_var in indices.iter() {
+                                let Variant::Int(idx) = idx_var.variant() else {
+                                    return Err(BfErr::Code(E_TYPE));
+                                };
+                                
+                                let idx = *idx as usize;
+                                if idx < 1 || idx > sublist.len() {
+                                    return Err(BfErr::Code(E_RANGE));
+                                }
+                                // MOO is 1-indexed, so subtract 1
+                                subresult.push(sublist.index(idx - 1).map_err(BfErr::Code)?);
                             }
+                            
+                            result.push(v_list(&subresult));
                         }
                     }
 
@@ -672,33 +671,32 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 }
 
                 // Case 3: List of maps + String key
-                // This handles: slice({#[["x", 1], ["y", 2]], #[["x", 3], ["z", 4]]}, "x") => {1, 3}
+                // This handles: slice({["x" -> 1, "y" -> 2], ["x" -> 3, "z" -> 4]}, "x") => {1, 3}
                 // For each map in the input list, extract the value associated with the key 'key'
                 // and return a list of these values
                 Variant::Str(key) => {
                     let mut result = Vec::with_capacity(list.len());
 
                     for item in list.iter() {
-                        match item.variant() {
-                            Variant::Map(map) => {
-                                // Create a key Var from the string
-                                let key_var = v_str(key.as_str());
+                        let Variant::Map(map) = item.variant() else {
+                            return Err(BfErr::Code(E_TYPE));
+                        };
+                        
+                        // Create a key Var from the string
+                        let key_var = v_str(key.as_str());
 
-                                // Try to get the value for this key
-                                match map.get(&key_var) {
-                                    Ok(value) => result.push(value),
-                                    Err(_) => {
-                                        // Use default value if provided, otherwise error
-                                        // This handles: slice({#[["x", 1]], #[["z", 4]]}, "x", 0) => {1, 0}
-                                        if let Some(default) = default_value {
-                                            result.push(default.clone());
-                                        } else {
-                                            return Err(BfErr::Code(E_RANGE));
-                                        }
-                                    }
+                        // Try to get the value for this key
+                        match map.get(&key_var) {
+                            Ok(value) => result.push(value),
+                            Err(_) => {
+                                // Use default value if provided, otherwise error
+                                // This handles: slice({#[["x", 1]], #[["z", 4]]}, "x", 0) => {1, 0}
+                                if let Some(default) = default_value {
+                                    result.push(default.clone());
+                                } else {
+                                    return Err(BfErr::Code(E_RANGE));
                                 }
                             }
-                            _ => return Err(BfErr::Code(E_TYPE)),
                         }
                     }
 
