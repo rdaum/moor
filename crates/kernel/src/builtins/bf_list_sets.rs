@@ -554,24 +554,26 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(substitute, bf_substitute);
 
-/// Function: list slice(list|map alist [, list|str index [, any default_value]])
-///
+/// ```moo
+/// list slice(list|map alist [, list|str index [, any default_value]])
+/// ```
 /// Returns a list containing elements from `alist` based on the `index` parameter:
 ///
 /// - If `alist` is a list of lists and `index` is an integer, returns a list containing
 ///   the element at the specified position from each sublist in `alist`.
-///   Example: slice({{1,2,3},{4,5,6}}, 2) => {2, 5}
-///
 /// - If `alist` is a list of lists and `index` is a list of integers, returns a list containing
 ///   lists of elements at the specified positions from each sublist in `alist`.
-///   Example: slice({{1,2,3},{4,5,6}}, {1, 3}) => {{1, 3}, {4, 6}}
 ///
 /// - If `alist` is a list of maps and `index` is a string, returns a list containing
 ///   the values associated with key `index` from each map in `alist`.
 ///   If `default_value` is provided, it will be used for any maps that don't contain the key.
-///  slice({{"z", 1}, {"y", 2}, {"x",5}}, 2) => {1, 2, 5}.
-/// slice({{"z", 1, 3}, {"y", 2, 4}}, {2, 1}) => {{1, "z"}, {2, "y"}}
-///  slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6]}, "a") => {1, 5}
+/// ```moo
+///   slice({{1,2,3},{4,5,6}}, 2) => {2, 5}
+///   slice({{1,2,3},{4,5,6}}, {1, 3}) => {{1, 3}, {4, 6}}
+///   slice({{"z", 1}, {"y", 2}, {"x",5}}, 2) => {1, 2, 5}.
+///   slice({{"z", 1, 3}, {"y", 2, 4}}, {2, 1}) => {{1, "z"}, {2, "y"}}
+///   slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6]}, "a") => {1, 5}
+/// ```
 fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
