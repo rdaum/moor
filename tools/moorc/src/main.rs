@@ -143,6 +143,7 @@ fn main() {
     // Actual binary database is in a tmpdir.
     let db_dir = tempfile::tempdir().unwrap();
 
+    info!("Opening temporary database at {}", db_dir.path().display());
     let (database, _) = TxDB::open(Some(db_dir.path()), DatabaseConfig::default());
     let Ok(mut loader_interface) = database.loader_client() else {
         error!(
