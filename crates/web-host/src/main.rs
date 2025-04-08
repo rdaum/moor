@@ -46,6 +46,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::Mutex;
 use tower_http::services::ServeDir;
 use tracing::{info, warn};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -345,8 +346,10 @@ async fn main() -> Result<(), eyre::Error> {
         .compact()
         .with_ansi(true)
         .with_file(true)
+        .with_target(false)
         .with_line_number(true)
         .with_thread_names(true)
+        .with_span_events(FmtSpan::NONE)
         .with_max_level(if args.debug {
             tracing::Level::DEBUG
         } else {

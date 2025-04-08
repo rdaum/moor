@@ -25,6 +25,7 @@ use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_kernel::textdump::textdump_load;
 use rpc_common::load_keypair;
 use tracing::{debug, info, warn};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 mod connections;
 
@@ -51,8 +52,10 @@ fn main() -> Result<(), Report> {
         .compact()
         .with_ansi(true)
         .with_file(true)
+        .with_target(false)
         .with_line_number(true)
         .with_thread_names(true)
+        .with_span_events(FmtSpan::NONE)
         .with_max_level(if args.debug {
             tracing::Level::DEBUG
         } else {

@@ -113,8 +113,10 @@ fn main() {
         .with_span_events(FmtSpan::NONE)
         .with_target(false)
         .with_file(false)
+        .with_target(false)
         .with_line_number(false)
         .with_thread_names(false)
+        .with_span_events(FmtSpan::NONE)
         .with_max_level(if args.debug {
             tracing::Level::DEBUG
         } else {
