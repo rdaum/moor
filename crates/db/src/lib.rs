@@ -33,7 +33,6 @@ mod worldstate_tests;
 use crate::db_worldstate::DbTxWorldState;
 use crate::worldstate_db::WorldStateDB;
 pub use config::{DatabaseConfig, TableConfig};
-pub use worldstate_tests::*;
 mod config;
 mod tx;
 
