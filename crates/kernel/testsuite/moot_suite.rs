@@ -165,6 +165,8 @@ fn test(db: Box<dyn Database>, path: &Path) {
         tasks_db,
         Arc::new(Config::default()),
         Arc::new(NoopSystemControl::default()),
+        None,
+        None,
     );
     let scheduler_client = scheduler.client().unwrap();
     let session_factory = Arc::new(NoopSessionFactory {});

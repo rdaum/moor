@@ -14,7 +14,7 @@
 use crate::model::{CompileError, WorldStateError};
 use crate::tasks::TaskId;
 use bincode::{Decode, Encode};
-use moor_var::{Error, Var};
+use moor_var::{Error, Symbol, Var};
 use std::fmt::Display;
 use std::time::Duration;
 use strum::Display;
@@ -99,4 +99,22 @@ pub enum CommandError {
     DatabaseError(#[source] WorldStateError),
     #[error("Permission denied")]
     PermissionDenied,
+}
+
+#[derive(Debug, Error, Clone, Decode, Encode, Eq, PartialEq)]
+pub enum WorkerError {
+    #[error("Permission denied")]
+    PermissionDenied(String),
+    #[error("Invalid request")]
+    InvalidRequest(String),
+    #[error("Invalid response")]
+    InternalError(String),
+    #[error("Request timed out")]
+    RequestTimedOut(String),
+    #[error("Request cancelled")]
+    RequestError(String),
+    #[error("Worker detached")]
+    WorkerDetached(String),
+    #[error("No worker available for {0}")]
+    NoWorkerAvailable(Symbol),
 }

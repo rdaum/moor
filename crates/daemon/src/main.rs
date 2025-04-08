@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use crate::args::Args;
 use crate::rpc_server::RpcServer;
+use crate::workers_server::WorkersServer;
 use clap::Parser;
 use eyre::Report;
 use moor_common::build;
@@ -36,6 +37,7 @@ mod rpc_server;
 mod rpc_session;
 mod sys_ctrl;
 mod tasks_fjall;
+mod workers_server;
 
 /// Host for the moor runtime.
 ///   * Brings up the database
@@ -148,20 +150,39 @@ fn main() -> Result<(), Report> {
 
     // We have to create the RpcServer before starting the scheduler because we need to pass it in
     // as a parameter to the scheduler for background session construction.
-
     let zmq_ctx = zmq::Context::new();
     zmq_ctx
         .set_io_threads(args.num_io_threads)
         .expect("Failed to set number of IO threads");
     let rpc_server = Arc::new(RpcServer::new(
-        public_key,
-        private_key,
+        public_key.clone(),
+        private_key.clone(),
         args.connections_file,
         zmq_ctx.clone(),
         args.events_listen.as_str(),
         config.clone(),
     ));
     let kill_switch = rpc_server.kill_switch();
+
+    let (worker_scheduler_send, worker_scheduler_recv) = crossbeam_channel::unbounded();
+
+    // Workers RPC server
+    let mut workers_server = WorkersServer::new(
+        kill_switch.clone(),
+        public_key,
+        private_key,
+        zmq_ctx.clone(),
+        worker_scheduler_send,
+    );
+    let workers_sender = workers_server
+        .start(&args.workers_request_listen)
+        .expect("Failed to start workers server");
+
+    std::thread::spawn(move || {
+        workers_server
+            .listen(&args.workers_response_listen)
+            .expect("Failed to listen for workers");
+    });
 
     // The pieces from core we're going to use:
     //   Our DB.
@@ -172,6 +193,8 @@ fn main() -> Result<(), Report> {
         tasks_db,
         config.clone(),
         rpc_server.clone(),
+        Some(workers_sender),
+        Some(worker_scheduler_recv),
     );
     let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
 

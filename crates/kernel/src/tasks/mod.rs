@@ -35,6 +35,7 @@ pub(crate) mod task;
 pub mod task_scheduler_client;
 mod tasks_db;
 pub mod vm_host;
+pub mod workers;
 
 pub const DEFAULT_FG_TICKS: usize = 60_000;
 pub const DEFAULT_BG_TICKS: usize = 30_000;
