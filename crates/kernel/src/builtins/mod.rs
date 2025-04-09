@@ -30,6 +30,7 @@ use crate::config::FeaturesConfig;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::activation::{BfFrame, Frame};
+use crate::vm::exec_state::VmCounters;
 use crate::vm::{ExecutionResult, VMExecState};
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
@@ -124,8 +125,10 @@ pub struct BfCallState<'a> {
     pub(crate) task_scheduler_client: TaskSchedulerClient,
     /// Config
     pub(crate) config: FeaturesConfig,
-    /// Information about the actual builtins runtimes
+    /// Counts and elapsed times on bf invocations
     pub(crate) bf_perf: Arc<Vec<BfPerf>>,
+    /// Counts and elapsed times for various VM operations
+    pub(crate) vmperf_counters: Arc<VmCounters>,
 }
 
 impl BfCallState<'_> {

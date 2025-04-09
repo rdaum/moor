@@ -12,6 +12,7 @@
 //
 
 use crate::vm::FinallyReason;
+use crate::vm::exec_state::{VMPerfCounterGuard, vm_counters};
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -186,6 +187,9 @@ impl MooStackFrame {
     }
 
     pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
+        let vm_counters = vm_counters();
+        let _t = VMPerfCounterGuard::new(&vm_counters.find_line_no);
+
         if self.program.line_number_spans.is_empty() {
             return None;
         }

@@ -19,11 +19,11 @@ use std::time::Instant;
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::objects::ObjFlag;
 use crate::model::objset::ObjSet;
 use crate::model::propdef::{PropDef, PropDefs};
 use crate::model::props::{PropAttrs, PropFlag};
-use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};

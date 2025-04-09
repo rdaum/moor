@@ -15,8 +15,8 @@ use rand::Rng;
 
 use moor_compiler::offset_for_builtin;
 use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_var::{v_float, v_int, v_str};
 use moor_var::{Sequence, Var, Variant};
+use moor_var::{v_float, v_int, v_str};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;

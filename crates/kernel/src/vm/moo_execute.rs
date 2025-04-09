@@ -21,6 +21,7 @@ use std::ops::Add;
 use std::time::Duration;
 
 use crate::config::FeaturesConfig;
+use crate::vm::exec_state::{VMPerfCounterGuard, vm_counters};
 use moor_var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_var::{
     Error, IndexMode, Obj, Sequence, TypeClass, Var, Variant, v_bool_int, v_empty_list,
@@ -986,6 +987,9 @@ fn get_property(
     propname: Symbol,
     features_config: &FeaturesConfig,
 ) -> Result<Var, Error> {
+    let vm_counters = vm_counters();
+    let _t = VMPerfCounterGuard::new(&vm_counters.get_property);
+
     match obj.variant() {
         Variant::Obj(obj) => {
             let result = world_state.retrieve_property(permissions, obj, propname);

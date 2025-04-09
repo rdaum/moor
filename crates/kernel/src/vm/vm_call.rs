@@ -18,6 +18,7 @@ use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::VMExecState;
 use crate::vm::activation::{Activation, Frame};
+use crate::vm::exec_state::{VMPerfCounterGuard, vm_counters};
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork};
 use lazy_static::lazy_static;
@@ -84,6 +85,8 @@ impl VMExecState {
         verb: Symbol,
         args: List,
     ) -> Result<ExecutionResult, Error> {
+        let vm_counters = vm_counters();
+        let _t = VMPerfCounterGuard::new(&vm_counters.prepare_verb_dispatch);
         let (args, this, location) = match target.variant() {
             Variant::Obj(o) => (args, target.clone(), o.clone()),
             Variant::Flyweight(f) => (args, target.clone(), f.delegate().clone()),
@@ -201,6 +204,8 @@ impl VMExecState {
         world_state: &mut dyn WorldState,
         args: &List,
     ) -> ExecutionResult {
+        let vm_counters = vm_counters();
+        let _t = VMPerfCounterGuard::new(&vm_counters.prepare_pass_verb);
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
         let permissions = &self.top().permissions;
@@ -271,6 +276,8 @@ impl VMExecState {
     /// We get an activation record which is a copy of where it was borked from, and a new Program
     /// which is the new task's code, derived from a fork vector in the original task.
     pub(crate) fn exec_fork_vector(&mut self, fork_request: Fork) {
+        let vm_counters = vm_counters();
+        let _t = VMPerfCounterGuard::new(&vm_counters.prepare_exec_fork_vector);
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
 
@@ -367,6 +374,7 @@ impl VMExecState {
             flags,
             self.top().player.clone(),
         ));
+        let vm_counters = vm_counters();
         let mut bf_args = BfCallState {
             exec_state: self,
             name: bf_name,
@@ -377,10 +385,18 @@ impl VMExecState {
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
             config: exec_args.config.clone(),
             bf_perf: exec_args.builtin_registry.perf.clone(),
+            vmperf_counters: vm_counters.clone(),
         };
         exec_args.builtin_registry.perf[bf_id.0 as usize]
             .invocations
             .add(1);
+        let elapsed_micros = start.elapsed().as_micros();
+        vm_counters.prepare_builtin_function.invocations.add(1);
+        vm_counters
+            .prepare_builtin_function
+            .cumulative_duration_us
+            .add(elapsed_micros as isize);
+
         let result = bf.call(&mut bf_args);
         let elapsed_micros = start.elapsed().as_micros();
         exec_args.builtin_registry.perf[bf_id.0 as usize]
@@ -402,6 +418,7 @@ impl VMExecState {
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
+        let start = Instant::now();
         let bf_frame = match self.top().frame {
             Frame::Bf(ref frame) => frame,
             _ => panic!("Expected a BF frame at the top of the stack"),
@@ -416,7 +433,8 @@ impl VMExecState {
             return self.unwind_stack(FinallyReason::Return(return_value));
         };
 
-        let bf = exec_args.builtin_registry.builtin_for(&bf_frame.bf_id);
+        let bf_id = bf_frame.bf_id;
+        let bf = exec_args.builtin_registry.builtin_for(&bf_id);
         let verb_name = self.top().verb_name;
         let sessions = session.clone();
         let args = self.top().args.clone();
@@ -430,9 +448,25 @@ impl VMExecState {
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
             config: exec_args.config.clone(),
             bf_perf: exec_args.builtin_registry.perf.clone(),
+            vmperf_counters: vm_counters().clone(),
         };
 
-        match bf.call(&mut bf_args) {
+        let elapsed_micros = start.elapsed().as_micros();
+        vm_counters()
+            .prepare_reenter_builtin_function
+            .invocations
+            .add(1);
+        vm_counters()
+            .prepare_reenter_builtin_function
+            .cumulative_duration_us
+            .add(elapsed_micros as isize);
+
+        let result = bf.call(&mut bf_args);
+        let elapsed_micros = start.elapsed().as_micros();
+        exec_args.builtin_registry.perf[bf_id.0 as usize]
+            .cumulative_time_us
+            .add(elapsed_micros as isize);
+        match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
             Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(e, msg, value),
