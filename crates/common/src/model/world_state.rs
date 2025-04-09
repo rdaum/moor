@@ -475,7 +475,7 @@ impl WorldStatePerf {
             owner_of: WSPerfCounter::new("owner_of"),
             controls: WSPerfCounter::new("controls"),
             flags_of: WSPerfCounter::new("flags_of"),
-            set_flags_of: WSPerfCounter::new("flags_of"),
+            set_flags_of: WSPerfCounter::new("set_flags_of"),
             location_of: WSPerfCounter::new("location_of"),
             object_bytes: WSPerfCounter::new("object_bytes"),
             create_object: WSPerfCounter::new("create_object"),
