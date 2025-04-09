@@ -381,6 +381,133 @@ fn perform_pcre_match(
 
     List::mk_list(&matches)
 }
+
+fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error> {
+    let separator = {
+        let mut chars = replace_str.chars();
+        // First character must be 's'
+        let Some(first_char) = chars.next() else {
+            return Err(E_INVARG);
+        };
+        if first_char != 's' {
+            return Err(E_INVARG);
+        }
+
+        // Next character is separator and must be either '/' or '!' and determines what the separator
+        // is for the rest of time.
+        let Some(sep_char) = chars.next() else {
+            return Err(E_INVARG);
+        };
+
+        if sep_char != '/' && sep_char != '!' {
+            return Err(E_INVARG);
+        }
+
+        sep_char
+    };
+
+    // Split using the separator
+    let components: Vec<_> = replace_str.splitn(4, separator).collect();
+    if components.len() < 2 {
+        return Err(E_INVARG);
+    };
+
+    let (pattern, replacement) = (components[1], components[2]);
+
+    let (global, case_insensitive) = if components.len() == 4 {
+        (components[3].contains("g"), components[3].contains("i"))
+    } else {
+        (false, false)
+    };
+
+    // Compile "pattern" as a regex.  Then search for it in "target", and then replace
+    let options = if !case_insensitive {
+        onig::RegexOptions::REGEX_OPTION_NONE
+    } else {
+        onig::RegexOptions::REGEX_OPTION_IGNORECASE
+    };
+
+    let syntax = onig::Syntax::perl();
+    let regex = onig::Regex::with_options(pattern, options, syntax).unwrap();
+
+    // If `global` we will replace all matches. Otherwise just stop after the first
+    let mut start = 0;
+    let mut region = Region::new();
+    let end = target.len();
+    let mut matches = vec![];
+    loop {
+        let match_num = regex.search_with_options(
+            target,
+            start,
+            end,
+            SearchOptions::SEARCH_OPTION_NONE,
+            Some(&mut region),
+        );
+
+        if match_num.is_none() {
+            break;
+        }
+        let Some((match_start, end)) = region.pos(0) else {
+            break;
+        };
+
+        // Append the match to our matches.
+        // If not `global`, break afterwords.
+        // If global, move "start" past it, and continue
+        matches.push((match_start, end));
+        if !global {
+            break;
+        }
+        start = end;
+    }
+
+    // Now compose the string looking at the matches, replacing the `replacement` in every place
+    let mut result = String::new();
+    let mut offset = 0;
+
+    // Iterate through all matches and compose the result string
+    for (start, end) in matches {
+        // Append the portion of the target string before the match
+        result.push_str(&target[offset..start]);
+
+        // Append the replacement string
+        result.push_str(replacement);
+
+        // Update the offset to the end of the current match
+        offset = end;
+    }
+
+    // Append the remainder of the target string after the last match
+    result.push_str(&target[offset..]);
+
+    Ok(result)
+}
+
+fn bf_pcre_replace(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // pcre_substitute(target, replace_str)
+    // Given a replace_str like 's/frob/dog', and a target like "pet the frobs"
+    // Should get 'pet the dogs'
+    // If suffixed with 'g' or 'i', "global" and "case insensitive" applied respectively.
+    // Separator is either '/' or '!' and is determined by looking at the first character after 's'
+    // only 's' is supported.
+    // (this abomination is only here for toast back compatibility.)
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let (Variant::Str(target), Variant::Str(replace_str)) =
+        (bf_args.args[0].variant(), bf_args.args[1].variant())
+    else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    let (target, replace_str) = (target.as_str(), replace_str.as_str());
+
+    match perform_pcre_replace(target, replace_str) {
+        Ok(result) => Ok(Ret(v_str(&result))),
+        Err(err) => Err(BfErr::Code(err)),
+    }
+}
+bf_declare!(pcre_replace, bf_pcre_replace);
 /*
 From Toast:
 
@@ -727,12 +854,15 @@ pub(crate) fn register_bf_list_sets(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("rmatch")] = Box::new(BfRmatch {});
     builtins[offset_for_builtin("substitute")] = Box::new(BfSubstitute {});
     builtins[offset_for_builtin("pcre_match")] = Box::new(BfPcreMatch {});
+    builtins[offset_for_builtin("pcre_replace")] = Box::new(BfPcreReplace {});
     builtins[offset_for_builtin("slice")] = Box::new(BfSlice {});
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::builtins::bf_list_sets::{perform_pcre_match, perform_regex_match, substitute};
+    use crate::builtins::bf_list_sets::{
+        perform_pcre_match, perform_pcre_replace, perform_regex_match, substitute,
+    };
     use moor_compiler::to_literal;
     use moor_var::{Var, Variant, v_int, v_list, v_map, v_str};
 
@@ -890,6 +1020,30 @@ mod tests {
             "Expected: \n{}\nGot: \n{}",
             to_literal(&expected),
             to_literal(&v)
+        );
+    }
+
+    #[test]
+    fn test_pcre_replace() {
+        assert_eq!(
+            perform_pcre_replace("cats and dogs", "s/cat/dog").unwrap(),
+            "dogs and dogs"
+        );
+        assert_eq!(
+            perform_pcre_replace("cats and dogs", "s/moose/dog").unwrap(),
+            "cats and dogs"
+        );
+        assert_eq!(
+            perform_pcre_replace("cats and dogs", "s/\\w+/moose").unwrap(),
+            "moose and dogs"
+        );
+        assert_eq!(
+            perform_pcre_replace("cats and dogs", r#"s/\w+/moose/g"#).unwrap(),
+            "moose moose moose"
+        );
+        assert_eq!(
+            perform_pcre_replace("Cats and Dogs and cats", r#"s/cats/moose/ig"#).unwrap(),
+            "moose and Dogs and moose"
         );
     }
 }

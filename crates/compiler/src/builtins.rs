@@ -314,6 +314,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             implemented: true,
         },
         Builtin {
+            name: Symbol::mk("pcre_replace"),
+            min_args: Q(2),
+            max_args: Q(4),
+            types: vec![Typed(TYPE_STR), Typed(TYPE_STR), Any],
+            implemented: true,
+        },
+        Builtin {
             name: Symbol::mk("crypt"),
             min_args: Q(1),
             max_args: Q(2),

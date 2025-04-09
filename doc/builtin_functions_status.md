@@ -8,21 +8,20 @@ included in the notes column.
 
 ### Lists
 
-| Name         | Complete | Notes                     |
-|--------------|----------|---------------------------|
-| `length`     | &check;  |                           |
-| `setadd`     | &check;  |                           |
-| `setremove`  | &check;  |                           |
-| `listappend` | &check;  |                           |
-| `listinsert` | &check;  |                           |
-| `listdelete` | &check;  |                           |
-| `listset`    | &check;  |                           |
-| `equal`      | &check;  |                           |
-| `is_member`  | &check;  |                           |
-| `match`      | &check;  |                           |
-| `rmatch`     | &check;  |                           |
-| `substitute` | &check;  |                           |
-| `pcre_match` | &check;  | Extension from ToastStunt |
+| Name         | Complete | Notes |
+|--------------|----------|-------|
+| `length`     | &check;  |       |
+| `setadd`     | &check;  |       |
+| `setremove`  | &check;  |       |
+| `listappend` | &check;  |       |
+| `listinsert` | &check;  |       |
+| `listdelete` | &check;  |       |
+| `listset`    | &check;  |       |
+| `equal`      | &check;  |       |
+| `is_member`  | &check;  |       |
+| `match`      | &check;  |       |
+| `rmatch`     | &check;  |       |
+| `substitute` | &check;  |       |
 
 ### Strings
 
@@ -209,6 +208,8 @@ Functions not in the original LambdaMOO, but were in Toast, and ported over
 | `ancestors`            | &check;  |                                                                     |
 | `descendants`          | &check;  |                                                                     |
 | `isa`                  | &check;  |                                                                     |
+| `pcre_match`           | &check;  |                                                                     |
+| `pcre_replace`         | &check;  |                                                                     |
 
 ## Extensions
 
@@ -228,4 +229,4 @@ Functions not part of the original LambdaMOO, but added in moor
 | `slots`       | Returns the slots on a given flyweight                                  | Available only if the flyweights feature is turned on |
 | `remove_slot` | Returns a copy of the flyweight with the given slot removed, if present | Available only if the flyweights feature is turned on |
 | `add_slot`    | Returns a copy of the flyweight with a new slot added                   | Available only if the flyweights feature is turned on |
-| 'to_sym'      | Turns the given value into a Symbol                                     | Available only if the symbols feature is turned on    |
+| `tosym'       | Turns the given value into a Symbol                                     | Available only if the symbols feature is turned on    |
