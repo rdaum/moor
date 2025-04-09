@@ -1159,6 +1159,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ)],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("bf_counters"),
+            min_args: Q(0),
+            max_args: Q(0),
+            types: vec![],
+            implemented: true,
+        },
     ]
 }
 

@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use fast_counter::ConcurrentCounter;
 use std::sync::Arc;
-
 use thiserror::Error;
 
 use crate::builtins::bf_age_crypto::register_bf_age_crypto;
@@ -56,6 +56,13 @@ mod bf_verbs;
 pub struct BuiltinRegistry {
     // The set of built-in functions, indexed by their Name offset in the variable stack.
     pub(crate) builtins: Arc<Vec<Box<dyn BuiltinFunction>>>,
+    pub(crate) perf: Arc<Vec<BfPerf>>,
+}
+
+pub(crate) struct BfPerf {
+    pub(crate) name: Symbol,
+    pub(crate) invocations: fast_counter::ConcurrentCounter,
+    pub(crate) cumulative_time_us: fast_counter::ConcurrentCounter,
 }
 
 impl Default for BuiltinRegistry {
@@ -82,8 +89,17 @@ impl BuiltinRegistry {
         register_bf_flyweights(&mut builtins);
         register_bf_age_crypto(&mut builtins);
 
+        let mut perf = Vec::with_capacity(BUILTINS.len());
+        for i in 0..BUILTINS.len() {
+            perf.push(BfPerf {
+                name: Symbol::mk(BUILTINS.names[&BuiltinId(i as u16)].as_str()),
+                invocations: ConcurrentCounter::new(0),
+                cumulative_time_us: ConcurrentCounter::new(0),
+            })
+        }
         BuiltinRegistry {
             builtins: Arc::new(builtins),
+            perf: Arc::new(perf),
         }
     }
 
@@ -108,6 +124,8 @@ pub struct BfCallState<'a> {
     pub(crate) task_scheduler_client: TaskSchedulerClient,
     /// Config
     pub(crate) config: FeaturesConfig,
+    /// Information about the actual builtins runtimes
+    pub(crate) bf_perf: Arc<Vec<BfPerf>>,
 }
 
 impl BfCallState<'_> {

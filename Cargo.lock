@@ -1496,6 +1496,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fast-counter"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bf000f5d36bbfe94dd055f7fc5ec15e67cc674fd867a109b1c56577c37d8234"
+
+[[package]]
 name = "fast-glob"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2780,6 +2786,7 @@ dependencies = [
  "crossbeam-channel",
  "encoding_rs",
  "eyre",
+ "fast-counter",
  "iana-time-zone",
  "lazy_static",
  "libc",

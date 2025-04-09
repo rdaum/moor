@@ -57,6 +57,7 @@ byteview.workspace = true
 chrono.workspace = true
 crossbeam-channel.workspace = true
 encoding_rs.workspace = true
+fast-counter.workspace = true
 lazy_static.workspace = true
 libc.workspace = true
 oneshot.workspace = true

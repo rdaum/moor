@@ -729,12 +729,12 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             if list.is_empty() {
                 return Ok(Ret(v_empty_list()));
             }
-            
+
             let first_item = list.index(0).map_err(BfErr::Code)?;
             if !matches!(first_item.variant(), Variant::List(_) | Variant::Map(_)) {
                 return Err(BfErr::Code(E_TYPE));
             }
-            
+
             match index.variant() {
                 // Case 1: List of lists + Integer index
                 // This handles: slice({{1,2,3},{4,5,6}}, 2) => {2, 5}
@@ -748,7 +748,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         let Variant::List(sublist) = item.variant() else {
                             return Err(BfErr::Code(E_TYPE));
                         };
-                        
+
                         if idx < 1 || idx > sublist.len() {
                             return Err(BfErr::Code(E_RANGE));
                         }
@@ -774,14 +774,14 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             let Variant::List(sublist) = item.variant() else {
                                 return Err(BfErr::Code(E_TYPE));
                             };
-                            
+
                             let mut subresult = Vec::with_capacity(indices.len());
-                            
+
                             for idx_var in indices.iter() {
                                 let Variant::Int(idx) = idx_var.variant() else {
                                     return Err(BfErr::Code(E_TYPE));
                                 };
-                                
+
                                 let idx = *idx as usize;
                                 if idx < 1 || idx > sublist.len() {
                                     return Err(BfErr::Code(E_RANGE));
@@ -789,7 +789,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 // MOO is 1-indexed, so subtract 1
                                 subresult.push(sublist.index(idx - 1).map_err(BfErr::Code)?);
                             }
-                            
+
                             result.push(v_list(&subresult));
                         }
                     }
@@ -808,7 +808,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         let Variant::Map(map) = item.variant() else {
                             return Err(BfErr::Code(E_TYPE));
                         };
-                        
+
                         // Create a key Var from the string
                         let key_var = v_str(key.as_str());
 

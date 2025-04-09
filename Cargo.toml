@@ -96,6 +96,7 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
 encoding_rs = "0.8"
 enum-primitive-derive = "0.3"
+fast-counter = "1.0.0"
 im = "15.1.0"
 indexmap = "2.7"
 itertools = "0.14"

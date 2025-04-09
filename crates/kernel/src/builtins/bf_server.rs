@@ -32,11 +32,11 @@ use moor_common::tasks::{NarrativeEvent, Presentation};
 use moor_compiler::compile;
 use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
 use moor_var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
-use moor_var::Sequence;
 use moor_var::VarType::TYPE_STR;
-use moor_var::Variant;
 use moor_var::{Error, v_list_iter};
+use moor_var::{Sequence, v_map};
 use moor_var::{Var, v_float, v_int, v_list, v_none, v_obj, v_str, v_string};
+use moor_var::{Variant, v_sym};
 
 fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(
@@ -1239,6 +1239,34 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(load_server_options, load_server_options);
 
+fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    let mut result = Vec::new();
+    let bf_perf = bf_args.bf_perf.as_ref();
+    for bf in bf_perf {
+        let bf_name = if bf_args.config.symbol_type {
+            v_sym(bf.name)
+        } else {
+            v_str(bf.name.as_str())
+        };
+        result.push((
+            bf_name,
+            v_list(&[
+                v_int(bf.invocations.sum() as i64),
+                v_int(bf.cumulative_time_us.sum() as i64),
+            ]),
+        ));
+    }
+
+    Ok(Ret(v_map(&result)))
+}
+bf_declare!(bf_counters, bf_bf_counters);
+
 pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(BfNotify {});
     builtins[offset_for_builtin("connected_players")] = Box::new(BfConnectedPlayers {});
@@ -1276,6 +1304,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("memory_usage")] = Box::new(BfMemoryUsage {});
     builtins[offset_for_builtin("db_disk_size")] = Box::new(BfDbDiskSize {});
     builtins[offset_for_builtin("load_server_options")] = Box::new(BfLoadServerOptions {});
+    builtins[offset_for_builtin("bf_counters")] = Box::new(BfBfCounters {});
 
     builtins[offset_for_builtin("present")] = Box::new(BfPresent {});
 }

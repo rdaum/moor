@@ -31,6 +31,7 @@ use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_var::{List, Obj};
 use moor_var::{Var, v_int, v_obj};
 use std::sync::Arc;
+use std::time::Instant;
 
 lazy_static! {
     static ref LIST_SYM: Symbol = Symbol::mk("list");
@@ -345,6 +346,7 @@ impl VMExecState {
         session: Arc<dyn Session>,
     ) -> ExecutionResult {
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
+        let start = Instant::now();
         let bf_desc = BUILTINS.description_for(bf_id).expect("Builtin not found");
         let bf_name = bf_desc.name;
 
@@ -374,9 +376,17 @@ impl VMExecState {
             args,
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
             config: exec_args.config.clone(),
+            bf_perf: exec_args.builtin_registry.perf.clone(),
         };
-
-        match bf.call(&mut bf_args) {
+        exec_args.builtin_registry.perf[bf_id.0 as usize]
+            .invocations
+            .add(1);
+        let result = bf.call(&mut bf_args);
+        let elapsed_micros = start.elapsed().as_micros();
+        exec_args.builtin_registry.perf[bf_id.0 as usize]
+            .cumulative_time_us
+            .add(elapsed_micros as isize);
+        match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
             Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(e, msg, value),
@@ -419,6 +429,7 @@ impl VMExecState {
             args,
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
             config: exec_args.config.clone(),
+            bf_perf: exec_args.builtin_registry.perf.clone(),
         };
 
         match bf.call(&mut bf_args) {
