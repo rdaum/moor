@@ -95,7 +95,7 @@ where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq;
 
-impl<'a, Domain, Codomain> CacheLock<'a, Domain, Codomain>
+impl<Domain, Codomain> CacheLock<'_, Domain, Codomain>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
