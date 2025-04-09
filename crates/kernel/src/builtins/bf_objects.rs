@@ -20,7 +20,7 @@ use moor_common::model::{ObjFlag, ValSet};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
 use moor_var::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
-use moor_var::{List, Variant};
+use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Sequence, Symbol, v_list};
 use moor_var::{v_int, v_none, v_obj, v_str, v_sym_str};
@@ -121,6 +121,79 @@ fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(children, bf_children);
 
+fn bf_descendants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
+        return Err(BfErr::Code(E_INVARG));
+    }
+    let descendants = bf_args
+        .world_state
+        .descendants_of(&bf_args.task_perms_who(), obj)
+        .map_err(world_state_bf_err)?;
+
+    let descendants = descendants.iter().map(v_obj).collect::<Vec<_>>();
+    Ok(Ret(v_list(&descendants)))
+}
+bf_declare!(descendants, bf_descendants);
+
+fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
+        return Err(BfErr::Code(E_INVARG));
+    }
+    let ancestors = bf_args
+        .world_state
+        .ancestors_of(&bf_args.task_perms_who(), obj)
+        .map_err(world_state_bf_err)?;
+
+    let ancestors = ancestors.iter().map(v_obj).collect::<Vec<_>>();
+    Ok(Ret(v_list(&ancestors)))
+}
+bf_declare!(ancestors, bf_ancestors);
+
+/*
+Syntax: isa (obj <object>, obj <possible_ancestor>) => int
+*/
+fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    let Variant::Obj(possible_ancestor) = bf_args.args[1].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)?
+        || !bf_args
+            .world_state
+            .valid(possible_ancestor)
+            .map_err(world_state_bf_err)?
+    {
+        return Err(BfErr::Code(E_INVARG));
+    }
+
+    let ancestors = bf_args
+        .world_state
+        .ancestors_of(&bf_args.task_perms_who(), obj)
+        .map_err(world_state_bf_err)?;
+
+    let isa = ancestors.contains(possible_ancestor.clone());
+
+    Ok(Ret(v_bool(isa)))
+}
+bf_declare!(isa, bf_isa);
 /*
 Syntax:  create (obj <parent> [, obj <owner>])   => obj
  */
@@ -725,6 +798,9 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("properties")] = Box::new(BfProperties {});
     builtins[offset_for_builtin("parent")] = Box::new(BfParent {});
     builtins[offset_for_builtin("children")] = Box::new(BfChildren {});
+    builtins[offset_for_builtin("ancestors")] = Box::new(BfAncestors {});
+    builtins[offset_for_builtin("isa")] = Box::new(BfIsa {});
+    builtins[offset_for_builtin("descendants")] = Box::new(BfDescendants {});
     builtins[offset_for_builtin("move")] = Box::new(BfMove {});
     builtins[offset_for_builtin("chparent")] = Box::new(BfChparent {});
     builtins[offset_for_builtin("set_player_flag")] = Box::new(BfSetPlayerFlag {});

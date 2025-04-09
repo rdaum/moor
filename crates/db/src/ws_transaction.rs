@@ -132,9 +132,14 @@ impl WorldStateTransaction {
         let mut ancestors = vec![];
         let mut current = obj.clone();
         loop {
-            ancestors.push(current.clone());
             match self.object_parent.get(&current) {
-                Ok(Some(parent)) => current = parent,
+                Ok(Some(parent)) => {
+                    current = parent;
+                    if current.is_nothing() {
+                        break;
+                    }
+                    ancestors.push(current.clone());
+                }
                 Ok(None) => break,
                 Err(e) => {
                     panic!("Error getting parent: {:?}", e);

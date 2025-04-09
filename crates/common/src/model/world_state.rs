@@ -365,6 +365,12 @@ pub trait WorldState: Send {
     /// Get the children of the given object.
     fn children_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError>;
 
+    /// Get the full descendant tree of the given object.
+    fn descendants_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError>;
+
+    /// Get the list of ancestors of the given object (parent + parent-parents)
+    fn ancestors_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError>;
+
     /// Check the validity of an object.
     fn valid(&self, obj: &Obj) -> Result<bool, WorldStateError>;
 

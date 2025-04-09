@@ -742,6 +742,14 @@ impl WorldState for DbWorldState {
         self.get_tx().get_object_children(obj)
     }
 
+    fn descendants_of(&self, _perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+        self.get_tx().descendants(obj)
+    }
+
+    fn ancestors_of(&self, _perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+        self.get_tx().ancestors(obj)
+    }
+
     fn valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
         self.get_tx().object_valid(obj)
     }

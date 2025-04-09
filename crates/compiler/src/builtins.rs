@@ -1131,6 +1131,27 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Typed(TYPE_STR)],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("ancestors"),
+            min_args: Q(1),
+            max_args: Q(1),
+            types: vec![Typed(TYPE_OBJ)],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("descendants"),
+            min_args: Q(1),
+            max_args: Q(1),
+            types: vec![Typed(TYPE_OBJ)],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("isa"),
+            min_args: Q(2),
+            max_args: Q(2),
+            types: vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ)],
+            implemented: true,
+        },
     ]
 }
 
