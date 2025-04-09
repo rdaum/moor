@@ -15,8 +15,8 @@ use rand::Rng;
 
 use moor_compiler::offset_for_builtin;
 use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_var::{Sequence, Var, Variant};
 use moor_var::{v_float, v_int, v_str};
+use moor_var::{Sequence, Var, Variant};
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
@@ -100,10 +100,7 @@ fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    let scientific = match &bf_args.args[2].variant() {
-        Variant::Int(b) => *b == 1,
-        _ => return Err(BfErr::Code(E_TYPE)),
-    };
+    let scientific = bf_args.args.len() == 3 && bf_args.args[2].is_true();
 
     let mut s = format!("{:.*}", precision, x);
     if scientific {
