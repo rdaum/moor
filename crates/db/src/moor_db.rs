@@ -467,6 +467,23 @@ impl MoorDB {
                     let object_propvalues = this.object_propvalues.lock();
                     let object_propflags = this.object_propflags.lock();
 
+                    let num_entries = object_flags.num_entries()
+                        + object_parent.num_entries()
+                        + object_children.num_entries()
+                        + object_owner.num_entries()
+                        + object_location.num_entries()
+                        + object_contents.num_entries()
+                        + object_name.num_entries()
+                        + object_verbdefs.num_entries()
+                        + object_verbs.num_entries()
+                        + object_propdefs.num_entries()
+                        + object_propvalues.num_entries()
+                        + object_propflags.num_entries();
+
+                    if num_entries > 10_000 {
+                        warn!("Potential large batch @ commit... Preparing {num_entries} tuples...");
+                    }
+
                     let Ok(ol_lock) = this.object_flags.check(object_flags, &ws.object_flags)
                     else {
                         reply.send(CommitResult::ConflictRetry).unwrap();
@@ -553,20 +570,6 @@ impl MoorDB {
                         reply.send(CommitResult::ConflictRetry).unwrap();
                         continue;
                     };
-
-                    // Sum up num entries in all locks
-                    let num_entries = ol_lock.num_entries()
-                        + op_lock.num_entries()
-                        + oc_lock.num_entries()
-                        + oo_lock.num_entries()
-                        + oloc_lock.num_entries()
-                        + ocont_lock.num_entries()
-                        + on_lock.num_entries()
-                        + ovd_lock.num_entries()
-                        + ov_lock.num_entries()
-                        + opd_lock.num_entries()
-                        + opv_lock.num_entries()
-                        + opf_lock.num_entries();
 
                     // Warn if the duration of the check phase took a really long time...
                     let apply_start = Instant::now();
