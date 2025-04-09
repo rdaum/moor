@@ -30,11 +30,11 @@ use moor_common::model::{PropAttrs, PropFlag};
 use moor_common::model::{PropDef, PropDefs};
 use moor_common::model::{VerbDef, VerbDefs};
 use moor_common::util::BitEnum;
-use moor_var::Variant;
 use moor_var::NOTHING;
-use moor_var::{v_bool_int, Obj};
-use moor_var::{v_list, Symbol};
-use moor_var::{v_obj, Var};
+use moor_var::Variant;
+use moor_var::{Obj, v_bool_int};
+use moor_var::{Symbol, v_list};
+use moor_var::{Var, v_obj};
 
 lazy_static! {
     static ref NAME_SYM: Symbol = Symbol::mk("name");

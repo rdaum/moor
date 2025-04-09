@@ -23,6 +23,7 @@ use moor_var::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
 use tracing::trace;
 
 use crate::vm::activation::{Activation, Frame};
+use crate::vm::exec_state::{VMPerfCounterGuard, vm_counters};
 use crate::vm::moo_frame::{CatchType, ScopeType};
 use crate::vm::{ExecutionResult, VMExecState};
 
@@ -225,6 +226,9 @@ impl VMExecState {
     ///     * Error raises of various kinds
     ///     * Return common
     pub(crate) fn unwind_stack(&mut self, why: FinallyReason) -> ExecutionResult {
+        let vm_counters = vm_counters();
+        let _t = VMPerfCounterGuard::new(&vm_counters.unwind_stack);
+
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
             // If this is an error or exit attempt to find a handler for it.

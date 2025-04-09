@@ -230,3 +230,11 @@ Functions not part of the original LambdaMOO, but added in moor
 | `remove_slot` | Returns a copy of the flyweight with the given slot removed, if present | Available only if the flyweights feature is turned on |
 | `add_slot`    | Returns a copy of the flyweight with a new slot added                   | Available only if the flyweights feature is turned on |
 | `tosym'       | Turns the given value into a Symbol                                     | Available only if the symbols feature is turned on    |
+
+### Admin
+
+| Name          | Description                                                     | Notes |
+|---------------|-----------------------------------------------------------------|-------|
+| `vm_counters` | Performance counters for profiling VM internals                 |       |
+| `bf_counters` | Performance counters for profiling builtin function performance |       | 
+| `db_counters` | Performance counters for profiling DB performance               |       |
