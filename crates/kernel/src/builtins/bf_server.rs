@@ -833,7 +833,7 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let builtin = BUILTINS
         .find_builtin(func_name)
-        .ok_or(BfErr::Code(E_ARGS))?;
+        .ok_or(BfErr::Code(E_INVARG))?;
 
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
     Ok(VmInstr(ExecutionResult::DispatchBuiltin {
