@@ -479,21 +479,21 @@ impl MoorDB {
                     let object_propvalues = this.object_propvalues.lock();
                     let object_propflags = this.object_propflags.lock();
 
-                    let num_entries = object_flags.num_entries()
-                        + object_parent.num_entries()
-                        + object_children.num_entries()
-                        + object_owner.num_entries()
-                        + object_location.num_entries()
-                        + object_contents.num_entries()
-                        + object_name.num_entries()
-                        + object_verbdefs.num_entries()
-                        + object_verbs.num_entries()
-                        + object_propdefs.num_entries()
-                        + object_propvalues.num_entries()
-                        + object_propflags.num_entries();
+                    let num_tuples = ws.object_flags.len()
+                        + ws.object_parent.len()
+                        + ws.object_children.len()
+                        + ws.object_owner.len()
+                        + ws.object_location.len()
+                        + ws.object_contents.len()
+                        + ws.object_name.len()
+                        + ws.object_verbdefs.len()
+                        + ws.object_verbs.len()
+                        + ws.object_propdefs.len()
+                        + ws.object_propvalues.len()
+                        + ws.object_propflags.len();
 
-                    if num_entries > 10_000 {
-                        warn!("Potential large batch @ commit... Preparing {num_entries} tuples...");
+                    if num_tuples > 10_000 {
+                        warn!("Potential large batch @ commit... Checking {num_tuples} total tuples from the working set...");
                     }
 
                     let Ok(ol_lock) = this.object_flags.check(object_flags, &ws.object_flags)
@@ -587,7 +587,7 @@ impl MoorDB {
                     let apply_start = Instant::now();
                     if start_time.elapsed() > Duration::from_secs(5) {
                         warn!(
-                            "Long running commit; check phase took {}s for {num_entries} tuples",
+                            "Long running commit; check phase took {}s for {num_tuples} tuples",
                             start_time.elapsed().as_secs_f32()
                         );
                     }
@@ -663,7 +663,7 @@ impl MoorDB {
                     // And if the commit took a long time, warn before the write to disk is begun.
                     if start_time.elapsed() > Duration::from_secs(5) {
                         warn!(
-                            "Long running commit, apply phase took {}s for {num_entries} tuples",
+                            "Long running commit, apply phase took {}s for {num_tuples} tuples",
                             apply_start.elapsed().as_secs_f32()
                         );
                     }
@@ -692,7 +692,7 @@ impl MoorDB {
 
                     if start_time.elapsed() > Duration::from_secs(5) {
                         warn!(
-                            "Long running commit, write phase took {}s; total commit time {}s for {num_entries} tuples",
+                            "Long running commit, write phase took {}s; total commit time {}s for {num_tuples} tuples",
                             write_start.elapsed().as_secs_f32(),
                             start_time.elapsed().as_secs_f32()
                         );
