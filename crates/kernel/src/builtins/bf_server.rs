@@ -1249,7 +1249,7 @@ fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut result = Vec::new();
     let bf_perf = bf_args.bf_perf.as_ref();
     for bf in bf_perf {
-        let bf_name = if bf_args.config.symbol_type {
+        let bf_name = if bf_args.config.use_symbols_in_builtins {
             v_sym(bf.name)
         } else {
             v_str(bf.name.as_str())
@@ -1278,7 +1278,7 @@ fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let counters = counters.all_counters();
     let mut result = Vec::new();
     for c in counters {
-        let op_name = if bf_args.config.symbol_type {
+        let op_name = if bf_args.config.use_symbols_in_builtins {
             v_sym(c.operation)
         } else {
             v_str(c.operation.as_str())
