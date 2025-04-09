@@ -2688,6 +2688,7 @@ dependencies = [
  "bincode",
  "byteview",
  "enum-primitive-derive",
+ "fast-counter",
  "itertools 0.14.0",
  "lazy_static",
  "moor-var",

@@ -13,14 +13,17 @@
 
 use bincode::{Decode, Encode};
 use byteview::ByteView;
+use fast_counter::ConcurrentCounter;
+use std::sync::Arc;
+use std::time::Instant;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::objects::ObjFlag;
 use crate::model::objset::ObjSet;
 use crate::model::propdef::{PropDef, PropDefs};
 use crate::model::props::{PropAttrs, PropFlag};
+use crate::model::r#match::{PrepSpec, VerbArgsSpec};
 use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};
@@ -128,7 +131,7 @@ impl From<WorldStateError> for Error {
 /// commit any changes to the world at the end of the transaction, or be capable of rolling back
 /// on failure.
 pub trait WorldState: Send {
-    // TODO: Combine worlstate owner & flags check into one call, to make perms check more efficient
+    // TODO: Combine worldstate owner & flags check into one call, to make perms check more efficient
 
     /// Get the set of all objects which are 'players' in the world.
     fn players(&self) -> Result<ObjSet, WorldStateError>;
@@ -385,6 +388,8 @@ pub trait WorldState: Send {
 
     /// Rollback all modifications made to the state of this world since the start of its transaction.
     fn rollback(self: Box<Self>) -> Result<(), WorldStateError>;
+
+    fn perf_counters(&self) -> Arc<WorldStatePerf>;
 }
 
 pub trait WorldStateSource: Send {
@@ -395,4 +400,181 @@ pub trait WorldStateSource: Send {
     /// Synchronize any in-memory state with the backing store.
     /// e.g. sequences
     fn checkpoint(&self) -> Result<(), WorldStateError>;
+}
+
+pub struct WSPerfCounter {
+    pub operation: Symbol,
+    pub invocations: ConcurrentCounter,
+    pub cumulative_duration_us: ConcurrentCounter,
+}
+
+impl WSPerfCounter {
+    fn new(name: &str) -> Self {
+        Self {
+            operation: Symbol::mk(name),
+            invocations: ConcurrentCounter::new(0),
+            cumulative_duration_us: ConcurrentCounter::new(0),
+        }
+    }
+}
+pub struct WorldStatePerf {
+    pub players: WSPerfCounter,
+    pub owner_of: WSPerfCounter,
+    pub controls: WSPerfCounter,
+    pub flags_of: WSPerfCounter,
+    pub set_flags_of: WSPerfCounter,
+    pub location_of: WSPerfCounter,
+    pub object_bytes: WSPerfCounter,
+    pub create_object: WSPerfCounter,
+    pub recycle_object: WSPerfCounter,
+    pub max_object: WSPerfCounter,
+    pub move_object: WSPerfCounter,
+    pub contents_of: WSPerfCounter,
+    pub verbs: WSPerfCounter,
+    pub properties: WSPerfCounter,
+    pub retrieve_property: WSPerfCounter,
+    pub get_property_info: WSPerfCounter,
+    pub set_property_info: WSPerfCounter,
+    pub update_property: WSPerfCounter,
+    pub is_property_clear: WSPerfCounter,
+    pub clear_property: WSPerfCounter,
+    pub define_property: WSPerfCounter,
+    pub delete_property: WSPerfCounter,
+    pub add_verb: WSPerfCounter,
+    pub remove_verb: WSPerfCounter,
+    pub update_verb: WSPerfCounter,
+    pub update_verb_at_index: WSPerfCounter,
+    pub update_verb_with_id: WSPerfCounter,
+    pub get_verb: WSPerfCounter,
+    pub get_verb_at_index: WSPerfCounter,
+    pub retrieve_verb: WSPerfCounter,
+    pub find_method_verb_on: WSPerfCounter,
+    pub find_command_verb_on: WSPerfCounter,
+    pub parent_of: WSPerfCounter,
+    pub change_parent: WSPerfCounter,
+    pub children_of: WSPerfCounter,
+    pub descendants_of: WSPerfCounter,
+    pub ancestors_of: WSPerfCounter,
+    pub valid: WSPerfCounter,
+    pub names_of: WSPerfCounter,
+    pub db_usage: WSPerfCounter,
+    pub commit: WSPerfCounter,
+    pub rollback: WSPerfCounter,
+}
+
+impl Default for WorldStatePerf {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WorldStatePerf {
+    pub fn new() -> Self {
+        Self {
+            players: WSPerfCounter::new("players"),
+            owner_of: WSPerfCounter::new("owner_of"),
+            controls: WSPerfCounter::new("controls"),
+            flags_of: WSPerfCounter::new("flags_of"),
+            set_flags_of: WSPerfCounter::new("flags_of"),
+            location_of: WSPerfCounter::new("location_of"),
+            object_bytes: WSPerfCounter::new("object_bytes"),
+            create_object: WSPerfCounter::new("create_object"),
+            recycle_object: WSPerfCounter::new("recycle_object"),
+            max_object: WSPerfCounter::new("max_object"),
+            move_object: WSPerfCounter::new("move_object"),
+            contents_of: WSPerfCounter::new("contents_of"),
+            verbs: WSPerfCounter::new("verbs"),
+            properties: WSPerfCounter::new("properties"),
+            retrieve_property: WSPerfCounter::new("retrieve_property"),
+            get_property_info: WSPerfCounter::new("get_property_info"),
+            set_property_info: WSPerfCounter::new("set_property_info"),
+            update_property: WSPerfCounter::new("update_property"),
+            is_property_clear: WSPerfCounter::new("is_property_clear"),
+            clear_property: WSPerfCounter::new("clear_property"),
+            define_property: WSPerfCounter::new("define_property"),
+            delete_property: WSPerfCounter::new("delete_property"),
+            add_verb: WSPerfCounter::new("add_verb"),
+            remove_verb: WSPerfCounter::new("remove_verb"),
+            update_verb: WSPerfCounter::new("update_verb"),
+            update_verb_at_index: WSPerfCounter::new("update_verb_at_index"),
+            update_verb_with_id: WSPerfCounter::new("update_verb_with_id"),
+            get_verb: WSPerfCounter::new("get_verb"),
+            get_verb_at_index: WSPerfCounter::new("get_verb_at_index"),
+            retrieve_verb: WSPerfCounter::new("retrieve_verb"),
+            find_method_verb_on: WSPerfCounter::new("find_method_verb_on"),
+            find_command_verb_on: WSPerfCounter::new("find_command_verb_on"),
+            parent_of: WSPerfCounter::new("parent_of"),
+            change_parent: WSPerfCounter::new("change_parent"),
+            children_of: WSPerfCounter::new("children_of"),
+            descendants_of: WSPerfCounter::new("descendants_of"),
+            ancestors_of: WSPerfCounter::new("ancestors_of"),
+            valid: WSPerfCounter::new("valid"),
+            names_of: WSPerfCounter::new("names_of"),
+            db_usage: WSPerfCounter::new("db_usage"),
+            commit: WSPerfCounter::new("commit"),
+            rollback: WSPerfCounter::new("rollback"),
+        }
+    }
+
+    pub fn all_counters(&self) -> Vec<&WSPerfCounter> {
+        vec![
+            &self.players,
+            &self.owner_of,
+            &self.controls,
+            &self.flags_of,
+            &self.set_flags_of,
+            &self.location_of,
+            &self.object_bytes,
+            &self.create_object,
+            &self.recycle_object,
+            &self.max_object,
+            &self.move_object,
+            &self.contents_of,
+            &self.verbs,
+            &self.properties,
+            &self.retrieve_property,
+            &self.get_property_info,
+            &self.set_property_info,
+            &self.update_property,
+            &self.is_property_clear,
+            &self.clear_property,
+            &self.define_property,
+            &self.delete_property,
+            &self.add_verb,
+            &self.remove_verb,
+            &self.update_verb,
+            &self.update_verb_at_index,
+            &self.update_verb_with_id,
+            &self.get_verb,
+            &self.get_verb_at_index,
+            &self.retrieve_verb,
+            &self.find_method_verb_on,
+            &self.find_command_verb_on,
+            &self.parent_of,
+            &self.change_parent,
+            &self.children_of,
+            &self.descendants_of,
+            &self.ancestors_of,
+            &self.valid,
+            &self.names_of,
+            &self.db_usage,
+            &self.commit,
+            &self.rollback,
+        ]
+    }
+}
+
+pub struct WsOpTimer<'a>(&'a WSPerfCounter, Instant);
+impl<'a> WsOpTimer<'a> {
+    pub fn new(perf: &'a WSPerfCounter) -> Self {
+        Self(perf, Instant::now())
+    }
+}
+
+impl Drop for WsOpTimer<'_> {
+    fn drop(&mut self) {
+        let elapsed = self.1.elapsed().as_micros();
+        self.0.invocations.add(1);
+        self.0.cumulative_duration_us.add(elapsed as isize);
+    }
 }

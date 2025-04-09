@@ -11,9 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use ArgCount::{Q, U};
-use ArgType::{Any, AnyNum, Typed};
-use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_var::Symbol;
@@ -21,6 +18,9 @@ use moor_var::VarType;
 use moor_var::VarType::{TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL};
 /// Global registry of built-in function names.
 use std::collections::HashMap;
+use ArgCount::{Q, U};
+use ArgType::{Any, AnyNum, Typed};
+use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
 
 lazy_static! {
     static ref BUILTIN_DESCRIPTORS: Vec<Builtin> = mk_builtin_table();
@@ -1161,6 +1161,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
         },
         Builtin {
             name: Symbol::mk("bf_counters"),
+            min_args: Q(0),
+            max_args: Q(0),
+            types: vec![],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("db_counters"),
             min_args: Q(0),
             max_args: Q(0),
             types: vec![],
