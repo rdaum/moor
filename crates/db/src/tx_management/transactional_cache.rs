@@ -151,11 +151,12 @@ where
         let start_time = Instant::now();
         let mut last_check_time = start_time;
         let inner = &mut cache_lock.0;
+        let total_ops = working_set.len();
         // Check phase first.
-        for (domain, op) in working_set {
+        for (n, (domain, op)) in working_set.iter().enumerate() {
             if last_check_time.elapsed() > Duration::from_secs(5) {
                 warn!(
-                    "Long check time for {}; running for {}s",
+                    "Long check time for {}; running for {}s; {n}/{total_ops} checked",
                     self.relation_name,
                     start_time.elapsed().as_secs_f32()
                 );
