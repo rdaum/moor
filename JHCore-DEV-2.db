@@ -124642,7 +124642,7 @@ return 0 && "Automatically Added Return";
 "Usage:  :init_for_module()";
 "";
 if ((caller != this) && (!$perm_utils:controls(caller_perms(), this)))
-raise(E_PERMS);
+raise(E_PERM);
 endif
 this.registry = {};
 this.next_id = 1;
