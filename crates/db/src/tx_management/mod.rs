@@ -55,7 +55,7 @@ pub trait Provider<Domain, Codomain> {
 /// A `SizedCache` is a cache that has a maximum size in bytes, and will attempt to evict entries
 /// when the cache size exceeds the maximum size.
 pub trait SizedCache {
-    #[allow(dead_code)]
+    fn select_victims(&self);
     fn process_cache_evictions(&self) -> (usize, usize);
     #[allow(dead_code)]
     fn cache_usage_bytes(&self) -> usize;

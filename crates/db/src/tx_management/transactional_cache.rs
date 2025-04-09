@@ -19,7 +19,7 @@ use indexmap::IndexMap;
 use moor_var::Symbol;
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, RwLock, RwLockWriteGuard};
 use std::time::{Duration, Instant};
 use tracing::warn;
 
@@ -48,7 +48,7 @@ where
     /// A series of common that local caches should be pre-seeded with.
     preseed: HashSet<Domain>,
 
-    index: Mutex<Inner<Domain, Codomain>>,
+    index: RwLock<Inner<Domain, Codomain>>,
 
     source: Arc<Source>,
 }
@@ -63,7 +63,7 @@ where
         Self {
             relation_name,
             preseed: HashSet::new(),
-            index: Mutex::new(Inner {
+            index: RwLock::new(Inner {
                 index: IndexMap::new(),
                 evict_q: vec![],
                 used_bytes: 0,
@@ -96,12 +96,12 @@ where
 
 /// Holds a lock on the cache while a transaction commit is in progress.
 /// (Just wraps the lock to avoid leaking the Inner type.)
-pub struct CacheLock<'a, Domain, Codomain>(MutexGuard<'a, Inner<Domain, Codomain>>)
+pub struct CacheWriteLock<'a, Domain, Codomain>(RwLockWriteGuard<'a, Inner<Domain, Codomain>>)
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq;
 
-impl<Domain, Codomain> CacheLock<'_, Domain, Codomain>
+impl<Domain, Codomain> CacheWriteLock<'_, Domain, Codomain>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
@@ -123,7 +123,7 @@ where
 {
     pub fn start(self: Arc<Self>, tx: &Tx) -> TransactionalTable<Domain, Codomain, Self> {
         let mut lc = TransactionalTable::new(*tx, self.clone());
-        let lock = self.lock();
+        let lock = self.write_lock();
         let mut preseed_tuples = vec![];
         for d in &self.preseed {
             if let Some(e) = lock.0.index.get(d) {
@@ -145,9 +145,9 @@ where
     /// the cache.
     pub fn check<'a>(
         &self,
-        mut cache_lock: CacheLock<'a, Domain, Codomain>,
+        mut cache_lock: CacheWriteLock<'a, Domain, Codomain>,
         working_set: &WorkingSet<Domain, Codomain>,
-    ) -> Result<CacheLock<'a, Domain, Codomain>, Error> {
+    ) -> Result<CacheWriteLock<'a, Domain, Codomain>, Error> {
         let start_time = Instant::now();
         let mut last_check_time = start_time;
         let inner = &mut cache_lock.0;
@@ -204,9 +204,9 @@ where
     /// requests mutation into the Source.
     pub fn apply<'a>(
         &self,
-        mut cache_lock: CacheLock<'a, Domain, Codomain>,
+        mut cache_lock: CacheWriteLock<'a, Domain, Codomain>,
         working_set: WorkingSet<Domain, Codomain>,
-    ) -> Result<CacheLock<'a, Domain, Codomain>, Error> {
+    ) -> Result<CacheWriteLock<'a, Domain, Codomain>, Error> {
         let start_time = Instant::now();
         let mut last_check_time = start_time;
         let total_ops = working_set.len();
@@ -242,19 +242,24 @@ where
         Ok(cache_lock)
     }
 
-    pub fn lock(&self) -> CacheLock<Domain, Codomain> {
-        CacheLock(self.index.lock().unwrap())
+    pub fn write_lock(&self) -> CacheWriteLock<Domain, Codomain> {
+        CacheWriteLock(self.index.write().unwrap())
     }
 
     #[allow(dead_code)]
     pub fn cache_usage_bytes(&self) -> usize {
-        self.index.lock().unwrap().used_bytes
+        self.index.read().unwrap().used_bytes
     }
 
     /// Scavenge the cache for victims that haven't been hit in the last round.
     pub fn process_cache_evictions(&self) -> (usize, usize) {
-        let mut inner = self.lock();
+        let mut inner = self.write_lock();
         inner.0.process_evictions()
+    }
+
+    pub fn select_victims(&self) {
+        let mut inner = self.write_lock();
+        inner.0.select_victims();
     }
 }
 
@@ -287,8 +292,6 @@ where
                 self.used_bytes += entry_size_bytes;
             }
         }
-
-        self.select_victims();
     }
 
     fn insert_tombstone(&mut self, ts: Timestamp, domain: Domain) {
@@ -308,7 +311,6 @@ where
                 self.used_bytes -= oe.size_bytes;
             }
         }
-        self.select_victims();
     }
 
     fn index_lookup(&mut self, domain: &Domain) -> Option<&mut Entry<Codomain>> {
@@ -366,7 +368,7 @@ where
     Source: Provider<Domain, Codomain>,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error> {
-        let mut inner = self.index.lock().unwrap();
+        let mut inner = self.index.write().unwrap();
         if let Some(entry) = inner.index_lookup(domain) {
             match &entry.datum {
                 Datum::Value(codomain) => Ok(Some((entry.ts, codomain.clone(), entry.size_bytes))),
@@ -390,7 +392,7 @@ where
     {
         let results = self.source.scan(&predicate)?;
         for (ts, domain, codomain, size) in &results {
-            let mut index = self.index.lock().unwrap();
+            let mut index = self.index.write().unwrap();
             index.insert_entry(*ts, domain.clone(), codomain.clone(), *size);
             index.used_bytes += *size;
         }
@@ -405,6 +407,10 @@ where
     Codomain: Clone + PartialEq + Eq,
     Source: Provider<Domain, Codomain>,
 {
+    fn select_victims(&self) {
+        self.select_victims();
+    }
+
     fn process_cache_evictions(&self) -> (usize, usize) {
         self.process_cache_evictions()
     }
@@ -496,7 +502,7 @@ mod tests {
         assert_eq!(lc.get(&TestDomain(0)).unwrap(), Some(TestCodomain(0)));
         let ws = lc.working_set();
 
-        let lock = global_cache.lock();
+        let lock = global_cache.write_lock();
         let lock = global_cache.check(lock, &ws).unwrap();
         let lock = global_cache.apply(lock, ws).unwrap();
         assert_eq!(
@@ -528,12 +534,12 @@ mod tests {
         let ws_a = lc_a.working_set();
         let ws_b = lc_b.working_set();
         {
-            let lock_a = global_cache.lock();
+            let lock_a = global_cache.write_lock();
             let lock_a = global_cache.check(lock_a, &ws_a).unwrap();
             let _lock_a = global_cache.apply(lock_a, ws_a).unwrap();
         }
         {
-            let lock_b = global_cache.lock();
+            let lock_b = global_cache.write_lock();
 
             // This should fail because the first insert has already happened.
             let check_result = global_cache.check(lock_b, &ws_b);
@@ -566,26 +572,23 @@ mod tests {
         let ws = lc.working_set();
 
         {
-            let lock = global_cache.lock();
+            let lock = global_cache.write_lock();
             let lock = global_cache.check(lock, &ws).unwrap();
             let _ = global_cache.apply(lock, ws).unwrap();
         }
-
         let bytes_usage = global_cache.cache_usage_bytes();
         assert!(
             bytes_usage > 2048,
             "Cache usage below threshold {bytes_usage} < 2048"
         );
+        global_cache.select_victims();
+
         let (num_evicted, freed_bytes) = global_cache.process_cache_evictions();
 
         assert!(num_evicted > 0, "No items evicted");
         assert!(freed_bytes > 0, "No bytes freed");
         assert!(
             global_cache.cache_usage_bytes() < bytes_usage,
-            "Cache usage above threshold"
-        );
-        assert!(
-            global_cache.cache_usage_bytes() < 2048,
             "Cache usage above threshold"
         );
     }

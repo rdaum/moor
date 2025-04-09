@@ -438,6 +438,7 @@ impl MoorDB {
                         let mut total_evicted_entries = 0;
                         let mut total_evicted_bytes = 0;
                         for cache in this.caches() {
+                            cache.select_victims();
                             let (evicted_entries, evicted_bytes) = cache.process_cache_evictions();
                             total_evicted_entries += evicted_entries;
                             total_evicted_bytes += evicted_bytes;
@@ -466,18 +467,18 @@ impl MoorDB {
 
                     let start_time = Instant::now();
 
-                    let object_flags = this.object_flags.lock();
-                    let object_parent = this.object_parent.lock();
-                    let object_children = this.object_children.lock();
-                    let object_owner = this.object_owner.lock();
-                    let object_location = this.object_location.lock();
-                    let object_contents = this.object_contents.lock();
-                    let object_name = this.object_name.lock();
-                    let object_verbdefs = this.object_verbdefs.lock();
-                    let object_verbs = this.object_verbs.lock();
-                    let object_propdefs = this.object_propdefs.lock();
-                    let object_propvalues = this.object_propvalues.lock();
-                    let object_propflags = this.object_propflags.lock();
+                    let object_flags = this.object_flags.write_lock();
+                    let object_parent = this.object_parent.write_lock();
+                    let object_children = this.object_children.write_lock();
+                    let object_owner = this.object_owner.write_lock();
+                    let object_location = this.object_location.write_lock();
+                    let object_contents = this.object_contents.write_lock();
+                    let object_name = this.object_name.write_lock();
+                    let object_verbdefs = this.object_verbdefs.write_lock();
+                    let object_verbs = this.object_verbs.write_lock();
+                    let object_propdefs = this.object_propdefs.write_lock();
+                    let object_propvalues = this.object_propvalues.write_lock();
+                    let object_propflags = this.object_propflags.write_lock();
 
                     let num_tuples = ws.object_flags.len()
                         + ws.object_parent.len()

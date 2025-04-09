@@ -267,7 +267,7 @@ mod tests {
                     let ws = cache.working_set();
 
                     {
-                        let lock = backing_store.lock();
+                        let lock = backing_store.write_lock();
                         let lock = backing_store
                             .check(lock, &ws)
                             .map_err(|_| eyre::eyre!("check failed in commit"))?;
@@ -302,7 +302,7 @@ mod tests {
                             }
                         }
                         let ws = cache.working_set();
-                        let lock = backing_store.lock();
+                        let lock = backing_store.write_lock();
                         let lock = match backing_store.check(lock, &ws) {
                             Err(Error::Conflict) => {
                                 return Ok(());
