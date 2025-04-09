@@ -204,12 +204,23 @@ where
     /// requests mutation into the Source.
     pub fn apply<'a>(
         &self,
-        mut lock: CacheLock<'a, Domain, Codomain>,
+        mut cache_lock: CacheLock<'a, Domain, Codomain>,
         working_set: WorkingSet<Domain, Codomain>,
     ) -> Result<CacheLock<'a, Domain, Codomain>, Error> {
-        let inner = &mut lock.0;
+        let start_time = Instant::now();
+        let mut last_check_time = start_time;
+        let total_ops = working_set.len();
+        let inner = &mut cache_lock.0;
         // Apply phase.
-        for (domain, op) in working_set {
+        for (n, (domain, op)) in working_set.into_iter().enumerate() {
+            if last_check_time.elapsed() > Duration::from_secs(5) {
+                warn!(
+                    "Long apply time for {}; running for {}s; {n}/{total_ops} checked",
+                    self.relation_name,
+                    start_time.elapsed().as_secs_f32()
+                );
+                last_check_time = Instant::now();
+            }
             match op.to_type {
                 OpType::Insert | OpType::Update => {
                     let codomain = op.value.unwrap();
@@ -228,7 +239,7 @@ where
                 _ => continue,
             }
         }
-        Ok(lock)
+        Ok(cache_lock)
     }
 
     pub fn lock(&self) -> CacheLock<Domain, Codomain> {
