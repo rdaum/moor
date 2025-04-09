@@ -20,7 +20,7 @@ use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
 use moor_common::util::BitEnum;
-use moor_var::{Obj, Var};
+use moor_var::{Obj, Symbol, Var};
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
@@ -207,6 +207,7 @@ impl MoorDB {
 
         let default_cache_eviction_threshold = config.default_eviction_threshold;
         let object_location = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_location"),
             Arc::new(object_location),
             config
                 .object_location
@@ -214,6 +215,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_contents = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_contents"),
             Arc::new(object_contents),
             config
                 .object_contents
@@ -221,6 +223,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_flags = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_flags"),
             Arc::new(object_flags),
             config
                 .object_flags
@@ -228,6 +231,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_parent = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_parent"),
             Arc::new(object_parent),
             config
                 .object_parent
@@ -235,6 +239,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_children = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_children"),
             Arc::new(object_children),
             config
                 .object_children
@@ -242,6 +247,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_owner = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_owner"),
             Arc::new(object_owner),
             config
                 .object_owner
@@ -249,6 +255,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_name = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_name"),
             Arc::new(object_name),
             config
                 .object_name
@@ -256,6 +263,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_verbdefs = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_verbdefs"),
             Arc::new(object_verbdefs),
             config
                 .object_verbdefs
@@ -263,6 +271,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_verbs = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_verbs"),
             Arc::new(object_verbs),
             config
                 .object_verbs
@@ -270,6 +279,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_propdefs = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_propdefs"),
             Arc::new(object_propdefs),
             config
                 .object_propdefs
@@ -277,6 +287,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_propvalues = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_propvalues"),
             Arc::new(object_propvalues),
             config
                 .object_propvalues
@@ -284,6 +295,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
         ));
         let object_propflags = Arc::new(TransactionalCache::new(
+            Symbol::mk("object_propflags"),
             Arc::new(object_propflags),
             config
                 .object_propflags

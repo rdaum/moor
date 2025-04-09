@@ -138,6 +138,7 @@ mod tests {
     use crate::{Operation, Type};
     use eyre::bail;
     use moor_db::{Error, Provider, Timestamp, TransactionalCache, TransactionalTable, Tx};
+    use moor_var::Symbol;
     use std::collections::HashMap;
     use std::path::Path;
     use std::sync::{Arc, Mutex};
@@ -210,7 +211,11 @@ mod tests {
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let backing_store = Arc::new(TransactionalCache::new(provider.clone(), 1 << 16));
+        let backing_store = Arc::new(TransactionalCache::new(
+            Symbol::mk("test"),
+            provider.clone(),
+            1 << 16,
+        ));
 
         let mut transactions = HashMap::new();
 

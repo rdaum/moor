@@ -16,9 +16,12 @@
 use crate::tx_management::tx_table::{OpType, TransactionalTable, WorkingSet};
 use crate::tx_management::{Canonical, Error, Provider, SizedCache, Timestamp, Tx};
 use indexmap::IndexMap;
+use moor_var::Symbol;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
+use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Datum<T: Clone + PartialEq> {
@@ -40,6 +43,8 @@ where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
 {
+    relation_name: Symbol,
+
     /// A series of common that local caches should be pre-seeded with.
     preseed: HashSet<Domain>,
 
@@ -54,8 +59,9 @@ where
     Codomain: Clone + PartialEq + Eq,
     Source: Provider<Domain, Codomain>,
 {
-    pub fn new(provider: Arc<Source>, threshold_bytes: usize) -> Self {
+    pub fn new(relation_name: Symbol, provider: Arc<Source>, threshold_bytes: usize) -> Self {
         Self {
+            relation_name,
             preseed: HashSet::new(),
             index: Mutex::new(Inner {
                 index: IndexMap::new(),
@@ -142,9 +148,19 @@ where
         mut cache_lock: CacheLock<'a, Domain, Codomain>,
         working_set: &WorkingSet<Domain, Codomain>,
     ) -> Result<CacheLock<'a, Domain, Codomain>, Error> {
+        let start_time = Instant::now();
+        let mut last_check_time = start_time;
         let inner = &mut cache_lock.0;
         // Check phase first.
         for (domain, op) in working_set {
+            if last_check_time.elapsed() > Duration::from_secs(5) {
+                warn!(
+                    "Long check time for {}; running for {}s",
+                    self.relation_name,
+                    start_time.elapsed().as_secs_f32()
+                );
+                last_check_time = Instant::now();
+            }
             // Check local to see if we have one first, to see if there's a conflict.
             if let Some(local_entry) = inner.index.get(domain) {
                 // If what we have is an insert, and there's something already there, that's a
@@ -456,7 +472,7 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache::new(provider, 2048));
+        let global_cache = Arc::new(TransactionalCache::new(Symbol::mk("test"), provider, 2048));
 
         let domain = TestDomain(1);
         let codomain = TestCodomain(1);
@@ -483,7 +499,7 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache::new(provider, 2048));
+        let global_cache = Arc::new(TransactionalCache::new(Symbol::mk("test"), provider, 2048));
 
         let domain = TestDomain(1);
         let codomain_a = TestCodomain(1);
@@ -518,7 +534,7 @@ mod tests {
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache::new(provider, 2048));
+        let global_cache = Arc::new(TransactionalCache::new(Symbol::mk("test"), provider, 2048));
 
         global_cache.process_cache_evictions();
 
