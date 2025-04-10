@@ -127,8 +127,11 @@ impl WorldStateTransaction {
         }
     }
 
-    pub fn ancestors(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+    pub fn ancestors(&self, obj: &Obj, include_self: bool) -> Result<ObjSet, WorldStateError> {
         let mut ancestors = vec![];
+        if include_self {
+            ancestors.push(obj.clone());
+        }
         let mut current = obj.clone();
         loop {
             match self.object_parent.get(&current) {
@@ -928,8 +931,7 @@ impl WorldStateTransaction {
                 name.to_string(),
             ));
         }
-        let ancestors = self.ancestors(location)?;
-        let check_locations = ObjSet::from_items(&[location.clone()]).with_concatenated(ancestors);
+        let check_locations = self.ancestors(location, true)?;
         for location in check_locations.iter() {
             let descendant_props = self.get_properties(&location)?;
 

@@ -142,18 +142,24 @@ fn bf_descendants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(descendants, bf_descendants);
 
 fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
+    if bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
+    let add_self = if bf_args.args.len() == 2 {
+        bf_args.args[1].is_true()
+    } else {
+        false
+    };
+
     if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
     }
     let ancestors = bf_args
         .world_state
-        .ancestors_of(&bf_args.task_perms_who(), obj)
+        .ancestors_of(&bf_args.task_perms_who(), obj, add_self)
         .map_err(world_state_bf_err)?;
 
     let ancestors = ancestors.iter().map(v_obj).collect::<Vec<_>>();
@@ -186,7 +192,7 @@ fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let ancestors = bf_args
         .world_state
-        .ancestors_of(&bf_args.task_perms_who(), obj)
+        .ancestors_of(&bf_args.task_perms_who(), obj, true)
         .map_err(world_state_bf_err)?;
 
     let isa = ancestors.contains(possible_ancestor.clone());

@@ -169,8 +169,7 @@ impl LoaderInterface for DbWorldState {
         this: &Obj,
     ) -> Result<Vec<(PropDef, (Option<Var>, PropPerms))>, WorldStateError> {
         // First get the entire inheritance hierarchy.
-        let ancestors = self.get_tx().ancestors(this)?;
-        let hierarchy = ObjSet::from_items(&[this.clone()]).with_concatenated(ancestors);
+        let hierarchy = self.get_tx().ancestors(this, true)?;
 
         // Now get the property common for each of those objects, but only for the props which
         // are defined by that object.
