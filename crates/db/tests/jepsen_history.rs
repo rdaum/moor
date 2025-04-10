@@ -215,6 +215,7 @@ mod tests {
             Symbol::mk("test"),
             provider.clone(),
             1 << 16,
+            &[],
         ));
 
         let mut transactions = HashMap::new();
