@@ -271,6 +271,39 @@ where
         Ok(true)
     }
 
+    pub fn has_domain(&self, domain: &Domain) -> Result<bool, Error> {
+        let mut index = self.index.borrow_mut();
+        let entry = index.get(domain);
+
+        if let Some(Entry::Present(entry)) = entry {
+            if entry.to_type == OpType::Delete {
+                return Ok(false);
+            }
+            return Ok(true);
+        }
+
+        let backing_value = self.backing_source.get(domain)?;
+        let Some((read_ts, backing_value, size_bytes)) = backing_value else {
+            index.insert(domain.clone(), Entry::NotPresent(self.tx.ts));
+            return Ok(false);
+        };
+
+        index.insert(
+            domain.clone(),
+            Entry::Present(Op {
+                read_ts,
+                write_ts: self.tx.ts,
+                source: DatumSource::Upstream,
+                from_type: OpType::Cached,
+                to_type: OpType::Cached,
+                value: Some(backing_value.clone()),
+                size_bytes,
+            }),
+        );
+
+        Ok(true)
+    }
+
     pub fn get(&self, domain: &Domain) -> Result<Option<Codomain>, Error> {
         let mut index = self.index.borrow_mut();
 

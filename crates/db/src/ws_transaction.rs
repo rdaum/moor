@@ -118,9 +118,8 @@ where
 
 impl WorldStateTransaction {
     pub fn object_valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
-        match self.object_flags.get(obj) {
-            Ok(Some(_)) => Ok(true),
-            Ok(None) => Ok(false),
+        match self.object_flags.has_domain(obj) {
+            Ok(b) => Ok(b),
             Err(e) => Err(WorldStateError::DatabaseError(format!(
                 "Error getting object flags: {:?}",
                 e
