@@ -154,6 +154,12 @@ pub struct SchedulerPerfCounters {
     task_exception: PerfCounter,
 }
 
+impl Default for SchedulerPerfCounters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SchedulerPerfCounters {
     pub fn new() -> Self {
         Self {

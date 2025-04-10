@@ -784,9 +784,14 @@ impl WorldState for DbWorldState {
         self.get_tx().descendants(obj)
     }
 
-    fn ancestors_of(&self, _perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+    fn ancestors_of(
+        &self,
+        _perms: &Obj,
+        obj: &Obj,
+        include_self: bool,
+    ) -> Result<ObjSet, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.ancestors_of);
-        self.get_tx().ancestors(obj)
+        self.get_tx().ancestors(obj, include_self)
     }
 
     fn valid(&self, obj: &Obj) -> Result<bool, WorldStateError> {
