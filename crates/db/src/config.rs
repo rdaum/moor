@@ -45,8 +45,8 @@ impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
             cache_eviction_interval: Duration::from_secs(60),
-            // 4MB
-            default_eviction_threshold: 1 << 22,
+            // 64MB.
+            default_eviction_threshold: 1 << 26,
             object_location: TableConfig::default(),
             object_contents: TableConfig::default(),
             object_flags: TableConfig::default(),

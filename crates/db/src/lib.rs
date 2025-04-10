@@ -35,6 +35,7 @@ use crate::moor_db::MoorDB;
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
 mod tx_management;
+mod verb_cache;
 
 pub use tx_management::Provider;
 pub use tx_management::{Error, Timestamp, TransactionalCache, TransactionalTable, Tx, WorkingSet};
