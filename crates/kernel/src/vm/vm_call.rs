@@ -380,7 +380,6 @@ impl VMExecState {
             name: bf_name,
             world_state,
             session: session.clone(),
-            // TODO: avoid copy here by using List inside BfCallState
             args,
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
             config: exec_args.config.clone(),
