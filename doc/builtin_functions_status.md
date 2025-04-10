@@ -149,15 +149,15 @@ included in the notes column.
 
 ### Tasks
 
-| Name           | Complete | Notes |
-|----------------|----------|-------|
-| `task_id`      | &check;  |       |
-| `queued_tasks` | &check;  |       |
-| `kill_task`    | &check;  |       |
-| `resume`       | &check;  |       |
-| `queue_info`   | &check;  |       |
-| `force_input`  |          |       |
-| `flush_input`  |          |       |
+| Name           | Complete | Notes                                                                                 |
+|----------------|----------|---------------------------------------------------------------------------------------|
+| `task_id`      | &check;  |                                                                                       |
+| `queued_tasks` | &check;  |                                                                                       |
+| `kill_task`    | &check;  |                                                                                       |
+| `resume`       | &check;  |                                                                                       |
+| `queue_info`   | &check;  |                                                                                       |
+| `force_input`  | &check;  | Does not support "at-front" argument, and command executes in parallel not in a queue |
+| `flush_input`  |          |                                                                                       |
 
 ### Execution
 

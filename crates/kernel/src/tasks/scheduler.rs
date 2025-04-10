@@ -1185,6 +1185,45 @@ impl Scheduler {
                 self.stop(msg)
                     .expect("Could not shutdown scheduler cleanly");
             }
+            TaskControlMsg::ForceInput { who, line, reply } => {
+                let Some(task) = task_q.tasks.get_mut(&task_id) else {
+                    warn!(task_id, "Task not found for force input request");
+
+                    reply.send(Err(E_INVIND)).ok();
+                    return;
+                };
+                let new_session = task.session.clone().fork().unwrap();
+                let task_start = Arc::new(TaskStart::StartCommandVerb {
+                    handler_object: SYSTEM_OBJECT.clone(),
+                    player: who.clone(),
+                    command: line,
+                });
+
+                let task_id = self.next_task_id;
+                self.next_task_id += 1;
+                let result = task_q.start_task_thread(
+                    task_id,
+                    task_start,
+                    &who,
+                    new_session,
+                    None,
+                    &who,
+                    &self.server_options,
+                    &self.task_control_sender,
+                    self.database.as_ref(),
+                    self.builtin_registry.clone(),
+                    self.config.clone(),
+                );
+                match result {
+                    Err(e) => {
+                        error!(?e, "Could not start task thread");
+                        reply.send(Err(E_INVIND)).ok();
+                    }
+                    Ok(th) => {
+                        reply.send(Ok(th.0)).ok();
+                    }
+                }
+            }
             TaskControlMsg::Checkpoint => {
                 if let Err(e) = self.checkpoint() {
                     error!(?e, "Could not checkpoint");

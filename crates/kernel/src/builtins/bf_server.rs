@@ -1327,6 +1327,39 @@ fn bf_vm_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(vm_counters, bf_vm_counters);
 
+fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    /*Syntax:  force_input (obj <conn>, str <line> [, <at-front>])   => none
+     */
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    // We always ignore 3rd argument ("at_front"), it makes no sense in mooR.
+    let Variant::Obj(conn) = bf_args.args[0].variant().clone() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    // Must be either player or wizard
+    let perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+
+    if perms.who != conn && !perms.check_is_wizard().map_err(world_state_bf_err)? {
+        return Err(BfErr::Code(E_PERM));
+    }
+
+    let Variant::Str(line) = bf_args.args[1].variant().clone() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    match bf_args
+        .task_scheduler_client
+        .force_input(conn, line.as_str().to_string())
+    {
+        Ok(task_id) => Ok(Ret(v_int(task_id as i64))),
+        Err(e) => Err(Code(e)),
+    }
+}
+bf_declare!(force_input, bf_force_input);
+
 pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(BfNotify {});
     builtins[offset_for_builtin("connected_players")] = Box::new(BfConnectedPlayers {});
@@ -1367,6 +1400,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("bf_counters")] = Box::new(BfBfCounters {});
     builtins[offset_for_builtin("db_counters")] = Box::new(BfDbCounters {});
     builtins[offset_for_builtin("vm_counters")] = Box::new(BfVmCounters {});
+    builtins[offset_for_builtin("force_input")] = Box::new(BfForceInput {});
 
     builtins[offset_for_builtin("present")] = Box::new(BfPresent {});
 }

@@ -265,6 +265,19 @@ impl TaskSchedulerClient {
             .send((self.task_id, TaskControlMsg::Shutdown(msg)))
             .expect("Could not deliver client message -- scheduler shut down?");
     }
+
+    pub fn force_input(&self, who: Obj, line: String) -> Result<TaskId, Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::ForceInput { who, line, reply },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive task id -- scheduler shut down?")
+    }
 }
 
 /// The ad-hoc messages that can be sent from tasks (or VM) up to the scheduler.
@@ -337,4 +350,10 @@ pub enum TaskControlMsg {
     RefreshServerOptions,
     /// Task requesting shutdown
     Shutdown(Option<String>),
+    /// Ask the scheduler to force input from the client.
+    ForceInput {
+        who: Obj,
+        line: String,
+        reply: oneshot::Sender<Result<TaskId, Error>>,
+    },
 }
