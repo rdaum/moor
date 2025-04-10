@@ -72,6 +72,10 @@ where
             source: provider,
         }
     }
+
+    pub fn set_preseed(&mut self, preseed: &[Domain]) {
+        self.preseed = preseed.iter().cloned().collect();
+    }
 }
 
 struct Inner<Domain, Codomain>
@@ -329,7 +333,11 @@ where
             let mut total_candidate_bytes = 0;
             let eviction_bytes_needed = self.used_bytes - self.threshold_bytes;
             while total_candidate_bytes < eviction_bytes_needed {
-                let random_index = rand::random::<usize>() % self.index.len();
+                let index_size = self.index.len();
+                if index_size == 0 {
+                    break;
+                }
+                let random_index = rand::random::<usize>() % index_size;
                 let entry = self.index.get_index(random_index).unwrap();
                 total_candidate_bytes += entry.1.size_bytes;
                 self.evict_q.push((entry.0.clone(), entry.1.hits));
