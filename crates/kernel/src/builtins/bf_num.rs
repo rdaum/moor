@@ -36,35 +36,40 @@ fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(abs, bf_abs);
 
 fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 2 {
+    if bf_args.args.is_empty() {
         return Err(BfErr::Code(E_ARGS));
     }
-
-    match (&bf_args.args[0].variant(), &bf_args.args[1].variant()) {
-        (Variant::Int(a), Variant::Int(b)) => Ok(Ret(v_int(*a.min(b)))),
-        (Variant::Float(a), Variant::Float(b)) => {
-            let m = a.min(*b);
-            Ok(Ret(v_float(m)))
+    let expected_type = bf_args.args[0].type_code();
+    let mut minimum = bf_args.args[0].clone();
+    for arg in bf_args.args.iter() {
+        if arg.type_code() != expected_type {
+            return Err(BfErr::Code(E_TYPE));
         }
-        _ => Err(BfErr::Code(E_TYPE)),
+        if arg.lt(&minimum) {
+            minimum = arg.clone();
+        }
     }
+    Ok(Ret(minimum))
 }
 bf_declare!(min, bf_min);
 
 fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 2 {
+    if bf_args.args.is_empty() {
         return Err(BfErr::Code(E_ARGS));
     }
-
-    match (&bf_args.args[0].variant(), &bf_args.args[1].variant()) {
-        (Variant::Int(a), Variant::Int(b)) => Ok(Ret(v_int(*a.max(b)))),
-        (Variant::Float(a), Variant::Float(b)) => {
-            let m = a.max(*b);
-            Ok(Ret(v_float(m)))
+    let expected_type = bf_args.args[0].type_code();
+    let mut maximum = bf_args.args[0].clone();
+    for arg in bf_args.args.iter() {
+        if arg.type_code() != expected_type {
+            return Err(BfErr::Code(E_TYPE));
         }
-        _ => Err(BfErr::Code(E_TYPE)),
+        if arg.gt(&maximum) {
+            maximum = arg.clone();
+        }
     }
+    Ok(Ret(maximum))
 }
+
 bf_declare!(max, bf_max);
 
 fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
