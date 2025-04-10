@@ -47,6 +47,8 @@ pub enum WakeCondition {
     Time(Instant),
     /// This task will wake up when the given input request is fulfilled.
     Input(Uuid),
+    /// This task will wake up when the given task is completed.
+    Task(TaskId),
 }
 
 #[repr(u8)]
@@ -55,6 +57,7 @@ pub enum WakeConditionType {
     Never = 0,
     Time = 1,
     Input = 2,
+    Task = 3,
 }
 
 impl WakeCondition {
@@ -63,6 +66,7 @@ impl WakeCondition {
             WakeCondition::Never => WakeConditionType::Never,
             WakeCondition::Time(_) => WakeConditionType::Time,
             WakeCondition::Input(_) => WakeConditionType::Input,
+            WakeCondition::Task(_) => WakeConditionType::Task,
         }
     }
 }
@@ -155,14 +159,22 @@ impl SuspensionQ {
     /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
     pub(crate) fn collect_wake_tasks(&mut self) -> Vec<SuspendedTask> {
         let now = Instant::now();
-        let to_wake = self
-            .tasks
-            .iter()
-            .filter_map(move |(task_id, sr)| match &sr.wake_condition {
-                WakeCondition::Time(t) => (*t <= now).then_some(*task_id),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
+        let mut to_wake = vec![];
+        for task in self.tasks.values() {
+            match task.wake_condition {
+                WakeCondition::Time(t) => {
+                    if t <= now {
+                        to_wake.push(task.task.task_id);
+                    }
+                }
+                WakeCondition::Task(task_id) => {
+                    if !self.tasks.contains_key(&task_id) {
+                        to_wake.push(task.task.task_id);
+                    }
+                }
+                _ => {}
+            }
+        }
         let mut tasks = vec![];
         for task_id in to_wake {
             let sr = self.tasks.remove(&task_id).unwrap();
@@ -214,6 +226,13 @@ impl SuspensionQ {
                 WakeCondition::Time(t) => {
                     let distance_from_now = t.duration_since(Instant::now());
                     Some(SystemTime::now() + distance_from_now)
+                }
+                WakeCondition::Task(task_id) => {
+                    if self.tasks.contains_key(&task_id) {
+                        Some(SystemTime::now() + Duration::from_secs(1000000000))
+                    } else {
+                        None
+                    }
                 }
                 _ => None,
             };
@@ -318,6 +337,7 @@ impl Encode for WakeCondition {
                 time_to_wake.as_micros().encode(encoder)
             }
             WakeCondition::Input(uuid) => uuid.as_u128().encode(encoder),
+            WakeCondition::Task(task_id) => task_id.encode(encoder),
         }
     }
 }
@@ -336,6 +356,10 @@ impl<C> Decode<C> for WakeCondition {
                 let uuid = Uuid::from_u128(Decode::decode(decoder)?);
                 Ok(WakeCondition::Input(uuid))
             }
+            WakeConditionType::Task => {
+                let task_id = TaskId::decode(decoder)?;
+                Ok(WakeCondition::Task(task_id))
+            }
         }
     }
 }
@@ -353,6 +377,10 @@ impl<'de, C> BorrowDecode<'de, C> for WakeCondition {
             WakeConditionType::Input => {
                 let uuid = Uuid::from_u128(Decode::decode(decoder)?);
                 Ok(WakeCondition::Input(uuid))
+            }
+            WakeConditionType::Task => {
+                let task_id = TaskId::borrow_decode(decoder)?;
+                Ok(WakeCondition::Task(task_id))
             }
         }
     }

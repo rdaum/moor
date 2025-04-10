@@ -23,7 +23,7 @@ use crate::bf_declare;
 use crate::builtins::BfErr::Code;
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
-use crate::vm::ExecutionResult;
+use crate::vm::{ExecutionResult, TaskSuspend};
 use moor_common::build::{PKG_VERSION, SHORT_COMMIT};
 use moor_common::model::{ObjFlag, WorldStateError};
 use moor_common::tasks::Event::{Present, Unpresent};
@@ -545,16 +545,12 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(server_version, bf_server_version);
 
 fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Syntax:  suspend(<seconds>)   => none
-    //
-    // Suspends the current task for <seconds> seconds.  If <seconds> is not specified, the task is suspended indefinitely.  The task may be resumed early by
-    // calling `resume' on it.
     if bf_args.args.len() > 1 {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let seconds = if bf_args.args.is_empty() {
-        None
+    let suspend_condition = if bf_args.args.is_empty() {
+        TaskSuspend::Never
     } else {
         let seconds = match bf_args.args[0].variant() {
             Variant::Float(seconds) => *seconds,
@@ -564,12 +560,27 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         if seconds < 0.0 {
             return Err(BfErr::Code(E_INVARG));
         }
-        Some(Duration::from_secs_f64(seconds))
+        TaskSuspend::Timed(Duration::from_secs_f64(seconds))
     };
 
-    Ok(VmInstr(ExecutionResult::TaskSuspend(seconds)))
+    Ok(VmInstr(ExecutionResult::TaskSuspend(suspend_condition)))
 }
 bf_declare!(suspend, bf_suspend);
+
+fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() > 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Variant::Int(task_id) = bf_args.args[0].variant().clone() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    Ok(VmInstr(ExecutionResult::TaskSuspend(
+        TaskSuspend::WaitTask(task_id as TaskId),
+    )))
+}
+bf_declare!(wait_task, bf_wait_task);
 
 fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
@@ -1401,6 +1412,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("db_counters")] = Box::new(BfDbCounters {});
     builtins[offset_for_builtin("vm_counters")] = Box::new(BfVmCounters {});
     builtins[offset_for_builtin("force_input")] = Box::new(BfForceInput {});
+    builtins[offset_for_builtin("wait_task")] = Box::new(BfWaitTask {});
 
     builtins[offset_for_builtin("present")] = Box::new(BfPresent {});
 }

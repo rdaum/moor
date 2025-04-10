@@ -23,7 +23,7 @@ use byteview::ByteView;
 pub use exec_state::VMExecState;
 use moor_common::matching::command_parse::ParsedCommand;
 use moor_common::model::VerbDef;
-use moor_common::tasks::{AbortLimitReason, Exception};
+use moor_common::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_compiler::{BuiltinId, Name};
 use moor_compiler::{Offset, Program};
 use moor_var::{Error, List, Obj, Symbol, Var};
@@ -43,6 +43,13 @@ pub(crate) mod vm_unwind;
 mod moo_frame;
 #[cfg(test)]
 mod vm_test;
+
+#[derive(Debug, Clone)]
+pub enum TaskSuspend {
+    Never,
+    Timed(Duration),
+    WaitTask(TaskId),
+}
 
 /// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
 #[derive(Debug, Clone)]
@@ -109,7 +116,7 @@ pub enum ExecutionResult {
     /// resumed under a new transaction.
     /// If the duration is None, then the task is suspended indefinitely, until it is killed or
     /// resumed using `resume()` or `kill_task()`.
-    TaskSuspend(Option<Duration>),
+    TaskSuspend(TaskSuspend),
     /// Request input from the client.
     TaskNeedInput,
     /// Rollback the current transaction and restart the task in a new transaction.
@@ -147,7 +154,7 @@ pub enum VMHostResponse {
     /// Tell the task to ask the scheduler to dispatch a fork request, and then resume execution.
     DispatchFork(Fork),
     /// Tell the task to suspend us.
-    Suspend(Option<Duration>),
+    Suspend(TaskSuspend),
     /// Tell the task Johnny 5 needs input from the client (`read` invocation).
     SuspendNeedInput,
     /// Task timed out or exceeded ticks.

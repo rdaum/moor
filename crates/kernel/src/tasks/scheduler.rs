@@ -44,7 +44,7 @@ use crate::tasks::{
     DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart,
 };
 use crate::textdump::{TextdumpWriter, make_textdump};
-use crate::vm::Fork;
+use crate::vm::{Fork, TaskSuspend};
 use moor_common::matching::command_parse::ParseMatcher;
 use moor_common::matching::match_env::MatchEnvironmentParseMatcher;
 use moor_common::matching::ws_match_env::WsMatchEnv;
@@ -132,7 +132,7 @@ struct TaskQ {
     /// Tasks in various types of suspension:
     ///     Forked background tasks that will execute someday
     ///     Suspended foreground tasks that are either indefinitely suspended or will execute someday
-    ///     Suspended tasks waiting for input from the player
+    ///     Suspended tasks waiting for input from the player or a task id to complete
     suspended: SuspensionQ,
 }
 
@@ -1021,8 +1021,11 @@ impl Scheduler {
                 };
                 self.process_fork_request(fork_request, reply, new_session);
             }
-            TaskControlMsg::TaskSuspend(resume_time, task) => {
-                debug!(task_id, "Handling task suspension until {:?}", resume_time);
+            TaskControlMsg::TaskSuspend(wake_condition, task) => {
+                debug!(
+                    task_id,
+                    "Handling task suspension until {:?}", wake_condition
+                );
                 // Task is suspended. The resume time (if any) is the system time at which
                 // the scheduler should try to wake us up.
 
@@ -1039,9 +1042,10 @@ impl Scheduler {
                 };
 
                 // And insert into the suspended list.
-                let wake_condition = match resume_time {
-                    Some(t) => WakeCondition::Time(t),
-                    None => WakeCondition::Never,
+                let wake_condition = match wake_condition {
+                    TaskSuspend::Never => WakeCondition::Never,
+                    TaskSuspend::Timed(t) => WakeCondition::Time(Instant::now() + t),
+                    TaskSuspend::WaitTask(task_id) => WakeCondition::Task(task_id),
                 };
 
                 task_q

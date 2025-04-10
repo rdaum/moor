@@ -24,7 +24,7 @@
 //!
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
@@ -207,8 +207,7 @@ impl Task {
                 // In both cases we'll rely on the scheduler to wake us up in its processing loop
                 // rather than sleep here, which would make this thread unresponsive to other
                 // messages.
-                let resume_time = delay.map(|delay| Instant::now() + delay);
-                task_scheduler_client.suspend(resume_time, self);
+                task_scheduler_client.suspend(delay, self);
                 None
             }
             VMHostResponse::SuspendNeedInput => {
@@ -966,11 +965,10 @@ mod tests {
         // Scheduler should have received a TaskSuspend message.
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
-        let TaskControlMsg::TaskSuspend(instant, mut resume_task) = msg else {
+        let TaskControlMsg::TaskSuspend(_, mut resume_task) = msg else {
             panic!("Expected TaskSuspend, got {:?}", msg);
         };
         assert_eq!(resume_task.task_id, 1);
-        assert!(instant.is_some());
 
         // Now we can simulate resumption...
         resume_task.vm_host.resume_execution(v_int(0));

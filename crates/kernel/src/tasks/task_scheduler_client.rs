@@ -11,13 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crossbeam_channel::Sender;
 
 use crate::tasks::TaskDescription;
 use crate::tasks::task::Task;
-use crate::vm::Fork;
+use crate::vm::{Fork, TaskSuspend};
 use moor_common::model::Perms;
 use moor_common::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
 use moor_var::Symbol;
@@ -111,9 +111,12 @@ impl TaskSchedulerClient {
     }
 
     /// Send a message to the scheduler that the task should be suspended.
-    pub fn suspend(&self, resume_time: Option<Instant>, task: Task) {
+    pub fn suspend(&self, resume_condition: TaskSuspend, task: Task) {
         self.scheduler_sender
-            .send((self.task_id, TaskControlMsg::TaskSuspend(resume_time, task)))
+            .send((
+                self.task_id,
+                TaskControlMsg::TaskSuspend(resume_condition, task),
+            ))
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 
@@ -301,7 +304,7 @@ pub enum TaskControlMsg {
     /// The task is letting us know that it has reached its abort limits.
     TaskAbortLimitsReached(AbortLimitReason, Var, Symbol, usize),
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)
-    TaskSuspend(Option<Instant>, Task),
+    TaskSuspend(TaskSuspend, Task),
     /// Tell the scheduler we're suspending until we get input from the client.
     TaskRequestInput(Task),
     /// Task is requesting a list of all other tasks known to the scheduler.
