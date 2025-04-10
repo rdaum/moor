@@ -238,3 +238,9 @@ Functions not part of the original LambdaMOO, but added in moor
 | `vm_counters` | Performance counters for profiling VM internals                 |       |
 | `bf_counters` | Performance counters for profiling builtin function performance |       | 
 | `db_counters` | Performance counters for profiling DB performance               |       |
+
+### Tasks
+
+| Name        | Description                                                                           | Notes |
+|-------------|---------------------------------------------------------------------------------------|-------|
+| `wait_task` | Causes the current task to wait for a given task id to not be in the background queue |       |
