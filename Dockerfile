@@ -18,6 +18,7 @@ COPY ./Cargo.lock ./Cargo.lock
 COPY ./.git ./.git
 
 # Set some additional build flags
+ENV MALLOC_CONF="thp:always,metadata_thp:always"
 ENV RUSTFLAGS="-C target-cpu=native"
 
 RUN CARGO_PROFILE_RELEASE_DEBUG=true cargo build --all-targets --release
