@@ -281,14 +281,15 @@ impl<'a> Unparse<'a> {
             Expr::Map(pairs) => {
                 let mut buffer = String::new();
                 buffer.push('[');
-                for (key, value) in pairs {
+                let len = pairs.len();
+                for (i, (key, value)) in pairs.iter().enumerate() {
                     buffer.push_str(self.unparse_expr(key)?.as_str());
                     buffer.push_str(" -> ");
                     buffer.push_str(self.unparse_expr(value)?.as_str());
-                    buffer.push_str(", ");
+                    if i + 1 < len {
+                        buffer.push_str(", ");
+                    }
                 }
-                buffer.pop();
-                buffer.pop();
                 buffer.push(']');
                 Ok(buffer)
             }
@@ -313,7 +314,8 @@ impl<'a> Unparse<'a> {
                     }
                 }
                 buffer.push('{');
-                for var in vars {
+                let len = vars.len();
+                for (i, var) in vars.iter().enumerate() {
                     match var.kind {
                         ast::ScatterKind::Required => {}
                         ast::ScatterKind::Optional => {
@@ -335,10 +337,10 @@ impl<'a> Unparse<'a> {
                         buffer.push_str(" = ");
                         buffer.push_str(self.unparse_expr(expr)?.as_str());
                     }
-                    buffer.push_str(", ");
+                    if i + 1 < len {
+                        buffer.push_str(", ");
+                    }
                 }
-                buffer.pop();
-                buffer.pop();
                 buffer.push_str("} = ");
                 buffer.push_str(self.unparse_expr(expr)?.as_str());
                 Ok(buffer)
@@ -351,24 +353,24 @@ impl<'a> Unparse<'a> {
                 buffer.push_str(self.unparse_expr(delegate)?.as_str());
                 if !slots.is_empty() {
                     buffer.push_str(", [");
-                    for (slot, value) in slots {
+                    for (i, (slot, value)) in slots.iter().enumerate() {
                         buffer.push_str(slot.as_str());
                         buffer.push_str(" -> ");
                         buffer.push_str(self.unparse_expr(value)?.as_str());
-                        buffer.push_str(", ");
+                        if i + 1 < slots.len() {
+                            buffer.push_str(", ");
+                        }
                     }
-                    buffer.pop();
-                    buffer.pop();
                     buffer.push(']');
                 }
                 if !contents.is_empty() {
                     buffer.push_str(", {");
-                    for value in contents {
+                    for (i, value) in contents.iter().enumerate() {
                         buffer.push_str(self.unparse_arg(value)?.as_str());
-                        buffer.push_str(", ");
+                        if i + 1 < contents.len() {
+                            buffer.push_str(", ");
+                        }
                     }
-                    buffer.pop();
-                    buffer.pop();
                     buffer.push('}');
                 }
                 buffer.push('>');
@@ -1216,5 +1218,13 @@ mod tests {
     pub fn parse_and_unparse(original: &str) -> Result<String, DecompileError> {
         let tree = crate::parse::parse_program(original, CompileOptions::default()).unwrap();
         Ok(unparse(&tree)?.join("\n"))
+    }
+
+    #[test]
+    fn test_unparse_empty_map_regression() {
+        let program = r#"return [];"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
     }
 }
