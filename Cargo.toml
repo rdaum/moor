@@ -164,3 +164,14 @@ ssh-key = "0.6"
 
 # For the consistency checker in `load-tools`
 edn-format = "3.3"
+
+[profile.release]
+# The Rust compiler splits crates into multiple codegen units to parallelize (and thus speed up) 
+# compilation. However, this might cause it to miss some potential optimizations. 
+# You may be able to improve runtime speed and reduce binary size, at the cost of increased 
+# compile times, by setting the number of units to one.
+codegen-units = 1
+
+# Link-time optimization (LTO) is a whole-program optimization technique that can improve runtime
+# speed by 10-20% or more, and also reduce binary size, at the cost of worse compile times.
+lto = "fat"

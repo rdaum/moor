@@ -25,6 +25,7 @@ moor-db = { path = "../db" }
 moor-kernel = { path = "../kernel" }
 moor-var = { path = "../var" }
 rpc-common = { path = "../rpc/rpc-common" }
+tikv-jemallocator = "0.6.0"
 
 ## Command line arguments parsing.
 clap.workspace = true
