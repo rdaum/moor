@@ -12,17 +12,17 @@
 //
 
 use bincode::{Decode, Encode};
-use fast_counter::ConcurrentCounter;
 use lazy_static::lazy_static;
 use moor_var::NOTHING;
 use moor_var::{Obj, Symbol};
 use moor_var::{Var, v_obj};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use crate::PhantomUnsync;
 use crate::vm::activation::{Activation, Frame};
 use moor_common::tasks::TaskId;
+use moor_common::util::PerfCounter;
 
 lazy_static! {
     static ref VM_COUNTERS: Arc<VmCounters> = Arc::new(VmCounters::new());
@@ -197,33 +197,31 @@ impl VMExecState {
 }
 
 pub struct VmCounters {
-    pub prepare_verb_dispatch: VMPerfCounter,
-    pub prepare_pass_verb: VMPerfCounter,
-    pub prepare_exec_fork_vector: VMPerfCounter,
-    pub prepare_builtin_function: VMPerfCounter,
-    pub prepare_reenter_builtin_function: VMPerfCounter,
-    pub unwind_stack: VMPerfCounter,
-    pub get_property: VMPerfCounter,
-    pub find_line_no: VMPerfCounter,
+    pub prepare_verb_dispatch: PerfCounter,
+    pub prepare_pass_verb: PerfCounter,
+    pub prepare_exec_fork_vector: PerfCounter,
+    pub prepare_builtin_function: PerfCounter,
+    pub prepare_reenter_builtin_function: PerfCounter,
+    pub unwind_stack: PerfCounter,
+    pub get_property: PerfCounter,
+    pub find_line_no: PerfCounter,
 }
 
 impl VmCounters {
     fn new() -> Self {
         Self {
-            prepare_verb_dispatch: VMPerfCounter::new("prepare_verb_dispatch"),
-            prepare_pass_verb: VMPerfCounter::new("prepare_pass_verb"),
-            prepare_exec_fork_vector: VMPerfCounter::new("prepare_exec_fork_vector"),
-            prepare_builtin_function: VMPerfCounter::new("prepare_builtin_function"),
-            prepare_reenter_builtin_function: VMPerfCounter::new(
-                "prepare_reenter_builtin_function",
-            ),
-            unwind_stack: VMPerfCounter::new("unwind_stack"),
-            get_property: VMPerfCounter::new("get_property"),
-            find_line_no: VMPerfCounter::new("find_line_no"),
+            prepare_verb_dispatch: PerfCounter::new("prepare_verb_dispatch"),
+            prepare_pass_verb: PerfCounter::new("prepare_pass_verb"),
+            prepare_exec_fork_vector: PerfCounter::new("prepare_exec_fork_vector"),
+            prepare_builtin_function: PerfCounter::new("prepare_builtin_function"),
+            prepare_reenter_builtin_function: PerfCounter::new("prepare_reenter_builtin_function"),
+            unwind_stack: PerfCounter::new("unwind_stack"),
+            get_property: PerfCounter::new("get_property"),
+            find_line_no: PerfCounter::new("find_line_no"),
         }
     }
 
-    pub(crate) fn all_counters(&self) -> Vec<&VMPerfCounter> {
+    pub(crate) fn all_counters(&self) -> Vec<&PerfCounter> {
         vec![
             &self.prepare_verb_dispatch,
             &self.prepare_pass_verb,
@@ -234,36 +232,5 @@ impl VmCounters {
             &self.get_property,
             &self.find_line_no,
         ]
-    }
-}
-pub struct VMPerfCounter {
-    pub operation: Symbol,
-    pub invocations: ConcurrentCounter,
-    pub cumulative_duration_us: ConcurrentCounter,
-}
-
-impl VMPerfCounter {
-    fn new(name: &str) -> Self {
-        Self {
-            operation: Symbol::mk(name),
-            invocations: ConcurrentCounter::new(0),
-            cumulative_duration_us: ConcurrentCounter::new(0),
-        }
-    }
-}
-
-pub struct VMPerfCounterGuard<'a>(&'a VMPerfCounter, Instant);
-
-impl<'a> VMPerfCounterGuard<'a> {
-    pub(crate) fn new(counter: &'a VMPerfCounter) -> Self {
-        Self(counter, Instant::now())
-    }
-}
-
-impl Drop for VMPerfCounterGuard<'_> {
-    fn drop(&mut self) {
-        self.0.invocations.add(1);
-        let duration_us = self.1.elapsed().as_micros();
-        self.0.cumulative_duration_us.add(duration_us as isize);
     }
 }

@@ -12,6 +12,7 @@
 //
 
 use fast_counter::ConcurrentCounter;
+use lazy_static::lazy_static;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -30,11 +31,11 @@ use crate::config::FeaturesConfig;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::activation::{BfFrame, Frame};
-use crate::vm::exec_state::VmCounters;
 use crate::vm::{ExecutionResult, VMExecState};
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
+use moor_common::util::PerfCounter;
 use moor_compiler::{BUILTINS, BuiltinId};
 use moor_var::Symbol;
 use moor_var::Var;
@@ -53,17 +54,48 @@ mod bf_strings;
 mod bf_values;
 mod bf_verbs;
 
+lazy_static! {
+    static ref BF_COUNTERS: Arc<BfCounters> = Arc::new(BfCounters::new());
+}
+
+pub struct BfCounters(Vec<PerfCounter>);
+
+impl Default for BfCounters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BfCounters {
+    pub fn new() -> Self {
+        let mut counters = Vec::with_capacity(BUILTINS.len());
+        for i in 0..BUILTINS.len() {
+            counters.push(PerfCounter {
+                operation: BUILTINS.names[&BuiltinId(i as u16)],
+                invocations: ConcurrentCounter::new(0),
+                cumulative_duration_us: ConcurrentCounter::new(0),
+            });
+        }
+        Self(counters)
+    }
+
+    pub fn counter_for(&self, id: BuiltinId) -> &PerfCounter {
+        &self.0[id.0 as usize]
+    }
+
+    pub fn all_counters(&self) -> Vec<&PerfCounter> {
+        self.0.iter().collect()
+    }
+}
+
+pub fn bf_perf_counters() -> Arc<BfCounters> {
+    BF_COUNTERS.clone()
+}
+
 /// The bundle of builtins are stored here, and passed around globally.
 pub struct BuiltinRegistry {
     // The set of built-in functions, indexed by their Name offset in the variable stack.
     pub(crate) builtins: Arc<Vec<Box<dyn BuiltinFunction>>>,
-    pub(crate) perf: Arc<Vec<BfPerf>>,
-}
-
-pub(crate) struct BfPerf {
-    pub(crate) name: Symbol,
-    pub(crate) invocations: fast_counter::ConcurrentCounter,
-    pub(crate) cumulative_time_us: fast_counter::ConcurrentCounter,
 }
 
 impl Default for BuiltinRegistry {
@@ -90,17 +122,8 @@ impl BuiltinRegistry {
         register_bf_flyweights(&mut builtins);
         register_bf_age_crypto(&mut builtins);
 
-        let mut perf = Vec::with_capacity(BUILTINS.len());
-        for i in 0..BUILTINS.len() {
-            perf.push(BfPerf {
-                name: Symbol::mk(BUILTINS.names[&BuiltinId(i as u16)].as_str()),
-                invocations: ConcurrentCounter::new(0),
-                cumulative_time_us: ConcurrentCounter::new(0),
-            })
-        }
         BuiltinRegistry {
             builtins: Arc::new(builtins),
-            perf: Arc::new(perf),
         }
     }
 
@@ -108,6 +131,7 @@ impl BuiltinRegistry {
         &*self.builtins[id.0 as usize]
     }
 }
+
 /// The arguments and other state passed to a built-in function.
 pub struct BfCallState<'a> {
     /// The name of the invoked function.
@@ -125,10 +149,6 @@ pub struct BfCallState<'a> {
     pub(crate) task_scheduler_client: TaskSchedulerClient,
     /// Config
     pub(crate) config: FeaturesConfig,
-    /// Counts and elapsed times on bf invocations
-    pub(crate) bf_perf: Arc<Vec<BfPerf>>,
-    /// Counts and elapsed times for various VM operations
-    pub(crate) vmperf_counters: Arc<VmCounters>,
 }
 
 impl BfCallState<'_> {

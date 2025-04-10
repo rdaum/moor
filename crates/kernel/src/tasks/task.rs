@@ -39,7 +39,7 @@ use moor_common::model::{CommitResult, VerbDef, WorldState, WorldStateError};
 use moor_common::tasks::CommandError;
 use moor_common::tasks::CommandError::PermissionDenied;
 use moor_common::tasks::TaskId;
-use moor_common::util::parse_into_words;
+use moor_common::util::{PerfTimerGuard, parse_into_words};
 use moor_var::{List, v_int, v_str};
 use moor_var::{NOTHING, SYSTEM_OBJECT};
 use moor_var::{Obj, v_obj};
@@ -50,7 +50,7 @@ use crate::config::{Config, FeaturesConfig};
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::VmHost;
-use crate::tasks::{ServerOptions, TaskStart, VerbCall};
+use crate::tasks::{ServerOptions, TaskStart, VerbCall, sched_counters};
 use crate::vm::VMHostResponse;
 use moor_common::matching::command_parse::{ParseCommandError, ParsedCommand, parse_command};
 use moor_common::matching::match_env::MatchEnvironmentParseMatcher;
@@ -158,6 +158,9 @@ impl Task {
         builtin_registry: Arc<BuiltinRegistry>,
         config: FeaturesConfig,
     ) -> Option<(Self, Box<dyn WorldState>)> {
+        let perfc = sched_counters();
+        let _t = PerfTimerGuard::new(&perfc.vm_dispatch);
+
         // Call the VM
         let vm_exec_result = self.vm_host.exec_interpreter(
             self.task_id,
@@ -354,6 +357,8 @@ impl Task {
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         world_state: &mut dyn WorldState,
     ) -> bool {
+        let perfc = sched_counters();
+        let _t = PerfTimerGuard::new(&perfc.setup_task);
         match self.task_start.clone().as_ref() {
             // We've been asked to start a command.
             // We need to set up the VM and then execute it.
@@ -468,6 +473,9 @@ impl Task {
         command: &str,
         world_state: &mut dyn WorldState,
     ) -> Result<(), CommandError> {
+        let perfc = sched_counters();
+        let _t = PerfTimerGuard::new(&perfc.start_command);
+
         // Command execution is a multi-phase process:
         //   1. Lookup $do_command. If we have the verb, execute it.
         //   2. If it returns a boolean `true`, we're done, let scheduler know, otherwise:
@@ -527,33 +535,40 @@ impl Task {
         command: &str,
         world_state: &mut dyn WorldState,
     ) -> Result<(), CommandError> {
-        // We need the player's location, and we'll just die if we can't get it.
-        let player_location = match world_state.location_of(player, player) {
-            Ok(loc) => loc,
-            Err(WorldStateError::VerbPermissionDenied)
-            | Err(WorldStateError::ObjectPermissionDenied)
-            | Err(WorldStateError::PropertyPermissionDenied) => {
-                return Err(PermissionDenied);
-            }
-            Err(wse) => {
-                return Err(CommandError::DatabaseError(wse));
-            }
-        };
+        let (player_location, parsed_command) = {
+            let perfc = sched_counters();
+            let _t = PerfTimerGuard::new(&perfc.parse_command);
 
-        // Parse the command in the current environment.
-        let me = WsMatchEnv::new(world_state, player.clone());
-        let matcher = MatchEnvironmentParseMatcher {
-            env: me,
-            player: player.clone(),
-        };
-        let parsed_command = match parse_command(command, matcher) {
-            Ok(pc) => pc,
-            Err(ParseCommandError::PermissionDenied) => {
-                return Err(PermissionDenied);
-            }
-            Err(_) => {
-                return Err(CommandError::CouldNotParseCommand);
-            }
+            // We need the player's location, and we'll just die if we can't get it.
+            let player_location = match world_state.location_of(player, player) {
+                Ok(loc) => loc,
+                Err(WorldStateError::VerbPermissionDenied)
+                | Err(WorldStateError::ObjectPermissionDenied)
+                | Err(WorldStateError::PropertyPermissionDenied) => {
+                    return Err(PermissionDenied);
+                }
+                Err(wse) => {
+                    return Err(CommandError::DatabaseError(wse));
+                }
+            };
+
+            // Parse the command in the current environment.
+            let me = WsMatchEnv::new(world_state, player.clone());
+            let matcher = MatchEnvironmentParseMatcher {
+                env: me,
+                player: player.clone(),
+            };
+            let parsed_command = match parse_command(command, matcher) {
+                Ok(pc) => pc,
+                Err(ParseCommandError::PermissionDenied) => {
+                    return Err(PermissionDenied);
+                }
+                Err(_) => {
+                    return Err(CommandError::CouldNotParseCommand);
+                }
+            };
+
+            (player_location, parsed_command)
         };
 
         // Look for the verb...
@@ -617,6 +632,8 @@ fn find_verb_for_command(
     pc: &ParsedCommand,
     ws: &mut dyn WorldState,
 ) -> Result<Option<((ByteView, VerbDef), Obj)>, CommandError> {
+    let perfc = sched_counters();
+    let _t = PerfTimerGuard::new(&perfc.find_verb_for_command);
     let targets_to_search = vec![
         player.clone(),
         player_location.clone(),

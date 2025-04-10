@@ -41,7 +41,7 @@ use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::{
     DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
-    DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart,
+    DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart, sched_counters,
 };
 use crate::textdump::{TextdumpWriter, make_textdump};
 use crate::vm::{Fork, TaskSuspend};
@@ -55,6 +55,7 @@ use moor_common::tasks::SchedulerError::{
 use moor_common::tasks::{
     AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError, TaskId, VerbProgramError,
 };
+use moor_common::util::PerfTimerGuard;
 use moor_var::Error::{E_INVARG, E_INVIND, E_PERM};
 use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};
@@ -907,6 +908,8 @@ impl Scheduler {
                 return task_q.send_task_result(task_id, Ok(value));
             }
             TaskControlMsg::TaskConflictRetry(task) => {
+                let perfc = sched_counters();
+                let _t = PerfTimerGuard::new(&perfc.task_conflict_retry);
                 trace!(?task_id, "Task retrying due to conflict");
 
                 // Ask the task to restart itself, using its stashed original start info, but with
@@ -932,6 +935,9 @@ impl Scheduler {
                 task_q.send_task_result(task_id, Err(CommandExecutionError(parse_command_error)));
             }
             TaskControlMsg::TaskAbortCancelled => {
+                let perfc = sched_counters();
+                let _t = PerfTimerGuard::new(&perfc.task_abort_cancelled);
+
                 warn!(?task_id, "Task cancelled");
 
                 // Rollback the session.
@@ -953,6 +959,8 @@ impl Scheduler {
                 task_q.send_task_result(task_id, Err(TaskAbortedCancelled));
             }
             TaskControlMsg::TaskAbortLimitsReached(limit_reason, this, verb, line_number) => {
+                let perfc = sched_counters();
+                let _t = PerfTimerGuard::new(&perfc.task_abort_limits);
                 let abort_reason_text = match limit_reason {
                     AbortLimitReason::Ticks(t) => {
                         warn!(?task_id, ticks = t, "Task aborted, ticks exceeded");
@@ -983,6 +991,8 @@ impl Scheduler {
                 task_q.send_task_result(task_id, Err(TaskAbortedLimit(limit_reason)));
             }
             TaskControlMsg::TaskException(exception) => {
+                let perfc = sched_counters();
+                let _t = PerfTimerGuard::new(&perfc.task_exception);
                 debug!(?task_id, finally_reason = ?exception, "Task threw exception");
 
                 let Some(task) = task_q.tasks.get_mut(&task_id) else {
@@ -1007,6 +1017,9 @@ impl Scheduler {
                 task_q.send_task_result(task_id, Err(TaskAbortedException(exception)));
             }
             TaskControlMsg::TaskRequestFork(fork_request, reply) => {
+                let perfc = sched_counters();
+                let _t = PerfTimerGuard::new(&perfc.fork_task);
+
                 trace!(?task_id,  delay=?fork_request.delay, "Task requesting fork");
 
                 // Task has requested a fork. Dispatch it and reply with the new task id.
@@ -1022,6 +1035,8 @@ impl Scheduler {
                 self.process_fork_request(fork_request, reply, new_session);
             }
             TaskControlMsg::TaskSuspend(wake_condition, task) => {
+                let perfc = sched_counters();
+                let _t = PerfTimerGuard::new(&perfc.suspend_task);
                 debug!(
                     task_id,
                     "Handling task suspension until {:?}", wake_condition
@@ -1428,6 +1443,8 @@ impl TaskQ {
         builtin_registry: Arc<BuiltinRegistry>,
         config: Arc<Config>,
     ) -> Result<TaskHandle, SchedulerError> {
+        let perfc = sched_counters();
+        let _t = PerfTimerGuard::new(&perfc.start_task);
         let is_background = task_start.is_background();
 
         let (sender, receiver) = oneshot::channel();
@@ -1548,6 +1565,9 @@ impl TaskQ {
         builtin_registry: Arc<BuiltinRegistry>,
         config: Arc<Config>,
     ) -> Result<(), SchedulerError> {
+        let perfc = sched_counters();
+        let _t = PerfTimerGuard::new(&perfc.resume_task);
+
         // Take a task out of a suspended state and start running it again.
         // Means:
         //   Start a new transaction
@@ -1628,6 +1648,9 @@ impl TaskQ {
         builtin_registry: Arc<BuiltinRegistry>,
         config: Arc<Config>,
     ) {
+        let perfc = sched_counters();
+        let _t = PerfTimerGuard::new(&perfc.retry_task);
+
         // Make sure the old thread is dead.
         task.kill_switch.store(true, Ordering::SeqCst);
 
@@ -1688,6 +1711,9 @@ impl TaskQ {
 
     #[instrument(skip(self))]
     fn kill_task(&mut self, victim_task_id: TaskId, sender_permissions: Perms) -> Var {
+        let perfc = sched_counters();
+        let _t = PerfTimerGuard::new(&perfc.kill_task);
+
         // We need to do perms check first, which means checking both running and suspended tasks,
         // and getting their permissions. And may as well remember whether it was in suspended or
         // active at the same time.

@@ -39,7 +39,7 @@ mod verbs;
 mod world_state;
 
 use moor_var::Symbol;
-pub use world_state::{WorldStateError, WorldStatePerf, WsOpTimer};
+pub use world_state::{WorldStateError, WorldStatePerf};
 
 /// The result code from a commit/complete operation on the world's state.
 #[derive(Debug, Eq, PartialEq)]
