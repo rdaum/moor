@@ -12,9 +12,10 @@
 //
 
 use crate::tx_management::{Canonical, Error, Timestamp, Tx};
+use ahash::AHasher;
 use indexmap::IndexMap;
 use std::cell::RefCell;
-use std::hash::Hash;
+use std::hash::{BuildHasherDefault, Hash};
 use std::sync::Arc;
 
 /// A key-value caching store that is scoped for the lifetime of a transaction.
@@ -30,7 +31,7 @@ where
 
     // Note: This is RefCell for interior mutability since even get/scan operations can modify the
     //   index.
-    index: RefCell<IndexMap<Domain, Entry<Codomain>>>,
+    index: RefCell<IndexMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>>,
 
     backing_source: Arc<Source>,
 }
@@ -80,7 +81,7 @@ where
     ) -> TransactionalTable<Domain, Codomain, Source> {
         TransactionalTable {
             tx,
-            index: RefCell::new(IndexMap::new()),
+            index: RefCell::new(IndexMap::default()),
             backing_source,
         }
     }

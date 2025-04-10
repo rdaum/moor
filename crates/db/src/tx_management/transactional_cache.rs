@@ -15,10 +15,11 @@
 
 use crate::tx_management::tx_table::{OpType, TransactionalTable, WorkingSet};
 use crate::tx_management::{Canonical, Error, Provider, SizedCache, Timestamp, Tx};
+use ahash::AHasher;
 use indexmap::IndexMap;
 use moor_var::Symbol;
 use std::collections::HashSet;
-use std::hash::Hash;
+use std::hash::{BuildHasherDefault, Hash};
 use std::sync::{Arc, RwLock, RwLockWriteGuard};
 use std::time::{Duration, Instant};
 use tracing::warn;
@@ -46,7 +47,7 @@ where
     relation_name: Symbol,
 
     /// A series of common that local caches should be pre-seeded with.
-    preseed: HashSet<Domain>,
+    preseed: HashSet<Domain, BuildHasherDefault<AHasher>>,
 
     index: RwLock<Inner<Domain, Codomain>>,
 
@@ -70,7 +71,7 @@ where
             relation_name,
             preseed,
             index: RwLock::new(Inner {
-                index: IndexMap::new(),
+                index: IndexMap::default(),
                 evict_q: vec![],
                 used_bytes: 0,
                 threshold_bytes,
@@ -90,7 +91,7 @@ where
     Codomain: Clone + PartialEq + Eq,
 {
     /// Internal index of the cache.
-    index: IndexMap<Domain, Entry<Codomain>>,
+    index: IndexMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
 
     /// Eviction queue, a place where entries go to die, unless they are given a second chance.
     /// Entry is Domain, hits & time of insertion. If hits during eviction is the same as hits

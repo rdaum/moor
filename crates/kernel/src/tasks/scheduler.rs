@@ -11,16 +11,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use ahash::AHasher;
+use crossbeam_channel::Receiver;
+use crossbeam_channel::Sender;
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fs::File;
+use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::yield_now;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
-use crossbeam_channel::Receiver;
-use crossbeam_channel::Sender;
-use lazy_static::lazy_static;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
@@ -129,7 +130,7 @@ struct RunningTaskControl {
 struct TaskQ {
     /// Information about the active, running tasks. The actual `Task` is owned by the task thread
     /// and this is just a control record for communicating with it.
-    tasks: HashMap<TaskId, RunningTaskControl>,
+    tasks: HashMap<TaskId, RunningTaskControl, BuildHasherDefault<AHasher>>,
     /// Tasks in various types of suspension:
     ///     Forked background tasks that will execute someday
     ///     Suspended foreground tasks that are either indefinitely suspended or will execute someday

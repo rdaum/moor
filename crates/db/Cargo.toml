@@ -21,6 +21,7 @@ tempfile.workspace = true
 moor-common = { path = "../common" }
 moor-var = { path = "../var" }
 
+ahash.workspace = true
 byteview.workspace = true
 crossbeam-channel.workspace = true
 fjall.workspace = true

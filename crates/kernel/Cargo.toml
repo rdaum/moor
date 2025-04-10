@@ -53,6 +53,7 @@ moor-moot = { path = "../testing/moot", features = ["colors"] }
 moor-var = { path = "../var" }
 
 ## General usefulness
+ahash.workspace = true
 byteview.workspace = true
 chrono.workspace = true
 crossbeam-channel.workspace = true
