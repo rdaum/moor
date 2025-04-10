@@ -59,10 +59,16 @@ where
     Codomain: Clone + PartialEq + Eq,
     Source: Provider<Domain, Codomain>,
 {
-    pub fn new(relation_name: Symbol, provider: Arc<Source>, threshold_bytes: usize) -> Self {
+    pub fn new(
+        relation_name: Symbol,
+        provider: Arc<Source>,
+        threshold_bytes: usize,
+        preseed_domains: &[Domain],
+    ) -> Self {
+        let preseed = preseed_domains.iter().cloned().collect();
         Self {
             relation_name,
-            preseed: HashSet::new(),
+            preseed,
             index: RwLock::new(Inner {
                 index: IndexMap::new(),
                 evict_q: vec![],
@@ -498,7 +504,12 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache::new(Symbol::mk("test"), provider, 2048));
+        let global_cache = Arc::new(TransactionalCache::new(
+            Symbol::mk("test"),
+            provider,
+            2048,
+            &[],
+        ));
 
         let domain = TestDomain(1);
         let codomain = TestCodomain(1);
@@ -525,7 +536,12 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache::new(Symbol::mk("test"), provider, 2048));
+        let global_cache = Arc::new(TransactionalCache::new(
+            Symbol::mk("test"),
+            provider,
+            2048,
+            &[],
+        ));
 
         let domain = TestDomain(1);
         let codomain_a = TestCodomain(1);
@@ -560,7 +576,12 @@ mod tests {
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache::new(Symbol::mk("test"), provider, 2048));
+        let global_cache = Arc::new(TransactionalCache::new(
+            Symbol::mk("test"),
+            provider,
+            2048,
+            &[],
+        ));
 
         global_cache.process_cache_evictions();
 

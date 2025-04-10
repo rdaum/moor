@@ -14,6 +14,7 @@
 use crate::fjall_provider::FjallProvider;
 use crate::moor_db::WorkingSets;
 use crate::tx_management::{TransactionalCache, TransactionalTable, Tx};
+use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::{BytesHolder, Error, ObjAndUUIDHolder, StringHolder};
 use byteview::ByteView;
 use crossbeam_channel::Sender;
@@ -25,7 +26,6 @@ use moor_common::model::{
 use moor_common::util::BitEnum;
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use oneshot::TryRecvError;
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
 use std::sync::Arc;
@@ -71,36 +71,7 @@ pub struct WorldStateTransaction {
     pub(crate) sequences: [Arc<AtomicI64>; 16],
 
     pub(crate) verb_resolution_cache: VerbResolutionCache,
-}
-
-/// Very naive per-tx_management verb resolution cache.
-/// Not very aggressive here, it flushes on every verbdef mutation on any object, regardless of
-/// inheritance chain.
-/// It's net-new empty for every transaction every time.
-/// The goal is really just to optimize tight-loop verb lookups
-/// Lots of room for improvement here:
-///     Keep a separate global cache which can be shared between transactions
-///     Flush entries for an object only if inheritance chain touched
-///     Speed up named lookups more for when verbs have many names
-#[derive(Default)]
-pub(crate) struct VerbResolutionCache {
-    entries: RefCell<HashMap<(Obj, Symbol), Vec<VerbDef>>>,
-}
-
-impl VerbResolutionCache {
-    pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Vec<VerbDef>> {
-        self.entries.borrow().get(&(obj.clone(), *verb)).cloned()
-    }
-
-    pub(crate) fn flush(&self) {
-        self.entries.borrow_mut().clear();
-    }
-
-    pub(crate) fn fill(&self, obj: &Obj, verb: &Symbol, verbs: &[VerbDef]) {
-        self.entries
-            .borrow_mut()
-            .insert((obj.clone(), *verb), verbs.to_vec());
-    }
+    pub(crate) ancestry_cache: AncestryCache,
 }
 
 fn upsert<Domain, Codomain>(
@@ -128,6 +99,11 @@ impl WorldStateTransaction {
     }
 
     pub fn ancestors(&self, obj: &Obj, include_self: bool) -> Result<ObjSet, WorldStateError> {
+        // Check ancestry cache first.
+        if let Some(ancestors) = self.ancestry_cache.lookup(obj) {
+            return Ok(ancestors);
+        }
+
         let mut ancestors = vec![];
         if include_self {
             ancestors.push(obj.clone());
@@ -148,8 +124,12 @@ impl WorldStateTransaction {
                 }
             }
         }
+        let ancestor_set = ancestors.into_iter().collect();
 
-        Ok(ancestors.into_iter().collect())
+        // Fill in the cache.
+        self.ancestry_cache.fill(&obj, &ancestor_set);
+
+        Ok(ancestor_set)
     }
 
     pub fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
@@ -283,6 +263,13 @@ impl WorldStateTransaction {
         // textdump case, where our numbers are coming in arbitrarily.
         self.update_sequence_max(SEQUENCE_MAX_OBJECT, id.id().0 as i64);
 
+        self.verb_resolution_cache.flush();
+        self.ancestry_cache.flush();
+
+        // Refill ancestry cache for this object, at least.
+        // TODO: We could probably be more aggressive here, and fill ancestry for our ancestors.
+        self.ancestors(&id, false).ok();
+
         Ok(id)
     }
 
@@ -364,6 +351,7 @@ impl WorldStateTransaction {
         self.object_propdefs.delete(obj).ok();
 
         self.verb_resolution_cache.flush();
+        self.ancestry_cache.flush();
 
         Ok(())
     }
@@ -386,6 +374,8 @@ impl WorldStateTransaction {
         if !old_parent.is_nothing() && old_parent.eq(new_parent) {
             return Ok(());
         };
+
+        self.ancestry_cache.flush();
 
         // Now find the set of new ancestors.
         let mut new_ancestors: HashSet<_> = self.ancestors_set(new_parent)?;
