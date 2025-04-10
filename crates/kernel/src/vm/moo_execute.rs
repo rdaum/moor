@@ -11,23 +11,23 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::config::FeaturesConfig;
 use crate::vm::ExecutionResult;
+use crate::vm::exec_state::vm_counters;
 use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
 use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
 use moor_common::model::WorldState;
+use moor_common::util::PerfTimerGuard;
 use moor_compiler::{Op, ScatterLabel};
-use std::ops::Add;
-use std::time::Duration;
-
-use crate::config::FeaturesConfig;
-use crate::vm::exec_state::{VMPerfCounterGuard, vm_counters};
 use moor_var::Error::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
 use moor_var::{
     Error, IndexMode, Obj, Sequence, TypeClass, Var, Variant, v_bool_int, v_empty_list,
     v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_sym,
 };
 use moor_var::{Symbol, VarType};
+use std::ops::Add;
+use std::time::Duration;
 
 lazy_static! {
     static ref DELEGATE_SYM: Symbol = Symbol::mk("delegate");
@@ -988,7 +988,7 @@ fn get_property(
     features_config: &FeaturesConfig,
 ) -> Result<Var, Error> {
     let vm_counters = vm_counters();
-    let _t = VMPerfCounterGuard::new(&vm_counters.get_property);
+    let _t = PerfTimerGuard::new(&vm_counters.get_property);
 
     match obj.variant() {
         Variant::Obj(obj) => {

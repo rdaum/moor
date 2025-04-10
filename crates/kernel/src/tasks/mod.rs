@@ -12,10 +12,11 @@
 //
 
 use std::fmt::Debug;
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use bincode::{Decode, Encode};
-
+use lazy_static::lazy_static;
 use moor_compiler::Program;
 use moor_var::{List, Obj};
 use moor_var::{Symbol, Var};
@@ -23,6 +24,7 @@ use moor_var::{Symbol, Var};
 pub use crate::tasks::tasks_db::{NoopTasksDb, TasksDb, TasksDbError};
 use crate::vm::Fork;
 use moor_common::tasks::{SchedulerError, TaskId};
+use moor_common::util::PerfCounter;
 
 pub mod scheduler;
 pub mod sessions;
@@ -39,6 +41,14 @@ pub const DEFAULT_BG_TICKS: usize = 30_000;
 pub const DEFAULT_FG_SECONDS: u64 = 5;
 pub const DEFAULT_BG_SECONDS: u64 = 3;
 pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
+
+lazy_static! {
+    static ref SCHED_COUNTERS: Arc<SchedulerPerfCounters> = Arc::new(SchedulerPerfCounters::new());
+}
+
+pub fn sched_counters() -> Arc<SchedulerPerfCounters> {
+    SCHED_COUNTERS.clone()
+}
 
 /// Just a handle to a task, with a receiver for the result.
 pub struct TaskHandle(
@@ -123,6 +133,66 @@ impl ServerOptions {
         } else {
             (self.fg_seconds, self.fg_ticks, self.max_stack_depth)
         }
+    }
+}
+
+pub struct SchedulerPerfCounters {
+    resume_task: PerfCounter,
+    start_task: PerfCounter,
+    retry_task: PerfCounter,
+    kill_task: PerfCounter,
+    vm_dispatch: PerfCounter,
+    setup_task: PerfCounter,
+    start_command: PerfCounter,
+    parse_command: PerfCounter,
+    find_verb_for_command: PerfCounter,
+    task_conflict_retry: PerfCounter,
+    task_abort_cancelled: PerfCounter,
+    task_abort_limits: PerfCounter,
+    fork_task: PerfCounter,
+    suspend_task: PerfCounter,
+    task_exception: PerfCounter,
+}
+
+impl SchedulerPerfCounters {
+    pub fn new() -> Self {
+        Self {
+            resume_task: PerfCounter::new("resume_task"),
+            start_task: PerfCounter::new("start_task"),
+            retry_task: PerfCounter::new("retry_task"),
+            kill_task: PerfCounter::new("kill_task"),
+            vm_dispatch: PerfCounter::new("vm_dispatch"),
+            setup_task: PerfCounter::new("setup_task"),
+            start_command: PerfCounter::new("start_command"),
+            parse_command: PerfCounter::new("parse_command"),
+            find_verb_for_command: PerfCounter::new("find_verb_for_command"),
+            task_conflict_retry: PerfCounter::new("task_conflict_retry"),
+            task_abort_cancelled: PerfCounter::new("task_abort_cancelled"),
+            task_abort_limits: PerfCounter::new("task_abort_limits"),
+            fork_task: PerfCounter::new("fork_task"),
+            suspend_task: PerfCounter::new("suspend_task"),
+            task_exception: PerfCounter::new("task_exception"),
+        }
+    }
+
+    pub fn all_counters(&self) -> Vec<&PerfCounter> {
+        vec![
+            &self.resume_task,
+            &self.start_task,
+            &self.retry_task,
+            &self.kill_task,
+            &self.vm_dispatch,
+            &self.setup_task,
+            &self.start_command,
+            &self.parse_command,
+            &self.find_verb_for_command,
+            &self.task_conflict_retry,
+            &self.task_abort_cancelled,
+            &self.task_abort_limits,
+            &self.fork_task,
+            &self.suspend_task,
+            &self.task_exception,
+        ]
     }
 }
 

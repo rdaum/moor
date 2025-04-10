@@ -13,9 +13,7 @@
 
 use bincode::{Decode, Encode};
 use byteview::ByteView;
-use fast_counter::ConcurrentCounter;
 use std::sync::Arc;
-use std::time::Instant;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -28,7 +26,7 @@ use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};
 use crate::model::{ObjAttr, Vid};
-use crate::util::BitEnum;
+use crate::util::{BitEnum, PerfCounter};
 use moor_var::Symbol;
 use moor_var::Var;
 use moor_var::{Error, Obj};
@@ -402,64 +400,49 @@ pub trait WorldStateSource: Send {
     fn checkpoint(&self) -> Result<(), WorldStateError>;
 }
 
-pub struct WSPerfCounter {
-    pub operation: Symbol,
-    pub invocations: ConcurrentCounter,
-    pub cumulative_duration_us: ConcurrentCounter,
-}
-
-impl WSPerfCounter {
-    fn new(name: &str) -> Self {
-        Self {
-            operation: Symbol::mk(name),
-            invocations: ConcurrentCounter::new(0),
-            cumulative_duration_us: ConcurrentCounter::new(0),
-        }
-    }
-}
 pub struct WorldStatePerf {
-    pub players: WSPerfCounter,
-    pub owner_of: WSPerfCounter,
-    pub controls: WSPerfCounter,
-    pub flags_of: WSPerfCounter,
-    pub set_flags_of: WSPerfCounter,
-    pub location_of: WSPerfCounter,
-    pub object_bytes: WSPerfCounter,
-    pub create_object: WSPerfCounter,
-    pub recycle_object: WSPerfCounter,
-    pub max_object: WSPerfCounter,
-    pub move_object: WSPerfCounter,
-    pub contents_of: WSPerfCounter,
-    pub verbs: WSPerfCounter,
-    pub properties: WSPerfCounter,
-    pub retrieve_property: WSPerfCounter,
-    pub get_property_info: WSPerfCounter,
-    pub set_property_info: WSPerfCounter,
-    pub update_property: WSPerfCounter,
-    pub is_property_clear: WSPerfCounter,
-    pub clear_property: WSPerfCounter,
-    pub define_property: WSPerfCounter,
-    pub delete_property: WSPerfCounter,
-    pub add_verb: WSPerfCounter,
-    pub remove_verb: WSPerfCounter,
-    pub update_verb: WSPerfCounter,
-    pub update_verb_at_index: WSPerfCounter,
-    pub update_verb_with_id: WSPerfCounter,
-    pub get_verb: WSPerfCounter,
-    pub get_verb_at_index: WSPerfCounter,
-    pub retrieve_verb: WSPerfCounter,
-    pub find_method_verb_on: WSPerfCounter,
-    pub find_command_verb_on: WSPerfCounter,
-    pub parent_of: WSPerfCounter,
-    pub change_parent: WSPerfCounter,
-    pub children_of: WSPerfCounter,
-    pub descendants_of: WSPerfCounter,
-    pub ancestors_of: WSPerfCounter,
-    pub valid: WSPerfCounter,
-    pub names_of: WSPerfCounter,
-    pub db_usage: WSPerfCounter,
-    pub commit: WSPerfCounter,
-    pub rollback: WSPerfCounter,
+    pub players: PerfCounter,
+    pub owner_of: PerfCounter,
+    pub controls: PerfCounter,
+    pub flags_of: PerfCounter,
+    pub set_flags_of: PerfCounter,
+    pub location_of: PerfCounter,
+    pub object_bytes: PerfCounter,
+    pub create_object: PerfCounter,
+    pub recycle_object: PerfCounter,
+    pub max_object: PerfCounter,
+    pub move_object: PerfCounter,
+    pub contents_of: PerfCounter,
+    pub verbs: PerfCounter,
+    pub properties: PerfCounter,
+    pub retrieve_property: PerfCounter,
+    pub get_property_info: PerfCounter,
+    pub set_property_info: PerfCounter,
+    pub update_property: PerfCounter,
+    pub is_property_clear: PerfCounter,
+    pub clear_property: PerfCounter,
+    pub define_property: PerfCounter,
+    pub delete_property: PerfCounter,
+    pub add_verb: PerfCounter,
+    pub remove_verb: PerfCounter,
+    pub update_verb: PerfCounter,
+    pub update_verb_at_index: PerfCounter,
+    pub update_verb_with_id: PerfCounter,
+    pub get_verb: PerfCounter,
+    pub get_verb_at_index: PerfCounter,
+    pub retrieve_verb: PerfCounter,
+    pub find_method_verb_on: PerfCounter,
+    pub find_command_verb_on: PerfCounter,
+    pub parent_of: PerfCounter,
+    pub change_parent: PerfCounter,
+    pub children_of: PerfCounter,
+    pub descendants_of: PerfCounter,
+    pub ancestors_of: PerfCounter,
+    pub valid: PerfCounter,
+    pub names_of: PerfCounter,
+    pub db_usage: PerfCounter,
+    pub commit: PerfCounter,
+    pub rollback: PerfCounter,
 }
 
 impl Default for WorldStatePerf {
@@ -471,52 +454,52 @@ impl Default for WorldStatePerf {
 impl WorldStatePerf {
     pub fn new() -> Self {
         Self {
-            players: WSPerfCounter::new("players"),
-            owner_of: WSPerfCounter::new("owner_of"),
-            controls: WSPerfCounter::new("controls"),
-            flags_of: WSPerfCounter::new("flags_of"),
-            set_flags_of: WSPerfCounter::new("set_flags_of"),
-            location_of: WSPerfCounter::new("location_of"),
-            object_bytes: WSPerfCounter::new("object_bytes"),
-            create_object: WSPerfCounter::new("create_object"),
-            recycle_object: WSPerfCounter::new("recycle_object"),
-            max_object: WSPerfCounter::new("max_object"),
-            move_object: WSPerfCounter::new("move_object"),
-            contents_of: WSPerfCounter::new("contents_of"),
-            verbs: WSPerfCounter::new("verbs"),
-            properties: WSPerfCounter::new("properties"),
-            retrieve_property: WSPerfCounter::new("retrieve_property"),
-            get_property_info: WSPerfCounter::new("get_property_info"),
-            set_property_info: WSPerfCounter::new("set_property_info"),
-            update_property: WSPerfCounter::new("update_property"),
-            is_property_clear: WSPerfCounter::new("is_property_clear"),
-            clear_property: WSPerfCounter::new("clear_property"),
-            define_property: WSPerfCounter::new("define_property"),
-            delete_property: WSPerfCounter::new("delete_property"),
-            add_verb: WSPerfCounter::new("add_verb"),
-            remove_verb: WSPerfCounter::new("remove_verb"),
-            update_verb: WSPerfCounter::new("update_verb"),
-            update_verb_at_index: WSPerfCounter::new("update_verb_at_index"),
-            update_verb_with_id: WSPerfCounter::new("update_verb_with_id"),
-            get_verb: WSPerfCounter::new("get_verb"),
-            get_verb_at_index: WSPerfCounter::new("get_verb_at_index"),
-            retrieve_verb: WSPerfCounter::new("retrieve_verb"),
-            find_method_verb_on: WSPerfCounter::new("find_method_verb_on"),
-            find_command_verb_on: WSPerfCounter::new("find_command_verb_on"),
-            parent_of: WSPerfCounter::new("parent_of"),
-            change_parent: WSPerfCounter::new("change_parent"),
-            children_of: WSPerfCounter::new("children_of"),
-            descendants_of: WSPerfCounter::new("descendants_of"),
-            ancestors_of: WSPerfCounter::new("ancestors_of"),
-            valid: WSPerfCounter::new("valid"),
-            names_of: WSPerfCounter::new("names_of"),
-            db_usage: WSPerfCounter::new("db_usage"),
-            commit: WSPerfCounter::new("commit"),
-            rollback: WSPerfCounter::new("rollback"),
+            players: PerfCounter::new("players"),
+            owner_of: PerfCounter::new("owner_of"),
+            controls: PerfCounter::new("controls"),
+            flags_of: PerfCounter::new("flags_of"),
+            set_flags_of: PerfCounter::new("set_flags_of"),
+            location_of: PerfCounter::new("location_of"),
+            object_bytes: PerfCounter::new("object_bytes"),
+            create_object: PerfCounter::new("create_object"),
+            recycle_object: PerfCounter::new("recycle_object"),
+            max_object: PerfCounter::new("max_object"),
+            move_object: PerfCounter::new("move_object"),
+            contents_of: PerfCounter::new("contents_of"),
+            verbs: PerfCounter::new("verbs"),
+            properties: PerfCounter::new("properties"),
+            retrieve_property: PerfCounter::new("retrieve_property"),
+            get_property_info: PerfCounter::new("get_property_info"),
+            set_property_info: PerfCounter::new("set_property_info"),
+            update_property: PerfCounter::new("update_property"),
+            is_property_clear: PerfCounter::new("is_property_clear"),
+            clear_property: PerfCounter::new("clear_property"),
+            define_property: PerfCounter::new("define_property"),
+            delete_property: PerfCounter::new("delete_property"),
+            add_verb: PerfCounter::new("add_verb"),
+            remove_verb: PerfCounter::new("remove_verb"),
+            update_verb: PerfCounter::new("update_verb"),
+            update_verb_at_index: PerfCounter::new("update_verb_at_index"),
+            update_verb_with_id: PerfCounter::new("update_verb_with_id"),
+            get_verb: PerfCounter::new("get_verb"),
+            get_verb_at_index: PerfCounter::new("get_verb_at_index"),
+            retrieve_verb: PerfCounter::new("retrieve_verb"),
+            find_method_verb_on: PerfCounter::new("find_method_verb_on"),
+            find_command_verb_on: PerfCounter::new("find_command_verb_on"),
+            parent_of: PerfCounter::new("parent_of"),
+            change_parent: PerfCounter::new("change_parent"),
+            children_of: PerfCounter::new("children_of"),
+            descendants_of: PerfCounter::new("descendants_of"),
+            ancestors_of: PerfCounter::new("ancestors_of"),
+            valid: PerfCounter::new("valid"),
+            names_of: PerfCounter::new("names_of"),
+            db_usage: PerfCounter::new("db_usage"),
+            commit: PerfCounter::new("commit"),
+            rollback: PerfCounter::new("rollback"),
         }
     }
 
-    pub fn all_counters(&self) -> Vec<&WSPerfCounter> {
+    pub fn all_counters(&self) -> Vec<&PerfCounter> {
         vec![
             &self.players,
             &self.owner_of,
@@ -561,20 +544,5 @@ impl WorldStatePerf {
             &self.commit,
             &self.rollback,
         ]
-    }
-}
-
-pub struct WsOpTimer<'a>(&'a WSPerfCounter, Instant);
-impl<'a> WsOpTimer<'a> {
-    pub fn new(perf: &'a WSPerfCounter) -> Self {
-        Self(perf, Instant::now())
-    }
-}
-
-impl Drop for WsOpTimer<'_> {
-    fn drop(&mut self) {
-        let elapsed = self.1.elapsed().as_micros();
-        self.0.invocations.add(1);
-        self.0.cumulative_duration_us.add(elapsed as isize);
     }
 }

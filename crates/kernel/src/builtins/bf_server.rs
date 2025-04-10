@@ -22,13 +22,18 @@ use tracing::{error, info, warn};
 use crate::bf_declare;
 use crate::builtins::BfErr::Code;
 use crate::builtins::BfRet::{Ret, VmInstr};
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::builtins::{
+    BfCallState, BfErr, BfRet, BuiltinFunction, bf_perf_counters, world_state_bf_err,
+};
+use crate::tasks::sched_counters;
+use crate::vm::exec_state::vm_counters;
 use crate::vm::{ExecutionResult, TaskSuspend};
 use moor_common::build::{PKG_VERSION, SHORT_COMMIT};
 use moor_common::model::{ObjFlag, WorldStateError};
 use moor_common::tasks::Event::{Present, Unpresent};
 use moor_common::tasks::TaskId;
 use moor_common::tasks::{NarrativeEvent, Presentation};
+use moor_common::util::PerfCounter;
 use moor_compiler::compile;
 use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
 use moor_var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
@@ -1250,6 +1255,27 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(load_server_options, load_server_options);
 
+fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
+    let mut result = vec![];
+    for c in counters {
+        let op_name = if use_symbols {
+            v_sym(c.operation)
+        } else {
+            v_str(c.operation.as_str())
+        };
+
+        result.push((
+            op_name,
+            v_list(&[
+                v_int(c.invocations.sum() as i64),
+                v_int(c.cumulative_duration_us.sum() as i64),
+            ]),
+        ));
+    }
+
+    v_map(&result)
+}
+
 fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1257,24 +1283,11 @@ fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    let mut result = Vec::new();
-    let bf_perf = bf_args.bf_perf.as_ref();
-    for bf in bf_perf {
-        let bf_name = if bf_args.config.use_symbols_in_builtins {
-            v_sym(bf.name)
-        } else {
-            v_str(bf.name.as_str())
-        };
-        result.push((
-            bf_name,
-            v_list(&[
-                v_int(bf.invocations.sum() as i64),
-                v_int(bf.cumulative_time_us.sum() as i64),
-            ]),
-        ));
-    }
-
-    Ok(Ret(v_map(&result)))
+    let counters = bf_perf_counters();
+    Ok(Ret(counter_map(
+        &counters.all_counters(),
+        bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
+    )))
 }
 bf_declare!(bf_counters, bf_bf_counters);
 
@@ -1286,25 +1299,10 @@ fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     let counters = bf_args.world_state.perf_counters();
-    let counters = counters.all_counters();
-    let mut result = Vec::new();
-    for c in counters {
-        let op_name = if bf_args.config.use_symbols_in_builtins {
-            v_sym(c.operation)
-        } else {
-            v_str(c.operation.as_str())
-        };
-
-        result.push((
-            op_name,
-            v_list(&[
-                v_int(c.invocations.sum() as i64),
-                v_int(c.cumulative_duration_us.sum() as i64),
-            ]),
-        ));
-    }
-
-    Ok(Ret(v_map(&result)))
+    Ok(Ret(counter_map(
+        &counters.all_counters(),
+        bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
+    )))
 }
 bf_declare!(db_counters, bf_db_counters);
 
@@ -1315,28 +1313,28 @@ fn bf_vm_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    let counters = &bf_args.vmperf_counters;
-    let counters = counters.all_counters();
-    let mut result = Vec::new();
-    for c in counters {
-        let op_name = if bf_args.config.use_symbols_in_builtins {
-            v_sym(c.operation)
-        } else {
-            v_str(c.operation.as_str())
-        };
-
-        result.push((
-            op_name,
-            v_list(&[
-                v_int(c.invocations.sum() as i64),
-                v_int(c.cumulative_duration_us.sum() as i64),
-            ]),
-        ));
-    }
-
-    Ok(Ret(v_map(&result)))
+    let counters = vm_counters();
+    Ok(Ret(counter_map(
+        &counters.all_counters(),
+        bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
+    )))
 }
 bf_declare!(vm_counters, bf_vm_counters);
+
+fn bf_sched_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    let counters = sched_counters();
+    Ok(Ret(counter_map(
+        &counters.all_counters(),
+        bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
+    )))
+}
+bf_declare!(sched_counters, bf_sched_counters);
 
 fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     /*Syntax:  force_input (obj <conn>, str <line> [, <at-front>])   => none
@@ -1411,6 +1409,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("bf_counters")] = Box::new(BfBfCounters {});
     builtins[offset_for_builtin("db_counters")] = Box::new(BfDbCounters {});
     builtins[offset_for_builtin("vm_counters")] = Box::new(BfVmCounters {});
+    builtins[offset_for_builtin("sched_counters")] = Box::new(BfSchedCounters {});
     builtins[offset_for_builtin("force_input")] = Box::new(BfForceInput {});
     builtins[offset_for_builtin("wait_task")] = Box::new(BfWaitTask {});
 

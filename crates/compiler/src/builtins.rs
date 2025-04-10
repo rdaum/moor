@@ -1181,6 +1181,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             implemented: true,
         },
         Builtin {
+            name: Symbol::mk("sched_counters"),
+            min_args: Q(0),
+            max_args: Q(0),
+            types: vec![],
+            implemented: true,
+        },
+        Builtin {
             name: Symbol::mk("wait_task"),
             min_args: Q(1),
             max_args: Q(1),

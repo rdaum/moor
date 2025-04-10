@@ -11,14 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry};
+use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters};
 use crate::config::FeaturesConfig;
 use crate::tasks::VerbCall;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::VMExecState;
 use crate::vm::activation::{Activation, Frame};
-use crate::vm::exec_state::{VMPerfCounterGuard, vm_counters};
+use crate::vm::exec_state::vm_counters;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork};
 use lazy_static::lazy_static;
@@ -26,6 +26,7 @@ use moor_common::matching::command_parse::ParsedCommand;
 use moor_common::model::VerbDef;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
+use moor_common::util::PerfTimerGuard;
 use moor_compiler::{BUILTINS, BuiltinId, Program};
 use moor_var::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
@@ -86,7 +87,7 @@ impl VMExecState {
         args: List,
     ) -> Result<ExecutionResult, Error> {
         let vm_counters = vm_counters();
-        let _t = VMPerfCounterGuard::new(&vm_counters.prepare_verb_dispatch);
+        let _t = PerfTimerGuard::new(&vm_counters.prepare_verb_dispatch);
         let (args, this, location) = match target.variant() {
             Variant::Obj(o) => (args, target.clone(), o.clone()),
             Variant::Flyweight(f) => (args, target.clone(), f.delegate().clone()),
@@ -205,7 +206,7 @@ impl VMExecState {
         args: &List,
     ) -> ExecutionResult {
         let vm_counters = vm_counters();
-        let _t = VMPerfCounterGuard::new(&vm_counters.prepare_pass_verb);
+        let _t = PerfTimerGuard::new(&vm_counters.prepare_pass_verb);
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
         let permissions = &self.top().permissions;
@@ -277,7 +278,7 @@ impl VMExecState {
     /// which is the new task's code, derived from a fork vector in the original task.
     pub(crate) fn exec_fork_vector(&mut self, fork_request: Fork) {
         let vm_counters = vm_counters();
-        let _t = VMPerfCounterGuard::new(&vm_counters.prepare_exec_fork_vector);
+        let _t = PerfTimerGuard::new(&vm_counters.prepare_exec_fork_vector);
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
 
@@ -383,12 +384,9 @@ impl VMExecState {
             args,
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
             config: exec_args.config.clone(),
-            bf_perf: exec_args.builtin_registry.perf.clone(),
-            vmperf_counters: vm_counters.clone(),
         };
-        exec_args.builtin_registry.perf[bf_id.0 as usize]
-            .invocations
-            .add(1);
+        let bf_counters = bf_perf_counters();
+        bf_counters.counter_for(bf_id).invocations.add(1);
         let elapsed_micros = start.elapsed().as_micros();
         vm_counters.prepare_builtin_function.invocations.add(1);
         vm_counters
@@ -398,8 +396,9 @@ impl VMExecState {
 
         let result = bf.call(&mut bf_args);
         let elapsed_micros = start.elapsed().as_micros();
-        exec_args.builtin_registry.perf[bf_id.0 as usize]
-            .cumulative_time_us
+        bf_counters
+            .counter_for(bf_id)
+            .cumulative_duration_us
             .add(elapsed_micros as isize);
         match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
@@ -446,8 +445,6 @@ impl VMExecState {
             args,
             task_scheduler_client: exec_args.task_scheduler_client.clone(),
             config: exec_args.config.clone(),
-            bf_perf: exec_args.builtin_registry.perf.clone(),
-            vmperf_counters: vm_counters().clone(),
         };
 
         let elapsed_micros = start.elapsed().as_micros();
@@ -462,8 +459,10 @@ impl VMExecState {
 
         let result = bf.call(&mut bf_args);
         let elapsed_micros = start.elapsed().as_micros();
-        exec_args.builtin_registry.perf[bf_id.0 as usize]
-            .cumulative_time_us
+        let bf_counters = bf_perf_counters();
+        bf_counters
+            .counter_for(bf_id)
+            .cumulative_duration_us
             .add(elapsed_micros as isize);
         match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),

@@ -14,10 +14,12 @@
 mod bitarray;
 mod bitenum;
 mod bitset;
+mod perf_counter;
 
 pub use bitarray::BitArray;
 pub use bitenum::BitEnum;
 pub use bitset::*;
+pub use perf_counter::{PerfCounter, PerfTimerGuard};
 
 /// Check `names` for matches with wildcard prefixes.
 /// e.g. "dname*c" will match for any of 'dname', 'dnamec'
