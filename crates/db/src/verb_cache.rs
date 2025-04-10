@@ -11,10 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use ahash::AHasher;
 use moor_common::model::{ObjSet, VerbDef};
 use moor_var::{Obj, Symbol};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 
 /// Very naive per-tx_management verb resolution cache.
 /// Not very aggressive here, it flushes on every verbdef mutation on any object, regardless of
@@ -27,7 +29,8 @@ use std::collections::HashMap;
 ///     Speed up named lookups more for when verbs have many names
 #[derive(Default)]
 pub(crate) struct VerbResolutionCache {
-    entries: RefCell<HashMap<(Obj, Symbol), Vec<VerbDef>>>,
+    #[allow(clippy::type_complexity)]
+    entries: RefCell<HashMap<(Obj, Symbol), Vec<VerbDef>, BuildHasherDefault<AHasher>>>,
 }
 
 impl VerbResolutionCache {
@@ -48,7 +51,8 @@ impl VerbResolutionCache {
 
 #[derive(Default)]
 pub struct AncestryCache {
-    entries: RefCell<HashMap<Obj, ObjSet>>,
+    #[allow(clippy::type_complexity)]
+    entries: RefCell<HashMap<Obj, ObjSet, BuildHasherDefault<AHasher>>>,
 }
 
 impl AncestryCache {

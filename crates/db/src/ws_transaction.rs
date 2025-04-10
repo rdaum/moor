@@ -16,6 +16,7 @@ use crate::moor_db::WorkingSets;
 use crate::tx_management::{TransactionalCache, TransactionalTable, Tx};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::{BytesHolder, Error, ObjAndUUIDHolder, StringHolder};
+use ahash::AHasher;
 use byteview::ByteView;
 use crossbeam_channel::Sender;
 use moor_common::model::{
@@ -27,7 +28,7 @@ use moor_common::util::BitEnum;
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use oneshot::TryRecvError;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::hash::Hash;
+use std::hash::{BuildHasherDefault, Hash};
 use std::sync::Arc;
 use std::sync::atomic::AtomicI64;
 use std::time::{Duration, Instant};
@@ -127,7 +128,7 @@ impl WorldStateTransaction {
         let ancestor_set = ancestors.into_iter().collect();
 
         // Fill in the cache.
-        self.ancestry_cache.fill(&obj, &ancestor_set);
+        self.ancestry_cache.fill(obj, &ancestor_set);
 
         Ok(ancestor_set)
     }
@@ -378,11 +379,13 @@ impl WorldStateTransaction {
         self.ancestry_cache.flush();
 
         // Now find the set of new ancestors.
-        let mut new_ancestors: HashSet<_> = self.ancestors_set(new_parent)?;
+        let mut new_ancestors: HashSet<_, BuildHasherDefault<AHasher>> =
+            self.ancestors_set(new_parent)?;
         new_ancestors.insert(new_parent.clone());
 
         // What's not shared?
-        let unshared_ancestors: HashSet<_> = old_ancestors.difference(&new_ancestors).collect();
+        let unshared_ancestors: HashSet<_, BuildHasherDefault<AHasher>> =
+            old_ancestors.difference(&new_ancestors).collect();
 
         // Go through and find all property definitions that were defined in the old ancestry graph that
         // no longer apply in the new.
@@ -411,7 +414,7 @@ impl WorldStateTransaction {
         // of my ancestors not shared by the new parent.
         let descendants = self.descendants(o)?;
 
-        let mut descendant_props = HashMap::new();
+        let mut descendant_props: HashMap<_, _, BuildHasherDefault<AHasher>> = HashMap::default();
         for c in descendants.iter() {
             let mut inherited_props = vec![];
             // Remove the set common.
@@ -1290,11 +1293,15 @@ impl WorldStateTransaction {
         }
     }
 
-    fn ancestors_up_to(&self, obj: &Obj, limit: &Obj) -> Result<HashSet<Obj>, WorldStateError> {
+    fn ancestors_up_to(
+        &self,
+        obj: &Obj,
+        limit: &Obj,
+    ) -> Result<HashSet<Obj, BuildHasherDefault<AHasher>>, WorldStateError> {
         if obj.eq(&NOTHING) || obj.eq(limit) {
-            return Ok(HashSet::new());
+            return Ok(HashSet::default());
         }
-        let mut ancestor_set = HashSet::new();
+        let mut ancestor_set = HashSet::default();
         let mut search_obj = obj.clone();
         loop {
             let ancestor = self.get_object_parent(&search_obj)?;
@@ -1306,11 +1313,14 @@ impl WorldStateTransaction {
         }
     }
 
-    fn ancestors_set(&self, obj: &Obj) -> Result<HashSet<Obj>, WorldStateError> {
+    fn ancestors_set(
+        &self,
+        obj: &Obj,
+    ) -> Result<HashSet<Obj, BuildHasherDefault<AHasher>>, WorldStateError> {
         if obj.eq(&NOTHING) {
-            return Ok(HashSet::new());
+            return Ok(HashSet::default());
         }
-        let mut ancestor_set = HashSet::new();
+        let mut ancestor_set = HashSet::default();
         let mut search_obj = obj.clone();
         loop {
             let ancestor = self.get_object_parent(&search_obj)?;

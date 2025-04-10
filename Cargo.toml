@@ -88,6 +88,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # General usefulness
+ahash = "0.8.11"
 binary-layout = "4.0"
 bincode = { version = "2.0", features = ["serde"] }
 byteview = "0.6"
