@@ -17,7 +17,7 @@ use crate::fjall_provider::FjallProvider;
 use crate::tx_management::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
 use crate::verb_cache::VerbResolutionCache;
 use crate::ws_transaction::WorldStateTransaction;
-use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
+use crate::{BytesHolder, CommitSet, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
@@ -54,7 +54,7 @@ pub struct MoorDB {
     sequences_partition: PartitionHandle,
 
     kill_switch: Arc<AtomicBool>,
-    commit_channel: Sender<(WorkingSets, oneshot::Sender<CommitResult>)>,
+    commit_channel: Sender<CommitSet>,
     usage_send: crossbeam_channel::Sender<oneshot::Sender<usize>>,
 
     verb_resolution_cache: RwLock<VerbResolutionCache>,
@@ -384,6 +384,7 @@ impl MoorDB {
             sequences: self.sequences.clone(),
             verb_resolution_cache,
             ancestry_cache: Default::default(),
+            has_mutations: false,
         }
     }
 
@@ -435,7 +436,7 @@ impl MoorDB {
 
     fn start_processing_thread(
         self: Arc<Self>,
-        receiver: crossbeam_channel::Receiver<(WorkingSets, oneshot::Sender<CommitResult>)>,
+        receiver: crossbeam_channel::Receiver<CommitSet>,
         usage_recv: crossbeam_channel::Receiver<oneshot::Sender<usize>>,
         kill_switch: Arc<AtomicBool>,
         config: DatabaseConfig,
@@ -482,7 +483,14 @@ impl MoorDB {
 
                     let msg = receiver.recv_timeout(Duration::from_millis(100));
                     let (ws, reply) = match msg {
-                        Ok(msg) => msg,
+                        Ok(CommitSet::CommitWrites(ws, reply)) => {
+                            (ws, reply)
+                        }
+                        Ok(CommitSet::CommitReadOnly(vc)) => {
+                            let mut vc_lock = this.verb_resolution_cache.write().unwrap();
+                            *vc_lock = vc;
+                            continue;
+                        }
                         Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
                             continue;
                         }

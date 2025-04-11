@@ -16,7 +16,7 @@ use crate::fjall_provider::FjallProvider;
 use crate::moor_db::WorkingSets;
 use crate::tx_management::{TransactionalCache, TransactionalTable, Tx};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
-use crate::{BytesHolder, Error, ObjAndUUIDHolder, StringHolder};
+use crate::{BytesHolder, CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
 use byteview::ByteView;
 use crossbeam_channel::Sender;
@@ -49,7 +49,7 @@ pub struct WorldStateTransaction {
 
     /// Channel to send our working set to the main thread for commit.
     /// Reply channel is used to send back the result of the commit.
-    pub(crate) commit_channel: Sender<(WorkingSets, oneshot::Sender<CommitResult>)>,
+    pub(crate) commit_channel: Sender<CommitSet>,
 
     /// Channel to request the current disk usage of the database.
     /// Note that for now the usage doesn't include the current pending transaction.
@@ -71,8 +71,16 @@ pub struct WorldStateTransaction {
 
     pub(crate) sequences: [Arc<AtomicI64>; 16],
 
+    /// Our fork of the global verb resolution cache. We fill or flush in our local copy, and
+    /// when we submit ours becomes the new global.
     pub(crate) verb_resolution_cache: VerbResolutionCache,
+
+    /// A (local-tx-only for now) cache of the ancestors of objects, as we look them up.
     pub(crate) ancestry_cache: AncestryCache,
+
+    /// True if this transaction has any *writes* at all. If not, our commits can be immediate
+    /// and successful.
+    pub(crate) has_mutations: bool,
 }
 
 fn upsert<Domain, Codomain>(
@@ -187,6 +195,7 @@ impl WorldStateTransaction {
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error setting object owner: {:?}", e))
             })?;
+        self.has_mutations = true;
         Ok(())
     }
 
@@ -198,6 +207,7 @@ impl WorldStateTransaction {
         upsert(&mut self.object_flags, obj.clone(), flags).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object flags: {:?}", e))
         })?;
+        self.has_mutations = true;
         Ok(())
     }
 
@@ -215,6 +225,7 @@ impl WorldStateTransaction {
         upsert(&mut self.object_name, obj.clone(), StringHolder(name)).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object name: {:?}", e))
         })?;
+        self.has_mutations = true;
         Ok(())
     }
 
@@ -241,6 +252,8 @@ impl WorldStateTransaction {
 
         let owner = attrs.owner().unwrap_or(id.clone());
         upsert(&mut self.object_owner, id.clone(), owner).expect("Unable to insert initial owner");
+
+        self.has_mutations = true;
 
         // Set initial name
         let name = attrs.name().unwrap_or_default();
@@ -283,6 +296,7 @@ impl WorldStateTransaction {
         for c in contents.iter() {
             self.set_object_location(&c, &NOTHING)?;
         }
+        self.has_mutations = true;
 
         // Now reparent all our immediate children to our parent.
         // This should properly move all properties all the way down the chain.
@@ -382,6 +396,10 @@ impl WorldStateTransaction {
         let mut new_ancestors: HashSet<_, BuildHasherDefault<AHasher>> =
             self.ancestors_set(new_parent)?;
         new_ancestors.insert(new_parent.clone());
+
+        // This is slightly pessimistic because if errors happened below, the write may not actually
+        // happen, but that's ok.
+        self.has_mutations = true;
 
         // What's not shared?
         let unshared_ancestors: HashSet<_, BuildHasherDefault<AHasher>> =
@@ -642,6 +660,7 @@ impl WorldStateTransaction {
         .map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object location: {:?}", e))
         })?;
+        self.has_mutations = true;
 
         // Now need to update contents in both.
         if let Some(old_location) = old_location {
@@ -838,6 +857,7 @@ impl WorldStateTransaction {
         upsert(&mut self.object_verbdefs, obj.clone(), verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
         })?;
+        self.has_mutations = true;
 
         if verb_attrs.binary.is_some() {
             upsert(
@@ -882,6 +902,7 @@ impl WorldStateTransaction {
         upsert(&mut self.object_verbdefs, oid.clone(), verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
         })?;
+        self.has_mutations = true;
 
         upsert(
             &mut self.object_verbs,
@@ -900,10 +921,11 @@ impl WorldStateTransaction {
         let verbdefs = verbdefs
             .with_removed(uuid)
             .ok_or_else(|| WorldStateError::VerbNotFound(location.clone(), format!("{}", uuid)))?;
-        self.verb_resolution_cache.flush();
         upsert(&mut self.object_verbdefs, location.clone(), verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
         })?;
+        self.verb_resolution_cache.flush();
+        self.has_mutations = true;
 
         self.object_verbs
             .delete(&ObjAndUUIDHolder::new(location, uuid))
@@ -934,6 +956,7 @@ impl WorldStateTransaction {
         .map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting property value: {:?}", e))
         })?;
+        self.has_mutations = true;
         Ok(())
     }
 
@@ -982,6 +1005,7 @@ impl WorldStateTransaction {
         .map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting property definition: {:?}", e))
         })?;
+        self.has_mutations = true;
 
         // If we have an initial value, set it, but just on ourselves. Descendants start out clear.
         if let Some(value) = value {
@@ -1041,6 +1065,7 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error updating property: {:?}", e))
             })?;
         }
+        self.has_mutations = true;
 
         // If flags or perms updated, do that.
         if new_flags.is_some() || new_owner.is_some() {
@@ -1074,6 +1099,7 @@ impl WorldStateTransaction {
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error clearing property value: {:?}", e))
             })?;
+        self.has_mutations = true;
         Ok(())
     }
 
@@ -1089,6 +1115,7 @@ impl WorldStateTransaction {
                 })?;
             }
         }
+        self.has_mutations = true;
         Ok(())
     }
 
@@ -1199,6 +1226,15 @@ impl WorldStateTransaction {
         let counters = db_counters();
         let commit_start = Instant::now();
 
+        // Did we have any mutations at all?  If not, just fire and forget the verb cache and
+        // return immediate success.
+        if !self.has_mutations {
+            self.commit_channel
+                .send(CommitSet::CommitReadOnly(self.verb_resolution_cache))
+                .expect("Unable to send commit request for read-only transaction");
+            return Ok(CommitResult::Success);
+        }
+
         // Pull out the working sets
         let _t = PerfTimerGuard::new(&counters.tx_commit_mk_working_set_phase);
 
@@ -1238,7 +1274,9 @@ impl WorldStateTransaction {
         drop(_t);
         let _t = PerfTimerGuard::new(&counters.tx_commit_send_working_set_phase);
         let (send, reply) = oneshot::channel();
-        self.commit_channel.send((ws, send)).unwrap();
+        self.commit_channel
+            .send(CommitSet::CommitWrites(ws, send))
+            .unwrap();
 
         // Wait for the reply.
         drop(_t);

@@ -12,7 +12,7 @@
 //
 
 use byteview::ByteView;
-use moor_common::model::WorldStateSource;
+use moor_common::model::{CommitResult, WorldStateSource};
 use moor_common::model::{WorldState, WorldStateError};
 use moor_var::{AsByteBuffer, DecodingError, EncodingError, Obj};
 use std::cmp::Ordering;
@@ -31,12 +31,13 @@ mod moor_db_tests;
 mod ws_transaction;
 
 use crate::db_worldstate::DbWorldState;
-use crate::moor_db::MoorDB;
+use crate::moor_db::{MoorDB, WorkingSets};
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
 mod tx_management;
 mod verb_cache;
 
+use crate::verb_cache::VerbResolutionCache;
 pub use tx_management::Provider;
 pub use tx_management::{Error, Timestamp, TransactionalCache, TransactionalTable, Tx, WorkingSet};
 
@@ -274,6 +275,14 @@ impl AsByteBuffer for ObjAndUUIDHolder {
         bytes.extend_from_slice(self.obj.as_bytes()?.as_ref());
         Ok(ByteView::from(bytes))
     }
+}
+
+enum CommitSet {
+    /// Commit the working sets of a transaction.
+    CommitWrites(WorkingSets, oneshot::Sender<CommitResult>),
+    /// This is a read only commit, we didn't do any mutations. We can just fire and forget,
+    /// just (maybe) updating the verb cache on the DB side, no need for locks, flushes, anything.
+    CommitReadOnly(VerbResolutionCache),
 }
 
 #[cfg(test)]
