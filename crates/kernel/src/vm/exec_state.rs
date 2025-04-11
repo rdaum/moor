@@ -14,13 +14,13 @@
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_var::NOTHING;
+use moor_var::{v_obj, Var};
 use moor_var::{Obj, Symbol};
-use moor_var::{Var, v_obj};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use crate::PhantomUnsync;
 use crate::vm::activation::{Activation, Frame};
+use crate::PhantomUnsync;
 use moor_common::tasks::TaskId;
 use moor_common::util::PerfCounter;
 
@@ -205,6 +205,7 @@ pub struct VmCounters {
     pub unwind_stack: PerfCounter,
     pub get_property: PerfCounter,
     pub find_line_no: PerfCounter,
+    pub opcode_execution: PerfCounter,
 }
 
 impl VmCounters {
@@ -218,6 +219,7 @@ impl VmCounters {
             unwind_stack: PerfCounter::new("unwind_stack"),
             get_property: PerfCounter::new("get_property"),
             find_line_no: PerfCounter::new("find_line_no"),
+            opcode_execution: PerfCounter::new("opcode_execution"),
         }
     }
 
@@ -231,6 +233,7 @@ impl VmCounters {
             &self.unwind_stack,
             &self.get_property,
             &self.find_line_no,
+            &self.opcode_execution,
         ]
     }
 }
