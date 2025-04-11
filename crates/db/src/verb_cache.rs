@@ -19,10 +19,6 @@ use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::RwLock;
 
-/// Lots of room for improvement here:
-///     Keep a separate global cache which can be shared between transactions
-///     Flush entries for an object only if inheritance chain touched
-///     Speed up named lookups more for when verbs have many names
 pub(crate) struct VerbResolutionCache {
     inner: RwLock<Inner>,
 }
@@ -97,9 +93,13 @@ impl VerbResolutionCache {
     pub(crate) fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbs: &[VerbDef]) {
         let mut inner = self.inner.write().unwrap();
         inner.version += 1;
-        inner
-            .entries
-            .insert((obj.clone(), *verb), Some(verbs.to_vec()));
+        inner.entries.entry((obj.clone(), *verb)).and_modify(|e| {
+            if let Some(e) = e {
+                e.extend_from_slice(verbs);
+            } else {
+                *e = Some(verbs.to_vec());
+            }
+        });
     }
 
     pub(crate) fn fill_miss(&self, obj: &Obj, verb: &Symbol) {

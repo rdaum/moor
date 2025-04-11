@@ -14,6 +14,7 @@
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::moor_db::WorkingSets;
+use crate::prop_cache::PropResolutionCache;
 use crate::tx_management::{TransactionalCache, TransactionalTable, Tx};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::{BytesHolder, CommitSet, Error, ObjAndUUIDHolder, StringHolder};
@@ -26,11 +27,11 @@ use moor_common::model::{
     WorldStateError,
 };
 use moor_common::util::{BitEnum, PerfTimerGuard};
-use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
+use moor_var::{v_none, AsByteBuffer, Obj, Symbol, Var, NOTHING};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hash};
-use std::sync::Arc;
 use std::sync::atomic::AtomicI64;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::warn;
 use uuid::Uuid;
@@ -74,6 +75,9 @@ pub struct WorldStateTransaction {
     /// Our fork of the global verb resolution cache. We fill or flush in our local copy, and
     /// when we submit ours becomes the new global.
     pub(crate) verb_resolution_cache: VerbResolutionCache,
+
+    /// Same as above but for properties.
+    pub(crate) prop_resolution_cache: PropResolutionCache,
 
     /// A (local-tx-only for now) cache of the ancestors of objects, as we look them up.
     pub(crate) ancestry_cache: AncestryCache,
@@ -284,6 +288,7 @@ impl WorldStateTransaction {
 
         self.verb_resolution_cache.flush();
         self.ancestry_cache.flush();
+        self.prop_resolution_cache.flush();
 
         // Refill ancestry cache for this object, at least.
         // TODO: We could probably be more aggressive here, and fill ancestry for our ancestors.
@@ -372,6 +377,7 @@ impl WorldStateTransaction {
 
         self.verb_resolution_cache.flush();
         self.ancestry_cache.flush();
+        self.prop_resolution_cache.flush();
 
         Ok(())
     }
@@ -405,6 +411,8 @@ impl WorldStateTransaction {
         // This is slightly pessimistic because if errors happened below, the write may not actually
         // happen, but that's ok.
         self.has_mutations = true;
+        self.verb_resolution_cache.flush();
+        self.prop_resolution_cache.flush();
 
         // What's not shared?
         let unshared_ancestors: HashSet<_, BuildHasherDefault<AHasher>> =
@@ -548,8 +556,6 @@ impl WorldStateTransaction {
                 .expect("Unable to update property flags");
             }
         }
-
-        self.verb_resolution_cache.flush();
 
         Ok(())
     }
@@ -1011,6 +1017,7 @@ impl WorldStateTransaction {
             WorldStateError::DatabaseError(format!("Error setting property definition: {:?}", e))
         })?;
         self.has_mutations = true;
+        self.prop_resolution_cache.flush();
 
         // If we have an initial value, set it, but just on ourselves. Descendants start out clear.
         if let Some(value) = value {
@@ -1071,6 +1078,7 @@ impl WorldStateTransaction {
             })?;
         }
         self.has_mutations = true;
+        self.prop_resolution_cache.flush();
 
         // If flags or perms updated, do that.
         if new_flags.is_some() || new_owner.is_some() {
@@ -1121,6 +1129,7 @@ impl WorldStateTransaction {
             }
         }
         self.has_mutations = true;
+        self.prop_resolution_cache.flush();
         Ok(())
     }
 
@@ -1161,23 +1170,51 @@ impl WorldStateTransaction {
         Ok(perms)
     }
 
-    pub fn resolve_property(
-        &self,
-        obj: &Obj,
-        name: Symbol,
-    ) -> Result<(PropDef, Var, PropPerms, bool), WorldStateError> {
+    fn find_property_by_name(&self, obj: &Obj, name: Symbol) -> Option<PropDef> {
+        // Check the cache first.
+        if let Some(cache_result) = self.prop_resolution_cache.lookup(obj, &name) {
+            // We recorded a miss here before..
+            let properties = cache_result?;
+            for prop in properties.iter() {
+                if prop.matches_name(name) {
+                    return Some(prop.clone());
+                }
+            }
+        }
+
         // Walk up the inheritance tree looking for the property definition.
-        let ancestors = self.ancestors(obj, true)?;
+        let Ok(ancestors) = self.ancestors(obj, true) else {
+            return None;
+        };
         let mut found_propdef = None;
         for search_obj in ancestors.iter() {
-            let propdef = self.get_properties(&search_obj)?.find_first_named(name);
+            let Ok(propdefs) = self.get_properties(&search_obj) else {
+                return None;
+            };
 
+            let propdef = propdefs.find_first_named(name);
             if let Some(propdef) = propdef {
                 found_propdef = Some(propdef);
                 break;
             }
         }
         let Some(propdef) = found_propdef else {
+            self.prop_resolution_cache.fill_miss(obj, &name);
+            return None;
+        };
+
+        // Cache it
+        self.prop_resolution_cache.fill_hit(obj, &name, &propdef);
+
+        Some(propdef)
+    }
+
+    pub fn resolve_property(
+        &self,
+        obj: &Obj,
+        name: Symbol,
+    ) -> Result<(PropDef, Var, PropPerms, bool), WorldStateError> {
+        let Some(propdef) = self.find_property_by_name(obj, name) else {
             return Err(WorldStateError::PropertyNotFound(
                 obj.clone(),
                 name.to_string(),
@@ -1231,9 +1268,13 @@ impl WorldStateTransaction {
         // Did we have any mutations at all?  If not, just fire and forget the verb cache and
         // return immediate success.
         if !self.has_mutations {
-            if self.verb_resolution_cache.has_changed() {
+            if self.verb_resolution_cache.has_changed() || self.prop_resolution_cache.has_changed()
+            {
                 self.commit_channel
-                    .send(CommitSet::CommitReadOnly(self.verb_resolution_cache))
+                    .send(CommitSet::CommitReadOnly(
+                        self.verb_resolution_cache,
+                        self.prop_resolution_cache,
+                    ))
                     .expect("Unable to send commit request for read-only transaction");
             }
             return Ok(CommitResult::Success);
@@ -1270,6 +1311,7 @@ impl WorldStateTransaction {
             object_propvalues,
             object_propflags,
             verb_resolution_cache: self.verb_resolution_cache,
+            prop_resolution_cache: self.prop_resolution_cache,
         };
 
         let tuple_count = ws.total_tuples();
