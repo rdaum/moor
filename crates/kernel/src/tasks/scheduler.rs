@@ -352,6 +352,8 @@ impl Scheduler {
 
 impl Scheduler {
     fn handle_scheduler_msg(&mut self, msg: SchedulerClientMsg) {
+        let counters = sched_counters();
+        let _t = PerfTimerGuard::new(&counters.handle_scheduler_msg);
         let task_q = &mut self.task_q;
         match msg {
             SchedulerClientMsg::SubmitCommandTask {
@@ -893,6 +895,9 @@ impl Scheduler {
     /// Note: this function should never be allowed to panic, as it is called from the scheduler main loop.
     #[instrument(skip(self))]
     fn handle_task_msg(&mut self, task_id: TaskId, msg: TaskControlMsg) {
+        let counters = sched_counters();
+        let _t = PerfTimerGuard::new(&counters.handle_task_msg);
+
         let task_q = &mut self.task_q;
         match msg {
             TaskControlMsg::TaskSuccess(value) => {

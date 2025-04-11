@@ -203,6 +203,7 @@ impl VmHost {
         builtin_registry: Arc<BuiltinRegistry>,
         config: FeaturesConfig,
     ) -> VMHostResponse {
+        let counters = vm_counters();
         self.vm_exec_state.task_id = task_id;
 
         let exec_params = VmExecParams {
@@ -277,6 +278,8 @@ impl VmHost {
                     call,
                     command,
                 } => {
+                    let _t = PerfTimerGuard::new(&counters.start_dispatch_verb);
+
                     let program = Self::decode_program(resolved_verb.binary_type(), binary);
 
                     let call_request = VerbExecutionRequest {
