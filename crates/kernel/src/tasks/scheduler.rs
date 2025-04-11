@@ -18,8 +18,8 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::BuildHasherDefault;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread::yield_now;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -28,7 +28,7 @@ use uuid::Uuid;
 use moor_common::model::{BinaryType, HasUuid, ObjectRef, ValSet, VerbAttrs};
 use moor_common::model::{CommitResult, Perms};
 use moor_common::model::{WorldState, WorldStateError};
-use moor_compiler::{Program, compile, program_to_tree, to_literal, unparse};
+use moor_compiler::{compile, program_to_tree, to_literal, unparse, Program};
 use moor_db::Database;
 
 use crate::builtins::BuiltinRegistry;
@@ -41,10 +41,10 @@ use crate::tasks::task::Task;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::{
-    DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
-    DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart, sched_counters,
+    sched_counters, ServerOptions, TaskHandle, TaskResult,
+    TaskStart, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS, DEFAULT_MAX_STACK_DEPTH,
 };
-use crate::textdump::{TextdumpWriter, make_textdump};
+use crate::textdump::{make_textdump, TextdumpWriter};
 use crate::vm::{Fork, TaskSuspend};
 use moor_common::matching::command_parse::ParseMatcher;
 use moor_common::matching::match_env::MatchEnvironmentParseMatcher;
@@ -58,8 +58,8 @@ use moor_common::tasks::{
 };
 use moor_common::util::PerfTimerGuard;
 use moor_var::Error::{E_INVARG, E_INVIND, E_PERM};
+use moor_var::{v_err, v_int, v_none, v_obj, v_string, List, Symbol, Var};
 use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
-use moor_var::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};
 use moor_var::{Obj, Variant};
 
 const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
@@ -203,7 +203,8 @@ impl Scheduler {
         self.reload_server_options();
         while self.running {
             // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
-            let to_wake = self.task_q.suspended.collect_wake_tasks();
+            let active_tasks = self.task_q.tasks.keys().copied().collect::<Vec<_>>();
+            let to_wake = self.task_q.suspended.collect_wake_tasks(&active_tasks);
             for sr in to_wake {
                 let task_id = sr.task.task_id;
                 if let Err(e) = self.task_q.resume_task_thread(
