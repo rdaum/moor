@@ -26,11 +26,11 @@ use moor_common::model::{
     WorldStateError,
 };
 use moor_common::util::{BitEnum, PerfTimerGuard};
-use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
+use moor_var::{v_none, AsByteBuffer, Obj, Symbol, Var, NOTHING};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hash};
-use std::sync::Arc;
 use std::sync::atomic::AtomicI64;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::warn;
 use uuid::Uuid;
@@ -1229,9 +1229,11 @@ impl WorldStateTransaction {
         // Did we have any mutations at all?  If not, just fire and forget the verb cache and
         // return immediate success.
         if !self.has_mutations {
-            self.commit_channel
-                .send(CommitSet::CommitReadOnly(self.verb_resolution_cache))
-                .expect("Unable to send commit request for read-only transaction");
+            if self.verb_resolution_cache.has_changed() {
+                self.commit_channel
+                    .send(CommitSet::CommitReadOnly(self.verb_resolution_cache))
+                    .expect("Unable to send commit request for read-only transaction");
+            }
             return Ok(CommitResult::Success);
         }
 
