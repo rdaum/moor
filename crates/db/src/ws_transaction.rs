@@ -27,11 +27,11 @@ use moor_common::model::{
     WorldStateError,
 };
 use moor_common::util::{BitEnum, PerfTimerGuard};
-use moor_var::{v_none, AsByteBuffer, Obj, Symbol, Var, NOTHING};
+use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hash};
-use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
+use std::sync::atomic::AtomicI64;
 use std::time::{Duration, Instant};
 use tracing::warn;
 use uuid::Uuid;

@@ -206,6 +206,7 @@ pub struct VmCounters {
     pub get_property: PerfCounter,
     pub find_line_no: PerfCounter,
     pub opcode_execution: PerfCounter,
+    pub start_dispatch_verb: PerfCounter,
 }
 
 impl VmCounters {
@@ -220,6 +221,7 @@ impl VmCounters {
             get_property: PerfCounter::new("get_property"),
             find_line_no: PerfCounter::new("find_line_no"),
             opcode_execution: PerfCounter::new("opcode_execution"),
+            start_dispatch_verb: PerfCounter::new("start_dispatch_verb"),
         }
     }
 

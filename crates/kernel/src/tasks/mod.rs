@@ -153,6 +153,8 @@ pub struct SchedulerPerfCounters {
     fork_task: PerfCounter,
     suspend_task: PerfCounter,
     task_exception: PerfCounter,
+    handle_scheduler_msg: PerfCounter,
+    handle_task_msg: PerfCounter,
 }
 
 impl Default for SchedulerPerfCounters {
@@ -180,6 +182,8 @@ impl SchedulerPerfCounters {
             fork_task: PerfCounter::new("fork_task"),
             suspend_task: PerfCounter::new("suspend_task"),
             task_exception: PerfCounter::new("task_exception"),
+            handle_scheduler_msg: PerfCounter::new("handle_scheduler_msg"),
+            handle_task_msg: PerfCounter::new("handle_task_msg"),
         }
     }
 
@@ -201,6 +205,8 @@ impl SchedulerPerfCounters {
             &self.fork_task,
             &self.suspend_task,
             &self.task_exception,
+            &self.handle_scheduler_msg,
+            &self.handle_task_msg,
         ]
     }
 }
