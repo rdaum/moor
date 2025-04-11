@@ -14,6 +14,7 @@
 use crate::config::DatabaseConfig;
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
+use crate::prop_cache::PropResolutionCache;
 use crate::tx_management::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
 use crate::verb_cache::VerbResolutionCache;
 use crate::ws_transaction::WorldStateTransaction;
@@ -58,6 +59,7 @@ pub struct MoorDB {
     usage_send: crossbeam_channel::Sender<oneshot::Sender<usize>>,
 
     verb_resolution_cache: RwLock<VerbResolutionCache>,
+    prop_resolution_cache: RwLock<PropResolutionCache>,
 }
 
 type GC<Domain, Codomain> =
@@ -79,6 +81,7 @@ pub(crate) struct WorkingSets {
     pub(crate) object_propvalues: WorkingSet<ObjAndUUIDHolder, Var>,
     pub(crate) object_propflags: WorkingSet<ObjAndUUIDHolder, PropPerms>,
     pub(crate) verb_resolution_cache: VerbResolutionCache,
+    pub(crate) prop_resolution_cache: PropResolutionCache,
 }
 
 impl WorkingSets {
@@ -326,6 +329,8 @@ impl MoorDB {
         let (usage_send, usage_recv) = crossbeam_channel::unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
         let verb_resolution_cache = RwLock::new(VerbResolutionCache::new());
+        let prop_resolution_cache = RwLock::new(PropResolutionCache::new());
+
         let s = Arc::new(Self {
             monotonic: AtomicU64::new(start_tx_num),
             object_location,
@@ -347,6 +352,7 @@ impl MoorDB {
             kill_switch: kill_switch.clone(),
             keyspace,
             verb_resolution_cache,
+            prop_resolution_cache,
         });
 
         s.clone()
@@ -365,6 +371,9 @@ impl MoorDB {
 
         let vc_lock = self.verb_resolution_cache.read().unwrap();
         let verb_resolution_cache = vc_lock.fork();
+
+        let prop_lock = self.prop_resolution_cache.read().unwrap();
+        let prop_resolution_cache = prop_lock.fork();
         WorldStateTransaction {
             tx,
             commit_channel: self.commit_channel.clone(),
@@ -383,6 +392,7 @@ impl MoorDB {
             object_propflags: self.object_propflags.clone().start(&tx),
             sequences: self.sequences.clone(),
             verb_resolution_cache,
+            prop_resolution_cache,
             ancestry_cache: Default::default(),
             has_mutations: false,
         }
@@ -486,9 +496,11 @@ impl MoorDB {
                         Ok(CommitSet::CommitWrites(ws, reply)) => {
                             (ws, reply)
                         }
-                        Ok(CommitSet::CommitReadOnly(vc)) => {
+                        Ok(CommitSet::CommitReadOnly(vc, pc )) => {
                             let mut vc_lock = this.verb_resolution_cache.write().unwrap();
                             *vc_lock = vc;
+                            let mut pc_lock = this.prop_resolution_cache.write().unwrap();
+                            *pc_lock = pc;
                             continue;
                         }
                         Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
@@ -724,6 +736,8 @@ impl MoorDB {
                     {
                         let mut vc_lock = this.verb_resolution_cache.write().unwrap();
                         *vc_lock = ws.verb_resolution_cache;
+                        let mut pc_lock = this.prop_resolution_cache.write().unwrap();
+                        *pc_lock = ws.prop_resolution_cache;
                     }
 
                     let _t = PerfTimerGuard::new(&counters.commit_write_phase);

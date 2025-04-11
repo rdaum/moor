@@ -34,9 +34,11 @@ use crate::db_worldstate::DbWorldState;
 use crate::moor_db::{MoorDB, WorkingSets};
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
+mod prop_cache;
 mod tx_management;
 mod verb_cache;
 
+use crate::prop_cache::PropResolutionCache;
 use crate::verb_cache::VerbResolutionCache;
 pub use tx_management::Provider;
 pub use tx_management::{Error, Timestamp, TransactionalCache, TransactionalTable, Tx, WorkingSet};
@@ -282,7 +284,7 @@ enum CommitSet {
     CommitWrites(WorkingSets, oneshot::Sender<CommitResult>),
     /// This is a read only commit, we didn't do any mutations. We can just fire and forget,
     /// just (maybe) updating the verb cache on the DB side, no need for locks, flushes, anything.
-    CommitReadOnly(VerbResolutionCache),
+    CommitReadOnly(VerbResolutionCache, PropResolutionCache),
 }
 
 #[cfg(test)]
