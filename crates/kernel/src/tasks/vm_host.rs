@@ -27,26 +27,28 @@ use moor_common::model::{VerbDef, WorldState};
 use moor_common::tasks::{AbortLimitReason, TaskId};
 use moor_compiler::Name;
 use moor_compiler::Program;
-use moor_compiler::{CompileOptions, compile};
+use moor_compiler::{compile, CompileOptions};
 use moor_var::Error::E_MAXREC;
 use moor_var::Var;
+use moor_var::{v_none, Symbol};
 use moor_var::{AsByteBuffer, List};
 use moor_var::{ErrorPack, Obj};
-use moor_var::{Symbol, v_none};
 
-use crate::PhantomUnsync;
 use crate::builtins::BuiltinRegistry;
 use crate::config::FeaturesConfig;
-use crate::tasks::VerbCall;
 use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
-use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
+use crate::tasks::VerbCall;
 use crate::vm::activation::Frame;
+use crate::vm::exec_state::vm_counters;
 use crate::vm::moo_execute::moo_frame_execute;
 use crate::vm::vm_call::{VerbProgram, VmExecParams};
+use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::vm::{ExecutionResult, Fork, VMHostResponse, VerbExecutionRequest};
 use crate::vm::{FinallyReason, VMExecState};
+use crate::PhantomUnsync;
 use moor_common::matching::command_parse::ParsedCommand;
+use moor_common::util::PerfTimerGuard;
 
 /// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.
 pub struct VmHost {
@@ -388,6 +390,8 @@ impl VmHost {
 
         let (result, new_tick_count) = match &mut activation.frame {
             Frame::Moo(fr) => {
+                let perfc = vm_counters();
+                let _t = PerfTimerGuard::new(&perfc.opcode_execution);
                 let result = moo_frame_execute(
                     tick_slice,
                     &mut tick_count,

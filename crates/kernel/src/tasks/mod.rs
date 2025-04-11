@@ -142,6 +142,7 @@ pub struct SchedulerPerfCounters {
     retry_task: PerfCounter,
     kill_task: PerfCounter,
     vm_dispatch: PerfCounter,
+    post_vm_dispatch: PerfCounter,
     setup_task: PerfCounter,
     start_command: PerfCounter,
     parse_command: PerfCounter,
@@ -168,6 +169,7 @@ impl SchedulerPerfCounters {
             retry_task: PerfCounter::new("retry_task"),
             kill_task: PerfCounter::new("kill_task"),
             vm_dispatch: PerfCounter::new("vm_dispatch"),
+            post_vm_dispatch: PerfCounter::new("post_vm_dispatch"),
             setup_task: PerfCounter::new("setup_task"),
             start_command: PerfCounter::new("start_command"),
             parse_command: PerfCounter::new("parse_command"),
@@ -188,6 +190,7 @@ impl SchedulerPerfCounters {
             &self.retry_task,
             &self.kill_task,
             &self.vm_dispatch,
+            &self.post_vm_dispatch,
             &self.setup_task,
             &self.start_command,
             &self.parse_command,
@@ -208,15 +211,15 @@ pub mod vm_test_utils {
 
     use moor_common::model::WorldState;
     use moor_compiler::Program;
+    use moor_var::{v_obj, Symbol};
     use moor_var::{List, SYSTEM_OBJECT};
     use moor_var::{Obj, Var};
-    use moor_var::{Symbol, v_obj};
 
     use crate::builtins::BuiltinRegistry;
     use crate::config::FeaturesConfig;
-    use crate::tasks::VerbCall;
     use crate::tasks::sessions::Session;
     use crate::tasks::vm_host::VmHost;
+    use crate::tasks::VerbCall;
     use crate::vm::VMHostResponse;
     use moor_common::tasks::Exception;
 
@@ -329,7 +332,7 @@ pub mod scheduler_test_utils {
     use std::time::Duration;
 
     use moor_common::tasks::{CommandError, SchedulerError};
-    use moor_var::{Error::E_VERBNF, Obj, SYSTEM_OBJECT, Var};
+    use moor_var::{Error::E_VERBNF, Obj, Var, SYSTEM_OBJECT};
 
     use super::{TaskHandle, TaskResult};
     use crate::config::FeaturesConfig;
