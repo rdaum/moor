@@ -158,7 +158,7 @@ impl SuspensionQ {
     }
 
     /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
-    pub(crate) fn collect_wake_tasks(&mut self) -> Vec<SuspendedTask> {
+    pub(crate) fn collect_wake_tasks(&mut self, running_tasks: &[TaskId]) -> Vec<SuspendedTask> {
         let now = Instant::now();
         let mut to_wake = vec![];
         for task in self.tasks.values() {
@@ -169,7 +169,7 @@ impl SuspensionQ {
                     }
                 }
                 WakeCondition::Task(task_id) => {
-                    if !self.tasks.contains_key(&task_id) {
+                    if !self.tasks.contains_key(&task_id) && !running_tasks.contains(&task_id) {
                         to_wake.push(task.task.task_id);
                     }
                 }
