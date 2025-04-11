@@ -12,6 +12,7 @@
 //
 
 use crate::config::DatabaseConfig;
+use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::tx_management::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
 use crate::ws_transaction::WorldStateTransaction;
@@ -19,7 +20,7 @@ use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
-use moor_common::util::BitEnum;
+use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use std::ops::Deref;
 use std::path::Path;
@@ -438,6 +439,8 @@ impl MoorDB {
             .spawn(move || {
                 let mut last_eviction_check = std::time::Instant::now();
                 loop {
+                    let counters = db_counters();
+
                     if kill_switch.load(std::sync::atomic::Ordering::SeqCst) {
                         break;
                     }
@@ -479,6 +482,8 @@ impl MoorDB {
                             break;
                         }
                     };
+
+                    let _t = PerfTimerGuard::new(&counters.commit_check_phase);
 
                     let start_time = Instant::now();
 
@@ -599,6 +604,10 @@ impl MoorDB {
                         continue;
                     };
 
+                    drop(_t);
+
+                    let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
+
                     // Warn if the duration of the check phase took a really long time...
                     let apply_start = Instant::now();
                     if start_time.elapsed() > Duration::from_secs(5) {
@@ -684,6 +693,12 @@ impl MoorDB {
                         );
                     }
 
+                    drop(_t);
+
+                    // No need to block the caller while we're doing the final write to disk.
+                    reply.send(CommitResult::Success).unwrap();
+
+                    let _t = PerfTimerGuard::new(&counters.commit_write_phase);
                     // Now write out the current state of the sequences to the seq partition.
                     // Start by making sure that the monotonic sequence is written out.
                     self.sequences[15].store(
@@ -704,7 +719,6 @@ impl MoorDB {
                         .persist(PersistMode::SyncAll)
                         .expect("persist failed");
 
-                    reply.send(CommitResult::Success).unwrap();
 
                     if start_time.elapsed() > Duration::from_secs(5) {
                         warn!(
