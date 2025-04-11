@@ -110,7 +110,7 @@ similar = "*"
 similar-asserts = "*"
 strum = { version = "0.27", features = ["derive"] }
 ustr = "1.0"
-uuid = { version = "1.16", features = ["v4"] }
+uuid = { version = "1.16", features = ["v4", "serde"] }
 xml-rs = "0.8"
 
 ## Required for MOO builtins.
