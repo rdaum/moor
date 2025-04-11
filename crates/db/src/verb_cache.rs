@@ -12,7 +12,7 @@
 //
 
 use ahash::AHasher;
-use moor_common::model::{ObjSet, VerbDef};
+use moor_common::model::VerbDef;
 use moor_var::{Obj, Symbol};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -112,11 +112,11 @@ impl VerbResolutionCache {
 #[derive(Default)]
 pub struct AncestryCache {
     #[allow(clippy::type_complexity)]
-    entries: RefCell<HashMap<Obj, ObjSet, BuildHasherDefault<AHasher>>>,
+    entries: RefCell<HashMap<Obj, Vec<Obj>, BuildHasherDefault<AHasher>>>,
 }
 
 impl AncestryCache {
-    pub(crate) fn lookup(&self, obj: &Obj) -> Option<ObjSet> {
+    pub(crate) fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
         self.entries.borrow().get(obj).cloned()
     }
 
@@ -124,9 +124,9 @@ impl AncestryCache {
         self.entries.borrow_mut().clear();
     }
 
-    pub(crate) fn fill(&self, obj: &Obj, ancestors: &ObjSet) {
+    pub(crate) fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
         self.entries
             .borrow_mut()
-            .insert(obj.clone(), ancestors.clone());
+            .insert(obj.clone(), ancestors.to_vec());
     }
 }

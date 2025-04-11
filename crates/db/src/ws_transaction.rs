@@ -26,11 +26,11 @@ use moor_common::model::{
     WorldStateError,
 };
 use moor_common::util::{BitEnum, PerfTimerGuard};
-use moor_var::{v_none, AsByteBuffer, Obj, Symbol, Var, NOTHING};
+use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hash};
-use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
+use std::sync::atomic::AtomicI64;
 use std::time::{Duration, Instant};
 use tracing::warn;
 use uuid::Uuid;
@@ -109,34 +109,39 @@ impl WorldStateTransaction {
 
     pub fn ancestors(&self, obj: &Obj, include_self: bool) -> Result<ObjSet, WorldStateError> {
         // Check ancestry cache first.
-        if let Some(ancestors) = self.ancestry_cache.lookup(obj) {
-            return Ok(ancestors);
-        }
-
-        let mut ancestors = vec![];
-        if include_self {
-            ancestors.push(obj.clone());
-        }
-        let mut current = obj.clone();
-        loop {
-            match self.object_parent.get(&current) {
-                Ok(Some(parent)) => {
-                    current = parent;
-                    if current.is_nothing() {
-                        break;
+        let results_sans_self = match self.ancestry_cache.lookup(obj) {
+            Some(hit) => hit,
+            None => {
+                let mut ancestors = vec![];
+                let mut current = obj.clone();
+                loop {
+                    match self.object_parent.get(&current) {
+                        Ok(Some(parent)) => {
+                            current = parent;
+                            if current.is_nothing() {
+                                break;
+                            }
+                            ancestors.push(current.clone());
+                        }
+                        Ok(None) => break,
+                        Err(e) => {
+                            panic!("Error getting parent: {:?}", e);
+                        }
                     }
-                    ancestors.push(current.clone());
                 }
-                Ok(None) => break,
-                Err(e) => {
-                    panic!("Error getting parent: {:?}", e);
-                }
-            }
-        }
-        let ancestor_set = ancestors.into_iter().collect();
+                // Fill in the cache.
+                self.ancestry_cache.fill(obj, &ancestors);
 
-        // Fill in the cache.
-        self.ancestry_cache.fill(obj, &ancestor_set);
+                ancestors
+            }
+        };
+        let ancestor_set = if include_self {
+            // Chained iter of "obj" + the results
+            let chained = std::iter::once(obj.clone()).chain(results_sans_self);
+            ObjSet::from_iter(chained)
+        } else {
+            ObjSet::from_items(&results_sans_self)
+        };
 
         Ok(ancestor_set)
     }
@@ -1162,20 +1167,17 @@ impl WorldStateTransaction {
         name: Symbol,
     ) -> Result<(PropDef, Var, PropPerms, bool), WorldStateError> {
         // Walk up the inheritance tree looking for the property definition.
-        let mut search_obj = obj.clone();
-        let propdef = loop {
+        let ancestors = self.ancestors(obj, true)?;
+        let mut found_propdef = None;
+        for search_obj in ancestors.iter() {
             let propdef = self.get_properties(&search_obj)?.find_first_named(name);
 
             if let Some(propdef) = propdef {
-                break propdef;
+                found_propdef = Some(propdef);
+                break;
             }
-
-            let parent = self.get_object_parent(&search_obj)?;
-            if !parent.is_nothing() {
-                search_obj = parent;
-                continue;
-            };
-
+        }
+        let Some(propdef) = found_propdef else {
             return Err(WorldStateError::PropertyNotFound(
                 obj.clone(),
                 name.to_string(),
