@@ -22,7 +22,7 @@ use rpc_common::RpcMessageError;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, SystemTimeError};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -292,8 +292,13 @@ impl ConnectionsDB for ConnectionsFjall {
         let mut to_remove = vec![];
         for (player_id, connections_record) in inner.player_clients.iter_mut() {
             for cr in &connections_record.connections {
-                if cr.last_ping.elapsed().unwrap() > CONNECTION_TIMEOUT_DURATION {
-                    to_remove.push((player_id.clone(), cr.client_id));
+                match cr.last_ping.elapsed() {
+                    Ok(elapsed) if elapsed < CONNECTION_TIMEOUT_DURATION => {
+                        continue;
+                    }
+                    _ => {
+                        to_remove.push((player_id.clone(), cr.client_id));
+                    }
                 }
             }
         }
