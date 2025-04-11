@@ -32,6 +32,7 @@ impl VerbResolutionCache {
         Self {
             inner: RwLock::new(Inner {
                 version: 0,
+                orig_version: 0,
                 flushed: false,
                 entries: im::HashMap::default(),
                 first_parent_with_verbs_cache: im::HashMap::default(),
@@ -42,6 +43,7 @@ impl VerbResolutionCache {
 
 #[derive(Clone)]
 struct Inner {
+    orig_version: i64,
     version: i64,
     flushed: bool,
 
@@ -54,10 +56,16 @@ impl VerbResolutionCache {
     pub(crate) fn fork(&self) -> Self {
         let inner = self.inner.read().unwrap();
         let mut forked_inner = inner.clone();
+        forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
         Self {
             inner: RwLock::new(forked_inner),
         }
+    }
+
+    pub(crate) fn has_changed(&self) -> bool {
+        let inner = self.inner.read().unwrap();
+        inner.version > inner.orig_version
     }
 
     pub(crate) fn lookup_first_parent_with_verbs(&self, obj: &Obj) -> Option<Option<Obj>> {
@@ -67,6 +75,7 @@ impl VerbResolutionCache {
 
     pub(crate) fn fill_first_parent_with_verbs(&self, obj: &Obj, parent: Option<Obj>) {
         let mut inner = self.inner.write().unwrap();
+        inner.version += 1;
         inner
             .first_parent_with_verbs_cache
             .insert(obj.clone(), parent);
