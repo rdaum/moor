@@ -448,6 +448,14 @@ pub struct WorldStatePerf {
     pub db_usage: PerfCounter,
     pub commit: PerfCounter,
     pub rollback: PerfCounter,
+
+    pub commit_check_phase: PerfCounter,
+    pub commit_apply_phase: PerfCounter,
+    pub commit_write_phase: PerfCounter,
+
+    pub tx_commit_mk_working_set_phase: PerfCounter,
+    pub tx_commit_send_working_set_phase: PerfCounter,
+    pub tx_commit_wait_result_phase: PerfCounter,
 }
 
 impl Default for WorldStatePerf {
@@ -501,6 +509,12 @@ impl WorldStatePerf {
             db_usage: PerfCounter::new("db_usage"),
             commit: PerfCounter::new("commit"),
             rollback: PerfCounter::new("rollback"),
+            commit_check_phase: PerfCounter::new("commit_check_phase"),
+            commit_apply_phase: PerfCounter::new("commit_apply_phase"),
+            commit_write_phase: PerfCounter::new("commit_write_phase"),
+            tx_commit_mk_working_set_phase: PerfCounter::new("tx_commit_mk_working_set_phase"),
+            tx_commit_send_working_set_phase: PerfCounter::new("tx_commit_send_working_set_phase"),
+            tx_commit_wait_result_phase: PerfCounter::new("tx_commit_wait_result_phase"),
         }
     }
 
@@ -548,6 +562,12 @@ impl WorldStatePerf {
             &self.db_usage,
             &self.commit,
             &self.rollback,
+            &self.commit_check_phase,
+            &self.commit_apply_phase,
+            &self.commit_write_phase,
+            &self.tx_commit_mk_working_set_phase,
+            &self.tx_commit_send_working_set_phase,
+            &self.tx_commit_wait_result_phase,
         ]
     }
 }

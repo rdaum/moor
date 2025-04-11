@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::moor_db::WorkingSets;
 use crate::tx_management::{TransactionalCache, TransactionalTable, Tx};
@@ -24,9 +25,8 @@ use moor_common::model::{
     PropDefs, PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
     WorldStateError,
 };
-use moor_common::util::BitEnum;
+use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
-use oneshot::TryRecvError;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hash};
 use std::sync::Arc;
@@ -1164,9 +1164,12 @@ impl WorldStateTransaction {
     }
 
     pub fn commit(self) -> Result<CommitResult, WorldStateError> {
+        let counters = db_counters();
         let commit_start = Instant::now();
 
         // Pull out the working sets
+        let _t = PerfTimerGuard::new(&counters.tx_commit_mk_working_set_phase);
+
         let object_location = self.object_location.working_set();
         let object_contents = self.object_contents.working_set();
         let object_parent = self.object_parent.working_set();
@@ -1199,17 +1202,21 @@ impl WorldStateTransaction {
         let tuple_count = ws.total_tuples();
 
         // Send the working sets to the commit processing thread
+        drop(_t);
+        let _t = PerfTimerGuard::new(&counters.tx_commit_send_working_set_phase);
         let (send, reply) = oneshot::channel();
         self.commit_channel.send((ws, send)).unwrap();
 
         // Wait for the reply.
+        drop(_t);
+        let _t = PerfTimerGuard::new(&counters.tx_commit_wait_result_phase);
         let mut last_check_time = Instant::now();
         loop {
-            match reply.try_recv() {
+            match reply.recv_timeout(Duration::from_millis(10)) {
                 Ok(reply) => {
                     return Ok(reply);
                 }
-                Err(TryRecvError::Empty) => {
+                Err(_) => {
                     if last_check_time.elapsed() > Duration::from_secs(5) {
                         warn!(
                             "Transaction commit (started {}s ago) taking a long time to commit. Contains {tuple_count} total tuples.",
@@ -1217,10 +1224,6 @@ impl WorldStateTransaction {
                         );
                     }
                     last_check_time = Instant::now();
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                Err(TryRecvError::Disconnected) => {
-                    panic!("Commit channel disconnected!");
                 }
             }
         }
