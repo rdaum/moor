@@ -680,7 +680,10 @@ impl RpcServer {
 
     pub(crate) fn idle_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
         let last_activity = self.connections.last_activity_for(player)?;
-        Ok(last_activity.elapsed().unwrap().as_secs_f64())
+        Ok(last_activity
+            .elapsed()
+            .map(|e| e.as_secs_f64())
+            .unwrap_or(0.0))
     }
 
     pub(crate) fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
