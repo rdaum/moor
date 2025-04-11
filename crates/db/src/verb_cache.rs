@@ -17,55 +17,86 @@ use moor_var::{Obj, Symbol};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use std::sync::RwLock;
 
-/// Very naive per-tx_management verb resolution cache.
-/// Not very aggressive here, it flushes on every verbdef mutation on any object, regardless of
-/// inheritance chain.
-/// It's net-new empty for every transaction every time.
-/// The goal is really just to optimize tight-loop verb lookups
 /// Lots of room for improvement here:
 ///     Keep a separate global cache which can be shared between transactions
 ///     Flush entries for an object only if inheritance chain touched
 ///     Speed up named lookups more for when verbs have many names
-#[derive(Default)]
 pub(crate) struct VerbResolutionCache {
-    #[allow(clippy::type_complexity)]
-    entries: RefCell<HashMap<(Obj, Symbol), Option<Vec<VerbDef>>, BuildHasherDefault<AHasher>>>,
-
-    first_parent_with_verbs_cache: RefCell<HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>>,
+    inner: RwLock<Inner>,
 }
 
 impl VerbResolutionCache {
+    pub(crate) fn new() -> Self {
+        Self {
+            inner: RwLock::new(Inner {
+                version: 0,
+                flushed: false,
+                entries: im::HashMap::default(),
+                first_parent_with_verbs_cache: im::HashMap::default(),
+            }),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Inner {
+    version: i64,
+    flushed: bool,
+
+    #[allow(clippy::type_complexity)]
+    entries: im::HashMap<(Obj, Symbol), Option<Vec<VerbDef>>, BuildHasherDefault<AHasher>>,
+    first_parent_with_verbs_cache: im::HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>,
+}
+
+impl VerbResolutionCache {
+    pub(crate) fn fork(&self) -> Self {
+        let inner = self.inner.read().unwrap();
+        let mut forked_inner = inner.clone();
+        forked_inner.flushed = false;
+        Self {
+            inner: RwLock::new(forked_inner),
+        }
+    }
+
     pub(crate) fn lookup_first_parent_with_verbs(&self, obj: &Obj) -> Option<Option<Obj>> {
-        self.first_parent_with_verbs_cache
-            .borrow()
-            .get(obj)
-            .cloned()
+        let inner = self.inner.read().unwrap();
+        inner.first_parent_with_verbs_cache.get(obj).cloned()
     }
 
     pub(crate) fn fill_first_parent_with_verbs(&self, obj: &Obj, parent: Option<Obj>) {
-        self.first_parent_with_verbs_cache
-            .borrow_mut()
+        let mut inner = self.inner.write().unwrap();
+        inner
+            .first_parent_with_verbs_cache
             .insert(obj.clone(), parent);
     }
 
     pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<Vec<VerbDef>>> {
-        self.entries.borrow().get(&(obj.clone(), *verb)).cloned()
+        let inner = self.inner.read().unwrap();
+        inner.entries.get(&(obj.clone(), *verb)).cloned()
     }
 
     pub(crate) fn flush(&self) {
-        self.entries.borrow_mut().clear();
-        self.first_parent_with_verbs_cache.borrow_mut().clear();
+        let mut inner = self.inner.write().unwrap();
+        inner.flushed = true;
+        inner.version += 1;
+        inner.entries.clear();
+        inner.first_parent_with_verbs_cache.clear();
     }
 
     pub(crate) fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbs: &[VerbDef]) {
-        self.entries
-            .borrow_mut()
+        let mut inner = self.inner.write().unwrap();
+        inner.version += 1;
+        inner
+            .entries
             .insert((obj.clone(), *verb), Some(verbs.to_vec()));
     }
 
     pub(crate) fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
-        self.entries.borrow_mut().insert((obj.clone(), *verb), None);
+        let mut inner = self.inner.write().unwrap();
+        inner.version += 1;
+        inner.entries.insert((obj.clone(), *verb), None);
     }
 }
 

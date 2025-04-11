@@ -25,6 +25,7 @@ ahash.workspace = true
 byteview.workspace = true
 crossbeam-channel.workspace = true
 fjall.workspace = true
+im.workspace = true
 indexmap.workspace = true
 lazy_static.workspace = true
 oneshot.workspace = true

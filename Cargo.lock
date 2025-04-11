@@ -2759,6 +2759,7 @@ dependencies = [
  "edn-format",
  "eyre",
  "fjall",
+ "im",
  "indexmap",
  "lazy_static",
  "moor-common",

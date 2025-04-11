@@ -15,6 +15,7 @@ use crate::config::DatabaseConfig;
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::tx_management::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
+use crate::verb_cache::VerbResolutionCache;
 use crate::ws_transaction::WorldStateTransaction;
 use crate::{BytesHolder, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
@@ -24,8 +25,8 @@ use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tracing::warn;
@@ -55,6 +56,8 @@ pub struct MoorDB {
     kill_switch: Arc<AtomicBool>,
     commit_channel: Sender<(WorkingSets, oneshot::Sender<CommitResult>)>,
     usage_send: crossbeam_channel::Sender<oneshot::Sender<usize>>,
+
+    verb_resolution_cache: RwLock<VerbResolutionCache>,
 }
 
 type GC<Domain, Codomain> =
@@ -75,6 +78,7 @@ pub(crate) struct WorkingSets {
     pub(crate) object_propdefs: WorkingSet<Obj, PropDefs>,
     pub(crate) object_propvalues: WorkingSet<ObjAndUUIDHolder, Var>,
     pub(crate) object_propflags: WorkingSet<ObjAndUUIDHolder, PropPerms>,
+    pub(crate) verb_resolution_cache: VerbResolutionCache,
 }
 
 impl WorkingSets {
@@ -321,6 +325,7 @@ impl MoorDB {
         let (commit_channel, commit_receiver) = crossbeam_channel::unbounded();
         let (usage_send, usage_recv) = crossbeam_channel::unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
+        let verb_resolution_cache = RwLock::new(VerbResolutionCache::new());
         let s = Arc::new(Self {
             monotonic: AtomicU64::new(start_tx_num),
             object_location,
@@ -341,6 +346,7 @@ impl MoorDB {
             usage_send,
             kill_switch: kill_switch.clone(),
             keyspace,
+            verb_resolution_cache,
         });
 
         s.clone()
@@ -357,6 +363,8 @@ impl MoorDB {
             ),
         };
 
+        let vc_lock = self.verb_resolution_cache.read().unwrap();
+        let verb_resolution_cache = vc_lock.fork();
         WorldStateTransaction {
             tx,
             commit_channel: self.commit_channel.clone(),
@@ -374,7 +382,7 @@ impl MoorDB {
             object_propvalues: self.object_propvalues.clone().start(&tx),
             object_propflags: self.object_propflags.clone().start(&tx),
             sequences: self.sequences.clone(),
-            verb_resolution_cache: Default::default(),
+            verb_resolution_cache,
             ancestry_cache: Default::default(),
         }
     }
@@ -517,186 +525,198 @@ impl MoorDB {
                         warn!("Potential large batch @ commit... Checking {num_tuples} total tuples from the working set...");
                     }
 
-                    let Ok(ol_lock) = this.object_flags.check(object_flags, &ws.object_flags)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
+                    {
+                        let Ok(ol_lock) = this.object_flags.check(object_flags, &ws.object_flags)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
 
-                        continue;
-                    };
+                            continue;
+                        };
 
-                    let Ok(op_lock) = this.object_parent.check(object_parent, &ws.object_parent)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
+                        let Ok(op_lock) = this.object_parent.check(object_parent, &ws.object_parent)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
 
-                        continue;
-                    };
+                            continue;
+                        };
 
-                    let Ok(oc_lock) = this
-                        .object_children
-                        .check(object_children, &ws.object_children)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(oc_lock) = this
+                            .object_children
+                            .check(object_children, &ws.object_children)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    let Ok(oo_lock) = this.object_owner.check(object_owner, &ws.object_owner)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(oo_lock) = this.object_owner.check(object_owner, &ws.object_owner)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    let Ok(oloc_lock) = this
-                        .object_location
-                        .check(object_location, &ws.object_location)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(oloc_lock) = this
+                            .object_location
+                            .check(object_location, &ws.object_location)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    let Ok(ocont_lock) = this
-                        .object_contents
-                        .check(object_contents, &ws.object_contents)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(ocont_lock) = this
+                            .object_contents
+                            .check(object_contents, &ws.object_contents)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    let Ok(on_lock) = this.object_name.check(object_name, &ws.object_name) else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(on_lock) = this.object_name.check(object_name, &ws.object_name) else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    let Ok(ovd_lock) = this
-                        .object_verbdefs
-                        .check(object_verbdefs, &ws.object_verbdefs)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(ovd_lock) = this
+                            .object_verbdefs
+                            .check(object_verbdefs, &ws.object_verbdefs)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    let Ok(ov_lock) = this.object_verbs.check(object_verbs, &ws.object_verbs)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(ov_lock) = this.object_verbs.check(object_verbs, &ws.object_verbs)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    let Ok(opd_lock) = this
-                        .object_propdefs
-                        .check(object_propdefs, &ws.object_propdefs)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(opd_lock) = this
+                            .object_propdefs
+                            .check(object_propdefs, &ws.object_propdefs)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    let Ok(opv_lock) = this
-                        .object_propvalues
-                        .check(object_propvalues, &ws.object_propvalues)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(opv_lock) = this
+                            .object_propvalues
+                            .check(object_propvalues, &ws.object_propvalues)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    let Ok(opf_lock) = this
-                        .object_propflags
-                        .check(object_propflags, &ws.object_propflags)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
+                        let Ok(opf_lock) = this
+                            .object_propflags
+                            .check(object_propflags, &ws.object_propflags)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
 
-                    drop(_t);
+                        drop(_t);
 
-                    let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
+                        let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
 
-                    // Warn if the duration of the check phase took a really long time...
-                    let apply_start = Instant::now();
-                    if start_time.elapsed() > Duration::from_secs(5) {
-                        warn!(
-                            "Long running commit; check phase took {}s for {num_tuples} tuples",
-                            start_time.elapsed().as_secs_f32()
-                        );
+                        // Warn if the duration of the check phase took a really long time...
+                        let apply_start = Instant::now();
+                        if start_time.elapsed() > Duration::from_secs(5) {
+                            warn!(
+                                "Long running commit; check phase took {}s for {num_tuples} tuples",
+                                start_time.elapsed().as_secs_f32()
+                            );
+                        }
+
+                        // Apply phase
+                        let Ok(_unused) = this.object_flags.apply(ol_lock, ws.object_flags) else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_parent.apply(op_lock, ws.object_parent) else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_children.apply(oc_lock, ws.object_children)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_owner.apply(oo_lock, ws.object_owner) else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_location.apply(oloc_lock, ws.object_location)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_contents.apply(ocont_lock, ws.object_contents)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_name.apply(on_lock, ws.object_name) else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_verbdefs.apply(ovd_lock, ws.object_verbdefs)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_verbs.apply(ov_lock, ws.object_verbs) else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_propdefs.apply(opd_lock, ws.object_propdefs)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_propvalues.apply(opv_lock, ws.object_propvalues)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        let Ok(_unused) = this.object_propflags.apply(opf_lock, ws.object_propflags)
+                        else {
+                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            continue;
+                        };
+
+                        // And if the commit took a long time, warn before the write to disk is begun.
+                        if start_time.elapsed() > Duration::from_secs(5) {
+                            warn!(
+                                "Long running commit, apply phase took {}s for {num_tuples} tuples",
+                                apply_start.elapsed().as_secs_f32()
+                            );
+                        }
+
+                        drop(_t);
+
+                        // No need to block the caller while we're doing the final write to disk.
+                        reply.send(CommitResult::Success).unwrap();
                     }
+                    // All locks now dropped, now we can do the write to disk, swap in the (maybe)
+                    // updated verb resolution cache update sequences, and move on.
+                    // NOTE: hopefully this all happens before the next commit comes in, otherwise
+                    //  we can end up backlogged here.
 
-                    // Apply phase
-                    let Ok(_unused) = this.object_flags.apply(ol_lock, ws.object_flags) else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_parent.apply(op_lock, ws.object_parent) else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_children.apply(oc_lock, ws.object_children)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_owner.apply(oo_lock, ws.object_owner) else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_location.apply(oloc_lock, ws.object_location)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_contents.apply(ocont_lock, ws.object_contents)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_name.apply(on_lock, ws.object_name) else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_verbdefs.apply(ovd_lock, ws.object_verbdefs)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_verbs.apply(ov_lock, ws.object_verbs) else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_propdefs.apply(opd_lock, ws.object_propdefs)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_propvalues.apply(opv_lock, ws.object_propvalues)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    let Ok(_unused) = this.object_propflags.apply(opf_lock, ws.object_propflags)
-                    else {
-                        reply.send(CommitResult::ConflictRetry).unwrap();
-                        continue;
-                    };
-
-                    // And if the commit took a long time, warn before the write to disk is begun.
-                    if start_time.elapsed() > Duration::from_secs(5) {
-                        warn!(
-                            "Long running commit, apply phase took {}s for {num_tuples} tuples",
-                            apply_start.elapsed().as_secs_f32()
-                        );
+                    // Swap the commit set's cache with the main cache.
+                    {
+                        let mut vc_lock = this.verb_resolution_cache.write().unwrap();
+                        *vc_lock = ws.verb_resolution_cache;
                     }
-
-                    drop(_t);
-
-                    // No need to block the caller while we're doing the final write to disk.
-                    reply.send(CommitResult::Success).unwrap();
 
                     let _t = PerfTimerGuard::new(&counters.commit_write_phase);
                     // Now write out the current state of the sequences to the seq partition.
