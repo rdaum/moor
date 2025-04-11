@@ -739,7 +739,11 @@ impl WorldStateTransaction {
         flagspec: Option<BitEnum<VerbFlag>>,
     ) -> Result<VerbDef, WorldStateError> {
         // Check the cache first.
-        if let Some(named) = self.verb_resolution_cache.lookup(obj, &name) {
+        if let Some(cache_result) = self.verb_resolution_cache.lookup(obj, &name) {
+            // We recorded a miss here before..
+            let Some(named) = cache_result else {
+                return Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()));
+            };
             for verb in named.iter() {
                 if verb.matches_spec(&argspec, &flagspec) {
                     return Ok(verb.clone());
@@ -747,16 +751,42 @@ impl WorldStateTransaction {
             }
         }
 
-        let mut search_o = obj.clone();
+        // Check to see if we have a hit for this object for first ancestor with verbdefs...
+        // If we do, we can jump straight to that as our search_o
+        let mut first_parent_hit = false;
+        let mut search_o = {
+            match self
+                .verb_resolution_cache
+                .lookup_first_parent_with_verbs(obj)
+            {
+                Some(Some(o)) => {
+                    first_parent_hit = true;
+                    o
+                }
+                Some(None) => {
+                    // No ancestors with verbs, verbnf
+                    return Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()));
+                }
+                None => obj.clone(),
+            }
+        };
         loop {
             let verbdefs = self.object_verbdefs.get(&search_o).map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error getting verbs: {:?}", e))
             })?;
             if let Some(verbdefs) = verbdefs {
+                if !first_parent_hit {
+                    self.verb_resolution_cache
+                        .fill_first_parent_with_verbs(obj, Some(search_o.clone()));
+                    first_parent_hit = true;
+                }
+
+                // Find the named verb (which may be empty if the verb is not defined on this
+                // object, but is defined on an ancestor
                 let named = verbdefs.find_named(name);
 
                 // Fill the verb cache.
-                self.verb_resolution_cache.fill(obj, &name, &named);
+                self.verb_resolution_cache.fill_hit(obj, &name, &named);
                 let verb = named.first();
                 if let Some(verb) = verb {
                     if verb.matches_spec(&argspec, &flagspec) {
@@ -770,6 +800,8 @@ impl WorldStateTransaction {
             }
         }
 
+        // Record the miss
+        self.verb_resolution_cache.fill_miss(obj, &name);
         Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()))
     }
 

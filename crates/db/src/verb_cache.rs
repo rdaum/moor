@@ -30,22 +30,42 @@ use std::hash::BuildHasherDefault;
 #[derive(Default)]
 pub(crate) struct VerbResolutionCache {
     #[allow(clippy::type_complexity)]
-    entries: RefCell<HashMap<(Obj, Symbol), Vec<VerbDef>, BuildHasherDefault<AHasher>>>,
+    entries: RefCell<HashMap<(Obj, Symbol), Option<Vec<VerbDef>>, BuildHasherDefault<AHasher>>>,
+
+    first_parent_with_verbs_cache: RefCell<HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>>,
 }
 
 impl VerbResolutionCache {
-    pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Vec<VerbDef>> {
+    pub(crate) fn lookup_first_parent_with_verbs(&self, obj: &Obj) -> Option<Option<Obj>> {
+        self.first_parent_with_verbs_cache
+            .borrow()
+            .get(obj)
+            .cloned()
+    }
+
+    pub(crate) fn fill_first_parent_with_verbs(&self, obj: &Obj, parent: Option<Obj>) {
+        self.first_parent_with_verbs_cache
+            .borrow_mut()
+            .insert(obj.clone(), parent);
+    }
+
+    pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<Vec<VerbDef>>> {
         self.entries.borrow().get(&(obj.clone(), *verb)).cloned()
     }
 
     pub(crate) fn flush(&self) {
         self.entries.borrow_mut().clear();
+        self.first_parent_with_verbs_cache.borrow_mut().clear();
     }
 
-    pub(crate) fn fill(&self, obj: &Obj, verb: &Symbol, verbs: &[VerbDef]) {
+    pub(crate) fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbs: &[VerbDef]) {
         self.entries
             .borrow_mut()
-            .insert((obj.clone(), *verb), verbs.to_vec());
+            .insert((obj.clone(), *verb), Some(verbs.to_vec()));
+    }
+
+    pub(crate) fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
+        self.entries.borrow_mut().insert((obj.clone(), *verb), None);
     }
 }
 
