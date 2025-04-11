@@ -14,13 +14,13 @@
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_var::NOTHING;
-use moor_var::{v_obj, Var};
 use moor_var::{Obj, Symbol};
+use moor_var::{Var, v_obj};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use crate::vm::activation::{Activation, Frame};
 use crate::PhantomUnsync;
+use crate::vm::activation::{Activation, Frame};
 use moor_common::tasks::TaskId;
 use moor_common::util::PerfCounter;
 
