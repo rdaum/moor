@@ -1229,6 +1229,7 @@ impl WorldStateTransaction {
             object_propdefs,
             object_propvalues,
             object_propflags,
+            verb_resolution_cache: self.verb_resolution_cache,
         };
 
         let tuple_count = ws.total_tuples();
