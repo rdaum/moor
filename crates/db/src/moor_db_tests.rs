@@ -1430,4 +1430,35 @@ mod tests {
         let db = test_db();
         db.process_cache_evictions();
     }
+
+    #[test]
+    fn test_regression_verb_cache_accidental_miss() {
+        let db = test_db();
+
+        // Create a verb with no X bit and wrong arg spec, resolve it (fail), and then get_verb_by_name and it should
+        // succeed. IT wasn't before because the verb cache was getting filled with a negative
+        // miss.
+        let mut tx = db.start_transaction();
+        let a = tx.create_object(None, Default::default()).unwrap();
+        tx.add_object_verb(
+            &a,
+            &a,
+            vec![Symbol::mk("test")],
+            vec![],
+            BinaryType::LambdaMoo18X,
+            VerbFlag::rw(),
+            VerbArgsSpec::none_none_none(),
+        )
+        .unwrap();
+        let r = tx.resolve_verb(
+            &a,
+            Symbol::mk("test"),
+            Some(VerbArgsSpec::this_none_this()),
+            None,
+        );
+        assert!(r.is_err());
+        let _ = tx
+            .get_verb_by_name(&a, Symbol::mk("test"))
+            .expect("Unable to get verb");
+    }
 }

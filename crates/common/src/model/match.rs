@@ -208,6 +208,15 @@ impl VerbArgsSpec {
             iobj: ArgSpec::This,
         }
     }
+
+    pub fn none_none_none() -> Self {
+        Self {
+            dobj: ArgSpec::None,
+            prep: PrepSpec::None,
+            iobj: ArgSpec::None,
+        }
+    }
+
     #[must_use]
     pub fn matches(&self, v: &Self) -> bool {
         (self.dobj == ArgSpec::Any || self.dobj == v.dobj)

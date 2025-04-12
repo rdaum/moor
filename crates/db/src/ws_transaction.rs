@@ -810,6 +810,7 @@ impl WorldStateTransaction {
                 None => obj.clone(),
             }
         };
+        let mut found = false;
         loop {
             let verbdefs = self.object_verbdefs.get(&search_o).map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error getting verbs: {:?}", e))
@@ -830,6 +831,7 @@ impl WorldStateTransaction {
                 if let Some(verb) = verb {
                     self.verb_resolution_cache.fill_hit(obj, &name, verb);
 
+                    found = true;
                     if verb.matches_spec(&argspec, &flagspec) {
                         return Ok(verb.clone());
                     }
@@ -841,8 +843,11 @@ impl WorldStateTransaction {
             }
         }
 
-        // Record the miss
-        self.verb_resolution_cache.fill_miss(obj, &name);
+        // Record the miss, but only if we actually didn't find anything, otherwise we can end up
+        // recording a miss for things where the argspec didn't match
+        if !found {
+            self.verb_resolution_cache.fill_miss(obj, &name);
+        }
         Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()))
     }
 
