@@ -1174,11 +1174,9 @@ impl WorldStateTransaction {
         // Check the cache first.
         if let Some(cache_result) = self.prop_resolution_cache.lookup(obj, &name) {
             // We recorded a miss here before..
-            let properties = cache_result?;
-            for prop in properties.iter() {
-                if prop.matches_name(name) {
-                    return Some(prop.clone());
-                }
+            let prop = cache_result?;
+            if prop.matches_name(name) {
+                return Some(prop.clone());
             }
         }
 
