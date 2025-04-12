@@ -620,8 +620,8 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    // Ask the scheduler (through its mailbox) to describe all the queued tasks.
-    let tasks = bf_args.task_scheduler_client.request_queued_tasks();
+    // Ask the scheduler (through its mailbox) to describe all the tasks.
+    let tasks = bf_args.task_scheduler_client.task_list();
 
     // return in form:
     //     {<task-id>, <start-time>, <x>, <y>,
@@ -669,7 +669,7 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Some(player)
     };
 
-    let tasks = bf_args.task_scheduler_client.request_queued_tasks();
+    let tasks = bf_args.task_scheduler_client.task_list();
     // Two modes: if player is None, we return a list of all players with queued tasks, but we
     // expect wiz perms.
     // If player is set, we return the number of tasks queued for that player.
@@ -1268,7 +1268,7 @@ fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
             op_name,
             v_list(&[
                 v_int(c.invocations.sum() as i64),
-                v_int(c.cumulative_duration_us.sum() as i64),
+                v_int(c.cumulative_duration_nanos.sum() as i64),
             ]),
         ));
     }

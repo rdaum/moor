@@ -18,7 +18,7 @@ use std::time::Instant;
 pub struct PerfCounter {
     pub operation: Symbol,
     pub invocations: ConcurrentCounter,
-    pub cumulative_duration_us: ConcurrentCounter,
+    pub cumulative_duration_nanos: ConcurrentCounter,
 }
 
 impl PerfCounter {
@@ -26,7 +26,7 @@ impl PerfCounter {
         Self {
             operation: Symbol::mk(name),
             invocations: ConcurrentCounter::new(0),
-            cumulative_duration_us: ConcurrentCounter::new(0),
+            cumulative_duration_nanos: ConcurrentCounter::new(0),
         }
     }
 }
@@ -41,8 +41,8 @@ impl<'a> PerfTimerGuard<'a> {
 
 impl Drop for PerfTimerGuard<'_> {
     fn drop(&mut self) {
-        let elapsed = self.1.elapsed().as_micros();
+        let elapsed = self.1.elapsed().as_nanos();
         self.0.invocations.add(1);
-        self.0.cumulative_duration_us.add(elapsed as isize);
+        self.0.cumulative_duration_nanos.add(elapsed as isize);
     }
 }
