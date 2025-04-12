@@ -1106,13 +1106,13 @@ impl Scheduler {
 
                 trace!(?task_id, "Task suspended waiting for input");
             }
-            TaskControlMsg::RequestQueuedTasks(reply) => {
-                // Task is asking for a description of all other tasks.
+            TaskControlMsg::RequestTasks(reply) => {
                 let tasks = self.task_q.suspended.tasks();
                 if let Err(e) = reply.send(tasks) {
                     error!(?e, "Could not send task description to requester");
                     // TODO: murder this errant task
                 }
+                // TODO: add non-queued tasks.
             }
             TaskControlMsg::KillTask {
                 victim_task_id,

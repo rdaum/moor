@@ -129,10 +129,10 @@ impl TaskSchedulerClient {
     }
 
     /// Ask the scheduler for a list of all background/suspended tasks known to it.
-    pub fn request_queued_tasks(&self) -> Vec<TaskDescription> {
+    pub fn task_list(&self) -> Vec<TaskDescription> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
-            .send((self.task_id, TaskControlMsg::RequestQueuedTasks(reply)))
+            .send((self.task_id, TaskControlMsg::RequestTasks(reply)))
             .expect("Could not deliver client message -- scheduler shut down?");
         receive
             .recv()
@@ -308,7 +308,7 @@ pub enum TaskControlMsg {
     /// Tell the scheduler we're suspending until we get input from the client.
     TaskRequestInput(Task),
     /// Task is requesting a list of all other tasks known to the scheduler.
-    RequestQueuedTasks(oneshot::Sender<Vec<TaskDescription>>),
+    RequestTasks(oneshot::Sender<Vec<TaskDescription>>),
     /// Task is requesting that the scheduler abort another task.
     KillTask {
         victim_task_id: TaskId,

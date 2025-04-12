@@ -73,7 +73,7 @@ impl BfCounters {
             counters.push(PerfCounter {
                 operation: BUILTINS.names[&BuiltinId(i as u16)],
                 invocations: ConcurrentCounter::new(0),
-                cumulative_duration_us: ConcurrentCounter::new(0),
+                cumulative_duration_nanos: ConcurrentCounter::new(0),
             });
         }
         Self(counters)

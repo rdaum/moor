@@ -387,19 +387,19 @@ impl VMExecState {
         };
         let bf_counters = bf_perf_counters();
         bf_counters.counter_for(bf_id).invocations.add(1);
-        let elapsed_micros = start.elapsed().as_micros();
+        let elapsed_nanos = start.elapsed().as_nanos();
         vm_counters.prepare_builtin_function.invocations.add(1);
         vm_counters
             .prepare_builtin_function
-            .cumulative_duration_us
-            .add(elapsed_micros as isize);
+            .cumulative_duration_nanos
+            .add(elapsed_nanos as isize);
 
         let result = bf.call(&mut bf_args);
-        let elapsed_micros = start.elapsed().as_micros();
+        let elapsed_nanos = start.elapsed().as_nanos();
         bf_counters
             .counter_for(bf_id)
-            .cumulative_duration_us
-            .add(elapsed_micros as isize);
+            .cumulative_duration_nanos
+            .add(elapsed_nanos as isize);
         match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
@@ -447,23 +447,23 @@ impl VMExecState {
             config: exec_args.config.clone(),
         };
 
-        let elapsed_micros = start.elapsed().as_micros();
+        let elapsed_nanos = start.elapsed().as_nanos();
         vm_counters()
             .prepare_reenter_builtin_function
             .invocations
             .add(1);
         vm_counters()
             .prepare_reenter_builtin_function
-            .cumulative_duration_us
-            .add(elapsed_micros as isize);
+            .cumulative_duration_nanos
+            .add(elapsed_nanos as isize);
 
         let result = bf.call(&mut bf_args);
-        let elapsed_micros = start.elapsed().as_micros();
+        let elapsed_nanos = start.elapsed().as_nanos();
         let bf_counters = bf_perf_counters();
         bf_counters
             .counter_for(bf_id)
-            .cumulative_duration_us
-            .add(elapsed_micros as isize);
+            .cumulative_duration_nanos
+            .add(elapsed_nanos as isize);
         match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
             Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
