@@ -738,12 +738,24 @@ impl WorldStateTransaction {
     }
 
     pub fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError> {
-        let verbdefs = self.get_verbs(obj)?;
-        let named = verbdefs.find_named(name);
-        let verb = named
-            .first()
-            .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), name.to_string()))?;
-        Ok(verb.clone())
+        // Check verb cache first, and then if we get a hit and definer == obj, we've got one,
+        // otherwise, go hunting.
+        match self.verb_resolution_cache.lookup(obj, &name) {
+            Some(Some(verbdef)) if verbdef.location().eq(obj) => Ok(verbdef),
+            Some(None) => Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string())),
+            _ => {
+                let verbdefs = self.get_verbs(obj)?;
+                let named = verbdefs.find_named(name);
+                let Some(verb) = named.first() else {
+                    self.verb_resolution_cache.fill_miss(obj, &name);
+                    return Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()));
+                };
+
+                // Fill cache
+                self.verb_resolution_cache.fill_hit(obj, &name, verb);
+                Ok(verb.clone())
+            }
+        }
     }
 
     pub fn get_verb_by_index(&self, obj: &Obj, index: usize) -> Result<VerbDef, WorldStateError> {
