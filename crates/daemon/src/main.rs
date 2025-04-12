@@ -37,6 +37,13 @@ mod rpc_session;
 mod sys_ctrl;
 mod tasks_fjall;
 
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 /// Host for the moor runtime.
 ///   * Brings up the database
 ///   * Instantiates a scheduler
