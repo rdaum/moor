@@ -1182,21 +1182,52 @@ impl WorldStateTransaction {
             }
         }
 
-        // Walk up the inheritance tree looking for the property definition.
-        let Ok(ancestors) = self.ancestors(obj, true) else {
-            return None;
-        };
-        let mut found_propdef = None;
-        for search_obj in ancestors.iter() {
-            let Ok(propdefs) = self.get_properties(&search_obj) else {
-                return None;
-            };
+        // Look in the cache for the first parent with non-empty propdefs. If we have no cache entry,
+        // then seek upwards until we find one, record that, and then look there.
+        let (mut propdefs, mut search_o) = {
+            match self
+                .prop_resolution_cache
+                .lookup_first_parent_with_props(obj)
+            {
+                Some(Some(o)) => (self.get_properties(&o).ok()?, o),
+                Some(None) => {
+                    // No ancestors with verbs, verbnf
+                    return None;
+                }
+                None => {
+                    let mut search_o = obj.clone();
+                    let propdefs = loop {
+                        let propdefs = self.get_properties(&search_o).ok()?;
+                        if !propdefs.is_empty() {
+                            self.prop_resolution_cache
+                                .fill_first_parent_with_props(obj, Some(search_o.clone()));
 
+                            break propdefs;
+                        }
+
+                        search_o = self.get_object_parent(&search_o).ok()?;
+                        if search_o.is_nothing() {
+                            return None;
+                        }
+                    };
+                    (propdefs, search_o)
+                }
+            }
+        };
+
+        let mut found_propdef = None;
+        loop {
             let propdef = propdefs.find_first_named(name);
             if let Some(propdef) = propdef {
                 found_propdef = Some(propdef);
                 break;
             }
+
+            search_o = self.get_object_parent(&search_o).ok()?;
+            if search_o.is_nothing() {
+                break;
+            }
+            propdefs = self.get_properties(&search_o).ok()?;
         }
         let Some(propdef) = found_propdef else {
             self.prop_resolution_cache.fill_miss(obj, &name);

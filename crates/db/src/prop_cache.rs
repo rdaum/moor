@@ -29,6 +29,7 @@ impl PropResolutionCache {
                 orig_version: 0,
                 flushed: false,
                 entries: im::HashMap::default(),
+                first_parent_with_props_cache: im::HashMap::default(),
             }),
         }
     }
@@ -42,6 +43,7 @@ struct Inner {
 
     #[allow(clippy::type_complexity)]
     entries: im::HashMap<(Obj, Symbol), Option<Vec<PropDef>>, BuildHasherDefault<AHasher>>,
+    first_parent_with_props_cache: im::HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>,
 }
 
 impl PropResolutionCache {
@@ -70,6 +72,7 @@ impl PropResolutionCache {
         inner.flushed = true;
         inner.version += 1;
         inner.entries.clear();
+        inner.first_parent_with_props_cache.clear();
     }
 
     pub(crate) fn fill_hit(&self, obj: &Obj, prop: &Symbol, propd: &PropDef) {
@@ -88,5 +91,18 @@ impl PropResolutionCache {
         let mut inner = self.inner.write().unwrap();
         inner.version += 1;
         inner.entries.insert((obj.clone(), *prop), None);
+    }
+
+    pub(crate) fn lookup_first_parent_with_props(&self, obj: &Obj) -> Option<Option<Obj>> {
+        let inner = self.inner.read().unwrap();
+        inner.first_parent_with_props_cache.get(obj).cloned()
+    }
+
+    pub(crate) fn fill_first_parent_with_props(&self, obj: &Obj, parent: Option<Obj>) {
+        let mut inner = self.inner.write().unwrap();
+        inner.version += 1;
+        inner
+            .first_parent_with_props_cache
+            .insert(obj.clone(), parent);
     }
 }
