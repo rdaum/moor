@@ -32,12 +32,12 @@ use moor_compiler::program_to_tree;
 use moor_compiler::unparse;
 use moor_compiler::{compile, to_literal};
 use moor_var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
-use moor_var::List;
 use moor_var::Obj;
 use moor_var::Symbol;
 use moor_var::Variant;
 use moor_var::{AsByteBuffer, Sequence};
 use moor_var::{Error, v_list_iter};
+use moor_var::{List, v_bool};
 use moor_var::{Var, v_empty_list, v_list, v_none, v_obj, v_str, v_string};
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
@@ -626,6 +626,48 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(disassemble, bf_disassemble);
 
+fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
+        return Err(BfErr::Code(E_INVARG));
+    }
+
+    let name = bf_args.args[1].as_symbol().map_err(BfErr::Code)?;
+
+    let Ok((_, vd)) = bf_args
+        .world_state
+        .find_method_verb_on(&bf_args.task_perms_who(), obj, name)
+    else {
+        return Ok(Ret(v_bool(false)));
+    };
+
+    let oflags = bf_args
+        .world_state
+        .flags_of(obj)
+        .map_err(world_state_bf_err)?;
+
+    if bf_args
+        .world_state
+        .controls(&bf_args.caller_perms(), obj)
+        .map_err(world_state_bf_err)?
+        || oflags.contains(ObjFlag::Read)
+    {
+        let names = v_str(&vd.names().join(" "));
+        let result = v_list(&[v_obj(vd.location()), names]);
+        Ok(Ret(result))
+    } else {
+        Ok(Ret(v_bool(true)))
+    }
+}
+bf_declare!(respond_to, bf_respond_to);
+
 pub(crate) fn register_bf_verbs(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("verb_info")] = Box::new(BfVerbInfo {});
     builtins[offset_for_builtin("set_verb_info")] = Box::new(BfSetVerbInfo {});
@@ -636,4 +678,5 @@ pub(crate) fn register_bf_verbs(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("add_verb")] = Box::new(BfAddVerb {});
     builtins[offset_for_builtin("delete_verb")] = Box::new(BfDeleteVerb {});
     builtins[offset_for_builtin("disassemble")] = Box::new(BfDisassemble {});
+    builtins[offset_for_builtin("respond_to")] = Box::new(BfRespondTo {});
 }
