@@ -286,6 +286,9 @@ pub mod vm_test_utils {
                 VMHostResponse::RollbackRetry => {
                     panic!("Unexpected rollback retry");
                 }
+                VMHostResponse::CompleteRollback(_) => {
+                    panic!("Unexpected rollback");
+                }
             }
         }
     }

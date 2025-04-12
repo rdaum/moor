@@ -359,6 +359,9 @@ impl VmHost {
                 ExecutionResult::TaskRollbackRestart => {
                     return VMHostResponse::RollbackRetry;
                 }
+                ExecutionResult::TaskRollback(commit_session) => {
+                    return VMHostResponse::CompleteRollback(commit_session);
+                }
             }
         }
 

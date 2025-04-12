@@ -242,6 +242,8 @@ Functions not part of the original LambdaMOO, but added in moor
 
 ### Tasks
 
-| Name        | Description                                                                           | Notes |
-|-------------|---------------------------------------------------------------------------------------|-------|
-| `wait_task` | Causes the current task to wait for a given task id to not be in the background queue |       |
+| Name        | Description                                                                                                                                                                       | Notes                           |
+|-------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------|
+| `wait_task` | Causes the current task to wait for a given task id to not be in the background queue                                                                                             |                                 |
+| `commit`    | Causes the current task to immediately commit its data, suspend, and then come out of suspension                                                                                  | Semantically same as suspend(0) |
+| `rollback`  | Causes the current task to immediately rollback all mutations to the DB and abort the current task. Only argument is boolean whether to send pending content to the player or not | Wizard only                     |

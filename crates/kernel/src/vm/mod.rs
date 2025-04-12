@@ -46,9 +46,14 @@ mod vm_test;
 
 #[derive(Debug, Clone)]
 pub enum TaskSuspend {
+    /// Suspend forever.
     Never,
+    /// Suspend for a given duration.
     Timed(Duration),
+    /// Suspend until another task completes (or never exists)
     WaitTask(TaskId),
+    /// Just commit and resume immediately.
+    Commit,
 }
 
 /// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
@@ -122,6 +127,8 @@ pub enum ExecutionResult {
     /// Rollback the current transaction and restart the task in a new transaction.
     /// This can happen when a conflict occurs during execution, independent of a commit.
     TaskRollbackRestart,
+    /// Just rollback and die. Kills all task DB mutations. Output (Session) is optionally committed.
+    TaskRollback(bool),
 }
 
 /// The set of parameters for a VM-requested fork.
@@ -165,6 +172,8 @@ pub enum VMHostResponse {
     CompleteAbort,
     /// The VM threw an exception. (FinallyReason::Uncaught in MOO VM)
     CompleteException(Exception),
+    /// Finish the task with a DB rollback. Second argument is whether to commit the session.
+    CompleteRollback(bool),
     /// A rollback-retry was requested.
     RollbackRetry,
 }

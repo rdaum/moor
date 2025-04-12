@@ -572,6 +572,33 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(suspend, bf_suspend);
 
+fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if !bf_args.args.is_empty() {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit)))
+}
+bf_declare!(commit, bf_commit);
+
+fn bf_rollback(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    // Rollback is wizard only
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    if bf_args.args.len() > 1 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let output_session = !bf_args.args.is_empty() && bf_args.args[0].is_true();
+
+    Ok(VmInstr(ExecutionResult::TaskRollback(output_session)))
+}
+bf_declare!(rollback, bf_rollback);
+
 fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
         return Err(BfErr::Code(E_ARGS));
@@ -1412,6 +1439,8 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("sched_counters")] = Box::new(BfSchedCounters {});
     builtins[offset_for_builtin("force_input")] = Box::new(BfForceInput {});
     builtins[offset_for_builtin("wait_task")] = Box::new(BfWaitTask {});
+    builtins[offset_for_builtin("commit")] = Box::new(BfCommit {});
+    builtins[offset_for_builtin("rollback")] = Box::new(BfRollback {});
 
     builtins[offset_for_builtin("present")] = Box::new(BfPresent {});
 }

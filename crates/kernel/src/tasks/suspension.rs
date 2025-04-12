@@ -50,6 +50,8 @@ pub enum WakeCondition {
     Input(Uuid),
     /// This task will wake up when the given task is completed.
     Task(TaskId),
+    /// Wake immediately. This is used for tasks that performed a commit().
+    Immedate,
 }
 
 #[repr(u8)]
@@ -59,6 +61,7 @@ pub enum WakeConditionType {
     Time = 1,
     Input = 2,
     Task = 3,
+    Immediate = 4,
 }
 
 impl WakeCondition {
@@ -68,6 +71,7 @@ impl WakeCondition {
             WakeCondition::Time(_) => WakeConditionType::Time,
             WakeCondition::Input(_) => WakeConditionType::Input,
             WakeCondition::Task(_) => WakeConditionType::Task,
+            WakeCondition::Immedate => WakeConditionType::Immediate,
         }
     }
 }
@@ -172,6 +176,9 @@ impl SuspensionQ {
                     if !self.tasks.contains_key(&task_id) && !running_tasks.contains(&task_id) {
                         to_wake.push(task.task.task_id);
                     }
+                }
+                WakeCondition::Immedate => {
+                    to_wake.push(task.task.task_id);
                 }
                 _ => {}
             }
@@ -339,6 +346,7 @@ impl Encode for WakeCondition {
             }
             WakeCondition::Input(uuid) => uuid.as_u128().encode(encoder),
             WakeCondition::Task(task_id) => task_id.encode(encoder),
+            WakeCondition::Immedate => Ok(()),
         }
     }
 }
@@ -361,6 +369,7 @@ impl<C> Decode<C> for WakeCondition {
                 let task_id = TaskId::decode(decoder)?;
                 Ok(WakeCondition::Task(task_id))
             }
+            WakeConditionType::Immediate => Ok(WakeCondition::Immedate),
         }
     }
 }
@@ -383,6 +392,7 @@ impl<'de, C> BorrowDecode<'de, C> for WakeCondition {
                 let task_id = TaskId::borrow_decode(decoder)?;
                 Ok(WakeCondition::Task(task_id))
             }
+            WakeConditionType::Immediate => Ok(WakeCondition::Immedate),
         }
     }
 }

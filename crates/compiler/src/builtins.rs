@@ -18,7 +18,7 @@ use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_var::Symbol;
 use moor_var::VarType;
-use moor_var::VarType::{TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL};
+use moor_var::VarType::{TYPE_BOOL, TYPE_FLYWEIGHT, TYPE_MAP, TYPE_SYMBOL};
 /// Global registry of built-in function names.
 use std::collections::HashMap;
 
@@ -1192,6 +1192,20 @@ fn mk_builtin_table() -> Vec<Builtin> {
             min_args: Q(1),
             max_args: Q(1),
             types: vec![Typed(TYPE_INT)],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("commit"),
+            min_args: Q(0),
+            max_args: Q(0),
+            types: vec![],
+            implemented: true,
+        },
+        Builtin {
+            name: Symbol::mk("rollback"),
+            min_args: Q(0),
+            max_args: Q(1),
+            types: vec![Typed(TYPE_BOOL)],
             implemented: true,
         },
         Builtin {

@@ -152,6 +152,9 @@ fn execute(
             VMHostResponse::RollbackRetry => {
                 panic!("Unexpected rollback retry");
             }
+            VMHostResponse::CompleteRollback(_) => {
+                panic!("Unexpected rollback abort");
+            }
         }
     }
 }

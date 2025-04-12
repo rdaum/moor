@@ -959,8 +959,8 @@ impl Scheduler {
                     warn!("Could not send abort message to player: {:?}", send_error);
                 };
 
-                let Ok(()) = task.session.rollback() else {
-                    warn!("Could not rollback session; aborting task");
+                let Ok(()) = task.session.commit() else {
+                    warn!("Could not commit aborted session; aborting task");
                     return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
                 task_q.send_task_result(task_id, Err(TaskAbortedCancelled));
@@ -1068,6 +1068,7 @@ impl Scheduler {
                     TaskSuspend::Never => WakeCondition::Never,
                     TaskSuspend::Timed(t) => WakeCondition::Time(Instant::now() + t),
                     TaskSuspend::WaitTask(task_id) => WakeCondition::Task(task_id),
+                    TaskSuspend::Commit => WakeCondition::Immedate,
                 };
 
                 task_q

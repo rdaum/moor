@@ -327,6 +327,23 @@ impl Task {
                 task_scheduler_client.exception(exception);
                 None
             }
+            VMHostResponse::CompleteRollback(commit_session) => {
+                // Rollback the transaction
+                world_state
+                    .rollback()
+                    .expect("Could not rollback world state transaction");
+
+                // And then decide if we are going to rollback th session as well.
+                if !commit_session {
+                    session.rollback().expect("Could not rollback session");
+                } else {
+                    session.commit().expect("Could not commit session");
+                }
+                self.vm_host.stop();
+                task_scheduler_client.abort_cancelled();
+                None
+            }
+
             VMHostResponse::AbortLimit(reason) => {
                 warn!(task_id = self.task_id, "Task abort limit reached");
 
