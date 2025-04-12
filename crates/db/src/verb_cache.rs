@@ -44,7 +44,7 @@ struct Inner {
     flushed: bool,
 
     #[allow(clippy::type_complexity)]
-    entries: im::HashMap<(Obj, Symbol), Option<Vec<VerbDef>>, BuildHasherDefault<AHasher>>,
+    entries: im::HashMap<(Obj, Symbol), Option<VerbDef>, BuildHasherDefault<AHasher>>,
     first_parent_with_verbs_cache: im::HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>,
 }
 
@@ -77,7 +77,7 @@ impl VerbResolutionCache {
             .insert(obj.clone(), parent);
     }
 
-    pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<Vec<VerbDef>>> {
+    pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
         let inner = self.inner.read().unwrap();
         inner.entries.get(&(obj.clone(), *verb)).cloned()
     }
@@ -90,16 +90,12 @@ impl VerbResolutionCache {
         inner.first_parent_with_verbs_cache.clear();
     }
 
-    pub(crate) fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbs: &[VerbDef]) {
+    pub(crate) fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
         let mut inner = self.inner.write().unwrap();
         inner.version += 1;
-        inner.entries.entry((obj.clone(), *verb)).and_modify(|e| {
-            if let Some(e) = e {
-                e.extend_from_slice(verbs);
-            } else {
-                *e = Some(verbs.to_vec());
-            }
-        });
+        inner
+            .entries
+            .insert((obj.clone(), *verb), Some(verbdef.clone()));
     }
 
     pub(crate) fn fill_miss(&self, obj: &Obj, verb: &Symbol) {

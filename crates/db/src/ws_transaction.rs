@@ -771,13 +771,11 @@ impl WorldStateTransaction {
         // Check the cache first.
         if let Some(cache_result) = self.verb_resolution_cache.lookup(obj, &name) {
             // We recorded a miss here before..
-            let Some(named) = cache_result else {
+            let Some(verbdef) = cache_result else {
                 return Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()));
             };
-            for verb in named.iter() {
-                if verb.matches_spec(&argspec, &flagspec) {
-                    return Ok(verb.clone());
-                }
+            if verbdef.matches_spec(&argspec, &flagspec) {
+                return Ok(verbdef.clone());
             }
         }
 
@@ -816,9 +814,10 @@ impl WorldStateTransaction {
                 let named = verbdefs.find_named(name);
 
                 // Fill the verb cache.
-                self.verb_resolution_cache.fill_hit(obj, &name, &named);
                 let verb = named.first();
                 if let Some(verb) = verb {
+                    self.verb_resolution_cache.fill_hit(obj, &name, verb);
+
                     if verb.matches_spec(&argspec, &flagspec) {
                         return Ok(verb.clone());
                     }
