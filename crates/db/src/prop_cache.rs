@@ -42,7 +42,7 @@ struct Inner {
     flushed: bool,
 
     #[allow(clippy::type_complexity)]
-    entries: im::HashMap<(Obj, Symbol), Option<Vec<PropDef>>, BuildHasherDefault<AHasher>>,
+    entries: im::HashMap<(Obj, Symbol), Option<PropDef>, BuildHasherDefault<AHasher>>,
     first_parent_with_props_cache: im::HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>,
 }
 
@@ -62,7 +62,7 @@ impl PropResolutionCache {
         inner.version > inner.orig_version
     }
 
-    pub(crate) fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<Vec<PropDef>>> {
+    pub(crate) fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<PropDef>> {
         let inner = self.inner.read().unwrap();
         inner.entries.get(&(obj.clone(), *prop)).cloned()
     }
@@ -78,13 +78,10 @@ impl PropResolutionCache {
     pub(crate) fn fill_hit(&self, obj: &Obj, prop: &Symbol, propd: &PropDef) {
         let mut inner = self.inner.write().unwrap();
         inner.version += 1;
-        inner.entries.entry((obj.clone(), *prop)).and_modify(|x| {
-            if let Some(x) = x {
-                x.push(propd.clone());
-            } else {
-                *x = Some(vec![propd.clone()]);
-            }
-        });
+
+        inner
+            .entries
+            .insert((obj.clone(), *prop), Some(propd.clone()));
     }
 
     pub(crate) fn fill_miss(&self, obj: &Obj, prop: &Symbol) {
