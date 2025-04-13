@@ -30,7 +30,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
-use tracing::warn;
+use tracing::{error, warn};
 
 pub struct MoorDB {
     monotonic: AtomicU64,
@@ -496,7 +496,7 @@ impl MoorDB {
                         Ok(CommitSet::CommitWrites(ws, reply)) => {
                             (ws, reply)
                         }
-                        Ok(CommitSet::CommitReadOnly(vc, pc )) => {
+                        Ok(CommitSet::CommitReadOnly(vc, pc)) => {
                             let mut vc_lock = this.verb_resolution_cache.write().unwrap();
                             *vc_lock = vc;
                             let mut pc_lock = this.prop_resolution_cache.write().unwrap();
@@ -548,14 +548,14 @@ impl MoorDB {
                     {
                         let Ok(ol_lock) = this.object_flags.check(object_flags, &ws.object_flags)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
 
                             continue;
                         };
 
                         let Ok(op_lock) = this.object_parent.check(object_parent, &ws.object_parent)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
 
                             continue;
                         };
@@ -564,13 +564,13 @@ impl MoorDB {
                             .object_children
                             .check(object_children, &ws.object_children)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(oo_lock) = this.object_owner.check(object_owner, &ws.object_owner)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
@@ -578,7 +578,7 @@ impl MoorDB {
                             .object_location
                             .check(object_location, &ws.object_location)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
@@ -586,12 +586,12 @@ impl MoorDB {
                             .object_contents
                             .check(object_contents, &ws.object_contents)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(on_lock) = this.object_name.check(object_name, &ws.object_name) else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
@@ -599,13 +599,13 @@ impl MoorDB {
                             .object_verbdefs
                             .check(object_verbdefs, &ws.object_verbdefs)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(ov_lock) = this.object_verbs.check(object_verbs, &ws.object_verbs)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
@@ -613,7 +613,7 @@ impl MoorDB {
                             .object_propdefs
                             .check(object_propdefs, &ws.object_propdefs)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
@@ -621,7 +621,7 @@ impl MoorDB {
                             .object_propvalues
                             .check(object_propvalues, &ws.object_propvalues)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
@@ -629,7 +629,7 @@ impl MoorDB {
                             .object_propflags
                             .check(object_propflags, &ws.object_propflags)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
@@ -648,69 +648,69 @@ impl MoorDB {
 
                         // Apply phase
                         let Ok(_unused) = this.object_flags.apply(ol_lock, ws.object_flags) else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_parent.apply(op_lock, ws.object_parent) else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_children.apply(oc_lock, ws.object_children)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_owner.apply(oo_lock, ws.object_owner) else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_location.apply(oloc_lock, ws.object_location)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_contents.apply(ocont_lock, ws.object_contents)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_name.apply(on_lock, ws.object_name) else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_verbdefs.apply(ovd_lock, ws.object_verbdefs)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_verbs.apply(ov_lock, ws.object_verbs) else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_propdefs.apply(opd_lock, ws.object_propdefs)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_propvalues.apply(opv_lock, ws.object_propvalues)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
                         let Ok(_unused) = this.object_propflags.apply(opf_lock, ws.object_propflags)
                         else {
-                            reply.send(CommitResult::ConflictRetry).unwrap();
+                            reply.send(CommitResult::ConflictRetry).ok();
                             continue;
                         };
 
@@ -723,10 +723,10 @@ impl MoorDB {
                         }
 
                         drop(_t);
-
-                        // No need to block the caller while we're doing the final write to disk.
-                        reply.send(CommitResult::Success).unwrap();
                     }
+                    // No need to block the caller while we're doing the final write to disk.
+                    reply.send(CommitResult::Success).ok();
+
                     // All locks now dropped, now we can do the write to disk, swap in the (maybe)
                     // updated verb resolution cache update sequences, and move on.
                     // NOTE: hopefully this all happens before the next commit comes in, otherwise
@@ -753,14 +753,17 @@ impl MoorDB {
                                 i.to_le_bytes(),
                                 seq.load(std::sync::atomic::Ordering::SeqCst).to_le_bytes(),
                             )
-                            .unwrap();
+                            .unwrap_or_else(|e| {
+                                error!("Failed to persist sequence {}: {}", i, e);
+                            });
                     }
 
                     let write_start = Instant::now();
                     self.keyspace
                         .persist(PersistMode::SyncAll)
-                        .expect("persist failed");
-
+                        .unwrap_or_else(|e| {
+                            error!("Failed to persist DB state to disk: {}", e);
+                        });
 
                     if start_time.elapsed() > Duration::from_secs(5) {
                         warn!(
