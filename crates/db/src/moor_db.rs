@@ -559,30 +559,40 @@ impl MoorDB {
                         // This will hold up new transactions starting, unfortunately.
                         // TODO: this is the major source of low throughput in benchmarking
                         {
-                            let object_flags_lock = this.object_flags.write_lock();
-                            let object_parent_lock = this.object_parent.write_lock();
-                            let object_children_lock = this.object_children.write_lock();
-                            let object_owner_lock = this.object_owner.write_lock();
-                            let object_location_lock = this.object_location.write_lock();
-                            let object_contents_lock = this.object_contents.write_lock();
-                            let object_name_lock = this.object_name.write_lock();
-                            let object_verbdefs_lock = this.object_verbdefs.write_lock();
-                            let object_verbs_lock = this.object_verbs.write_lock();
-                            let object_propdefs_lock = this.object_propdefs.write_lock();
-                            let object_propvalues_lock = this.object_propvalues.write_lock();
-                            let object_propflags_lock = this.object_propflags.write_lock();
-
+                            let object_flags_lock = object_flags.dirty().then(|| this.object_flags.write_lock());
                             object_flags.commit(object_flags_lock);
+
+                            let object_parent_lock = object_parent.dirty().then(|| this.object_parent.write_lock());
                             object_parent.commit(object_parent_lock);
+
+                            let object_children_lock = object_children.dirty().then(|| this.object_children.write_lock());
                             object_children.commit(object_children_lock);
+
+                            let object_owner_lock = object_owner.dirty().then(|| this.object_owner.write_lock());
                             object_owner.commit(object_owner_lock);
+
+                            let object_location_lock = object_location.dirty().then(|| this.object_location.write_lock());
                             object_location.commit(object_location_lock);
+
+                            let object_contents_lock = object_contents.dirty().then(|| this.object_contents.write_lock());
                             object_contents.commit(object_contents_lock);
+
+                            let object_name_lock = object_name.dirty().then(|| this.object_name.write_lock());
                             object_name.commit(object_name_lock);
+
+                            let object_verbdefs_lock = object_verbdefs.dirty().then(|| this.object_verbdefs.write_lock());
                             object_verbdefs.commit(object_verbdefs_lock);
+
+                            let object_verbs_lock = object_verbs.dirty().then(|| this.object_verbs.write_lock());
                             object_verbs.commit(object_verbs_lock);
+
+                            let object_propdefs_lock = object_propdefs.dirty().then(|| this.object_propdefs.write_lock());
                             object_propdefs.commit(object_propdefs_lock);
+
+                            let object_propvalues_lock = object_propvalues.dirty().then(|| this.object_propvalues.write_lock());
                             object_propvalues.commit(object_propvalues_lock);
+
+                            let object_propflags_lock = object_propflags.dirty().then(|| this.object_propflags.write_lock());
                             object_propflags.commit(object_propflags_lock);
                         }
 

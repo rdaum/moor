@@ -270,7 +270,7 @@ mod tests {
                         cr.check(&ws).expect("check failed in begin");
                         cr.apply(ws).expect("apply failed in begin");
                         let w = backing_store.write_lock();
-                        cr.commit(w);
+                        cr.commit(Some(w))
                     }
                 }
                 Type::Fail => {
@@ -314,7 +314,7 @@ mod tests {
                             Err(e) => panic!("unexpected error: {:?}", e),
                         }
                         let w = backing_store.write_lock();
-                        cr.commit(w);
+                        cr.commit(Some(w));
                         Ok(())
                     };
                     return fail_check_fn();

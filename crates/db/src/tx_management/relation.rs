@@ -213,8 +213,10 @@ where
         Ok(())
     }
 
-    pub fn commit(self, mut inner: RwLockWriteGuard<RelationIndex<Domain, Codomain>>) {
-        *inner = self.index;
+    pub fn commit(self, inner: Option<RwLockWriteGuard<RelationIndex<Domain, Codomain>>>) {
+        if let Some(mut inner) = inner {
+            *inner = self.index;
+        }
     }
 }
 
