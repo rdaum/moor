@@ -2755,6 +2755,7 @@ version = "0.9.0-alpha"
 dependencies = [
  "ahash",
  "byteview",
+ "criterion",
  "crossbeam-channel",
  "edn-format",
  "eyre",

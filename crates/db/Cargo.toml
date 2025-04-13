@@ -11,7 +11,12 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Interfaces for describing the worldstate of a moor database"
 
+[[bench]]
+name = "txdb_benches"
+harness = false
+
 [dev-dependencies]
+criterion.workspace = true
 edn-format.workspace = true
 eyre.workspace = true
 tempfile.workspace = true
