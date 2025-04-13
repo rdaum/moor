@@ -15,7 +15,7 @@ use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::moor_db::WorkingSets;
 use crate::prop_cache::PropResolutionCache;
-use crate::tx_management::{TransactionalCache, TransactionalTable, Tx};
+use crate::tx_management::{Relation, RelationTransaction, Tx};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::{BytesHolder, CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
@@ -36,10 +36,10 @@ use std::time::{Duration, Instant};
 use tracing::warn;
 use uuid::Uuid;
 
-type LC<Domain, Codomain> = TransactionalTable<
+type RTx<Domain, Codomain> = RelationTransaction<
     Domain,
     Codomain,
-    TransactionalCache<Domain, Codomain, FjallProvider<Domain, Codomain>>,
+    Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>,
 >;
 
 pub const SEQUENCE_MAX_OBJECT: usize = 0;
@@ -56,19 +56,19 @@ pub struct WorldStateTransaction {
     /// Note that for now the usage doesn't include the current pending transaction.
     pub(crate) usage_channel: Sender<oneshot::Sender<usize>>,
 
-    pub(crate) object_location: LC<Obj, Obj>,
-    pub(crate) object_contents: LC<Obj, ObjSet>,
-    pub(crate) object_flags: LC<Obj, BitEnum<ObjFlag>>,
-    pub(crate) object_parent: LC<Obj, Obj>,
-    pub(crate) object_children: LC<Obj, ObjSet>,
-    pub(crate) object_owner: LC<Obj, Obj>,
-    pub(crate) object_name: LC<Obj, StringHolder>,
+    pub(crate) object_location: RTx<Obj, Obj>,
+    pub(crate) object_contents: RTx<Obj, ObjSet>,
+    pub(crate) object_flags: RTx<Obj, BitEnum<ObjFlag>>,
+    pub(crate) object_parent: RTx<Obj, Obj>,
+    pub(crate) object_children: RTx<Obj, ObjSet>,
+    pub(crate) object_owner: RTx<Obj, Obj>,
+    pub(crate) object_name: RTx<Obj, StringHolder>,
 
-    pub(crate) object_verbdefs: LC<Obj, VerbDefs>,
-    pub(crate) object_verbs: LC<ObjAndUUIDHolder, BytesHolder>,
-    pub(crate) object_propdefs: LC<Obj, PropDefs>,
-    pub(crate) object_propvalues: LC<ObjAndUUIDHolder, Var>,
-    pub(crate) object_propflags: LC<ObjAndUUIDHolder, PropPerms>,
+    pub(crate) object_verbdefs: RTx<Obj, VerbDefs>,
+    pub(crate) object_verbs: RTx<ObjAndUUIDHolder, BytesHolder>,
+    pub(crate) object_propdefs: RTx<Obj, PropDefs>,
+    pub(crate) object_propvalues: RTx<ObjAndUUIDHolder, Var>,
+    pub(crate) object_propflags: RTx<ObjAndUUIDHolder, PropPerms>,
 
     pub(crate) sequences: [Arc<AtomicI64>; 16],
 
@@ -88,7 +88,7 @@ pub struct WorldStateTransaction {
 }
 
 fn upsert<Domain, Codomain>(
-    table: &mut LC<Domain, Codomain>,
+    table: &mut RTx<Domain, Codomain>,
     d: Domain,
     c: Codomain,
 ) -> Result<Option<Codomain>, Error>

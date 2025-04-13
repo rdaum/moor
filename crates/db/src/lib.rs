@@ -41,7 +41,7 @@ mod verb_cache;
 use crate::prop_cache::PropResolutionCache;
 use crate::verb_cache::VerbResolutionCache;
 pub use tx_management::Provider;
-pub use tx_management::{Error, Timestamp, TransactionalCache, TransactionalTable, Tx, WorkingSet};
+pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;

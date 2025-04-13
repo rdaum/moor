@@ -21,7 +21,7 @@ use std::sync::Arc;
 /// A key-value caching store that is scoped for the lifetime of a transaction.
 /// When the transaction is completed, it collapses into a WorkingSet which can be applied to the
 /// global transactional cache.
-pub struct TransactionalTable<Domain, Codomain, Source>
+pub struct RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
     Domain: Hash + Eq,
@@ -69,7 +69,8 @@ pub(crate) enum Entry<Datum: Clone> {
 
 pub type WorkingSet<Domain, Codomain> = Vec<(Domain, Op<Codomain>)>;
 
-impl<Domain, Codomain, Source> TransactionalTable<Domain, Codomain, Source>
+/// Represents the state of a relation in the context of a current transaction.
+impl<Domain, Codomain, Source> RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
     Domain: Clone + Hash + Eq,
@@ -78,8 +79,8 @@ where
     pub fn new(
         tx: Tx,
         backing_source: Arc<Source>,
-    ) -> TransactionalTable<Domain, Codomain, Source> {
-        TransactionalTable {
+    ) -> RelationTransaction<Domain, Codomain, Source> {
+        RelationTransaction {
             tx,
             index: RefCell::new(IndexMap::default()),
             backing_source,
@@ -548,7 +549,7 @@ mod tests {
 
         let backing_store = Arc::new(backing_store);
         let tx = Tx { ts: Timestamp(1) };
-        let mut cache = TransactionalTable::new(tx, backing_store.clone());
+        let mut cache = RelationTransaction::new(tx, backing_store.clone());
 
         let result = cache.get(&1).unwrap();
         assert_eq!(result, Some(1));

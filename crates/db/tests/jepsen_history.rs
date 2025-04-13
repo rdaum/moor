@@ -137,7 +137,7 @@ pub fn parse_edn(path: &Path) -> Vec<Entry> {
 mod tests {
     use crate::{Operation, Type};
     use eyre::bail;
-    use moor_db::{Error, Provider, Timestamp, TransactionalCache, TransactionalTable, Tx};
+    use moor_db::{Error, Provider, Relation, RelationTransaction, Timestamp, Tx};
     use moor_var::Symbol;
     use std::collections::HashMap;
     use std::path::Path;
@@ -211,7 +211,7 @@ mod tests {
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let backing_store = Arc::new(TransactionalCache::new(
+        let backing_store = Arc::new(Relation::new(
             Symbol::mk("test"),
             provider.clone(),
             1 << 16,
@@ -231,7 +231,7 @@ mod tests {
                     let tx = Tx {
                         ts: Timestamp(tx_counter),
                     };
-                    let cache = TransactionalTable::new(tx, backing_store.clone());
+                    let cache = RelationTransaction::new(tx, backing_store.clone());
                     backing_store.clone().start(&tx);
 
                     if transactions.insert(entry.process, (tx, cache)).is_some() {

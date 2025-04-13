@@ -13,7 +13,7 @@
 
 //! Global cache is a cache that acts as an origin for all local caches.
 
-use crate::tx_management::tx_table::{OpType, TransactionalTable, WorkingSet};
+use crate::tx_management::relation_tx::{OpType, RelationTransaction, WorkingSet};
 use crate::tx_management::{Canonical, Error, Provider, SizedCache, Timestamp, Tx};
 use ahash::AHasher;
 use indexmap::IndexMap;
@@ -38,7 +38,8 @@ struct Entry<T: Clone + PartialEq> {
     size_bytes: usize,
 }
 
-pub struct TransactionalCache<Domain, Codomain, Source>
+/// Represents the current "canonical" state of a relation.
+pub struct Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
     Domain: Hash + PartialEq + Eq + Clone,
@@ -54,7 +55,7 @@ where
     source: Arc<Source>,
 }
 
-impl<Domain, Codomain, Source> TransactionalCache<Domain, Codomain, Source>
+impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
@@ -126,14 +127,14 @@ where
     }
 }
 
-impl<Domain, Codomain, Source> TransactionalCache<Domain, Codomain, Source>
+impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
 {
-    pub fn start(self: Arc<Self>, tx: &Tx) -> TransactionalTable<Domain, Codomain, Self> {
-        let mut lc = TransactionalTable::new(*tx, self.clone());
+    pub fn start(self: Arc<Self>, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
+        let mut lc = RelationTransaction::new(*tx, self.clone());
         let lock = self.write_lock();
         let mut preseed_tuples = vec![];
         for d in &self.preseed {
@@ -375,8 +376,7 @@ where
     }
 }
 
-impl<Domain, Codomain, Source> Canonical<Domain, Codomain>
-    for TransactionalCache<Domain, Codomain, Source>
+impl<Domain, Codomain, Source> Canonical<Domain, Codomain> for Relation<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
@@ -416,7 +416,7 @@ where
     }
 }
 
-impl<Domain, Codomain, Source> SizedCache for TransactionalCache<Domain, Codomain, Source>
+impl<Domain, Codomain, Source> SizedCache for Relation<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
@@ -505,12 +505,7 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache::new(
-            Symbol::mk("test"),
-            provider,
-            2048,
-            &[],
-        ));
+        let global_cache = Arc::new(Relation::new(Symbol::mk("test"), provider, 2048, &[]));
 
         let domain = TestDomain(1);
         let codomain = TestCodomain(1);
@@ -537,12 +532,7 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache::new(
-            Symbol::mk("test"),
-            provider,
-            2048,
-            &[],
-        ));
+        let global_cache = Arc::new(Relation::new(Symbol::mk("test"), provider, 2048, &[]));
 
         let domain = TestDomain(1);
         let codomain_a = TestCodomain(1);
@@ -577,12 +567,7 @@ mod tests {
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(TransactionalCache::new(
-            Symbol::mk("test"),
-            provider,
-            2048,
-            &[],
-        ));
+        let global_cache = Arc::new(Relation::new(Symbol::mk("test"), provider, 2048, &[]));
 
         global_cache.process_cache_evictions();
 

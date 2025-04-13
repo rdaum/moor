@@ -37,7 +37,7 @@ fn commit_latency(c: &mut Criterion) {
         .unwrap();
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);
 
-    let append_values = v_list_iter((0..100).map(|i| v_int(i)));
+    let append_values = v_list_iter((0..100).map(v_int));
     let mut group = c.benchmark_group("commit_latency");
     let mut all_props = vec![];
     group.sample_size(10);
@@ -55,7 +55,7 @@ fn commit_latency(c: &mut Criterion) {
                 for _ in 0..num_tuples {
                     let new_prop_name = uuid::Uuid::new_v4();
                     let new_prop_name = Symbol::mk(&new_prop_name.to_string());
-                    all_props.push(new_prop_name.clone());
+                    all_props.push(new_prop_name);
                     tx.define_property(
                         &SYSTEM_OBJECT,
                         &SYSTEM_OBJECT,
@@ -81,7 +81,7 @@ fn commit_latency(c: &mut Criterion) {
             let mut cumulative_time = Duration::new(0, 0);
             for _ in 0..iters {
                 // pick a prop name from random out of all_props
-                let prop_name = all_props.choose(&mut rand::thread_rng()).unwrap().clone();
+                let prop_name = *all_props.choose(&mut rand::thread_rng()).unwrap();
                 let tx = db.new_world_state().unwrap();
                 for _ in 0..num_tuples {
                     let _ = tx

@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-mod transactional_cache;
-mod tx_table;
+mod relation;
+mod relation_tx;
 
-pub use transactional_cache::TransactionalCache;
-pub use tx_table::{TransactionalTable, WorkingSet};
+pub use relation::Relation;
+pub use relation_tx::{RelationTransaction, WorkingSet};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Timestamp(pub u64);

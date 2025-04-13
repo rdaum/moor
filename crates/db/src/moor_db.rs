@@ -15,7 +15,7 @@ use crate::config::DatabaseConfig;
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::prop_cache::PropResolutionCache;
-use crate::tx_management::{SizedCache, Timestamp, TransactionalCache, Tx, WorkingSet};
+use crate::tx_management::{Relation, SizedCache, Timestamp, Tx, WorkingSet};
 use crate::verb_cache::VerbResolutionCache;
 use crate::ws_transaction::WorldStateTransaction;
 use crate::{BytesHolder, CommitSet, ObjAndUUIDHolder, StringHolder};
@@ -37,19 +37,19 @@ pub struct MoorDB {
 
     keyspace: fjall::Keyspace,
 
-    object_location: GC<Obj, Obj>,
-    object_contents: GC<Obj, ObjSet>,
-    object_flags: GC<Obj, BitEnum<ObjFlag>>,
-    object_parent: GC<Obj, Obj>,
-    object_children: GC<Obj, ObjSet>,
-    object_owner: GC<Obj, Obj>,
-    object_name: GC<Obj, StringHolder>,
+    object_location: R<Obj, Obj>,
+    object_contents: R<Obj, ObjSet>,
+    object_flags: R<Obj, BitEnum<ObjFlag>>,
+    object_parent: R<Obj, Obj>,
+    object_children: R<Obj, ObjSet>,
+    object_owner: R<Obj, Obj>,
+    object_name: R<Obj, StringHolder>,
 
-    object_verbdefs: GC<Obj, VerbDefs>,
-    object_verbs: GC<ObjAndUUIDHolder, BytesHolder>,
-    object_propdefs: GC<Obj, PropDefs>,
-    object_propvalues: GC<ObjAndUUIDHolder, Var>,
-    object_propflags: GC<ObjAndUUIDHolder, PropPerms>,
+    object_verbdefs: R<Obj, VerbDefs>,
+    object_verbs: R<ObjAndUUIDHolder, BytesHolder>,
+    object_propdefs: R<Obj, PropDefs>,
+    object_propvalues: R<ObjAndUUIDHolder, Var>,
+    object_propflags: R<ObjAndUUIDHolder, PropPerms>,
 
     sequences: [Arc<AtomicI64>; 16],
     sequences_partition: PartitionHandle,
@@ -62,8 +62,7 @@ pub struct MoorDB {
     prop_resolution_cache: RwLock<PropResolutionCache>,
 }
 
-type GC<Domain, Codomain> =
-    Arc<TransactionalCache<Domain, Codomain, FjallProvider<Domain, Codomain>>>;
+type R<Domain, Codomain> = Arc<Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>>;
 
 pub(crate) struct WorkingSets {
     #[allow(dead_code)]
@@ -216,7 +215,7 @@ impl MoorDB {
         let preseed_objects = vec![SYSTEM_OBJECT, Obj::mk_id(1)];
 
         let default_cache_eviction_threshold = config.default_eviction_threshold;
-        let object_location = Arc::new(TransactionalCache::new(
+        let object_location = Arc::new(Relation::new(
             Symbol::mk("object_location"),
             Arc::new(object_location),
             config
@@ -225,7 +224,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &preseed_objects,
         ));
-        let object_contents = Arc::new(TransactionalCache::new(
+        let object_contents = Arc::new(Relation::new(
             Symbol::mk("object_contents"),
             Arc::new(object_contents),
             config
@@ -234,7 +233,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &preseed_objects,
         ));
-        let object_flags = Arc::new(TransactionalCache::new(
+        let object_flags = Arc::new(Relation::new(
             Symbol::mk("object_flags"),
             Arc::new(object_flags),
             config
@@ -243,7 +242,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &preseed_objects,
         ));
-        let object_parent = Arc::new(TransactionalCache::new(
+        let object_parent = Arc::new(Relation::new(
             Symbol::mk("object_parent"),
             Arc::new(object_parent),
             config
@@ -252,7 +251,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &preseed_objects,
         ));
-        let object_children = Arc::new(TransactionalCache::new(
+        let object_children = Arc::new(Relation::new(
             Symbol::mk("object_children"),
             Arc::new(object_children),
             config
@@ -261,7 +260,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &preseed_objects,
         ));
-        let object_owner = Arc::new(TransactionalCache::new(
+        let object_owner = Arc::new(Relation::new(
             Symbol::mk("object_owner"),
             Arc::new(object_owner),
             config
@@ -270,7 +269,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &preseed_objects,
         ));
-        let object_name = Arc::new(TransactionalCache::new(
+        let object_name = Arc::new(Relation::new(
             Symbol::mk("object_name"),
             Arc::new(object_name),
             config
@@ -279,7 +278,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &preseed_objects,
         ));
-        let object_verbdefs = Arc::new(TransactionalCache::new(
+        let object_verbdefs = Arc::new(Relation::new(
             Symbol::mk("object_verbdefs"),
             Arc::new(object_verbdefs),
             config
@@ -288,7 +287,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &preseed_objects,
         ));
-        let object_verbs = Arc::new(TransactionalCache::new(
+        let object_verbs = Arc::new(Relation::new(
             Symbol::mk("object_verbs"),
             Arc::new(object_verbs),
             config
@@ -297,7 +296,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &[],
         ));
-        let object_propdefs = Arc::new(TransactionalCache::new(
+        let object_propdefs = Arc::new(Relation::new(
             Symbol::mk("object_propdefs"),
             Arc::new(object_propdefs),
             config
@@ -306,7 +305,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &preseed_objects,
         ));
-        let object_propvalues = Arc::new(TransactionalCache::new(
+        let object_propvalues = Arc::new(Relation::new(
             Symbol::mk("object_propvalues"),
             Arc::new(object_propvalues),
             config
@@ -315,7 +314,7 @@ impl MoorDB {
                 .unwrap_or(default_cache_eviction_threshold),
             &[],
         ));
-        let object_propflags = Arc::new(TransactionalCache::new(
+        let object_propflags = Arc::new(Relation::new(
             Symbol::mk("object_propflags"),
             Arc::new(object_propflags),
             config
