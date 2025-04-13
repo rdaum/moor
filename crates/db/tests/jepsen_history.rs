@@ -137,7 +137,7 @@ pub fn parse_edn(path: &Path) -> Vec<Entry> {
 mod tests {
     use crate::{Operation, Type};
     use eyre::bail;
-    use moor_db::{Error, Provider, Relation, RelationTransaction, Timestamp, Tx};
+    use moor_db::{Error, Provider, Relation, Timestamp, Tx};
     use moor_var::Symbol;
     use std::collections::HashMap;
     use std::path::Path;
@@ -211,12 +211,7 @@ mod tests {
         let backing = HashMap::new();
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let backing_store = Arc::new(Relation::new(
-            Symbol::mk("test"),
-            provider.clone(),
-            1 << 16,
-            &[],
-        ));
+        let backing_store = Arc::new(Relation::new(Symbol::mk("test"), provider.clone()));
 
         let mut transactions = HashMap::new();
 
@@ -231,10 +226,13 @@ mod tests {
                     let tx = Tx {
                         ts: Timestamp(tx_counter),
                     };
-                    let cache = RelationTransaction::new(tx, backing_store.clone());
+                    let transaction = backing_store.clone().start(&tx);
                     backing_store.clone().start(&tx);
 
-                    if transactions.insert(entry.process, (tx, cache)).is_some() {
+                    if transactions
+                        .insert(entry.process, (tx, transaction))
+                        .is_some()
+                    {
                         bail!("transaction already exists");
                     }
                 }
@@ -268,13 +266,11 @@ mod tests {
                     let ws = cache.working_set();
 
                     {
-                        let lock = backing_store.write_lock();
-                        let lock = backing_store
-                            .check(lock, &ws)
-                            .map_err(|_| eyre::eyre!("check failed in commit"))?;
-                        let _l = backing_store
-                            .apply(lock, ws)
-                            .map_err(|_| eyre::eyre!("apply failed in commit"))?;
+                        let mut cr = backing_store.begin_check();
+                        cr.check(&ws).expect("check failed in begin");
+                        cr.apply(ws).expect("apply failed in begin");
+                        let w = backing_store.write_lock();
+                        cr.commit(w);
                     }
                 }
                 Type::Fail => {
@@ -303,19 +299,23 @@ mod tests {
                             }
                         }
                         let ws = cache.working_set();
-                        let lock = backing_store.write_lock();
-                        let lock = match backing_store.check(lock, &ws) {
+                        let mut cr = backing_store.begin_check();
+
+                        match cr.check(&ws) {
                             Err(Error::Conflict) => {
                                 return Ok(());
                             }
                             Err(e) => panic!("unexpected error: {:?}", e),
                             Ok(lock) => lock,
                         };
-                        match backing_store.apply(lock, ws) {
+                        match cr.apply(ws) {
                             Ok(_) => bail!("Expected conflict, got none in {entry:?}"),
-                            Err(Error::Conflict) => Ok(()),
+                            Err(Error::Conflict) => {}
                             Err(e) => panic!("unexpected error: {:?}", e),
                         }
+                        let w = backing_store.write_lock();
+                        cr.commit(w);
+                        Ok(())
                     };
                     return fail_check_fn();
                 }

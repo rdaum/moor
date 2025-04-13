@@ -16,26 +16,18 @@
 use crate::tx_management::relation_tx::{OpType, RelationTransaction, WorkingSet};
 use crate::tx_management::{Canonical, Error, Provider, SizedCache, Timestamp, Tx};
 use ahash::AHasher;
-use indexmap::IndexMap;
 use moor_var::Symbol;
-use std::collections::HashSet;
 use std::hash::{BuildHasherDefault, Hash};
 use std::sync::{Arc, RwLock, RwLockWriteGuard};
 use std::time::{Duration, Instant};
 use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Datum<T: Clone + PartialEq> {
-    Value(T),
-    Tombstone,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct Entry<T: Clone + PartialEq> {
-    ts: Timestamp,
-    hits: usize,
-    datum: Datum<T>,
-    size_bytes: usize,
+pub struct Entry<T: Clone + PartialEq> {
+    pub ts: Timestamp,
+    pub hits: usize,
+    pub value: T,
+    pub size_bytes: usize,
 }
 
 /// Represents the current "canonical" state of a relation.
@@ -47,10 +39,7 @@ where
 {
     relation_name: Symbol,
 
-    /// A series of common that local caches should be pre-seeded with.
-    preseed: HashSet<Domain, BuildHasherDefault<AHasher>>,
-
-    index: RwLock<Inner<Domain, Codomain>>,
+    index: RwLock<RelationIndex<Domain, Codomain>>,
 
     source: Arc<Source>,
 }
@@ -61,111 +50,78 @@ where
     Codomain: Clone + PartialEq + Eq,
     Source: Provider<Domain, Codomain>,
 {
-    pub fn new(
-        relation_name: Symbol,
-        provider: Arc<Source>,
-        threshold_bytes: usize,
-        preseed_domains: &[Domain],
-    ) -> Self {
-        let preseed = preseed_domains.iter().cloned().collect();
+    pub fn new(relation_name: Symbol, provider: Arc<Source>) -> Self {
         Self {
             relation_name,
-            preseed,
-            index: RwLock::new(Inner {
-                index: IndexMap::default(),
-                evict_q: vec![],
+            index: RwLock::new(RelationIndex {
+                entries: Default::default(),
                 used_bytes: 0,
-                threshold_bytes,
             }),
             source: provider,
         }
     }
 
-    pub fn set_preseed(&mut self, preseed: &[Domain]) {
-        self.preseed = preseed.iter().cloned().collect();
+    pub fn write_lock(&self) -> RwLockWriteGuard<RelationIndex<Domain, Codomain>> {
+        self.index.write().unwrap()
     }
 }
 
-struct Inner<Domain, Codomain>
+#[derive(Clone)]
+pub struct RelationIndex<Domain, Codomain>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
 {
     /// Internal index of the cache.
-    index: IndexMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
-
-    /// Eviction queue, a place where entries go to die, unless they are given a second chance.
-    /// Entry is Domain, hits & time of insertion. If hits during eviction is the same as hits
-    /// during insertion, it's evicted.
-    evict_q: Vec<(Domain, usize)>,
+    entries: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
 
     /// Total bytes used by the cache.
     used_bytes: usize,
-
-    /// Threshold for eviction.
-    threshold_bytes: usize,
 }
 
 /// Holds a lock on the cache while a transaction commit is in progress.
 /// (Just wraps the lock to avoid leaking the Inner type.)
-pub struct CacheWriteLock<'a, Domain, Codomain>(RwLockWriteGuard<'a, Inner<Domain, Codomain>>)
-where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq;
-
-impl<Domain, Codomain> CacheWriteLock<'_, Domain, Codomain>
+pub struct CheckRelation<Domain, Codomain, P>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
+    P: Provider<Domain, Codomain>,
+{
+    index: RelationIndex<Domain, Codomain>,
+    relation_name: Symbol,
+    source: Arc<P>,
+    dirty: bool,
+}
+
+impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
+where
+    Domain: Hash + PartialEq + Eq + Clone,
+    Codomain: Clone + PartialEq + Eq,
+    P: Provider<Domain, Codomain>,
 {
     pub fn num_entries(&self) -> usize {
-        self.0.index.len()
+        self.index.entries.len()
     }
 
     pub fn used_bytes(&self) -> usize {
-        self.0.used_bytes
+        self.index.used_bytes
     }
-}
 
-impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
-where
-    Source: Provider<Domain, Codomain>,
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
-{
-    pub fn start(self: Arc<Self>, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
-        let mut lc = RelationTransaction::new(*tx, self.clone());
-        let lock = self.write_lock();
-        let mut preseed_tuples = vec![];
-        for d in &self.preseed {
-            if let Some(e) = lock.0.index.get(d) {
-                match &e.datum {
-                    Datum::Value(c) => {
-                        preseed_tuples.push((e.ts, d.clone(), c.clone(), e.size_bytes));
-                    }
-                    Datum::Tombstone => continue,
-                }
-            }
-        }
-        lc.preseed(&preseed_tuples);
-        lc
+    pub fn dirty(&self) -> bool {
+        self.dirty
     }
 
     /// Check the cache for conflicts with the given working set.
     /// Holds a lock on the cache while checking.
     /// This is the first phase of transaction commit, and does not mutate the contents of
     /// the cache.
-    pub fn check<'a>(
-        &self,
-        mut cache_lock: CacheWriteLock<'a, Domain, Codomain>,
-        working_set: &WorkingSet<Domain, Codomain>,
-    ) -> Result<CacheWriteLock<'a, Domain, Codomain>, Error> {
+    pub fn check(&mut self, working_set: &WorkingSet<Domain, Codomain>) -> Result<(), Error> {
         let start_time = Instant::now();
         let mut last_check_time = start_time;
-        let inner = &mut cache_lock.0;
         let total_ops = working_set.len();
+        self.dirty = !working_set.is_empty();
         // Check phase first.
-        for (n, (domain, op)) in working_set.iter().enumerate() {
+        for (n, (domain, op, _)) in working_set.iter().enumerate() {
             if last_check_time.elapsed() > Duration::from_secs(5) {
                 warn!(
                     "Long check time for {}; running for {}s; {n}/{total_ops} checked",
@@ -175,7 +131,7 @@ where
                 last_check_time = Instant::now();
             }
             // Check local to see if we have one first, to see if there's a conflict.
-            if let Some(local_entry) = inner.index.get(domain) {
+            if let Some(local_entry) = self.index.entries.get(domain) {
                 // If what we have is an insert, and there's something already there, that's a
                 // a conflict.
                 if op.to_type == OpType::Insert {
@@ -193,7 +149,13 @@ where
 
             // Otherwise, pull from upstream and fetch to cache and check for conflict.
             if let Some((ts, codomain, size_bytes)) = self.source.get(domain)? {
-                inner.insert_entry(ts, domain.clone(), codomain.clone(), size_bytes);
+                let entry = Entry {
+                    ts,
+                    hits: 0,
+                    value: codomain.clone(),
+                    size_bytes,
+                };
+                self.index.entries.insert(domain.clone(), entry);
 
                 // If what we have is an insert, and there's something already there, that's also
                 // a conflict.
@@ -201,30 +163,25 @@ where
                     return Err(Error::Conflict);
                 }
             } else {
-                // If upstream doesn't have it, and it's not an insert, that's a conflict, this
+                // If upstream doesn't have it, and it's not an insert or delete, that's a conflict, this
                 // should not have happened.
-                if op.to_type != OpType::Insert {
+                if op.to_type == OpType::Update {
                     return Err(Error::Conflict);
                 }
             }
         }
-        Ok(cache_lock)
+        Ok(())
     }
 
     /// Apply the given working set to the cache.
     /// This is the final phase of the transaction commit process, and mutates the cache and
     /// requests mutation into the Source.
-    pub fn apply<'a>(
-        &self,
-        mut cache_lock: CacheWriteLock<'a, Domain, Codomain>,
-        working_set: WorkingSet<Domain, Codomain>,
-    ) -> Result<CacheWriteLock<'a, Domain, Codomain>, Error> {
+    pub fn apply(&mut self, working_set: WorkingSet<Domain, Codomain>) -> Result<(), Error> {
         let start_time = Instant::now();
         let mut last_check_time = start_time;
         let total_ops = working_set.len();
-        let inner = &mut cache_lock.0;
         // Apply phase.
-        for (n, (domain, op)) in working_set.into_iter().enumerate() {
+        for (n, (domain, op, codomain)) in working_set.into_iter().enumerate() {
             if last_check_time.elapsed() > Duration::from_secs(5) {
                 warn!(
                     "Long apply time for {}; running for {}s; {n}/{total_ops} checked",
@@ -235,47 +192,61 @@ where
             }
             match op.to_type {
                 OpType::Insert | OpType::Update => {
-                    let codomain = op.value.unwrap();
-                    inner.insert_entry(
+                    let entry = codomain
+                        .expect("Codomain should be non-None for insert or update operation");
+                    self.index.insert_entry(
                         op.write_ts,
                         domain.clone(),
-                        codomain.clone(),
-                        op.size_bytes,
+                        entry.value.clone(),
+                        entry.size_bytes,
                     );
-                    self.source.put(op.write_ts, domain.clone(), codomain).ok();
+                    self.source
+                        .put(op.write_ts, domain.clone(), entry.value)
+                        .ok();
                 }
                 OpType::Delete => {
-                    inner.insert_tombstone(op.write_ts, domain.clone());
+                    self.index.insert_tombstone(op.write_ts, domain.clone());
                     self.source.del(op.write_ts, &domain).unwrap();
                 }
-                _ => continue,
             }
         }
-        Ok(cache_lock)
+        Ok(())
     }
 
-    pub fn write_lock(&self) -> CacheWriteLock<Domain, Codomain> {
-        CacheWriteLock(self.index.write().unwrap())
+    pub fn commit(self, mut inner: RwLockWriteGuard<RelationIndex<Domain, Codomain>>) {
+        *inner = self.index;
+    }
+}
+
+impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
+where
+    Source: Provider<Domain, Codomain>,
+    Domain: Hash + PartialEq + Eq + Clone,
+    Codomain: Clone + PartialEq + Eq,
+{
+    pub fn start(self: Arc<Self>, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
+        let index = self.index.read().unwrap();
+        RelationTransaction::new(*tx, index.entries.clone(), self.clone())
+    }
+
+    pub fn begin_check(&self) -> CheckRelation<Domain, Codomain, Source> {
+        let index = self.index.read().unwrap();
+        CheckRelation {
+            index: index.clone(),
+            relation_name: self.relation_name,
+            source: self.source.clone(),
+            dirty: false,
+        }
     }
 
     #[allow(dead_code)]
     pub fn cache_usage_bytes(&self) -> usize {
-        self.index.read().unwrap().used_bytes
-    }
-
-    /// Scavenge the cache for victims that haven't been hit in the last round.
-    pub fn process_cache_evictions(&self) -> (usize, usize) {
-        let mut inner = self.write_lock();
-        inner.0.process_evictions()
-    }
-
-    pub fn select_victims(&self) {
-        let mut inner = self.write_lock();
-        inner.0.select_victims();
+        let index = self.index.read().unwrap();
+        index.used_bytes
     }
 }
 
-impl<Domain, Codomain> Inner<Domain, Codomain>
+impl<Domain, Codomain> RelationIndex<Domain, Codomain>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
@@ -287,12 +258,12 @@ where
         codomain: Codomain,
         entry_size_bytes: usize,
     ) {
-        match self.index.insert(
+        match self.entries.insert(
             domain.clone(),
             Entry {
                 ts,
                 hits: 0,
-                datum: Datum::Value(codomain),
+                value: codomain,
                 size_bytes: entry_size_bytes,
             },
         ) {
@@ -306,18 +277,8 @@ where
         }
     }
 
-    fn insert_tombstone(&mut self, ts: Timestamp, domain: Domain) {
-        match self.index.insert(
-            domain.clone(),
-            Entry {
-                ts,
-                hits: 0,
-                datum: Datum::Tombstone,
-                // TODO: this really should be a constant size of what a zero-size entry is, which
-                //  is actually a few bytes
-                size_bytes: 0,
-            },
-        ) {
+    fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain) {
+        match self.entries.remove(&domain) {
             None => {}
             Some(oe) => {
                 self.used_bytes -= oe.size_bytes;
@@ -326,53 +287,11 @@ where
     }
 
     fn index_lookup(&mut self, domain: &Domain) -> Option<&mut Entry<Codomain>> {
-        let mut entry = self.index.get_mut(domain);
+        let mut entry = self.entries.get_mut(domain);
         if let Some(e) = &mut entry {
             e.hits += 1;
         }
         entry
-    }
-
-    fn select_victims(&mut self) {
-        // If we've hit a bytes threshold, we pick some entries at random to put into an eviction
-        // victims list. It can then be given a second chance, or if still seen in the next
-        // eviction round, it will be evicted.
-        if self.used_bytes > self.threshold_bytes {
-            let mut total_candidate_bytes = 0;
-            let eviction_bytes_needed = self.used_bytes - self.threshold_bytes;
-            while total_candidate_bytes < eviction_bytes_needed {
-                let index_size = self.index.len();
-                if index_size == 0 {
-                    break;
-                }
-                let random_index = rand::random::<usize>() % index_size;
-                let entry = self.index.get_index(random_index).unwrap();
-                total_candidate_bytes += entry.1.size_bytes;
-                self.evict_q.push((entry.0.clone(), entry.1.hits));
-            }
-        }
-    }
-
-    fn process_evictions(&mut self) -> (usize, usize) {
-        // Go through the eviction queue and evict entries that haven't been hit in the last round.
-        let mut num_evicted = 0;
-        let before_eviction = self.used_bytes;
-        let evict_q = std::mem::take(&mut self.evict_q);
-        let mut victims = Vec::new();
-        for (domain, hits) in evict_q {
-            if let Some(e) = self.index.get(&domain) {
-                if e.hits == hits {
-                    victims.push((domain, e.size_bytes));
-                }
-            }
-        }
-        for (v, size_bytes) in victims {
-            if self.index.swap_remove(&v).is_some() {
-                self.used_bytes -= size_bytes;
-                num_evicted += 1;
-            }
-        }
-        (num_evicted, before_eviction - self.used_bytes)
     }
 }
 
@@ -385,10 +304,7 @@ where
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error> {
         let mut inner = self.index.write().unwrap();
         if let Some(entry) = inner.index_lookup(domain) {
-            match &entry.datum {
-                Datum::Value(codomain) => Ok(Some((entry.ts, codomain.clone(), entry.size_bytes))),
-                Datum::Tombstone => Ok(None),
-            }
+            Ok(Some((entry.ts, entry.value.clone(), entry.size_bytes)))
         } else {
             // Pull from backing store.
             if let Some((ts, codomain, bytes)) = self.source.get(domain)? {
@@ -423,11 +339,12 @@ where
     Source: Provider<Domain, Codomain>,
 {
     fn select_victims(&self) {
-        self.select_victims();
+        // Noop
     }
 
     fn process_cache_evictions(&self) -> (usize, usize) {
-        self.process_cache_evictions()
+        // Noop
+        (0, 0)
     }
 
     fn cache_usage_bytes(&self) -> usize {
@@ -505,25 +422,22 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(Relation::new(Symbol::mk("test"), provider, 2048, &[]));
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
         let domain = TestDomain(1);
         let codomain = TestCodomain(1);
 
-        let tx = Tx { ts: Timestamp(0) };
-        let mut lc = global_cache.clone().start(&tx);
+        let tx = Tx { ts: Timestamp(1) };
+        let mut lc = relation.clone().start(&tx);
         lc.insert(domain.clone(), codomain.clone(), 16).unwrap();
         assert_eq!(lc.get(&domain).unwrap(), Some(codomain.clone()));
         assert_eq!(lc.get(&TestDomain(0)).unwrap(), Some(TestCodomain(0)));
         let ws = lc.working_set();
 
-        let lock = global_cache.write_lock();
-        let lock = global_cache.check(lock, &ws).unwrap();
-        let lock = global_cache.apply(lock, ws).unwrap();
-        assert_eq!(
-            lock.0.index.get(&domain).unwrap().datum,
-            Datum::Value(codomain.clone())
-        );
+        let mut cr = relation.begin_check();
+        cr.check(&ws).unwrap();
+        cr.apply(ws).unwrap();
+        assert_eq!(relation.get(&domain).unwrap().unwrap().1, codomain.clone());
     }
 
     #[test]
@@ -532,7 +446,7 @@ mod tests {
         backing.insert(TestDomain(0), TestCodomain(0));
         let data = Arc::new(Mutex::new(backing));
         let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(Relation::new(Symbol::mk("test"), provider, 2048, &[]));
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
         let domain = TestDomain(1);
         let codomain_a = TestCodomain(1);
@@ -541,70 +455,26 @@ mod tests {
         let tx_a = Tx { ts: Timestamp(0) };
         let tx_b = Tx { ts: Timestamp(1) };
 
-        let mut lc_a = global_cache.clone().start(&tx_a);
+        let mut r_tx_a = relation.clone().start(&tx_a);
 
-        lc_a.insert(domain.clone(), codomain_a, 16).unwrap();
-        let mut lc_b = global_cache.clone().start(&tx_b);
-        lc_b.insert(domain.clone(), codomain_b, 16).unwrap();
-        let ws_a = lc_a.working_set();
-        let ws_b = lc_b.working_set();
+        r_tx_a.insert(domain.clone(), codomain_a, 16).unwrap();
+        let mut r_tx_b = relation.clone().start(&tx_b);
+        r_tx_b.insert(domain.clone(), codomain_b, 16).unwrap();
+        let ws_a = r_tx_a.working_set();
+        let ws_b = r_tx_b.working_set();
         {
-            let lock_a = global_cache.write_lock();
-            let lock_a = global_cache.check(lock_a, &ws_a).unwrap();
-            let _lock_a = global_cache.apply(lock_a, ws_a).unwrap();
+            let mut cr_a = relation.begin_check();
+            cr_a.check(&ws_a).unwrap();
+            cr_a.apply(ws_a).unwrap();
+            let mut r = relation.index.write().unwrap();
+            *r = cr_a.index;
         }
         {
-            let lock_b = global_cache.write_lock();
+            let mut cr_b = relation.begin_check();
 
             // This should fail because the first insert has already happened.
-            let check_result = global_cache.check(lock_b, &ws_b);
+            let check_result = cr_b.check(&ws_b);
             assert!(matches!(check_result, Err(Error::Conflict)));
         }
-    }
-
-    #[test]
-    fn test_simple_cache_evict() {
-        let backing = HashMap::new();
-        let data = Arc::new(Mutex::new(backing));
-        let provider = Arc::new(TestProvider { data });
-        let global_cache = Arc::new(Relation::new(Symbol::mk("test"), provider, 2048, &[]));
-
-        global_cache.process_cache_evictions();
-
-        // Fill up with some stuff greater than the threshold of 2048 bytes. Then initiate the evict cycle
-        // twice, and verify that some stuff got evictinated.
-
-        // Fill up the cache with entries exceeding the threshold of 2048 bytes.
-        let tx = Tx { ts: Timestamp(1) };
-        let mut lc = global_cache.clone().start(&tx);
-
-        for i in 0..3000 {
-            let domain = TestDomain(i);
-            let codomain = TestCodomain(i);
-
-            lc.insert(domain, codomain, 16).unwrap();
-        }
-        let ws = lc.working_set();
-
-        {
-            let lock = global_cache.write_lock();
-            let lock = global_cache.check(lock, &ws).unwrap();
-            let _ = global_cache.apply(lock, ws).unwrap();
-        }
-        let bytes_usage = global_cache.cache_usage_bytes();
-        assert!(
-            bytes_usage > 2048,
-            "Cache usage below threshold {bytes_usage} < 2048"
-        );
-        global_cache.select_victims();
-
-        let (num_evicted, freed_bytes) = global_cache.process_cache_evictions();
-
-        assert!(num_evicted > 0, "No items evicted");
-        assert!(freed_bytes > 0, "No bytes freed");
-        assert!(
-            global_cache.cache_usage_bytes() < bytes_usage,
-            "Cache usage above threshold"
-        );
     }
 }

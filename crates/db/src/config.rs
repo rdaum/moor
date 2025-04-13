@@ -66,10 +66,6 @@ impl Default for DatabaseConfig {
 /// Per-table configuration.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct TableConfig {
-    /// The maximum number of bytes to keep in the global transactional cache for this table,
-    /// before starting to evict entries.
-    pub cache_eviction_threshold: Option<usize>,
-
     /// Various fjall partition creation options.
     /// Refer to the fjall documentation for more information.
     pub max_memtable_size: Option<u32>,

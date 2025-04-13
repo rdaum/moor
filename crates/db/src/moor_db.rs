@@ -23,7 +23,7 @@ use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
 use moor_common::util::{BitEnum, PerfTimerGuard};
-use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var};
+use moor_var::{Obj, Symbol, Var};
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
@@ -212,116 +212,53 @@ impl MoorDB {
         let object_propvalues = FjallProvider::new(object_propvalues);
         let object_propflags = FjallProvider::new(object_propflags);
 
-        let preseed_objects = vec![SYSTEM_OBJECT, Obj::mk_id(1)];
-
-        let default_cache_eviction_threshold = config.default_eviction_threshold;
         let object_location = Arc::new(Relation::new(
             Symbol::mk("object_location"),
             Arc::new(object_location),
-            config
-                .object_location
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &preseed_objects,
         ));
         let object_contents = Arc::new(Relation::new(
             Symbol::mk("object_contents"),
             Arc::new(object_contents),
-            config
-                .object_contents
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &preseed_objects,
         ));
         let object_flags = Arc::new(Relation::new(
             Symbol::mk("object_flags"),
             Arc::new(object_flags),
-            config
-                .object_flags
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &preseed_objects,
         ));
         let object_parent = Arc::new(Relation::new(
             Symbol::mk("object_parent"),
             Arc::new(object_parent),
-            config
-                .object_parent
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &preseed_objects,
         ));
         let object_children = Arc::new(Relation::new(
             Symbol::mk("object_children"),
             Arc::new(object_children),
-            config
-                .object_children
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &preseed_objects,
         ));
         let object_owner = Arc::new(Relation::new(
             Symbol::mk("object_owner"),
             Arc::new(object_owner),
-            config
-                .object_owner
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &preseed_objects,
         ));
         let object_name = Arc::new(Relation::new(
             Symbol::mk("object_name"),
             Arc::new(object_name),
-            config
-                .object_name
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &preseed_objects,
         ));
         let object_verbdefs = Arc::new(Relation::new(
             Symbol::mk("object_verbdefs"),
             Arc::new(object_verbdefs),
-            config
-                .object_verbdefs
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &preseed_objects,
         ));
         let object_verbs = Arc::new(Relation::new(
             Symbol::mk("object_verbs"),
             Arc::new(object_verbs),
-            config
-                .object_verbs
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &[],
         ));
         let object_propdefs = Arc::new(Relation::new(
             Symbol::mk("object_propdefs"),
             Arc::new(object_propdefs),
-            config
-                .object_propdefs
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &preseed_objects,
         ));
         let object_propvalues = Arc::new(Relation::new(
             Symbol::mk("object_propvalues"),
             Arc::new(object_propvalues),
-            config
-                .object_propvalues
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &[],
         ));
         let object_propflags = Arc::new(Relation::new(
             Symbol::mk("object_propflags"),
             Arc::new(object_propflags),
-            config
-                .object_propflags
-                .cache_eviction_threshold
-                .unwrap_or(default_cache_eviction_threshold),
-            &[],
         ));
 
         let (commit_channel, commit_receiver) = crossbeam_channel::unbounded();
@@ -514,18 +451,19 @@ impl MoorDB {
 
                     let start_time = Instant::now();
 
-                    let object_flags = this.object_flags.write_lock();
-                    let object_parent = this.object_parent.write_lock();
-                    let object_children = this.object_children.write_lock();
-                    let object_owner = this.object_owner.write_lock();
-                    let object_location = this.object_location.write_lock();
-                    let object_contents = this.object_contents.write_lock();
-                    let object_name = this.object_name.write_lock();
-                    let object_verbdefs = this.object_verbdefs.write_lock();
-                    let object_verbs = this.object_verbs.write_lock();
-                    let object_propdefs = this.object_propdefs.write_lock();
-                    let object_propvalues = this.object_propvalues.write_lock();
-                    let object_propflags = this.object_propflags.write_lock();
+                    let mut object_flags = this.object_flags.begin_check();
+                    let mut object_parent = this.object_parent.begin_check();
+                    let mut object_children = this.object_children.begin_check();
+                    let mut object_owner = this.object_owner.begin_check();
+                    let mut object_location = this.object_location.begin_check();
+                    let mut object_contents = this.object_contents.begin_check();
+                    let mut object_name = this.object_name.begin_check();
+                    let mut object_verbdefs = this.object_verbdefs.begin_check();
+                    let mut object_verbs = this.object_verbs.begin_check();
+                    let mut object_propdefs = this.object_propdefs.begin_check();
+                    let mut object_propvalues = this.object_propvalues.begin_check();
+                    let mut object_propflags = this.object_propflags.begin_check();
+
 
                     let num_tuples = ws.object_flags.len()
                         + ws.object_parent.len()
@@ -545,96 +483,49 @@ impl MoorDB {
                     }
 
                     {
-                        let Ok(ol_lock) = this.object_flags.check(object_flags, &ws.object_flags)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-
-                            continue;
-                        };
-
-                        let Ok(op_lock) = this.object_parent.check(object_parent, &ws.object_parent)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-
-                            continue;
-                        };
-
-                        let Ok(oc_lock) = this
-                            .object_children
-                            .check(object_children, &ws.object_children)
-                        else {
+                        if object_flags.check(&ws.object_flags).is_err()
+                            || object_parent.check(&ws.object_parent).is_err()
+                            || object_children.check(&ws.object_children).is_err()
+                            || object_owner.check(&ws.object_owner).is_err()
+                            || object_location.check(&ws.object_location).is_err()
+                            || object_contents.check(&ws.object_contents).is_err()
+                            || object_name.check(&ws.object_name).is_err()
+                            || object_verbdefs.check(&ws.object_verbdefs).is_err()
+                            || object_verbs.check(&ws.object_verbs).is_err()
+                            || object_propdefs.check(&ws.object_propdefs).is_err()
+                            || object_propvalues.check(&ws.object_propvalues).is_err()
+                            || object_propflags.check(&ws.object_propflags).is_err() {
                             reply.send(CommitResult::ConflictRetry).ok();
                             continue;
-                        };
-
-                        let Ok(oo_lock) = this.object_owner.check(object_owner, &ws.object_owner)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(oloc_lock) = this
-                            .object_location
-                            .check(object_location, &ws.object_location)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(ocont_lock) = this
-                            .object_contents
-                            .check(object_contents, &ws.object_contents)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(on_lock) = this.object_name.check(object_name, &ws.object_name) else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(ovd_lock) = this
-                            .object_verbdefs
-                            .check(object_verbdefs, &ws.object_verbdefs)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(ov_lock) = this.object_verbs.check(object_verbs, &ws.object_verbs)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(opd_lock) = this
-                            .object_propdefs
-                            .check(object_propdefs, &ws.object_propdefs)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(opv_lock) = this
-                            .object_propvalues
-                            .check(object_propvalues, &ws.object_propvalues)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(opf_lock) = this
-                            .object_propflags
-                            .check(object_propflags, &ws.object_propflags)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
+                        }
                         drop(_t);
 
-                        let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
+                        // If after checking, it turns out there was nothing to do...
+                        let all_clean = !object_flags.dirty()
+                            && !object_parent.dirty()
+                            && !object_children.dirty()
+                            && !object_owner.dirty()
+                            && !object_location.dirty()
+                            && !object_contents.dirty()
+                            && !object_name.dirty()
+                            && !object_verbdefs.dirty()
+                            && !object_verbs.dirty()
+                            && !object_propdefs.dirty()
+                            && !object_propvalues.dirty()
+                            && !object_propflags.dirty();
+
+                        if all_clean {
+                            reply.send(CommitResult::Success).ok();
+
+                            // Update verb caches immediately
+                            let mut vc_lock = this.verb_resolution_cache.write().unwrap();
+                            *vc_lock = ws.verb_resolution_cache;
+
+                            let mut pc_lock = this.prop_resolution_cache.write().unwrap();
+                            *pc_lock = ws.prop_resolution_cache;
+
+                            continue;
+                        }
 
                         // Warn if the duration of the check phase took a really long time...
                         let apply_start = Instant::now();
@@ -645,73 +536,55 @@ impl MoorDB {
                             );
                         }
 
-                        // Apply phase
-                        let Ok(_unused) = this.object_flags.apply(ol_lock, ws.object_flags) else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
+                        let _t = PerfTimerGuard::new(&counters.commit_apply_phase);
 
-                        let Ok(_unused) = this.object_parent.apply(op_lock, ws.object_parent) else {
+                        if object_flags.apply(ws.object_flags).is_err()
+                            || object_parent.apply(ws.object_parent).is_err()
+                            || object_children.apply(ws.object_children).is_err()
+                            || object_owner.apply(ws.object_owner).is_err()
+                            || object_location.apply(ws.object_location).is_err()
+                            || object_contents.apply(ws.object_contents).is_err()
+                            || object_name.apply(ws.object_name).is_err()
+                            || object_verbdefs.apply(ws.object_verbdefs).is_err()
+                            || object_verbs.apply(ws.object_verbs).is_err()
+                            || object_propdefs.apply(ws.object_propdefs).is_err()
+                            || object_propvalues.apply(ws.object_propvalues).is_err()
+                            || object_propflags.apply(ws.object_propflags).is_err() {
                             reply.send(CommitResult::ConflictRetry).ok();
                             continue;
-                        };
+                        }
 
-                        let Ok(_unused) = this.object_children.apply(oc_lock, ws.object_children)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
 
-                        let Ok(_unused) = this.object_owner.apply(oo_lock, ws.object_owner) else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
+                        // Now take write-lock on all relations just for the very instant that we swap em out.
+                        // This will hold up new transactions starting, unfortunately.
+                        // TODO: this is the major source of low throughput in benchmarking
+                        {
+                            let object_flags_lock = this.object_flags.write_lock();
+                            let object_parent_lock = this.object_parent.write_lock();
+                            let object_children_lock = this.object_children.write_lock();
+                            let object_owner_lock = this.object_owner.write_lock();
+                            let object_location_lock = this.object_location.write_lock();
+                            let object_contents_lock = this.object_contents.write_lock();
+                            let object_name_lock = this.object_name.write_lock();
+                            let object_verbdefs_lock = this.object_verbdefs.write_lock();
+                            let object_verbs_lock = this.object_verbs.write_lock();
+                            let object_propdefs_lock = this.object_propdefs.write_lock();
+                            let object_propvalues_lock = this.object_propvalues.write_lock();
+                            let object_propflags_lock = this.object_propflags.write_lock();
 
-                        let Ok(_unused) = this.object_location.apply(oloc_lock, ws.object_location)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(_unused) = this.object_contents.apply(ocont_lock, ws.object_contents)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(_unused) = this.object_name.apply(on_lock, ws.object_name) else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(_unused) = this.object_verbdefs.apply(ovd_lock, ws.object_verbdefs)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(_unused) = this.object_verbs.apply(ov_lock, ws.object_verbs) else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(_unused) = this.object_propdefs.apply(opd_lock, ws.object_propdefs)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(_unused) = this.object_propvalues.apply(opv_lock, ws.object_propvalues)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
-
-                        let Ok(_unused) = this.object_propflags.apply(opf_lock, ws.object_propflags)
-                        else {
-                            reply.send(CommitResult::ConflictRetry).ok();
-                            continue;
-                        };
+                            object_flags.commit(object_flags_lock);
+                            object_parent.commit(object_parent_lock);
+                            object_children.commit(object_children_lock);
+                            object_owner.commit(object_owner_lock);
+                            object_location.commit(object_location_lock);
+                            object_contents.commit(object_contents_lock);
+                            object_name.commit(object_name_lock);
+                            object_verbdefs.commit(object_verbdefs_lock);
+                            object_verbs.commit(object_verbs_lock);
+                            object_propdefs.commit(object_propdefs_lock);
+                            object_propvalues.commit(object_propvalues_lock);
+                            object_propflags.commit(object_propflags_lock);
+                        }
 
                         // And if the commit took a long time, warn before the write to disk is begun.
                         if start_time.elapsed() > Duration::from_secs(5) {

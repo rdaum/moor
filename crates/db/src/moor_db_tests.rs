@@ -1461,4 +1461,17 @@ mod tests {
             .get_verb_by_name(&a, Symbol::mk("test"))
             .expect("Unable to get verb");
     }
+
+    #[test]
+    fn test_create_immediate_destroy() {
+        // equiv of recycle(create($nothing));
+        let db = test_db();
+        let mut tx = db.start_transaction();
+        let my_obj = tx
+            .create_object(Some(Obj::mk_id(-1)), Default::default())
+            .unwrap();
+        tx.recycle_object(&my_obj).unwrap();
+        let r = tx.commit().unwrap();
+        assert_eq!(r, CommitResult::Success);
+    }
 }
