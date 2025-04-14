@@ -62,7 +62,10 @@ use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};
 use moor_var::{Obj, Variant};
 
-const SCHEDULER_TICK_TIME: Duration = Duration::from_millis(5);
+// How long to pause between scheduler loop iterations when there is no work to do.
+// The higher this number the lower the background CPU usage but the higher the latency for response
+// to task suspension / resumptions.
+const SCHEDULER_YIELD_TIME: Duration = Duration::from_micros(10);
 
 /// Number of times to retry a program compilation transaction in case of conflict, before giving up.
 const NUM_VERB_PROGRAM_ATTEMPTS: usize = 5;
@@ -205,6 +208,7 @@ impl Scheduler {
             // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
             let active_tasks = self.task_q.tasks.keys().copied().collect::<Vec<_>>();
             let to_wake = self.task_q.suspended.collect_wake_tasks(&active_tasks);
+            let mut found_work = !to_wake.is_empty();
             for sr in to_wake {
                 let task_id = sr.task.task_id;
                 if let Err(e) = self.task_q.resume_task_thread(
@@ -223,11 +227,15 @@ impl Scheduler {
             // Handle any scheduler submissions...
             if let Ok(msg) = self.scheduler_receiver.try_recv() {
                 self.handle_scheduler_msg(msg);
+                found_work = true;
             }
 
-            if let Ok((task_id, msg)) = self.task_control_receiver.recv_timeout(SCHEDULER_TICK_TIME)
-            {
+            if let Ok((task_id, msg)) = self.task_control_receiver.try_recv() {
                 self.handle_task_msg(task_id, msg);
+                found_work = true;
+            }
+            if !found_work {
+                std::thread::sleep(SCHEDULER_YIELD_TIME);
             }
         }
 
