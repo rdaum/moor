@@ -91,6 +91,7 @@ where
                             error!("failed to insert into database: {}", e);
                         })
                         .ok();
+                    continue;
                 }
 
                 if let Ok(domain) = delete_rx.try_recv() {
@@ -105,7 +106,9 @@ where
                             error!("failed to delete from database: {}", e);
                         })
                         .ok();
+                    continue;
                 }
+                // If nothing was found introduce a small pause to stop CPU spinning.
                 std::thread::sleep(std::time::Duration::from_micros(1));
             }
         });
