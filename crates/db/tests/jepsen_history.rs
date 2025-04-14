@@ -203,6 +203,10 @@ mod tests {
                 .map(|(k, v)| (Timestamp(0), k.clone(), v.clone(), 16))
                 .collect())
         }
+
+        fn stop(&self) -> Result<(), Error> {
+            Ok(())
+        }
     }
 
     /// Given a workload, run it against our transaction implementation and verify the results.

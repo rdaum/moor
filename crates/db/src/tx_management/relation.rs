@@ -134,7 +134,7 @@ where
             if let Some(local_entry) = self.index.entries.get(domain) {
                 // If what we have is an insert, and there's something already there, that's a
                 // a conflict.
-                if op.to_type == OpType::Insert {
+                if op.operation == OpType::Insert {
                     return Err(Error::Conflict);
                 }
 
@@ -159,13 +159,13 @@ where
 
                 // If what we have is an insert, and there's something already there, that's also
                 // a conflict.
-                if op.to_type == OpType::Insert || ts > op.read_ts {
+                if op.operation == OpType::Insert || ts > op.read_ts {
                     return Err(Error::Conflict);
                 }
             } else {
                 // If upstream doesn't have it, and it's not an insert or delete, that's a conflict, this
                 // should not have happened.
-                if op.to_type == OpType::Update {
+                if op.operation == OpType::Update {
                     return Err(Error::Conflict);
                 }
             }
@@ -190,7 +190,7 @@ where
                 );
                 last_check_time = Instant::now();
             }
-            match op.to_type {
+            match op.operation {
                 OpType::Insert | OpType::Update => {
                     let entry = codomain
                         .expect("Codomain should be non-None for insert or update operation");
@@ -331,6 +331,16 @@ where
         Ok(results)
     }
 }
+impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
+where
+    Domain: Hash + PartialEq + Eq + Clone,
+    Codomain: Clone + PartialEq + Eq,
+    Source: Provider<Domain, Codomain>,
+{
+    pub fn stop_provider(&self) -> Result<(), Error> {
+        self.source.stop()
+    }
+}
 
 impl<Domain, Codomain, Source> SizedCache for Relation<Domain, Codomain, Source>
 where
@@ -413,6 +423,10 @@ mod tests {
                 .filter(|(k, v)| predicate(k, v))
                 .map(|(k, v)| (Timestamp(0), k.clone(), v.clone(), 16))
                 .collect())
+        }
+
+        fn stop(&self) -> Result<(), Error> {
+            Ok(())
         }
     }
 

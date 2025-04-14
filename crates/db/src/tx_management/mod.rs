@@ -50,6 +50,9 @@ pub trait Provider<Domain, Codomain> {
     fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool;
+
+    // Stop any background processing that is running on this provider.
+    fn stop(&self) -> Result<(), Error>;
 }
 
 /// A `SizedCache` is a cache that has a maximum size in bytes, and will attempt to evict entries

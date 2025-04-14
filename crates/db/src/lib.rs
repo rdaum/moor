@@ -80,6 +80,12 @@ impl Database for TxDB {
     }
 }
 
+impl Drop for TxDB {
+    fn drop(&mut self) {
+        self.storage.stop();
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StringHolder(pub String);
 

@@ -20,14 +20,15 @@ use crate::verb_cache::VerbResolutionCache;
 use crate::ws_transaction::WorldStateTransaction;
 use crate::{BytesHolder, CommitSet, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
-use fjall::{Config, PartitionCreateOptions, PartitionHandle};
+use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{Obj, Symbol, Var};
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tracing::{error, warn};
@@ -60,6 +61,8 @@ pub struct MoorDB {
 
     verb_resolution_cache: RwLock<VerbResolutionCache>,
     prop_resolution_cache: RwLock<PropResolutionCache>,
+
+    jh: Mutex<Option<JoinHandle<()>>>,
 }
 
 type R<Domain, Codomain> = Arc<Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>>;
@@ -289,6 +292,7 @@ impl MoorDB {
             keyspace,
             verb_resolution_cache,
             prop_resolution_cache,
+            jh: Mutex::new(None),
         });
 
         s.clone()
@@ -378,6 +382,27 @@ impl MoorDB {
     pub fn stop(&self) {
         self.kill_switch
             .store(true, std::sync::atomic::Ordering::SeqCst);
+
+        let mut jh_lock = self.jh.lock().unwrap();
+        if let Some(jh) = jh_lock.take() {
+            jh.join().unwrap();
+        }
+
+        self.object_parent.stop_provider().unwrap();
+        self.object_location.stop_provider().unwrap();
+        self.object_contents.stop_provider().unwrap();
+        self.object_flags.stop_provider().unwrap();
+        self.object_children.stop_provider().unwrap();
+        self.object_owner.stop_provider().unwrap();
+        self.object_name.stop_provider().unwrap();
+        self.object_verbdefs.stop_provider().unwrap();
+        self.object_verbs.stop_provider().unwrap();
+        self.object_propdefs.stop_provider().unwrap();
+        self.object_propvalues.stop_provider().unwrap();
+        self.object_propflags.stop_provider().unwrap();
+        if let Err(e) = self.keyspace.persist(PersistMode::SyncAll) {
+            error!("Failed to persist keyspace: {}", e);
+        }
     }
 
     fn start_processing_thread(
@@ -390,7 +415,7 @@ impl MoorDB {
         let this = self.clone();
 
         let thread_builder = std::thread::Builder::new().name("moor-db-process".to_string());
-        thread_builder
+        let jh = thread_builder
             .spawn(move || {
                 let mut last_eviction_check = std::time::Instant::now();
                 loop {
@@ -595,6 +620,8 @@ impl MoorDB {
                             let object_propflags_lock = object_propflags.dirty().then(|| this.object_propflags.write_lock());
                             object_propflags.commit(object_propflags_lock);
                         }
+                        // No need to block the caller while we're doing the final write to disk.
+                        reply.send(CommitResult::Success).ok();
 
                         // And if the commit took a long time, warn before the write to disk is begun.
                         if start_time.elapsed() > Duration::from_secs(5) {
@@ -606,8 +633,7 @@ impl MoorDB {
 
                         drop(_t);
                     }
-                    // No need to block the caller while we're doing the final write to disk.
-                    reply.send(CommitResult::Success).ok();
+
 
                     // All locks now dropped, now we can do the write to disk, swap in the (maybe)
                     // updated verb resolution cache update sequences, and move on.
@@ -623,10 +649,11 @@ impl MoorDB {
                     }
 
                     let _t = PerfTimerGuard::new(&counters.commit_write_phase);
+
                     // Now write out the current state of the sequences to the seq partition.
                     // Start by making sure that the monotonic sequence is written out.
-                    self.sequences[15].store(
-                        self.monotonic.load(std::sync::atomic::Ordering::SeqCst) as i64,
+                    this.sequences[15].store(
+                        this.monotonic.load(std::sync::atomic::Ordering::SeqCst) as i64,
                         std::sync::atomic::Ordering::Relaxed,
                     );
                     for (i, seq) in this.sequences.iter().enumerate() {
@@ -642,6 +669,9 @@ impl MoorDB {
                 }
             })
             .expect("failed to start DB processing thread");
+
+        let mut jh_lock = self.jh.lock().unwrap();
+        *jh_lock = Some(jh);
     }
 }
 

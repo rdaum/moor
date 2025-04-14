@@ -56,7 +56,7 @@ pub(crate) enum OpType {
 pub struct Op {
     pub(crate) read_ts: Timestamp,
     pub(crate) write_ts: Timestamp,
-    pub(crate) to_type: OpType,
+    pub(crate) operation: OpType,
 }
 
 pub type WorkingSet<Domain, Codomain> = Vec<(Domain, Op, Option<Entry<Codomain>>)>;
@@ -119,7 +119,7 @@ where
             Op {
                 read_ts: self.tx.ts,
                 write_ts: self.tx.ts,
-                to_type: OpType::Insert,
+                operation: OpType::Insert,
             },
         );
 
@@ -143,12 +143,7 @@ where
             // Check to see if we already have an operations-log entry for this domain.
             // If we do, we can update it to its new state.
             if let Some(old_entry) = index.operations.get_mut(domain) {
-                // Update the "to_type" depending on what the existing to_type was.
-                // If it was a "delete", that's an error, you can't update something deleted.
-                // If it was an "insert", keep it as an insert, but with the new value.
-                // If it was an "update", it stays the same, but with new value.
-                // If it was "cached", it now becomes an update.
-                old_entry.to_type = match old_entry.to_type {
+                old_entry.operation = match old_entry.operation {
                     OpType::Update => OpType::Update,
                     OpType::Delete => {
                         return Ok(None);
@@ -163,7 +158,7 @@ where
                     Op {
                         read_ts: self.tx.ts,
                         write_ts: self.tx.ts,
-                        to_type: OpType::Update,
+                        operation: OpType::Update,
                     },
                 );
             }
@@ -199,7 +194,7 @@ where
             Op {
                 read_ts,
                 write_ts: self.tx.ts,
-                to_type: OpType::Update,
+                operation: OpType::Update,
             },
         );
 
@@ -261,7 +256,7 @@ where
             // Check to see if we already have an operations-log entry for this domain.
             // If we do, we can update it to its new state.
             if let Some(old_entry) = index.operations.get_mut(domain) {
-                old_entry.to_type = match old_entry.to_type {
+                old_entry.operation = match old_entry.operation {
                     OpType::Update => OpType::Delete,
                     OpType::Delete => {
                         return Ok(None);
@@ -278,7 +273,7 @@ where
                     Op {
                         read_ts: self.tx.ts,
                         write_ts: self.tx.ts,
-                        to_type: OpType::Delete,
+                        operation: OpType::Delete,
                     },
                 );
             }
@@ -308,7 +303,7 @@ where
             Op {
                 read_ts,
                 write_ts: self.tx.ts,
-                to_type: OpType::Delete,
+                operation: OpType::Delete,
             },
         );
 
