@@ -70,20 +70,21 @@ where
     Domain: Clone + Eq + PartialEq + AsByteBuffer + Send + 'static,
     Codomain: Clone + Eq + PartialEq + AsByteBuffer + Send + 'static,
 {
-    pub fn new(fjall_partition: fjall::PartitionHandle) -> Self {
+    pub fn new(relation_name: &str, fjall_partition: fjall::PartitionHandle) -> Self {
         let kill_switch = Arc::new(AtomicBool::new(false));
         let (ops_tx, ops_rx) = crossbeam_channel::unbounded::<WriteOp<Domain, Codomain>>();
 
         let fj = fjall_partition.clone();
         let ks = kill_switch.clone();
-        let tb = std::thread::Builder::new().name("moor-fjall-write".into());
+        let thread_name = format!("moor-w-{}", relation_name);
+        let tb = std::thread::Builder::new().name(thread_name);
         let jh = tb
             .spawn(move || {
                 loop {
                     if ks.load(std::sync::atomic::Ordering::SeqCst) {
                         break;
                     }
-                    match ops_rx.recv_timeout(Duration::from_millis(1)) {
+                    match ops_rx.recv_timeout(Duration::from_millis(5)) {
                         Ok(WriteOp::Insert(ts, domain, codomain)) => {
                             let Ok(key) = domain.as_bytes().map_err(|_| {
                                 error!("failed to encode domain to database");

@@ -202,18 +202,18 @@ impl MoorDB {
             )
             .unwrap();
 
-        let object_location = FjallProvider::new(object_location);
-        let object_contents = FjallProvider::new(object_contents);
-        let object_flags = FjallProvider::new(object_flags);
-        let object_parent = FjallProvider::new(object_parent);
-        let object_children = FjallProvider::new(object_children);
-        let object_owner = FjallProvider::new(object_owner);
-        let object_name = FjallProvider::new(object_name);
-        let object_verbdefs = FjallProvider::new(object_verbdefs);
-        let object_verbs = FjallProvider::new(object_verbs);
-        let object_propdefs = FjallProvider::new(object_propdefs);
-        let object_propvalues = FjallProvider::new(object_propvalues);
-        let object_propflags = FjallProvider::new(object_propflags);
+        let object_location = FjallProvider::new("oloc", object_location);
+        let object_contents = FjallProvider::new("ocont", object_contents);
+        let object_flags = FjallProvider::new("oflags", object_flags);
+        let object_parent = FjallProvider::new("oparen", object_parent);
+        let object_children = FjallProvider::new("ochld", object_children);
+        let object_owner = FjallProvider::new("oown", object_owner);
+        let object_name = FjallProvider::new("oname", object_name);
+        let object_verbdefs = FjallProvider::new("ovdef", object_verbdefs);
+        let object_verbs = FjallProvider::new("overb", object_verbs);
+        let object_propdefs = FjallProvider::new("opdefs", object_propdefs);
+        let object_propvalues = FjallProvider::new("opvals", object_propvalues);
+        let object_propflags = FjallProvider::new("opflags", object_propflags);
 
         let object_location = Arc::new(Relation::new(
             Symbol::mk("object_location"),
