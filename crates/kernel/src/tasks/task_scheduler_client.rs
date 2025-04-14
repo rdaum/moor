@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use crossbeam_channel::Sender;
 
-use crate::tasks::TaskDescription;
 use crate::tasks::task::Task;
+use crate::tasks::{ActiveTask, QueuedTask};
 use crate::vm::{Fork, TaskSuspend};
 use moor_common::model::Perms;
 use moor_common::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
@@ -129,7 +129,7 @@ impl TaskSchedulerClient {
     }
 
     /// Ask the scheduler for a list of all background/suspended tasks known to it.
-    pub fn task_list(&self) -> Vec<TaskDescription> {
+    pub fn task_list(&self) -> (Vec<QueuedTask>, Vec<ActiveTask>) {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::RequestTasks(reply)))
@@ -308,7 +308,7 @@ pub enum TaskControlMsg {
     /// Tell the scheduler we're suspending until we get input from the client.
     TaskRequestInput(Task),
     /// Task is requesting a list of all other tasks known to the scheduler.
-    RequestTasks(oneshot::Sender<Vec<TaskDescription>>),
+    RequestTasks(oneshot::Sender<(Vec<QueuedTask>, Vec<ActiveTask>)>),
     /// Task is requesting that the scheduler abort another task.
     KillTask {
         victim_task_id: TaskId,

@@ -41,8 +41,9 @@ use crate::tasks::task::Task;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::{
-    DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
-    DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart, sched_counters,
+    ActiveTask, DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
+    DEFAULT_MAX_STACK_DEPTH, QueuedTask, ServerOptions, TaskHandle, TaskResult, TaskStart,
+    sched_counters,
 };
 use crate::textdump::{TextdumpWriter, make_textdump};
 use crate::vm::{Fork, TaskSuspend};
@@ -120,6 +121,14 @@ pub struct Scheduler {
 struct RunningTaskControl {
     /// For which player this task is running on behalf of.
     player: Obj,
+    /// What perms is it running with?
+    perms: Obj,
+    /// What was the action that started the task?
+    target: Arc<TaskStart>,
+    /// And what time did it first start, or recently resume?
+    start_time: Instant,
+    /// Is this a background task, or a foreground (command) task?
+    is_background: bool,
     /// A kill switch to signal the task to stop. True means the VM execution thread should stop
     /// as soon as it can.
     kill_switch: Arc<AtomicBool>,
@@ -141,6 +150,24 @@ struct TaskQ {
     suspended: SuspensionQ,
 }
 
+impl TaskQ {
+    pub(crate) fn tasks(&self) -> (Vec<QueuedTask>, Vec<ActiveTask>) {
+        let tasks = self.suspended.tasks();
+        let mut active_tasks = vec![];
+        for (t, r) in &self.tasks {
+            //
+            active_tasks.push(ActiveTask {
+                task_id: t.clone(),
+                player: r.player.clone(),
+                perms: r.perms.clone(),
+                target: r.target.clone(),
+                start_time: r.start_time.clone(),
+                is_background: r.is_background,
+            });
+        }
+        (tasks, active_tasks)
+    }
+}
 fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
     let Ok(value) = tx.retrieve_property(&SYSTEM_OBJECT, server_options_obj, name) else {
         return None;
@@ -148,7 +175,7 @@ fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState)
     match value.variant() {
         Variant::Int(i) if *i >= 0 => Some(*i as u64),
         _ => {
-            warn!("$bg_seconds is not a positive integer");
+            warn!("${name} is not a positive integer");
             None
         }
     }
@@ -204,6 +231,7 @@ impl Scheduler {
         info!("Starting scheduler loop");
 
         self.reload_server_options();
+
         while self.running {
             // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
             let active_tasks = self.task_q.tasks.keys().copied().collect::<Vec<_>>();
@@ -288,6 +316,7 @@ impl Scheduler {
 
         self.server_options = so;
 
+        info!("Current server options: {:?}", self.server_options);
         info!("Server options refreshed.");
     }
 
@@ -1116,7 +1145,7 @@ impl Scheduler {
                 trace!(?task_id, "Task suspended waiting for input");
             }
             TaskControlMsg::RequestTasks(reply) => {
-                let tasks = self.task_q.suspended.tasks();
+                let tasks = self.task_q.tasks();
                 if let Err(e) = reply.send(tasks) {
                     error!(?e, "Could not send task description to requester");
                     // TODO: murder this errant task
@@ -1515,6 +1544,10 @@ impl TaskQ {
         // Otherwise, we create a task control record and fire up a thread.
         let task_control = RunningTaskControl {
             player: player.clone(),
+            is_background,
+            start_time: Instant::now(),
+            perms: perms.clone(),
+            target: task.task_start.clone(),
             kill_switch,
             session: session.clone(),
             result_sender: (!is_background).then_some(sender),
@@ -1604,6 +1637,10 @@ impl TaskQ {
         let kill_switch = task.kill_switch.clone();
         let task_control = RunningTaskControl {
             player: player.clone(),
+            is_background: task.task_start.is_background(),
+            target: task.task_start.clone(),
+            perms: task.perms.clone(),
+            start_time: Instant::now(),
             kill_switch,
             session: session.clone(),
             result_sender,

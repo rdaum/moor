@@ -27,7 +27,7 @@ use moor_var::Obj;
 
 use crate::tasks::sessions::{NoopClientSession, Session, SessionFactory};
 use crate::tasks::task::Task;
-use crate::tasks::{TaskDescription, TaskResult, TasksDb};
+use crate::tasks::{QueuedTask, TaskResult, TasksDb};
 use moor_common::tasks::{SchedulerError, TaskId};
 
 /// State a suspended task sits in inside the `suspended` side of the task queue.
@@ -225,7 +225,7 @@ impl SuspensionQ {
     }
 
     /// Get a nice friendly list of all tasks in suspension state.
-    pub(crate) fn tasks(&self) -> Vec<TaskDescription> {
+    pub(crate) fn tasks(&self) -> Vec<QueuedTask> {
         let mut tasks = Vec::new();
 
         // Suspended tasks.
@@ -244,7 +244,7 @@ impl SuspensionQ {
                 }
                 _ => None,
             };
-            tasks.push(TaskDescription {
+            tasks.push(QueuedTask {
                 task_id: sr.task.task_id,
                 start_time,
                 permissions: sr.task.perms.clone(),

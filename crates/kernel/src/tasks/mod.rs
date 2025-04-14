@@ -13,7 +13,7 @@
 
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
@@ -98,9 +98,9 @@ pub struct VerbCall {
     pub caller: Var,
 }
 
-/// External interface description of a task, for purpose of e.g. the queued_tasks() builtin.
+/// External interface description of a queued task, for purpose of e.g. the queued_tasks() builtin.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct TaskDescription {
+pub struct QueuedTask {
     pub task_id: TaskId,
     pub start_time: Option<SystemTime>,
     pub permissions: Obj,
@@ -108,6 +108,23 @@ pub struct TaskDescription {
     pub verb_definer: Obj,
     pub line_number: usize,
     pub this: Var,
+}
+
+/// Description of a running task.
+#[derive(Debug, Clone)]
+pub struct ActiveTask {
+    /// The task ID
+    pub task_id: TaskId,
+    /// For which player this task is running on behalf of.
+    pub player: Obj,
+    /// What perms is it running with?
+    pub perms: Obj,
+    /// What was the action that started the task?
+    pub target: Arc<TaskStart>,
+    /// And what time did it first start, or recently resume?
+    pub start_time: Instant,
+    /// Is this a background task, or a foreground (command) task?
+    pub is_background: bool,
 }
 
 /// The set of options that can be configured for the server via core $server_options.

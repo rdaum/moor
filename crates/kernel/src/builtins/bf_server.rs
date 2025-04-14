@@ -11,12 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::io::Read;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
+use ahash::HashSet;
 use chrono::{DateTime, Local, TimeZone};
 use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;
+use std::io::Read;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
 
 use crate::bf_declare;
@@ -653,7 +653,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // return in form:
     //     {<task-id>, <start-time>, <x>, <y>,
     //      <programmer>, <verb-loc>, <verb-name>, <line>, <this>}
-    let tasks = tasks.iter().map(|task| {
+    let tasks = tasks.0.iter().map(|task| {
         let task_id = v_int(task.task_id as i64);
         let start_time = match task.start_time {
             None => v_none(),
@@ -700,6 +700,14 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Two modes: if player is None, we return a list of all players with queued tasks, but we
     // expect wiz perms.
     // If player is set, we return the number of tasks queued for that player.
+    // Now we can get the list of players with suspended or active tasks.
+    let mut players = HashSet::default();
+    for q in tasks.0 {
+        players.insert(q.permissions.clone());
+    }
+    for a in tasks.1 {
+        players.insert(a.perms.clone());
+    }
     match player {
         None => {
             // Check wiz perms
@@ -709,12 +717,6 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 .check_wizard()
                 .map_err(world_state_bf_err)?;
 
-            // Now we can get the list of players with queued tasks.
-            let players = tasks
-                .iter()
-                .map(|task| task.permissions.clone())
-                .collect::<Vec<_>>();
-
             Ok(Ret(v_list_iter(players.iter().map(|p| v_obj(p.clone())))))
         }
         Some(p) => {
@@ -723,7 +725,7 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             if !perms.check_is_wizard().map_err(world_state_bf_err)? && !p.eq(&perms.who) {
                 return Err(BfErr::Code(E_PERM));
             }
-            let queued_tasks = tasks.iter().filter(|t| &t.permissions == p).count();
+            let queued_tasks = players.iter().filter(|p| p.eq(p)).count();
             Ok(Ret(v_int(queued_tasks as i64)))
         }
     }
