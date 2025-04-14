@@ -20,7 +20,7 @@ use crate::verb_cache::VerbResolutionCache;
 use crate::ws_transaction::WorldStateTransaction;
 use crate::{BytesHolder, CommitSet, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
-use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
+use fjall::{Config, PartitionCreateOptions, PartitionHandle};
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{Obj, Symbol, Var};
@@ -638,21 +638,6 @@ impl MoorDB {
                             .unwrap_or_else(|e| {
                                 error!("Failed to persist sequence {}: {}", i, e);
                             });
-                    }
-
-                    let write_start = Instant::now();
-                    self.keyspace
-                        .persist(PersistMode::SyncAll)
-                        .unwrap_or_else(|e| {
-                            error!("Failed to persist DB state to disk: {}", e);
-                        });
-
-                    if start_time.elapsed() > Duration::from_secs(5) {
-                        warn!(
-                            "Long running commit, write phase took {}s; total commit time {}s for {num_tuples} tuples",
-                            write_start.elapsed().as_secs_f32(),
-                            start_time.elapsed().as_secs_f32()
-                        );
                     }
                 }
             })
