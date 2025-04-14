@@ -100897,6 +100897,7 @@ return 0 && "Automatically Added Return";
 "Last-Modify: {978675973, \"Xeric\", #999, \"Waterpoint\"}";
 .
 #52:18
+start_time = ftime();
 set_task_perms(player);
 if (prepstr == "in")
 pattern = dobjstr;
@@ -100933,6 +100934,8 @@ endif
 player:notify(tostr("Searching for verbs ", prepstr, " ", iobjstr, (verb == "@egrep") ? " matching the pattern " | " containing the string ", $string_utils:print(pattern), " ..."));
 player:notify("");
 $code_utils:((verb == "@egrep") ? "find_verbs_matching" | "find_verbs_containing")(pattern, @objlist);
+end_time = ftime();
+player:tell("Grep took ", (end_time - start_time), " seconds");
 return 0 && "Automatically Added Return";
 "Metadata 202106";
 .
