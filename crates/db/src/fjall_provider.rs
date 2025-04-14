@@ -20,7 +20,16 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::thread::JoinHandle;
+use std::time::Duration;
 use tracing::error;
+
+enum WriteOp<
+    Domain: Clone + Eq + PartialEq + AsByteBuffer,
+    Codomain: Clone + Eq + PartialEq + AsByteBuffer,
+> {
+    Insert(Timestamp, Domain, Codomain),
+    Delete(Domain),
+}
 
 /// A backing persistence provider that fills the DB cache from a Fjall partition.
 pub(crate) struct FjallProvider<Domain, Codomain>
@@ -29,8 +38,7 @@ where
     Codomain: Clone + Eq + PartialEq + AsByteBuffer,
 {
     fjall_partition: fjall::PartitionHandle,
-    insert_tx: Sender<(Timestamp, Domain, Codomain)>,
-    delete_tx: Sender<Domain>,
+    ops: Sender<WriteOp<Domain, Codomain>>,
     kill_switch: Arc<AtomicBool>,
     _phantom_data: PhantomData<(Domain, Codomain)>,
     jh: Option<JoinHandle<()>>,
@@ -64,58 +72,58 @@ where
 {
     pub fn new(fjall_partition: fjall::PartitionHandle) -> Self {
         let kill_switch = Arc::new(AtomicBool::new(false));
-        let (insert_tx, insert_rx) =
-            crossbeam_channel::unbounded::<(Timestamp, Domain, Codomain)>();
-        let (delete_tx, delete_rx) = crossbeam_channel::unbounded::<Domain>();
+        let (ops_tx, ops_rx) = crossbeam_channel::unbounded::<WriteOp<Domain, Codomain>>();
 
         let fj = fjall_partition.clone();
         let ks = kill_switch.clone();
-        let jh = std::thread::spawn(move || {
-            loop {
-                if ks.load(std::sync::atomic::Ordering::SeqCst) {
-                    break;
+        let tb = std::thread::Builder::new().name("moor-fjall-write".into());
+        let jh = tb
+            .spawn(move || {
+                loop {
+                    if ks.load(std::sync::atomic::Ordering::SeqCst) {
+                        break;
+                    }
+                    match ops_rx.recv_timeout(Duration::from_millis(1)) {
+                        Ok(WriteOp::Insert(ts, domain, codomain)) => {
+                            let Ok(key) = domain.as_bytes().map_err(|_| {
+                                error!("failed to encode domain to database");
+                            }) else {
+                                continue;
+                            };
+                            let Ok(value) = encode::<Codomain>(ts, &codomain) else {
+                                error!("failed to encode codomain to database");
+                                continue;
+                            };
+                            fjall_partition
+                                .insert(key, value)
+                                .map_err(|e| {
+                                    error!("failed to insert into database: {}", e);
+                                })
+                                .ok();
+                        }
+                        Ok(WriteOp::Delete(domain)) => {
+                            let Ok(key) = domain.as_bytes().map_err(|_| {
+                                error!("failed to encode domain to database for deletion");
+                            }) else {
+                                continue;
+                            };
+                            fjall_partition
+                                .remove(key)
+                                .map_err(|e| {
+                                    error!("failed to delete from database: {}", e);
+                                })
+                                .ok();
+                        }
+                        Err(_e) => {
+                            continue;
+                        }
+                    }
                 }
-                if let Ok((ts, domain, codomain)) = insert_rx.try_recv() {
-                    let Ok(key) = domain.as_bytes().map_err(|_| {
-                        error!("failed to encode domain to database");
-                    }) else {
-                        continue;
-                    };
-                    let Ok(value) = encode::<Codomain>(ts, &codomain) else {
-                        error!("failed to encode codomain to database");
-                        continue;
-                    };
-                    fjall_partition
-                        .insert(key, value)
-                        .map_err(|e| {
-                            error!("failed to insert into database: {}", e);
-                        })
-                        .ok();
-                    continue;
-                }
-
-                if let Ok(domain) = delete_rx.try_recv() {
-                    let Ok(key) = domain.as_bytes().map_err(|_| {
-                        error!("failed to encode domain to database for deletion");
-                    }) else {
-                        continue;
-                    };
-                    fjall_partition
-                        .remove(key)
-                        .map_err(|e| {
-                            error!("failed to delete from database: {}", e);
-                        })
-                        .ok();
-                    continue;
-                }
-                // If nothing was found introduce a small pause to stop CPU spinning.
-                std::thread::sleep(std::time::Duration::from_micros(1));
-            }
-        });
+            })
+            .expect("failed to spawn fjall-write");
         Self {
             fjall_partition: fj,
-            insert_tx,
-            delete_tx,
+            ops: ops_tx,
             _phantom_data: PhantomData,
             kill_switch,
             jh: Some(jh),
@@ -145,8 +153,8 @@ where
 
     fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error> {
         if let Err(e) = self
-            .insert_tx
-            .send((timestamp, domain.clone(), codomain.clone()))
+            .ops
+            .send(WriteOp::Insert(timestamp, domain.clone(), codomain.clone()))
         {
             return Err(Error::StorageFailure(format!(
                 "failed to insert into database: {}",
@@ -157,7 +165,7 @@ where
     }
 
     fn del(&self, _timestamp: Timestamp, domain: &Domain) -> Result<(), Error> {
-        if let Err(e) = self.delete_tx.send(domain.clone()) {
+        if let Err(e) = self.ops.send(WriteOp::Delete(domain.clone())) {
             return Err(Error::StorageFailure(format!(
                 "failed to delete from database: {}",
                 e
