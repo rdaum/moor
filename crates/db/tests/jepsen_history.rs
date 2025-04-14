@@ -175,11 +175,11 @@ mod tests {
         fn put(
             &self,
             _timestamp: Timestamp,
-            domain: TestDomain,
-            codomain: TestCodomain,
+            domain: &TestDomain,
+            codomain: &TestCodomain,
         ) -> Result<(), Error> {
             let mut data = self.data.lock().unwrap();
-            data.insert(domain, codomain);
+            data.insert(domain.clone(), codomain.clone());
             Ok(())
         }
 

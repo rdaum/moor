@@ -37,7 +37,7 @@ where
     Ok((ts, codomain))
 }
 
-fn encode<Codomain>(ts: Timestamp, codomain: Codomain) -> Result<UserValue, Error>
+fn encode<Codomain>(ts: Timestamp, codomain: &Codomain) -> Result<UserValue, Error>
 where
     Codomain: AsByteBuffer,
 {
@@ -81,7 +81,7 @@ where
         Ok(Some((ts, codomain, size)))
     }
 
-    fn put(&self, timestamp: Timestamp, domain: Domain, codomain: Codomain) -> Result<(), Error> {
+    fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error> {
         let key = domain.as_bytes().map_err(|_| Error::EncodingFailure)?;
         let value = encode::<Codomain>(timestamp, codomain)?;
         self.fjall_partition

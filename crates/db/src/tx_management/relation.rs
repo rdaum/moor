@@ -194,15 +194,13 @@ where
                 OpType::Insert | OpType::Update => {
                     let entry = codomain
                         .expect("Codomain should be non-None for insert or update operation");
+                    self.source.put(op.write_ts, &domain, &entry.value).ok();
                     self.index.insert_entry(
                         op.write_ts,
                         domain.clone(),
-                        entry.value.clone(),
+                        entry.value,
                         entry.size_bytes,
                     );
-                    self.source
-                        .put(op.write_ts, domain.clone(), entry.value)
-                        .ok();
                 }
                 OpType::Delete => {
                     self.index.insert_tombstone(op.write_ts, domain.clone());
@@ -388,11 +386,11 @@ mod tests {
         fn put(
             &self,
             _timestamp: Timestamp,
-            domain: TestDomain,
-            codomain: TestCodomain,
+            domain: &TestDomain,
+            codomain: &TestCodomain,
         ) -> Result<(), Error> {
             let mut data = self.data.lock().unwrap();
-            data.insert(domain, codomain);
+            data.insert(domain.clone(), codomain.clone());
             Ok(())
         }
 

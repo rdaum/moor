@@ -43,7 +43,7 @@ pub enum Error {
 /// global cache.
 pub trait Provider<Domain, Codomain> {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error>;
-    fn put(&self, timestamp: Timestamp, domain: Domain, codomain: Codomain) -> Result<(), Error>;
+    fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error>;
     fn del(&self, timestamp: Timestamp, domain: &Domain) -> Result<(), Error>;
 
     /// Scan the database for all keys match the given predicate
