@@ -267,7 +267,7 @@ impl WorldState for DbWorldState {
 
         // Special properties like name, location, and contents get treated specially.
         if pname == *NAME_SYM {
-            return self.names_of(perms, obj).map(|(name, _)| Var::from(name));
+            return self.name_of(perms, obj).map(|name| Var::from(name));
         } else if pname == *LOCATION_SYM {
             return self.location_of(perms, obj).map(Var::from);
         } else if pname == *CONTENTS_SYM {
@@ -803,10 +803,15 @@ impl WorldState for DbWorldState {
         self.get_tx().object_valid(obj)
     }
 
+    fn name_of(&self, _perms: &Obj, obj: &Obj) -> Result<String, WorldStateError> {
+        let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.names_of);
+        let name = self.get_tx().get_object_name(obj)?;
+
+        Ok(name)
+    }
+
     fn names_of(&self, perms: &Obj, obj: &Obj) -> Result<(String, Vec<String>), WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.names_of);
-        // Another thing that MOO allows lookup of without permissions.
-        // First get name
         let name = self.get_tx().get_object_name(obj)?;
 
         // Then grab aliases property.

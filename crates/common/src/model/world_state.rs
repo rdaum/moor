@@ -380,6 +380,9 @@ pub trait WorldState: Send {
     /// Check the validity of an object.
     fn valid(&self, obj: &Obj) -> Result<bool, WorldStateError>;
 
+    /// Get just the name of a given object.
+    fn name_of(&self, perms: &Obj, obj: &Obj) -> Result<String, WorldStateError>;
+
     /// Get the name & aliases of an object.
     fn names_of(&self, perms: &Obj, obj: &Obj) -> Result<(String, Vec<String>), WorldStateError>;
 
@@ -444,6 +447,7 @@ pub struct WorldStatePerf {
     pub descendants_of: PerfCounter,
     pub ancestors_of: PerfCounter,
     pub valid: PerfCounter,
+    pub name_of: PerfCounter,
     pub names_of: PerfCounter,
     pub db_usage: PerfCounter,
     pub commit: PerfCounter,
@@ -505,6 +509,7 @@ impl WorldStatePerf {
             descendants_of: PerfCounter::new("descendants_of"),
             ancestors_of: PerfCounter::new("ancestors_of"),
             valid: PerfCounter::new("valid"),
+            name_of: PerfCounter::new("name_of"),
             names_of: PerfCounter::new("names_of"),
             db_usage: PerfCounter::new("db_usage"),
             commit: PerfCounter::new("commit"),
@@ -558,6 +563,7 @@ impl WorldStatePerf {
             &self.descendants_of,
             &self.ancestors_of,
             &self.valid,
+            &self.name_of,
             &self.names_of,
             &self.db_usage,
             &self.commit,
