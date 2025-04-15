@@ -24,28 +24,13 @@ use std::cmp::Ordering;
 use std::hash::Hash;
 
 #[derive(Clone)]
-pub struct Map(Box<im::Vector<(Var, Var)>>);
+pub struct Map(Box<im::OrdMap<Var, Var>>);
 
 impl Map {
     // Construct from an Iterator of paris
     pub(crate) fn build<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
-        // We use a vector of pairs, sorted, so binary search can be used to find
-        // keys in O(log n) time.
-        // Construction, however, is O(n) because we need to insert the pairs in sorted order.
-        // And make a copy, to boot.
-        let mut sorted: Vec<_> = pairs.collect();
-        sorted.sort_by(|(a, _), (b, _)| a.cmp(b));
-
-        Self::build_presorted(sorted.into_iter())
-    }
-
-    pub(crate) fn build_presorted<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
-        let l = im::Vector::from(
-            pairs
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect::<Vec<_>>(),
-        );
-        let m = Map(Box::new(l));
+        let m = im::OrdMap::from_iter(pairs.cloned());
+        let m = Map(Box::new(m));
         Var::from_variant(Variant::Map(m))
     }
 
@@ -94,15 +79,7 @@ impl Associative for Map {
     }
 
     fn get(&self, key: &Var) -> Result<Var, Error> {
-        // Binary search for the key.
-        let pos = self.0.binary_search_by(|(k, _)| k.cmp(key));
-        match pos {
-            Ok(pos) => {
-                let entry = &self.0[pos];
-                Ok(entry.1.clone())
-            }
-            Err(_) => Err(E_RANGE),
-        }
+        self.0.get(key).cloned().ok_or(E_RANGE)
     }
 
     fn set(&self, key: &Var, value: &Var) -> Result<Var, Error> {
@@ -116,50 +93,45 @@ impl Associative for Map {
         // Otherwise, we add a new key-value pair, which requires re-sorting...
         // So no matter what, this is an expensive O(N) operation, requiring multiple copies.
         // We'll just build a new, vector, and then pass the iterator into the build function.
-
-        // TODO: find a way to construct chained iterators for this instead...
-
-        let mut new_vec = Vec::with_capacity(self.len() + 1);
-        let mut found = false;
-        for (k, v) in self.iter() {
-            if k == *key {
-                new_vec.push((key.clone(), value.clone()));
-                found = true;
-            } else {
-                new_vec.push((k, v));
-            }
-        }
-        if !found {
-            new_vec.push((key.clone(), value.clone()));
-        }
-        Ok(Self::build(new_vec.iter()))
+        let mut cow_value = self.0.clone();
+        cow_value.insert(key.clone(), value.clone());
+        Ok(Var::from_variant(Variant::Map(Map(cow_value))))
     }
 
     fn index(&self, index: usize) -> Result<(Var, Var), Error> {
-        let (k, v) = &self.0[index];
+        // Note: Our structure doesn't have sequential indexed iteration, so to get the Nth value, we
+        // have to do an O(N) iteration. This is a notably expensive operation, and should be avoided.
+        // We should try to come up with a way to get map iteration to... not do this.
+        let iterator = self.iter();
+        let mut iterator = iterator.skip(index);
+        let Some((k, v)) = iterator.next() else {
+            return Err(E_RANGE);
+        };
+
         Ok((k.clone(), v.clone()))
     }
 
     /// Return the range of key-value pairs between the two keys.
     fn range(&self, from: &Var, to: &Var) -> Result<Var, Error> {
-        // Find start with binary search.
-        let start = match self.0.binary_search_by(|(k, _)| k.cmp(from)) {
-            Ok(pos) => pos,
-            Err(_) => return Err(E_RANGE),
+        // Start by seeking the start of the range
+        let mut range = self.0.range(from..);
+
+        // There has to be something at the start of the range, or we toss out an E_RANGE
+        let Some(first) = range.next() else {
+            return Err(E_RANGE);
         };
 
-        // Now scan forward to find the end.
-        let mut new_vec = Vec::new();
-        for i in start..self.len() {
-            let (k, v) = &self.0[i];
+        let mut new_map = Box::new(im::OrdMap::new());
+        new_map.insert(first.0.clone(), first.1.clone());
+        for (k, v) in range {
             let ordering = k.cmp(to);
             if ordering == Ordering::Greater || ordering == Ordering::Equal {
                 break;
             }
-            new_vec.push((k.clone(), v.clone()));
+            new_map.insert(k.clone(), v.clone());
         }
 
-        Ok(Self::build_presorted(new_vec.iter()))
+        Ok(Var::from_variant(Variant::Map(Map(new_map))))
     }
 
     fn range_set(&self, _from: &Var, _to: &Var, _with: &Var) -> Result<Var, Error> {
@@ -205,37 +177,47 @@ impl Associative for Map {
         if self.is_empty() {
             return Ok(false);
         }
-        let cmp = |a: &Var, b: &Var| {
-            if case_sensitive {
-                a.cmp_case_sensitive(b)
-            } else {
-                a.cmp(b)
+        // If case sensitive, we have to do a (choke) linear scan. Otherwise we can just do a
+        // normal search using existing comparator.
+        if !case_sensitive {
+            return Ok(self.0.contains_key(key));
+        }
+        for (k, _) in self.0.iter() {
+            if k.cmp_case_sensitive(key) == Ordering::Equal {
+                return Ok(true);
             }
-        };
-        Ok(self.0.binary_search_by(|(k, _)| cmp(k, key)).is_ok())
+        }
+        Ok(false)
     }
 
     /// Return this map with the key/value pair removed.
     /// Return the new map and the value that was removed, if any
     fn remove(&self, key: &Var, case_sensitive: bool) -> (Var, Option<Var>) {
-        let position = self.0.binary_search_by(|(k, _)| {
-            if case_sensitive {
-                k.cmp_case_sensitive(key)
-            } else {
-                k.cmp(key)
-            }
-        });
-        match position {
-            Ok(pos) => {
-                let mut new = self.0.as_ref().clone();
-                new.remove(pos);
-                (Self::build(new.iter()), Some(self.0[pos].1.clone()))
-            }
-            Err(_) => {
-                let variant = Variant::Map(self.clone());
-                (Var::from_variant(variant), None)
-            }
+        if self.is_empty() {
+            return (Var::from_variant(Variant::Map(self.clone())), None);
         }
+
+        if !case_sensitive {
+            let mut cow_value = self.0.clone();
+            let old_value = cow_value.remove(key);
+            return (Var::from_variant(Variant::Map(Map(cow_value))), old_value);
+        }
+        let mut new_map = Box::new(im::OrdMap::new());
+        let mut iterator = self.iter();
+        let mut removed = None;
+        loop {
+            let Some((k, v)) = iterator.next() else {
+                break;
+            };
+            if k.cmp_case_sensitive(key) == Ordering::Equal {
+                if removed.is_none() {
+                    removed = Some(v.clone());
+                }
+                continue;
+            }
+            new_map.insert(k.clone(), v.clone());
+        }
+        (Var::from_variant(Variant::Map(Map(new_map))), removed)
     }
 }
 
@@ -288,10 +270,10 @@ impl Encode for Map {
 impl<Context> Decode<Context> for Map {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
+        let mut l = im::OrdMap::new();
         for _ in 0..len {
             let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
-            l.push_back(pair);
+            l.insert(pair.0.clone(), pair.1.clone());
         }
         Ok(Map(Box::new(l)))
     }
@@ -300,10 +282,10 @@ impl<Context> Decode<Context> for Map {
 impl<'de, Context> BorrowDecode<'de, Context> for Map {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = usize::decode(decoder)?;
-        let mut l = im::Vector::new();
+        let mut l = im::OrdMap::new();
         for _ in 0..len {
             let pair = (Var::decode(decoder)?, Var::decode(decoder)?);
-            l.push_back(pair);
+            l.insert(pair.0.clone(), pair.1.clone());
         }
         Ok(Map(Box::new(l)))
     }
