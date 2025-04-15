@@ -267,7 +267,7 @@ impl WorldState for DbWorldState {
 
         // Special properties like name, location, and contents get treated specially.
         if pname == *NAME_SYM {
-            return self.name_of(perms, obj).map(|name| Var::from(name));
+            return self.name_of(perms, obj).map(Var::from);
         } else if pname == *LOCATION_SYM {
             return self.location_of(perms, obj).map(Var::from);
         } else if pname == *CONTENTS_SYM {
