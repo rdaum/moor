@@ -191,6 +191,11 @@ fn translate_pattern(pattern: &str) -> Option<String> {
 type Span = (isize, isize);
 type MatchSpans = (Span, Vec<Span>);
 
+lazy_static! {
+    static ref MOO_REGEX_CACHE: Mutex<HashMap<(String, bool), Result<onig::Regex, onig::Error>>> =
+        Default::default();
+}
+
 /// Perform regex match using LambdaMOO's "legacy" regular expression support, which is based on
 /// pre-POSIX regexes.
 /// To do this, we use oniguruma, which is a modern regex library that supports these old-style
@@ -220,9 +225,18 @@ fn perform_regex_match(
     );
     syntax.set_behavior(SyntaxBehavior::SYNTAX_BEHAVIOR_ALLOW_DOUBLE_RANGE_OP_IN_CC);
 
-    let regex = onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
-        .map_err(|_| E_INVARG)?;
-
+    let mut cache_lock = MOO_REGEX_CACHE.lock().unwrap();
+    let regex = cache_lock
+        .entry((translated_pattern.clone(), case_matters))
+        .or_insert_with(|| {
+            onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
+        });
+    let regex = match regex {
+        Ok(regex) => regex,
+        Err(_) => {
+            return Err(E_INVARG);
+        }
+    };
     let (search_start, search_end) = if reverse {
         (subject.len(), 0)
     } else {
@@ -308,7 +322,8 @@ fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(rmatch, bf_rmatch);
 
 lazy_static! {
-    static ref PCRE_PATTERN_CACHE: Mutex<HashMap<(String, bool), onig::Regex>> = Default::default();
+    static ref PCRE_PATTERN_CACHE: Mutex<HashMap<(String, bool), Result<onig::Regex, onig::Error>>> =
+        Default::default();
 }
 
 /// Perform a PCRE match using oniguruma.
@@ -324,7 +339,7 @@ fn perform_pcre_match(
     re: &str,
     target: &str,
     repeat: bool,
-) -> List {
+) -> Result<List, Error> {
     let case_insensitive = !case_matters;
     let cache_key = (re.to_string(), case_insensitive);
     let mut cache_lock = PCRE_PATTERN_CACHE.lock().unwrap();
@@ -336,10 +351,14 @@ fn perform_pcre_match(
         };
 
         let syntax = onig::Syntax::perl();
-        let regex = onig::Regex::with_options(re, options, syntax).unwrap();
-
-        regex
+        onig::Regex::with_options(re, options, syntax)
     });
+    let regex = match regex {
+        Ok(regex) => regex,
+        Err(_) => {
+            return Err(E_INVARG);
+        }
+    };
 
     let mut region = Region::new();
     let mut matches = Vec::new();
@@ -392,7 +411,7 @@ fn perform_pcre_match(
         }
     }
 
-    List::mk_list(&matches)
+    Ok(List::mk_list(&matches))
 }
 
 fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error> {
@@ -443,10 +462,14 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
         };
 
         let syntax = onig::Syntax::perl();
-        let regex = onig::Regex::with_options(pattern, options, syntax).unwrap();
-
-        regex
+        onig::Regex::with_options(pattern, options, syntax)
     });
+    let regex = match regex {
+        Ok(regex) => regex,
+        Err(_) => {
+            return Err(E_INVARG);
+        }
+    };
     // If `global` we will replace all matches. Otherwise, just stop after the first
     let mut start = 0;
     let mut region = Region::new();
@@ -571,13 +594,16 @@ fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let map_support = bf_args.config.map_type;
-    let result = perform_pcre_match(
+    let result = match perform_pcre_match(
         map_support,
         case_matters,
         pattern.as_str(),
         subject.as_str(),
         repeat,
-    );
+    ) {
+        Ok(result) => result,
+        Err(err) => return Err(BfErr::Code(err)),
+    };
     Ok(Ret(Var::from_variant(Variant::List(result))))
 }
 bf_declare!(pcre_match, bf_pcre_match);
@@ -1000,7 +1026,7 @@ mod tests {
         //  => {["0" -> ["match" -> "09/12/1999", "position" -> {1, 10}], "1" -> ["match" -> "09", "position" -> {1, 2}], "2" -> ["match" -> "12", "position" -> {4, 5}], "3" -> ["match" -> "1999", "position" -> {7, 10}]], ["0" -> ["match" -> "01/21/1952", "position" -> {30, 39}], "1" -> ["match" -> "01", "position" -> {30, 31}], "2" -> ["match" -> "21", "position" -> {33, 34}], "3" -> ["match" -> "1952", "position" -> {36, 39}]]}
         let regex = "([0-9]{2})/([0-9]{2})/([0-9]{4})";
         let target = "09/12/1999 other random text 01/21/1952";
-        let result = perform_pcre_match(true, false, regex, target, false);
+        let result = perform_pcre_match(true, false, regex, target, false).unwrap();
         let v = Var::from_variant(Variant::List(result));
         let expected = v_list(&[v_map(&[
             (
