@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::ops::BitOr;
-
+use ahash::HashMap;
+use lazy_static::lazy_static;
 use moor_compiler::offset_for_builtin;
 use moor_var::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
 use moor_var::{Associative, Error, Variant};
@@ -21,6 +21,8 @@ use moor_var::{
     v_str, v_string,
 };
 use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
+use std::ops::BitOr;
+use std::sync::Mutex;
 
 use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
@@ -305,6 +307,10 @@ fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(rmatch, bf_rmatch);
 
+lazy_static! {
+    static ref PCRE_PATTERN_CACHE: Mutex<HashMap<(String, bool), onig::Regex>> = Default::default();
+}
+
 /// Perform a PCRE match using oniguruma.
 /// If `map_support` is true, the return value is a list of maps, where each map contains the
 /// matched text and the start and end positions of the match.
@@ -319,15 +325,22 @@ fn perform_pcre_match(
     target: &str,
     repeat: bool,
 ) -> List {
-    let options = if case_matters {
-        onig::RegexOptions::REGEX_OPTION_NONE
-    } else {
-        onig::RegexOptions::REGEX_OPTION_IGNORECASE
-    };
+    let case_insensitive = !case_matters;
+    let cache_key = (re.to_string(), case_insensitive);
+    let mut cache_lock = PCRE_PATTERN_CACHE.lock().unwrap();
+    let regex = cache_lock.entry(cache_key).or_insert_with(|| {
+        let options = if !case_insensitive {
+            onig::RegexOptions::REGEX_OPTION_NONE
+        } else {
+            onig::RegexOptions::REGEX_OPTION_IGNORECASE
+        };
 
-    let syntax = onig::Syntax::perl();
+        let syntax = onig::Syntax::perl();
+        let regex = onig::Regex::with_options(re, options, syntax).unwrap();
 
-    let regex = onig::Regex::with_options(re, options, syntax).unwrap();
+        regex
+    });
+
     let mut region = Region::new();
     let mut matches = Vec::new();
     let mut start = 0;
@@ -420,22 +433,26 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
         (false, false)
     };
 
-    // Compile "pattern" as a regex.  Then search for it in "target", and then replace
-    let options = if !case_insensitive {
-        onig::RegexOptions::REGEX_OPTION_NONE
-    } else {
-        onig::RegexOptions::REGEX_OPTION_IGNORECASE
-    };
+    let cache_key = (pattern.to_string(), case_insensitive);
+    let mut cache_lock = PCRE_PATTERN_CACHE.lock().unwrap();
+    let regex = cache_lock.entry(cache_key).or_insert_with(|| {
+        let options = if !case_insensitive {
+            onig::RegexOptions::REGEX_OPTION_NONE
+        } else {
+            onig::RegexOptions::REGEX_OPTION_IGNORECASE
+        };
 
-    let syntax = onig::Syntax::perl();
-    let regex = onig::Regex::with_options(pattern, options, syntax).unwrap();
+        let syntax = onig::Syntax::perl();
+        let regex = onig::Regex::with_options(pattern, options, syntax).unwrap();
 
-    // If `global` we will replace all matches. Otherwise just stop after the first
+        regex
+    });
+    // If `global` we will replace all matches. Otherwise, just stop after the first
     let mut start = 0;
     let mut region = Region::new();
     let end = target.len();
     let mut matches = vec![];
-    loop {
+    'outer: loop {
         let match_num = regex.search_with_options(
             target,
             start,
@@ -447,18 +464,19 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
         if match_num.is_none() {
             break;
         }
-        let Some((match_start, end)) = region.pos(0) else {
-            break;
-        };
-
-        // Append the match to our matches.
-        // If not `global`, break afterwords.
-        // If global, move "start" past it, and continue
-        matches.push((match_start, end));
-        if !global {
+        if region.is_empty() {
             break;
         }
-        start = end;
+        for (match_start, end) in region.iter() {
+            // Append the match to our matches.
+            // If not `global`, break afterwords.
+            // If global, move "start" past it, and continue
+            matches.push((match_start, end));
+            if !global {
+                break 'outer;
+            }
+            start = end;
+        }
     }
 
     // Now compose the string looking at the matches, replacing the `replacement` in every place
