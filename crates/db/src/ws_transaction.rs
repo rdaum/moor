@@ -1189,11 +1189,7 @@ impl WorldStateTransaction {
     fn find_property_by_name(&self, obj: &Obj, name: Symbol) -> Option<PropDef> {
         // Check the cache first.
         if let Some(cache_result) = self.prop_resolution_cache.lookup(obj, &name) {
-            // We recorded a miss here before..
-            let prop = cache_result?;
-            if prop.matches_name(name) {
-                return Some(prop.clone());
-            }
+            return cache_result;
         }
 
         // Look in the cache for the first parent with non-empty propdefs. If we have no cache entry,
@@ -1269,18 +1265,13 @@ impl WorldStateTransaction {
         // Now that we have the propdef, we can look for the value & owner.
         // We should *always* have the owner.
         // But value could be 'clear' in which case we need to look in the parent.
-        let (pvalue, perms) = self.retrieve_property(obj, propdef.uuid())?;
+        let prop_uuid = propdef.uuid();
+        let (pvalue, perms) = self.retrieve_property(obj, prop_uuid)?;
         match pvalue {
             Some(value) => Ok((propdef, value, perms, false)),
             None => {
-                let mut search_obj = obj.clone();
-                loop {
-                    let parent = self.get_object_parent(&search_obj)?;
-                    if parent.is_nothing() {
-                        break Ok((propdef, v_none(), perms, true));
-                    }
-                    search_obj = parent;
-
+                let ancestors = self.ancestors(obj, false)?;
+                for search_obj in ancestors.iter() {
                     let value = self
                         .object_propvalues
                         .get(&ObjAndUUIDHolder::new(&search_obj, propdef.uuid()))
@@ -1291,9 +1282,10 @@ impl WorldStateTransaction {
                             ))
                         })?;
                     if let Some(value) = value {
-                        break Ok((propdef, value, perms, true));
+                        return Ok((propdef, value, perms, true));
                     }
                 }
+                Ok((propdef, v_none(), perms, true))
             }
         }
     }
