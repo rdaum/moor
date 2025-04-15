@@ -14,8 +14,6 @@
 use ahash::AHasher;
 use moor_common::model::VerbDef;
 use moor_var::{Obj, Symbol};
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::RwLock;
 
@@ -105,24 +103,59 @@ impl VerbResolutionCache {
     }
 }
 
-#[derive(Default)]
 pub struct AncestryCache {
     #[allow(clippy::type_complexity)]
-    entries: RefCell<HashMap<Obj, Vec<Obj>, BuildHasherDefault<AHasher>>>,
+    inner: RwLock<AncestryInner>,
+}
+
+impl Default for AncestryCache {
+    fn default() -> Self {
+        Self {
+            inner: RwLock::new(AncestryInner {
+                orig_version: 0,
+                version: 0,
+                flushed: false,
+                entries: im::HashMap::default(),
+            }),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct AncestryInner {
+    orig_version: i64,
+    version: i64,
+    flushed: bool,
+
+    #[allow(clippy::type_complexity)]
+    entries: im::HashMap<Obj, Vec<Obj>, BuildHasherDefault<AHasher>>,
 }
 
 impl AncestryCache {
+    pub(crate) fn fork(&self) -> Self {
+        let inner = self.inner.read().unwrap();
+        let mut forked_inner = inner.clone();
+        forked_inner.orig_version = inner.version;
+        forked_inner.flushed = false;
+        Self {
+            inner: RwLock::new(forked_inner),
+        }
+    }
     pub(crate) fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
-        self.entries.borrow().get(obj).cloned()
+        let inner = self.inner.read().unwrap();
+        inner.entries.get(obj).cloned()
     }
 
     pub(crate) fn flush(&self) {
-        self.entries.borrow_mut().clear();
+        let mut inner = self.inner.write().unwrap();
+        inner.flushed = true;
+        inner.version += 1;
+        inner.entries.clear();
     }
 
     pub(crate) fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
-        self.entries
-            .borrow_mut()
-            .insert(obj.clone(), ancestors.to_vec());
+        let mut inner = self.inner.write().unwrap();
+        inner.version += 1;
+        inner.entries.insert(obj.clone(), ancestors.to_vec());
     }
 }

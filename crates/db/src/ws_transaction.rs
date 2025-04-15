@@ -1311,6 +1311,7 @@ impl WorldStateTransaction {
                     .send(CommitSet::CommitReadOnly(
                         self.verb_resolution_cache,
                         self.prop_resolution_cache,
+                        self.ancestry_cache,
                     ))
                     .expect("Unable to send commit request for read-only transaction");
             }
@@ -1349,6 +1350,7 @@ impl WorldStateTransaction {
             object_propflags,
             verb_resolution_cache: self.verb_resolution_cache,
             prop_resolution_cache: self.prop_resolution_cache,
+            ancestry_cache: self.ancestry_cache,
         };
 
         let tuple_count = ws.total_tuples();

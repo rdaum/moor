@@ -39,7 +39,7 @@ mod tx_management;
 mod verb_cache;
 
 use crate::prop_cache::PropResolutionCache;
-use crate::verb_cache::VerbResolutionCache;
+use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 pub use tx_management::Provider;
 pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 
@@ -289,8 +289,8 @@ enum CommitSet {
     /// Commit the working sets of a transaction.
     CommitWrites(WorkingSets, oneshot::Sender<CommitResult>),
     /// This is a read only commit, we didn't do any mutations. We can just fire and forget,
-    /// just (maybe) updating the verb cache on the DB side, no need for locks, flushes, anything.
-    CommitReadOnly(VerbResolutionCache, PropResolutionCache),
+    /// just (maybe) updating the caches on the DB side, no need for locks, flushes, anything.
+    CommitReadOnly(VerbResolutionCache, PropResolutionCache, AncestryCache),
 }
 
 #[cfg(test)]

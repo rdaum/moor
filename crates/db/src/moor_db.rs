@@ -16,7 +16,7 @@ use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::prop_cache::PropResolutionCache;
 use crate::tx_management::{Relation, SizedCache, Timestamp, Tx, WorkingSet};
-use crate::verb_cache::VerbResolutionCache;
+use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::ws_transaction::WorldStateTransaction;
 use crate::{BytesHolder, CommitSet, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
@@ -61,6 +61,7 @@ pub struct MoorDB {
 
     verb_resolution_cache: RwLock<VerbResolutionCache>,
     prop_resolution_cache: RwLock<PropResolutionCache>,
+    ancestry_cache: RwLock<AncestryCache>,
 
     jh: Mutex<Option<JoinHandle<()>>>,
 }
@@ -84,6 +85,7 @@ pub(crate) struct WorkingSets {
     pub(crate) object_propflags: WorkingSet<ObjAndUUIDHolder, PropPerms>,
     pub(crate) verb_resolution_cache: VerbResolutionCache,
     pub(crate) prop_resolution_cache: PropResolutionCache,
+    pub(crate) ancestry_cache: AncestryCache,
 }
 
 impl WorkingSets {
@@ -269,7 +271,7 @@ impl MoorDB {
         let kill_switch = Arc::new(AtomicBool::new(false));
         let verb_resolution_cache = RwLock::new(VerbResolutionCache::new());
         let prop_resolution_cache = RwLock::new(PropResolutionCache::new());
-
+        let ancestry_cache = RwLock::new(AncestryCache::default());
         let s = Arc::new(Self {
             monotonic: AtomicU64::new(start_tx_num),
             object_location,
@@ -292,6 +294,7 @@ impl MoorDB {
             keyspace,
             verb_resolution_cache,
             prop_resolution_cache,
+            ancestry_cache,
             jh: Mutex::new(None),
         });
 
@@ -314,6 +317,9 @@ impl MoorDB {
 
         let prop_lock = self.prop_resolution_cache.read().unwrap();
         let prop_resolution_cache = prop_lock.fork();
+
+        let ancestry_lock = self.ancestry_cache.read().unwrap();
+        let ancestry_cache = ancestry_lock.fork();
         WorldStateTransaction {
             tx,
             commit_channel: self.commit_channel.clone(),
@@ -333,7 +339,7 @@ impl MoorDB {
             sequences: self.sequences.clone(),
             verb_resolution_cache,
             prop_resolution_cache,
-            ancestry_cache: Default::default(),
+            ancestry_cache,
             has_mutations: false,
         }
     }
@@ -457,11 +463,13 @@ impl MoorDB {
                         Ok(CommitSet::CommitWrites(ws, reply)) => {
                             (ws, reply)
                         }
-                        Ok(CommitSet::CommitReadOnly(vc, pc)) => {
+                        Ok(CommitSet::CommitReadOnly(vc, pc, ac)) => {
                             let mut vc_lock = this.verb_resolution_cache.write().unwrap();
                             *vc_lock = vc;
                             let mut pc_lock = this.prop_resolution_cache.write().unwrap();
                             *pc_lock = pc;
+                            let mut anc_lock = this.ancestry_cache.write().unwrap();
+                            *anc_lock = ac;
                             continue;
                         }
                         Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
@@ -542,13 +550,12 @@ impl MoorDB {
                         if all_clean {
                             reply.send(CommitResult::Success).ok();
 
-                            // Update verb caches immediately
                             let mut vc_lock = this.verb_resolution_cache.write().unwrap();
                             *vc_lock = ws.verb_resolution_cache;
-
                             let mut pc_lock = this.prop_resolution_cache.write().unwrap();
                             *pc_lock = ws.prop_resolution_cache;
-
+                            let mut anc_lock = this.ancestry_cache.write().unwrap();
+                            *anc_lock = ws.ancestry_cache;
                             continue;
                         }
 
@@ -646,6 +653,8 @@ impl MoorDB {
                         *vc_lock = ws.verb_resolution_cache;
                         let mut pc_lock = this.prop_resolution_cache.write().unwrap();
                         *pc_lock = ws.prop_resolution_cache;
+                        let mut anc_lock = this.ancestry_cache.write().unwrap();
+                        *anc_lock = ws.ancestry_cache;
                     }
 
                     let _t = PerfTimerGuard::new(&counters.commit_write_phase);
