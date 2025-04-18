@@ -214,7 +214,7 @@ async fn perform_http_request(arguments: Vec<Var>) -> Result<Vec<Var>, WorkerErr
             "At least two arguments are required".to_string(),
         ));
     }
-    // args: method (symbol or string), URL, and then optionally body, then optionally headers.
+    // args: method (symbol or string), URL, and then headers then optionally body.
     let client = reqwest::Client::new();
     let method = arguments[0].as_symbol().map_err(|_| {
         WorkerError::RequestError("First argument must be a symbol or string".to_string())
@@ -228,33 +228,6 @@ async fn perform_http_request(arguments: Vec<Var>) -> Result<Vec<Var>, WorkerErr
 
     let Ok(url) = Url::parse(url.as_str()) else {
         return Err(WorkerError::RequestError("Invalid URL".to_string()));
-    };
-
-    let body = if arguments.len() > 2 {
-        match arguments[2].variant() {
-            Variant::Str(body) => Some(body.as_str().to_string()),
-            Variant::List(list) => {
-                let mut body = String::new();
-                for item in list.iter() {
-                    match item.variant() {
-                        Variant::Str(s) => body.push_str(s.as_str()),
-                        _ => {
-                            return Err(WorkerError::RequestError(
-                                "List items must be strings".to_string(),
-                            ));
-                        }
-                    }
-                }
-                Some(body)
-            }
-            _ => {
-                return Err(WorkerError::RequestError(
-                    "Body must be a string or list".to_string(),
-                ));
-            }
-        }
-    } else {
-        None
     };
 
     let headers = if arguments.len() > 3 {
@@ -298,6 +271,33 @@ async fn perform_http_request(arguments: Vec<Var>) -> Result<Vec<Var>, WorkerErr
             headers_map.insert(key, value);
         }
         Some(headers_map)
+    } else {
+        None
+    };
+
+    let body = if arguments.len() > 2 {
+        match arguments[2].variant() {
+            Variant::Str(body) => Some(body.as_str().to_string()),
+            Variant::List(list) => {
+                let mut body = String::new();
+                for item in list.iter() {
+                    match item.variant() {
+                        Variant::Str(s) => body.push_str(s.as_str()),
+                        _ => {
+                            return Err(WorkerError::RequestError(
+                                "List items must be strings".to_string(),
+                            ));
+                        }
+                    }
+                }
+                Some(body)
+            }
+            _ => {
+                return Err(WorkerError::RequestError(
+                    "Body must be a string or list".to_string(),
+                ));
+            }
+        }
     } else {
         None
     };
