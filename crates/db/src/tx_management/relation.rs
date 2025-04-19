@@ -31,6 +31,7 @@ pub struct Entry<T: Clone + PartialEq> {
 }
 
 /// Represents the current "canonical" state of a relation.
+#[derive(Clone)]
 pub struct Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
@@ -39,7 +40,7 @@ where
 {
     relation_name: Symbol,
 
-    index: RwLock<RelationIndex<Domain, Codomain>>,
+    index: Arc<RwLock<RelationIndex<Domain, Codomain>>>,
 
     source: Arc<Source>,
 }
@@ -53,10 +54,10 @@ where
     pub fn new(relation_name: Symbol, provider: Arc<Source>) -> Self {
         Self {
             relation_name,
-            index: RwLock::new(RelationIndex {
+            index: Arc::new(RwLock::new(RelationIndex {
                 entries: Default::default(),
                 used_bytes: 0,
-            }),
+            })),
             source: provider,
         }
     }
@@ -224,7 +225,7 @@ where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq + Eq,
 {
-    pub fn start(self: Arc<Self>, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
+    pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
         let index = self.index.read().unwrap();
         RelationTransaction::new(*tx, index.entries.clone(), self.clone())
     }
@@ -376,6 +377,7 @@ mod tests {
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct TestCodomain(u64);
 
+    #[derive(Clone)]
     struct TestProvider {
         data: Arc<Mutex<HashMap<TestDomain, TestCodomain>>>,
     }

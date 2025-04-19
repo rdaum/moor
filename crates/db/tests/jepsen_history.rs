@@ -155,6 +155,7 @@ mod tests {
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct TestCodomain(Vec<i32>);
 
+    #[derive(Clone)]
     struct TestProvider {
         data: Arc<Mutex<HashMap<TestDomain, TestCodomain>>>,
     }

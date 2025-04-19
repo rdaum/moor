@@ -24,7 +24,6 @@ use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{Obj, Symbol, Var};
-use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
 use std::sync::{Arc, Mutex, RwLock};
@@ -57,7 +56,7 @@ pub struct MoorDB {
 
     kill_switch: Arc<AtomicBool>,
     commit_channel: Sender<CommitSet>,
-    usage_send: crossbeam_channel::Sender<oneshot::Sender<usize>>,
+    usage_send: Sender<oneshot::Sender<usize>>,
 
     verb_resolution_cache: RwLock<VerbResolutionCache>,
     prop_resolution_cache: RwLock<PropResolutionCache>,
@@ -66,7 +65,7 @@ pub struct MoorDB {
     jh: Mutex<Option<JoinHandle<()>>>,
 }
 
-type R<Domain, Codomain> = Arc<Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>>;
+type R<Domain, Codomain> = Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>;
 
 pub(crate) struct WorkingSets {
     #[allow(dead_code)]
@@ -217,54 +216,25 @@ impl MoorDB {
         let object_propvalues = FjallProvider::new("opvals", object_propvalues);
         let object_propflags = FjallProvider::new("opflags", object_propflags);
 
-        let object_location = Arc::new(Relation::new(
-            Symbol::mk("object_location"),
-            Arc::new(object_location),
-        ));
-        let object_contents = Arc::new(Relation::new(
-            Symbol::mk("object_contents"),
-            Arc::new(object_contents),
-        ));
-        let object_flags = Arc::new(Relation::new(
-            Symbol::mk("object_flags"),
-            Arc::new(object_flags),
-        ));
-        let object_parent = Arc::new(Relation::new(
-            Symbol::mk("object_parent"),
-            Arc::new(object_parent),
-        ));
-        let object_children = Arc::new(Relation::new(
-            Symbol::mk("object_children"),
-            Arc::new(object_children),
-        ));
-        let object_owner = Arc::new(Relation::new(
-            Symbol::mk("object_owner"),
-            Arc::new(object_owner),
-        ));
-        let object_name = Arc::new(Relation::new(
-            Symbol::mk("object_name"),
-            Arc::new(object_name),
-        ));
-        let object_verbdefs = Arc::new(Relation::new(
-            Symbol::mk("object_verbdefs"),
-            Arc::new(object_verbdefs),
-        ));
-        let object_verbs = Arc::new(Relation::new(
-            Symbol::mk("object_verbs"),
-            Arc::new(object_verbs),
-        ));
-        let object_propdefs = Arc::new(Relation::new(
-            Symbol::mk("object_propdefs"),
-            Arc::new(object_propdefs),
-        ));
-        let object_propvalues = Arc::new(Relation::new(
-            Symbol::mk("object_propvalues"),
-            Arc::new(object_propvalues),
-        ));
-        let object_propflags = Arc::new(Relation::new(
-            Symbol::mk("object_propflags"),
-            Arc::new(object_propflags),
-        ));
+        let object_location =
+            Relation::new(Symbol::mk("object_location"), Arc::new(object_location));
+        let object_contents =
+            Relation::new(Symbol::mk("object_contents"), Arc::new(object_contents));
+        let object_flags = Relation::new(Symbol::mk("object_flags"), Arc::new(object_flags));
+        let object_parent = Relation::new(Symbol::mk("object_parent"), Arc::new(object_parent));
+        let object_children =
+            Relation::new(Symbol::mk("object_children"), Arc::new(object_children));
+        let object_owner = Relation::new(Symbol::mk("object_owner"), Arc::new(object_owner));
+        let object_name = Relation::new(Symbol::mk("object_name"), Arc::new(object_name));
+        let object_verbdefs =
+            Relation::new(Symbol::mk("object_verbdefs"), Arc::new(object_verbdefs));
+        let object_verbs = Relation::new(Symbol::mk("object_verbs"), Arc::new(object_verbs));
+        let object_propdefs =
+            Relation::new(Symbol::mk("object_propdefs"), Arc::new(object_propdefs));
+        let object_propvalues =
+            Relation::new(Symbol::mk("object_propvalues"), Arc::new(object_propvalues));
+        let object_propflags =
+            Relation::new(Symbol::mk("object_propflags"), Arc::new(object_propflags));
 
         let (commit_channel, commit_receiver) = crossbeam_channel::unbounded();
         let (usage_send, usage_recv) = crossbeam_channel::unbounded();
@@ -324,18 +294,18 @@ impl MoorDB {
             tx,
             commit_channel: self.commit_channel.clone(),
             usage_channel: self.usage_send.clone(),
-            object_location: self.object_location.clone().start(&tx),
-            object_contents: self.object_contents.clone().start(&tx),
-            object_flags: self.object_flags.clone().start(&tx),
-            object_parent: self.object_parent.clone().start(&tx),
-            object_children: self.object_children.clone().start(&tx),
-            object_owner: self.object_owner.clone().start(&tx),
-            object_name: self.object_name.clone().start(&tx),
-            object_verbdefs: self.object_verbdefs.clone().start(&tx),
-            object_verbs: self.object_verbs.clone().start(&tx),
-            object_propdefs: self.object_propdefs.clone().start(&tx),
-            object_propvalues: self.object_propvalues.clone().start(&tx),
-            object_propflags: self.object_propflags.clone().start(&tx),
+            object_location: self.object_location.start(&tx),
+            object_contents: self.object_contents.start(&tx),
+            object_flags: self.object_flags.start(&tx),
+            object_parent: self.object_parent.start(&tx),
+            object_children: self.object_children.start(&tx),
+            object_owner: self.object_owner.start(&tx),
+            object_name: self.object_name.start(&tx),
+            object_verbdefs: self.object_verbdefs.start(&tx),
+            object_verbs: self.object_verbs.start(&tx),
+            object_propdefs: self.object_propdefs.start(&tx),
+            object_propvalues: self.object_propvalues.start(&tx),
+            object_propflags: self.object_propflags.start(&tx),
             sequences: self.sequences.clone(),
             verb_resolution_cache,
             prop_resolution_cache,
@@ -346,18 +316,18 @@ impl MoorDB {
 
     fn caches(&self) -> Vec<&dyn SizedCache> {
         vec![
-            self.object_location.deref(),
-            self.object_contents.deref(),
-            self.object_flags.deref(),
-            self.object_parent.deref(),
-            self.object_children.deref(),
-            self.object_owner.deref(),
-            self.object_name.deref(),
-            self.object_verbdefs.deref(),
-            self.object_verbs.deref(),
-            self.object_propdefs.deref(),
-            self.object_propvalues.deref(),
-            self.object_propflags.deref(),
+            &self.object_location,
+            &self.object_contents,
+            &self.object_flags,
+            &self.object_parent,
+            &self.object_children,
+            &self.object_owner,
+            &self.object_name,
+            &self.object_verbdefs,
+            &self.object_verbs,
+            &self.object_propdefs,
+            &self.object_propvalues,
+            &self.object_propflags,
         ]
     }
 
@@ -423,7 +393,7 @@ impl MoorDB {
         let thread_builder = std::thread::Builder::new().name("moor-db-process".to_string());
         let jh = thread_builder
             .spawn(move || {
-                let mut last_eviction_check = std::time::Instant::now();
+                let mut last_eviction_check = Instant::now();
                 loop {
                     let counters = db_counters();
 
@@ -455,7 +425,7 @@ impl MoorDB {
                             );
                         }
 
-                        last_eviction_check = std::time::Instant::now();
+                        last_eviction_check = Instant::now();
                     }
 
                     let msg = receiver.recv_timeout(Duration::from_millis(100));

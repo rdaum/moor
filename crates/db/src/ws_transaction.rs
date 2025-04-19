@@ -1361,7 +1361,7 @@ impl WorldStateTransaction {
         let (send, reply) = oneshot::channel();
         self.commit_channel
             .send(CommitSet::CommitWrites(ws, send))
-            .unwrap();
+            .expect("Could not send commit request -- channel closed?");
 
         // Wait for the reply.
         drop(_t);

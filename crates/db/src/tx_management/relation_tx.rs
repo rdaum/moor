@@ -71,7 +71,7 @@ where
     pub fn new(
         tx: Tx,
         canonical: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
-        backing_source: Arc<Source>,
+        backing_source: Source,
     ) -> RelationTransaction<Domain, Codomain, Source> {
         let inner = Inner {
             operations: IndexMap::default(),
@@ -80,7 +80,7 @@ where
         RelationTransaction {
             tx,
             index: RefCell::new(inner),
-            backing_source,
+            backing_source: backing_source.into(),
         }
     }
 

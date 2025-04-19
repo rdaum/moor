@@ -17,8 +17,8 @@ use crossbeam_channel::Sender;
 use fjall::UserValue;
 use moor_var::AsByteBuffer;
 use std::marker::PhantomData;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use tracing::error;
@@ -32,6 +32,7 @@ enum WriteOp<
 }
 
 /// A backing persistence provider that fills the DB cache from a Fjall partition.
+#[derive(Clone)]
 pub(crate) struct FjallProvider<Domain, Codomain>
 where
     Domain: Clone + Eq + PartialEq + AsByteBuffer,
@@ -41,7 +42,7 @@ where
     ops: Sender<WriteOp<Domain, Codomain>>,
     kill_switch: Arc<AtomicBool>,
     _phantom_data: PhantomData<(Domain, Codomain)>,
-    jh: Option<JoinHandle<()>>,
+    jh: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 fn decode<Codomain>(user_value: UserValue) -> Result<(Timestamp, Codomain), Error>
@@ -127,7 +128,7 @@ where
             ops: ops_tx,
             _phantom_data: PhantomData,
             kill_switch,
-            jh: Some(jh),
+            jh: Arc::new(Mutex::new(Some(jh))),
         }
     }
 }
@@ -207,7 +208,8 @@ where
 {
     fn drop(&mut self) {
         self.stop().unwrap();
-        if let Some(jh) = self.jh.take() {
+        let mut jh = self.jh.lock().unwrap();
+        if let Some(jh) = jh.take() {
             jh.join().unwrap();
         }
     }

@@ -41,7 +41,7 @@ pub enum Error {
 
 /// The `Provider` trait is a generic interface for a key-value store that back the transactional
 /// global cache.
-pub trait Provider<Domain, Codomain> {
+pub trait Provider<Domain, Codomain>: Clone {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error>;
     fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error>;
     fn del(&self, timestamp: Timestamp, domain: &Domain) -> Result<(), Error>;
