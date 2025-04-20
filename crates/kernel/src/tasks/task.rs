@@ -52,9 +52,10 @@ use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::VmHost;
 use crate::tasks::{ServerOptions, TaskStart, VerbCall, sched_counters};
 use crate::vm::VMHostResponse;
-use moor_common::matching::command_parse::{ParseCommandError, ParsedCommand, parse_command};
-use moor_common::matching::match_env::MatchEnvironmentParseMatcher;
+use moor_common::matching::command_parse::parse_command;
+use moor_common::matching::match_env::DefaultObjectNameMatcher;
 use moor_common::matching::ws_match_env::WsMatchEnv;
+use moor_common::matching::{ParseCommandError, ParsedCommand};
 
 lazy_static! {
     static ref HUH_SYM: Symbol = Symbol::mk("huh");
@@ -574,7 +575,7 @@ impl Task {
 
             // Parse the command in the current environment.
             let me = WsMatchEnv::new(world_state, player.clone());
-            let matcher = MatchEnvironmentParseMatcher {
+            let matcher = DefaultObjectNameMatcher {
                 env: me,
                 player: player.clone(),
             };

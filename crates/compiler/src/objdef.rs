@@ -732,7 +732,7 @@ fn parse_verb_decl(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moor_common::model::Preposition;
+    use moor_common::matching::Preposition;
     use moor_var::Error::E_INVIND;
     use moor_var::Variant;
 

@@ -22,7 +22,7 @@ use crate::vm::exec_state::vm_counters;
 use crate::vm::vm_unwind::FinallyReason;
 use crate::vm::{ExecutionResult, Fork};
 use lazy_static::lazy_static;
-use moor_common::matching::command_parse::ParsedCommand;
+use moor_common::matching::ParsedCommand;
 use moor_common::model::VerbDef;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;

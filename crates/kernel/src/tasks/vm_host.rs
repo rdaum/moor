@@ -47,7 +47,7 @@ use crate::vm::moo_execute::moo_frame_execute;
 use crate::vm::vm_call::{VerbProgram, VmExecParams};
 use crate::vm::{ExecutionResult, Fork, VMHostResponse, VerbExecutionRequest};
 use crate::vm::{FinallyReason, VMExecState};
-use moor_common::matching::command_parse::ParsedCommand;
+use moor_common::matching::ParsedCommand;
 use moor_common::util::PerfTimerGuard;
 
 /// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.

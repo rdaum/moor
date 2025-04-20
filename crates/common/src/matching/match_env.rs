@@ -11,27 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::matching::command_parse::ParseMatcher;
+use crate::matching::{MatchEnvironment, ObjectNameMatcher};
+use crate::model::ValSet;
 use crate::model::WorldStateError;
-use crate::model::{ObjSet, ValSet};
 use moor_var::Obj;
 use moor_var::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 
-// This is the interface that the matching code needs to be able to call into the world state.
-// Separated out so can be more easily mocked.
-pub trait MatchEnvironment {
-    // Test whether a given object is valid in this environment.
-    fn obj_valid(&self, oid: &Obj) -> Result<bool, WorldStateError>;
-
-    // Return all match names & aliases for an object.
-    fn get_names(&self, oid: &Obj) -> Result<Vec<String>, WorldStateError>;
-
-    // Returns location, contents, and player, all the things we'd search for matches on.
-    fn get_surroundings(&self, player: &Obj) -> Result<ObjSet, WorldStateError>;
-
-    // Return the location of a given object.
-    fn location_of(&self, player: &Obj) -> Result<Obj, WorldStateError>;
-}
+const ME: &'static str = "me";
+const HERE: &'static str = "here";
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 struct MatchData {
@@ -75,7 +62,7 @@ fn do_match_object_names(
     }
 }
 
-pub fn match_contents<M: MatchEnvironment>(
+fn match_contents<M: MatchEnvironment>(
     env: &M,
     player: &Obj,
     object_name: &str,
@@ -104,12 +91,12 @@ pub fn match_contents<M: MatchEnvironment>(
     }
 }
 
-pub struct MatchEnvironmentParseMatcher<M: MatchEnvironment> {
+pub struct DefaultObjectNameMatcher<M: MatchEnvironment> {
     pub env: M,
     pub player: Obj,
 }
 
-impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
+impl<M: MatchEnvironment> ObjectNameMatcher for DefaultObjectNameMatcher<M> {
     fn match_object(&self, object_name: &str) -> Result<Option<Obj>, WorldStateError> {
         if object_name.is_empty() {
             return Ok(None);
@@ -132,11 +119,11 @@ impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
         }
 
         // Check 'me' and 'here' first.
-        if object_name == "me" {
+        if object_name == ME {
             return Ok(Some(self.player.clone()));
         }
 
-        if object_name == "here" {
+        if object_name == HERE {
             return Ok(Some(self.env.location_of(&self.player)?));
         }
 
@@ -146,9 +133,8 @@ impl<M: MatchEnvironment> ParseMatcher for MatchEnvironmentParseMatcher<M> {
 
 #[cfg(test)]
 mod tests {
-    use crate::matching::command_parse::ParseMatcher;
     use crate::matching::match_env::{
-        MatchData, MatchEnvironmentParseMatcher, do_match_object_names,
+        DefaultObjectNameMatcher, MatchData, ObjectNameMatcher, do_match_object_names,
     };
     use crate::matching::mock_matching_env::{
         MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
@@ -271,7 +257,7 @@ mod tests {
     #[test]
     fn test_match_object_empty() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -282,7 +268,7 @@ mod tests {
     #[test]
     fn test_match_object_object_number() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -293,7 +279,7 @@ mod tests {
     #[test]
     fn test_match_object_me() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -304,7 +290,7 @@ mod tests {
     #[test]
     fn test_match_object_here() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -315,7 +301,7 @@ mod tests {
     #[test]
     fn test_match_object_room_name() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -326,7 +312,7 @@ mod tests {
     #[test]
     fn test_match_object_room_alias() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -337,7 +323,7 @@ mod tests {
     #[test]
     fn test_match_object_player_name() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -348,7 +334,7 @@ mod tests {
     #[test]
     fn test_match_object_thing_name() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -359,7 +345,7 @@ mod tests {
     #[test]
     fn test_match_object_thing_alias() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -370,7 +356,7 @@ mod tests {
     #[test]
     fn test_match_object_invalid_player() {
         let env = setup_mock_environment();
-        let menv = MatchEnvironmentParseMatcher {
+        let menv = DefaultObjectNameMatcher {
             env,
             player: NOTHING,
         };

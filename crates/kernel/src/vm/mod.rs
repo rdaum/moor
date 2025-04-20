@@ -21,7 +21,7 @@ use std::time::Duration;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 pub use exec_state::VMExecState;
-use moor_common::matching::command_parse::ParsedCommand;
+use moor_common::matching::ParsedCommand;
 use moor_common::model::VerbDef;
 use moor_common::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_compiler::{BuiltinId, Name};

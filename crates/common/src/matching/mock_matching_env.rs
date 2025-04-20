@@ -18,7 +18,7 @@ use crate::model::{ObjectRef, WorldStateError};
 use moor_var::NOTHING;
 use moor_var::Obj;
 
-use crate::matching::match_env::MatchEnvironment;
+use crate::matching::MatchEnvironment;
 
 pub const MOCK_PLAYER: Obj = Obj::mk_id(3);
 pub const MOCK_ROOM1: Obj = Obj::mk_id(1);

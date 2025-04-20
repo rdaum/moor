@@ -16,7 +16,7 @@ use crate::model::WorldState;
 use crate::model::WorldStateError;
 use moor_var::Obj;
 
-use crate::matching::match_env::MatchEnvironment;
+use crate::matching::MatchEnvironment;
 
 /// A "match environment" which matches out of the current DB world state.
 pub struct WsMatchEnv<'a> {

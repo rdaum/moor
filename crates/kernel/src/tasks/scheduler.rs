@@ -46,8 +46,8 @@ use crate::tasks::{
 };
 use crate::textdump::{TextdumpWriter, make_textdump};
 use crate::vm::{Fork, TaskSuspend};
-use moor_common::matching::command_parse::ParseMatcher;
-use moor_common::matching::match_env::MatchEnvironmentParseMatcher;
+use moor_common::matching::ObjectNameMatcher;
+use moor_common::matching::match_env::DefaultObjectNameMatcher;
 use moor_common::matching::ws_match_env::WsMatchEnv;
 use moor_common::tasks::SchedulerError::{
     CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
@@ -1905,7 +1905,7 @@ fn match_object_ref(
         }
         ObjectRef::Match(object_name) => {
             let match_env = WsMatchEnv::new(tx, perms.clone());
-            let matcher = MatchEnvironmentParseMatcher {
+            let matcher = DefaultObjectNameMatcher {
                 env: match_env,
                 player: player.clone(),
             };

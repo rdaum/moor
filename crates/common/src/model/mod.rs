@@ -12,7 +12,9 @@
 //
 
 pub use crate::model::defset::{Defs, DefsIter, HasUuid, Named};
-pub use crate::model::r#match::{ArgSpec, PrepSpec, Preposition, VerbArgsSpec};
+pub use crate::model::r#match::{
+    ArgSpec, PrepSpec, VerbArgsSpec, parse_preposition_spec, preposition_to_string,
+};
 pub use crate::model::objects::{ObjAttr, ObjAttrs, ObjFlag, ObjectRef};
 pub use crate::model::objset::{ObjSet, ObjSetIter};
 pub use crate::model::permissions::Perms;

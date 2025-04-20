@@ -13,94 +13,17 @@
 
 use std::string::ToString;
 
-use bincode::{Decode, Encode};
-
-use crate::model::WorldStateError;
-use crate::model::{PrepSpec, Preposition};
+use crate::matching::{ObjectNameMatcher, ParseCommandError, ParsedCommand, Preposition};
+use crate::model::PrepSpec;
 use crate::util;
-use moor_var::{Obj, Symbol};
 use moor_var::{Var, v_str};
-
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
-pub struct ParsedCommand {
-    pub verb: Symbol,
-    pub argstr: String,
-    pub args: Vec<Var>,
-
-    pub dobjstr: Option<String>,
-    pub dobj: Option<Obj>,
-
-    pub prepstr: Option<String>,
-    pub prep: PrepSpec,
-
-    pub iobjstr: Option<String>,
-    pub iobj: Option<Obj>,
-}
-
-/// Match a preposition for the form used by set_verb_args and friends, which means it must support
-/// numeric arguments for the preposition.
-pub fn parse_preposition_spec(repr: &str) -> Option<PrepSpec> {
-    match repr {
-        "any" => Some(PrepSpec::Any),
-        "none" => Some(PrepSpec::None),
-        _ => find_preposition(repr).map(PrepSpec::Other),
-    }
-}
-
-pub fn find_preposition(prep: &str) -> Option<Preposition> {
-    // If the string starts with a number (with or without # prefix), treat it as a preposition ID.
-    let numeric_offset = if prep.starts_with('#') { 1 } else { 0 };
-    if let Ok(id) = prep[numeric_offset..].parse::<u16>() {
-        return Preposition::from_repr(id);
-    }
-
-    Preposition::parse(prep)
-}
-
-pub fn preposition_to_string(ps: &PrepSpec) -> &str {
-    match ps {
-        PrepSpec::Any => "any",
-        PrepSpec::None => "none",
-        PrepSpec::Other(id) => id.to_string(),
-    }
-}
-
-// Seeks the first preposition in a list of words, returning the index of the preposition, the
-// preposition itself, and the preposition string, if any.
-fn seek_preposition(words: &[String]) -> (Option<(usize, String)>, PrepSpec) {
-    for (j, word) in words.iter().enumerate() {
-        if Preposition::parse(word.as_str()).is_some() {
-            return (
-                Some((j, word.clone())),
-                PrepSpec::Other(Preposition::parse(word).unwrap()),
-            );
-        }
-    }
-    (None, PrepSpec::None)
-}
-
-pub trait ParseMatcher {
-    fn match_object(&self, name: &str) -> Result<Option<Obj>, WorldStateError>;
-}
-
-#[derive(thiserror::Error, Debug, Clone, Decode, Encode)]
-pub enum ParseCommandError {
-    #[error("Empty command")]
-    EmptyCommand,
-    #[error("Unimplemented built-in command")]
-    UnimplementedBuiltInCommand,
-    #[error("Error occurred during object matching")]
-    ErrorDuringMatch(WorldStateError),
-    #[error("Permission denied")]
-    PermissionDenied,
-}
 
 pub fn parse_command<M>(
     input: &str,
     command_environment: M,
 ) -> Result<ParsedCommand, ParseCommandError>
 where
-    M: ParseMatcher,
+    M: ObjectNameMatcher,
 {
     // Replace initial command characters with say/emote/eval
     let mut command = input.trim_start().to_string();
@@ -182,19 +105,33 @@ where
     })
 }
 
+// Seeks the first preposition in a list of words, returning the index of the preposition, the
+// preposition itself, and the preposition string, if any.
+fn seek_preposition(words: &[String]) -> (Option<(usize, String)>, PrepSpec) {
+    for (j, word) in words.iter().enumerate() {
+        if Preposition::parse(word.as_str()).is_some() {
+            return (
+                Some((j, word.clone())),
+                PrepSpec::Other(Preposition::parse(word).unwrap()),
+            );
+        }
+    }
+    (None, PrepSpec::None)
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::model::Preposition;
+    use crate::model::WorldStateError;
     use crate::util::parse_into_words;
-    use moor_var::FAILED_MATCH;
     use moor_var::v_str;
+    use moor_var::{FAILED_MATCH, Obj};
 
-    use crate::matching::match_env::MatchEnvironmentParseMatcher;
+    use super::*;
+    use crate::matching::ObjectNameMatcher;
+    use crate::matching::match_env::DefaultObjectNameMatcher;
     use crate::matching::mock_matching_env::{
         MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
     };
-
-    use super::*;
 
     #[test]
     fn test_parse_into_words_simple() {
@@ -225,7 +162,7 @@ mod tests {
     }
 
     struct SimpleParseMatcher {}
-    impl ParseMatcher for SimpleParseMatcher {
+    impl ObjectNameMatcher for SimpleParseMatcher {
         fn match_object(&self, name: &str) -> Result<Option<Obj>, WorldStateError> {
             Ok(match name {
                 "obj" => Some(Obj::mk_id(1)),
@@ -381,7 +318,7 @@ mod tests {
     #[test]
     fn test_command_parser_get_thing1() {
         let env = setup_mock_environment();
-        let match_object_fn = MatchEnvironmentParseMatcher {
+        let match_object_fn = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -400,7 +337,7 @@ mod tests {
     #[test]
     fn test_command_parser_put_thing1_in_thing2() {
         let env = setup_mock_environment();
-        let match_object_fn = MatchEnvironmentParseMatcher {
+        let match_object_fn = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -420,7 +357,7 @@ mod tests {
     #[test]
     fn test_command_parser_look_at_here() {
         let env = setup_mock_environment();
-        let match_object_fn = MatchEnvironmentParseMatcher {
+        let match_object_fn = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
@@ -440,7 +377,7 @@ mod tests {
     #[test]
     fn test_prep_confused_with_numeric_arg() {
         let env = setup_mock_environment();
-        let match_object_fn = MatchEnvironmentParseMatcher {
+        let match_object_fn = DefaultObjectNameMatcher {
             env,
             player: MOCK_PLAYER,
         };
