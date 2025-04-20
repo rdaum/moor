@@ -52,10 +52,10 @@ use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::VmHost;
 use crate::tasks::{ServerOptions, TaskStart, VerbCall, sched_counters};
 use crate::vm::VMHostResponse;
-use moor_common::matching::command_parse::parse_command;
-use moor_common::matching::match_env::DefaultObjectNameMatcher;
-use moor_common::matching::ws_match_env::WsMatchEnv;
-use moor_common::matching::{ParseCommandError, ParsedCommand};
+use moor_common::matching::{
+    CommandParser, DefaultObjectNameMatcher, DefaultParseCommand, ParseCommandError, ParsedCommand,
+    WsMatchEnv,
+};
 
 lazy_static! {
     static ref HUH_SYM: Symbol = Symbol::mk("huh");
@@ -579,7 +579,8 @@ impl Task {
                 env: me,
                 player: player.clone(),
             };
-            let parsed_command = match parse_command(command, matcher) {
+            let command_parser = DefaultParseCommand::new();
+            let parsed_command = match command_parser.parse_command(command, &matcher) {
                 Ok(pc) => pc,
                 Err(ParseCommandError::PermissionDenied) => {
                     return Err(PermissionDenied);

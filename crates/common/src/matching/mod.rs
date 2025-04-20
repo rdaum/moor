@@ -22,6 +22,10 @@ pub mod mock_matching_env;
 mod prepositions;
 pub mod ws_match_env;
 
+pub use command_parse::DefaultParseCommand;
+pub use match_env::DefaultObjectNameMatcher;
+pub use ws_match_env::WsMatchEnv;
+
 pub use prepositions::{Preposition, find_preposition};
 
 /// Output from command matching, which is then used to match against the verb present in the
@@ -40,6 +44,12 @@ pub struct ParsedCommand {
 
     pub iobjstr: Option<String>,
     pub iobj: Option<Obj>,
+}
+
+/// The command parser interface. This is used to parse a command string into a ParsedCommand, or
+/// return an error if the command is invalid.
+pub trait CommandParser<M: ObjectNameMatcher> {
+    fn parse_command(&self, command: &str, env: &M) -> Result<ParsedCommand, ParseCommandError>;
 }
 
 /// This is the interface that the matching code needs to be able to call into the world state.
