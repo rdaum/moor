@@ -21,6 +21,7 @@ use std::time::Duration;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 pub use exec_state::VMExecState;
+pub use exec_state::vm_counters;
 use moor_common::matching::ParsedCommand;
 use moor_common::model::VerbDef;
 use moor_common::tasks::{AbortLimitReason, Exception, TaskId};

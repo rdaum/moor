@@ -29,11 +29,13 @@ use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, prepositi
 use moor_common::tasks::SchedulerError::CommandExecutionError;
 use moor_common::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
 use moor_common::util::parse_into_words;
-use moor_kernel::SchedulerClient;
+use moor_db::db_counters;
+use moor_kernel::builtins::bf_perf_counters;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::sessions::SessionError::DeliveryError;
 use moor_kernel::tasks::sessions::{Session, SessionError};
-use moor_kernel::tasks::{TaskHandle, TaskResult};
+use moor_kernel::tasks::{TaskHandle, TaskResult, sched_counters};
+use moor_kernel::{SchedulerClient, vm_counters};
 use moor_var::SYSTEM_OBJECT;
 use moor_var::{List, Variant};
 use moor_var::{Obj, Var};
@@ -338,7 +340,52 @@ impl RpcServer {
                 // Reply with an ack.
                 pack_host_response(Ok(DaemonToHostReply::Ack))
             }
-            HostToDaemonMessage::DetachHost() => {
+            HostToDaemonMessage::RequestPerformanceCounters => {
+                let mut all_counters = vec![];
+                let mut sch = vec![];
+                for c in sched_counters().all_counters() {
+                    sch.push((
+                        c.operation,
+                        c.invocations.sum(),
+                        c.cumulative_duration_nanos.sum(),
+                    ));
+                }
+                all_counters.push((Symbol::mk("sched"), sch));
+
+                let mut db = vec![];
+                for c in db_counters().all_counters() {
+                    db.push((
+                        c.operation,
+                        c.invocations.sum(),
+                        c.cumulative_duration_nanos.sum(),
+                    ));
+                }
+                all_counters.push((Symbol::mk("db"), db));
+
+                let mut vm = vec![];
+                for c in vm_counters().all_counters() {
+                    vm.push((
+                        c.operation,
+                        c.invocations.sum(),
+                        c.cumulative_duration_nanos.sum(),
+                    ));
+                }
+                all_counters.push((Symbol::mk("vm"), vm));
+
+                let mut bf = vec![];
+                for c in bf_perf_counters().all_counters() {
+                    bf.push((
+                        c.operation,
+                        c.invocations.sum(),
+                        c.cumulative_duration_nanos.sum(),
+                    ));
+                }
+                pack_host_response(Ok(DaemonToHostReply::PerfCounters(
+                    SystemTime::now(),
+                    all_counters,
+                )))
+            }
+            HostToDaemonMessage::DetachHost => {
                 hosts.unregister_host(&host_token);
                 pack_host_response(Ok(DaemonToHostReply::Ack))
             }

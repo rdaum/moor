@@ -32,9 +32,11 @@ use rpc_async_client::{make_host_token, start_host_session};
 use rpc_common::DaemonToClientReply::TaskSubmitted;
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{
-    AuthToken, ClientToken, HostClientToDaemonMessage, HostType, ReplyResult, load_keypair,
+    AuthToken, ClientToken, DaemonToHostReply, HostClientToDaemonMessage, HostToDaemonMessage,
+    HostToken, HostType, ReplyResult, load_keypair,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
@@ -51,27 +53,41 @@ struct Args {
 
     #[arg(
         long,
-        value_name = "num-concurrent-workloads",
-        help = "Number of concurrent fake users to generate load",
-        default_value = "50"
+        help = "Min number of concurrent fake users to generate load. Load tests will start at `min_concurrent_workload` and increase to `max_concurrent_workload`.",
+        default_value = "1"
     )]
-    num_concurrent_workloads: usize,
+    min_concurrent_workload: usize,
 
     #[arg(
         long,
-        value_name = "num-objects",
+        help = "Max number of concurrent fake users to generate load.",
+        default_value = "32"
+    )]
+    max_concurrent_workload: usize,
+
+    #[arg(
+        long,
         help = "Number of objects to create for the workload",
-        default_value = "20"
+        default_value = "10"
     )]
     num_objects: usize,
 
     #[arg(
         long,
-        value_name = "num-verb-invocations",
-        help = "How many times to invoke the top-level verb which then calls the load verb for each object",
-        default_value = "500"
+        help = "How many times the top-level verb should call the workload verb",
+        default_value = "1000"
+    )]
+    num_verb_iterations: usize,
+
+    #[arg(
+        long,
+        help = "How many times the top-level verb should be called.",
+        default_value = "100"
     )]
     num_verb_invocations: usize,
+
+    #[arg(long, help = "CSV output file for benchmark data")]
+    output_file: Option<PathBuf>,
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
@@ -138,7 +154,7 @@ async fn workload(
                     auth_token.clone(),
                     ObjectRef::Id(connection_oid.clone()),
                     Symbol::mk("invoke_load_test"),
-                    vec![v_int(args.num_verb_invocations as i64)],
+                    vec![v_int(args.num_verb_iterations as i64)],
                 ),
             )
             .await
@@ -157,7 +173,7 @@ async fn workload(
             }
         };
 
-        let start_time = Instant::now();
+        let wait_time = Instant::now();
         loop {
             {
                 let mut tasks = task_results.lock().await;
@@ -165,9 +181,9 @@ async fn workload(
                     break results;
                 }
             }
-            sleep(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(1)).await;
 
-            if start_time.elapsed().as_secs() > 10 {
+            if wait_time.elapsed().as_secs() > 10 {
                 panic!("Timed out waiting for task results");
             }
         }
@@ -177,13 +193,76 @@ async fn workload(
     Ok(start_time.elapsed())
 }
 
+async fn request_counters(
+    zmq_ctx: tmq::Context,
+    rpc_address: String,
+    host_token: &HostToken,
+) -> Result<HashMap<Symbol, HashMap<Symbol, (isize, isize)>>, eyre::Error> {
+    let rpc_request_sock = request(&zmq_ctx)
+        .set_rcvtimeo(100)
+        .set_sndtimeo(100)
+        .connect(rpc_address.as_str())
+        .expect("Unable to bind RPC server for connection");
+    let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+    let response = rpc_client
+        .make_host_rpc_call(host_token, HostToDaemonMessage::RequestPerformanceCounters)
+        .await
+        .expect("Unable to send call request to RPC server");
+    let ReplyResult::HostSuccess(DaemonToHostReply::PerfCounters(_, counters)) = response else {
+        panic!("Unexpected response from daemon: {:?}", response);
+    };
+
+    // Build a map of maps for the counters.
+    let mut counters_map = HashMap::new();
+    for (category, counter_list) in counters {
+        let mut category_map = HashMap::new();
+        for (counter_name, count, total) in counter_list {
+            category_map.insert(counter_name, (count, total));
+        }
+        counters_map.insert(category, category_map);
+    }
+
+    Ok(counters_map)
+}
+
+fn process_counters(
+    before_counters: HashMap<Symbol, HashMap<Symbol, (isize, isize)>>,
+    after_counters: HashMap<Symbol, HashMap<Symbol, (isize, isize)>>,
+) -> BTreeMap<String, (f64, f64, isize)> {
+    let mut results = BTreeMap::new();
+    for (category, counters) in after_counters {
+        let mut diff = HashMap::new();
+        for (counter_name, (count, total)) in counters {
+            let before_count = before_counters
+                .get(&category)
+                .and_then(|c| c.get(&counter_name))
+                .map(|c| c.0)
+                .unwrap_or(0);
+            let before_total = before_counters
+                .get(&category)
+                .and_then(|c| c.get(&counter_name))
+                .map(|c| c.1)
+                .unwrap_or(0);
+            diff.insert(counter_name, (count - before_count, total - before_total));
+        }
+        // Print the averages for each counter
+        for (counter_name, (count, total)) in diff {
+            let total = (total as f64) / 1000.0;
+            let avg = total / (count as f64);
+            results.insert(format!("{category}/{counter_name}"), (avg, total, count));
+        }
+    }
+    results
+}
+
 async fn load_test_workload(
-    args: Args,
+    args: &Args,
     ExecutionContext {
         zmq_ctx,
         kill_switch,
     }: ExecutionContext,
-) -> Result<(), eyre::Error> {
+    host_token: &HostToken,
+) -> Result<Vec<Results>, eyre::Error> {
     let (
         connection_oid,
         auth_token,
@@ -253,60 +332,120 @@ async fn load_test_workload(
     )
     .await;
 
-    let start_time = Instant::now();
-    // Spawn N = num_users threads that call the invoke_load_test verb
-    info!(
-        "Starting {} concurrent workloads",
-        args.num_concurrent_workloads
-    );
-    let mut workload_futures = FuturesUnordered::new();
-    for i in 0..args.num_concurrent_workloads {
-        let zmq_ctx = zmq_ctx.clone();
-        let connection_oid = connection_oid.clone();
-        let auth_token = auth_token.clone();
-        let client_token = client_token.clone();
-        let rpc_address = args.client_args.rpc_address.clone();
-        let args = args.clone();
-        let task_results = task_results.clone();
-        workload_futures.push(workload(
-            args,
-            zmq_ctx,
-            rpc_address,
-            i,
-            connection_oid,
-            auth_token,
-            client_token,
-            client_id,
-            task_results,
-        ));
+    let mut results = vec![];
+
+    let mut concurrency = args.min_concurrent_workload as f32;
+    loop {
+        if concurrency > args.max_concurrent_workload as f32 {
+            break;
+        }
+        let num_concurrent_workload = concurrency as usize;
+        let start_time = Instant::now();
+
+        let before_counters = request_counters(
+            zmq_ctx.clone(),
+            args.client_args.rpc_address.clone(),
+            host_token,
+        )
+        .await?;
+        info!(
+            "Starting {num_concurrent_workload} threads workloads, calling load test {} times, which does {} dispatch iterations...",
+            args.num_verb_invocations, args.num_verb_iterations
+        );
+        let mut workload_futures = FuturesUnordered::new();
+        for i in 0..num_concurrent_workload {
+            let zmq_ctx = zmq_ctx.clone();
+            let connection_oid = connection_oid.clone();
+            let auth_token = auth_token.clone();
+            let client_token = client_token.clone();
+            let rpc_address = args.client_args.rpc_address.clone();
+            let args = args.clone();
+            let task_results = task_results.clone();
+            workload_futures.push(workload(
+                args,
+                zmq_ctx,
+                rpc_address,
+                i,
+                connection_oid,
+                auth_token,
+                client_token,
+                client_id,
+                task_results,
+            ));
+        }
+
+        let mut times = vec![];
+        while let Some(h) = workload_futures.next().await {
+            times.push(h.expect("Workload failed"));
+        }
+
+        let after_counters = request_counters(
+            zmq_ctx.clone(),
+            args.client_args.rpc_address.clone(),
+            host_token,
+        )
+        .await?;
+
+        let processed_counters = process_counters(before_counters, after_counters);
+
+        let cumulative_time = times.iter().fold(Duration::new(0, 0), |acc, x| acc + *x);
+        let total_time = start_time.elapsed();
+        let total_invocations = args.num_verb_invocations * num_concurrent_workload;
+        let total_verb_calls =
+            (args.num_verb_invocations * args.num_verb_iterations * num_concurrent_workload)
+                + total_invocations;
+        let r = Results {
+            concurrency: num_concurrent_workload,
+            total_invocations,
+            total_time,
+            cumulative_time,
+            total_verb_calls,
+            per_invocation_time: Duration::from_secs_f64(
+                cumulative_time.as_secs_f64() / total_invocations as f64,
+            ),
+            per_dispatch_time: Duration::from_secs_f64(
+                cumulative_time.as_secs_f64() / total_verb_calls as f64,
+            ),
+            counters: processed_counters,
+        };
+        info!(
+            "@ Concurrency: {} w/ total invocations: {}, ({total_verb_calls} total verb calls): Total Time: {:?}, Cumulative: {:?}, Per Invocation Time: {:?}, Per Verb Dispatch: {:?} ",
+            r.concurrency,
+            r.total_invocations,
+            r.total_time,
+            r.cumulative_time,
+            r.per_invocation_time,
+            r.per_dispatch_time
+        );
+        results.push(r);
+
+        // Scale up by 25% or 1, whichever is larger, so we don't get stuck on lower values.
+        let mut next_concurrency = concurrency * 1.25;
+        if next_concurrency as usize <= concurrency as usize {
+            next_concurrency = concurrency + 1.0;
+        }
+        concurrency = next_concurrency;
     }
+    Ok(results)
+}
 
-    info!(
-        "Waiting for {} workloads to complete...",
-        workload_futures.len()
-    );
-
-    let mut times = vec![];
-    while let Some(h) = workload_futures.next().await {
-        times.push(h.expect("Workload failed"));
-    }
-
-    let sum_time = times.iter().fold(Duration::new(0, 0), |acc, x| acc + *x);
-    info!(
-        "All workloads completed in {:?}s total vs {}s cumulative",
-        start_time.elapsed().as_secs(),
-        sum_time.as_secs_f64()
-    );
-    let total_verb_invocations =
-        args.num_verb_invocations * args.num_concurrent_workloads * args.num_objects;
-    info!(
-        "Verb invocations completed : {}/s cumulative {}/s concurrent. Across {} objects, {} invocations",
-        total_verb_invocations as f64 / sum_time.as_secs_f64(),
-        total_verb_invocations as f64 / start_time.elapsed().as_secs_f64(),
-        args.num_objects,
-        total_verb_invocations
-    );
-    Ok(())
+struct Results {
+    /// How many concurrent threads there were.
+    concurrency: usize,
+    /// How many times the top-level verb was invoked
+    total_invocations: usize,
+    /// How many total verb calls that led to
+    total_verb_calls: usize,
+    /// The duration of the whole load test
+    total_time: Duration,
+    /// The cumulative time actually spent waiting for the daemon to respond
+    cumulative_time: Duration,
+    /// The time per invocation
+    per_invocation_time: Duration,
+    /// The time per verb dispatch
+    per_dispatch_time: Duration,
+    /// All system performance counters aggregated before and after the load run
+    counters: BTreeMap<String, (f64, f64, isize)>,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -339,10 +478,11 @@ async fn main() -> Result<(), eyre::Error> {
 
     let (listeners, _ljh) = setup::noop_listeners_loop().await;
 
+    let rpc_address = args.client_args.rpc_address.clone();
     let _rpc_client = start_host_session(
         &host_token,
         zmq_ctx.clone(),
-        args.client_args.rpc_address.clone(),
+        rpc_address.clone(),
         kill_switch.clone(),
         listeners.clone(),
     )
@@ -350,12 +490,52 @@ async fn main() -> Result<(), eyre::Error> {
     .expect("Unable to establish initial host session");
 
     let exec_context = ExecutionContext {
-        zmq_ctx,
+        zmq_ctx: zmq_ctx.clone(),
         kill_switch: kill_switch.clone(),
     };
 
-    load_test_workload(args, exec_context).await?;
+    let results = load_test_workload(&args, exec_context, &host_token).await?;
 
+    if let Some(output_file) = args.output_file {
+        let num_records = results.len();
+        let mut writer =
+            csv::Writer::from_path(&output_file).expect("Could not open benchmark output file");
+
+        // Use first row of results to figure out the header.
+        let first_row = results.first().expect("No results found");
+        let mut header = vec![
+            "concurrency".to_string(),
+            "total_invocations".to_string(),
+            "total_verb_calls".to_string(),
+            "total_time_ns".to_string(),
+            "per_dispatch_time_μs".to_string(),
+            "per_invocation_time_μs".to_string(),
+        ];
+        for x in first_row.counters.keys() {
+            header.push(format!("{}-avg_μs", x));
+            header.push(format!("{}-total_μs", x));
+            header.push(format!("{}-count", x));
+        }
+        writer.write_record(header)?;
+        for r in results {
+            let mut base = vec![
+                r.concurrency.to_string(),
+                r.total_invocations.to_string(),
+                r.total_verb_calls.to_string(),
+                r.total_time.as_nanos().to_string(),
+                r.per_dispatch_time.as_nanos().to_string(),
+                r.per_invocation_time.as_nanos().to_string(),
+            ];
+            for (_, (avg, total, count)) in r.counters {
+                base.push(avg.to_string());
+                base.push(total.to_string());
+                base.push(count.to_string());
+            }
+            writer.write_record(base)?
+        }
+        info!("Wrote {num_records} to {}", output_file.display())
+    }
     kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
+
     Ok(())
 }

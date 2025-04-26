@@ -12,7 +12,7 @@
 //
 
 use bincode::{Decode, Encode};
-use moor_var::Obj;
+use moor_var::{Obj, Symbol};
 use std::net::SocketAddr;
 use std::time::SystemTime;
 
@@ -51,7 +51,9 @@ pub enum HostToDaemonMessage {
     /// listeners that the daemon expects the host to start listening on.
     RegisterHost(SystemTime, HostType, Vec<(Obj, SocketAddr)>),
     /// Unregister the presence of this host's listeners with the daemon.
-    DetachHost(),
+    DetachHost,
+    /// Please send the performance counters for the current running system.
+    RequestPerformanceCounters,
     /// Respond to a host ping request.
     HostPong(SystemTime, HostType, Vec<(Obj, SocketAddr)>),
 }
@@ -63,6 +65,9 @@ pub enum DaemonToHostReply {
     Ack,
     /// The daemon does not like this host for some reason. The host should die.
     Reject(String),
+    /// Here is a dump of the performance counters for the system, as requested.
+    /// `[category, [ name, [cnt, total_cumulative_ns]]]`
+    PerfCounters(SystemTime, Vec<(Symbol, Vec<(Symbol, isize, isize)>)>),
 }
 
 /// Events which occur over the pubsub endpoint, but are for all the hosts.

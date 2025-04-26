@@ -40,6 +40,7 @@ mod verb_cache;
 
 use crate::prop_cache::PropResolutionCache;
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
+pub use db_worldstate::db_counters;
 pub use tx_management::Provider;
 pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
 

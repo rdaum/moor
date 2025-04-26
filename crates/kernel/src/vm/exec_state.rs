@@ -28,7 +28,7 @@ lazy_static! {
     static ref VM_COUNTERS: Arc<VmCounters> = Arc::new(VmCounters::new());
 }
 
-pub(crate) fn vm_counters() -> Arc<VmCounters> {
+pub fn vm_counters() -> Arc<VmCounters> {
     VM_COUNTERS.clone()
 }
 
@@ -225,7 +225,7 @@ impl VmCounters {
         }
     }
 
-    pub(crate) fn all_counters(&self) -> Vec<&PerfCounter> {
+    pub fn all_counters(&self) -> Vec<&PerfCounter> {
         vec![
             &self.prepare_verb_dispatch,
             &self.prepare_pass_verb,

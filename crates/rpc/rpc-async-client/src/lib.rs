@@ -114,6 +114,9 @@ pub async fn start_host_session(
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 continue;
             }
+            _ => {
+                error!("Daemon did not respond with an Ack. Retrying...");
+            }
         }
     };
     Ok(rpc_client)
@@ -166,6 +169,9 @@ pub async fn proces_hosts_events(
                             "Error communicating with daemon: {} to respond to ping: {:?}",
                             e, msg
                         );
+                    }
+                    _ => {
+                        error!("Daemon did not respond with an Ack. Retrying...");
                     }
                 }
             }
