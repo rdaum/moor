@@ -56,11 +56,14 @@ pub struct TaskHandle(
     oneshot::Receiver<Result<TaskResult, SchedulerError>>,
 );
 
-// Results from a task which are either a value or a notification to the task Q to restart the
-// task.
+// Results from a task which are either a value or a notification that the underlying task handle
+// was replaced at the whim of the scheduler.
 pub enum TaskResult {
     Result(Var),
-    Restarted(TaskHandle),
+    // TODO: this is no longer used, 'twas used in previous implementation of task restarting on
+    //  conflict. But the facility could come in handy in the future, so leaving it in for now,
+    //  rather than gut all the code I wrote to handle it on the other side.
+    Replaced(TaskHandle),
 }
 
 impl Debug for TaskHandle {
@@ -374,7 +377,7 @@ pub mod scheduler_test_utils {
             Err(CommandExecutionError(CommandError::NoCommandMatch)) => Ok(E_VERBNF.into()),
             Err(err) => Err(err),
             Ok(TaskResult::Result(var)) => Ok(var),
-            Ok(TaskResult::Restarted(_)) => panic!("Unexpected task restart"),
+            Ok(TaskResult::Replaced(_)) => panic!("Unexpected task restart"),
         }
     }
 

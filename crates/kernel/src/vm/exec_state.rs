@@ -44,7 +44,7 @@ pub struct Caller {
 }
 
 /// Represents the state of VM execution for a given task.
-#[derive(Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct VMExecState {
     /// The task ID of the task that for current stack of activations.
     pub(crate) task_id: TaskId,

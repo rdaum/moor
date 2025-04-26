@@ -46,6 +46,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 use tmq::request;
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 use tracing::{debug, info};
 use uuid::Uuid;
 
@@ -304,6 +305,7 @@ async fn workload(
         };
 
         let start_time = Instant::now();
+        // Spin waiting for results to show up in the task_results map
         let result = loop {
             {
                 let mut tasks = task_results.lock().await;
@@ -311,7 +313,7 @@ async fn workload(
                     break results;
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            sleep(std::time::Duration::from_millis(100)).await;
 
             if start_time.elapsed().as_secs() > 5 {
                 panic!("Timed out waiting for task results");
@@ -319,7 +321,7 @@ async fn workload(
         }
         .expect("Task results not found");
 
-        // Spin waiting for results to show up in the task_results map
+        // For our workload this should be a list, and if it isn't there's something messed up!
         let Variant::List(result) = result.variant() else {
             panic!("Unexpected result: {:?}", result);
         };

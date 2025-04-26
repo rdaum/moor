@@ -51,7 +51,7 @@ use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::vm_host::VmHost;
 use crate::tasks::{ServerOptions, TaskStart, VerbCall, sched_counters};
-use crate::vm::VMHostResponse;
+use crate::vm::{VMExecState, VMHostResponse};
 use moor_common::matching::{
     CommandParser, DefaultObjectNameMatcher, DefaultParseCommand, ParseCommandError, ParsedCommand,
     WsMatchEnv,
@@ -77,6 +77,9 @@ pub struct Task {
     pub(crate) kill_switch: Arc<AtomicBool>,
     /// The number of retries this process has undergone.
     pub(crate) retries: u8,
+    /// A copy of the VM state at the time the task was created or last committed/suspended.
+    /// For restoring on retry.
+    pub(crate) retry_state: VMExecState,
 }
 
 impl Task {
@@ -103,6 +106,7 @@ impl Task {
             Duration::from_secs(max_seconds),
         );
 
+        let retry_state = vm_host.snapshot_state();
         Task {
             task_id,
             player,
@@ -111,6 +115,7 @@ impl Task {
             perms,
             kill_switch,
             retries: 0,
+            retry_state,
         }
     }
 
@@ -205,6 +210,7 @@ impl Task {
                     return None;
                 }
 
+                self.retry_state = self.vm_host.snapshot_state();
                 trace!(task_id = self.task_id, "Task suspended");
                 self.vm_host.stop();
 
@@ -232,7 +238,7 @@ impl Task {
                     task_scheduler_client.conflict_retry(self);
                     return None;
                 }
-
+                self.retry_state = self.vm_host.snapshot_state();
                 trace!(task_id = self.task_id, "Task suspended for input");
                 self.vm_host.stop();
 
@@ -711,6 +717,7 @@ impl<C> Decode<C> for Task {
         let vm_host = VmHost::decode(decoder)?;
         let perms = Obj::decode(decoder)?;
         let retries = u8::decode(decoder)?;
+        let retry_state = VMExecState::decode(decoder)?;
 
         let kill_switch = Arc::new(AtomicBool::new(false));
         Ok(Task {
@@ -721,6 +728,7 @@ impl<C> Decode<C> for Task {
             perms,
             kill_switch,
             retries,
+            retry_state,
         })
     }
 }
@@ -733,8 +741,9 @@ impl<'de, C> BorrowDecode<'de, C> for Task {
         let vm_host = VmHost::borrow_decode(decoder)?;
         let perms = Obj::borrow_decode(decoder)?;
         let retries = u8::decode(decoder)?;
-
+        let retry_state = VMExecState::decode(decoder)?;
         let kill_switch = Arc::new(AtomicBool::new(false));
+
         Ok(Task {
             task_id,
             player,
@@ -743,6 +752,7 @@ impl<'de, C> BorrowDecode<'de, C> for Task {
             perms,
             kill_switch,
             retries,
+            retry_state,
         })
     }
 }

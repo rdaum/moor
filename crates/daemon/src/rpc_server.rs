@@ -791,7 +791,7 @@ impl RpcServer {
         let player = loop {
             let receiver = task_handle.into_receiver();
             match receiver.recv() {
-                Ok(Ok(TaskResult::Restarted(th))) => {
+                Ok(Ok(TaskResult::Replaced(th))) => {
                     task_handle = th;
                     continue;
                 }
@@ -1046,7 +1046,7 @@ impl RpcServer {
         };
         loop {
             match task_handle.into_receiver().recv() {
-                Ok(Ok(TaskResult::Restarted(th))) => {
+                Ok(Ok(TaskResult::Replaced(th))) => {
                     task_handle = th;
                     continue;
                 }
@@ -1148,7 +1148,7 @@ impl RpcServer {
             for (task_id, client_id, result) in completed {
                 let result = match result {
                     Ok(TaskResult::Result(v)) => ClientEvent::TaskSuccess(task_id, v),
-                    Ok(TaskResult::Restarted(th)) => {
+                    Ok(TaskResult::Replaced(th)) => {
                         info!(?client_id, ?task_id, "Task restarted");
                         th_q.insert(task_id, (client_id, th));
                         continue;

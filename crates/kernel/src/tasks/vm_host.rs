@@ -52,7 +52,7 @@ use moor_common::util::PerfTimerGuard;
 
 /// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.
 pub struct VmHost {
-    /// Where we store current execution state for this host. Includes all all activations and the
+    /// Where we store current execution state for this host. Includes all activations and the
     /// interpreter-specific frames inside them.
     vm_exec_state: VMExecState,
     /// The maximum stack depth for this task
@@ -436,6 +436,16 @@ impl VmHost {
         }
 
         debug!(task_id = self.vm_exec_state.task_id, "Resuming VMHost");
+    }
+
+    /// Get a copy of the current VM state, for later restoration.
+    pub fn snapshot_state(&self) -> VMExecState {
+        self.vm_exec_state.clone()
+    }
+
+    /// Restore from a snapshot.
+    pub fn restore_state(&mut self, state: &VMExecState) {
+        self.vm_exec_state = state.clone();
     }
 
     pub fn is_running(&self) -> bool {

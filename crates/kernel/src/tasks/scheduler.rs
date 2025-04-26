@@ -920,7 +920,7 @@ impl Scheduler {
                     return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
                 trace!(?task_id, result = ?value, "Task succeeded");
-                return task_q.send_task_result(task_id, Ok(value));
+                task_q.send_task_result(task_id, Ok(value))
             }
             TaskControlMsg::TaskConflictRetry(task) => {
                 let perfc = sched_counters();
@@ -933,7 +933,6 @@ impl Scheduler {
                     task,
                     &self.task_control_sender,
                     self.database.as_ref(),
-                    &self.server_options,
                     self.builtin_registry.clone(),
                     self.config.clone(),
                 );
@@ -1189,12 +1188,10 @@ impl Scheduler {
                     warn!(task_id, "Task not found for listen request");
                     return;
                 };
-                let result = self.system_control.listen(
-                    handler_object,
-                    &host_type,
-                    port,
-                    print_messages,
-                ).err();
+                let result = self
+                    .system_control
+                    .listen(handler_object, &host_type, port, print_messages)
+                    .err();
                 reply.send(result).expect("Could not send listen reply");
             }
             TaskControlMsg::Unlisten {
@@ -1490,6 +1487,7 @@ impl TaskQ {
                 error!(task_id, "Could not setup task start");
                 return Err(SchedulerError::CouldNotStartTask);
             }
+            task.retry_state = task.vm_host.snapshot_state();
 
             match world_state.commit() {
                 Ok(CommitResult::Success) => {}
@@ -1542,6 +1540,7 @@ impl TaskQ {
                     trace!(task_start = ?task.task_start, task_id, "Could not setup task start");
                     return;
                 }
+                task.retry_state = task.vm_host.snapshot_state();
 
                 Task::run_task_loop(
                     task,
@@ -1598,7 +1597,10 @@ impl TaskQ {
 
         let task_id = task.task_id;
         let player = task.perms.clone();
-        let kill_switch = task.kill_switch.clone();
+
+        // Brand new kill switch for the resumed task. The old one may have gotten toggled.
+        let kill_switch = Arc::new(AtomicBool::new(false));
+        task.kill_switch = kill_switch.clone();
         let task_control = RunningTaskControl {
             player: player.clone(),
             kill_switch,
@@ -1657,12 +1659,13 @@ impl TaskQ {
         mut task: Task,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
-        server_options: &ServerOptions,
         builtin_registry: Arc<BuiltinRegistry>,
         config: Arc<Config>,
     ) {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.retry_task);
+
+        let task_id = task.task_id;
 
         // Make sure the old thread is dead.
         task.kill_switch.store(true, Ordering::SeqCst);
@@ -1672,7 +1675,7 @@ impl TaskQ {
         // running tasks there's something very wrong.
         let old_tc = self
             .tasks
-            .remove(&task.task_id)
+            .remove(&task_id)
             .expect("Task not found for retry");
 
         // If the number of retries has been exceeded, we'll just immediately respond with abort.
@@ -1682,44 +1685,60 @@ impl TaskQ {
                 "Maximum number of retries exceeded for task {}.  Aborting.",
                 task.task_id
             );
-            self.send_task_result(task.task_id, Err(TaskAbortedError));
+            self.send_task_result(task_id, Err(TaskAbortedError));
             return;
         }
         task.retries += 1;
 
-        // Grab the "task start" record from the (now dead) task, and submit this again with the same
-        // task_id.
-        let task_start = task.task_start.clone();
+        // Restore the VM state from its last snapshot, which would either be the original state of
+        // the task, or its state as of the last commit.
+        task.vm_host.restore_state(&task.retry_state);
 
+        // Start a new session.
         let new_session = old_tc.session.fork().unwrap();
 
-        match self.start_task_thread(
-            task.task_id,
-            task_start,
-            &old_tc.player,
-            new_session,
-            None,
-            &task.perms,
-            server_options,
-            control_sender,
-            database,
-            builtin_registry,
-            config,
-        ) {
-            Ok(th) => {
-                // Replacement task handle now exists, we need to send a message to the daemon to
-                // let it know that, otherwise it will sit hanging waiting on the old one forever.
-                // This does not apply if the task is backgrounded. (e.g. fork)
-                if let Some(result_sender) = old_tc.result_sender {
-                    if let Err(e) = result_sender.send(Ok(TaskResult::Restarted(th))) {
-                        warn!(error = ?e, "Could not send retry result to requester, could not issue new task handle");
-                    }
-                }
-            }
+        // Brand new kill switch for the retried task. The old one was toggled to die.
+        let kill_switch = Arc::new(AtomicBool::new(false));
+        task.kill_switch = kill_switch.clone();
+
+        // Otherwise, we create a task control record and fire up a thread.
+        let task_control = RunningTaskControl {
+            player: old_tc.player.clone(),
+            kill_switch,
+            session: new_session.clone(),
+            result_sender: old_tc.result_sender,
+        };
+
+        // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
+        self.tasks.insert(task_id, task_control);
+
+        let thread_name = format!("moor-task-{}-player-{}", task_id, task.player);
+        let control_sender = control_sender.clone();
+
+        let world_state = match database.new_world_state() {
+            Ok(ws) => ws,
             Err(e) => {
-                error!(error = ?e, "Could not start task thread to retry task");
+                // We panic here because this is a fundamental issue that will require admin
+                // intervention.
+                panic!("Could not start transaction for retry task due to DB error: {e:?}");
             }
         };
+        let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
+        std::thread::Builder::new()
+            .name(thread_name)
+            .spawn(move || {
+                info!(?task.task_id, "Restarting retry task");
+                Task::run_task_loop(
+                    task,
+                    &task_scheduler_client,
+                    new_session,
+                    world_state,
+                    builtin_registry,
+                    config,
+                );
+                trace!(?task_id, "Completed task");
+            })
+            .expect("Could not spawn task thread");
     }
 
     #[instrument(skip(self))]
