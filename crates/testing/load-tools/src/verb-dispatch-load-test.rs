@@ -40,6 +40,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use tmq::request;
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 use tracing::info;
 use uuid::Uuid;
 
@@ -164,9 +165,9 @@ async fn workload(
                     break results;
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            sleep(Duration::from_millis(100)).await;
 
-            if start_time.elapsed().as_secs() > 5 {
+            if start_time.elapsed().as_secs() > 10 {
                 panic!("Timed out waiting for task results");
             }
         }
@@ -252,7 +253,7 @@ async fn load_test_workload(
     )
     .await;
 
-    let start_time = std::time::Instant::now();
+    let start_time = Instant::now();
     // Spawn N = num_users threads that call the invoke_load_test verb
     info!(
         "Starting {} concurrent workloads",
