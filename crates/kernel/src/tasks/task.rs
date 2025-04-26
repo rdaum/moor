@@ -705,7 +705,8 @@ impl Encode for Task {
         self.task_start.encode(encoder)?;
         self.vm_host.encode(encoder)?;
         self.perms.encode(encoder)?;
-        self.retries.encode(encoder)
+        self.retries.encode(encoder)?;
+        self.retry_state.encode(encoder)
     }
 }
 
@@ -718,7 +719,6 @@ impl<C> Decode<C> for Task {
         let perms = Obj::decode(decoder)?;
         let retries = u8::decode(decoder)?;
         let retry_state = VMExecState::decode(decoder)?;
-
         let kill_switch = Arc::new(AtomicBool::new(false));
         Ok(Task {
             task_id,
