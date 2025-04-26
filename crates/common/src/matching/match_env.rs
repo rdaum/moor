@@ -17,8 +17,8 @@ use crate::model::WorldStateError;
 use moor_var::Obj;
 use moor_var::{AMBIGUOUS, FAILED_MATCH, NOTHING};
 
-const ME: &'static str = "me";
-const HERE: &'static str = "here";
+const ME: &str = "me";
+const HERE: &str = "here";
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 struct MatchData {

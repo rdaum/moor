@@ -66,7 +66,7 @@ pub struct Task {
     /// My unique task id.
     pub task_id: TaskId,
     /// What I was asked to do.
-    pub(crate) task_start: Arc<TaskStart>,
+    pub(crate) task_start: TaskStart,
     /// The player on behalf of whom this task is running. Who owns this task.
     pub(crate) player: Obj,
     /// The permissions of the task -- the object on behalf of which all permissions are evaluated.
@@ -85,7 +85,7 @@ impl Task {
     pub fn new(
         task_id: TaskId,
         player: Obj,
-        task_start: Arc<TaskStart>,
+        task_start: TaskStart,
         perms: Obj,
         server_options: &ServerOptions,
         kill_switch: Arc<AtomicBool>,
@@ -252,19 +252,19 @@ impl Task {
                     handler_object,
                     player,
                     command,
-                } = self.task_start.clone().as_ref()
+                } = &self.task_start
                 {
-                    let (player, command) = (player, command.clone());
+                    let (player, command) = (player.clone(), command.clone());
                     if !result.is_true() {
                         // Intercept and rewrite us back to StartVerbCommand and do old school parse.
-                        self.task_start = Arc::new(TaskStart::StartCommandVerb {
+                        self.task_start = TaskStart::StartCommandVerb {
                             handler_object: handler_object.clone(),
                             player: player.clone(),
                             command: command.clone(),
-                        });
+                        };
 
                         if let Err(e) =
-                            self.setup_start_parse_command(player, &command, world_state.as_mut())
+                            self.setup_start_parse_command(&player, &command, world_state.as_mut())
                         {
                             task_scheduler_client.command_error(e);
                         }
@@ -380,7 +380,7 @@ impl Task {
     ) -> bool {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.setup_task);
-        match self.task_start.clone().as_ref() {
+        match &self.task_start {
             // We've been asked to start a command.
             // We need to set up the VM and then execute it.
             TaskStart::StartCommandVerb {
@@ -388,8 +388,10 @@ impl Task {
                 player,
                 command,
             } => {
+                let (handler_object, player, command) =
+                    (handler_object.clone(), player.clone(), command.clone());
                 if let Err(e) =
-                    self.start_command(handler_object, player, command.as_str(), world_state)
+                    self.start_command(&handler_object, &player, command.as_str(), world_state)
                 {
                     control_sender
                         .send((self.task_id, TaskControlMsg::TaskCommandError(e)))
@@ -537,11 +539,11 @@ impl Task {
                     verb_info,
                     verb_call,
                 );
-                self.task_start = Arc::new(TaskStart::StartDoCommand {
+                self.task_start = TaskStart::StartDoCommand {
                     handler_object: handler_object.clone(),
                     player: player.clone(),
                     command: command.to_string(),
-                });
+                };
             }
             Err(e) => {
                 panic!("Unable to start task due to error: {e:?}");
@@ -705,7 +707,7 @@ impl<C> Decode<C> for Task {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let task_id = TaskId::decode(decoder)?;
         let player = Obj::decode(decoder)?;
-        let task_start = Arc::decode(decoder)?;
+        let task_start = TaskStart::decode(decoder)?;
         let vm_host = VmHost::decode(decoder)?;
         let perms = Obj::decode(decoder)?;
         let retries = u8::decode(decoder)?;
@@ -727,7 +729,7 @@ impl<'de, C> BorrowDecode<'de, C> for Task {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let task_id = TaskId::borrow_decode(decoder)?;
         let player = Obj::borrow_decode(decoder)?;
-        let task_start = Arc::borrow_decode(decoder)?;
+        let task_start = TaskStart::decode(decoder)?;
         let vm_host = VmHost::borrow_decode(decoder)?;
         let perms = Obj::borrow_decode(decoder)?;
         let retries = u8::decode(decoder)?;
@@ -782,7 +784,7 @@ mod tests {
 
     #[allow(clippy::type_complexity)]
     fn setup_test_env(
-        task_start: Arc<TaskStart>,
+        task_start: TaskStart,
         programs: &[TestVerb],
     ) -> (
         Arc<AtomicBool>,
@@ -872,10 +874,10 @@ mod tests {
         Receiver<(TaskId, TaskControlMsg)>,
     ) {
         let program = compile(program, CompileOptions::default()).unwrap();
-        let task_start = Arc::new(TaskStart::StartEval {
+        let task_start = TaskStart::StartEval {
             player: SYSTEM_OBJECT,
             program,
-        });
+        };
         setup_test_env(task_start, &[])
     }
 
@@ -891,11 +893,11 @@ mod tests {
         TaskSchedulerClient,
         Receiver<(TaskId, TaskControlMsg)>,
     ) {
-        let task_start = Arc::new(TaskStart::StartCommandVerb {
+        let task_start = TaskStart::StartCommandVerb {
             handler_object: SYSTEM_OBJECT,
             player: SYSTEM_OBJECT,
             command: command.to_string(),
-        });
+        };
         setup_test_env(task_start, verbs)
     }
 
@@ -1085,7 +1087,7 @@ mod tests {
 
         // Pull a copy of the program out for comparison later.
         let task_start = task.task_start.clone();
-        let TaskStart::StartEval { program, .. } = task_start.as_ref() else {
+        let TaskStart::StartEval { program, .. } = &task_start else {
             panic!("Expected StartEval, got {:?}", task.task_start);
         };
 

@@ -154,10 +154,10 @@ mod tests {
         let task = Task::new(
             task_id,
             SYSTEM_OBJECT,
-            Arc::new(TaskStart::StartEval {
+            TaskStart::StartEval {
                 player: SYSTEM_OBJECT,
                 program: Default::default(),
-            }),
+            },
             SYSTEM_OBJECT,
             &so,
             Arc::new(AtomicBool::new(false)),
@@ -207,10 +207,10 @@ mod tests {
             let task = Task::new(
                 task_id,
                 SYSTEM_OBJECT,
-                Arc::new(TaskStart::StartEval {
+                TaskStart::StartEval {
                     player: SYSTEM_OBJECT,
                     program: Default::default(),
-                }),
+                },
                 SYSTEM_OBJECT,
                 &so,
                 Arc::new(AtomicBool::new(false)),
@@ -264,10 +264,10 @@ mod tests {
             let task = Task::new(
                 task_id,
                 SYSTEM_OBJECT,
-                Arc::new(TaskStart::StartEval {
+                TaskStart::StartEval {
                     player: SYSTEM_OBJECT,
                     program: Default::default(),
-                }),
+                },
                 SYSTEM_OBJECT,
                 &so,
                 Arc::new(AtomicBool::new(false)),

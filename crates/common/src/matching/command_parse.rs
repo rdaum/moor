@@ -29,6 +29,15 @@ where
     phantom_data: PhantomData<M>,
 }
 
+impl<M> Default for DefaultParseCommand<M>
+where
+    M: ObjectNameMatcher,
+ {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<M> DefaultParseCommand<M>
 where
     M: ObjectNameMatcher,

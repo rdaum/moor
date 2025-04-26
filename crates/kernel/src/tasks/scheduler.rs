@@ -372,11 +372,11 @@ impl Scheduler {
                 session,
                 reply,
             } => {
-                let task_start = Arc::new(TaskStart::StartCommandVerb {
+                let task_start = TaskStart::StartCommandVerb {
                     handler_object,
                     player: player.clone(),
                     command: command.to_string(),
-                });
+                };
 
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
@@ -428,13 +428,13 @@ impl Scheduler {
                     }
                 };
 
-                let task_start = Arc::new(TaskStart::StartVerb {
+                let task_start = TaskStart::StartVerb {
                     player: player.clone(),
                     vloc,
                     verb,
                     args,
                     argstr,
-                });
+                };
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
                 let result = task_q.start_task_thread(
@@ -499,13 +499,13 @@ impl Scheduler {
             } => {
                 let args = command.into_iter().map(v_string);
                 let args = List::from_iter(args);
-                let task_start = Arc::new(TaskStart::StartVerb {
+                let task_start = TaskStart::StartVerb {
                     player: player.clone(),
                     vloc: v_obj(handler_object),
                     verb: *DO_OUT_OF_BAND_COMMAND,
                     args,
                     argstr,
-                });
+                };
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
                 let result = task_q.start_task_thread(
@@ -532,10 +532,10 @@ impl Scheduler {
                 sessions,
                 reply,
             } => {
-                let task_start = Arc::new(TaskStart::StartEval {
+                let task_start = TaskStart::StartEval {
                     player: player.clone(),
                     program,
-                });
+                };
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
                 let result = task_q.start_task_thread(
@@ -1189,15 +1189,12 @@ impl Scheduler {
                     warn!(task_id, "Task not found for listen request");
                     return;
                 };
-                let result = match self.system_control.listen(
+                let result = self.system_control.listen(
                     handler_object,
                     &host_type,
                     port,
                     print_messages,
-                ) {
-                    Ok(()) => None,
-                    Err(e) => Some(e),
-                };
+                ).err();
                 reply.send(result).expect("Could not send listen reply");
             }
             TaskControlMsg::Unlisten {
@@ -1228,11 +1225,11 @@ impl Scheduler {
                     return;
                 };
                 let new_session = task.session.clone().fork().unwrap();
-                let task_start = Arc::new(TaskStart::StartCommandVerb {
+                let task_start = TaskStart::StartCommandVerb {
                     handler_object: SYSTEM_OBJECT.clone(),
                     player: who.clone(),
                     command: line,
-                });
+                };
 
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
@@ -1264,7 +1261,7 @@ impl Scheduler {
                     error!(?e, "Could not checkpoint");
                 }
             }
-            TaskControlMsg::RefreshServerOptions { .. } => {
+            TaskControlMsg::RefreshServerOptions => {
                 self.reload_server_options();
             }
         }
@@ -1372,10 +1369,10 @@ impl Scheduler {
         let delay = fork_request.delay;
         let progr = fork_request.progr.clone();
 
-        let task_start = Arc::new(TaskStart::StartFork {
+        let task_start = TaskStart::StartFork {
             fork_request,
             suspended,
-        });
+        };
         let task_id = self.next_task_id;
         self.next_task_id += 1;
         match self.task_q.start_task_thread(
@@ -1448,7 +1445,7 @@ impl TaskQ {
     fn start_task_thread(
         &mut self,
         task_id: TaskId,
-        task_start: Arc<TaskStart>,
+        task_start: TaskStart,
         player: &Obj,
         session: Arc<dyn Session>,
         delay_start: Option<Duration>,
