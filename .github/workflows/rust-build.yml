@@ -10,10 +10,6 @@ jobs:
   build_default_linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: cmake python3-dev swig
-          version: 1.1
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
@@ -26,10 +22,6 @@ jobs:
   build_all_linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: cmake python3-dev swig
-          version: 1.1
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
@@ -43,9 +35,6 @@ jobs:
   build_default_macos:
     runs-on: macos-latest
     steps:
-      - uses: tecolicom/actions-use-homebrew-tools@v1
-        with:
-          tools: cmake
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
