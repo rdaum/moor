@@ -209,6 +209,6 @@ some additional features. This will include a web-based client. To get there the
 ### Join us!
 
 If you're interested in helping out, or just want to chat, please join us on
-our [Discord server](https://discord.gg/f5NnYJBfcG).
+our [Discord server](https://discord.gg/Ec94y5983z).
 
 Note: When the time is right the Discord will be replaced by a running instance of `mooR` itself.
