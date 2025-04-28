@@ -135,7 +135,9 @@ pub fn moo_frame_execute(
                 end_label,
                 environment_width,
             } => {
-                f.push_scope(ScopeType::While, *environment_width, end_label);
+                if *environment_width != 0 {
+                    f.push_scope(ScopeType::While, *environment_width, end_label);
+                }
                 let v = f.pop();
                 let is_true = v.is_true();
                 f.set_env(id, v);
@@ -149,8 +151,9 @@ pub fn moo_frame_execute(
                 key_bind,
                 environment_width,
             } => {
-                f.push_scope(ScopeType::For, *environment_width, end_label);
-
+                if *environment_width != 0 {
+                    f.push_scope(ScopeType::For, *environment_width, end_label);
+                }
                 // Pop the count and list off the stack. We push back later when we re-enter.
 
                 let (count, seq) = f.peek2();
@@ -221,7 +224,9 @@ pub fn moo_frame_execute(
                 id,
                 environment_width,
             } => {
-                f.push_scope(ScopeType::For, *environment_width, end_label);
+                if *environment_width != 0 {
+                    f.push_scope(ScopeType::For, *environment_width, end_label);
+                }
 
                 // Pull the range ends off the stack.
                 let (from, next_val) = {
