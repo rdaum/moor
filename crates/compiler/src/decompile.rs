@@ -958,6 +958,7 @@ impl Decompile {
             Op::ImmObjid(oid) => {
                 self.push_expr(Expr::Value(v_obj(oid)));
             }
+            Op::ImmType(t) => self.push_expr(Expr::TypeConstant(t)),
             Op::BeginScope {
                 num_bindings,
                 end_label,

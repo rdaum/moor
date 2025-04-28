@@ -165,7 +165,7 @@ builtin_call = { (ident ~ !(keyword)) ~ arglist }
 sysprop      = { "$" ~ ident }
 sysprop_call = { sysprop ~ arglist }
 
-atom     = { integer | float | string | object | err | boolean | symbol | ident }
+atom     = { integer | float | string | object | err | boolean | symbol | type_constant | ident  }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
 
@@ -213,6 +213,16 @@ symbol = @{ "'" ~ ident }
 
 ident_start    = _{ "_" | ASCII_ALPHA }
 ident_continue = _{ "_" | ASCII_ALPHANUMERIC }
+
+type_constant = @{ (^"int"| ^"num" | ^"float"
+                  | ^"str"
+                  | ^"err"
+                  | ^"obj"
+                  | ^"list"
+                  | ^"map"
+                  | ^"bool"
+                  | ^"flyweight"
+                  | ^"sym") ~ !(ident_continue) }
 
 ident = @{
     ((!keyword ~ ident_start) ~ ident_continue* ~ !ident_continue)

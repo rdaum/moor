@@ -30,7 +30,7 @@ use moor_var::Obj;
 use moor_var::{AsByteBuffer, Symbol};
 use moor_var::{Error, v_empty_str};
 use moor_var::{List, NOTHING};
-use moor_var::{Var, VarType, v_empty_list, v_int, v_obj, v_str, v_string};
+use moor_var::{Var, v_empty_list, v_obj, v_str, v_string};
 
 use crate::vm::VerbExecutionRequest;
 use crate::vm::moo_frame::MooStackFrame;
@@ -210,21 +210,6 @@ pub struct BfFrame {
     pub(crate) return_value: Option<Var>,
 }
 
-/// Set global constants into stack frame.
-fn set_constants(f: &mut Frame) {
-    f.set_global_variable(GlobalName::NUM, v_int(VarType::TYPE_INT as i64));
-    f.set_global_variable(GlobalName::OBJ, v_int(VarType::TYPE_OBJ as i64));
-    f.set_global_variable(GlobalName::STR, v_int(VarType::TYPE_STR as i64));
-    f.set_global_variable(GlobalName::ERR, v_int(VarType::TYPE_ERR as i64));
-    f.set_global_variable(GlobalName::LIST, v_int(VarType::TYPE_LIST as i64));
-    f.set_global_variable(GlobalName::INT, v_int(VarType::TYPE_INT as i64));
-    f.set_global_variable(GlobalName::FLOAT, v_int(VarType::TYPE_FLOAT as i64));
-    f.set_global_variable(GlobalName::SYMBOL, v_int(VarType::TYPE_SYMBOL as i64));
-    f.set_global_variable(GlobalName::FLYWEIGHT, v_int(VarType::TYPE_FLYWEIGHT as i64));
-    f.set_global_variable(GlobalName::MAP, v_int(VarType::TYPE_MAP as i64));
-    f.set_global_variable(GlobalName::BOOLEAN, v_int(VarType::TYPE_BOOL as i64));
-}
-
 impl Activation {
     pub fn is_builtin_frame(&self) -> bool {
         matches!(self.frame, Frame::Bf(_))
@@ -240,7 +225,6 @@ impl Activation {
         };
         let frame = MooStackFrame::new(program);
         let mut frame = Frame::Moo(frame);
-        set_constants(&mut frame);
         frame.set_global_variable(GlobalName::this, verb_call_request.call.this.clone());
         frame.set_global_variable(
             GlobalName::player,
@@ -323,7 +307,6 @@ impl Activation {
         let frame = MooStackFrame::new(program);
         let mut frame = Frame::Moo(frame);
 
-        set_constants(&mut frame);
         frame.set_global_variable(GlobalName::this, v_obj(NOTHING));
         frame.set_global_variable(GlobalName::player, v_obj(player.clone()));
         frame.set_global_variable(GlobalName::caller, v_obj(player.clone()));

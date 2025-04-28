@@ -24,6 +24,7 @@ mod symbol;
 mod var;
 mod variant;
 
+use bincode::{Decode, Encode};
 pub use error::{Error, ErrorPack};
 pub use flyweight::Flyweight;
 pub use list::List;
@@ -47,7 +48,7 @@ pub use encode::{
 
 /// Integer encoding of common as represented in a `LambdaMOO` textdump, and by `bf_typeof`
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, FromRepr, Encode, Decode)]
 #[allow(non_camel_case_types)]
 pub enum VarType {
     TYPE_INT = 0,
@@ -67,6 +68,41 @@ pub enum VarType {
     TYPE_BOOL = 14,
     TYPE_FLYWEIGHT = 15,
     TYPE_SYMBOL = 16,
+}
+
+impl VarType {
+    pub fn to_literal(&self) -> &str {
+        match self {
+            VarType::TYPE_INT => "INT",
+            VarType::TYPE_OBJ => "OBJ",
+            VarType::TYPE_FLOAT => "FLOAT",
+            VarType::TYPE_STR => "STR",
+            VarType::TYPE_ERR => "ERR",
+            VarType::TYPE_LIST => "LIST",
+            VarType::TYPE_MAP => "MAP",
+            VarType::TYPE_BOOL => "BOOL",
+            VarType::TYPE_FLYWEIGHT => "FLYWEIGHT",
+            VarType::TYPE_SYMBOL => "SYM",
+            _ => "INVALID-TYPe",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_uppercase().as_str() {
+            "NUM" => Some(VarType::TYPE_INT),
+            "INT" => Some(VarType::TYPE_INT),
+            "FLOAT" => Some(VarType::TYPE_FLOAT),
+            "OBJ" => Some(VarType::TYPE_OBJ),
+            "STR" => Some(VarType::TYPE_STR),
+            "ERR" => Some(VarType::TYPE_ERR),
+            "LIST" => Some(VarType::TYPE_LIST),
+            "MAP" => Some(VarType::TYPE_MAP),
+            "BOOL" => Some(VarType::TYPE_BOOL),
+            "FLYWEIGHT" => Some(VarType::TYPE_FLYWEIGHT),
+            "SYM" => Some(VarType::TYPE_SYMBOL),
+            _ => None,
+        }
+    }
 }
 
 /// Sequence index modes: 0 or 1 indexed.

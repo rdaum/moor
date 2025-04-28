@@ -50,17 +50,6 @@ pub use crate::unparse::{to_literal, to_literal_objsub, unparse};
 #[repr(usize)]
 #[allow(non_camel_case_types, non_snake_case)]
 pub enum GlobalName {
-    NUM = 0,
-    OBJ,
-    STR,
-    LIST,
-    ERR,
-    INT,
-    FLOAT,
-    SYMBOL,
-    BOOLEAN,
-    FLYWEIGHT,
-    MAP,
     player,
     this,
     caller,

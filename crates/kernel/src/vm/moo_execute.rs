@@ -313,6 +313,10 @@ pub fn moo_frame_execute(
                     }
                 }
             }
+            Op::ImmType(vt) => {
+                let value = *vt as u8;
+                f.push(v_int(value as i64));
+            }
             Op::ImmEmptyList => f.push(v_empty_list()),
             Op::ListAddTail => {
                 let (tail, list) = (f.pop(), f.peek_top_mut());

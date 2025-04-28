@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use itertools::Itertools;
-use moor_var::{Error, SYSTEM_OBJECT, Var};
+use moor_var::{Error, SYSTEM_OBJECT, Var, VarType};
 use moor_var::{Symbol, v_none};
 pub use pest::Parser as PestParser;
 use pest::error::LineColLocation;
@@ -39,7 +39,7 @@ use crate::ast::{
 use crate::names::{Names, UnboundName, UnboundNames};
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
-use moor_common::model::CompileError::DuplicateVariable;
+use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
 use moor_common::model::{CompileContext, CompileError};
 
 pub mod moo {
@@ -119,6 +119,17 @@ impl TreeTransformer {
                     ));
                 };
                 Ok(Expr::Id(name))
+            }
+            Rule::type_constant => {
+                let type_str = pair.as_str();
+                let Some(type_id) = VarType::parse(type_str) else {
+                    return Err(UnknownTypeConstant(
+                        self.compile_context(&pair),
+                        type_str.into(),
+                    ));
+                };
+
+                Ok(Expr::TypeConstant(type_id))
             }
             Rule::object => {
                 let ostr = &pair.as_str()[1..];
@@ -3118,8 +3129,8 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::ForList {
-                value_binding: UnboundName { offset: 22 },
-                key_binding: Some(UnboundName { offset: 23 }),
+                value_binding: UnboundName { offset: 11 },
+                key_binding: Some(UnboundName { offset: 12 }),
                 expr: Expr::Map(vec![
                     (Value(v_int(1)), Value(v_int(2))),
                     (Value(v_int(3)), Value(v_int(4)))

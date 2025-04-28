@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_var::Symbol;
+use moor_var::{Symbol, VarType};
 use std::fmt::Display;
 
 use moor_var::Var;
@@ -128,6 +128,7 @@ pub enum Expr {
     Pass {
         args: Vec<Arg>,
     },
+    TypeConstant(VarType),
     Value(Var),
     Id(UnboundName),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),

@@ -71,6 +71,7 @@ impl Expr {
 
             Expr::Value(_) => 1,
             Expr::Id(_) => 1,
+            Expr::TypeConstant(_) => 1,
             Expr::List(_) => 1,
             Expr::Map(_) => 1,
             Expr::Flyweight(..) => 1,
@@ -167,6 +168,7 @@ impl<'a> Unparse<'a> {
                 Ok(buffer)
             }
             Expr::Value(var) => Ok(self.unparse_var(var, false)),
+            Expr::TypeConstant(vt) => Ok(vt.to_literal().to_string()),
             Expr::Id(id) => Ok(self
                 .tree
                 .names
@@ -1224,6 +1226,14 @@ mod tests {
     fn test_unparse_empty_map_regression() {
         let program = r#"return [];"#;
         let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_type_literals() {
+        let progrma = r#"return {INT, STR, OBJ, LIST, MAP, SYM, FLYWEIGHT};"#;
+        let stripped = unindent(progrma);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());
     }

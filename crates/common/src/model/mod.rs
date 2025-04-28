@@ -88,6 +88,8 @@ pub enum CompileError {
     },
     #[error("Unknown built-in function @ {0}: {1}")]
     UnknownBuiltinFunction(CompileContext, String),
+    #[error("Unknown type constant @ {0}: {1}")]
+    UnknownTypeConstant(CompileContext, String),
     #[error("Could not find loop with id @ {0}: {1}")]
     UnknownLoopLabel(CompileContext, String),
     #[error("Duplicate variable in scope @ {0}: {1}")]

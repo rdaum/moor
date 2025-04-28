@@ -350,6 +350,10 @@ impl CodegenState {
                 };
                 self.push_stack(1);
             }
+            Expr::TypeConstant(vt) => {
+                self.emit(Op::ImmType(*vt));
+                self.push_stack(1);
+            }
             Expr::Id(ident) => {
                 self.emit(Op::Push(self.binding_mappings[ident]));
                 self.push_stack(1);
