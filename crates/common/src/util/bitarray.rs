@@ -116,10 +116,11 @@ where
             // Drop old value if it exists
             if self.bitset.check(pos) {
                 self.storage[pos].assume_init_drop();
+            } else {
+                self.bitset.set(pos);
             }
             self.storage[pos].as_mut_ptr().write(x);
         };
-        self.bitset.set(pos);
     }
 
     #[inline]
