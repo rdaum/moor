@@ -32,7 +32,7 @@ where
 impl<M> Default for DefaultParseCommand<M>
 where
     M: ObjectNameMatcher,
- {
+{
     fn default() -> Self {
         Self::new()
     }

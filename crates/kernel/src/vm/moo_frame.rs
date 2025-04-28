@@ -20,7 +20,6 @@ use bincode::{BorrowDecode, Decode, Encode};
 use moor_common::util::{BitArray, Bitset16, PerfTimerGuard};
 use moor_compiler::Name;
 use moor_compiler::{GlobalName, Label, Op, Program};
-use moor_var::Error::E_VARNF;
 use moor_var::{Error, Var, v_none};
 
 /// The MOO stack-frame specific portions of the activation:
@@ -211,12 +210,11 @@ impl MooStackFrame {
     }
 
     #[inline]
-    pub fn set_env(&mut self, id: &Name, v: Var) {
-        let env_offset = self
-            .program
-            .var_names
-            .offset_for(id)
-            .expect("variable not found");
+    pub fn set_variable(&mut self, id: &Name, v: Var) {
+        // This is a "trust us we know what we're doing" use of the explicit offset without check
+        // into the names list like we did before. If the compiler produces garbage, it gets what
+        // it deserves.
+        let env_offset = id.0 as usize;
         self.environment.set(env_offset, v);
     }
 
@@ -225,14 +223,6 @@ impl MooStackFrame {
     pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
         let offset = self.program.var_names.offset_for(id)?;
         self.environment.get(offset)
-    }
-
-    #[inline]
-    pub fn set_variable(&mut self, name: &Name, value: Var) -> Result<(), Error> {
-        let offset = self.program.var_names.offset_for(name).ok_or(E_VARNF)?;
-
-        self.environment.set(offset, value);
-        Ok(())
     }
 
     #[inline]
@@ -309,14 +299,13 @@ impl MooStackFrame {
     pub fn push_scope(&mut self, scope: ScopeType, scope_width: u16, end_label: &Label) {
         // If this is a lexical scope, expand the environment to accommodate the new variables.
         // (This is just updating environment_width)
-        let environment_width = scope_width as usize;
-        self.environment_width += environment_width;
+        self.environment_width += scope_width as usize;
 
         let end_pos = self.program.jump_labels[end_label.0 as usize].position.0 as usize;
         self.scope_stack.push(Scope {
             scope_type: scope,
             valstack_pos: self.valstack.len(),
-            environment_width,
+            environment_width: self.environment_width,
             end_pos,
         });
     }
@@ -326,11 +315,8 @@ impl MooStackFrame {
         self.valstack.truncate(scope.valstack_pos);
 
         // Clear out the environment for the scope that is being exited.
-        // Everything in environment after old width - new-width should be unset.
-        let old_width = self.environment_width;
-        let truncate_after = old_width - scope.environment_width;
-        self.environment.truncate(truncate_after);
-        self.environment_width -= scope.environment_width;
+        self.environment.truncate(scope.environment_width);
+        self.environment_width = scope.environment_width;
         Some(scope)
     }
 }

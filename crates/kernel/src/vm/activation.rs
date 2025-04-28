@@ -155,7 +155,10 @@ impl Frame {
 
     pub fn set_variable(&mut self, name: &Name, value: Var) -> Result<(), Error> {
         match self {
-            Frame::Moo(frame) => frame.set_variable(name, value),
+            Frame::Moo(frame) => {
+                frame.set_variable(name, value);
+                Ok(())
+            }
             Frame::Bf(_) => {
                 panic!("set_variable called for a built-in function frame")
             }

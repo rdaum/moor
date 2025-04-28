@@ -140,7 +140,7 @@ pub fn moo_frame_execute(
                 }
                 let v = f.pop();
                 let is_true = v.is_true();
-                f.set_env(id, v);
+                f.set_variable(id, v);
                 if !is_true {
                     f.jump(end_label);
                 }
@@ -213,9 +213,9 @@ pub fn moo_frame_execute(
                         return ExecutionResult::RaiseError(e);
                     }
                 };
-                f.set_env(value_bind, k_v.1);
+                f.set_variable(value_bind, k_v.1);
                 if let Some(key_bind) = key_bind {
-                    f.set_env(key_bind, k_v.0.clone());
+                    f.set_variable(key_bind, k_v.0.clone());
                 }
                 f.poke(0, v_int((count_i + 1) as i64));
             }
@@ -271,7 +271,7 @@ pub fn moo_frame_execute(
                     (from.clone(), next_val)
                 };
                 f.poke(1, next_val);
-                f.set_env(id, from);
+                f.set_variable(id, from);
             }
             Op::Pop => {
                 f.pop();
@@ -540,7 +540,7 @@ pub fn moo_frame_execute(
             }
             Op::Put(ident) => {
                 let v = f.peek_top();
-                f.set_env(ident, v.clone());
+                f.set_variable(ident, v.clone());
             }
             Op::PushRef => {
                 let (key_or_index, value) = f.peek2();
@@ -866,14 +866,14 @@ pub fn moo_frame_execute(
                                 v.push(rest.clone());
                             }
                             let rest = v_list(&v);
-                            f.set_env(id, rest);
+                            f.set_variable(id, rest);
                         }
                         ScatterLabel::Required(id) => {
                             let Some(arg) = args_iter.next() else {
                                 return ExecutionResult::PushError(E_ARGS);
                             };
 
-                            f.set_env(id, arg.clone());
+                            f.set_variable(id, arg.clone());
                         }
                         ScatterLabel::Optional(id, jump_to) => {
                             if nopt_avail > 0 {
@@ -881,7 +881,7 @@ pub fn moo_frame_execute(
                                 let Some(arg) = args_iter.next() else {
                                     return ExecutionResult::PushError(E_ARGS);
                                 };
-                                f.set_env(id, arg.clone());
+                                f.set_variable(id, arg.clone());
                             } else if jump_where.is_none() && jump_to.is_some() {
                                 jump_where = *jump_to;
                             }
@@ -958,7 +958,7 @@ pub fn moo_frame_execute(
                     let Ok(item) = list.index(&v_int(position), IndexMode::OneBased) else {
                         return ExecutionResult::PushError(E_RANGE);
                     };
-                    f.set_env(item_variable, item);
+                    f.set_variable(item_variable, item);
                 }
             }
             Op::ContinueComprehension(id) => {
@@ -974,7 +974,7 @@ pub fn moo_frame_execute(
                 let Ok(new_list) = list.push(&result) else {
                     return ExecutionResult::PushError(E_TYPE);
                 };
-                f.set_env(id, new_position);
+                f.set_variable(id, new_position);
                 f.push(new_list);
             }
         }

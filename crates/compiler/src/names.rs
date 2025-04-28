@@ -258,7 +258,7 @@ impl UnboundNames {
 
 /// A Name is a unique identifier for a variable in the program's environment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Hash)]
-pub struct Name(u16);
+pub struct Name(pub u16);
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct Names {
