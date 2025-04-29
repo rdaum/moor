@@ -260,9 +260,9 @@ fn opcode_throughput(c: &mut Criterion) {
             do_program(
                 db.clone(),
                 r#"while(1)
-                            list = {1};
+                            l = {1};
                             for i in [0..10000] 
-                                list[1] = i;
+                                l[1] = i;
                             endfor
                           endwhile"#,
                 num_ticks,
