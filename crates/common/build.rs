@@ -14,8 +14,11 @@
 use shadow_rs::{BuildPattern, ShadowBuilder};
 
 fn main() {
-    ShadowBuilder::builder()
+    let shadow = ShadowBuilder::builder()
         .build_pattern(BuildPattern::Lazy)
         .build()
         .unwrap();
+    // Note:  If there are no rerun-if-changed directives, cargo helpfully rebuilds *every single time*
+    //   despite ShadowBuilder not emitting anything new.
+    println!("rerun-if-changed={}", shadow.out_path);
 }
