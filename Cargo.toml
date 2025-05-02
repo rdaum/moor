@@ -123,8 +123,8 @@ pwhash = { version = "1.0", default-features = false }
 rand = "0.8"
 
 ## Compiler grammar/parser
-pest = "2.7"
-pest_derive = "2.7"
+pest = "2.8"
+pest_derive = "2.8"
 
 ## Error declaration/ handling
 color-eyre = "0.6"
