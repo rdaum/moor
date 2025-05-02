@@ -56,7 +56,7 @@ impl Var {
             (Variant::Int(l), Variant::Int(r)) => l.checked_add(*r).map(v_int).ok_or(E_INVARG),
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.to_f64().unwrap() + (*r as f64))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 + r.to_f64().unwrap())),
-            (Variant::Str(s), Variant::Str(r)) => Ok(s.append(r)),
+            (Variant::Str(s), Variant::Str(r)) => Ok(s.str_append(r)),
             (_, _) => Ok(v_err(E_TYPE)),
         }
     }

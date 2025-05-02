@@ -39,22 +39,7 @@ impl Str {
         self.0.as_ref()
     }
 
-    pub fn index_set(&self, index: usize, value: &Self) -> Result<Var, Error> {
-        if value.len() != 1 {
-            return Err(E_INVARG);
-        }
-        let string = self.0.as_ref();
-        if index >= string.len() {
-            return Err(E_RANGE);
-        }
-        let mut s = string.clone();
-        s.replace_range(index..=index, value.as_str());
-        let s = Str(Arc::new(s));
-        let v = Variant::Str(s);
-        Ok(Var::from_variant(v))
-    }
-
-    pub fn append(&self, other: &Self) -> Var {
+    pub fn str_append(&self, other: &Self) -> Var {
         let mut s = self.0.as_ref().clone();
         s.push_str(other.as_str());
         let s = Str(Arc::new(s));
@@ -72,14 +57,48 @@ impl Sequence for Str {
         self.as_str().len()
     }
 
+    fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
+        let value = match value.variant() {
+            Variant::Str(s) => s,
+            _ => return Err(E_TYPE),
+        };
+
+        let s = self.as_str();
+        let value = value.as_str();
+        let contains = if case_sensitive {
+            // Get the index of the substring in the string.
+            s.find(value)
+        } else {
+            s.to_lowercase().find(&value.to_lowercase())
+        };
+
+        Ok(contains)
+    }
+
+    fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
+        let value = match value.variant() {
+            Variant::Str(s) => s,
+            _ => return Err(E_TYPE),
+        };
+
+        let s = self.as_str();
+        let value = value.as_str();
+        let contains = if case_sensitive {
+            s.contains(value)
+        } else {
+            s.to_lowercase().contains(&value.to_lowercase())
+        };
+
+        Ok(contains)
+    }
+
     fn index(&self, index: usize) -> Result<Var, Error> {
         if index >= self.as_str().len() {
             return Err(E_RANGE);
         }
         let c = self.as_str().chars().nth(index).unwrap();
         let c_str = c.to_string();
-        let v = Var::mk_str(&c_str);
-        Ok(v)
+        Ok(Var::from_variant(Variant::Str(Str(Arc::new(c_str)))))
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -101,7 +120,18 @@ impl Sequence for Str {
 
         let mut s = self.as_str().to_string();
         s.replace_range(index..=index, value.as_str());
-        Ok(Var::mk_string(s))
+        Ok(Var::from_variant(Variant::Str(Str(Arc::new(s)))))
+    }
+
+    fn push(&self, value: &Var) -> Result<Var, Error> {
+        let value = match value.variant() {
+            Variant::Str(s) => s,
+            _ => return Err(E_TYPE),
+        };
+
+        let mut new_copy = self.as_str().to_string();
+        new_copy.push_str(value.as_str());
+        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
     }
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
@@ -113,7 +143,7 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.insert_str(index, value.as_str());
-        Ok(Var::mk_string(new_copy))
+        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
     }
 
     fn range(&self, from: isize, to: isize) -> Result<Var, Error> {
@@ -155,18 +185,7 @@ impl Sequence for Str {
             }
         }
 
-        Ok(Var::mk_str(&result_str))
-    }
-
-    fn push(&self, value: &Var) -> Result<Var, Error> {
-        let value = match value.variant() {
-            Variant::Str(s) => s,
-            _ => return Err(E_TYPE),
-        };
-
-        let mut new_copy = self.as_str().to_string();
-        new_copy.push_str(value.as_str());
-        Ok(Var::mk_string(new_copy))
+        Ok(Var::from_variant(Variant::Str(Str(Arc::new(result_str)))))
     }
 
     fn append(&self, other: &Var) -> Result<Var, Error> {
@@ -177,7 +196,7 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.push_str(other.as_str());
-        Ok(Var::mk_string(new_copy))
+        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
     }
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
@@ -187,41 +206,7 @@ impl Sequence for Str {
 
         let mut new_copy = self.as_str().to_string();
         new_copy.remove(index);
-        Ok(Var::mk_string(new_copy))
-    }
-
-    fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
-        let value = match value.variant() {
-            Variant::Str(s) => s,
-            _ => return Err(E_TYPE),
-        };
-
-        let s = self.as_str();
-        let value = value.as_str();
-        let contains = if case_sensitive {
-            s.contains(value)
-        } else {
-            s.to_lowercase().contains(&value.to_lowercase())
-        };
-
-        Ok(contains)
-    }
-    fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
-        let value = match value.variant() {
-            Variant::Str(s) => s,
-            _ => return Err(E_TYPE),
-        };
-
-        let s = self.as_str();
-        let value = value.as_str();
-        let contains = if case_sensitive {
-            // Get the index of the substring in the string.
-            s.find(value)
-        } else {
-            s.to_lowercase().find(&value.to_lowercase())
-        };
-
-        Ok(contains)
+        Ok(Var::from_variant(Variant::Str(Str(Arc::new(new_copy)))))
     }
 }
 
