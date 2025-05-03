@@ -38,24 +38,24 @@ MOO supports several types of statements:
 MOO supports several basic data types:
 
 1. **Primitive Types**:
-    - Integer (`int`) - Whole numbers
-    - Float (`float`) - Decimal numbers
-    - String (`str`) - Text in double quotes
-    - Boolean (`bool`) - `true` or `false`
-    - Object (`obj`) - References to objects, written as `#123`
-    - Error (`e_*`) - Error values, starting with `E_`
-    - Symbol (`'name`) - Symbolic identifiers prefixed with a single quote
+    - Integer (`INT`) - Whole numbers
+    - Float (`FLOAT`) - Decimal numbers
+    - String (`STR`) - Text in double quotes
+    - Boolean (`BOOL`) - `true` or `false`
+    - Object (`OBJ`) - References to objects in the DB, written as `#123`
+    - Error (`ERR`) - Error values, starting with `E_`
+    - Symbol (`SYM`) - Symbolic identifiers prefixed with a single quote, as in Scheme or Lisp, e.g. `'symbol`
 
 2. **Complex Types**:
 
-    - List (`list`) - Ordered collections in curly braces `{1, 2, 3}`. Lists can contain any type of value, including
+    - List (`LIST`) - Ordered collections in curly braces `{1, 2, 3}`. Lists can contain any type of value, including
       other
       lists.
       _Note that unlike most programming languages (and like Pascal, Lua, Julia, etc.) lists are 1-indexed, not
       zero-indexed._
 
-    - Map (`map`) - Key-value collections in square brackets `[key -> value]`
-    - Flyweight - Lightweight objects with structure `<parent, [slots], {contents}>`
+    - Map (`MAP`) - Key-value collections in square brackets `[key -> value]`
+    - Flyweight (`FLYWEIGHT`) - Lightweight objects with structure `<parent, [slots], {contents}>`
 
 _Note that MOO's lists and maps have "opposite" syntax to most programming languages. Lists are
 `{1, 2, 3}` and maps are `[key -> value]`._ This is a product of the age of the language, which predates the
