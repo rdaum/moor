@@ -679,7 +679,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 bf_declare!(queued_tasks, bf_queued_tasks);
 
 /// Function: active_tasks()
-/// Returns the list of active running (not suspended/queued) foreground tasks.
+/// Returns the list of active running (not suspended/queued) running tasks.
 /// If the player is a wizard, it returns the list of all active tasks, otherwise it returns the list of
 /// tasks only for the player themselves.
 /// The information returned differs from queued_tasks and provides only:
@@ -847,7 +847,8 @@ bf_declare!(queue_info, bf_queue_info);
 fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  kill_task(<task-id>)   => none
     //
-    // Kills the task with the given <task-id>.  The task must be queued or suspended, and the current task must be the owner of the task being killed.
+    // Kills the task with the given <task-id>.
+    // The task can be suspended / queued or running.
     if bf_args.args.len() != 1 {
         return Err(BfErr::Code(E_ARGS));
     }
