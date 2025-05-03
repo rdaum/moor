@@ -296,8 +296,9 @@ argspec = {"this" | "none" | "any"}
 flagchars = @{ ASCII_ALPHA* }
 flags_attr = {"flags" ~ ":" ~ "\"" ~ flagchars ~ "\"" }
 
-literal = { atom | literal_map | literal_list | literal_flyweight | variable }
+literal = { literal_atom | literal_map | literal_list | literal_flyweight | variable }
 variable = { ident }
+literal_atom = { integer | float | string | object | err | boolean | symbol | ident  }
 literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | ( "[" ~ "]") }
 literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}") | "{}" }
 literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slots)? ~ ("," ~ literal_flyweight_contents)? ~ ">" }

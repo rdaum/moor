@@ -138,7 +138,7 @@ fn parse_literal_map(
 
 fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, ObjDefParseError> {
     match pair.as_rule() {
-        Rule::atom => {
+        Rule::literal_atom => {
             let pair = pair.into_inner().next().unwrap();
             parse_literal_atom(context, pair)
         }
