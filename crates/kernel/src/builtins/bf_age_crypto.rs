@@ -16,11 +16,13 @@ use std::str::FromStr;
 
 use age::{
     Decryptor, Encryptor,
+    Recipient as AgeRecipient,
     secrecy::ExposeSecret,
     x25519::{Identity, Recipient},
 };
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use ssh_key::public::PublicKey;
+use std::io::Read;
 use tracing::{error, warn};
 
 use crate::bf_declare;
@@ -118,7 +120,7 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         // Try to parse as an age X25519 recipient
         if let Ok(x25519_recipient) = recipient_str.parse::<Recipient>() {
-            recipients.push(Box::new(x25519_recipient) as Box<dyn age::Recipient + Send>);
+            recipients.push(Box::new(x25519_recipient) as Box<dyn AgeRecipient>);
             continue;
         }
 
@@ -129,7 +131,7 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 let ssh_key_str = ssh_key.to_string();
                 match age::ssh::Recipient::from_str(&ssh_key_str) {
                     Ok(ssh_recipient) => {
-                        recipients.push(Box::new(ssh_recipient) as Box<dyn age::Recipient + Send>);
+                        recipients.push(Box::new(ssh_recipient) as Box<dyn AgeRecipient>);
                     }
                     Err(_) => {
                         warn!("Failed to create age recipient from SSH key");
@@ -145,9 +147,9 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     // Create an encryptor with the recipients
-    let encryptor = Encryptor::with_recipients(recipients).ok_or_else(|| {
+    let encryptor = Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref())).or_else(|_| {
         error!("Failed to create encryptor");
-        BfErr::Code(E_INVARG)
+        Err(BfErr::Code(E_INVARG))
     })?;
 
     // Encrypt the message
@@ -277,43 +279,25 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         warn!("No valid identities found for decryption");
         return Err(BfErr::Code(E_INVARG));
     }
+    let decryptor = Decryptor::new_buffered(&encrypted[..]).or_else(|_| {
+        error!("Failed to create decryptor");
+        Err(BfErr::Code(E_INVARG))
+    })?;
 
     // Create a decryptor
-    let decryptor = match Decryptor::new(&encrypted[..]) {
-        Ok(Decryptor::Recipients(d)) => d,
-        Ok(_) => {
-            warn!("Unsupported decryptor type (expected recipient-based)");
-            return Err(BfErr::Code(E_INVARG));
-        }
-        Err(e) => {
-            error!("Failed to create decryptor: {}", e);
-            return Err(BfErr::Code(E_INVARG));
-        }
-    };
-
-    // Attempt decryption
-    let mut decrypted = Vec::new();
-    match decryptor.decrypt(identities.iter().map(|i| i.as_ref() as &dyn age::Identity)) {
-        Ok(mut reader) => {
-            if let Err(e) = std::io::Read::read_to_end(&mut reader, &mut decrypted) {
-                error!("Failed to read decrypted data: {}", e);
-                return Err(BfErr::Code(E_INVARG));
-            }
-        }
-        Err(e) => {
-            error!("Failed to decrypt: {}", e);
-            return Err(BfErr::Code(E_INVARG));
-        }
-    }
-
-    // Convert decrypted bytes to string
-    match String::from_utf8(decrypted) {
-        Ok(decrypted_str) => Ok(Ret(v_string(decrypted_str))),
+    let mut reader = decryptor.decrypt(identities.iter().map(|i| i.as_ref())).or_else(|_| {
+        warn!("Failed to create decryptor");
+        return Err(BfErr::Code(E_INVARG));
+    })?;
+    let mut decrypted = String::new();
+    match reader.read_to_string(&mut decrypted) {
+        Ok(_) => Ok(Ret(v_string(decrypted))),
         Err(_) => {
             warn!("Decrypted data is not valid UTF-8");
             Err(BfErr::Code(E_INVARG))
         }
     }
+   
 }
 bf_declare!(age_decrypt, bf_age_decrypt);
 

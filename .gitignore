@@ -16,3 +16,5 @@ tasks.db
 textdumps
 *.pem
 .aider*
+
+mise.toml
