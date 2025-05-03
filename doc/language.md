@@ -14,96 +14,96 @@ function).
 MOO supports several types of statements:
 
 1. **Control Flow Statements**:
-   - `if`/`elseif`/`else`/`endif` - Conditional execution
-   - `while`/`endwhile` - Loop as long as condition is true
-   - `for`/`endfor` - Iteration over ranges or collections
-   - `fork`/`endfork` - Parallel execution threads
-   - `try`/`except`/`finally`/`endtry` - Exception handling
-   - `break` and `continue` - Loop control
-   - `return` - Return from the current verb
+    - `if`/`elseif`/`else`/`endif` - Conditional execution
+    - `while`/`endwhile` - Loop as long as condition is true
+    - `for`/`endfor` - Iteration over ranges or collections
+    - `fork`/`endfork` - Parallel execution threads
+    - `try`/`except`/`finally`/`endtry` - Exception handling
+    - `break` and `continue` - Loop control
+    - `return` - Return from the current verb
 
 2. **Variable Declaration and Assignment**:
-   - `let` - Declares local variables
-   - `const` - Declares constants
-   - `global` - Declares global variables
+    - `let` - Declares local variables
+    - `const` - Declares constants
+    - `global` - Declares global variables
 
 3. **Block Structure**:
-   - `begin`/`end` - Groups statements into a block
+    - `begin`/`end` - Groups statements into a block
 
 4. **Expression Statements**:
-   - Any expression followed by a semicolon
+    - Any expression followed by a semicolon
 
 ## Variables and Types
 
 MOO supports several basic data types:
 
 1. **Primitive Types**:
-   - Integer (`int`) - Whole numbers
-   - Float (`float`) - Decimal numbers
-   - String (`str`) - Text in double quotes
-   - Boolean (`bool`) - `true` or `false`
-   - Object (`obj`) - References to objects, written as `#123`
-   - Error (`e_*`) - Error values, starting with `E_`
-   - Symbol (`'name`) - Symbolic identifiers prefixed with a single quote
+    - Integer (`int`) - Whole numbers
+    - Float (`float`) - Decimal numbers
+    - String (`str`) - Text in double quotes
+    - Boolean (`bool`) - `true` or `false`
+    - Object (`obj`) - References to objects, written as `#123`
+    - Error (`e_*`) - Error values, starting with `E_`
+    - Symbol (`'name`) - Symbolic identifiers prefixed with a single quote
 
 2. **Complex Types**:
 
-   - List (`list`) - Ordered collections in curly braces `{1, 2, 3}`. Lists can contain any type of value, including
-     other
-     lists.
-     _Note that unlike most programming languages (and like Pascal, Lua, Julia, etc.) lists are 1-indexed, not
-     zero-indexed._
+    - List (`list`) - Ordered collections in curly braces `{1, 2, 3}`. Lists can contain any type of value, including
+      other
+      lists.
+      _Note that unlike most programming languages (and like Pascal, Lua, Julia, etc.) lists are 1-indexed, not
+      zero-indexed._
 
-   - Map (`map`) - Key-value collections in square brackets `[key -> value]`
-   - Flyweight - Lightweight objects with structure `<parent, [slots], {contents}>`
+    - Map (`map`) - Key-value collections in square brackets `[key -> value]`
+    - Flyweight - Lightweight objects with structure `<parent, [slots], {contents}>`
 
 _Note that MOO's lists and maps have "opposite" syntax to most programming languages. Lists are
 `{1, 2, 3}` and maps are `[key -> value]`._ This is a product of the age of the language, which predates the
 introduction of Python and other similar languages that used square brackets for lists and curly braces for maps.
 
 3. **Type Constants**:
-   - `INT`, `NUM`, `FLOAT`, `STR`, `ERR`, `OBJ`, `LIST`, `MAP`, `BOOL`, `FLYWEIGHT`, `SYM`
+    - `INT`, `NUM`, `FLOAT`, `STR`, `ERR`, `OBJ`, `LIST`, `MAP`, `BOOL`, `FLYWEIGHT`, `SYM`
 
 ## Expressions
 
 Expressions can include:
 
 1. **Arithmetic Operations**:
-   - Addition (`+`), Subtraction (`-`), Multiplication (`*`), Division (`/`), Modulus (`%`), Power (`^`)
+    - Addition (`+`), Subtraction (`-`), Multiplication (`*`), Division (`/`), Modulus (`%`), Power (`^`)
 
 2. **Comparison Operations**:
-   - Equal (`==`), Not Equal (`!=`), Less Than (`<`), Greater Than (`>`), Less Than or Equal (`<=`), Greater Than or
-     Equal (`>=`)
+    - Equal (`==`), Not Equal (`!=`), Less Than (`<`), Greater Than (`>`), Less Than or Equal (`<=`), Greater Than or
+      Equal (`>=`)
 
 3. **Logical Operations**:
-   - Logical AND (`&&`), Logical OR (`||`), Logical NOT (`!`)
+    - Logical AND (`&&`), Logical OR (`||`), Logical NOT (`!`)
 
 4. **Special Operations**:
-   - Range (`..`) - Used in indexing and iteration
-   - In-range (`in`) - Tests if a value is in a range
+    - Range (`..`) - Used in indexing and iteration
+    - In-range (`in`) - Tests if a value is in a range
 
 5. **Conditional Expression**:
-   - `expr ? true_expr | false_expr` - Ternary conditional
+    - `expr ? true_expr | false_expr` - Ternary conditional
 
 6. **Variable Assignment**:
-   - `var = expr` - Assigns value to variable
+    - `var = expr` - Assigns value to variable
 
 7. **Object Member Access**:
-   - Property access: `obj.property` or `obj.(expr)`
-   - Verb call: `obj:verb(args)` or `obj:(expr)(args)`
-   - System property: `$property` (looks on `#0` for the property)
+    - Property access: `obj.property` or `obj.(expr)`
+    - Verb call: `obj:verb(args)` or `obj:(expr)(args)`
+    - System property: `$property` (looks on `#0` for the property)
 
 8. **Collection Operations**:
-   - Indexing: `collection[index]`
-   - Range indexing: `collection[start..end]`
-   - List or map assignment: `list[index] = value` - Assigns value to a specific index or key in a list or map
-   - Scatter assignment: `{var1, var2} = list` - Unpacks a list into variables. Has support for optional and rest
-     variables: `{var1, ?optional = default, @rest} = list`
+    - Indexing: `collection[index]`
+    - Range indexing: `collection[start..end]`
+    - List or map assignment: `list[index] = value` - Assigns value to a specific index or key in a list or map
+    - Scatter assignment: `{var1, var2} = list` - Unpacks a list into variables. Has support for optional and rest
+      variables: `{var1, ?optional = default, @rest} = list`
 
 9. **Special Forms**:
-   - Try expression: `` `expr!codes => handler` `` - Evaluates `expr` and handles errors
-   - Range comprehension: `{expr for var in range}` - Creates a list from a generator expression
-   - Range end marker: `$` - Represents the end of a list in range operations
+    - Try expression: `` `expr!codes => handler` `` - Evaluates `expr` and handles errors
+    - Range comprehension: `{expr for var in range}` - Creates a list from a generator expression
+    - Range end marker: `$` - Represents the end of a list in range operations
 
 ## Control Structures
 
@@ -137,6 +137,8 @@ endwhile
 
 ### For Loops
 
+The `for` loop has several syntaxes depending on the type of iteration, and will work over both lists and maps.
+
 Iteration over a collection:
 
 ```
@@ -145,13 +147,26 @@ for item in (collection)
 endfor
 ```
 
-Iteration with index:
+Iteration with index/key:
+
+For lists:
 
 ```
-for index, value in (collection)
+for value, index in (collection)
     statements
 endfor
 ```
+
+For maps:
+
+```
+for value, key in (collection)
+    statements
+endfor
+```
+
+(Note the "backwards" order of the arguments, which is done to preserve backwards compatibility with the original
+iteration syntax.)
 
 Iteration over a range:
 
