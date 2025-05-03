@@ -189,7 +189,9 @@ Everything should work. If it doesn't, that's a bug. Which you should report.
   possible to add in the future, others do not fit the design philosophy of the system going forward.
 
 For a list of the status of the implementation of standard LambdaMOO builtin functions, see
-[builtin_functions_status.md](./doc/builtin_functions_status.md).
+[builtin_functions_status.md](doc/builtins/builtin_functions_status.md). Early documentation for the builtin functions
+is
+available in the [doc/builtins](doc/builtins) directory.
 
 ### What's next?
 

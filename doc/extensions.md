@@ -1,6 +1,6 @@
 ## Extensions
 
-`moor` adds the following notable extensions to the LambdaMOO 1.8.x language and runtime. Note that this list
+`mooR` adds the following notable extensions to the LambdaMOO 1.8.x language and runtime. Note that this list
 isn't fully complete as some features are still in development, and some are not so easily categorized
 as extensions and more "architectural differences" which will be described elsewhere.
 
@@ -11,7 +11,7 @@ Adds block-level lexical scoping to the LambdaMOO language.
 Enabled by default, can be disabled with command line option `--lexical-scopes=false`
 
 In LambdaMOO all variables are global to the verb scope, and are bound at the first assignment.
-`moor` adds optional lexical scoping, where variables are bound to the scope in which they are declared,
+`mooR` adds optional lexical scoping, where variables are bound to the scope in which they are declared,
 and leave the scope when it is exited.
 This is done by using the `let` keyword to declare variables that will exist only in the current scope.
 
@@ -46,7 +46,7 @@ Adds the ability to call verbs on primitive types, such as numbers and strings.
 
 Enabled by default, can be disabled with command line option `--type-dispatch=false`
 
-In LambdaMOO, verbs can only be called on objects. `moor` adds the ability to indirectly dispatch verbs for primitive
+In LambdaMOO, verbs can only be called on objects. `mooR` adds the ability to indirectly dispatch verbs for primitive
 types by interpreting the verb name as a verb on a special object that represents the primitive type and passing
 the value itself as the first argument to the verb. Where other arguments are passed, they are appended to the argument
 list.
@@ -65,7 +65,7 @@ The names of the type objects to the system objects `$string`, `$float`, `$integ
 
 ### Map type
 
-`moor` adds a dictionary or map type mostly equivalent to the one present in `stunt`/`toaststunt`.
+`mooR` adds a dictionary or map type mostly equivalent to the one present in `stunt`/`toaststunt`.
 
 Enabled by default, can be disabled with command line option `--map-type=false`
 
@@ -78,22 +78,113 @@ my_map["a"] => 1
 ```
 
 Wherever possible, the Map type semantics are made to be compatible with those from `stunt`, so
-most existing code from those servers should work with `moor` with no changes.
+most existing code from those servers should work with `mooR` with no changes.
 
 Values are stored sorted, and lookup uses a binary search. The map is immutable, and modification is done through
 copy and update like other MOO primitive types.
 
 Performance wise, construction and lookup are O(log n) operations, and iteration is O(n).
 
+### Symbol type
+
+`mooR` adds a symbol type which represents interned strings similar to those found in Lisp, Scheme and other languages.
+
+Enabled by default, can be disabled with command line option `--symbol-type=false`
+
+Symbols are immutable string values that are guaranteed to be unique and can be compared by reference rather than value.
+This makes them useful for keys in maps and other data structures where fast comparison is important.
+
+The syntax for creating a symbol is the same as for strings, but with a leading apostrophe:
+
+`'hello'` is a symbol, while `"hello"` is a string.
+
+Symbols are useful for representing identifiers, keywords, and other values that are not meant to be modified, and
+they can be used in place of strings as "keys" in maps and other data structures.
+
+### For comprehensions
+
+`mooR` adds a syntax similar to Python or Julia for list comprehensions, allowing you to create lists from existing
+lists
+or ranges in a more concise way:
+
+```moo
+{ x * 2 for x in ({1, 2, 3, 4}) };
+=> {2, 4, 6, 8}
+```
+
+or
+
+```moo
+{ x * 2 for x in [1..10] };
+=> {2, 4, 6, 8, 10, 12, 14, 16, 18, 20}
+```
+
+### Return as expression rather than a statement
+
+`mooR` allows the `return` statement to be used as an expression, allowing for "short circuit" returns within chains
+of expression, in a manner similar to Julia.
+
+This can be useful for forcing immediate returns from a verb without having to use `if` statements.
+
+```moo
+this.colour != "red" && return true;
+this.colour || return false;
+```
+
+### Flyweight objects
+
+`mooR` adds a new type of object called a "flyweight" which is a lightweight object that can be used to represent
+data structures without the overhead of a full object. Flyweights are immutable and can be used to represent
+complex data structures like trees or graphs without the overhead of creating a full object for each node.
+
+Flyweights have three components only one of this is mandatory:
+
+- A delegate (like a parent)
+- A set of slots (like properties)
+- Contents (a list)
+
+Which is expressed in the following literal syntax:
+
+```moo
+< delegate, [ slot -> value, ... ], { contents } >
+```
+
+Examples:
+
+```moo
+< $key, [ password -> "secret" ], { 1, 2, 3 } >
+< $exit, [ name -> "door", locked -> 1, description -> "..." ] >
+< $password, [ crypted -> "fsadfdsa", salt -> "sdfasfd" ]>
+```
+
+When accessing a property (or slot) on a flyweight using property accessing syntax, the system will first check the
+flyweight itself, and then check the delegate object. If the property is not found on either, it will return `E_PROPNF`:
+
+```moo
+let x = < $key, [ password => "secret" ] >;
+return x.password;
+
+=> "secret"
+```
+
+Verbs cannot be defined on a flyweight, but calling a verb on one will attempt to call it on the delegate:
+
+```moo
+let x = < $key, [ password -> "secret" >;
+x:unlock("magic_key");
+```
+
+Will call `$key:unlock` with `this` being the flyweight object, and the first argument being the string "magic_key".
+
 ### "Rich" output via `notify`
 
 The `notify` builtin in MOO is used to output a line of text over the telnet connection to the player.
 
-In `moor`, the connection may not be `telnet`, and the output may be more than just text.
+In `mooR`, the connection may not be `telnet`, and the output may be more than just text.
 
 Enabled by default, can be disabled with command line option `--rich-notify=false`
 
-Moor ships with a `web-host` that can serve HTTP and websocket connections, and the `notify` verb can be used to
+mooR ships with a `web-host` that can serve HTTP and websocket connections, and the `notify` verb can be used to
 output JSON values over the websocket connection.
 
 When this feature is enabled, the second (value) argument to `notify` can be any MOO value, and it will be
