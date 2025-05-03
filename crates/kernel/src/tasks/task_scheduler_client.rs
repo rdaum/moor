@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use crossbeam_channel::Sender;
 
-use crate::tasks::TaskDescription;
 use crate::tasks::task::Task;
+use crate::tasks::{TaskDescription, TaskStart};
 use crate::vm::{Fork, TaskSuspend};
 use moor_common::model::Perms;
 use moor_common::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
@@ -281,6 +281,16 @@ impl TaskSchedulerClient {
             .recv()
             .expect("Could not receive task id -- scheduler shut down?")
     }
+
+    pub fn active_tasks(&self) -> Result<Vec<(TaskId, Obj, TaskStart)>, Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((self.task_id, TaskControlMsg::ActiveTasks { reply }))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive active tasks -- scheduler shut down?")
+    }
 }
 
 /// The ad-hoc messages that can be sent from tasks (or VM) up to the scheduler.
@@ -358,5 +368,9 @@ pub enum TaskControlMsg {
         who: Obj,
         line: String,
         reply: oneshot::Sender<Result<TaskId, Error>>,
+    },
+    /// Ask the scheduler to return information of all active tasks (non-suspended)
+    ActiveTasks {
+        reply: oneshot::Sender<Result<Vec<(TaskId, Obj, TaskStart)>, Error>>,
     },
 }

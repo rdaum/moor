@@ -1215,6 +1215,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Typed(TYPE_OBJ), Any],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("active_tasks"),
+            min_args: Q(0),
+            max_args: Q(0),
+            types: vec![],
+            implemented: true,
+        },
     ]
 }
 

@@ -25,11 +25,11 @@ use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{
     BfCallState, BfErr, BfRet, BuiltinFunction, bf_perf_counters, world_state_bf_err,
 };
-use crate::tasks::sched_counters;
+use crate::tasks::{TaskStart, sched_counters};
 use crate::vm::exec_state::vm_counters;
 use crate::vm::{ExecutionResult, TaskSuspend};
 use moor_common::build::{PKG_VERSION, SHORT_COMMIT};
-use moor_common::model::{ObjFlag, WorldStateError};
+use moor_common::model::{Named, ObjFlag, WorldStateError};
 use moor_common::tasks::Event::{Present, Unpresent};
 use moor_common::tasks::TaskId;
 use moor_common::tasks::{NarrativeEvent, Presentation};
@@ -38,7 +38,7 @@ use moor_compiler::compile;
 use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
 use moor_var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_var::VarType::TYPE_STR;
-use moor_var::{Error, v_list_iter};
+use moor_var::{Error, Symbol, v_list_iter};
 use moor_var::{Sequence, v_map};
 use moor_var::{Var, v_float, v_int, v_list, v_none, v_obj, v_str, v_string};
 use moor_var::{Variant, v_sym};
@@ -677,6 +677,120 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(tasks)))
 }
 bf_declare!(queued_tasks, bf_queued_tasks);
+
+/// Function: active_tasks()
+/// Returns the list of active running (not suspended/queued) foreground tasks.
+/// If the player is a wizard, it returns the list of all active tasks, otherwise it returns the list of
+/// tasks only for the player themselves.
+/// The information returned differs from queued_tasks and provides only:
+/// { task_id, player_id, task_start } where task_start is a description of how the task was started,
+/// and varies depending on the type of task:
+/// - { 'command, #handler, #player, "command" }
+/// - { 'do_command, #handler, #player, "command" } - when $do_command has been invoked
+/// - { 'verb, #player, #verb_location, 'verb, { args }, "argstr" }
+/// - { 'eval, #player }
+/// - { 'fork, #player, #perms, parent task, verb_location, verb_name, args }
+fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    let tasks = match bf_args.task_scheduler_client.active_tasks() {
+        Ok(tasks) => tasks,
+        Err(e) => {
+            return Err(BfErr::Code(e));
+        }
+    };
+
+    let player = bf_args.exec_state.caller();
+    let is_wizard = bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_is_wizard()
+        .map_err(world_state_bf_err)?;
+
+    let results = tasks.iter().filter(|(_, player_id, _)| {
+        if is_wizard {
+            true
+        } else {
+            v_obj(player_id.clone()) == player
+        }
+    });
+
+    let sym_or_str = |s| {
+        if bf_args.config.symbol_type {
+            v_sym(Symbol::mk(s))
+        } else {
+            v_str(s)
+        }
+    };
+
+    let mut output = vec![];
+    for r in results {
+        let task_id = v_int(r.0 as i64);
+        let player_id = v_obj(r.1.clone());
+        let task_start = match &r.2 {
+            TaskStart::StartCommandVerb {
+                handler_object,
+                player,
+                command,
+            } => v_list(&[
+                sym_or_str("command"),
+                v_obj(handler_object.clone()),
+                v_obj(player.clone()),
+                v_str(command),
+            ]),
+            TaskStart::StartDoCommand {
+                handler_object,
+                player,
+                command,
+            } => v_list(&[
+                sym_or_str("do_command"),
+                v_obj(handler_object.clone()),
+                v_obj(player.clone()),
+                v_str(command),
+            ]),
+            TaskStart::StartVerb {
+                player,
+                vloc,
+                verb,
+                args,
+                argstr,
+            } => v_list(&[
+                sym_or_str("verb"),
+                v_obj(player.clone()),
+                vloc.clone(),
+                sym_or_str(verb.as_str()),
+                v_list_iter(args.iter()),
+                v_str(argstr),
+            ]),
+            TaskStart::StartFork {
+                fork_request,
+                suspended: _,
+            } => {
+                let player = v_obj(fork_request.player.clone());
+                let parent_task = v_int(fork_request.parent_task_id as i64);
+                let perms = v_obj(fork_request.progr.clone());
+                let verb_loc = v_obj(fork_request.activation.verbdef.location().clone());
+                let verb_name = v_str(fork_request.activation.verbdef.names().join(" ").as_str());
+                let args = v_list_iter(fork_request.activation.args.iter());
+                v_list(&[
+                    sym_or_str("fork"),
+                    player,
+                    perms,
+                    parent_task,
+                    verb_loc,
+                    verb_name,
+                    args,
+                ])
+            }
+            TaskStart::StartEval { player, program: _ } => {
+                v_list(&[sym_or_str("eval"), v_obj(player.clone())])
+            }
+        };
+        let entry = v_list(&[task_id, player_id, task_start]);
+        output.push(entry);
+    }
+
+    Ok(Ret(v_list_iter(output)))
+}
+bf_declare!(active_tasks, bf_active_tasks);
 
 /// Function: list queue_info ([obj player])
 /// If player is omitted, returns a list of object numbers naming all players that currently have active task
@@ -1415,6 +1529,7 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("shutdown")] = Box::new(BfShutdown {});
     builtins[offset_for_builtin("suspend")] = Box::new(BfSuspend {});
     builtins[offset_for_builtin("queued_tasks")] = Box::new(BfQueuedTasks {});
+    builtins[offset_for_builtin("active_tasks")] = Box::new(BfActiveTasks {});
     builtins[offset_for_builtin("queue_info")] = Box::new(BfQueueInfo {});
     builtins[offset_for_builtin("kill_task")] = Box::new(BfKillTask {});
     builtins[offset_for_builtin("resume")] = Box::new(BfResume {});

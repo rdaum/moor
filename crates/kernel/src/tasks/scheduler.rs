@@ -117,9 +117,11 @@ pub struct Scheduler {
 /// not shared elsewhere.
 /// The actual `Task` is owned by the task thread until it is suspended or completed.
 /// (When suspended it is moved into a `SuspendedTask` in the `.suspended` list)
-struct RunningTaskControl {
+struct RunningTask {
     /// For which player this task is running on behalf of.
     player: Obj,
+    /// What triggered this task to start.
+    task_start: TaskStart,
     /// A kill switch to signal the task to stop. True means the VM execution thread should stop
     /// as soon as it can.
     kill_switch: Arc<AtomicBool>,
@@ -132,8 +134,8 @@ struct RunningTaskControl {
 /// The internal state of the task queue.
 struct TaskQ {
     /// Information about the active, running tasks. The actual `Task` is owned by the task thread
-    /// and this is just a control record for communicating with it.
-    tasks: HashMap<TaskId, RunningTaskControl, BuildHasherDefault<AHasher>>,
+    /// and this is just an information, and control record for communicating with it.
+    active: HashMap<TaskId, RunningTask, BuildHasherDefault<AHasher>>,
     /// Tasks in various types of suspension:
     ///     Forked background tasks that will execute someday
     ///     Suspended foreground tasks that are either indefinitely suspended or will execute someday
@@ -166,7 +168,7 @@ impl Scheduler {
         let (scheduler_sender, scheduler_receiver) = crossbeam_channel::unbounded();
         let suspension_q = SuspensionQ::new(tasks_database);
         let task_q = TaskQ {
-            tasks: Default::default(),
+            active: Default::default(),
             suspended: suspension_q,
         };
         let default_server_options = ServerOptions {
@@ -206,7 +208,7 @@ impl Scheduler {
         self.reload_server_options();
         while self.running {
             // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
-            let active_tasks = self.task_q.tasks.keys().copied().collect::<Vec<_>>();
+            let active_tasks = self.task_q.active.keys().copied().collect::<Vec<_>>();
             let to_wake = self.task_q.suspended.collect_wake_tasks(&active_tasks);
             let mut found_work = !to_wake.is_empty();
             for sr in to_wake {
@@ -911,7 +913,7 @@ impl Scheduler {
         match msg {
             TaskControlMsg::TaskSuccess(value) => {
                 // Commit the session.
-                let Some(task) = task_q.tasks.get_mut(&task_id) else {
+                let Some(task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for success");
                     return;
                 };
@@ -955,7 +957,7 @@ impl Scheduler {
                 warn!(?task_id, "Task cancelled");
 
                 // Rollback the session.
-                let Some(task) = task_q.tasks.get_mut(&task_id) else {
+                let Some(task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
                     return;
                 };
@@ -990,7 +992,7 @@ impl Scheduler {
                 };
 
                 // Commit the session
-                let Some(task) = task_q.tasks.get_mut(&task_id) else {
+                let Some(task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
 
                     return;
@@ -1009,7 +1011,7 @@ impl Scheduler {
                 let _t = PerfTimerGuard::new(&perfc.task_exception);
                 debug!(?task_id, finally_reason = ?exception, "Task threw exception");
 
-                let Some(task) = task_q.tasks.get_mut(&task_id) else {
+                let Some(task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
                     return;
                 };
@@ -1040,7 +1042,7 @@ impl Scheduler {
                 // Gotta dump this out til we exit the loop tho, since self.tasks is already
                 // borrowed here.
                 let new_session = {
-                    let Some(task) = task_q.tasks.get_mut(&task_id) else {
+                    let Some(task) = task_q.active.get_mut(&task_id) else {
                         warn!(task_id, "Task not found for fork request");
                         return;
                     };
@@ -1059,7 +1061,7 @@ impl Scheduler {
                 // the scheduler should try to wake us up.
 
                 // Remove from the local task control...
-                let Some(tc) = task_q.tasks.remove(&task_id) else {
+                let Some(tc) = task_q.active.remove(&task_id) else {
                     warn!(task_id, "Task not found for suspend request");
                     return;
                 };
@@ -1090,7 +1092,7 @@ impl Scheduler {
                 // session receives input.
 
                 let input_request_id = Uuid::new_v4();
-                let Some(tc) = task_q.tasks.remove(&task_id) else {
+                let Some(tc) = task_q.active.remove(&task_id) else {
                     warn!(task_id, "Task not found for input request");
                     return;
                 };
@@ -1159,7 +1161,7 @@ impl Scheduler {
             }
             TaskControlMsg::Notify { player, event } => {
                 // Task is asking to notify a player of an event.
-                let Some(task) = task_q.tasks.get_mut(&task_id) else {
+                let Some(task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for notify request");
                     return;
                 };
@@ -1184,7 +1186,7 @@ impl Scheduler {
                 print_messages,
                 reply,
             } => {
-                let Some(_task) = task_q.tasks.get_mut(&task_id) else {
+                let Some(_task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for listen request");
                     return;
                 };
@@ -1199,7 +1201,7 @@ impl Scheduler {
                 port,
                 reply,
             } => {
-                let Some(_task) = task_q.tasks.get_mut(&task_id) else {
+                let Some(_task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for unlisten request");
                     return;
                 };
@@ -1215,7 +1217,7 @@ impl Scheduler {
                     .expect("Could not shutdown scheduler cleanly");
             }
             TaskControlMsg::ForceInput { who, line, reply } => {
-                let Some(task) = task_q.tasks.get_mut(&task_id) else {
+                let Some(task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for force input request");
 
                     reply.send(Err(E_INVIND)).ok();
@@ -1260,6 +1262,15 @@ impl Scheduler {
             }
             TaskControlMsg::RefreshServerOptions => {
                 self.reload_server_options();
+            }
+            TaskControlMsg::ActiveTasks { reply } => {
+                let mut results = vec![];
+                for (task_id, tc) in self.task_q.active.iter() {
+                    results.push((*task_id, tc.player.clone(), tc.task_start.clone()));
+                }
+                if let Err(e) = reply.send(Ok(results)) {
+                    error!(?e, "Could not send active tasks to requester");
+                }
             }
         }
     }
@@ -1402,13 +1413,13 @@ impl Scheduler {
     /// Stop the scheduler run loop.
     fn stop(&mut self, msg: Option<String>) -> Result<(), SchedulerError> {
         // Send shutdown notification to all live tasks.
-        for (_, task) in self.task_q.tasks.iter() {
+        for (_, task) in self.task_q.active.iter() {
             let _ = task.session.notify_shutdown(msg.clone());
         }
         warn!("Issuing clean shutdown...");
         {
             // Send shut down to all the tasks.
-            for (_, task) in self.task_q.tasks.drain() {
+            for (_, task) in self.task_q.active.drain() {
                 task.kill_switch.store(true, Ordering::SeqCst);
             }
         }
@@ -1417,7 +1428,7 @@ impl Scheduler {
         // Then spin until they're all done.
         loop {
             {
-                if self.task_q.tasks.is_empty() {
+                if self.task_q.active.is_empty() {
                     break;
                 }
             }
@@ -1465,7 +1476,7 @@ impl TaskQ {
         let mut task = Task::new(
             task_id,
             player.clone(),
-            task_start,
+            task_start.clone(),
             perms.clone(),
             server_options,
             kill_switch.clone(),
@@ -1508,15 +1519,16 @@ impl TaskQ {
         }
 
         // Otherwise, we create a task control record and fire up a thread.
-        let task_control = RunningTaskControl {
+        let task_control = RunningTask {
             player: player.clone(),
             kill_switch,
+            task_start,
             session: session.clone(),
             result_sender: (!is_background).then_some(sender),
         };
 
         // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
-        self.tasks.insert(task_id, task_control);
+        self.active.insert(task_id, task_control);
 
         let thread_name = format!("moor-task-{}-player-{}", task_id, player);
         let control_sender = control_sender.clone();
@@ -1601,14 +1613,15 @@ impl TaskQ {
         // Brand new kill switch for the resumed task. The old one may have gotten toggled.
         let kill_switch = Arc::new(AtomicBool::new(false));
         task.kill_switch = kill_switch.clone();
-        let task_control = RunningTaskControl {
+        let task_control = RunningTask {
             player: player.clone(),
             kill_switch,
             session: session.clone(),
             result_sender,
+            task_start: task.task_start.clone(),
         };
 
-        self.tasks.insert(task_id, task_control);
+        self.active.insert(task_id, task_control);
         task.vm_host.resume_execution(resume_val);
         let thread_name = format!("moor-task-{}-player-{}", task_id, player);
         let control_sender = control_sender.clone();
@@ -1632,7 +1645,7 @@ impl TaskQ {
     }
 
     fn send_task_result(&mut self, task_id: TaskId, result: Result<Var, SchedulerError>) {
-        let Some(mut task_control) = self.tasks.remove(&task_id) else {
+        let Some(mut task_control) = self.active.remove(&task_id) else {
             // Missing task, must have ended already or gone into suspension?
             // This is odd though? So we'll warn.
             warn!(task_id, "Task not found for notification, ignoring");
@@ -1674,7 +1687,7 @@ impl TaskQ {
         // By definition we can't respond to a retry for a suspended task, so if it's not in the
         // running tasks there's something very wrong.
         let old_tc = self
-            .tasks
+            .active
             .remove(&task_id)
             .expect("Task not found for retry");
 
@@ -1702,15 +1715,16 @@ impl TaskQ {
         task.kill_switch = kill_switch.clone();
 
         // Otherwise, we create a task control record and fire up a thread.
-        let task_control = RunningTaskControl {
+        let task_control = RunningTask {
             player: old_tc.player.clone(),
             kill_switch,
             session: new_session.clone(),
             result_sender: old_tc.result_sender,
+            task_start: task.task_start.clone(),
         };
 
         // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
-        self.tasks.insert(task_id, task_control);
+        self.active.insert(task_id, task_control);
 
         let thread_name = format!("moor-task-{}-player-{}", task_id, task.player);
         let control_sender = control_sender.clone();
@@ -1751,7 +1765,7 @@ impl TaskQ {
         // active at the same time.
         let (perms, is_suspended) = match self.suspended.perms_check(victim_task_id, false) {
             Some(perms) => (perms, true),
-            None => match self.tasks.get(&victim_task_id) {
+            None => match self.active.get(&victim_task_id) {
                 Some(tc) => (tc.player.clone(), false),
                 None => {
                     return v_err(E_INVARG);
@@ -1787,7 +1801,7 @@ impl TaskQ {
 
         // Otherwise we have to check if the task is running, remove its control record, and flip
         // its kill switch.
-        let victim_task = match self.tasks.remove(&victim_task_id) {
+        let victim_task = match self.active.remove(&victim_task_id) {
             Some(victim_task) => victim_task,
             None => {
                 return v_err(E_INVARG);
@@ -1857,7 +1871,7 @@ impl TaskQ {
 
     #[instrument(skip(self))]
     fn disconnect_task(&mut self, disconnect_task_id: TaskId, player: &Obj) {
-        let Some(task) = self.tasks.get_mut(&disconnect_task_id) else {
+        let Some(task) = self.active.get_mut(&disconnect_task_id) else {
             warn!(task = disconnect_task_id, "Disconnecting task not found");
             return;
         };
@@ -1870,7 +1884,7 @@ impl TaskQ {
 
         // Then abort all of their still-living forked tasks (that weren't the disconnect
         // task, we need to let that run to completion for sanity's sake.)
-        for (task_id, tc) in self.tasks.iter() {
+        for (task_id, tc) in self.active.iter() {
             if *task_id == disconnect_task_id {
                 continue;
             }
