@@ -2523,6 +2523,8 @@ mod tests {
 
     #[test]
     fn test_keyword_disambig_call() {
+        // This is a regression test for a bug where the parser would incorrectly parse
+        // this as "l in e ... " instead of "line in "
         let program = r#"
             for line in ({1,2,3})
             endfor(52);
@@ -3139,5 +3141,20 @@ mod tests {
                 environment_width: 0,
             }]
         )
+    }
+
+    #[test]
+    fn test_return_x_regression() {
+        // "returnval" was being parsed as "return val" not expecting whitespace after
+        // (Was due to return as expr being parsed higher precedence than ident)
+        let program = r#"return returnval;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Return(Some(Box::new(Id(parse
+                .unbound_names
+                .find_name("returnval")
+                .unwrap())))))]
+        );
     }
 }
