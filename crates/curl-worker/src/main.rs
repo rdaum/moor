@@ -117,6 +117,7 @@ async fn process(
     rpc_address: String,
     my_id: Uuid,
     worker_token: WorkerToken,
+    worker_type: Symbol,
     kill_switch: Arc<AtomicBool>,
 ) {
     let rpc_request_sock = request(&zmq_ctx)
@@ -127,18 +128,15 @@ async fn process(
     let mut rpc_client = WorkerRpcSendClient::new(rpc_request_sock);
 
     match event {
-        DaemonToWorkerMessage::PingWorker(_, worker_id) => {
-            if worker_id == my_id {
-                info!("Received ping from daemon");
-                rpc_client
-                    .make_worker_rpc_call(
-                        &worker_token,
-                        my_id,
-                        WorkerToDaemonMessage::Pong(worker_token.clone()),
-                    )
-                    .await
-                    .expect("Unable to send pong to daemon");
-            }
+        DaemonToWorkerMessage::PingWorkers => {
+            rpc_client
+                .make_worker_rpc_call(
+                    &worker_token,
+                    my_id,
+                    WorkerToDaemonMessage::Pong(worker_token.clone(), worker_type),
+                )
+                .await
+                .expect("Unable to send pong to daemon");
         }
         DaemonToWorkerMessage::WorkerRequest {
             worker_id,

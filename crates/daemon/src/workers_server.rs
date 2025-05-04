@@ -28,6 +28,9 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 use zmq::SocketType;
 
+pub const WORKER_TIMEOUT: Duration = Duration::from_secs(10);
+pub const PING_FREQUENCY: Duration = Duration::from_secs(5);
+
 pub struct WorkersServer {
     zmq_context: zmq::Context,
     workers: Arc<RwLock<HashMap<Uuid, Worker>>>,
@@ -83,10 +86,54 @@ fn process(
     send: crossbeam_channel::Sender<WorkerResponse>,
     workers: Arc<RwLock<HashMap<Uuid, Worker>>>,
 ) {
+    let mut last_ping_out = Instant::now();
     loop {
         if ks.load(std::sync::atomic::Ordering::Relaxed) {
             info!("Workers server thread exiting.");
             break;
+        }
+
+        // Check for expired workers and remove them.
+        {
+            let mut workers = workers.write().unwrap();
+            let now = Instant::now();
+            workers.retain(|_, worker| {
+                if now.duration_since(worker.last_ping_time) > WORKER_TIMEOUT {
+                    error!(
+                        "Worker {} of type {} has expired",
+                        worker.id, worker.worker_type
+                    );
+                    // Abort all requests for this worker.
+                    for (id, _, _) in &worker.requests {
+                        send.send(WorkerResponse::Error {
+                            request_id: *id,
+                            error: WorkerError::WorkerDetached(format!(
+                                "{} worker {} detached",
+                                worker.worker_type, worker.id
+                            )),
+                        })
+                        .ok();
+                    }
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+
+        // If it's been a while since we sent a ping, send one out to all workers.
+        if last_ping_out.elapsed() > PING_FREQUENCY {
+            let event = DaemonToWorkerMessage::PingWorkers;
+            let Ok(event_bytes) = bincode::encode_to_vec(&event, bincode::config::standard())
+            else {
+                error!("Unable to encode event");
+                continue;
+            };
+            let payload = vec![WORKER_BROADCAST_TOPIC.to_vec(), event_bytes];
+            if let Err(e) = publish.send_multipart(payload, 0) {
+                error!("Unable to send message to workers: {}", e);
+            }
+            last_ping_out = Instant::now();
         }
 
         match recv.recv_timeout(Duration::from_millis(200)) {
@@ -319,14 +366,43 @@ impl WorkersServer {
 
                     info!("Worker {} attached", worker_id);
                 }
-                WorkerToDaemonMessage::Pong(_) => {
-                    ack(&rpc_socket);
+                WorkerToDaemonMessage::Pong(token, worker_type) => {
                     // Update the last ping time for this worker.
                     let mut workers = self.workers.write().unwrap();
                     if let Some(worker) = workers.get_mut(&worker_id) {
                         worker.last_ping_time = Instant::now();
+                        ack(&rpc_socket);
                     } else {
-                        error!("Received pong from unknown or old worker");
+                        warn!(
+                            "Received pong from unknown or old worker (did we restart?); re-establishing..."
+                        );
+                        workers.insert(
+                            worker_id,
+                            Worker {
+                                token: token.clone(),
+                                last_ping_time: Instant::now(),
+                                worker_type,
+                                id: worker_id,
+                                requests: vec![],
+                            },
+                        );
+
+                        let response = DaemonToWorkerReply::Attached(token, worker_id);
+                        let Ok(response) =
+                            bincode::encode_to_vec(&response, bincode::config::standard())
+                        else {
+                            error!("Unable to encode response");
+                            reject(&rpc_socket);
+                            continue;
+                        };
+
+                        info!("Attaching worker {} of type {}", worker_id, worker_type);
+                        let Ok(_) = rpc_socket.send_multipart([&response], 0) else {
+                            error!("Unable to send response");
+                            continue;
+                        };
+
+                        info!("Worker {} attached", worker_id);
                         continue;
                     }
                 }

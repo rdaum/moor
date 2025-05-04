@@ -39,8 +39,15 @@ pub async fn worker_loop<ProcessFunc, Fut>(
     perform: ProcessFunc,
 ) -> Result<(), WorkerError>
 where
-    ProcessFunc:
-        Fn(DaemonToWorkerMessage, tmq::Context, String, Uuid, WorkerToken, Arc<AtomicBool>) -> Fut,
+    ProcessFunc: Fn(
+        DaemonToWorkerMessage,
+        tmq::Context,
+        String,
+        Uuid,
+        WorkerToken,
+        Symbol,
+        Arc<AtomicBool>,
+    ) -> Fut,
     Fut: std::future::Future<Output = ()> + Send + 'static,
 {
     let zmq_ctx = tmq::Context::new();
@@ -81,6 +88,7 @@ where
             addr,
             my_id,
             worker_token,
+            worker_type,
             kill_switch.clone(),
         ));
     }

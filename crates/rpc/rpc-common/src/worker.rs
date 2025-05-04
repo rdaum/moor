@@ -19,8 +19,8 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum DaemonToWorkerMessage {
-    /// Ping a worker to ensure it is still alive.
-    PingWorker(WorkerToken, #[bincode(with_serde)] Uuid),
+    /// Ping all workers to ask them to respond with a Pong message.
+    PingWorkers,
     /// Initiate a one-shot request from the daemon to a specific worker to execute something in its worker
     /// specific way.
     /// The interpretation of the request is left to the worker.
@@ -47,8 +47,9 @@ pub enum WorkerToDaemonMessage {
         token: WorkerToken,
         worker_type: Symbol,
     },
-    /// Respond to a ping from the daemon.
-    Pong(WorkerToken),
+    /// Respond to a ping from the daemon, letting it know that this worker is still alive, or
+    /// if the daemon restarted, basically re-attaching to the daemon.
+    Pong(WorkerToken, Symbol),
     /// Detach this worker from the daemon.
     DetachWorker(WorkerToken),
     /// Return the results of a daemon initiated request.
