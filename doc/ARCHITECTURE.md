@@ -1,11 +1,11 @@
-## Moor Architecture & High-Level Technical Overview
+## mooR Architecture & High-Level Technical Overview
 
-The following is an attempt to provide a high-level overview of the architecture of the Moor system. This is considered
+The following is an attempt to provide a high-level overview of the architecture of the mooR system. This is considered
 a "living document" and will be updated as the system evolves, and in response to feedback from readers.
 
 ### The Atmospheric view
 
-Moor is a multi-player authoring system for shared social spaces.
+mooR is a multi-player authoring system for shared social spaces.
 
 It can be used for MUD-style games, for social networks, for chat, or for general shared application development.
 
@@ -15,33 +15,37 @@ But it is designed to be more flexible and extensible, and to support richer fro
 
 ### 10-thousand foot view
 
-**_Moor_** is a network-accessible virtual machine for running shared user programs (verbs)
+**_mooR_** is a network-accessible virtual machine for running shared user programs (verbs)
 in a shared persistent object environment.
 
 The object environment is based around permissioned, shared, persistent objects which use prototype-inheritance to share
 behaviour (verbs) and data (properties).
 
-For now verbs are authored in a simple dynamically typed scripting language called `MOO`. It has a simple familiar syntax. But the system is written with
+For now verbs are authored in a simple dynamically typed scripting language called `MOO`. It has a simple familiar
+syntax. But the system is written with
 the intention of supporting multiple languages and runtimes in the future. JavaScript is likely to be the first target.
 
-This object environment and language as implemented are compatible with LambdaMOO 1.8.x, a philosophically similar system first built
-in the 1990s. Existing LambdaMOO databases ("cores") can be imported, and _should_ run without modification (with some caveats)
-in Moor.
+This object environment and language as implemented are compatible with LambdaMOO 1.8.x, a philosophically similar
+system first built in the 1990s. Existing LambdaMOO databases ("cores") can be imported, and _should_ run without
+modification (with some caveats) in mooR.
 
 At least that's the starting point.
 
 The main differences with LambdaMOO are:
 
-- Moor is designed to have richer front ends, including a graphical web-based interface. LambdaMOO is restricted to
+- mooR is multi-threaded, LambdaMOO is single-threaded. (MOO will lag under heavy concurrent load, mooR will attempt to
+  scale up to the load.)
+- mooR is written in Rust, and is designed to be more modular and extensible.
+- mooR is designed to have richer front ends, including a graphical web-based interface. LambdaMOO is restricted to
   a text-line based interface.
-- Moor is multi-threaded, LambdaMOO is single-threaded
-- Moor uses multi-version control, with transactional isolation to control shared access to objects.\
-  LambdaMOO time-slices program execution with a global interpreter lock.
-- Moor is written in Rust, and is designed to be more modular and extensible.
+- mooR uses multi-version control, with transactional isolation to control shared access to objects.\
+  LambdaMOO time-slices database access with a global interpreter lock preventing multiple threads from accessing the
+  shared database at the same time, which can lead to lag under heavy load.
+- mooR has extensions to the MOO language to support new types and new syntactic constructs.
 
 ### 1-thousand foot view
 
-Moor is a multi-process system. There is a single `daemon` process, and multiple "host" processes. The host processes
+mooR is a multi-process system. There is a single `daemon` process, and multiple "host" processes. The host processes
 are the actual user interfaces, and the daemon process is the shared object environment and the execution engine.
 
 _Process_ wise, in broad strokes:
@@ -72,13 +76,13 @@ clients, and manages the shared object environment and the execution of verbs.
 The daemon process can be stopped and restarted while still maintaining active host connections. And vice versa,
 _host_ processes can be stopped and restarted.
 
-Host processes can be located on different machines, and can be added or removed at any time. In this way a Moor system
+Host processes can be located on different machines, and can be added or removed at any time. In this way a mooR system
 is designed to be flexible in terms of cluster deployment, at least from the front-end perspective. (Right now, there
 is no support for distributing the daemon process & its embedded database.)
 
 #### Database & objects
 
-Moor objects are stored in a custom transactional (multi-version controlled) database.
+mooR objects are stored in a custom transactional (multi-version controlled) database.
 
 The database itself is (currently) an in-memory system and the total world size is limited to the size of the system's
 memory. This may change in the near future.
@@ -91,20 +95,18 @@ The intent is to provide ACID guarantees, similar to a classic SQL RDBMS.
 Embedding the database in the daemon process is done to ensure faster access to the data than would be possible with a
 separate database server.
 
-Moor objects themselves are broken up into many small pieces (relations), based on their individual attributes.
+mooR objects themselves are broken up into many small pieces (relations), based on their individual attributes.
 These relations are in fact a form of binary relations; collections of tuples which are composed of a domain ("key")
 and codomain ("value"). The domain is always indexed, and is generally considered to be a unique key.
 
-The database additionally supports secondary-indexing on the codomain.
-
 Objects have verbs, properties, parents, and children. Each of these is stored in a separate relation.
 
-All operations on the database are transactional, and the database supports a form of "serializable isolation" to provide
-consistent views of the data.
+All operations on the database are transactional, and the database supports a form of "serializable isolation" to
+provide consistent views of the data.
 
 #### Permissions
 
-Moor objects are all permissioned. This permission system is based on the classic LambdaMOO model, which follows a
+mooR objects are all permissioned. This permission system is based on the classic LambdaMOO model, which follows a
 somewhat Unix-like Access Control List (ACL) model based around ownership and permission bits.
 
 Every object, verb, and property has owners and permission bits which determine who can read, write (or execute) them.
@@ -116,17 +118,20 @@ supplement/subsume this model with a more robust capability-based model.
 
 #### The MOO language
 
-The MOO language is a simple dynamically typed scripting language. It has a simple familiar syntax, and is designed to be
+The MOO language is a simple dynamically typed scripting language. It has a simple familiar syntax, and is designed to
+be
 easy to learn and use. It is designed to be a "safe" language, and is designed to be used in a multi-user environment.
 
-A manual for the MOO language can be found at [LambdaMOO Programmer's Manual](https://www.hayseed.net/MOO/manuals/ProgrammersManual.html).
+A manual for the MOO language can be found
+at [LambdaMOO Programmer's Manual](https://www.hayseed.net/MOO/manuals/ProgrammersManual.html).
 
 The MOO language is compiled to opcodes, which are executed by a virtual machine. The opcode set is designed such that
 the program can be "decompiled" back into a human-readable MOO code. In this way all verbs in the system can be read
 and modified by any user (who has permissions), without the source code itself being stored in the database.
 
-For now, Moor sticks to the classic LambdaMOO 1.8.x language without some of the extensions that were added in later
-by the MOO community (such as those offered by Stunt or ToastStunt). So MOO does not have e.g. "WAIFs" (light weight objects),
+For now, mooR sticks to the classic LambdaMOO 1.8.x language without some of the extensions that were added in later
+by the MOO community (such as those offered by Stunt or ToastStunt). So MOO does not have e.g. "WAIFs" (light weight
+objects),
 or dictionary/map types. These may be added in the future.
 
 #### The virtual machine
@@ -155,9 +160,10 @@ fails too many times, it is aborted and the user is informed.
 #### Commands & verb executions.
 
 The system has a built-in command parser which is responsible for parsing user input and converting it into a task
-execution, which is scheduled in the scheduler. The command parser is exactly the same as the one used in LambdaMOO 1.8.x. which
-is a fairly rudimentary English-like parser in the style of classic adventure games. See the LambdaMOO Programmer's Manual
-for more details.
+execution, which is scheduled in the scheduler. The command parser is exactly the same as the one used in LambdaMOO
+1.8.x. which is a fairly rudimentary English-like parser in the style of classic adventure games. See the LambdaMOO
+Programmer's
+Manual for more details.
 
 Top-level verb execution tasks can be additionally scheduled by RPC calls from the host processes. This is how e.g.
 the web host process is able to execute verbs in response to HTTP requests to do things like read and write properties
@@ -169,10 +175,11 @@ The system uses ZeroMQ for inter-process communication. The daemon process liste
 from the host processes. The host processes use ZeroMQ to send requests to the daemon process. Each request is a
 simple `bincode`-serialized message which is dispatched to the RPC handler in the daemon process.
 
-Moor uses a simple request-response model for RPC. The host process sends a request, and the daemon process sends a
+mooR uses a simple request-response model for RPC. The host process sends a request, and the daemon process sends a
 response.
 
-Additionally, there are two broadcast `pubsub` channels which are used to send events from the daemon to the host processes:
+Additionally, there are two broadcast `pubsub` channels which are used to send events from the daemon to the host
+processes:
 
 - The `narrative` channel is used to send "narrative" events, which are used to inform the host processes of things
   that have happened in the world. This ultimately ties back to the MOO `notify` built-in function. For now this
@@ -189,11 +196,12 @@ Additionally, there are two broadcast `pubsub` channels which are used to send e
 
 MOO itself has a simple built-in authentication system. Users are identified by a "player" object, which is a special
 kind of object in the database. The player object has a password. A login verb (`$do_login_command`) is used to
-authenticate a user. Initial connections are given a "connection" object, which is used to represent their connection to the
-system. Once authenticated, the connection object is replaced with the player object.
+authenticate a user. Initial connections are given a "connection" object, which is used to represent their connection to
+the system. Once authenticated, the connection object is replaced with the player object.
 
-In Moor the authentication system is extended with the use of [PASETO](https://github.com/paseto-standard/paseto-spec) tokens. Every RPC call from a host process to the
-daemon process is required to have a valid token. The token is used to identify the user and their permissions. The
+In mooR the authentication system is extended with the use of [PASETO](https://github.com/paseto-standard/paseto-spec)
+tokens. Every RPC call from a host process to the daemon process is required to have a valid token. The token is used to
+identify the user and their permissions. The
 tokens are signed by the daemon process, and granted at login time.
 
 The same PASETO token system is used by the web host process to manage user sessions.
