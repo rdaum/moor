@@ -3,11 +3,36 @@
 > **Warning**: Parts of this document were written with assistance from Large Language Models (LLMs). While efforts have
 > been made to ensure accuracy, please verify critical information against the official MOO language specifications.
 
+## Introduction
+
+MOO is an object-oriented programming language designed for use in MOO environments. It is a dynamic, interpreted
+language that allows for rapid development and prototyping.
+
+Its syntax has some similarities in style to Wirth-style languages (like Pascal) because it has a keyword-based block
+syntax and 1-based indexing, but it also has a more C-like syntax for expressions and operators, and some functional
+programming inspirations (immutable collections, list comprehensions, etc.) though it does not (yet) have first-class
+functions or lambdas.
+
+Objects in MOO differ from objects in most other object-oriented programming languages you are likely familiar with.
+
+In MOO, objects are persistent database entities. They are not garbage collected, and are referred to using literals
+like `#123` or `$room`. Changes made to objects are permanent and can be accessed by other users or processes.
+
+MOO also has a different inheritance model than most object-oriented languages. Objects can inherit properties and verbs
+from other objects,
+but there are no "classes." This model of inheritance is called "prototype inheritance" and is similar to the model
+in the Self language. Each object has at most one parent, and properties and verbs are looked up in the parent if
+they are not found in the object itself. New objects can be created with any other existing object as a parent,
+providing
+the user has the necessary permissions.
+
 ## Basic Structure
 
-A MOO program consists of a series of statements. These statements can be control structures, assignments, expressions,
-or other language constructs. Programs are parsed from beginning to end with no explicit entry point (like a "main"
-function).
+A MOO program is called a "verb" and consists of a series of statements that are executed in order. There are no
+subroutines or functions in the traditional sense, but verbs can call other verbs on objects.
+
+The following is a rather terse summary of the MOO syntax. For a more user-friendly overview, please see the
+LambdaMOO Programmers Manual or various tutorials.
 
 ## Statements
 
@@ -42,7 +67,9 @@ MOO supports several basic data types:
     - Float (`FLOAT`) - Decimal numbers
     - String (`STR`) - Text in double quotes
     - Boolean (`BOOL`) - `true` or `false`
-    - Object (`OBJ`) - References to objects in the DB, written as `#123`
+    - Object (`OBJ`) - References to objects in the DB, written as `#123` or `$room`. Note that `$` is a special prefix
+      for "system" objects, which are objects referenced off the system object `#0`. `$room` is short-hand for
+      `#0.room`.
     - Error (`ERR`) - Error values, starting with `E_`
     - Symbol (`SYM`) - Symbolic identifiers prefixed with a single quote, as in Scheme or Lisp, e.g. `'symbol`
 
@@ -79,11 +106,11 @@ Expressions can include:
     - Logical AND (`&&`), Logical OR (`||`), Logical NOT (`!`)
 
 4. **Special Operations**:
-    - Range (`..`) - Used in indexing and iteration
-    - In-range (`in`) - Tests if a value is in a range
+    - Range (`..`) - Used in range selection and range iteration
+    - In-range (`in`) - Tests if a value is in a sequence (list or map)
 
 5. **Conditional Expression**:
-    - `expr ? true_expr | false_expr` - Ternary conditional
+    - `expr ? true_expr | false_expr` - Ternary conditional expression the same as C's `?:` operator.
 
 6. **Variable Assignment**:
     - `var = expr` - Assigns value to variable
@@ -91,7 +118,7 @@ Expressions can include:
 7. **Object Member Access**:
     - Property access: `obj.property` or `obj.(expr)`
     - Verb call: `obj:verb(args)` or `obj:(expr)(args)`
-    - System property: `$property` (looks on `#0` for the property)
+    - System property or verb: `$property` (looks on `#0` for the property)
 
 8. **Collection Operations**:
     - Indexing: `collection[index]`
@@ -308,11 +335,13 @@ let {var1, ?optional = default, @rest} = list;
 [key1 -> value1, key2 -> value2]
 ```
 
-3. **For List/Range Comprehensions** - List generation from iteration:
+3. **For List/Range Comprehensions**
 
-````
-{expr for var in (collection)}```
-````
+List generation from iteration:
+
+```
+{expr for var in (collection)}
+```
 
 or
 
