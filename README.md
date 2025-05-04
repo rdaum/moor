@@ -71,22 +71,22 @@ implementations like ToastStunt.
 Enhancements over base the LambdaMOO 1.8.x system include (but are not limited to):
 
 - Runtime features:
-    - A fully multithreaded architecture, taking advantage of the wizardly powers of modern multicore computing
-      machines.
-    - A native web front end, with rich content presentation.
-    - A directory basecd import / export format for objects that can be read by a human and edited by a standard text
-      editor and managed with standard version control tools.
-    - An architecture that is easier to extend and add to.
+  - A fully multithreaded architecture, taking advantage of the wizardly powers of modern multicore computing
+    machines.
+  - A native web front end, with rich content presentation.
+  - A directory basecd import / export format for objects that can be read by a human and edited by a standard text
+    editor and managed with standard version control tools.
+  - An architecture that is easier to extend and add to.
 
 - Language features:
-    - Lexically scoped variables / `begin` / `end` blocks
-    - Maps: an associative container type (`[ "key" -> "value", ... ]`)
-    - List / Range comprehensions, similar to Python, Julia, etc. (`{ x * 2 for x in [1..5]}`)
-    - UTF-8 strings
-    - 64-bit integers and floats
-    - Symbol (interned string) type (`'symbol`)
-    - Booleans (`true` / `false`)
-    - "flyweights" - a lightweight anonymous immutable object / container type.
+  - Lexically scoped variables / `begin` / `end` blocks
+  - Maps: an associative container type (`[ "key" -> "value", ... ]`)
+  - List / Range comprehensions, similar to Python, Julia, etc. (`{ x * 2 for x in [1..5]}`)
+  - UTF-8 strings
+  - 64-bit integers and floats
+  - Symbol (interned string) type (`'symbol`)
+  - Booleans (`true` / `false`)
+  - "flyweights" - a lightweight anonymous immutable object / container type.
 
 A "core" database foundation designed expecially for mooR is under development and lives
 at http://github.com/rdaum/cowbell
@@ -169,9 +169,9 @@ Stephen White. Successive versions and forks have been maintained by a number of
 To contribute:
 
 1. Check our [GitHub issues](https://github.com/rdaum/moor/issues) for current needs or file a new issue
-    - If you have a feature request, please file an issue and describe it in detail
-    - If you find a bug, please file an issue and include steps to reproduce it, and feel free to join our
-      Discord to discuss it
+   - If you have a feature request, please file an issue and describe it in detail
+   - If you find a bug, please file an issue and include steps to reproduce it, and feel free to join our
+     Discord to discuss it
 2. Join our [Discord](https://discord.gg/Ec94y5983z) to discuss ideas or keep up with development
 3. Fork the repository and submit pull requests
 

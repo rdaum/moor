@@ -254,6 +254,7 @@ impl WorldState for DbWorldState {
         Ok(properties)
     }
 
+    #[allow(clippy::obfuscated_if_else)]
     fn retrieve_property(
         &self,
         perms: &Obj,

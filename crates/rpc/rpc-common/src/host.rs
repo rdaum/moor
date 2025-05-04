@@ -58,6 +58,8 @@ pub enum HostToDaemonMessage {
     HostPong(SystemTime, HostType, Vec<(Obj, SocketAddr)>),
 }
 
+pub type Counters = Vec<(Symbol, Vec<(Symbol, isize, isize)>)>;
+
 /// An RPC message sent from the daemon to a host in response to a HostToDaemonMessage.
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub enum DaemonToHostReply {
@@ -67,7 +69,7 @@ pub enum DaemonToHostReply {
     Reject(String),
     /// Here is a dump of the performance counters for the system, as requested.
     /// `[category, [ name, [cnt, total_cumulative_ns]]]`
-    PerfCounters(SystemTime, Vec<(Symbol, Vec<(Symbol, isize, isize)>)>),
+    PerfCounters(SystemTime, Counters),
 }
 
 /// Events which occur over the pubsub endpoint, but are for all the hosts.

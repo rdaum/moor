@@ -293,6 +293,8 @@ impl TaskSchedulerClient {
     }
 }
 
+pub type ActiveTaskDescriptions = Vec<(TaskId, Obj, TaskStart)>;
+
 /// The ad-hoc messages that can be sent from tasks (or VM) up to the scheduler.
 #[derive(Debug)]
 pub enum TaskControlMsg {
@@ -371,6 +373,6 @@ pub enum TaskControlMsg {
     },
     /// Ask the scheduler to return information of all active tasks (non-suspended)
     ActiveTasks {
-        reply: oneshot::Sender<Result<Vec<(TaskId, Obj, TaskStart)>, Error>>,
+        reply: oneshot::Sender<Result<ActiveTaskDescriptions, Error>>,
     },
 }
