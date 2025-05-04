@@ -16,26 +16,20 @@ use clap_derive::Parser;
 use moor_common::tasks::WorkerError;
 use moor_var::{Sequence, Symbol, Var, Variant, v_int, v_list, v_list_iter, v_str};
 use reqwest::Url;
-use rpc_async_client::pubsub_client::workers_events_recv;
-use rpc_async_client::{WorkerRpcSendClient, attach_worker, make_worker_token};
+use rpc_async_client::{WorkerRpcSendClient, make_worker_token, worker_loop};
 use rpc_common::client_args::RpcClientArgs;
-use rpc_common::{
-    DaemonToWorkerMessage, WORKER_BROADCAST_TOPIC, WorkerToDaemonMessage, WorkerToken, load_keypair,
-};
+use rpc_common::{DaemonToWorkerMessage, WorkerToDaemonMessage, WorkerToken, load_keypair};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tmq::request;
 use tokio::select;
 use tokio::signal::unix::{SignalKind, signal};
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::fmt::format::FmtSpan;
 use uuid::Uuid;
 
 // TODO: timeouts, and generally more error handling
-// TODO: almost everything in here is generic across any worker and could be moved to a common
-//   library, only really perform_http_request is specific to this worker.
-
 #[derive(Parser, Debug)]
 struct Args {
     #[command(flatten)]
@@ -80,45 +74,37 @@ async fn main() -> Result<(), eyre::Error> {
     let my_id = Uuid::new_v4();
     let worker_token = make_worker_token(&private_key, my_id);
 
-    let zmq_ctx = tmq::Context::new();
+    let worker_response_rpc_addr = args.client_args.workers_response_address.clone();
+    let worker_request_rpc_addr = args.client_args.workers_request_address.clone();
+    let worker_type = Symbol::mk("curl");
+    let ks = kill_switch.clone();
+    let worker_loop_thread = tokio::spawn(async move {
+        if let Err(e) = worker_loop(
+            &ks,
+            my_id,
+            &worker_token,
+            &worker_response_rpc_addr,
+            &worker_request_rpc_addr,
+            worker_type,
+            process,
+        )
+        .await
+        {
+            error!("Worker loop for {my_id} exited with error: {}", e);
+            ks.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    });
 
-    // First attempt to connect to the daemon and "attach" ourselves.
-    let _rpc_client = attach_worker(
-        &worker_token,
-        Symbol::mk("curl"),
-        my_id,
-        zmq_ctx.clone(),
-        args.client_args.workers_response_address.clone(),
-    )
-    .await
-    .expect("Unable to attach to daemon");
-
-    // Now make the pub-sub client to the daemon and listen.
-    let sub = tmq::subscribe(&zmq_ctx)
-        .connect(&args.client_args.workers_request_address)
-        .expect("Unable to connect host worker events subscriber ");
-    let mut sub = sub
-        .subscribe(WORKER_BROADCAST_TOPIC)
-        .expect("Unable to subscribe to topic");
-    loop {
-        select! {
-            _ = hup_signal.recv() => {
-                info!("Received HUP signal, reloading configuration is not supported yet");
-                break;
-            },
-            _ = stop_signal.recv() => {
-                info!("Received STOP signal, shutting down...");
-                kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
-                break;
-            },
-            event = workers_events_recv(&mut sub) => {
-                if let Ok(event) = event {
-                    let addr = args.client_args.workers_response_address.clone();
-                    let ctx = zmq_ctx.clone();
-                    let worker_token = worker_token.clone();
-                    tokio::spawn(process(event, ctx, addr, my_id, worker_token, kill_switch.clone()));
-                }
-            }
+    select! {
+        _ = hup_signal.recv() => {
+            info!("Received HUP signal, reloading configuration is not supported yet");
+        },
+        _ = stop_signal.recv() => {
+            info!("Received STOP signal, shutting down...");
+            kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
+        },
+        _ = worker_loop_thread => {
+            info!("Worker loop thread exited");
         }
     }
     info!("Done");
