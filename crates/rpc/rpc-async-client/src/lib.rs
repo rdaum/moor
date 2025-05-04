@@ -16,7 +16,7 @@
 pub use host::{make_host_token, proces_hosts_events, send_host_to_daemon_msg, start_host_session};
 pub use listeners::{ListenersClient, ListenersError, ListenersMessage};
 pub use worker::{attach_worker, make_worker_token};
-pub use worker_loop::{WorkerError, worker_loop};
+pub use worker_loop::{WorkerRpcError, worker_loop};
 pub use worker_rpc_client::WorkerRpcSendClient;
 mod host;
 mod listeners;

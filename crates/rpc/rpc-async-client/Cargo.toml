@@ -14,6 +14,7 @@ description = "Utilities for connection to the 0MQ RPC server via tokio/async ca
 [dependencies]
 # Own
 moor-var = { path = "../../var" }
+moor-common = { path = "../../common" }
 rpc-common = { path = "../rpc-common" }
 
 bincode.workspace = true

@@ -41,7 +41,7 @@ pub async fn attach_worker(
     worker_type: Symbol,
     worker_id: Uuid,
     zmq_ctx: tmq::Context,
-    rpc_address: String,
+    rpc_address: &str,
 ) -> Result<WorkerRpcSendClient, RpcError> {
     // Establish the initial connection to the daemon, and send the worker token and our initial
     // listener list.
@@ -49,7 +49,7 @@ pub async fn attach_worker(
         let rpc_request_sock = request(&zmq_ctx)
             .set_rcvtimeo(100)
             .set_sndtimeo(100)
-            .connect(rpc_address.as_str())
+            .connect(rpc_address)
             .expect("Unable to bind RPC server for connection");
 
         // And let the RPC server know we're here, and it should start sending events on the

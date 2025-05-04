@@ -14,15 +14,14 @@
 use clap::Parser;
 use clap_derive::Parser;
 use moor_common::tasks::WorkerError;
-use moor_var::{Sequence, Symbol, Var, Variant, v_int, v_list, v_list_iter, v_str};
+use moor_var::{Obj, Sequence, Symbol, Var, Variant, v_int, v_list, v_list_iter, v_str};
 use reqwest::Url;
-use rpc_async_client::{WorkerRpcSendClient, make_worker_token, worker_loop};
+use rpc_async_client::{make_worker_token, worker_loop};
 use rpc_common::client_args::RpcClientArgs;
-use rpc_common::{DaemonToWorkerMessage, WorkerToDaemonMessage, WorkerToken, load_keypair};
+use rpc_common::{WorkerToken, load_keypair};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use tmq::request;
 use tokio::select;
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
@@ -78,6 +77,7 @@ async fn main() -> Result<(), eyre::Error> {
     let worker_request_rpc_addr = args.client_args.workers_request_address.clone();
     let worker_type = Symbol::mk("curl");
     let ks = kill_switch.clone();
+    let perform_func = Arc::new(perform_http_request);
     let worker_loop_thread = tokio::spawn(async move {
         if let Err(e) = worker_loop(
             &ks,
@@ -86,7 +86,7 @@ async fn main() -> Result<(), eyre::Error> {
             &worker_response_rpc_addr,
             &worker_request_rpc_addr,
             worker_type,
-            process,
+            perform_func,
         )
         .await
         {
@@ -111,88 +111,13 @@ async fn main() -> Result<(), eyre::Error> {
     Ok(())
 }
 
-async fn process(
-    event: DaemonToWorkerMessage,
-    zmq_ctx: tmq::Context,
-    rpc_address: String,
-    my_id: Uuid,
-    worker_token: WorkerToken,
-    worker_type: Symbol,
-    kill_switch: Arc<AtomicBool>,
-) {
-    let rpc_request_sock = request(&zmq_ctx)
-        .set_rcvtimeo(100)
-        .set_sndtimeo(100)
-        .connect(&rpc_address)
-        .expect("Unable to bind RPC server for connection");
-    let mut rpc_client = WorkerRpcSendClient::new(rpc_request_sock);
-
-    match event {
-        DaemonToWorkerMessage::PingWorkers => {
-            rpc_client
-                .make_worker_rpc_call(
-                    &worker_token,
-                    my_id,
-                    WorkerToDaemonMessage::Pong(worker_token.clone(), worker_type),
-                )
-                .await
-                .expect("Unable to send pong to daemon");
-        }
-        DaemonToWorkerMessage::WorkerRequest {
-            worker_id,
-            token: _,
-            id: request_id,
-            perms: _,
-            request,
-        } => {
-            if worker_id != my_id {
-                return;
-            }
-
-            // Make an outbound HTTP request w/ request
-            let result = perform_http_request(request).await;
-            match result {
-                Ok(r) => {
-                    rpc_client
-                        .make_worker_rpc_call(
-                            &worker_token,
-                            my_id,
-                            WorkerToDaemonMessage::RequestResult(
-                                worker_token.clone(),
-                                request_id,
-                                r,
-                            ),
-                        )
-                        .await
-                        .expect("Unable to send response to daemon");
-                }
-                Err(e) => {
-                    info!("Error performing request: {}", e);
-                    rpc_client
-                        .make_worker_rpc_call(
-                            &worker_token,
-                            my_id,
-                            WorkerToDaemonMessage::RequestError(
-                                worker_token.clone(),
-                                request_id,
-                                e,
-                            ),
-                        )
-                        .await
-                        .expect("Unable to send error response to daemon");
-                }
-            }
-        }
-        DaemonToWorkerMessage::PleaseDie(token, _) => {
-            if token == worker_token {
-                info!("Received please die from daemon");
-                kill_switch.store(true, std::sync::atomic::Ordering::Relaxed);
-            }
-        }
-    }
-}
-
-async fn perform_http_request(arguments: Vec<Var>) -> Result<Vec<Var>, WorkerError> {
+async fn perform_http_request(
+    _token: WorkerToken,
+    _request_id: Uuid,
+    _worker_type: Symbol,
+    _perms: Obj,
+    arguments: Vec<Var>,
+) -> Result<Vec<Var>, WorkerError> {
     if arguments.len() < 2 {
         return Err(WorkerError::RequestError(
             "At least two arguments are required".to_string(),
