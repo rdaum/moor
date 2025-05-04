@@ -1,3 +1,5 @@
+<p align="center"><img src="./doc/porcupine-building.jpg" alt="mooR logo" width="300"/></p>
+
 # mooR
 
 ### ... What is this?
@@ -6,7 +8,7 @@
 
 - A system for building shared, programmable, Internet-accessible virtual _social spaces_
 - A programming and authoring _tool_ for shared environments.
-- Compatible with [LambdaMOO](https://en.wikipedia.org/wiki/MOO) 1.8.x
+- Compatible with [LambdaMOO](https://en.wikipedia.org/wiki/MOO) 1.8.x (with many extensions)
 
 _mooR_ provides (from the bottom layer up...)
 
@@ -26,48 +28,12 @@ And it is designed to be used for:
 - Interactive fiction
 - Your entertainment and delight
 
-mooR is written from the ground up, with reference to the LambdaMOO sources, but is not a fork of LambdaMOO.
+### Status
 
-A "core" foundation designed expecially for mooR lives at http://github.com/rdaum/cowbell
-
-### And enhanced...
-
-Enhancements over base the LambdaMOO 1.8.x system include (but are not limited to):
-
-- Runtime features:
-  - A fully multithreaded architecture, taking advantage of the wizardly powers of modern multicore computing
-    machines.
-  - A native web front end, with rich content presentation.
-  - A text import / export format for objects that can be read by a human and edited by a standard text editor.
-  - An architecture that is easier to extend and add to.
-- Language features:
-  - Lexically scoped variables / `begin` / `end` blocks
-  - Maps: an associative container type (`[ "key" -> "value", ... ]`)
-  - List / Range comprehensions, similar to Python, Julia, etc. (`{ x * 2 for x in [1..5]}`)
-  - UTF-8 strings
-  - 64-bit integers and floats
-  - Symbol (interned string) type (`'symbol`)
-  - Booleans (`true` / `false`)
-  - "flyweights" - a lightweight anonymous reference counted immutable object / container type.
-
-### Why?
-
-Socializing, authoring, and creating on the Internet is in many ways broken. We want to make it better, by giving people
-tools to create their _own_ spaces, and to create their own _things_ and _tools_ within those spaces.
-
-It should be fun, it should be easy, it should be accessible, it should be open, it should be collaborative, it should
-be programmable, it should be extensible, it should be secure, it should be private, it should be free.
-
-This kind of environment is our take on how we can make that happen:
-
-- Shared, self-authored, spaces
-- Where you make things together
-- Easy to learn tools
-- Easy to share what you make
-- Secure, and as private as you want it to be
-- Driven around a shared narrative
-
-In short: Build your own village.
+_mooR_ is in active development, heading towards a stable 1.0 release. It is currently in a pre-release "alpha"
+state and is arguably not yet ready for production use. Database formats and APIs may change, and there are
+still some rough edges. However, it is already capable of running a full LambdaMOO database, under concurrent
+load, and a development server instant has been running for several months without incident or downtime.
 
 ### Background
 
@@ -91,29 +57,58 @@ It is a place where people can meet, talk, and build things together. And it's k
 
 (for a longer description, see [doc/lambda-background.md](./doc/lambda-background.md))
 
-### Back to the Future
+### mooR
 
-But it some senses, the actual technology did not age well at all. It lacks multimedia of any kind, its interface is
-dated, it is not very accessible to new users, and the once active community of developers and participants has
-dwindled to a small but dedicated group of enthusiasts.
+Is not a fork of LambdaMOO, but is a new implementation of the MOO server and programming language. It was
+written from the ground up.
 
-And the server itself is aged; it is written in C -- is single threaded, with some known architectural limitations, and
-is not very easy to extend or modify. While there are newer versions and forks (such as Stunt, ToastStunt, etc.) that
-address many of these issues, they are still based on the same original codebase and architecture -- remaining bound by
-the single-threaded, single-core model of the original.
+However, it is designed to be compatible with LambdaMOO 1.8.x, existing MOO cores should -- on the whole --
+import and run without modification.
 
-_mooR_ is an attempt to reimagine LambdaMOO for the modern world, while retaining the core concepts and ideas that made
-it so compelling in the first place. It is a ground-up rewrite (in Rust). And while it maintains full compatibility with
-existing LambdaMOO "cores" (databases, worlds), it also offers a new, more flexible and extensible architecture, and
-extensions to the runtime to make it more adaptable to modern use cases:
+But mooR also includes a number of enhancements and new features, including some functionality also present in other MOO
+implementations like ToastStunt.
 
-- A web-native architecture which allows for richer clients than a standard text-based terminal, including graphical
-  clients, web clients, and mobile clients. Images, videos, emojis, rich text are all feasible, while keeping the
-  narrative metaphor and creative aspects of the system intact.
-- A multi-core, multi-threaded, runtime, with a transactional, multiversion concurrency model instead of a global
-  lock on the database, as in MOO. This allows for theoretically greater scalability.
-- A flexible, pluggable virtual machine environment which allows "verbs" to be written in alternative languages,
-  such as JavaScript or WebAssembly modules (WIP).
+Enhancements over base the LambdaMOO 1.8.x system include (but are not limited to):
+
+- Runtime features:
+    - A fully multithreaded architecture, taking advantage of the wizardly powers of modern multicore computing
+      machines.
+    - A native web front end, with rich content presentation.
+    - A directory basecd import / export format for objects that can be read by a human and edited by a standard text
+      editor and managed with standard version control tools.
+    - An architecture that is easier to extend and add to.
+
+- Language features:
+    - Lexically scoped variables / `begin` / `end` blocks
+    - Maps: an associative container type (`[ "key" -> "value", ... ]`)
+    - List / Range comprehensions, similar to Python, Julia, etc. (`{ x * 2 for x in [1..5]}`)
+    - UTF-8 strings
+    - 64-bit integers and floats
+    - Symbol (interned string) type (`'symbol`)
+    - Booleans (`true` / `false`)
+    - "flyweights" - a lightweight anonymous immutable object / container type.
+
+A "core" database foundation designed expecially for mooR is under development and lives
+at http://github.com/rdaum/cowbell
+
+### Why?
+
+Socializing, authoring, and creating on the Internet is in many ways broken. We want to make it better, by giving people
+tools to create their _own_ spaces, and to create their own _things_ and _tools_ within those spaces.
+
+It should be fun, it should be easy, it should be accessible, it should be open, it should be collaborative, it should
+be programmable, it should be extensible, it should be secure, it should be private, it should be free.
+
+This kind of environment is our take on how we can make that happen:
+
+- Shared, self-authored, spaces
+- Where you make things together
+- Easy to learn tools
+- Easy to share what you make
+- Secure, and as private as you want it to be
+- Driven around a shared narrative
+
+In short: Build your own village.
 
 ### How do I use it?
 
@@ -136,27 +131,13 @@ So to connect, point your browser to `http://localhost:8080` or if you're feelin
 
 Studying the `docker-compose.yml` file should give some insight to how things are glued together.
 
-### How is this thing put together? What even is it?
-
-The server is written in Rust, and is composed of a number of crates and running services. These services communicate
-with the main server process over an RPC system and message bus implemented on top of ZeroMQ.
+For documentation of the MOO programming language as implemented in `mooR`, see the [doc/language.md](./doc/language.md)
+document.
 
 For a high level architecture description plus a more detailed breakdown on how the server is put together, see the
 [ARCHITECTURE.md](./doc/ARCHITECTURE.md) document.
 
-### License?
-
-_mooR_ is licensed under the GNU General Public License, version 3.0. See the [LICENSE](./LICENSE) file for details.
-
-You can make modifications as you like, but if you distribute those modifications, you must also distribute the source
-code for those modifications under the same license.
-
-The choice to use the GPL was made to ensure that the software remains open and free, and that any modifications to it
-are also open and free. This is in keeping with the spirit of the original LambdaMOO server, which was also under the
-GPL license.
-
-Further, since portions of the code inside `mooR` are based on readings of the LambdaMOO server code, staying with
-the GPL is the right thing to do.
+For a list of built-in functions and their descriptions, see the [doc/builtins](./doc/builtins) directory.
 
 ### Who made this?
 
@@ -175,6 +156,46 @@ There's been plenty of inspiration and help from a community of fellow old-schoo
 
 Finally, LambdaMOO _itself_ was primarily authored by Pavel Curtis, with the original LambdaMOO server being written by
 Stephen White. Successive versions and forks have been maintained by a number of people.
+
+## Contributing
+
+**We welcome contributions!** mooR is actively seeking contributors in several areas:
+
+- **Development**: Help improve the core system, add features, or fix bugs
+- **Documentation**: Expand and improve our docs for users, developers, and administrators
+- **Testing**: Help identify issues and ensure reliability
+- **Building**: Create interesting worlds and applications using mooR
+
+To contribute:
+
+1. Check our [GitHub issues](https://github.com/rdaum/moor/issues) for current needs or file a new issue
+    - If you have a feature request, please file an issue and describe it in detail
+    - If you find a bug, please file an issue and include steps to reproduce it, and feel free to join our
+      Discord to discuss it
+2. Join our [Discord](https://discord.gg/Ec94y5983z) to discuss ideas or keep up with development
+3. Fork the repository and submit pull requests
+
+We're particularly interested in:
+
+- Documentation improvements
+- Development of the `cowbell` core database (see http://github.com/rdaum/cowbell)
+- Stress testing and performance testing
+- Performance optimizations
+- UI development work on the web client
+
+### License
+
+_mooR_ is licensed under the GNU General Public License, version 3.0. See the [LICENSE](./LICENSE) file for details.
+
+You can make modifications as you like, but if you distribute those modifications, you must also distribute the source
+code for those modifications under the same license.
+
+The choice to use the GPL was made to ensure that the software remains open and free, and that any modifications to it
+are also open and free. This is in keeping with the spirit of the original LambdaMOO server, which was also under the
+GPL license.
+
+Further, since portions of the code inside `mooR` are based on readings of the LambdaMOO server code, staying with
+the GPL is the right thing to do.
 
 ### What's done?
 
