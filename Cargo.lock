@@ -2797,6 +2797,8 @@ dependencies = [
  "moor-common",
  "moor-db",
  "moor-kernel",
+ "moor-objdef",
+ "moor-textdump",
  "moor-var",
  "oneshot",
  "rpc-common",
@@ -2863,6 +2865,8 @@ dependencies = [
  "moor-compiler",
  "moor-db",
  "moor-moot",
+ "moor-objdef",
+ "moor-textdump",
  "moor-var",
  "oneshot",
  "onig",
@@ -2880,7 +2884,6 @@ dependencies = [
  "tempfile",
  "test-case",
  "test_each_file",
- "text_io",
  "thiserror 2.0.12",
  "tracing",
  "uuid 1.16.0",
@@ -2926,6 +2929,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-objdef"
+version = "0.9.0-alpha"
+dependencies = [
+ "moor-common",
+ "moor-compiler",
+ "moor-db",
+ "moor-textdump",
+ "moor-var",
+ "semver",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tracing",
+]
+
+[[package]]
 name = "moor-telnet-host"
 version = "0.9.0-alpha"
 dependencies = [
@@ -2950,6 +2968,23 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid 1.16.0",
+]
+
+[[package]]
+name = "moor-textdump"
+version = "0.9.0-alpha"
+dependencies = [
+ "encoding_rs",
+ "moor-common",
+ "moor-compiler",
+ "moor-db",
+ "moor-var",
+ "semver",
+ "serde",
+ "similar-asserts",
+ "strum",
+ "thiserror 2.0.12",
+ "tracing",
 ]
 
 [[package]]
@@ -3010,6 +3045,8 @@ dependencies = [
  "moor-db",
  "moor-kernel",
  "moor-moot",
+ "moor-objdef",
+ "moor-textdump",
  "moor-var",
  "semver",
  "tempfile",
@@ -5667,12 +5704,6 @@ dependencies = [
  "syn",
  "unicode-ident",
 ]
-
-[[package]]
-name = "text_io"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d8d3ca3b06292094e03841d8995e910712d2a10b5869c8f9725385b29761115"
 
 [[package]]
 name = "textwrap"

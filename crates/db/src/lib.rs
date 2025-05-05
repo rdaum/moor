@@ -20,12 +20,11 @@ use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::loader::LoaderInterface;
+use moor_common::model::loader::LoaderInterface;
 
 mod db_loader_client;
 pub mod db_worldstate;
 mod fjall_provider;
-pub mod loader;
 pub(crate) mod moor_db;
 mod moor_db_tests;
 mod ws_transaction;

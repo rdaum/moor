@@ -15,12 +15,12 @@ use byteview::ByteView;
 use uuid::Uuid;
 
 use crate::db_worldstate::DbWorldState;
-use crate::loader::LoaderInterface;
 use moor_common::model::ObjAttrs;
 use moor_common::model::ObjSet;
 use moor_common::model::PropFlag;
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbDefs;
+use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{BinaryType, VerbFlag};
 use moor_common::model::{CommitResult, WorldStateError};
 use moor_common::model::{HasUuid, PropPerms, ValSet};

@@ -24,14 +24,12 @@ use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource};
 use moor_common::tasks::SchedulerError;
 use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig};
-use moor_kernel::objdef::{
-    ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions,
-};
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::sessions::{NoopSystemControl, SessionFactory};
 use moor_kernel::tasks::{NoopTasksDb, TaskResult};
-use moor_kernel::textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
 use moor_moot::MootOptions;
+use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
+use moor_textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
 use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Variant};
 use std::fs::File;
 use std::path::PathBuf;
@@ -169,7 +167,7 @@ fn main() {
             loader_interface.as_mut(),
             textdump.clone(),
             version.clone(),
-            features.clone(),
+            features.compile_options(),
         )
         .unwrap();
 
@@ -182,7 +180,7 @@ fn main() {
         let start = std::time::Instant::now();
         let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
 
-        if let Err(e) = od.read_dirdump(features.clone(), objdef_dir.as_ref()) {
+        if let Err(e) = od.read_dirdump(features.compile_options(), objdef_dir.as_ref()) {
             error!("Compilation failure @ {}", e.path().display());
             error!("{:#}", e);
             return;

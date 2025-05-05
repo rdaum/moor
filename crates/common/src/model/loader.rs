@@ -14,15 +14,15 @@
 use byteview::ByteView;
 use uuid::Uuid;
 
-use moor_common::model::ObjSet;
-use moor_common::model::PropFlag;
-use moor_common::model::VerbArgsSpec;
-use moor_common::model::VerbDefs;
-use moor_common::model::VerbFlag;
-use moor_common::model::{CommitResult, WorldStateError};
-use moor_common::model::{ObjAttrs, PropPerms};
-use moor_common::model::{PropDef, PropDefs};
-use moor_common::util::BitEnum;
+use crate::model::ObjSet;
+use crate::model::PropFlag;
+use crate::model::VerbArgsSpec;
+use crate::model::VerbDefs;
+use crate::model::VerbFlag;
+use crate::model::{CommitResult, WorldStateError};
+use crate::model::{ObjAttrs, PropPerms};
+use crate::model::{PropDef, PropDefs};
+use crate::util::BitEnum;
 use moor_var::Obj;
 use moor_var::Var;
 

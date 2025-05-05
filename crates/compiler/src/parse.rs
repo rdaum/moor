@@ -48,7 +48,7 @@ pub mod moo {
     pub struct MooParser;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CompileOptions {
     /// Whether we allow lexical scope blocks. begin/end blocks and 'let' and 'global' statements
     pub lexical_scopes: bool,

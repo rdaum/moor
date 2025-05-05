@@ -21,10 +21,10 @@ use eyre::Report;
 use moor_common::build;
 use moor_db::{Database, TxDB};
 use moor_kernel::config::ImportExportFormat;
-use moor_kernel::objdef::ObjectDefinitionLoader;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
-use moor_kernel::textdump::textdump_load;
+use moor_objdef::ObjectDefinitionLoader;
+use moor_textdump::textdump_load;
 use rpc_common::load_keypair;
 use tracing::{debug, info, warn};
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -124,15 +124,18 @@ fn main() -> Result<(), Report> {
             match &config.import_export_config.import_format {
                 ImportExportFormat::Objdef => {
                     let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
-                    od.read_dirdump(config.features_config.clone(), import_path.as_ref())
-                        .unwrap();
+                    od.read_dirdump(
+                        config.features_config.compile_options(),
+                        import_path.as_ref(),
+                    )
+                    .unwrap();
                 }
                 ImportExportFormat::Textdump => {
                     textdump_load(
                         loader_interface.as_mut(),
                         import_path.clone(),
                         version.clone(),
-                        config.features_config.clone(),
+                        config.features_config.compile_options(),
                     )
                     .unwrap();
                 }

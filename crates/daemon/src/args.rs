@@ -15,7 +15,7 @@ use clap::builder::ValueHint;
 use clap_derive::{Parser, ValueEnum};
 use moor_db::DatabaseConfig;
 use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig, ImportExportFormat};
-use moor_kernel::textdump::EncodingMode;
+use moor_textdump::EncodingMode;
 use std::path::PathBuf;
 use std::time::Duration;
 

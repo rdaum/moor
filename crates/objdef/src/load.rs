@@ -11,11 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::config::FeaturesConfig;
-use crate::objdef::DirDumpReaderError;
+use crate::DirDumpReaderError;
 use moor_common::model::ObjAttrs;
+use moor_common::model::loader::LoaderInterface;
 use moor_compiler::{CompileOptions, ObjFileContext, ObjectDefinition, compile_object_definitions};
-use moor_db::loader::LoaderInterface;
 use moor_var::{NOTHING, Obj};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -37,7 +36,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
     pub fn read_dirdump(
         &mut self,
-        features_config: FeaturesConfig,
+        compile_options: CompileOptions,
         dirpath: &Path,
     ) -> Result<(), DirDumpReaderError> {
         let start_time = Instant::now();
@@ -51,7 +50,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
         let mut context = ObjFileContext::new();
 
         // Verb compilation options
-        let mut compile_options = features_config.compile_options();
+        let mut compile_options = compile_options.clone();
         compile_options.call_unsupported_builtins = true;
 
         // Collect all the file names,
@@ -276,7 +275,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::objdef::load::ObjectDefinitionLoader;
+    use crate::ObjectDefinitionLoader;
     use moor_common::model::{Named, PrepSpec, WorldStateSource};
     use moor_compiler::{CompileOptions, ObjFileContext};
     use moor_db::{Database, DatabaseConfig, TxDB};

@@ -30,6 +30,7 @@ use std::fmt::{Debug, Display};
 use thiserror::Error;
 
 mod defset;
+pub mod loader;
 mod r#match;
 mod objects;
 mod objset;

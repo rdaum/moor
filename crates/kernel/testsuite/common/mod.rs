@@ -27,13 +27,12 @@ use moor_compiler::Program;
 use moor_compiler::{CompileOptions, compile};
 use moor_db::{Database, DatabaseConfig, TxDB};
 use moor_kernel::builtins::BuiltinRegistry;
-use moor_kernel::config::FeaturesConfig;
 use moor_kernel::tasks::sessions::NoopClientSession;
 use moor_kernel::tasks::sessions::Session;
 use moor_kernel::tasks::vm_test_utils;
 use moor_kernel::tasks::vm_test_utils::ExecResult;
-use moor_kernel::textdump::textdump_load;
 use moor_moot::test_db_path;
+use moor_textdump::textdump_load;
 use moor_var::Symbol;
 use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
 use moor_var::{List, Obj};
@@ -52,7 +51,7 @@ pub fn load_textdump(db: &dyn Database) {
         tx.as_mut(),
         test_db_path(),
         Version::new(0, 1, 0),
-        FeaturesConfig::default(),
+        CompileOptions::default(),
     )
     .expect("Could not load textdump");
     assert_eq!(tx.commit().unwrap(), CommitResult::Success);

@@ -23,9 +23,7 @@ use std::marker::PhantomData;
 
 pub mod builtins;
 pub mod config;
-pub mod objdef;
 pub mod tasks;
-pub mod textdump;
 pub mod vm;
 
 /// A phantom type for explicitly marking types as !Sync

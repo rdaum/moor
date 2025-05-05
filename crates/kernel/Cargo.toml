@@ -50,6 +50,8 @@ moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
 moor-moot = { path = "../testing/moot", features = ["colors"] }
+moor-objdef = { path = "../objdef" }
+moor-textdump = { path = "../textdump" }
 moor-var = { path = "../var" }
 
 ## General usefulness
@@ -65,7 +67,6 @@ oneshot.workspace = true
 semver.workspace = true
 serde.workspace = true
 strum.workspace = true
-text_io.workspace = true
 uuid.workspace = true
 
 ## Required for MOO builtins.

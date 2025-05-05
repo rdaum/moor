@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{
     HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, prop_flags_string, verb_perms_string,
 };
@@ -18,7 +19,6 @@ use moor_compiler::{
     ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, Program, program_to_tree,
     to_literal, to_literal_objsub, unparse,
 };
-use moor_db::loader::LoaderInterface;
 use moor_var::{AsByteBuffer, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_str, v_string};
 use std::collections::HashMap;
 use std::io::Write;
@@ -350,13 +350,11 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
 
 #[cfg(test)]
 mod tests {
-    use crate::config::FeaturesConfig;
-    use crate::objdef::{
-        ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions,
-    };
-    use crate::textdump::textdump_load;
+    use crate::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
     use moor_common::model::CommitResult;
+    use moor_compiler::CompileOptions;
     use moor_db::{Database, DatabaseConfig, TxDB};
+    use moor_textdump::textdump_load;
     use semver::Version;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -372,11 +370,6 @@ mod tests {
 
         let tmpdir = tempfile::tempdir().unwrap();
         let tmpdir_path = tmpdir.path();
-        let feaures_config = FeaturesConfig {
-            // JHCore has an erroneous "E_PERMS" in it, which causes confusions.
-            custom_errors: true,
-            ..Default::default()
-        };
         {
             let (db, _) = TxDB::open(None, DatabaseConfig::default());
             let db = Arc::new(db);
@@ -386,7 +379,7 @@ mod tests {
                 loader_client.as_mut(),
                 jhcore,
                 Version::new(0, 1, 0),
-                feaures_config.clone(),
+                CompileOptions::default(),
             )
             .unwrap();
             assert_eq!(loader_client.commit().unwrap(), CommitResult::Success);
@@ -403,7 +396,9 @@ mod tests {
         // Now load
         let mut loader = db.loader_client().unwrap();
         let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
-        defloader.read_dirdump(feaures_config, tmpdir_path).unwrap();
+        defloader
+            .read_dirdump(CompileOptions::default(), tmpdir_path)
+            .unwrap();
 
         // Round trip worked, so we'll just leave it at that for now. A more anal retentive test
         // would go look at known objects and props etc and compare.

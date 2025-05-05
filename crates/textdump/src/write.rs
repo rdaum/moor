@@ -16,8 +16,8 @@ use moor_var::{Var, VarType, Variant};
 use std::collections::BTreeMap;
 use std::io;
 
-use crate::textdump::read::TYPE_CLEAR;
-use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
+use crate::read::TYPE_CLEAR;
+use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_var::Associative;
 
 pub struct TextdumpWriter<W: io::Write> {

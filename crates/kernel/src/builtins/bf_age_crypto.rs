@@ -121,11 +121,11 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             recipients.push(Box::new(x25519_recipient) as Box<dyn AgeRecipient>);
             continue;
         }
-        let ssh_key = PublicKey::from_openssh(recipient_str).map_err(|_| {{
+        let ssh_key = PublicKey::from_openssh(recipient_str).map_err(|_| {
             warn!("Failed to parse SSH key");
             BfErr::Code(E_INVARG)
-        }})?;
-        
+        })?;
+
         let ssh_recipient = age::ssh::Recipient::from_str(&ssh_key.to_string()).map_err(|_| {
             warn!("Failed to create age recipient from SSH key");
             BfErr::Code(E_INVARG)

@@ -1,0 +1,35 @@
+[package]
+name = "moor-textdump"
+version = "0.9.0-alpha"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+resolver = "2"
+rust-version.workspace = true
+description = "LambdaMOO compatible textdump parsing and generation for mooR."
+
+[dev-dependencies]
+moor-db = { path = "../db" }
+similar-asserts.workspace = true
+
+[dependencies]
+## Own
+moor-common = { path = "../common" }
+moor-compiler = { path = "../compiler" }
+moor-var = { path = "../var" }
+
+## General usefulness
+encoding_rs.workspace = true
+semver.workspace = true
+serde.workspace = true
+strum.workspace = true
+
+## Logging & tracing
+tracing.workspace = true
+
+## Error declaration/ handling
+thiserror.workspace = true

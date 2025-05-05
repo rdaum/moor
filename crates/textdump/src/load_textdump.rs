@@ -11,21 +11,21 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::config::{FeaturesConfig, TextdumpVersion};
-use crate::textdump::read::TextdumpReaderError;
-use crate::textdump::{
-    Object, PREP_ANY, PREP_NONE, TextdumpReader, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS,
-    VF_DEBUG, VF_DOBJSHIFT, VF_EXEC, VF_IOBJSHIFT, VF_OBJMASK, VF_PERMMASK, VF_READ, VF_WRITE,
+use crate::read::TextdumpReaderError;
+use crate::{
+    Object, PREP_ANY, PREP_NONE, TextdumpReader, TextdumpVersion, VF_ASPEC_ANY, VF_ASPEC_NONE,
+    VF_ASPEC_THIS, VF_DEBUG, VF_DOBJSHIFT, VF_EXEC, VF_IOBJSHIFT, VF_OBJMASK, VF_PERMMASK, VF_READ,
+    VF_WRITE,
 };
 use moor_common::matching::Preposition;
 use moor_common::model::PropFlag;
 use moor_common::model::VerbFlag;
+use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_common::model::{ObjAttrs, ObjFlag};
 use moor_common::util::BitEnum;
-use moor_compiler::Program;
 use moor_compiler::compile;
-use moor_db::loader::LoaderInterface;
+use moor_compiler::{CompileOptions, Program};
 use moor_var::Obj;
 use moor_var::Var;
 use moor_var::{AsByteBuffer, NOTHING};
@@ -89,7 +89,7 @@ pub fn textdump_load(
     ldr: &mut dyn LoaderInterface,
     path: PathBuf,
     moor_version: Version,
-    features_config: FeaturesConfig,
+    features_config: CompileOptions,
 ) -> Result<(), TextdumpReaderError> {
     let textdump_import_span = span!(tracing::Level::INFO, "textdump_import");
     let _enter = textdump_import_span.enter();
@@ -102,11 +102,27 @@ pub fn textdump_load(
     read_textdump(ldr, br, moor_version, features_config)
 }
 
+/// Returns true if the compile options are compatible with another configuration, for the purposes
+/// of textdump loading.
+///
+/// Which means that if the other configuration has a feature enabled, this configuration
+/// must also have it enabled.
+/// The other way around is fine.
+pub fn is_textdump_compatible(a: &CompileOptions, other: &CompileOptions) -> bool {
+    (!other.lexical_scopes || a.lexical_scopes)
+        && (!other.map_type || a.map_type)
+        && (!other.bool_type || a.bool_type)
+        && (!other.flyweight_type || a.flyweight_type)
+        && (!other.symbol_type || a.symbol_type)
+        && (!other.list_comprehensions || a.list_comprehensions)
+        && (!other.custom_errors || a.custom_errors)
+}
+
 pub fn read_textdump<T: io::Read>(
     loader: &mut dyn LoaderInterface,
     reader: BufReader<T>,
     moo_version: Version,
-    features_config: FeaturesConfig,
+    compile_options: CompileOptions,
 ) -> Result<(), TextdumpReaderError> {
     let mut tdr = TextdumpReader::new(reader)?;
     // Validate the textdumps' version string against the configuration of the server.
@@ -128,7 +144,7 @@ pub fn read_textdump<T: io::Read>(
                      and datatypes unsupported by mooR. This may cause errors requiring manual intervention."
             );
         }
-        TextdumpVersion::Moor(v, features, _encoding) => {
+        TextdumpVersion::Moor(v, other_options, _encoding) => {
             // Semver major versions must match.
             // TODO: We will let minor and patch versions slide, but may need to get stricter
             //   about minor in the future.
@@ -139,17 +155,18 @@ pub fn read_textdump<T: io::Read>(
             }
 
             // Features mut be compatible
-            if !features_config.is_textdump_compatible(features) {
+            if !is_textdump_compatible(&compile_options, other_options) {
                 return Err(TextdumpReaderError::VersionError(
-                    "Incompatible features".to_string(),
+                    "Incompatible compiler features".to_string(),
                 ));
             }
         }
     }
 
     let td = tdr.read_textdump()?;
-    let mut compile_options = features_config.compile_options();
+
     // For textdump imports we wrap unknown functions up in `call_function`...
+    let mut compile_options = compile_options.clone();
     compile_options.call_unsupported_builtins = true;
 
     info!("Instantiating objects");

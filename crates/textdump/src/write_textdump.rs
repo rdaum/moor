@@ -13,16 +13,16 @@
 
 use std::collections::BTreeMap;
 
-use crate::textdump::{
+use crate::{
     Object, Propval, Textdump, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS, VF_DOBJSHIFT,
     VF_IOBJSHIFT, Verb, Verbdef,
 };
+use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
 use moor_common::model::{BinaryType, VerbFlag};
 use moor_common::model::{HasUuid, Named};
 use moor_common::util::BitEnum;
 use moor_compiler::Program;
-use moor_db::loader::LoaderInterface;
 use moor_var::v_none;
 use moor_var::{AsByteBuffer, NOTHING};
 

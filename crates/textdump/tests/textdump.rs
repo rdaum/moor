@@ -24,14 +24,14 @@ mod test {
     use moor_common::model::VerbArgsSpec;
     use moor_common::model::VerbFlag;
     use moor_common::model::WorldStateSource;
+    use moor_common::model::loader::LoaderInterface;
     use moor_common::model::{CommitResult, ValSet};
     use moor_common::model::{HasUuid, Named};
-    use moor_compiler::Program;
-    use moor_db::loader::LoaderInterface;
+    use moor_compiler::{CompileOptions, Program};
     use moor_db::{Database, DatabaseConfig, TxDB};
-    use moor_kernel::config::{FeaturesConfig, LambdaMOODBVersion, TextdumpVersion};
-    use moor_kernel::textdump::{
-        EncodingMode, TextdumpReader, make_textdump, read_textdump, textdump_load,
+    use moor_textdump::{
+        EncodingMode, LambdaMOODBVersion, TextdumpReader, TextdumpVersion, TextdumpWriter,
+        make_textdump, read_textdump, textdump_load,
     };
     use moor_var::Symbol;
     use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
@@ -44,7 +44,7 @@ mod test {
     }
 
     fn load_textdump_file(mut tx: Box<dyn LoaderInterface>, path: &str) {
-        let feaures_config = FeaturesConfig {
+        let compile_options = CompileOptions {
             // JHCore has an erroneous "E_PERMS" in it, which causes confusions.
             custom_errors: true,
             ..Default::default()
@@ -53,7 +53,7 @@ mod test {
             tx.as_mut(),
             PathBuf::from(path),
             Version::new(0, 1, 0),
-            feaures_config,
+            compile_options,
         )
         .expect("Could not load textdump");
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
@@ -64,8 +64,7 @@ mod test {
         let mut output = Vec::new();
         let textdump = make_textdump(tx.as_ref(), version.to_string());
 
-        let mut writer =
-            moor_kernel::textdump::TextdumpWriter::new(&mut output, EncodingMode::UTF8);
+        let mut writer = TextdumpWriter::new(&mut output, EncodingMode::UTF8);
         writer
             .write_textdump(&textdump)
             .expect("Failed to write textdump");
@@ -179,8 +178,7 @@ mod test {
         let td = tdr.read_textdump().expect("Failed to read textdump");
 
         let mut output = Vec::new();
-        let mut writer =
-            moor_kernel::textdump::TextdumpWriter::new(&mut output, EncodingMode::UTF8);
+        let mut writer = TextdumpWriter::new(&mut output, EncodingMode::UTF8);
         writer
             .write_textdump(&td)
             .expect("Failed to write textdump");
@@ -209,7 +207,7 @@ mod test {
             tx.as_mut(),
             minimal_db,
             Version::new(0, 1, 0),
-            FeaturesConfig::default(),
+            CompileOptions::default(),
         )
         .unwrap();
         assert_eq!(tx.commit().unwrap(), CommitResult::Success);
@@ -309,7 +307,7 @@ mod test {
             lc.as_mut(),
             buffered_string_reader,
             Version::new(0, 1, 0),
-            FeaturesConfig::default(),
+            CompileOptions::default(),
         )
         .unwrap();
         assert_eq!(lc.commit().unwrap(), CommitResult::Success);

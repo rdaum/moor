@@ -33,7 +33,6 @@ use moor_db::Database;
 
 use crate::builtins::BuiltinRegistry;
 use crate::config::{Config, ImportExportFormat};
-use crate::objdef::{collect_object_definitions, dump_object_definitions};
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::sessions::{Session, SessionFactory, SystemControl};
 use crate::tasks::suspension::{SuspensionQ, WakeCondition};
@@ -45,7 +44,6 @@ use crate::tasks::{
     DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
     DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart, sched_counters,
 };
-use crate::textdump::{TextdumpWriter, make_textdump};
 use crate::vm::{Fork, TaskSuspend};
 use moor_common::matching::ObjectNameMatcher;
 use moor_common::matching::match_env::DefaultObjectNameMatcher;
@@ -59,6 +57,8 @@ use moor_common::tasks::{
     VerbProgramError, WorkerError,
 };
 use moor_common::util::PerfTimerGuard;
+use moor_objdef::{collect_object_definitions, dump_object_definitions};
+use moor_textdump::{TextdumpWriter, make_textdump};
 use moor_var::Error::{E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_var::{AsByteBuffer, SYSTEM_OBJECT, v_list};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};

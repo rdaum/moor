@@ -7,12 +7,14 @@ members = [
     "crates/daemon",
     "crates/db",
     "crates/kernel",
+    "crates/objdef",
     "crates/rpc/rpc-async-client",
     "crates/rpc/rpc-common",
     "crates/rpc/rpc-sync-client",
     "crates/telnet-host",
     "crates/testing/load-tools",
     "crates/testing/moot",
+    "crates/textdump",
     "crates/var",
     "crates/web-host",
     "tools/moorc",
@@ -22,7 +24,9 @@ default-members = [
     "crates/common",
     "crates/compiler",
     "crates/kernel",
+    "crates/objdef",
     "crates/db",
+    "crates/textdump",
     "crates/rpc/rpc-common",
     "crates/rpc/rpc-sync-client",
     "crates/rpc/rpc-async-client",
@@ -150,7 +154,6 @@ paste = "1.0"
 # For the DB & common layer.
 fjall = { version = "2.10", default-features = false }
 libc = "0.2"
-text_io = "0.1" # Used for reading text dumps.
 
 # Dev dependencies
 tempfile = "3.10"

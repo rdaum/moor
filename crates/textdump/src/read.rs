@@ -14,18 +14,17 @@
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read};
 
-use text_io::scan;
 use tracing::{info, warn};
 
-use crate::config::LambdaMOODBVersion::DbvFloat;
+use crate::LambdaMOODBVersion::DbvFloat;
 
-use crate::config::TextdumpVersion;
-use crate::config::TextdumpVersion::{LambdaMOO, ToastStunt};
-use crate::config::ToastStuntDBVersion::{
+use crate::TextdumpVersion;
+use crate::TextdumpVersion::{LambdaMOO, ToastStunt};
+use crate::ToastStuntDBVersion::{
     ToastDbvAnon, ToastDbvInterrupt, ToastDbvLastMove, ToastDbvNextGen, ToastDbvTaskLocal,
     ToastDbvThis, ToastDbvThreaded,
 };
-use crate::textdump::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
+use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_common::model::CompileError;
 use moor_common::model::WorldStateError;
 use moor_compiler::Label;
@@ -469,8 +468,30 @@ impl<R: Read> TextdumpReader<R> {
     }
     fn read_verb(&mut self) -> Result<Verb, TextdumpReaderError> {
         let header = self.read_string()?;
-        let (oid, verbnum): (i32, usize);
-        scan!(header.bytes() => "#{}:{}", oid, verbnum);
+
+        let (oid, verbnum) = match header.strip_prefix('#').and_then(|s| s.split_once(':')) {
+            Some((oid_str, verbnum_str)) => {
+                let oid = oid_str.parse::<i32>().map_err(|e| {
+                    TextdumpReaderError::ParseError(
+                        format!("invalid object id: {}", e),
+                        self.line_num,
+                    )
+                })?;
+                let verbnum = verbnum_str.parse::<usize>().map_err(|e| {
+                    TextdumpReaderError::ParseError(
+                        format!("invalid verb number: {}", e),
+                        self.line_num,
+                    )
+                })?;
+                (oid, verbnum)
+            }
+            None => {
+                return Err(TextdumpReaderError::ParseError(
+                    format!("invalid verb header format: {}", header),
+                    self.line_num,
+                ));
+            }
+        };
 
         // Collect lines
         let program_lines = self.read_program()?;
