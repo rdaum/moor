@@ -17,6 +17,9 @@ COPY ./Cargo.lock ./Cargo.lock
 # We bring this over so we can get the git hash via shadow-rs. A bit bloated, but oh well.
 COPY ./.git ./.git
 
+# Set some additional build flags
+ENV RUSTFLAGS="-C target-cpu=native"
+
 RUN CARGO_PROFILE_RELEASE_DEBUG=true cargo build --all-targets --release
 COPY ./crates/web-host/src/client ./client
 
