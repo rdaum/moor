@@ -59,6 +59,16 @@ readme = "README.md"
 repository = "https://github.com/rdaum/moor.git"
 rust-version = "1.85.0"
 
+[profile.release]
+# The Rust compiler splits crates into multiple codegen units to parallelize (and thus speed up)
+# compilation. However, this might cause it to miss some potential optimizations.
+# You may be able to improve runtime speed and reduce binary size, at the cost of increased
+# compile times, by setting the number of units to one.
+codegen-units = 1
+# Link-time optimization (LTO) is a whole-program optimization technique that can improve runtime
+# speed by 10-20% or more, and also reduce binary size, at the cost of worse compile times.
+lto = "fat"
+
 [workspace.dependencies]
 ## Command line arguments parsing.
 clap = "4.5"
@@ -67,6 +77,7 @@ clap_derive = "4.5"
 ## HTTP/websockets front-end
 axum = { version = "0.8", features = ["ws"] }
 serde = { version = "1.0", features = ["derive"] }
+
 serde_derive = "1.0"
 serde_json = "1.0"
 
