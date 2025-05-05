@@ -19,6 +19,7 @@ use clap::Parser;
 use eyre::Report;
 use moor_common::build;
 use moor_db::{Database, TxDB};
+use moor_kernel::config::ImportExportFormat;
 use moor_kernel::objdef::ObjectDefinitionLoader;
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
@@ -104,12 +105,12 @@ fn main() -> Result<(), Report> {
     let database = Box::new(database);
     info!(path = ?args.db_args.db, "Opened database");
 
-    if let Some(textdump) = config.textdump_config.input_path.as_ref() {
+    if let Some(import_path) = config.import_export_config.input_path.as_ref() {
         // If the database already existed, do not try to import the textdump...
         if !freshly_made {
             info!("Database already exists, skipping textdump import");
         } else {
-            info!("Loading textdump from {:?}", textdump);
+            info!("Loading textdump from {:?}", import_path);
             let start = std::time::Instant::now();
             let mut loader_interface = database
                 .loader_client()
@@ -118,18 +119,21 @@ fn main() -> Result<(), Report> {
             // We have two ways of loading textdump.
             // legacy "textdump" format from LambdaMOO,
             // or our own exploded objdef format.
-            if config.textdump_config.import_dirdump {
-                let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
-                od.read_dirdump(config.features_config.clone(), textdump.as_ref())
+            match &config.import_export_config.import_format {
+                ImportExportFormat::Objdef => {
+                    let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
+                    od.read_dirdump(config.features_config.clone(), import_path.as_ref())
+                        .unwrap();
+                }
+                ImportExportFormat::Textdump => {
+                    textdump_load(
+                        loader_interface.as_mut(),
+                        import_path.clone(),
+                        version.clone(),
+                        config.features_config.clone(),
+                    )
                     .unwrap();
-            } else {
-                textdump_load(
-                    loader_interface.as_mut(),
-                    textdump.clone(),
-                    version.clone(),
-                    config.features_config.clone(),
-                )
-                .unwrap();
+                }
             }
 
             let duration = start.elapsed();
@@ -183,8 +187,8 @@ fn main() -> Result<(), Report> {
 
     // Background DB checkpoint thread.
     if let (Some(checkpoint_interval), Some(output_path)) = (
-        config.textdump_config.checkpoint_interval,
-        config.textdump_config.output_path.clone(),
+        config.import_export_config.checkpoint_interval,
+        config.import_export_config.output_path.clone(),
     ) {
         let checkpoint_kill_switch = kill_switch.clone();
         let checkpoint_scheduler_client = scheduler_client.clone();
