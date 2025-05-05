@@ -17,7 +17,9 @@ use tmq::subscribe::Subscribe;
 use tracing::trace;
 use uuid::Uuid;
 
-use rpc_common::{ClientEvent, ClientsBroadcastEvent, HostBroadcastEvent, RpcError};
+use rpc_common::{
+    ClientEvent, ClientsBroadcastEvent, DaemonToWorkerMessage, HostBroadcastEvent, RpcError,
+};
 
 pub async fn events_recv(
     client_id: Uuid,
@@ -138,6 +140,49 @@ pub async fn hosts_events_recv(subscribe: &mut Subscribe) -> Result<HostBroadcas
     let (msg, _msg_size): (HostBroadcastEvent, usize) =
         bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
             RpcError::CouldNotDecode(format!("Unable to decode host broadcast message: {}", e))
+        })?;
+    Ok(msg)
+}
+
+pub async fn workers_events_recv(
+    subscribe: &mut Subscribe,
+) -> Result<DaemonToWorkerMessage, RpcError> {
+    let Some(Ok(mut inbound)) = subscribe.next().await else {
+        return Err(RpcError::CouldNotReceive(
+            "Unable to receive worker broadcast message".to_string(),
+        ));
+    };
+
+    trace!(message = ?inbound, "worker_broadcast_message");
+    if inbound.len() != 2 {
+        return Err(RpcError::CouldNotDecode(format!(
+            "Unexpected message length: {}",
+            inbound.len()
+        )));
+    }
+
+    let Some(topic) = inbound.pop_front() else {
+        return Err(RpcError::CouldNotDecode(
+            "Unexpected message format".to_string(),
+        ));
+    };
+
+    if &topic[..] != b"workers" {
+        return Err(RpcError::CouldNotDecode(format!(
+            "Unexpected topic: {:?}",
+            topic
+        )));
+    }
+
+    let Some(event) = inbound.pop_front() else {
+        return Err(RpcError::CouldNotDecode(
+            "Unexpected message format".to_string(),
+        ));
+    };
+
+    let (msg, _msg_size): (DaemonToWorkerMessage, usize) =
+        bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
+            RpcError::CouldNotDecode(format!("Unable to decode worker broadcast message: {}", e))
         })?;
     Ok(msg)
 }

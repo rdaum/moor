@@ -32,7 +32,7 @@ use rolldown::{
     RawMinifyOptions, SourceMapType, Watcher,
 };
 use rpc_async_client::{
-    ListenersClient, ListenersMessage, make_host_token, proces_hosts_events, start_host_session,
+    ListenersClient, ListenersMessage, make_host_token, process_hosts_events, start_host_session,
 };
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{HostType, load_keypair};
@@ -401,7 +401,7 @@ async fn main() -> Result<(), eyre::Error> {
         .await
         .expect("Unable to start default listener");
 
-    let host_listen_loop = proces_hosts_events(
+    let host_listen_loop = process_hosts_events(
         rpc_client,
         host_token,
         zmq_ctx.clone(),

@@ -40,6 +40,7 @@ use crate::tasks::suspension::{SuspensionQ, WakeCondition};
 use crate::tasks::task::Task;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
+use crate::tasks::workers::{WorkerRequest, WorkerResponse};
 use crate::tasks::{
     DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
     DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart, sched_counters,
@@ -54,11 +55,12 @@ use moor_common::tasks::SchedulerError::{
     TaskAbortedException, TaskAbortedLimit, VerbProgramFailed,
 };
 use moor_common::tasks::{
-    AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError, TaskId, VerbProgramError,
+    AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError, TaskId,
+    VerbProgramError, WorkerError,
 };
 use moor_common::util::PerfTimerGuard;
-use moor_var::Error::{E_INVARG, E_INVIND, E_PERM};
-use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
+use moor_var::Error::{E_INVARG, E_INVIND, E_PERM, E_TYPE};
+use moor_var::{AsByteBuffer, SYSTEM_OBJECT, v_list};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};
 use moor_var::{Obj, Variant};
 
@@ -105,6 +107,9 @@ pub struct Scheduler {
     builtin_registry: Arc<BuiltinRegistry>,
 
     system_control: Arc<dyn SystemControl>,
+
+    worker_request_send: Option<Sender<WorkerRequest>>,
+    worker_request_recv: Option<Receiver<WorkerResponse>>,
 
     /// The internal task queue which holds our suspended tasks, and control records for actively
     /// running tasks.
@@ -163,6 +168,8 @@ impl Scheduler {
         tasks_database: Box<dyn TasksDb>,
         config: Arc<Config>,
         system_control: Arc<dyn SystemControl>,
+        worker_request_send: Option<Sender<WorkerRequest>>,
+        worker_request_recv: Option<Receiver<WorkerResponse>>,
     ) -> Self {
         let (task_control_sender, task_control_receiver) = crossbeam_channel::unbounded();
         let (scheduler_sender, scheduler_receiver) = crossbeam_channel::unbounded();
@@ -193,6 +200,8 @@ impl Scheduler {
             builtin_registry,
             server_options: default_server_options,
             system_control,
+            worker_request_send,
+            worker_request_recv,
         }
     }
 
@@ -230,6 +239,14 @@ impl Scheduler {
             if let Ok(msg) = self.scheduler_receiver.try_recv() {
                 self.handle_scheduler_msg(msg);
                 found_work = true;
+            }
+
+            // Handle any worker responses
+            if let Some(worker_response_recv) = self.worker_request_recv.as_ref() {
+                if let Ok(worker_response) = worker_response_recv.try_recv() {
+                    self.handle_worker_response(worker_response);
+                    found_work = true;
+                }
             }
 
             if let Ok((task_id, msg)) = self.task_control_receiver.try_recv() {
@@ -1078,6 +1095,27 @@ impl Scheduler {
                     TaskSuspend::Timed(t) => WakeCondition::Time(Instant::now() + t),
                     TaskSuspend::WaitTask(task_id) => WakeCondition::Task(task_id),
                     TaskSuspend::Commit => WakeCondition::Immedate,
+                    TaskSuspend::WorkerRequest(worker_type, args) => {
+                        let worker_request_id = Uuid::new_v4();
+                        // Send out a message over the workers channel.
+                        // If we're not set up to do workers, just abort the task.
+                        let Some(workers_sender) = self.worker_request_send.as_ref() else {
+                            warn!("No workers configured for scheduler; aborting task");
+                            return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                        };
+
+                        if let Err(e) = workers_sender.send(WorkerRequest::Request {
+                            request_id: worker_request_id,
+                            request_type: worker_type,
+                            perms: task.perms.clone(),
+                            request: args,
+                        }) {
+                            error!(?e, "Could not send worker request; aborting task");
+                            return task_q.send_task_result(task_id, Err(TaskAbortedError));
+                        }
+
+                        WakeCondition::Worker(worker_request_id)
+                    }
                 };
 
                 task_q
@@ -1116,6 +1154,7 @@ impl Scheduler {
 
                 trace!(?task_id, "Task suspended waiting for input");
             }
+
             TaskControlMsg::RequestTasks(reply) => {
                 let tasks = self.task_q.suspended.tasks();
                 if let Err(e) = reply.send(tasks) {
@@ -1272,6 +1311,49 @@ impl Scheduler {
                     error!(?e, "Could not send active tasks to requester");
                 }
             }
+        }
+    }
+
+    fn handle_worker_response(&mut self, worker_response: WorkerResponse) {
+        let (request_id, response_value) = match worker_response {
+            WorkerResponse::Error { request_id, error } => {
+                // TODO: these should be returning full ErrorPack stuff, not these amputated codes
+                //  which tell you almost nothing
+                //  Custom errors could also be used here, but are not turned on for all servers.
+                //  So some intelligence will be required to figure out what to do with this.
+                let err = match error {
+                    WorkerError::PermissionDenied(_) => E_PERM,
+                    WorkerError::NoWorkerAvailable(_) => E_TYPE,
+                    _ => E_INVARG,
+                };
+                (request_id, v_err(err))
+            }
+            WorkerResponse::Response {
+                request_id,
+                response,
+            } => (request_id, v_list(&response)),
+        };
+
+        // Find the suspended task for this request.
+        let task = self.task_q.suspended.pull_task_for_worker(request_id);
+
+        // Find the task that requested this input, if any
+        let Some(sr) = task else {
+            warn!(?request_id, "Task for worker request not found; expired?");
+            return;
+        };
+
+        if let Err(e) = self.task_q.resume_task_thread(
+            sr.task,
+            response_value,
+            sr.session,
+            sr.result_sender,
+            &self.task_control_sender,
+            self.database.as_ref(),
+            self.builtin_registry.clone(),
+            self.config.clone(),
+        ) {
+            error!("Failure to resume task after worker response: {:?}", e);
         }
     }
 

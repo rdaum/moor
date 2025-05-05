@@ -1511,6 +1511,31 @@ fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(force_input, bf_force_input);
 
+/// worker_request(worker_type, args, ...)
+/// Sends a request to a worker (e.g. outbound HTTP, files, etc.) to perform some action.
+/// Task then goes into suspension until the request is completed or times out.
+/// Wizard only.
+fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    bf_args
+        .task_perms()
+        .map_err(world_state_bf_err)?
+        .check_wizard()
+        .map_err(world_state_bf_err)?;
+
+    if bf_args.args.len() < 2 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let worker_type = bf_args.args[0].as_symbol().map_err(BfErr::Code)?;
+
+    // The args are everything after the first argument
+    let args = bf_args.args.iter().skip(1).collect();
+    Ok(VmInstr(ExecutionResult::TaskSuspend(
+        TaskSuspend::WorkerRequest(worker_type, args),
+    )))
+}
+bf_declare!(worker_request, bf_worker_request);
+
 pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(BfNotify {});
     builtins[offset_for_builtin("connected_players")] = Box::new(BfConnectedPlayers {});
@@ -1557,6 +1582,6 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("wait_task")] = Box::new(BfWaitTask {});
     builtins[offset_for_builtin("commit")] = Box::new(BfCommit {});
     builtins[offset_for_builtin("rollback")] = Box::new(BfRollback {});
-
     builtins[offset_for_builtin("present")] = Box::new(BfPresent {});
+    builtins[offset_for_builtin("worker_request")] = Box::new(BfWorkerRequest {});
 }

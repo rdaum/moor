@@ -487,7 +487,6 @@ impl RpcServer {
                 let connection = self.client_auth(token, client_id)?;
                 self.validate_auth_token(auth_token, Some(&connection))?;
 
-                let request_id = Uuid::from_u128(request_id);
                 self.clone().respond_input(
                     scheduler_client,
                     client_id,
@@ -1274,7 +1273,7 @@ impl RpcServer {
             return Err(SessionError::NoConnectionForPlayer(player));
         }
 
-        let event = ClientEvent::RequestInput(input_request_id.as_u128());
+        let event = ClientEvent::RequestInput(input_request_id);
         let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
             .expect("Unable to serialize input request");
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];

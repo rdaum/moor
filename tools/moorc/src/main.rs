@@ -315,6 +315,8 @@ fn main() {
         tasks_db,
         Arc::new(config),
         Arc::new(NoopSystemControl::default()),
+        None,
+        None,
     );
     let scheduler_client = scheduler.client().unwrap();
     let session_factory = Arc::new(crate::testrun::NoopSessionFactory {});

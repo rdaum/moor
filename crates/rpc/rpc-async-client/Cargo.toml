@@ -13,6 +13,7 @@ description = "Utilities for connection to the 0MQ RPC server via tokio/async ca
 
 [dependencies]
 # Own
+moor-common = { path = "../../common" }
 moor-var = { path = "../../var" }
 rpc-common = { path = "../rpc-common" }
 

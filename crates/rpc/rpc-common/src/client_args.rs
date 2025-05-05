@@ -48,4 +48,20 @@ pub struct RpcClientArgs {
         default_value = "moor-signing-key.pem"
     )]
     pub private_key: PathBuf,
+
+    #[arg(
+        long,
+        value_name = "workers-dispatch_address",
+        help = "Workers server ZMQ pub-sub address for receiving dispatch requests",
+        default_value = "ipc:///tmp/moor_workers_response.sock"
+    )]
+    pub workers_response_address: String,
+
+    #[arg(
+        long,
+        value_name = "workers-address",
+        help = "Workers server ZMQ RPC for sending dispatch responses",
+        default_value = "ipc:///tmp/moor_workers_request.sock"
+    )]
+    pub workers_request_address: String,
 }

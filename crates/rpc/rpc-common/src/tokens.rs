@@ -21,6 +21,7 @@ use thiserror::Error;
 pub const MOOR_HOST_TOKEN_FOOTER: &str = "key-id:moor_host";
 pub const MOOR_SESSION_TOKEN_FOOTER: &str = "key-id:moor_client";
 pub const MOOR_AUTH_TOKEN_FOOTER: &str = "key-id:moor_player";
+pub const MOOR_WORKER_TOKEN_FOOTER: &str = "key-id:moor_worker";
 
 /// PASETO public token representing the host's identity.
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
@@ -34,6 +35,10 @@ pub struct ClientToken(pub String);
 /// PASTEO public token for an authenticated player, encoding the player's identity.
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
 pub struct AuthToken(pub String);
+
+/// PASETO public token for a worker. Encodes the worker type, and its creation time.
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode, Hash)]
+pub struct WorkerToken(pub String);
 
 #[derive(Error, Debug)]
 pub enum KeyError {
