@@ -172,7 +172,7 @@ signal-hook = "0.3"
 termimad = "0.31"
 
 # For age encryption
-age = "0.11.1"
+age = "0.11"
 base64 = "0.21"
 ssh-key = "0.6"
 
