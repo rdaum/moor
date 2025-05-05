@@ -57,7 +57,7 @@ pub struct VerbExecutionRequest {
     /// The call parameters that were used to resolve the verb.
     pub call: VerbCall,
     /// The parsed user command that led to this verb dispatch, if any.
-    pub command: Option<ParsedCommand>,
+    pub command: Option<Box<ParsedCommand>>,
     /// The decoded MOO Binary that contains the verb to be executed.
     pub program: VerbProgram,
 }

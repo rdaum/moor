@@ -64,7 +64,7 @@ pub(crate) struct Activation {
     /// and caller_perms() returns the value of this in the *parent* stack frame (or #-1 if none)
     pub(crate) permissions: Obj,
     /// The command that triggered this verb call, if any.
-    pub(crate) command: Option<ParsedCommand>,
+    pub(crate) command: Option<Box<ParsedCommand>>,
 }
 
 impl Encode for Activation {
@@ -93,7 +93,7 @@ impl<C> Decode<C> for Activation {
         let args = Vec::<Var>::decode(decoder)?;
         let verb_name = Symbol::decode(decoder)?;
         let permissions = Obj::decode(decoder)?;
-        let command = Option::<ParsedCommand>::decode(decoder)?;
+        let command = Option::<Box<ParsedCommand>>::decode(decoder)?;
 
         let verbdef_bytes = Vec::<u8>::decode(decoder)?;
         let verbdef_bytes = ByteView::from(verbdef_bytes);
@@ -120,7 +120,7 @@ impl<'de, C> BorrowDecode<'de, C> for Activation {
         let args = Vec::<Var>::decode(decoder)?;
         let verb_name = Symbol::decode(decoder)?;
         let permissions = Obj::decode(decoder)?;
-        let command = Option::<ParsedCommand>::decode(decoder)?;
+        let command = Option::<Box<ParsedCommand>>::decode(decoder)?;
 
         let verbdef_bytes = Vec::<u8>::decode(decoder)?;
         let verbdef_bytes = ByteView::from(verbdef_bytes);

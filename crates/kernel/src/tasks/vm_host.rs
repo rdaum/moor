@@ -113,7 +113,7 @@ impl VmHost {
             permissions: permissions.clone(),
             resolved_verb: verb.1,
             call: verb_call,
-            command: Some(command),
+            command: Some(Box::new(command)),
             program,
         };
 

@@ -100,7 +100,7 @@ pub enum ExecutionResult {
         /// The call parameters that were used to resolve the verb.
         call: VerbCall,
         /// The parsed user command that led to this verb dispatch, if any.
-        command: Option<ParsedCommand>,
+        command: Option<Box<ParsedCommand>>,
     },
     /// Request `eval` execution, which is a kind of special activation creation where we've already
     /// been given the program to execute instead of having to look it up.
