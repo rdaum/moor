@@ -26,7 +26,7 @@ pub struct Args {
     pub db_args: DatabaseArgs,
 
     #[command(flatten)]
-    textdump_args: Option<ImportExportArgs>,
+    import_export_args: Option<ImportExportArgs>,
 
     #[command(flatten)]
     feature_args: Option<FeatureArgs>,
@@ -370,7 +370,7 @@ impl DatabaseArgs {
 impl Args {
     #[allow(dead_code)]
     pub fn merge_config(&self, mut config: Config) -> Config {
-        if let Some(args) = self.textdump_args.as_ref() {
+        if let Some(args) = self.import_export_args.as_ref() {
             args.merge_config(&mut config.import_export_config);
         }
         if let Some(args) = self.feature_args.as_ref() {

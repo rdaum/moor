@@ -105,12 +105,12 @@ fn main() -> Result<(), Report> {
     let database = Box::new(database);
     info!(path = ?args.db_args.db, "Opened database");
 
-    if let Some(textdump) = config.import_export_config.input_path.as_ref() {
+    if let Some(import_path) = config.import_export_config.input_path.as_ref() {
         // If the database already existed, do not try to import the textdump...
         if !freshly_made {
             info!("Database already exists, skipping textdump import");
         } else {
-            info!("Loading textdump from {:?}", textdump);
+            info!("Loading textdump from {:?}", import_path);
             let start = std::time::Instant::now();
             let mut loader_interface = database
                 .loader_client()
@@ -122,13 +122,13 @@ fn main() -> Result<(), Report> {
             match &config.import_export_config.import_format {
                 ImportExportFormat::Objdef => {
                     let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
-                    od.read_dirdump(config.features_config.clone(), textdump.as_ref())
+                    od.read_dirdump(config.features_config.clone(), import_path.as_ref())
                         .unwrap();
                 }
                 ImportExportFormat::Textdump => {
                     textdump_load(
                         loader_interface.as_mut(),
-                        textdump.clone(),
+                        import_path.clone(),
                         version.clone(),
                         config.features_config.clone(),
                     )

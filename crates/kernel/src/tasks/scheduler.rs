@@ -1317,7 +1317,7 @@ impl Scheduler {
         let dirdump = self.config.import_export_config.export_format == ImportExportFormat::Objdef;
 
         let tr = std::thread::Builder::new()
-            .name("textdump-thread".to_string())
+            .name("moor-export".to_string())
             .spawn(move || {
                 if dirdump {
                     info!("Collecting objects for dump...");
