@@ -1,5 +1,5 @@
 [package]
-name = "curl-worker"
+name = "moor-curl-worker"
 version = "0.9.0-alpha"
 authors.workspace = true
 categories.workspace = true

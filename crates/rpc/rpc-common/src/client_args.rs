@@ -51,7 +51,7 @@ pub struct RpcClientArgs {
 
     #[arg(
         long,
-        value_name = "workers-dispatch_address",
+        value_name = "workers-dispatch-address",
         help = "Workers server ZMQ pub-sub address for receiving dispatch requests",
         default_value = "ipc:///tmp/moor_workers_response.sock"
     )]

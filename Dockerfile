@@ -26,6 +26,10 @@ COPY ./crates/web-host/src/client ./client
 # But we don't need the source code and all the rust stuff and packages in our final image. Just slim.
 FROM linuxcontainers/debian-slim:latest
 
+# We need libssl for the curl worker
+RUN apt update
+RUN apt -y install libssl3
+
 WORKDIR /moor
 
 # The keys for signing and verifying PASETO tokens, we built them in the build image. We could do them here, but then
@@ -37,6 +41,7 @@ COPY --from=build ./moor-build/moor-verifying-key.pem ./moor-verifying-key.pem
 COPY --from=build /moor-build/target/release/moor-daemon /moor/moor-daemon
 COPY --from=build /moor-build/target/release/moor-web-host /moor/moor-web-host
 COPY --from=build /moor-build/target/release/moor-telnet-host /moor/moor-telnet-host
+COPY --from=build /moor-build/target/release/moor-curl-worker /moor/moor-curl-worker
 
 # The web client source directory
 COPY --from=build /moor-build/client /moor/client
