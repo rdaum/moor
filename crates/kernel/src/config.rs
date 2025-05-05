@@ -27,7 +27,7 @@ use strum::{Display, FromRepr};
 pub struct Config {
     pub database_config: DatabaseConfig,
     pub features_config: FeaturesConfig,
-    pub textdump_config: TextdumpConfig,
+    pub import_export_config: ImportExportConfig,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -139,11 +139,21 @@ impl FeaturesConfig {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Default, Eq, PartialEq)]
+pub enum ImportExportFormat {
+    /// The legacy LambdaMOO textdump format.
+    #[default]
+    Textdump,
+    /// The new-style directory based objectdef format.
+    Objdef,
+}
+
+/// Configuration for the import/export of textdumps or objdefs.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TextdumpConfig {
-    /// Where to read the initial textdump from, if any.
+pub struct ImportExportConfig {
+    /// Where to read the initial import from, if any.
     pub input_path: Option<PathBuf>,
-    /// Directory to write periodic textdumps of the database, if any.
+    /// Directory to write periodic export/backups of the database, if any.
     pub output_path: Option<PathBuf>,
     /// What encoding to use for writing textdumps (ISO-8859-1 or UTF-8).
     pub output_encoding: EncodingMode,
@@ -156,15 +166,13 @@ pub struct TextdumpConfig {
     /// This is useful for producing textdumps that are compatible with other servers, but be
     /// careful to not lie about the features (and encoding) you support.
     pub version_override: Option<String>,
-    /// If true, use the new-style directory based objectdef import format instead of traditional
-    /// textdump.
-    pub import_dirdump: bool,
-    /// If true, use the new-style directory based objectdef dump format instead of traditional
-    /// textdump.
-    pub export_dirdump: bool,
+    /// Which format to use for import.
+    pub import_format: ImportExportFormat,
+    /// Which format to use for export.
+    pub export_format: ImportExportFormat,
 }
 
-impl Default for TextdumpConfig {
+impl Default for ImportExportConfig {
     fn default() -> Self {
         Self {
             input_path: None,
@@ -172,13 +180,13 @@ impl Default for TextdumpConfig {
             output_encoding: EncodingMode::UTF8,
             checkpoint_interval: Some(Duration::from_secs(60)),
             version_override: None,
-            import_dirdump: false,
-            export_dirdump: false,
+            import_format: ImportExportFormat::Textdump,
+            export_format: ImportExportFormat::Textdump,
         }
     }
 }
 
-impl TextdumpConfig {
+impl ImportExportConfig {
     pub fn version_string(
         &self,
         moor_version: &Version,

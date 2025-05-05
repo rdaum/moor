@@ -23,7 +23,7 @@ use moor_common::build;
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource};
 use moor_common::tasks::SchedulerError;
 use moor_db::{Database, DatabaseConfig, TxDB};
-use moor_kernel::config::{Config, FeaturesConfig, TextdumpConfig};
+use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig};
 use moor_kernel::objdef::{
     ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions,
 };
@@ -211,7 +211,7 @@ fn main() {
 
         let version = semver::Version::parse(build::PKG_VERSION).expect("Invalid moor version");
 
-        let textdump_config = TextdumpConfig::default();
+        let textdump_config = ImportExportConfig::default();
         let encoding_mode = EncodingMode::UTF8;
         let version_string = textdump_config.version_string(&version, &features);
 
