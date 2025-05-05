@@ -59,7 +59,6 @@ ahash.workspace = true
 byteview.workspace = true
 chrono.workspace = true
 crossbeam-channel.workspace = true
-encoding_rs.workspace = true
 fast-counter.workspace = true
 lazy_static.workspace = true
 libc.workspace = true
@@ -72,14 +71,14 @@ uuid.workspace = true
 ## Required for MOO builtins.
 age = { workspace = true, features = ["ssh"] }
 argon2.workspace = true
-base64 = "0.21.7"
+base64.workspace = true
 chrono-tz.workspace = true
 iana-time-zone.workspace = true
 md-5.workspace = true
 onig.workspace = true
 pwhash.workspace = true
 rand.workspace = true
-ssh-key = "0.6.5"
+ssh-key.workspace = true
 xml-rs.workspace = true
 
 ## Error declaration/ handling
