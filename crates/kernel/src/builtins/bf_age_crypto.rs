@@ -15,8 +15,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use age::{
-    Decryptor, Encryptor,
-    Recipient as AgeRecipient,
+    Decryptor, Encryptor, Recipient as AgeRecipient,
     secrecy::ExposeSecret,
     x25519::{Identity, Recipient},
 };
@@ -118,59 +117,39 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             _ => return Err(BfErr::Code(E_TYPE)),
         };
 
-        // Try to parse as an age X25519 recipient
         if let Ok(x25519_recipient) = recipient_str.parse::<Recipient>() {
             recipients.push(Box::new(x25519_recipient) as Box<dyn AgeRecipient>);
-            continue;
-        }
-
-        // Try to parse as an SSH public key
-        match PublicKey::from_openssh(recipient_str) {
-            Ok(ssh_key) => {
-                // Convert SSH key to string format that age can parse
-                let ssh_key_str = ssh_key.to_string();
-                match age::ssh::Recipient::from_str(&ssh_key_str) {
-                    Ok(ssh_recipient) => {
-                        recipients.push(Box::new(ssh_recipient) as Box<dyn AgeRecipient>);
-                    }
-                    Err(_) => {
-                        warn!("Failed to create age recipient from SSH key");
-                        return Err(BfErr::Code(E_INVARG));
-                    }
-                }
-            }
-            Err(_) => {
-                warn!("Invalid recipient format: {}", recipient_str);
-                return Err(BfErr::Code(E_INVARG));
-            }
+        } else if let Ok(ssh_key) = PublicKey::from_openssh(recipient_str)
+            && let Ok(ssh_recipient) = age::ssh::Recipient::from_str(&ssh_key.to_string())
+        {
+            recipients.push(Box::new(ssh_recipient) as Box<dyn AgeRecipient>);
+        } else {
+            warn!("Invalid recipient format: {}", recipient_str);
+            return Err(BfErr::Code(E_INVARG));
         }
     }
 
     // Create an encryptor with the recipients
-    let encryptor = Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref())).or_else(|_| {
-        error!("Failed to create encryptor");
-        Err(BfErr::Code(E_INVARG))
-    })?;
+    let encryptor =
+        Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref())).map_err(|_| {
+            error!("Failed to create encryptor");
+            BfErr::Code(E_INVARG)
+        })?;
 
     // Encrypt the message
     let mut encrypted = Vec::new();
-    let mut writer = match encryptor.wrap_output(&mut encrypted) {
-        Ok(writer) => writer,
-        Err(e) => {
-            error!("Failed to create encryption writer: {}", e);
-            return Err(BfErr::Code(E_INVARG));
-        }
-    };
+    let mut writer = encryptor.wrap_output(&mut encrypted).map_err(|e| {
+        error!("Failed to create encryption writer: {}", e);
+        BfErr::Code(E_INVARG)
+    })?;
 
-    if let Err(e) = writer.write_all(message.as_bytes()) {
-        error!("Failed to write message for encryption: {}", e);
-        return Err(BfErr::Code(E_INVARG));
-    }
-
-    if let Err(e) = writer.finish() {
-        error!("Failed to finalize encryption: {}", e);
-        return Err(BfErr::Code(E_INVARG));
-    }
+    writer
+        .write_all(message.as_bytes())
+        .and_then(|_| writer.finish())
+        .map_err(|e| {
+            error!("Failed to write message for encryption: {}", e);
+            BfErr::Code(E_INVARG)
+        })?;
 
     // Base64 encode the encrypted data
     let encoded = BASE64.encode(&encrypted);
@@ -279,16 +258,18 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         warn!("No valid identities found for decryption");
         return Err(BfErr::Code(E_INVARG));
     }
-    let decryptor = Decryptor::new_buffered(&encrypted[..]).or_else(|_| {
+    let decryptor = Decryptor::new_buffered(&encrypted[..]).map_err(|_| {
         error!("Failed to create decryptor");
-        Err(BfErr::Code(E_INVARG))
+        BfErr::Code(E_INVARG)
     })?;
 
     // Create a decryptor
-    let mut reader = decryptor.decrypt(identities.iter().map(|i| i.as_ref())).or_else(|_| {
-        warn!("Failed to create decryptor");
-        return Err(BfErr::Code(E_INVARG));
-    })?;
+    let mut reader = decryptor
+        .decrypt(identities.iter().map(|i| i.as_ref()))
+        .map_err(|_| {
+            warn!("Failed to create decryptor");
+            BfErr::Code(E_INVARG)
+        })?;
     let mut decrypted = String::new();
     match reader.read_to_string(&mut decrypted) {
         Ok(_) => Ok(Ret(v_string(decrypted))),
@@ -297,7 +278,6 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Err(BfErr::Code(E_INVARG))
         }
     }
-   
 }
 bf_declare!(age_decrypt, bf_age_decrypt);
 
