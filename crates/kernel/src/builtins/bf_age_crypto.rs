@@ -119,7 +119,9 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         if let Ok(x25519_recipient) = recipient_str.parse::<Recipient>() {
             recipients.push(Box::new(x25519_recipient) as Box<dyn AgeRecipient>);
-        } else if let Ok(ssh_key) = PublicKey::from_openssh(recipient_str)
+            continue;
+        } 
+        if let Ok(ssh_key) = PublicKey::from_openssh(recipient_str)
             && let Ok(ssh_recipient) = age::ssh::Recipient::from_str(&ssh_key.to_string())
         {
             recipients.push(Box::new(ssh_recipient) as Box<dyn AgeRecipient>);
