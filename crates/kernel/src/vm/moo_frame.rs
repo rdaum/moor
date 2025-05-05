@@ -27,7 +27,7 @@ use moor_var::{Error, Var, v_none};
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct MooStackFrame {
     /// The program of the verb that is currently being executed.
-    pub(crate) program: Program,
+    pub(crate) program: Box<Program>,
     /// The program counter.
     pub(crate) pc: usize,
     /// The values of the variables currently in scope, by their offset.
@@ -106,7 +106,7 @@ impl Encode for MooStackFrame {
 
 impl<C> Decode<C> for MooStackFrame {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Program::decode(decoder)?;
+        let program = Box::new(Program::decode(decoder)?);
         let pc = usize::decode(decoder)?;
 
         let env: Vec<Option<Var>> = Vec::decode(decoder)?;
@@ -138,7 +138,7 @@ impl<C> Decode<C> for MooStackFrame {
 
 impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Program::borrow_decode(decoder)?;
+        let program = Box::new(Program::borrow_decode(decoder)?);
         let pc = usize::borrow_decode(decoder)?;
 
         let env: Vec<Option<Var>> = Vec::borrow_decode(decoder)?;
@@ -169,7 +169,7 @@ impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
 }
 
 impl MooStackFrame {
-    pub(crate) fn new(program: Program) -> Self {
+    pub(crate) fn new(program: Box<Program>) -> Self {
         let environment = BitArray::new();
         let environment_width = program.var_names.global_width();
         Self {

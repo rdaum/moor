@@ -114,10 +114,8 @@ where
     pub fn set(&mut self, pos: usize, x: X) {
         unsafe {
             // Drop old value if it exists
-            if self.bitset.check(pos) {
+            if self.bitset.check_set(pos) {
                 self.storage[pos].assume_init_drop();
-            } else {
-                self.bitset.set(pos);
             }
             self.storage[pos].as_mut_ptr().write(x);
         };

@@ -110,7 +110,7 @@ pub enum ExecutionResult {
         /// The player who is performing the eval.
         player: Obj,
         /// The program to execute.
-        program: Program,
+        program: Box<Program>,
     },
     /// Request dispatch of a builtin function with the given arguments.
     DispatchBuiltin { builtin: BuiltinId, arguments: List },

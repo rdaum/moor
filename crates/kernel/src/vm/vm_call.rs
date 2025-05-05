@@ -64,7 +64,7 @@ pub struct VerbExecutionRequest {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VerbProgram {
-    Moo(Program),
+    Moo(Box<Program>),
 }
 
 /// The set of parameters & utilities passed to the VM for execution of a given task.
@@ -266,7 +266,7 @@ impl VMExecState {
         self.stack.push(a);
     }
 
-    pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Program) {
+    pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Box<Program>) {
         let a = Activation::for_eval(permissions.clone(), player, program);
 
         self.stack.push(a);

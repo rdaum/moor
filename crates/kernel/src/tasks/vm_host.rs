@@ -170,7 +170,7 @@ impl VmHost {
         &mut self,
         task_id: TaskId,
         player: &Obj,
-        program: Program,
+        program: Box<Program>,
         world_state: &dyn WorldState,
     ) {
         let is_programmer = world_state
@@ -458,9 +458,9 @@ impl VmHost {
 
     pub fn decode_program(binary_type: BinaryType, binary_bytes: ByteView) -> VerbProgram {
         match binary_type {
-            BinaryType::LambdaMoo18X => VerbProgram::Moo(
+            BinaryType::LambdaMoo18X => VerbProgram::Moo(Box::new(
                 Program::from_bytes(binary_bytes).expect("Could not decode MOO program"),
-            ),
+            )),
             _ => panic!("Unsupported binary type {:?}", binary_type),
         }
     }

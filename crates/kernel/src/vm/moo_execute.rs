@@ -145,14 +145,14 @@ pub fn moo_frame_execute(
                     f.jump(end_label);
                 }
             }
-            Op::ForSequence {
-                end_label,
-                value_bind,
-                key_bind,
-                environment_width,
-            } => {
-                if *environment_width != 0 {
-                    f.push_scope(ScopeType::For, *environment_width, end_label);
+            Op::ForSequence(offset) => {
+                let operand = f.program.for_sequence_operands[offset.0 as usize].clone();
+                if operand.environment_width != 0 {
+                    f.push_scope(
+                        ScopeType::For,
+                        operand.environment_width,
+                        &operand.end_label,
+                    );
                 }
                 // Pop the count and list off the stack. We push back later when we re-enter.
 
@@ -164,7 +164,7 @@ pub fn moo_frame_execute(
                     // If the result of raising error was just to push the value -- that is, we
                     // didn't 'throw' and unwind the stack -- we need to get out of the loop.
                     // So we preemptively jump (here and below for List) and then raise the error.
-                    f.jump(end_label);
+                    f.jump(&operand.end_label);
                     return ExecutionResult::RaiseError(E_TYPE);
                 };
                 let count_i = *count_i as usize;
@@ -175,7 +175,7 @@ pub fn moo_frame_execute(
                     f.pop();
                     f.pop();
 
-                    f.jump(end_label);
+                    f.jump(&operand.end_label);
                     return ExecutionResult::RaiseError(E_TYPE);
                 };
 
@@ -188,7 +188,7 @@ pub fn moo_frame_execute(
                     f.pop();
                     f.pop();
 
-                    f.jump(end_label);
+                    f.jump(&operand.end_label);
                     continue;
                 }
 
@@ -209,13 +209,13 @@ pub fn moo_frame_execute(
                     Err(e) => {
                         f.pop();
                         f.pop();
-                        f.jump(end_label);
+                        f.jump(&operand.end_label);
                         return ExecutionResult::RaiseError(e);
                     }
                 };
-                f.set_variable(value_bind, k_v.1);
-                if let Some(key_bind) = key_bind {
-                    f.set_variable(key_bind, k_v.0.clone());
+                f.set_variable(&operand.value_bind, k_v.1);
+                if let Some(key_bind) = operand.key_bind {
+                    f.set_variable(&key_bind, k_v.0.clone());
                 }
                 f.poke(0, v_int((count_i + 1) as i64));
             }
@@ -820,11 +820,14 @@ pub fn moo_frame_execute(
             Op::Scatter(sa) => {
                 // TODO: this could do with some attention. a lot of the complexity here has to
                 //   do with translating fairly directly from the lambdamoo sources.
+                // It would be nice to be able to eliminate the clone here, but if we don't we get
+                // multiple borrow issues.
+                let table = &f.program.scatter_tables[sa.0 as usize].clone();
                 let (nargs, rest, nreq) = {
                     let mut nargs = 0;
                     let mut rest = 0;
                     let mut nreq = 0;
-                    for label in sa.labels.iter() {
+                    for label in table.labels.iter() {
                         match label {
                             ScatterLabel::Rest(_) => rest += 1,
                             ScatterLabel::Required(_) => nreq += 1,
@@ -859,7 +862,7 @@ pub fn moo_frame_execute(
                 let mut jump_where = None;
                 let mut args_iter = rhs_values.iter();
 
-                for label in sa.labels.iter() {
+                for label in table.labels.iter() {
                     match label {
                         ScatterLabel::Rest(id) => {
                             let mut v = vec![];
@@ -893,7 +896,7 @@ pub fn moo_frame_execute(
                     }
                 }
                 match &jump_where {
-                    None => f.jump(&sa.done),
+                    None => f.jump(&table.done),
                     Some(jump_where) => f.jump(jump_where),
                 }
             }
@@ -930,39 +933,41 @@ pub fn moo_frame_execute(
                 f.push(v_empty_list());
                 f.push_scope(ScopeType::Comprehension, 1, end_label);
             }
-            Op::ComprehendRange {
-                position,
-                end_of_range_register,
-                end_label,
-            } => {
-                let end_of_range = f.get_env(end_of_range_register).unwrap().clone();
+            Op::ComprehendRange(offset) => {
+                let range_comprehension = f.program.range_comprehensions[offset.0 as usize].clone();
+                let end_of_range = f
+                    .get_env(&range_comprehension.end_of_range_register)
+                    .unwrap()
+                    .clone();
                 let position = f
-                    .get_env(position)
+                    .get_env(&range_comprehension.position)
                     .expect("Bad range position variable in range comprehension")
                     .clone();
                 if !position.le(&end_of_range) {
-                    f.jump(end_label);
+                    f.jump(&range_comprehension.end_label);
                 }
             }
-            Op::ComprehendList {
-                item_variable,
-                position_register,
-                list_register,
-                end_label,
-            } => {
-                let list = f.get_env(list_register).unwrap().clone();
-                let position = f.get_env(position_register).unwrap().clone();
+            Op::ComprehendList(offset) => {
+                let list_comprehension = f.program.list_comprehensions[offset.0 as usize].clone();
+                let list = f
+                    .get_env(&list_comprehension.list_register)
+                    .unwrap()
+                    .clone();
+                let position = f
+                    .get_env(&list_comprehension.position_register)
+                    .unwrap()
+                    .clone();
                 let Variant::Int(position) = position.variant() else {
                     return ExecutionResult::PushError(E_TYPE);
                 };
                 let position = *position;
                 if position > list.len().unwrap() as i64 {
-                    f.jump(end_label);
+                    f.jump(&list_comprehension.end_label);
                 } else {
                     let Ok(item) = list.index(&v_int(position), IndexMode::OneBased) else {
                         return ExecutionResult::PushError(E_RANGE);
                     };
-                    f.set_variable(item_variable, item);
+                    f.set_variable(&list_comprehension.item_variable, item);
                 }
             }
             Op::ContinueComprehension(id) => {

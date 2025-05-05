@@ -33,6 +33,7 @@ pub trait BitsetTrait: Default {
     fn set(&mut self, pos: usize);
     fn unset(&mut self, pos: usize);
     fn unset_from(&mut self, pos: usize);
+    fn check_set(&mut self, pos: usize) -> bool;
     fn check(&self, pos: usize) -> bool;
     fn clear(&mut self);
     fn last(&self) -> Option<usize>;
@@ -140,6 +141,19 @@ where
 
         // Clear all subsequent StorageType slices
         self.bitset[start_index + 1..].fill(StorageType::zero());
+    }
+
+    /// Set the bit, and return if it was already set
+    #[inline]
+    fn check_set(&mut self, pos: usize) -> bool {
+        assert!(pos < Self::BITSET_WIDTH);
+        let spos = pos >> Self::BIT_SHIFT;
+        let old_v = self.bitset[spos];
+        let shift: StorageType = StorageType::one() << (pos % Self::STORAGE_BIT_WIDTH);
+        let old_t = !(old_v & shift).is_zero();
+        let v = old_v.bitor(shift);
+        self.bitset[spos] = v;
+        old_t
     }
 
     #[inline]

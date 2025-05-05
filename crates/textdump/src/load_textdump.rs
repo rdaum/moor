@@ -283,7 +283,7 @@ pub fn read_textdump<T: io::Read>(
                 })?,
                 // If the verb program is missing, then it's an empty program, and we'll put in
                 // an empty binary.
-                _ => Program::new(),
+                _ => Box::new(Program::new()),
             };
 
             let binary =

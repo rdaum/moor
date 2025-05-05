@@ -788,7 +788,7 @@ mod tests {
 
     struct TestVerb {
         name: Symbol,
-        program: Program,
+        program: Box<Program>,
         argspec: VerbArgsSpec,
     }
 

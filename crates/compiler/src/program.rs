@@ -13,7 +13,7 @@
 
 use crate::labels::{JumpLabel, Label};
 use crate::names::{Name, Names};
-use crate::opcode::Op;
+use crate::opcode::{ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs};
 use crate::unparse::to_literal;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
@@ -36,6 +36,14 @@ pub struct Program {
     pub jump_labels: Vec<JumpLabel>,
     /// All the variable names used in this program.
     pub var_names: Names,
+    /// Scatter assignment tables, referenced by the scatter opcode.
+    pub scatter_tables: Vec<ScatterArgs>,
+    /// Table of the operands for the ForSequence opcode.
+    pub for_sequence_operands: Vec<ForSequenceOperand>,
+    /// Range comprehensions, referenced by the range comprehension opcode.
+    pub range_comprehensions: Vec<RangeComprehend>,
+    /// List comprehensions, referenced by the list comprehension opcode.
+    pub list_comprehensions: Vec<ListComprehend>,
     /// The actual program code.
     pub main_vector: Arc<Vec<Op>>,
     /// The program code for each fork.
@@ -52,6 +60,10 @@ impl Program {
             literals: Vec::new(),
             jump_labels: Vec::new(),
             var_names: Names::new(0),
+            scatter_tables: vec![],
+            for_sequence_operands: vec![],
+            range_comprehensions: vec![],
+            list_comprehensions: vec![],
             main_vector: Arc::new(Vec::new()),
             fork_vectors: Vec::new(),
             line_number_spans: Vec::new(),

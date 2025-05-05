@@ -30,7 +30,10 @@ use crate::builtins::BUILTINS;
 use crate::labels::{JumpLabel, Label, Offset};
 use crate::names::{Name, Names, UnboundName};
 use crate::opcode::Op::Jump;
-use crate::opcode::{ComprehensionType, Op, ScatterArgs, ScatterLabel};
+use crate::opcode::{
+    ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
+    ScatterLabel,
+};
 use crate::parse::moo::Rule;
 use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
 use crate::program::Program;
@@ -54,6 +57,10 @@ pub struct CodegenState {
     pub(crate) literals: Vec<Var>,
     pub(crate) loops: Vec<Loop>,
     pub(crate) saved_stack: Option<Offset>,
+    pub(crate) scatter_tables: Vec<ScatterArgs>,
+    pub(crate) for_sequence_operands: Vec<ForSequenceOperand>,
+    pub(crate) range_comprehensions: Vec<RangeComprehend>,
+    pub(crate) list_comprehensions: Vec<ListComprehend>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
     pub(crate) fork_vectors: Vec<Vec<Op>>,
@@ -79,9 +86,13 @@ impl CodegenState {
             cur_stack: 0,
             max_stack: 0,
             fork_vectors: vec![],
+            scatter_tables: vec![],
+            for_sequence_operands: vec![],
+            range_comprehensions: vec![],
             line_number_spans: vec![],
             current_line_col: (0, 0),
             compile_options,
+            list_comprehensions: vec![],
         }
     }
 
@@ -113,6 +124,30 @@ impl CodegenState {
             idx
         });
         Label(pos as u16)
+    }
+
+    fn add_scatter_table(&mut self, labels: Vec<ScatterLabel>, done: Label) -> Offset {
+        let st_pos = self.scatter_tables.len();
+        self.scatter_tables.push(ScatterArgs { labels, done });
+        Offset(st_pos as u16)
+    }
+
+    fn add_range_comprehension(&mut self, range_comprehension: RangeComprehend) -> Offset {
+        let rc_pos = self.range_comprehensions.len();
+        self.range_comprehensions.push(range_comprehension);
+        Offset(rc_pos as u16)
+    }
+
+    fn add_list_comprehension(&mut self, list_comprehension: ListComprehend) -> Offset {
+        let lc_pos = self.list_comprehensions.len();
+        self.list_comprehensions.push(list_comprehension);
+        Offset(lc_pos as u16)
+    }
+
+    fn add_for_sequence_operand(&mut self, operand: ForSequenceOperand) -> Offset {
+        let fs_pos = self.for_sequence_operands.len();
+        self.for_sequence_operands.push(operand);
+        Offset(fs_pos as u16)
     }
 
     fn emit(&mut self, op: Op) {
@@ -249,10 +284,9 @@ impl CodegenState {
             })
             .collect();
         let done = self.make_jump_label(None);
-        self.emit(Op::Scatter(Box::new(ScatterArgs {
-            labels: labels.iter().map(|(_, l)| l.clone()).collect(),
-            done,
-        })));
+        let scater_offset =
+            self.add_scatter_table(labels.iter().map(|(_, l)| l.clone()).collect(), done);
+        self.emit(Op::Scatter(scater_offset));
         for (s, label) in labels {
             if let ScatterLabel::Optional(_, Some(label)) = label {
                 if s.expr.is_none() {
@@ -583,11 +617,12 @@ impl CodegenState {
 
                 self.pop_stack(2);
                 self.commit_jump_label(loop_start_label);
-                self.emit(ComprehendRange {
+                let offset = self.add_range_comprehension(RangeComprehend {
                     position: index_variable,
                     end_of_range_register,
                     end_label,
                 });
+                self.emit(ComprehendRange(offset));
                 self.generate_expr(producer_expr.as_ref())?;
                 self.emit(ContinueComprehension(index_variable));
                 self.emit(Jump {
@@ -626,12 +661,13 @@ impl CodegenState {
                 self.emit(Pop);
 
                 self.commit_jump_label(loop_start_label);
-                self.emit(ComprehendList {
-                    list_register,
+                let offset = self.add_list_comprehension(ListComprehend {
                     position_register,
+                    list_register,
                     item_variable,
                     end_label,
                 });
+                self.emit(ComprehendList(offset));
                 self.generate_expr(producer_expr.as_ref())?;
                 self.emit(ContinueComprehension(position_register));
                 self.emit(Jump {
@@ -722,12 +758,13 @@ impl CodegenState {
                 let loop_top = self.make_jump_label(Some(value_bind));
                 self.commit_jump_label(loop_top);
                 let end_label = self.make_jump_label(Some(value_bind));
-                self.emit(Op::ForSequence {
+                let offset = self.add_for_sequence_operand(ForSequenceOperand {
                     value_bind,
                     key_bind,
                     end_label,
                     environment_width: *environment_width as u16,
                 });
+                self.emit(Op::ForSequence(offset));
                 self.loops.push(Loop {
                     loop_name: Some(value_bind),
                     top_label: loop_top,
@@ -995,7 +1032,7 @@ impl CodegenState {
     }
 }
 
-fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, CompileError> {
+fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Box<Program>, CompileError> {
     // Generate the code into 'cg_state'.
     let mut cg_state = CodegenState::new(compile_options, parse.names, parse.names_mapping);
     for x in parse.stmts {
@@ -1010,27 +1047,34 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
         )
     }
 
-    let program = Program {
+    let program = Box::new(Program {
         literals: cg_state.literals,
         jump_labels: cg_state.jumps,
         var_names: cg_state.var_names,
+        scatter_tables: cg_state.scatter_tables,
+        range_comprehensions: cg_state.range_comprehensions,
+        list_comprehensions: cg_state.list_comprehensions,
+        for_sequence_operands: cg_state.for_sequence_operands,
         main_vector: Arc::new(cg_state.ops),
         fork_vectors: cg_state.fork_vectors,
         line_number_spans: cg_state.line_number_spans,
-    };
+    });
 
     Ok(program)
 }
 
 /// Compile from a program string, starting at the "program" rule.
-pub fn compile(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
+pub fn compile(program: &str, options: CompileOptions) -> Result<Box<Program>, CompileError> {
     let parse = parse_program(program, options.clone())?;
 
     do_compile(parse, options)
 }
 
 /// Compile from an already-parsed tree stating at the `statements` rule.
-pub fn compile_tree(tree: Pairs<Rule>, options: CompileOptions) -> Result<Program, CompileError> {
+pub fn compile_tree(
+    tree: Pairs<Rule>,
+    options: CompileOptions,
+) -> Result<Box<Program>, CompileError> {
     let parse = parse_tree(tree, options.clone())?;
 
     // TODO: we'll have to adjust line numbers accordingly to who called us?

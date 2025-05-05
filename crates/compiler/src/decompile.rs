@@ -25,7 +25,9 @@ use crate::builtins::BuiltinId;
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::labels::{JumpLabel, Label};
 use crate::names::{Name, UnboundName, UnboundNames};
-use crate::opcode::{ComprehensionType, Op, ScatterLabel};
+use crate::opcode::{
+    ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterLabel,
+};
 use crate::parse::Parse;
 use crate::program::Program;
 
@@ -270,12 +272,7 @@ impl Decompile {
                 };
                 arms.push(cond_arm);
             }
-            Op::ForSequence {
-                value_bind,
-                key_bind,
-                end_label: label,
-                environment_width,
-            } => {
+            Op::ForSequence(offset) => {
                 let one = self.pop_expr()?;
                 let Expr::Value(v) = one else {
                     return Err(MalformedProgram(
@@ -288,6 +285,12 @@ impl Decompile {
                     ));
                 };
                 let list = self.pop_expr()?;
+                let ForSequenceOperand {
+                    value_bind,
+                    key_bind,
+                    end_label: label,
+                    environment_width,
+                } = self.program.for_sequence_operands[offset.0 as usize];
                 let body = self.decompile_statements_until(&label)?;
                 let value_id = self.decompile_name(&value_bind)?;
                 let key_id = match key_bind {
@@ -666,15 +669,21 @@ impl Decompile {
                 // optional scatters. We will use this later to compute the end of optional
                 // assignment expressions in the scatter.
                 let mut opt_jump_labels = vec![];
-                for scatter_label in sa.labels.iter() {
+                let scatter_table = self
+                    .program
+                    .scatter_tables
+                    .get(sa.0 as usize)
+                    .ok_or_else(|| MalformedProgram(format!("scatter table {} not found", sa.0)))?
+                    .clone();
+                for scatter_label in scatter_table.labels.iter() {
                     if let ScatterLabel::Optional(_, Some(label)) = scatter_label {
                         opt_jump_labels.push(label);
                     }
                 }
-                opt_jump_labels.push(&sa.done);
+                opt_jump_labels.push(&scatter_table.done);
 
                 let mut label_pos = 0;
-                for scatter_label in sa.labels.iter() {
+                for scatter_label in scatter_table.labels.iter() {
                     let scatter_item = match scatter_label {
                         ScatterLabel::Required(id) => {
                             let id = self.decompile_name(id)?;
@@ -984,17 +993,24 @@ impl Decompile {
 
                         // Next must be ComprehendRange
                         let next = self.next()?;
-                        let Op::ComprehendRange {
-                            position,
-                            end_of_range_register,
-                            end_label,
-                        } = next
-                        else {
+
+                        let Op::ComprehendRange(offset) = next else {
                             return Err(MalformedProgram(
                                 "malformed range comprehension".to_string(),
                             ));
                         };
-
+                        let RangeComprehend {
+                            position,
+                            end_of_range_register,
+                            end_label,
+                        } = self
+                            .program
+                            .range_comprehensions
+                            .get(offset.0 as usize)
+                            .ok_or_else(|| {
+                                MalformedProgram(format!("comprehend range {:?} not found", offset))
+                            })?
+                            .clone();
                         self.decompile_statements_until(&end_label)?;
                         let producer_expr = self.pop_expr()?;
 
@@ -1030,18 +1046,24 @@ impl Decompile {
                         assert_eq!(assign_statements.len(), 2);
 
                         let next_opcode = self.next()?;
-                        let Op::ComprehendList {
-                            position_register,
-                            list_register,
-                            item_variable,
-                            end_label,
-                        } = next_opcode
-                        else {
+                        let Op::ComprehendList(offset) = next_opcode else {
                             return Err(MalformedProgram(
                                 "malformed list comprehension".to_string(),
                             ));
                         };
-
+                        let ListComprehend {
+                            position_register,
+                            list_register,
+                            item_variable,
+                            end_label,
+                        } = self
+                            .program
+                            .list_comprehensions
+                            .get(offset.0 as usize)
+                            .ok_or_else(|| {
+                                MalformedProgram(format!("comprehend list {:?} not found", offset))
+                            })?
+                            .clone();
                         self.decompile_statements_until(&end_label)?;
                         let producer_expr = self.pop_expr()?;
 

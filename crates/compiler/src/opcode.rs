@@ -37,12 +37,7 @@ pub enum Op {
     },
     ExitId(Label),
     Exp,
-    ForSequence {
-        value_bind: Name,
-        key_bind: Option<Name>,
-        end_label: Label,
-        environment_width: u16,
-    },
+    ForSequence(Offset),
     ForRange {
         id: Name,
         end_label: Label,
@@ -101,7 +96,7 @@ pub enum Op {
     Ref,
     Return,
     Return0,
-    Scatter(Box<ScatterArgs>),
+    Scatter(Offset),
     Sub,
     PushCatchLabel(Label),
     TryCatch {
@@ -139,25 +134,39 @@ pub enum Op {
     If(Label, u16),
     Eif(Label, u16),
     BeginComprehension(ComprehensionType, Label, Label),
-    ComprehendRange {
-        /// The variable to populate with the result of the current range iteration, which is
-        /// declared in the current scope.
-        position: Name,
-        end_of_range_register: Name,
-        /// Where to jump after done producing
-        end_label: Label,
-    },
-    ComprehendList {
-        /// The register (unnamed variable) which holds the current offset into the list
-        position_register: Name,
-        /// The register holding the evaluated list we're iterating.
-        list_register: Name,
-        /// The variable we assign with the value indexed from the list.
-        item_variable: Name,
-        /// Where to jump after done producing
-        end_label: Label,
-    },
+    ComprehendRange(Offset),
+    ComprehendList(Offset),
     ContinueComprehension(Name),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+pub struct ForSequenceOperand {
+    pub value_bind: Name,
+    pub key_bind: Option<Name>,
+    pub end_label: Label,
+    pub environment_width: u16,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+pub struct RangeComprehend {
+    /// The variable to populate with the result of the current range iteration, which is
+    /// declared in the current scope.
+    pub position: Name,
+    pub end_of_range_register: Name,
+    /// Where to jump after done producing
+    pub end_label: Label,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+pub struct ListComprehend {
+    /// The register (unnamed variable) which holds the current offset into the list
+    pub position_register: Name,
+    /// The register holding the evaluated list we're iterating.
+    pub list_register: Name,
+    /// The variable we assign with the value indexed from the list.
+    pub item_variable: Name,
+    /// Where to jump after done producing
+    pub end_label: Label,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
@@ -184,15 +193,11 @@ mod tests {
     use crate::names::Name;
     use crate::{Label, Offset};
 
-    /// Verify we don't go over our 24 byte budget for opcodes.
-    // TODO: This is still rather bloated.
-    //  and was 16, until we widened ForSequence
-    //  we need to come up with a more compact representation
     #[test]
     fn size_opcode() {
         use crate::opcode::Op;
         use std::mem::size_of;
-        assert_eq!(size_of::<Op>(), 24);
+        assert_eq!(size_of::<Op>(), 16);
         assert_eq!(size_of::<Name>(), 2);
         assert_eq!(size_of::<Offset>(), 2);
         assert_eq!(size_of::<Label>(), 2);

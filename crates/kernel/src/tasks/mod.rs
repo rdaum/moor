@@ -330,9 +330,8 @@ pub mod vm_test_utils {
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
         builtins: Arc<BuiltinRegistry>,
-
         player: Obj,
-        program: Program,
+        program: Box<Program>,
     ) -> ExecResult {
         execute(world_state, session, builtins, |world_state, vm_host| {
             vm_host.start_eval(0, &player, program, world_state);
@@ -443,7 +442,7 @@ pub enum TaskStart {
         suspended: bool,
     },
     /// The scheduler is telling the task to evaluate a specific (MOO) program.
-    StartEval { player: Obj, program: Program },
+    StartEval { player: Obj, program: Box<Program> },
 }
 
 impl TaskStart {

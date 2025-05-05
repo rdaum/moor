@@ -18,7 +18,7 @@ mod tests {
     use crate::codegen::compile;
     use crate::labels::{Label, Offset};
     use crate::opcode::Op::*;
-    use crate::opcode::{ScatterArgs, ScatterLabel};
+    use crate::opcode::{ForSequenceOperand, ScatterArgs, ScatterLabel};
     use moor_common::model::CompileError;
     use moor_var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
     use moor_var::Obj;
@@ -323,12 +323,7 @@ mod tests {
                 ImmInt(3),
                 ListAddTail,
                 ImmInt(0),
-                ForSequence {
-                    value_bind: x,
-                    key_bind: None,
-                    end_label: 1.into(),
-                    environment_width: 0,
-                },
+                ForSequence(Offset(0)),
                 Push(x),
                 ImmInt(5),
                 Add,
@@ -338,6 +333,15 @@ mod tests {
                 EndScope { num_bindings: 0 },
                 Done
             ]
+        );
+        assert_eq!(
+            binary.for_sequence_operands[0],
+            ForSequenceOperand {
+                value_bind: x,
+                key_bind: None,
+                end_label: 1.into(),
+                environment_width: 0,
+            }
         );
         assert_eq!(binary.jump_labels[0].position.0, 7);
     }
@@ -1054,20 +1058,20 @@ mod tests {
 
         assert_eq!(
             *binary.main_vector.as_ref(),
-            vec![
-                Push(binary.find_var("args")),
-                Scatter(Box::new(ScatterArgs {
-                    labels: vec![
-                        ScatterLabel::Required(a),
-                        ScatterLabel::Required(b),
-                        ScatterLabel::Required(c),
-                    ],
-                    done: 0.into(),
-                })),
-                Pop,
-                Done
-            ]
-        )
+            vec![Push(binary.find_var("args")), Scatter(Offset(0)), Pop, Done]
+        );
+        let sa = binary.scatter_tables[0].clone();
+        assert_eq!(
+            sa,
+            ScatterArgs {
+                labels: vec![
+                    ScatterLabel::Required(a),
+                    ScatterLabel::Required(b),
+                    ScatterLabel::Required(c),
+                ],
+                done: 0.into()
+            }
+        );
     }
 
     #[test]
@@ -1092,20 +1096,24 @@ mod tests {
             *binary.main_vector.as_ref(),
             vec![
                 Push(binary.find_var("args")),
-                Scatter(Box::new(ScatterArgs {
-                    labels: vec![
-                        ScatterLabel::Required(first),
-                        ScatterLabel::Required(second),
-                        ScatterLabel::Optional(third, Some(0.into())),
-                    ],
-                    done: 1.into(),
-                })),
+                Scatter(Offset(0)),
                 ImmInt(0),
                 Put(binary.find_var("third")),
                 Pop,
                 Pop,
                 Done
             ]
+        );
+        assert_eq!(
+            binary.scatter_tables[0].clone(),
+            ScatterArgs {
+                labels: vec![
+                    ScatterLabel::Required(first),
+                    ScatterLabel::Required(second),
+                    ScatterLabel::Optional(third, Some(0.into())),
+                ],
+                done: 1.into(),
+            }
         )
     }
 
@@ -1134,15 +1142,7 @@ mod tests {
             *binary.main_vector.as_ref(),
             vec![
                 Push(binary.find_var("args")),
-                Scatter(Box::new(ScatterArgs {
-                    labels: vec![
-                        ScatterLabel::Required(a),
-                        ScatterLabel::Required(b),
-                        ScatterLabel::Optional(c, Some(0.into())),
-                        ScatterLabel::Rest(d),
-                    ],
-                    done: 1.into(),
-                })),
+                Scatter(Offset(0)),
                 ImmInt(8),
                 Put(binary.find_var("c")),
                 Pop,
@@ -1150,6 +1150,18 @@ mod tests {
                 Done
             ]
         );
+        assert_eq!(
+            binary.scatter_tables[0].clone(),
+            ScatterArgs {
+                labels: vec![
+                    ScatterLabel::Required(a),
+                    ScatterLabel::Required(b),
+                    ScatterLabel::Optional(c, Some(0.into())),
+                    ScatterLabel::Rest(d),
+                ],
+                done: 1.into(),
+            }
+        )
     }
 
     #[test]
@@ -1182,17 +1194,7 @@ mod tests {
             *binary.main_vector.as_ref(),
             vec![
                 Push(binary.find_var("args")),
-                Scatter(Box::new(ScatterArgs {
-                    labels: vec![
-                        ScatterLabel::Required(a),
-                        ScatterLabel::Optional(b, None),
-                        ScatterLabel::Optional(c, Some(0.into())),
-                        ScatterLabel::Rest(d),
-                        ScatterLabel::Optional(e, Some(1.into())),
-                        ScatterLabel::Required(f),
-                    ],
-                    done: 2.into(),
-                })),
+                Scatter(Offset(0)),
                 ImmInt(8),
                 Put(binary.find_var("c")),
                 Pop,
@@ -1202,7 +1204,21 @@ mod tests {
                 Pop,
                 Done
             ]
-        )
+        );
+        assert_eq!(
+            binary.scatter_tables[0].clone(),
+            ScatterArgs {
+                labels: vec![
+                    ScatterLabel::Required(a),
+                    ScatterLabel::Optional(b, None),
+                    ScatterLabel::Optional(c, Some(0.into())),
+                    ScatterLabel::Rest(d),
+                    ScatterLabel::Optional(e, Some(1.into())),
+                    ScatterLabel::Required(f),
+                ],
+                done: 2.into(),
+            }
+        );
     }
 
     #[test]
@@ -1258,15 +1274,7 @@ mod tests {
                 MakeSingletonList,
                 ImmInt(1),
                 Ref,
-                Scatter(Box::new(ScatterArgs {
-                    labels: vec![
-                        ScatterLabel::Required(a),
-                        ScatterLabel::Required(b),
-                        ScatterLabel::Optional(c, None),
-                        ScatterLabel::Rest(d),
-                    ],
-                    done: 0.into(),
-                })),
+                Scatter(Offset(0)),
                 Pop,
                 Push(a),
                 MakeSingletonList,
@@ -1278,7 +1286,19 @@ mod tests {
                 Pop,
                 Done
             ]
-        )
+        );
+        assert_eq!(
+            binary.scatter_tables[0].clone(),
+            ScatterArgs {
+                labels: vec![
+                    ScatterLabel::Required(a),
+                    ScatterLabel::Required(b),
+                    ScatterLabel::Optional(c, None),
+                    ScatterLabel::Rest(d),
+                ],
+                done: 0.into(),
+            }
+        );
     }
 
     #[test]
