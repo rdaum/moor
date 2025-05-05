@@ -1,5 +1,9 @@
-# Docker composition for starting up the Moor system in cargo-watch mode, running with separate `daemon` and `host`
-# binaries (communicating via ZMQ RPC),
+# Example docker composition for starting up a mooR system, with a telnet server and a web server, and a worker process
+# for handling outbound HTTP requests.
+
+# This could be used as a starting point for a production system, and uses release builds of the mooR system as built
+# by the Dockerfile in the root of the repository. A real production system would definitely need to consider its
+# security and network layout, and this is just a simple example to get started with.
 
 # The first time the system starts, it will import JHCore-DEV-2.db from the root of the repository. This is a recent
 # JaysHouseCore database, with no modifications. After import, `development.db` will contain the database
@@ -9,8 +13,13 @@
 # system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
 
 networks:
+  # An internal network for the mooR system, to allow the different components to communicate with each other.
+  # Note: We could use IPC sockets instead, and it would be more efficient, but by using TCP we can give an example
+  # of how to use the system over a network if we were in a real distributed system.
   moor_net:
+
 services:
+  # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
     build:
       context: .
@@ -22,13 +31,24 @@ services:
     volumes:
       - ./:/db
     command: >
-      sh -c "./moor-daemon /db/development.db --rpc-listen=tcp://0.0.0.0:7899 --events-listen=tcp://0.0.0.0:7898 --import=/db/JHCore-DEV-2.db --import-format=textdump --export=export --export-format objdef --checkpoint-interval-seconds=360"
+      ./moor-daemon /db/development.db 
+        --rpc-listen=tcp://0.0.0.0:7899 
+        --events-listen=tcp://0.0.0.0:7898 
+        --workers-response-listen=tcp://0.0.0.0:7897 
+        --workers-request-listen=tcp://0.0.0.0:7896 
+        --import=/db/JHCore-DEV-2.db --import-format=textdump 
+        --export=export --export-format objdef 
+        --checkpoint-interval-seconds=360
     ports:
       # ZMQ ports
-      - "7899:7899"
-      - "7898:7898"
+      - "7899:7899" # RPC listener
+      - "7898:7898" # Events listener
+      - "7897:7897" # Workers response listener
+      - "7896:7896" # Workers request listener
     networks:
       - moor_net
+
+  # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
     build:
       context: .
@@ -38,12 +58,17 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "./moor-telnet-host --telnet-address=0.0.0.0 --telnet-port=8888 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898"
+      ./moor-telnet-host --telnet-address=0.0.0.0 
+        --telnet-port=8888 
+        --rpc-address=tcp://moor-daemon:7899 
+        --events-address=tcp://moor-daemon:7898
     ports:
       # Telnet listener
       - "8888:8888"
     networks:
       - moor_net
+
+  # A web server that serves the client files and handles incoming websocket connections.
   moor-web-host:
     build:
       context: .
@@ -53,9 +78,32 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      sh -c "./moor-web-host --listen-address=0.0.0.0:8080 --rpc-address=tcp://moor-daemon:7899 --events-address=tcp://moor-daemon:7898 --client-sources=./client"
+      ./moor-web-host 
+        --listen-address=0.0.0.0:8080 
+        --rpc-address=tcp://moor-daemon:7899 
+        --events-address=tcp://moor-daemon:7898 
+        --client-sources=./client
     ports:
       # HTTP listener
       - "8080:8080"
+    networks:
+      - moor_net
+
+  # A worker process that handles requests from the daemon for outbound HTTP requests and returns the results back
+  # to the daemon.
+  moor-curl-worker:
+    build:
+      context: .
+      network: host
+    container_name: "moor-curl-worker"
+    environment:
+      - RUST_BACKTRACE=1
+    working_dir: /moor
+    command: >
+      ./moor-curl-worker 
+        --rpc-address=tcp://moor-daemon:7899 
+        --events-address=tcp://moor-daemon:7898 
+        --workers-request-address=tcp://moor-daemon:7896 
+        --workers-response-address=tcp://moor-daemon:7897
     networks:
       - moor_net
