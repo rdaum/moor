@@ -13,7 +13,9 @@
 
 #![allow(clippy::too_many_arguments)]
 
-pub use host::{make_host_token, proces_hosts_events, send_host_to_daemon_msg, start_host_session};
+pub use host::{
+    make_host_token, process_hosts_events, send_host_to_daemon_msg, start_host_session,
+};
 pub use listeners::{ListenersClient, ListenersError, ListenersMessage};
 pub use worker::{attach_worker, make_worker_token};
 pub use worker_loop::{WorkerRpcError, worker_loop};

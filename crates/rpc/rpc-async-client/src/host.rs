@@ -120,7 +120,7 @@ pub async fn start_host_session(
     Ok(rpc_client)
 }
 
-pub async fn proces_hosts_events(
+pub async fn process_hosts_events(
     mut rpc_client: RpcSendClient,
     host_token: HostToken,
     zmq_ctx: tmq::Context,
