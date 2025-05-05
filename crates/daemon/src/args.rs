@@ -12,9 +12,9 @@
 //
 
 use clap::builder::ValueHint;
-use clap_derive::Parser;
+use clap_derive::{Parser, ValueEnum};
 use moor_db::DatabaseConfig;
-use moor_kernel::config::{Config, FeaturesConfig, TextdumpConfig};
+use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig, ImportExportFormat};
 use moor_kernel::textdump::EncodingMode;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -26,7 +26,7 @@ pub struct Args {
     pub db_args: DatabaseArgs,
 
     #[command(flatten)]
-    textdump_args: Option<TextdumpArgs>,
+    textdump_args: Option<ImportExportArgs>,
 
     #[command(flatten)]
     feature_args: Option<FeatureArgs>,
@@ -231,25 +231,47 @@ impl FeatureArgs {
     }
 }
 
+/// Formats for import or export
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Default)]
+pub enum Format {
+    /// Traditional LambdaMOO textdump format
+    #[default]
+    Textdump,
+    /// New-style objdef/dirdump format
+    Objdef,
+}
+
 #[allow(dead_code)]
 #[derive(Parser, Debug)]
-pub struct TextdumpArgs {
-    #[arg(short, long, value_name = "textdump", help = "Path to the textdump to import", value_hint = ValueHint::FilePath)]
-    pub textdump: Option<PathBuf>,
+pub struct ImportExportArgs {
+    #[arg(short, long, value_name = "import", help = "Path to a textdump or objdef directory to import", value_hint = ValueHint::FilePath)]
+    pub import: Option<PathBuf>,
 
     #[arg(
         long,
-        help = "Use the new-style \"dirdump\" importer to load object definition files from the textdump directory instead of the legacy LambdaMOO format.",
-        default_value = "false"
+        value_name = "export",
+        help = "Path to a textdump or objdef directory to export into",
+        value_hint = ValueHint::FilePath
     )]
-    pub import_dirdump_format: bool,
+    pub export: Option<PathBuf>,
 
     #[arg(
+        short,
         long,
-        help = "Use the new-style \"dirdump\" importer to dump object definition files into textdump directory instead of the legacy LambdaMOO format.",
-        default_value = "false"
+        value_name = "import-format",
+        help = "Format to import from.",
+        value_enum
     )]
-    pub export_dirdump_format: bool,
+    pub import_format: Format,
+
+    #[arg(
+        short,
+        long,
+        value_name = "export-format",
+        help = "Format to export into.",
+        value_enum
+    )]
+    pub export_format: Format,
 
     #[arg(
         long,
@@ -257,13 +279,6 @@ pub struct TextdumpArgs {
         help = "Interval in seconds between database checkpoints"
     )]
     pub checkpoint_interval_seconds: Option<u16>,
-
-    #[arg(
-        long,
-        value_name = "textdump-output",
-        help = "Path to directory to write the textdump file to on `dump_database()`, or on schedule, if any"
-    )]
-    pub textdump_out: Option<PathBuf>,
 
     #[arg(
         long,
@@ -286,12 +301,12 @@ pub struct TextdumpArgs {
     pub version_override: Option<String>,
 }
 
-impl TextdumpArgs {
-    pub fn merge_config(&self, config: &mut TextdumpConfig) {
-        if let Some(args) = self.textdump.as_ref() {
+impl ImportExportArgs {
+    pub fn merge_config(&self, config: &mut ImportExportConfig) {
+        if let Some(args) = self.import.as_ref() {
             config.input_path = Some(args.clone());
         }
-        if let Some(args) = self.textdump_out.as_ref() {
+        if let Some(args) = self.export.as_ref() {
             config.output_path = Some(args.clone());
         }
         if let Some(args) = self.textdump_output_encoding {
@@ -303,8 +318,14 @@ impl TextdumpArgs {
         if let Some(args) = self.version_override.as_ref() {
             config.version_override = Some(args.clone());
         }
-        config.import_dirdump = self.import_dirdump_format;
-        config.export_dirdump = self.export_dirdump_format;
+        config.import_format = match self.import_format {
+            Format::Textdump => ImportExportFormat::Textdump,
+            Format::Objdef => ImportExportFormat::Objdef,
+        };
+        config.export_format = match self.export_format {
+            Format::Textdump => ImportExportFormat::Textdump,
+            Format::Objdef => ImportExportFormat::Objdef,
+        };
     }
 }
 
@@ -350,7 +371,7 @@ impl Args {
     #[allow(dead_code)]
     pub fn merge_config(&self, mut config: Config) -> Config {
         if let Some(args) = self.textdump_args.as_ref() {
-            args.merge_config(&mut config.textdump_config);
+            args.merge_config(&mut config.import_export_config);
         }
         if let Some(args) = self.feature_args.as_ref() {
             args.merge_config(&mut config.features_config);

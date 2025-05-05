@@ -32,7 +32,7 @@ use moor_compiler::{Program, compile, program_to_tree, to_literal, unparse};
 use moor_db::Database;
 
 use crate::builtins::BuiltinRegistry;
-use crate::config::Config;
+use crate::config::{Config, ImportExportFormat};
 use crate::objdef::{collect_object_definitions, dump_object_definitions};
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
 use crate::tasks::sessions::{Session, SessionFactory, SystemControl};
@@ -1276,7 +1276,7 @@ impl Scheduler {
     }
 
     fn checkpoint(&self) -> Result<(), SchedulerError> {
-        let Some(textdump_path) = self.config.textdump_config.output_path.clone() else {
+        let Some(textdump_path) = self.config.import_export_config.output_path.clone() else {
             error!("Cannot textdump as output directory not configured");
             return Err(SchedulerError::CouldNotStartTask);
         };
@@ -1298,7 +1298,7 @@ impl Scheduler {
                 .as_secs()
         ));
 
-        let encoding_mode = self.config.textdump_config.output_encoding;
+        let encoding_mode = self.config.import_export_config.output_encoding;
 
         let loader_client = {
             match self.database.loader_client() {
@@ -1312,9 +1312,9 @@ impl Scheduler {
 
         let version_string = self
             .config
-            .textdump_config
+            .import_export_config
             .version_string(&self.version, &self.config.features_config);
-        let dirdump = self.config.textdump_config.export_dirdump;
+        let dirdump = self.config.import_export_config.export_format == ImportExportFormat::Objdef;
 
         let tr = std::thread::Builder::new()
             .name("textdump-thread".to_string())
