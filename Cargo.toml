@@ -112,7 +112,7 @@ encoding_rs = "0.8"
 enum-primitive-derive = "0.3"
 fast-counter = "1.0.0"
 im = "15.1.0"
-indexmap = "2.7"
+indexmap = "2.9"
 itertools = "0.14"
 lazy_static = "1.5"
 num-traits = "0.2"
@@ -173,7 +173,7 @@ termimad = "0.31"
 
 # For age encryption
 age = "0.11"
-base64 = "0.21"
+base64 = "0.22"
 ssh-key = "0.6"
 
 # For the consistency checker in `load-tools`
