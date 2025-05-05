@@ -17,7 +17,7 @@ use crate::listen::Listeners;
 use clap::Parser;
 use clap_derive::Parser;
 use moor_var::SYSTEM_OBJECT;
-use rpc_async_client::{make_host_token, proces_hosts_events, start_host_session};
+use rpc_async_client::{make_host_token, process_hosts_events, start_host_session};
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{HostType, load_keypair};
 use std::net::SocketAddr;
@@ -121,7 +121,7 @@ async fn main() -> Result<(), eyre::Error> {
     .await
     .expect("Unable to establish initial host session");
 
-    let host_listen_loop = proces_hosts_events(
+    let host_listen_loop = process_hosts_events(
         rpc_client,
         host_token,
         zmq_ctx.clone(),

@@ -55,6 +55,9 @@ pub enum TaskSuspend {
     WaitTask(TaskId),
     /// Just commit and resume immediately.
     Commit,
+    /// Ask the scheduler to ask a worker to do some work, suspend us, and then resume us when
+    /// the work is done.
+    WorkerRequest(Symbol, Vec<Var>),
 }
 
 /// Possible outcomes from VM execution inner loop, which are used to determine what to do next.

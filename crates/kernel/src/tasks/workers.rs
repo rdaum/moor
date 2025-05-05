@@ -11,19 +11,30 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#![allow(clippy::too_many_arguments)]
+use moor_common::tasks::WorkerError;
+use moor_var::{Obj, Symbol, Var};
+use uuid::Uuid;
 
-pub use host::{
-    make_host_token, process_hosts_events, send_host_to_daemon_msg, start_host_session,
-};
-pub use listeners::{ListenersClient, ListenersError, ListenersMessage};
-pub use worker::{attach_worker, make_worker_token};
-pub use worker_loop::{WorkerRpcError, worker_loop};
-pub use worker_rpc_client::WorkerRpcSendClient;
-mod host;
-mod listeners;
-pub mod pubsub_client;
-pub mod rpc_client;
-mod worker;
-mod worker_loop;
-mod worker_rpc_client;
+#[derive(Debug)]
+pub enum WorkerRequest {
+    /// A request to a worker of X type, with an optional response channel.
+    /// We will pick a worker of the given type to send the request to.
+    Request {
+        request_id: Uuid,
+        request_type: Symbol,
+        perms: Obj,
+        request: Vec<Var>,
+    },
+}
+
+#[derive(Debug)]
+pub enum WorkerResponse {
+    Error {
+        request_id: Uuid,
+        error: WorkerError,
+    },
+    Response {
+        request_id: Uuid,
+        response: Vec<Var>,
+    },
+}

@@ -52,6 +52,8 @@ pub enum WakeCondition {
     Task(TaskId),
     /// Wake immediately. This is used for tasks that performed a commit().
     Immedate,
+    /// Wake when a worker responds to this request id
+    Worker(Uuid),
 }
 
 #[repr(u8)]
@@ -62,6 +64,7 @@ pub enum WakeConditionType {
     Input = 2,
     Task = 3,
     Immediate = 4,
+    Worker = 5,
 }
 
 impl WakeCondition {
@@ -72,6 +75,7 @@ impl WakeCondition {
             WakeCondition::Input(_) => WakeConditionType::Input,
             WakeCondition::Task(_) => WakeConditionType::Task,
             WakeCondition::Immedate => WakeConditionType::Immediate,
+            WakeCondition::Worker(_) => WakeConditionType::Worker,
         }
     }
 }
@@ -224,6 +228,26 @@ impl SuspensionQ {
         Some(sr)
     }
 
+    pub(crate) fn pull_task_for_worker(
+        &mut self,
+        worker_request_id: Uuid,
+    ) -> Option<SuspendedTask> {
+        let (task_id, _) = self.tasks.iter().find_map(|(task_id, sr)| {
+            if let WakeCondition::Worker(request_id) = &sr.wake_condition {
+                if *request_id == worker_request_id {
+                    Some((*task_id, sr.task.perms.clone()))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })?;
+
+        let sr = self.remove_task(task_id).expect("Corrupt task list");
+        Some(sr)
+    }
+
     /// Get a nice friendly list of all tasks in suspension state.
     pub(crate) fn tasks(&self) -> Vec<TaskDescription> {
         let mut tasks = Vec::new();
@@ -346,6 +370,7 @@ impl Encode for WakeCondition {
             }
             WakeCondition::Input(uuid) => uuid.as_u128().encode(encoder),
             WakeCondition::Task(task_id) => task_id.encode(encoder),
+            WakeCondition::Worker(worker_request_id) => worker_request_id.as_u128().encode(encoder),
             WakeCondition::Immedate => Ok(()),
         }
     }
@@ -369,6 +394,10 @@ impl<C> Decode<C> for WakeCondition {
                 let task_id = TaskId::decode(decoder)?;
                 Ok(WakeCondition::Task(task_id))
             }
+            WakeConditionType::Worker => {
+                let worker_request_id = Uuid::from_u128(Decode::decode(decoder)?);
+                Ok(WakeCondition::Worker(worker_request_id))
+            }
             WakeConditionType::Immediate => Ok(WakeCondition::Immedate),
         }
     }
@@ -391,6 +420,10 @@ impl<'de, C> BorrowDecode<'de, C> for WakeCondition {
             WakeConditionType::Task => {
                 let task_id = TaskId::borrow_decode(decoder)?;
                 Ok(WakeCondition::Task(task_id))
+            }
+            WakeConditionType::Worker => {
+                let worker_request_id = Uuid::from_u128(Decode::decode(decoder)?);
+                Ok(WakeCondition::Worker(worker_request_id))
             }
             WakeConditionType::Immediate => Ok(WakeCondition::Immedate),
         }

@@ -34,6 +34,7 @@ clap_derive.workspace = true
 bincode.workspace = true
 byteview.workspace = true
 color-eyre.workspace = true
+crossbeam-channel.workspace = true
 eyre.workspace = true
 fjall.workspace = true
 oneshot.workspace = true

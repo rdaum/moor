@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/common",
     "crates/compiler",
+    "crates/curl-worker",
     "crates/daemon",
     "crates/db",
     "crates/kernel",
@@ -30,6 +31,7 @@ default-members = [
     "crates/web-host",
     "crates/testing/moot",
     "crates/testing/load-tools",
+    "crates/curl-worker",
     "tools/moorc",
 ]
 
@@ -85,6 +87,7 @@ serde_json = "1.0"
 ## the daemon itself uses its own threading
 futures = "0.3"
 futures-util = { version = "0.3", features = ["sink", "std"] }
+reqwest = "0.12"
 tokio = { version = "1.44", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
 tower-http = { version = "0.6", features = ["fs"] }

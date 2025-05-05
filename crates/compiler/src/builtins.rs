@@ -1222,6 +1222,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("worker_request"),
+            min_args: Q(2),
+            max_args: U,
+            types: vec![Typed(TYPE_SYMBOL), Any],
+            implemented: true,
+        },
     ]
 }
 

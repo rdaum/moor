@@ -24,3 +24,5 @@ thiserror.workspace = true
 # Auth/Auth
 ed25519-dalek.workspace = true
 rusty_paseto.workspace = true
+
+uuid.workspace = true

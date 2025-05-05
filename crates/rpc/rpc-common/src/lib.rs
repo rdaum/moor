@@ -20,20 +20,26 @@ pub use client::{
     HostClientToDaemonMessage, PropInfo, VerbInfo, VerbProgramResponse,
 };
 pub use host::{DaemonToHostReply, HostBroadcastEvent, HostToDaemonMessage, HostType};
+pub use worker::{DaemonToWorkerMessage, DaemonToWorkerReply, WorkerToDaemonMessage};
+
 pub use tokens::{
     AuthToken, ClientToken, HostToken, KeyError, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,
-    MOOR_SESSION_TOKEN_FOOTER, load_keypair, parse_keypair,
+    MOOR_SESSION_TOKEN_FOOTER, MOOR_WORKER_TOKEN_FOOTER, WorkerToken, load_keypair, parse_keypair,
 };
 mod client;
 pub mod client_args;
 mod host;
 mod tokens;
+mod worker;
 
 /// A ZMQ topic for broadcasting to all clients of all hosts.
 pub const CLIENT_BROADCAST_TOPIC: &[u8; 9] = b"broadcast";
 
 /// A ZMQ topic for broadcasting to just the hosts.
 pub const HOST_BROADCAST_TOPIC: &[u8; 5] = b"hosts";
+
+/// A ZMQ topic for broadcasting to just the workers.
+pub const WORKER_BROADCAST_TOPIC: &[u8; 7] = b"workers";
 
 /// Errors at the RPC transport / encoding layer.
 #[derive(Debug, Error)]

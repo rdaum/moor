@@ -211,7 +211,7 @@ impl WebSocketConnection {
         &mut self,
         ws_sender: &mut SplitSink<WebSocket, Message>,
         event: ClientEvent,
-    ) -> Option<u128> {
+    ) -> Option<Uuid> {
         trace!(?event, "narrative_event");
         match event {
             ClientEvent::SystemMessage(author, msg) => {
@@ -339,7 +339,7 @@ impl WebSocketConnection {
     async fn process_requested_input_line(
         &mut self,
         line: Message,
-        expecting_input: &mut VecDeque<u128>,
+        expecting_input: &mut VecDeque<Uuid>,
         ws_sender: &mut SplitSink<WebSocket, Message>,
     ) {
         let line = line.into_text().unwrap();
