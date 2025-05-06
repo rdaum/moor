@@ -11,18 +11,24 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::fmt::{Display, Formatter};
-
 use crate::Symbol;
 use crate::var::Var;
 use ErrorCode::*;
 use bincode::{Decode, Encode};
+use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 
-#[derive(Clone, Debug, Eq, Ord, PartialOrd, Hash, Encode, Decode)]
+#[derive(Clone, Eq, Ord, PartialOrd, Encode, Decode)]
 pub struct Error {
     pub err_type: ErrorCode,
     pub msg: Option<String>,
     pub value: Option<Box<Var>>,
+}
+
+impl Hash for Error {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.err_type.hash(state);
+    }
 }
 
 impl Error {
@@ -32,6 +38,16 @@ impl Error {
             msg,
             value: value.map(Box::new),
         }
+    }
+}
+
+// TODO: Debug for Error should be more informative, but we need to be careful about what it returns
+//   because the `moot` tests use this to compare results via string comparison, and we don't want
+//   to break that.  We need to do some work in the moot test runner to make it handle error comparisons
+//   better, and then we can make this more informative again.
+impl Debug for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.err_type)
     }
 }
 
