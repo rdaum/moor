@@ -14,14 +14,14 @@
 use moor_common::model::{PropAttrs, PropFlag, prop_flags_string};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
-use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
 use moor_var::Sequence;
 use moor_var::Variant;
+use moor_var::{E_ARGS, E_INVARG, E_TYPE};
 use moor_var::{List, v_empty_list};
 use moor_var::{v_list, v_none, v_obj, v_string};
 
 use crate::bf_declare;
-use crate::builtins::BfErr::Code;
+use crate::builtins::BfErr::{Code, ErrValue};
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 
@@ -34,7 +34,7 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(Code(E_TYPE));
     };
-    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
+    let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
     let (_, perms) = bf_args
         .world_state
         .get_property_info(&bf_args.task_perms_who(), obj, prop_name)
@@ -56,21 +56,21 @@ enum InfoParseResult {
 
 fn info_to_prop_attrs(info: &List) -> InfoParseResult {
     if info.len() < 2 || info.len() > 3 {
-        return InfoParseResult::Fail(E_ARGS);
+        return InfoParseResult::Fail(E_ARGS.msg("Invalid property info length"));
     }
 
     let owner = info.index(0).unwrap();
     let Variant::Obj(owner) = owner.variant() else {
-        return InfoParseResult::Fail(E_TYPE);
+        return InfoParseResult::Fail(E_TYPE.msg("Invalid property info owner"));
     };
     let perms = info.index(1).unwrap();
     let Variant::Str(perms) = perms.variant() else {
-        return InfoParseResult::Fail(E_TYPE);
+        return InfoParseResult::Fail(E_TYPE.msg("Invalid property info perms"));
     };
     let name = if info.len() == 3 {
         let name = info.index(2).unwrap();
         let Variant::Str(name) = name.variant() else {
-            return InfoParseResult::Fail(E_TYPE);
+            return InfoParseResult::Fail(E_TYPE.msg("Invalid property info name"));
         };
         Some(name.as_str().to_string())
     } else {
@@ -83,7 +83,7 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
             'r' => flags |= PropFlag::Read,
             'w' => flags |= PropFlag::Write,
             'c' => flags |= PropFlag::Chown,
-            _ => return InfoParseResult::Fail(E_INVARG),
+            _ => return InfoParseResult::Fail(E_INVARG.msg("Invalid property info perms")),
         }
     }
 
@@ -98,19 +98,21 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
 
 fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
-        return Err(Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("set_property_info requires 3 arguments"),
+        ));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(Code(E_TYPE));
+        return Err(ErrValue(E_TYPE.msg("set_property_info requires an object")));
     };
-    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
+    let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
     let Variant::List(info) = bf_args.args[2].variant() else {
-        return Err(Code(E_TYPE));
+        return Err(ErrValue(E_TYPE.msg("set_property_info requires a list")));
     };
 
     let attrs = match info_to_prop_attrs(info) {
         InfoParseResult::Fail(e) => {
-            return Err(Code(e));
+            return Err(ErrValue(e));
         }
         InfoParseResult::Success(a) => a,
     };
@@ -130,7 +132,7 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(Code(E_TYPE));
     };
-    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
+    let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
     let is_clear = bf_args
         .world_state
         .is_property_clear(&bf_args.task_perms_who(), obj, prop_name)
@@ -146,7 +148,7 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(Code(E_TYPE));
     };
-    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
+    let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
     bf_args
         .world_state
         .clear_property(&bf_args.task_perms_who(), obj, prop_name)
@@ -170,11 +172,11 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(Code(E_ARGS));
     };
 
-    let prop_name = name.as_symbol().map_err(Code)?;
+    let prop_name = name.as_symbol().map_err(ErrValue)?;
 
     let attrs = match info_to_prop_attrs(info) {
         InfoParseResult::Fail(e) => {
-            return Err(Code(e));
+            return Err(ErrValue(e));
         }
         InfoParseResult::Success(a) => a,
     };
@@ -202,7 +204,7 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
         return Err(Code(E_TYPE));
     };
-    let prop_name = bf_args.args[1].as_symbol().map_err(Code)?;
+    let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
     bf_args
         .world_state
         .delete_property(&bf_args.task_perms_who(), obj, prop_name)

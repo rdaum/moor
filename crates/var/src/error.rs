@@ -13,14 +13,40 @@
 
 use std::fmt::{Display, Formatter};
 
+use crate::Symbol;
+use crate::var::Var;
+use ErrorCode::*;
 use bincode::{Decode, Encode};
 
-use crate::Symbol;
-use crate::var::{Var, v_none};
+#[derive(Clone, Debug, Eq, Ord, PartialOrd, Hash, Encode, Decode)]
+pub struct Error {
+    pub err_type: ErrorCode,
+    pub msg: Option<String>,
+    pub value: Option<Box<Var>>,
+}
 
+impl Error {
+    pub fn new(err_type: ErrorCode, msg: Option<String>, value: Option<Var>) -> Self {
+        Self {
+            err_type,
+            msg,
+            value: value.map(Box::new),
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.msg.is_some() {
+            write!(f, "{} ({})", self.err_type, self.message())
+        } else {
+            write!(f, "{}", self.err_type)
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode)]
 #[allow(non_camel_case_types)]
-pub enum Error {
+pub enum ErrorCode {
     E_NONE,
     E_TYPE,
     E_DIV,
@@ -41,180 +67,189 @@ pub enum Error {
     E_FILE,
     E_EXEC,
     E_INTRPT,
-    Custom(Symbol),
+    // Our own extension
+    ErrCustom(Symbol),
+}
+
+impl Display for ErrorCode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            E_NONE => write!(f, "E_NONE"),
+            E_TYPE => write!(f, "E_TYPE"),
+            E_DIV => write!(f, "E_DIV"),
+            E_PERM => write!(f, "E_PERM"),
+            E_PROPNF => write!(f, "E_PROPNF"),
+            E_VERBNF => write!(f, "E_VERBNF"),
+            E_VARNF => write!(f, "E_VARNF"),
+            E_INVIND => write!(f, "E_INVIND"),
+            E_RECMOVE => write!(f, "E_RECMOVE"),
+            E_MAXREC => write!(f, "E_MAXREC"),
+            E_RANGE => write!(f, "E_RANGE"),
+            E_ARGS => write!(f, "E_ARGS"),
+            E_NACC => write!(f, "E_NACC"),
+            E_INVARG => write!(f, "E_INVARG"),
+            E_QUOTA => write!(f, "E_QUOTA"),
+            E_FLOAT => write!(f, "E_FLOAT"),
+            E_FILE => write!(f, "E_FILE"),
+            E_EXEC => write!(f, "E_EXEC"),
+            E_INTRPT => write!(f, "E_INTRPT"),
+            ErrCustom(sym) => write!(f, "{sym}"),
+        }
+    }
+}
+impl ErrorCode {
+    pub fn msg(self, s: &str) -> Error {
+        Error::new(self, Some(s.into()), None)
+    }
+
+    pub fn with_msg<F>(self, f: F) -> Error
+    where
+        F: FnOnce() -> String,
+    {
+        Error::new(self, Some(f()), None)
+    }
+
+    pub fn with_msg_and_value<F>(self, f: F, value: Var) -> Error
+    where
+        F: FnOnce() -> String,
+    {
+        Error::new(self, Some(f()), Some(value))
+    }
+}
+
+// TODO: this presents difficulties/confusions for Hash, Clippy warns about it.
+impl PartialEq<ErrorCode> for Error {
+    fn eq(&self, other: &ErrorCode) -> bool {
+        self.err_type == *other
+    }
+}
+
+impl PartialEq<Error> for Error {
+    fn eq(&self, other: &Error) -> bool {
+        *self == other.err_type && self.value == other.value
+    }
+}
+
+impl From<ErrorCode> for Error {
+    fn from(val: ErrorCode) -> Self {
+        Error::new(val, None, None)
+    }
 }
 
 impl Error {
     pub fn from_repr(v: u8) -> Option<Self> {
-        match v {
-            0 => Some(Self::E_NONE),
-            1 => Some(Self::E_TYPE),
-            2 => Some(Self::E_DIV),
-            3 => Some(Self::E_PERM),
-            4 => Some(Self::E_PROPNF),
-            5 => Some(Self::E_VERBNF),
-            6 => Some(Self::E_VARNF),
-            7 => Some(Self::E_INVIND),
-            8 => Some(Self::E_RECMOVE),
-            9 => Some(Self::E_MAXREC),
-            10 => Some(Self::E_RANGE),
-            11 => Some(Self::E_ARGS),
-            12 => Some(Self::E_NACC),
-            13 => Some(Self::E_INVARG),
-            14 => Some(Self::E_QUOTA),
-            15 => Some(Self::E_FLOAT),
-            16 => Some(Self::E_FILE),
-            17 => Some(Self::E_EXEC),
-            18 => Some(Self::E_INTRPT),
+        let err_code = match v {
+            0 => Some(E_NONE),
+            1 => Some(E_TYPE),
+            2 => Some(E_DIV),
+            3 => Some(E_PERM),
+            4 => Some(E_PROPNF),
+            5 => Some(E_VERBNF),
+            6 => Some(E_VARNF),
+            7 => Some(E_INVIND),
+            8 => Some(E_RECMOVE),
+            9 => Some(E_MAXREC),
+            10 => Some(E_RANGE),
+            11 => Some(E_ARGS),
+            12 => Some(E_NACC),
+            13 => Some(E_INVARG),
+            14 => Some(E_QUOTA),
+            15 => Some(E_FLOAT),
+            16 => Some(E_FILE),
+            17 => Some(E_EXEC),
+            18 => Some(E_INTRPT),
             _ => None,
-        }
+        }?;
+        Some(Error::new(err_code, None, None))
     }
 
     pub fn to_int(&self) -> Option<u8> {
-        match self {
-            Self::E_NONE => Some(0),
-            Self::E_TYPE => Some(1),
-            Self::E_DIV => Some(2),
-            Self::E_PERM => Some(3),
-            Self::E_PROPNF => Some(4),
-            Self::E_VERBNF => Some(5),
-            Self::E_VARNF => Some(6),
-            Self::E_INVIND => Some(7),
-            Self::E_RECMOVE => Some(8),
-            Self::E_MAXREC => Some(9),
-            Self::E_RANGE => Some(10),
-            Self::E_ARGS => Some(11),
-            Self::E_NACC => Some(12),
-            Self::E_INVARG => Some(13),
-            Self::E_QUOTA => Some(14),
-            Self::E_FLOAT => Some(15),
-            Self::E_FILE => Some(16),
-            Self::E_EXEC => Some(17),
-            Self::E_INTRPT => Some(18),
+        match self.err_type {
+            E_NONE => Some(0),
+            E_TYPE => Some(1),
+            E_DIV => Some(2),
+            E_PERM => Some(3),
+            E_PROPNF => Some(4),
+            E_VERBNF => Some(5),
+            E_VARNF => Some(6),
+            E_INVIND => Some(7),
+            E_RECMOVE => Some(8),
+            E_MAXREC => Some(9),
+            E_RANGE => Some(10),
+            E_ARGS => Some(11),
+            E_NACC => Some(12),
+            E_INVARG => Some(13),
+            E_QUOTA => Some(14),
+            E_FLOAT => Some(15),
+            E_FILE => Some(16),
+            E_EXEC => Some(17),
+            E_INTRPT => Some(18),
             _ => None,
         }
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message())
     }
 }
 
 impl std::error::Error for Error {}
-#[derive(Debug)]
-pub struct ErrorPack {
-    pub code: Error,
-    pub msg: String,
-    pub value: Var,
-}
-
-impl ErrorPack {
-    pub fn new(code: Error, msg: String, value: Var) -> Self {
-        Self { code, msg, value }
-    }
-}
-
-impl From<Error> for ErrorPack {
-    fn from(value: Error) -> Self {
-        ErrorPack::new(value, value.message().to_string(), v_none())
-    }
-}
 
 impl Error {
     #[must_use]
     pub fn message(&self) -> String {
-        match self {
-            Self::E_NONE => "No error".into(),
-            Self::E_TYPE => "Type mismatch".into(),
-            Self::E_DIV => "Division by zero".into(),
-            Self::E_PERM => "Permission denied".into(),
-            Self::E_PROPNF => "Property not found".into(),
-            Self::E_VERBNF => "Verb not found".into(),
-            Self::E_VARNF => "Variable not found".into(),
-            Self::E_INVIND => "Invalid indirection".into(),
-            Self::E_RECMOVE => "Recursive move".into(),
-            Self::E_MAXREC => "Too many verb calls".into(),
-            Self::E_RANGE => "Range error".into(),
-            Self::E_ARGS => "Incorrect number of arguments".into(),
-            Self::E_NACC => "Move refused by destination".into(),
-            Self::E_INVARG => "Invalid argument".into(),
-            Self::E_QUOTA => "Resource limit exceeded".into(),
-            Self::E_FLOAT => "Floating-point arithmetic error".into(),
-            Self::E_FILE => "File error".into(),
-            Self::E_EXEC => "Execution error".into(),
-            Self::E_INTRPT => "Interruption".into(),
-            Self::Custom(sym) => format!("Error: {}", sym.as_str().to_uppercase()),
+        if let Some(msg) = &self.msg {
+            return msg.clone();
+        }
+        // Default message if one not provided.
+        match self.err_type {
+            E_NONE => "No error".into(),
+            E_TYPE => "Type mismatch".into(),
+            E_DIV => "Division by zero".into(),
+            E_PERM => "Permission denied".into(),
+            E_PROPNF => "Property not found".into(),
+            E_VERBNF => "Verb not found".into(),
+            E_VARNF => "Variable not found".into(),
+            E_INVIND => "Invalid indirection".into(),
+            E_RECMOVE => "Recursive move".into(),
+            E_MAXREC => "Too many verb calls".into(),
+            E_RANGE => "Range error".into(),
+            E_ARGS => "Incorrect number of arguments".into(),
+            E_NACC => "Move refused by destination".into(),
+            E_INVARG => "Invalid argument".into(),
+            E_QUOTA => "Resource limit exceeded".into(),
+            E_FLOAT => "Floating-point arithmetic error".into(),
+            E_FILE => "File error".into(),
+            E_EXEC => "Execution error".into(),
+            E_INTRPT => "Interruption".into(),
+            ErrCustom(sym) => format!("Custom error: {}", sym),
         }
     }
 
     #[must_use]
     pub fn name(&self) -> Symbol {
-        match self {
-            Self::E_NONE => "E_NONE".into(),
-            Self::E_TYPE => "E_TYPE".into(),
-            Self::E_DIV => "E_DIV".into(),
-            Self::E_PERM => "E_PERM".into(),
-            Self::E_PROPNF => "E_PROPNF".into(),
-            Self::E_VERBNF => "E_VERBNF".into(),
-            Self::E_VARNF => "E_VARNF".into(),
-            Self::E_INVIND => "E_INVIND".into(),
-            Self::E_RECMOVE => "E_RECMOVE".into(),
-            Self::E_MAXREC => "E_MAXREC".into(),
-            Self::E_RANGE => "E_RANGE".into(),
-            Self::E_ARGS => "E_ARGS".into(),
-            Self::E_NACC => "E_NACC".into(),
-            Self::E_INVARG => "E_INVARG".into(),
-            Self::E_QUOTA => "E_QUOTA".into(),
-            Self::E_FLOAT => "E_FLOAT".into(),
-            Self::E_FILE => "E_FILE".into(),
-            Self::E_EXEC => "E_EXEC".into(),
-            Self::E_INTRPT => "E_INTRPT".into(),
-            Self::Custom(sym) => *sym,
-        }
-    }
-
-    #[must_use]
-    pub fn make_raise_pack(&self, msg: String, value: Var) -> ErrorPack {
-        ErrorPack {
-            code: *self,
-            msg,
-            value,
-        }
-    }
-
-    #[must_use]
-    pub fn make_error_pack(&self, msg: Option<String>, value: Option<Var>) -> ErrorPack {
-        ErrorPack {
-            code: *self,
-            msg: msg.unwrap_or(self.message().to_string()),
-            value: value.unwrap_or(v_none()),
-        }
+        Symbol::mk(&format!("{}", self.err_type))
     }
 
     pub fn parse_str(s: &str) -> Option<Self> {
-        match s.to_uppercase().as_str() {
-            "E_NONE" => Some(Self::E_NONE),
-            "E_TYPE" => Some(Self::E_TYPE),
-            "E_DIV" => Some(Self::E_DIV),
-            "E_PERM" => Some(Self::E_PERM),
-            "E_PROPNF" => Some(Self::E_PROPNF),
-            "E_VERBNF" => Some(Self::E_VERBNF),
-            "E_VARNF" => Some(Self::E_VARNF),
-            "E_INVIND" => Some(Self::E_INVIND),
-            "E_RECMOVE" => Some(Self::E_RECMOVE),
-            "E_MAXREC" => Some(Self::E_MAXREC),
-            "E_RANGE" => Some(Self::E_RANGE),
-            "E_ARGS" => Some(Self::E_ARGS),
-            "E_NACC" => Some(Self::E_NACC),
-            "E_INVARG" => Some(Self::E_INVARG),
-            "E_QUOTA" => Some(Self::E_QUOTA),
-            "E_FLOAT" => Some(Self::E_FLOAT),
-            "E_FILE" => Some(Self::E_FILE),
-            "E_EXEC" => Some(Self::E_EXEC),
-            "E_INTRPT" => Some(Self::E_INTRPT),
-            s => Some(Self::Custom(Symbol::mk_case_insensitive(s))),
-        }
+        let e = match s.to_uppercase().as_str() {
+            "E_NONE" => Some(E_NONE),
+            "E_TYPE" => Some(E_TYPE),
+            "E_DIV" => Some(E_DIV),
+            "E_PERM" => Some(E_PERM),
+            "E_PROPNF" => Some(E_PROPNF),
+            "E_VERBNF" => Some(E_VERBNF),
+            "E_VARNF" => Some(E_VARNF),
+            "E_INVIND" => Some(E_INVIND),
+            "E_RECMOVE" => Some(E_RECMOVE),
+            "E_MAXREC" => Some(E_MAXREC),
+            "E_RANGE" => Some(E_RANGE),
+            "E_ARGS" => Some(E_ARGS),
+            "E_NACC" => Some(E_NACC),
+            "E_INVARG" => Some(E_INVARG),
+            "E_QUOTA" => Some(E_QUOTA),
+            "E_FLOAT" => Some(E_FLOAT),
+            "E_FILE" => Some(E_FILE),
+            "E_EXEC" => Some(E_EXEC),
+            "E_INTRPT" => Some(E_INTRPT),
+            s => Some(ErrCustom(Symbol::mk_case_insensitive(s))),
+        };
+        e.map(|e| Error::new(e, None, None))
     }
 }

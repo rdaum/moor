@@ -16,9 +16,9 @@ use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use md5::Digest;
 use moor_compiler::{offset_for_builtin, to_literal};
-use moor_var::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
 use moor_var::Variant;
 use moor_var::{AsByteBuffer, Sequence};
+use moor_var::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
 use moor_var::{v_float, v_int, v_obj, v_objid, v_str, v_sym, v_sym_str};
 
 fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -215,7 +215,7 @@ fn bf_length(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match bf_args.args[0].len() {
         Ok(l) => Ok(Ret(v_int(l as i64))),
-        Err(e) => Err(BfErr::Code(e)),
+        Err(e) => Err(BfErr::ErrValue(e)),
     }
 }
 bf_declare!(length, bf_length);

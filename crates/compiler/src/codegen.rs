@@ -374,9 +374,6 @@ impl CodegenState {
                         Err(_) => self.emit(Op::ImmBigInt(*i)),
                     },
                     Variant::Float(f) => self.emit(Op::ImmFloat(*f)),
-                    Variant::Err(e) => {
-                        self.emit(Op::ImmErr(*e));
-                    }
                     _ => {
                         let literal = self.add_literal(v);
                         self.emit(Op::Imm(literal));

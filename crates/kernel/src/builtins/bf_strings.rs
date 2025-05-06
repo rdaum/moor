@@ -17,7 +17,7 @@ use base64::Engine;
 use base64::engine::general_purpose;
 use md5::Digest;
 use moor_compiler::offset_for_builtin;
-use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
+use moor_var::{E_ARGS, E_INVARG, E_TYPE};
 use moor_var::{Sequence, Variant};
 use moor_var::{v_int, v_map, v_str, v_string};
 use rand::distributions::Alphanumeric;

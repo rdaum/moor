@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use itertools::Itertools;
-use moor_var::{Error, SYSTEM_OBJECT, Var, VarType};
+use moor_var::{Error, ErrorCode, SYSTEM_OBJECT, Var, VarType, v_error};
 use moor_var::{Symbol, v_none};
 pub use pest::Parser as PestParser;
 use pest::error::LineColLocation;
@@ -27,7 +27,7 @@ use pest::iterators::{Pair, Pairs};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 
 use moor_var::Obj;
-use moor_var::{v_err, v_float, v_int, v_obj, v_str, v_string};
+use moor_var::{v_float, v_int, v_obj, v_str, v_string};
 
 use crate::Name;
 use crate::ast::Arg::{Normal, Splice};
@@ -186,7 +186,7 @@ impl TreeTransformer {
                 let Some(e) = Error::parse_str(e) else {
                     panic!("invalid error value: {e}");
                 };
-                if let Error::Custom(_) = &e {
+                if let ErrorCode::ErrCustom(_) = &e.err_type {
                     if !self.options.custom_errors {
                         return Err(CompileError::DisabledFeature(
                             self.compile_context(&pair),
@@ -194,7 +194,7 @@ impl TreeTransformer {
                         ));
                     }
                 }
-                Ok(Expr::Value(v_err(e)))
+                Ok(Expr::Value(v_error(e)))
             }
             _ => {
                 panic!("Unimplemented atom: {:?}", pair);
@@ -1463,8 +1463,7 @@ pub fn unquote_str(s: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use moor_var::Error::{Custom, E_INVARG, E_PROPNF, E_VARNF};
-    use moor_var::{Symbol, v_none};
+    use moor_var::{E_INVARG, E_PROPNF, E_VARNF, ErrCustom, Symbol, v_none};
     use moor_var::{Var, v_err, v_float, v_int, v_objid, v_str};
 
     use crate::CompileOptions;
@@ -3116,9 +3115,9 @@ mod tests {
                 vec![
                     Normal(Value(v_err(E_INVARG))),
                     Normal(Value(v_err(E_PROPNF))),
-                    Normal(Value(v_err(Custom("e_custom".into())))),
-                    Normal(Value(v_err(Custom("e__ultra_long_custom".into())))),
-                    Normal(Value(v_err(Custom("e_unknown".into())))),
+                    Normal(Value(v_err(ErrCustom("e_custom".into())))),
+                    Normal(Value(v_err(ErrCustom("e__ultra_long_custom".into())))),
+                    Normal(Value(v_err(ErrCustom("e_unknown".into())))),
                 ]
             )))))]
         )

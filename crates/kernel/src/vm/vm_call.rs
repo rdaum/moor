@@ -28,7 +28,7 @@ use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
 use moor_common::util::PerfTimerGuard;
 use moor_compiler::{BUILTINS, BuiltinId, Program};
-use moor_var::Error::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
+use moor_var::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_var::{List, Obj};
 use moor_var::{Var, v_int, v_obj};
@@ -93,7 +93,7 @@ impl VMExecState {
             Variant::Flyweight(f) => (args, target.clone(), f.delegate().clone()),
             non_obj => {
                 if !exec_params.config.type_dispatch {
-                    return Err(E_TYPE);
+                    return Err(E_TYPE.msg("Invalid target for verb dispatch"));
                 }
                 // If the object is not an object or frob, it's a primitive.
                 // For primitives, we look at its type, and look for a
@@ -111,7 +111,12 @@ impl VMExecState {
                     Variant::Sym(_) => *SYM_SYM,
                     Variant::Bool(_) => *BOOL_SYM,
                     _ => {
-                        return Err(E_TYPE);
+                        return Err(E_TYPE.with_msg(|| {
+                            format!(
+                                "Invalid target for verb dispatch: {}",
+                                target.type_code().to_literal()
+                            )
+                        }));
                     }
                 };
                 let perms = self.top().permissions.clone();
@@ -119,17 +124,27 @@ impl VMExecState {
                     match world_state.retrieve_property(&perms, &SYSTEM_OBJECT, sysprop_sym) {
                         Ok(prop_val) => prop_val,
                         Err(e) => {
-                            return Err(e.to_error_code());
+                            return Err(e.to_error());
                         }
                     };
                 let Variant::Obj(prop_val) = prop_val.variant() else {
-                    return Err(E_TYPE);
+                    return Err(E_TYPE.with_msg(|| {
+                        format!(
+                            "Invalid target for verb dispatch: {}",
+                            prop_val.type_code().to_literal()
+                        )
+                    }));
                 };
                 let arguments = args
                     .insert(0, &target)
                     .expect("Failed to insert object for dispatch");
                 let Variant::List(arguments) = arguments.variant() else {
-                    return Err(E_TYPE);
+                    return Err(E_TYPE.with_msg(|| {
+                        format!(
+                            "Invalid arguments for verb dispatch: {}",
+                            arguments.type_code().to_literal()
+                        )
+                    }));
                 };
                 (arguments.clone(), v_obj(prop_val.clone()), prop_val.clone())
             }
@@ -161,24 +176,25 @@ impl VMExecState {
             .valid(&location)
             .expect("Error checking object validity");
         if !self_valid {
-            return self.push_error(E_INVIND);
+            return self.push_error(E_INVIND.msg("Invalid object for verb dispatch"));
         }
         // Find the callable verb ...
         let (binary, resolved_verb) =
             match world_state.find_method_verb_on(&self.top().permissions, &location, verb_name) {
                 Ok(vi) => vi,
                 Err(WorldStateError::ObjectPermissionDenied) => {
-                    return self.push_error(E_PERM);
+                    return self.push_error(E_PERM.into());
                 }
                 Err(WorldStateError::RollbackRetry) => {
                     return ExecutionResult::TaskRollbackRestart;
                 }
                 Err(WorldStateError::VerbPermissionDenied) => {
-                    return self.push_error(E_PERM);
+                    return self.push_error(E_PERM.into());
                 }
                 Err(WorldStateError::VerbNotFound(_, _)) => {
-                    return self
-                        .push_error_msg(E_VERBNF, format!("Verb \"{}\" not found", verb_name));
+                    return self.push_error(
+                        E_VERBNF.with_msg(|| format!("Verb \"{}\" not found", verb_name)),
+                    );
                 }
                 Err(e) => {
                     panic!("Unexpected error from find_method_verb_on: {:?}", e)
@@ -216,7 +232,7 @@ impl VMExecState {
             Err(WorldStateError::RollbackRetry) => {
                 return ExecutionResult::TaskRollbackRestart;
             }
-            Err(e) => return self.raise_error(e.to_error_code()),
+            Err(e) => return self.raise_error(e.to_error()),
         };
         let verb = self.top().verb_name;
 
@@ -225,7 +241,7 @@ impl VMExecState {
             .valid(&parent)
             .expect("Error checking object validity")
         {
-            return self.push_error(E_INVIND);
+            return self.push_error(E_INVIND.msg("Invalid object for pass() verb dispatch"));
         }
 
         // call verb on parent, but with our current 'this'
@@ -235,7 +251,7 @@ impl VMExecState {
                 Err(WorldStateError::RollbackRetry) => {
                     return ExecutionResult::TaskRollbackRestart;
                 }
-                Err(e) => return self.raise_error(e.to_error_code()),
+                Err(e) => return self.raise_error(e.to_error()),
             };
 
         let caller = self.caller();
@@ -400,8 +416,9 @@ impl VMExecState {
             .add(elapsed_nanos as isize);
         match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
-            Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
-            Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(e, msg, value),
+            Err(BfErr::ErrValue(e)) => self.push_bf_error(e),
+            Err(BfErr::Code(c)) => self.push_bf_error(c.into()),
+            Err(BfErr::Raise(e)) => self.push_bf_error(e),
             Err(BfErr::Rollback) => ExecutionResult::TaskRollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
         }
@@ -464,9 +481,9 @@ impl VMExecState {
             .add(elapsed_nanos as isize);
         match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
-            Err(BfErr::Code(e)) => self.push_bf_error(e, None, None),
-            Err(BfErr::Raise(e, msg, value)) => self.push_bf_error(e, msg, value),
-
+            Err(BfErr::Code(c)) => self.push_bf_error(c.into()),
+            Err(BfErr::ErrValue(e)) => self.push_bf_error(e),
+            Err(BfErr::Raise(e)) => self.push_bf_error(e),
             Err(BfErr::Rollback) => ExecutionResult::TaskRollbackRestart,
             Ok(BfRet::VmInstr(vmi)) => vmi,
         }

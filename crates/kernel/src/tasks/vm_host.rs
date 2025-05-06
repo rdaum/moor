@@ -28,10 +28,10 @@ use moor_common::tasks::{AbortLimitReason, TaskId};
 use moor_compiler::Name;
 use moor_compiler::Program;
 use moor_compiler::{CompileOptions, compile};
-use moor_var::Error::E_MAXREC;
+use moor_var::E_MAXREC;
+use moor_var::Obj;
 use moor_var::Var;
 use moor_var::{AsByteBuffer, List};
-use moor_var::{ErrorPack, Obj};
 use moor_var::{Symbol, v_none};
 
 use crate::PhantomUnsync;
@@ -236,10 +236,6 @@ impl VmHost {
                     result = self.vm_exec_state.push_error(e);
                     continue;
                 }
-                ExecutionResult::PushErrorPack(e, m, v) => {
-                    result = self.vm_exec_state.push_error_pack(ErrorPack::new(e, m, v));
-                    continue;
-                }
                 ExecutionResult::RaiseError(e) => {
                     result = self.vm_exec_state.raise_error(e);
                     continue;
@@ -386,7 +382,7 @@ impl VmHost {
         if self.vm_exec_state.stack.len() >= vm_exec_params.max_stack_depth {
             // Absolutely raise-unwind an error here instead of just offering it as a potential
             // return value if this is a non-d verb. At least I think this the right thing to do?
-            return self.vm_exec_state.throw_error(E_MAXREC);
+            return self.vm_exec_state.throw_error(E_MAXREC.into());
         }
 
         // Pick the right kind of execution flow depending on the activation -- builtin or MOO?

@@ -16,10 +16,10 @@ use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_common::model::WorldState;
 use moor_compiler::offset_for_builtin;
-use moor_var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_var::{
-    Associative, Flyweight, List, Map, Obj, SYSTEM_OBJECT, Sequence, Symbol, Variant, v_flyweight,
-    v_list, v_map, v_obj, v_str, v_string, v_sym,
+    Associative, E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, Flyweight, List, Map, Obj,
+    SYSTEM_OBJECT, Sequence, Symbol, Variant, v_flyweight, v_list, v_map, v_obj, v_str, v_string,
+    v_sym,
 };
 use std::io::{BufReader, BufWriter};
 use tracing::error;
@@ -34,20 +34,35 @@ use xml::reader::XmlEvent;
 ///    in the map, and the object is resolved from that.
 fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.flyweight_type {
-        return Err(BfErr::Code(E_PERM));
+        return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
     }
 
     if bf_args.args.len() != 1 && bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
+            format!(
+                "xml_parse() takes 1 or 2 arguments, got {}",
+                bf_args.args.len()
+            )
+        })));
     }
 
     let Variant::Str(xml) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+            format!(
+                "xml_parse() expects a string argument, got {}",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
     };
 
     let map = if bf_args.args.len() == 2 {
         let Variant::Map(m) = bf_args.args[1].variant() else {
-            return Err(BfErr::Code(E_INVARG));
+            return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                format!(
+                    "xml_parse() expects a map as the second argument, got {}",
+                    bf_args.args[1].type_code().to_literal()
+                )
+            })));
         };
         Some(m)
     } else {
@@ -71,10 +86,14 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         let key = tag.to_string();
                         let key = v_str(key.as_str());
                         let Ok(obj) = m.get(&key) else {
-                            return Err(BfErr::Code(E_INVARG));
+                            return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                                format!("xml_parse() tag {} not found in map", tag)
+                            })));
                         };
                         let Variant::Obj(o) = obj.variant() else {
-                            return Err(BfErr::Code(E_TYPE));
+                            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                                format!("xml_parse() tag {} in map is not an object", tag)
+                            })));
                         };
                         o.clone()
                     }
@@ -89,7 +108,9 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             .map_err(world_state_bf_err)?;
 
                         let Variant::Obj(o) = prop_value.variant() else {
-                            return Err(BfErr::Code(E_TYPE));
+                            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                                format!("xml_parse() tag {} not found in system object", tag)
+                            })));
                         };
 
                         o.clone()
@@ -109,8 +130,9 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 current_node.push(entry);
             }
             Ok(XmlEvent::EndElement { .. }) => {
-                let (obj, attributes, children) =
-                    current_node.pop().ok_or(BfErr::Code(E_INVARG))?;
+                let (obj, attributes, children) = current_node.pop().ok_or(BfErr::ErrValue(
+                    E_INVARG.with_msg(|| "xml_parse() end tag without start tag".to_string()),
+                ))?;
                 // Turn this into a flyweight and push into the children of the parent
                 let children = List::mk_list(&children);
                 let fl = v_flyweight(obj.clone(), &attributes, children, None);
@@ -129,8 +151,10 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Ok(_) => {
                 // Ignore other events (CDATA, etc)
             }
-            Err(_) => {
-                return Err(BfErr::Code(E_INVARG));
+            Err(e) => {
+                return Err(BfErr::ErrValue(
+                    E_INVARG.with_msg(|| format!("xml_parse() error parsing XML: {}", e)),
+                ));
             }
         }
     }
@@ -161,10 +185,14 @@ fn flyweight_to_xml_tag(
         Some(m) => {
             let key = v_obj(fl.delegate().clone());
             let Ok(tag) = m.get(&key) else {
-                return Err(BfErr::Code(E_INVARG));
+                return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                    format!("to_xml() tag {} not found in map", fl.delegate().id())
+                })));
             };
             let Variant::Str(s) = tag.variant() else {
-                return Err(BfErr::Code(E_INVARG));
+                return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                    format!("to_xml() tag {} in map is not a string", fl.delegate().id())
+                })));
             };
             s.as_str().to_string()
         }
@@ -175,7 +203,9 @@ fn flyweight_to_xml_tag(
                 .map_err(world_state_bf_err)?;
 
             let Variant::Str(s) = tag.variant() else {
-                return Err(BfErr::Code(E_TYPE));
+                return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                    format!("to_xml() tag {} is not a string", fl.delegate().id())
+                })));
             };
 
             s.as_str().to_string()
@@ -191,7 +221,13 @@ fn flyweight_to_xml_tag(
             Variant::Float(f) => f.to_string(),
             _ => {
                 error!("Invalid attribute type");
-                return Err(BfErr::Code(E_INVARG));
+                return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                    format!(
+                        "to_xml() attribute {} is not a string or number (is {})",
+                        key,
+                        value.type_code().to_literal()
+                    )
+                })));
             }
         };
         attributes.push((key, value));
@@ -209,8 +245,9 @@ fn flyweight_to_xml_tag(
                 tags.push(Tag::Text(s.as_str().to_string()));
             }
             _ => {
-                error!("Invalid child type");
-                return Err(BfErr::Code(E_INVARG));
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("to_xml() child is not a flyweight or string"),
+                ));
             }
         }
     }
@@ -228,17 +265,27 @@ fn flyweight_to_xml_tag(
 ///  - any children must be either other valid flyweights, or string values.
 fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.flyweight_type {
-        return Err(BfErr::Code(E_PERM));
+        return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
     }
 
     if bf_args.args.len() != 1 && bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
+            format!(
+                "to_xml() takes 1 or 2 arguments, got {}",
+                bf_args.args.len()
+            )
+        })));
     }
 
     let root = &bf_args.args[0];
     let map = if bf_args.args.len() == 2 {
         let Variant::Map(m) = bf_args.args[1].variant() else {
-            return Err(BfErr::Code(E_INVARG));
+            return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                format!(
+                    "to_xml() expects a map as the second argument, got {}",
+                    bf_args.args[1].type_code().to_literal()
+                )
+            })));
         };
         Some(m)
     } else {
@@ -254,7 +301,12 @@ fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         // Element needs to be a flyweight
         let Variant::Flyweight(fl) = root.variant() else {
-            return Err(BfErr::Code(E_INVARG));
+            return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+                format!(
+                    "to_xml() expects a flyweight as the first argument, got {}",
+                    root.type_code().to_literal()
+                )
+            })));
         };
 
         let root_tag = flyweight_to_xml_tag(fl, map, &bf_args.caller_perms(), bf_args.world_state)?;
@@ -266,24 +318,38 @@ fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         attributes.iter().fold(element_builder, |builder, (k, v)| {
                             builder.attr(k.as_str(), v.as_str())
                         });
-                    writer
-                        .write(element_builder)
-                        .map_err(|_| BfErr::Code(E_INVIND))?;
+                    writer.write(element_builder).map_err(|e| {
+                        BfErr::ErrValue(
+                            E_INVIND.with_msg(|| format!("to_xml() error writing XML: {}", e)),
+                        )
+                    })?;
                 }
                 Tag::Text(text) => {
                     writer
                         .write(xml::writer::XmlEvent::characters(text.as_str()))
-                        .map_err(|_| BfErr::Code(E_INVIND))?;
+                        .map_err(|e| {
+                            BfErr::ErrValue(
+                                E_INVIND.with_msg(|| format!("to_xml() error writing XML: {}", e)),
+                            )
+                        })?;
                 }
                 Tag::EndElement(_) => {
                     writer
                         .write(xml::writer::XmlEvent::end_element())
-                        .map_err(|_| BfErr::Code(E_INVIND))?;
+                        .map_err(|e| {
+                            BfErr::ErrValue(
+                                E_INVIND.with_msg(|| format!("to_xml() error writing XML: {}", e)),
+                            )
+                        })?;
                 }
             }
         }
     }
-    let output_as_string = String::from_utf8(output).map_err(|_| BfErr::Code(E_INVIND))?;
+    let output_as_string = String::from_utf8(output).map_err(|e| {
+        BfErr::ErrValue(
+            E_INVIND.with_msg(|| format!("to_xml() error converting XML to string: {}", e)),
+        )
+    })?;
     Ok(Ret(v_string(output_as_string)))
 }
 bf_declare!(to_xml, bf_to_xml);
@@ -291,15 +357,22 @@ bf_declare!(to_xml, bf_to_xml);
 /// slots(flyweight) - returns the set of slots on the flyweight as a map
 fn bf_slots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.flyweight_type {
-        return Err(BfErr::Code(E_PERM));
+        return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
     }
 
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
+            format!("slots() takes 1 argument, got {}", bf_args.args.len())
+        })));
     }
 
     let Variant::Flyweight(f) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "slots() expects a flyweight as the first argument, got {}",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
     };
 
     let slots: Vec<_> = f
@@ -317,19 +390,34 @@ bf_declare!(slots, bf_slots);
 // No error is returned if the slot isn't present.
 fn bf_remove_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.flyweight_type {
-        return Err(BfErr::Code(E_PERM));
+        return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
     }
 
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
+            format!(
+                "remove_slot() takes 2 arguments, got {}",
+                bf_args.args.len()
+            )
+        })));
     }
 
     let Variant::Flyweight(f) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "remove_slot() expects a flyweight as the first argument, got {}",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
     };
 
     let Ok(s) = bf_args.args[1].as_symbol() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "remove_slot() expects a symbol as the second argument, got {}",
+                bf_args.args[1].type_code().to_literal()
+            )
+        })));
     };
 
     let slots: Vec<_> = f
@@ -347,19 +435,31 @@ bf_declare!(remove_slot, bf_remove_slot);
 /// add_slot(flyweight, key, value) - return copy of the same flyweight but with the slot of `key` name added or updated.
 fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.flyweight_type {
-        return Err(BfErr::Code(E_PERM));
+        return Err(BfErr::ErrValue(E_PERM.msg("Flyweights not enabled")));
     }
 
     if bf_args.args.len() != 3 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.with_msg(|| {
+            format!("add_slot() takes 3 arguments, got {}", bf_args.args.len())
+        })));
     }
 
     let Variant::Flyweight(f) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "add_slot() expects a flyweight as the first argument, got {}",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
     };
 
     let Ok(key) = bf_args.args[1].as_symbol() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "add_slot() expects a symbol as the second argument, got {}",
+                bf_args.args[1].type_code().to_literal()
+            )
+        })));
     };
 
     let value = bf_args.args[2].clone();

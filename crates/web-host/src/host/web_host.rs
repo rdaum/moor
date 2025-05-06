@@ -23,8 +23,7 @@ use axum::response::{IntoResponse, Response};
 use eyre::eyre;
 
 use moor_common::model::ObjectRef;
-use moor_var::Error::E_INVIND;
-use moor_var::{Obj, Symbol, v_err};
+use moor_var::{E_INVIND, Obj, Symbol, v_err};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::AuthToken;
 use rpc_common::HostClientToDaemonMessage::{Attach, ConnectionEstablish};

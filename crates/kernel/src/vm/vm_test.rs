@@ -25,8 +25,8 @@ mod tests {
         v_obj, v_objid, v_str, v_sym_str,
     };
 
-    use moor_var::Error::*;
     use moor_var::NOTHING;
+    use moor_var::*;
     use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
 
     use crate::builtins::BuiltinRegistry;

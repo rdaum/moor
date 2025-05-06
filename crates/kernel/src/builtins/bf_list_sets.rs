@@ -14,8 +14,7 @@
 use ahash::HashMap;
 use lazy_static::lazy_static;
 use moor_compiler::offset_for_builtin;
-use moor_var::Error::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
-use moor_var::{Associative, Error, Variant};
+use moor_var::{Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, Variant};
 use moor_var::{
     IndexMode, List, Sequence, Var, VarType, v_empty_list, v_int, v_list, v_list_iter, v_map,
     v_str, v_string,
@@ -37,7 +36,11 @@ fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // is not *really* a correct place for it, but `bf_list_sets_and_maps_too_i_guess.rs` is a bit silly.
     match container.variant() {
         Variant::List(list) => {
-            if list.index_in(value, true).map_err(BfErr::Code)?.is_some() {
+            if list
+                .index_in(value, true)
+                .map_err(BfErr::ErrValue)?
+                .is_some()
+            {
                 Ok(Ret(v_int(1)))
             } else {
                 Ok(Ret(v_int(0)))
@@ -65,11 +68,11 @@ fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     // If two args, treat as push. If three, treat as insert.
     if bf_args.args.len() == 2 {
-        return Ok(Ret(list.push(value).map_err(BfErr::Code)?));
+        return Ok(Ret(list.push(value).map_err(BfErr::ErrValue)?));
     }
     let index = &bf_args.args[2];
     let res = list.insert(index, value, IndexMode::OneBased);
-    Ok(Ret(res.map_err(BfErr::Code)?))
+    Ok(Ret(res.map_err(BfErr::ErrValue)?))
 }
 
 bf_declare!(listinsert, bf_listinsert);
@@ -85,11 +88,11 @@ fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     // If two args, treat as push. If three, treat as insert.
     if bf_args.args.len() == 2 {
-        return Ok(Ret(list.push(value).map_err(BfErr::Code)?));
+        return Ok(Ret(list.push(value).map_err(BfErr::ErrValue)?));
     }
     let index = &bf_args.args[2];
     let res = list.insert(index, value, IndexMode::ZeroBased);
-    Ok(Ret(res.map_err(BfErr::Code)?))
+    Ok(Ret(res.map_err(BfErr::ErrValue)?))
 }
 bf_declare!(listappend, bf_listappend);
 
@@ -101,7 +104,7 @@ fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let list = &bf_args.args[0];
     Ok(Ret(list
         .remove_at(&index, IndexMode::OneBased)
-        .map_err(BfErr::Code)?))
+        .map_err(BfErr::ErrValue)?))
 }
 bf_declare!(listdelete, bf_listdelete);
 
@@ -117,7 +120,7 @@ fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     Ok(Ret(list
         .index_set(&index, &value, IndexMode::OneBased)
-        .map_err(BfErr::Code)?))
+        .map_err(BfErr::ErrValue)?))
 }
 bf_declare!(listset, bf_listset);
 
@@ -130,7 +133,7 @@ fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::List(list) = list.variant() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    Ok(Ret(list.set_add(&value).map_err(BfErr::Code)?))
+    Ok(Ret(list.set_add(&value).map_err(BfErr::ErrValue)?))
 }
 bf_declare!(setadd, bf_setadd);
 
@@ -143,7 +146,7 @@ fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let Variant::List(list) = list else {
         return Err(BfErr::Code(E_TYPE));
     };
-    Ok(Ret(list.set_remove(&value).map_err(BfErr::Code)?))
+    Ok(Ret(list.set_remove(&value).map_err(BfErr::ErrValue)?))
 }
 bf_declare!(setremove, bf_setremove);
 
@@ -207,7 +210,7 @@ fn perform_regex_match(
     reverse: bool,
 ) -> Result<Option<MatchSpans>, Error> {
     let Some(translated_pattern) = translate_pattern(pattern) else {
-        return Err(E_INVARG);
+        return Err(E_INVARG.msg("Invalid regex pattern"));
     };
 
     let options = if case_matters {
@@ -234,7 +237,7 @@ fn perform_regex_match(
     let regex = match regex {
         Ok(regex) => regex,
         Err(_) => {
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("Invalid regex pattern"));
         }
     };
     let (search_start, search_end) = if reverse {
@@ -294,7 +297,7 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Bf
     // TODO: Regex pattern cache?
     let Some((overall, match_vec)) =
         perform_regex_match(pattern.as_str(), subject.as_str(), case_matters, reverse)
-            .map_err(BfErr::Code)?
+            .map_err(BfErr::ErrValue)?
     else {
         return Ok(Ret(v_empty_list()));
     };
@@ -356,7 +359,7 @@ fn perform_pcre_match(
     let regex = match regex {
         Ok(regex) => regex,
         Err(_) => {
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("Invalid regex pattern"));
         }
     };
 
@@ -419,20 +422,20 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
         let mut chars = replace_str.chars();
         // First character must be 's'
         let Some(first_char) = chars.next() else {
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("Invalid regex pattern"));
         };
         if first_char != 's' {
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("Invalid regex pattern"));
         }
 
         // Next character is separator and must be either '/' or '!' and determines what the separator
         // is for the rest of time.
         let Some(sep_char) = chars.next() else {
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("Invalid regex pattern"));
         };
 
         if sep_char != '/' && sep_char != '!' {
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("Invalid regex pattern"));
         }
 
         sep_char
@@ -441,7 +444,7 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
     // Split using the separator
     let components: Vec<_> = replace_str.splitn(4, separator).collect();
     if components.len() < 2 {
-        return Err(E_INVARG);
+        return Err(E_INVARG.msg("Invalid regex pattern"));
     };
 
     let (pattern, replacement) = (components[1], components[2]);
@@ -467,7 +470,7 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
     let regex = match regex {
         Ok(regex) => regex,
         Err(_) => {
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("Invalid regex pattern"));
         }
     };
     // If `global` we will replace all matches. Otherwise, just stop after the first
@@ -533,19 +536,23 @@ fn bf_pcre_replace(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // only 's' is supported.
     // (this abomination is only here for toast back compatibility.)
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("pcre_replace() requires two arguments"),
+        ));
     }
 
     let (Variant::Str(target), Variant::Str(replace_str)) =
         (bf_args.args[0].variant(), bf_args.args[1].variant())
     else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("pcre_replace() requires two string arguments"),
+        ));
     };
     let (target, replace_str) = (target.as_str(), replace_str.as_str());
 
     match perform_pcre_replace(target, replace_str) {
         Ok(result) => Ok(Ret(v_str(&result))),
-        Err(err) => Err(BfErr::Code(err)),
+        Err(err) => Err(BfErr::ErrValue(err)),
     }
 }
 bf_declare!(pcre_replace, bf_pcre_replace);
@@ -602,7 +609,7 @@ fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         repeat,
     ) {
         Ok(result) => result,
-        Err(err) => return Err(BfErr::Code(err)),
+        Err(err) => return Err(BfErr::ErrValue(err)),
     };
     Ok(Ret(Var::from_variant(Variant::List(result))))
 }
@@ -642,13 +649,13 @@ fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<S
         // Now we'll parse the number.
         let Ok(number) = number.parse::<usize>() else {
             // If we can't parse the number, we'll raise an error.
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("Invalid number"));
         };
 
         // If the number is out of range, we'll raise an E_INVARG. E_RANGE would be nice, but
         // that's not what MOO does.
         if number > subs.len() {
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("Number out of range"));
         }
 
         // Special case for 0
@@ -720,7 +727,7 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match substitute(template.as_str(), &mysubs, source.as_str()) {
         Ok(r) => Ok(Ret(v_string(r))),
-        Err(e) => Err(BfErr::Code(e)),
+        Err(e) => Err(BfErr::ErrValue(e)),
     }
 }
 bf_declare!(substitute, bf_substitute);
@@ -774,7 +781,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 return Ok(Ret(v_empty_list()));
             }
 
-            let first_item = list.index(0).map_err(BfErr::Code)?;
+            let first_item = list.index(0).map_err(BfErr::ErrValue)?;
             if !matches!(first_item.variant(), Variant::List(_) | Variant::Map(_)) {
                 return Err(BfErr::Code(E_TYPE));
             }
@@ -797,7 +804,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             return Err(BfErr::Code(E_RANGE));
                         }
                         // MOO is 1-indexed, so subtract 1
-                        result.push(sublist.index(idx - 1).map_err(BfErr::Code)?);
+                        result.push(sublist.index(idx - 1).map_err(BfErr::ErrValue)?);
                     }
 
                     Ok(Ret(v_list(&result)))
@@ -809,7 +816,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     let mut result = Vec::with_capacity(list.len());
 
                     // Check if this is a list of lists
-                    let first_item = list.index(0).map_err(BfErr::Code)?;
+                    let first_item = list.index(0).map_err(BfErr::ErrValue)?;
                     if let Variant::List(_) = first_item.variant() {
                         // This is a list of lists, extract elements from each sublist based on indices
                         // For each sublist in the input list, create a new list containing
@@ -831,7 +838,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                     return Err(BfErr::Code(E_RANGE));
                                 }
                                 // MOO is 1-indexed, so subtract 1
-                                subresult.push(sublist.index(idx - 1).map_err(BfErr::Code)?);
+                                subresult.push(sublist.index(idx - 1).map_err(BfErr::ErrValue)?);
                             }
 
                             result.push(v_list(&subresult));

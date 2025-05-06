@@ -19,7 +19,9 @@ mod ws_connection;
 
 pub use auth::connect_auth_handler;
 pub use auth::create_auth_handler;
-use moor_var::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_objid, v_str};
+use moor_var::{
+    Var, Variant, v_error, v_float, v_int, v_list, v_map, v_none, v_objid, v_str,
+};
 pub use props::properties_handler;
 pub use props::property_retrieval_handler;
 use serde::Serialize;
@@ -182,7 +184,7 @@ pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
                 )
                 .ok_or(JsonParseError::UnknownError)?;
 
-                return Ok(v_err(e));
+                return Ok(v_error(e));
             }
 
             Err(JsonParseError::UnknownType)
@@ -208,7 +210,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use moor_var::{v_err, v_float, v_int, v_str};
+    use moor_var::{E_ARGS, v_err, v_float, v_int, v_str};
 
     #[test]
     fn test_int_to_fro() {
@@ -236,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_error_to_fro() {
-        let n = v_err(moor_var::Error::E_ARGS);
+        let n = v_err(E_ARGS);
         let j = super::var_as_json(&n);
         let n2 = super::json_as_var(&j).unwrap();
         assert_eq!(n, n2);

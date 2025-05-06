@@ -71,16 +71,14 @@ pub enum SchedulerError {
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct Exception {
-    pub code: Error,
-    pub msg: String,
-    pub value: Var,
+    pub error: Error,
     pub stack: Vec<Var>,
     pub backtrace: Vec<Var>,
 }
 
 impl Display for Exception {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Uncaught exception: {} ({})", self.msg, self.code)
+        write!(f, "Uncaught exception: {}", self.error)
     }
 }
 

@@ -24,8 +24,8 @@ use moor_common::model::{
 };
 use moor_common::util::BitEnum;
 use moor_var::{
-    AsByteBuffer, Error, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_err, v_float,
-    v_flyweight, v_int, v_list, v_map, v_obj, v_str,
+    AsByteBuffer, Error, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_error,
+    v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str,
 };
 use pest::Parser;
 use pest::error::LineColLocation;
@@ -289,7 +289,7 @@ fn parse_literal_atom(
                     message: e.to_string(),
                 }));
             };
-            Ok(v_err(e))
+            Ok(v_error(e))
         }
         Rule::ident | Rule::variable => {
             let sym = Symbol::mk(pair.as_str());
@@ -733,8 +733,7 @@ fn parse_verb_decl(
 mod tests {
     use super::*;
     use moor_common::matching::Preposition;
-    use moor_var::Error::E_INVIND;
-    use moor_var::Variant;
+    use moor_var::{E_INVIND, Variant, v_err};
 
     /// Just a simple objdef no verbs or props
     #[test]
