@@ -35,7 +35,11 @@ impl SystemControl for RpcServer {
     ) -> Result<(), moor_var::Error> {
         let host_type = match host_type {
             "tcp" => HostType::TCP,
-            _ => return Err(moor_var::E_INVARG.msg("Invalid host type")),
+            _ => {
+                return Err(
+                    moor_var::E_INVARG.with_msg(|| format!("Unhandled host type: {host_type}"))
+                );
+            }
         };
 
         let event = HostBroadcastEvent::Listen {
