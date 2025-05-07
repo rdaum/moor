@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::warn;
 
-use moor_var::{Var, v_str};
+use moor_var::{ErrorCode, Var, v_str};
 use moor_var::{Variant, v_sym};
 
 use crate::Op::{
@@ -61,6 +61,7 @@ pub struct CodegenState {
     pub(crate) for_sequence_operands: Vec<ForSequenceOperand>,
     pub(crate) range_comprehensions: Vec<RangeComprehend>,
     pub(crate) list_comprehensions: Vec<ListComprehend>,
+    pub(crate) error_operands: Vec<ErrorCode>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
     pub(crate) fork_vectors: Vec<Vec<Op>>,
@@ -93,6 +94,7 @@ impl CodegenState {
             current_line_col: (0, 0),
             compile_options,
             list_comprehensions: vec![],
+            error_operands: vec![],
         }
     }
 
@@ -126,6 +128,11 @@ impl CodegenState {
         Label(pos as u16)
     }
 
+    fn add_error_code_operand(&mut self, code: ErrorCode) -> Offset {
+        let err_pos = self.error_operands.len();
+        self.error_operands.push(code);
+        Offset(err_pos as u16)
+    }
     fn add_scatter_table(&mut self, labels: Vec<ScatterLabel>, done: Label) -> Offset {
         let st_pos = self.scatter_tables.len();
         self.scatter_tables.push(ScatterArgs { labels, done });
@@ -379,6 +386,19 @@ impl CodegenState {
                         self.emit(Op::Imm(literal));
                     }
                 };
+                self.push_stack(1);
+            }
+            Expr::Error(code, msg) => {
+                // If we have a message, push it on the stack and then push MakeError.
+                // Otherwise, just emit an error Literal
+                if let Some(msg) = msg {
+                    self.generate_expr(msg)?;
+                    self.pop_stack(1);
+                    let operand_offset = self.add_error_code_operand(*code);
+                    self.emit(Op::MakeError(operand_offset));
+                } else {
+                    self.emit(Op::ImmErr(*code));
+                }
                 self.push_stack(1);
             }
             Expr::TypeConstant(vt) => {
@@ -1055,6 +1075,7 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Box<Progr
         main_vector: Arc::new(cg_state.ops),
         fork_vectors: cg_state.fork_vectors,
         line_number_spans: cg_state.line_number_spans,
+        error_operands: cg_state.error_operands,
     });
 
     Ok(program)

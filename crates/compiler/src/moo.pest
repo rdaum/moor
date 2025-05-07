@@ -184,7 +184,8 @@ range_end = { "$" }
 // An unambiguous assignment operator, for use in scatter assignments where list comparison could be a false match.
 ASSIGN = _{ "=" ~ !("=") }
 
-err = @{ ^"e_" ~ ident_continue+ }
+err = { errcode ~ ("(" ~ expr ~ ")")? }
+errcode = @{ ^"e_" ~ ident_continue+  }
 
 object  = @{ "#" ~ integer }
 keyword = @{

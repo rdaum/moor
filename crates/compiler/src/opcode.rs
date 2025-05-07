@@ -73,6 +73,8 @@ pub enum Op {
     ListAddTail,
     ListAppend,
     Lt,
+    /// Operand is used because not doing so blew us over our 16-byte limit for some reason.
+    MakeError(Offset),
     MakeSingletonList,
     MakeMap,
     MapInsert,

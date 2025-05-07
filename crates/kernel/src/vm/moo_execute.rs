@@ -20,7 +20,7 @@ use lazy_static::lazy_static;
 use moor_common::model::WorldState;
 use moor_common::util::PerfTimerGuard;
 use moor_compiler::{Op, ScatterLabel, to_literal};
-use moor_var::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF};
+use moor_var::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_error};
 use moor_var::{
     Error, IndexMode, Obj, Sequence, TypeClass, Var, Variant, v_bool_int, v_empty_list,
     v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_sym,
@@ -382,6 +382,19 @@ pub fn moo_frame_execute(
                         return ExecutionResult::PushError(e);
                     }
                 }
+            }
+            Op::MakeError(offset) => {
+                let code = f.program.error_operands[offset.0 as usize];
+
+                // Expect an argument on stack (otherwise we would have used ImmErr)
+                let err_msg = f.pop();
+                let Variant::Str(err_msg) = err_msg.variant() else {
+                    return ExecutionResult::PushError(
+                        E_TYPE.msg("invalid value for error message"),
+                    );
+                };
+                let err_msg = err_msg.as_str();
+                f.push(v_error(code.msg(err_msg)));
             }
             Op::MakeSingletonList => {
                 let v = f.peek_top();

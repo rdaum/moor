@@ -50,6 +50,7 @@ mod tests {
             for_sequence_operands: vec![],
             range_comprehensions: vec![],
             list_comprehensions: vec![],
+            error_operands: vec![],
             main_vector: Arc::new(main_vector),
             fork_vectors: vec![],
             line_number_spans: vec![],

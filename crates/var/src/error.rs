@@ -87,32 +87,67 @@ pub enum ErrorCode {
     ErrCustom(Symbol),
 }
 
-impl Display for ErrorCode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            E_NONE => write!(f, "E_NONE"),
-            E_TYPE => write!(f, "E_TYPE"),
-            E_DIV => write!(f, "E_DIV"),
-            E_PERM => write!(f, "E_PERM"),
-            E_PROPNF => write!(f, "E_PROPNF"),
-            E_VERBNF => write!(f, "E_VERBNF"),
-            E_VARNF => write!(f, "E_VARNF"),
-            E_INVIND => write!(f, "E_INVIND"),
-            E_RECMOVE => write!(f, "E_RECMOVE"),
-            E_MAXREC => write!(f, "E_MAXREC"),
-            E_RANGE => write!(f, "E_RANGE"),
-            E_ARGS => write!(f, "E_ARGS"),
-            E_NACC => write!(f, "E_NACC"),
-            E_INVARG => write!(f, "E_INVARG"),
-            E_QUOTA => write!(f, "E_QUOTA"),
-            E_FLOAT => write!(f, "E_FLOAT"),
-            E_FILE => write!(f, "E_FILE"),
-            E_EXEC => write!(f, "E_EXEC"),
-            E_INTRPT => write!(f, "E_INTRPT"),
-            ErrCustom(sym) => write!(f, "{sym}"),
+impl ErrorCode {
+    pub fn parse_str(s: &str) -> Option<Self> {
+        match s.to_uppercase().as_str() {
+            "E_NONE" => Some(E_NONE),
+            "E_TYPE" => Some(E_TYPE),
+            "E_DIV" => Some(E_DIV),
+            "E_PERM" => Some(E_PERM),
+            "E_PROPNF" => Some(E_PROPNF),
+            "E_VERBNF" => Some(E_VERBNF),
+            "E_VARNF" => Some(E_VARNF),
+            "E_INVIND" => Some(E_INVIND),
+            "E_RECMOVE" => Some(E_RECMOVE),
+            "E_MAXREC" => Some(E_MAXREC),
+            "E_RANGE" => Some(E_RANGE),
+            "E_ARGS" => Some(E_ARGS),
+            "E_NACC" => Some(E_NACC),
+            "E_INVARG" => Some(E_INVARG),
+            "E_QUOTA" => Some(E_QUOTA),
+            "E_FLOAT" => Some(E_FLOAT),
+            "E_FILE" => Some(E_FILE),
+            "E_EXEC" => Some(E_EXEC),
+            "E_INTRPT" => Some(E_INTRPT),
+            s => Some(ErrCustom(Symbol::mk_case_insensitive(s))),
         }
     }
 }
+
+impl From<ErrorCode> for String {
+    fn from(val: ErrorCode) -> Self {
+        match val {
+            E_NONE => "E_NONE".into(),
+            E_TYPE => "E_TYPE".into(),
+            E_DIV => "E_DIV".into(),
+            E_PERM => "E_PERM".into(),
+            E_PROPNF => "E_PROPNF".into(),
+            E_VERBNF => "E_VERBNF".into(),
+            E_VARNF => "E_VARNF".into(),
+            E_INVIND => "E_INVIND".into(),
+            E_RECMOVE => "E_RECMOVE".into(),
+            E_MAXREC => "E_MAXREC".into(),
+            E_RANGE => "E_RANGE".into(),
+            E_ARGS => "E_ARGS".into(),
+            E_NACC => "E_NACC".into(),
+            E_INVARG => "E_INVARG".into(),
+            E_QUOTA => "E_QUOTA".into(),
+            E_FLOAT => "E_FLOAT".into(),
+            E_FILE => "E_FILE".into(),
+            E_EXEC => "E_EXEC".into(),
+            E_INTRPT => "E_INTRPT".into(),
+            ErrCustom(sym) => sym.to_string(),
+        }
+    }
+}
+
+impl Display for ErrorCode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s: String = (*self).into();
+        write!(f, "{}", s)
+    }
+}
+
 impl ErrorCode {
     pub fn msg(self, s: &str) -> Error {
         Error::new(self, Some(s.into()), None)
@@ -241,31 +276,5 @@ impl Error {
     #[must_use]
     pub fn name(&self) -> Symbol {
         Symbol::mk(&format!("{}", self.err_type))
-    }
-
-    pub fn parse_str(s: &str) -> Option<Self> {
-        let e = match s.to_uppercase().as_str() {
-            "E_NONE" => Some(E_NONE),
-            "E_TYPE" => Some(E_TYPE),
-            "E_DIV" => Some(E_DIV),
-            "E_PERM" => Some(E_PERM),
-            "E_PROPNF" => Some(E_PROPNF),
-            "E_VERBNF" => Some(E_VERBNF),
-            "E_VARNF" => Some(E_VARNF),
-            "E_INVIND" => Some(E_INVIND),
-            "E_RECMOVE" => Some(E_RECMOVE),
-            "E_MAXREC" => Some(E_MAXREC),
-            "E_RANGE" => Some(E_RANGE),
-            "E_ARGS" => Some(E_ARGS),
-            "E_NACC" => Some(E_NACC),
-            "E_INVARG" => Some(E_INVARG),
-            "E_QUOTA" => Some(E_QUOTA),
-            "E_FLOAT" => Some(E_FLOAT),
-            "E_FILE" => Some(E_FILE),
-            "E_EXEC" => Some(E_EXEC),
-            "E_INTRPT" => Some(E_INTRPT),
-            s => Some(ErrCustom(Symbol::mk_case_insensitive(s))),
-        };
-        e.map(|e| Error::new(e, None, None))
     }
 }

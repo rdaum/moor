@@ -24,7 +24,7 @@ use moor_common::model::{
 };
 use moor_common::util::BitEnum;
 use moor_var::{
-    AsByteBuffer, Error, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_error,
+    AsByteBuffer, ErrorCode, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_err,
     v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str,
 };
 use pest::Parser;
@@ -281,7 +281,7 @@ fn parse_literal_atom(
         }
         Rule::err => {
             let e = pair.as_str();
-            let Some(e) = Error::parse_str(e) else {
+            let Some(e) = ErrorCode::parse_str(e) else {
                 return Err(VerbCompileError(CompileError::ParseError {
                     error_position: CompileContext::new(pair.line_col()),
                     end_line_col: None,
@@ -289,7 +289,7 @@ fn parse_literal_atom(
                     message: e.to_string(),
                 }));
             };
-            Ok(v_error(e))
+            Ok(v_err(e))
         }
         Rule::ident | Rule::variable => {
             let sym = Symbol::mk(pair.as_str());

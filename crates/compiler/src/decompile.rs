@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_var::{Symbol, Var, v_err, v_int, v_none, v_obj};
+use moor_var::{Symbol, Var, v_int, v_none, v_obj};
 use moor_var::{Variant, v_float};
 use std::collections::{HashMap, VecDeque};
 
@@ -656,6 +656,12 @@ impl Decompile {
                 let delegate = self.pop_expr()?;
                 self.push_expr(Expr::Flyweight(Box::new(delegate), slots, contents));
             }
+            Op::MakeError(offset) => {
+                let error_code = self.program.error_operands[offset.0 as usize];
+                // The value for the error is on the stack.
+                let value = self.pop_expr()?;
+                self.push_expr(Expr::Error(error_code, Some(Box::new(value))))
+            }
             Op::Pass => {
                 let args = self.pop_expr()?;
                 let Expr::List(args) = args else {
@@ -962,7 +968,7 @@ impl Decompile {
                 self.push_expr(Expr::Value(v_float(f)));
             }
             Op::ImmErr(e) => {
-                self.push_expr(Expr::Value(v_err(e)));
+                self.push_expr(Expr::Error(e, None));
             }
             Op::ImmObjid(oid) => {
                 self.push_expr(Expr::Value(v_obj(oid)));

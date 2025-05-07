@@ -20,9 +20,9 @@ mod tests {
     use crate::opcode::Op::*;
     use crate::opcode::{ForSequenceOperand, ScatterArgs, ScatterLabel};
     use moor_common::model::CompileError;
-    use moor_var::Obj;
     use moor_var::SYSTEM_OBJECT;
     use moor_var::Symbol;
+    use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, Obj};
 
     #[test]
     fn test_simple_add_expr() {
@@ -867,10 +867,10 @@ mod tests {
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
-                Imm(Label(0)),
+                ImmErr(E_INVARG),
                 MakeSingletonList,
                 PushCatchLabel(0.into()),
-                Imm(Label(1)),
+                ImmErr(E_PROPNF),
                 MakeSingletonList,
                 PushCatchLabel(1.into()),
                 TryExcept {
@@ -924,9 +924,9 @@ mod tests {
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
-                Imm(Label(0)),
+                ImmErr(E_PROPNF),
                 MakeSingletonList,
-                Imm(Label(1)),
+                ImmErr(E_PERM),
                 ListAddTail,
                 PushCatchLabel(0.into()),
                 TryCatch {
@@ -973,7 +973,7 @@ mod tests {
                     handler_label: 0.into(),
                     end_label: 1.into(),
                 },
-                Imm(Label(0)),
+                ImmErr(E_INVARG),
                 MakeSingletonList,
                 FuncCall { id: raise },
                 EndCatch(1.into()),
@@ -1512,7 +1512,7 @@ mod tests {
         assert_eq!(
             *program.main_vector.as_ref(),
             vec![
-                Imm(Label(0)),
+                ImmErr(E_RANGE),
                 MakeSingletonList,
                 PushCatchLabel(Label(0)),
                 TryExcept {
@@ -1520,7 +1520,7 @@ mod tests {
                     environment_width: 0,
                     end_label: 1.into(),
                 },
-                Imm(Label(1)),
+                Imm(Label(0)),
                 ImmInt(2),
                 // Our offset is different because we don't count PushLabel in the stack.
                 Length(Offset(0)),
@@ -1556,7 +1556,7 @@ mod tests {
         assert_eq!(
             *binary.main_vector.as_ref(),
             vec![
-                Imm(Label(0)),
+                ImmErr(E_INVIND),
                 MakeSingletonList,
                 PushCatchLabel(0.into()),
                 TryCatch {

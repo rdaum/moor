@@ -19,9 +19,7 @@ mod ws_connection;
 
 pub use auth::connect_auth_handler;
 pub use auth::create_auth_handler;
-use moor_var::{
-    Var, Variant, v_error, v_float, v_int, v_list, v_map, v_none, v_objid, v_str,
-};
+use moor_var::{Var, Variant, v_err, v_float, v_int, v_list, v_map, v_none, v_objid, v_str};
 pub use props::properties_handler;
 pub use props::property_retrieval_handler;
 use serde::Serialize;
@@ -176,15 +174,17 @@ pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
             }
 
             if let Some(error_name) = o.get("error") {
+                // TODO: support messages & values from the errors
+
                 // Match against the symbols in Error
-                let e = moor_var::Error::parse_str(
+                let e = moor_var::ErrorCode::parse_str(
                     error_name
                         .as_str()
                         .ok_or(JsonParseError::InvalidRepresentation)?,
                 )
                 .ok_or(JsonParseError::UnknownError)?;
 
-                return Ok(v_error(e));
+                return Ok(v_err(e));
             }
 
             Err(JsonParseError::UnknownType)

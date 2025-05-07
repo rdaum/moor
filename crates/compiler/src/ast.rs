@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_var::{Symbol, VarType};
+use moor_var::{ErrorCode, Symbol, VarType};
 use std::fmt::Display;
 
 use moor_var::Var;
@@ -130,6 +130,7 @@ pub enum Expr {
     },
     TypeConstant(VarType),
     Value(Var),
+    Error(ErrorCode, Option<Box<Expr>>),
     Id(UnboundName),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),

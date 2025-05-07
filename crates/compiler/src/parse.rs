@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use itertools::Itertools;
-use moor_var::{Error, ErrorCode, SYSTEM_OBJECT, Var, VarType, v_error};
+use moor_var::{ErrorCode, SYSTEM_OBJECT, Var, VarType};
 use moor_var::{Symbol, v_none};
 pub use pest::Parser as PestParser;
 use pest::error::LineColLocation;
@@ -182,11 +182,13 @@ impl TreeTransformer {
                 Ok(Expr::Value(v_str(&parsed)))
             }
             Rule::err => {
+                let mut inner = pair.into_inner();
+                let pair = inner.next().unwrap();
                 let e = pair.as_str();
-                let Some(e) = Error::parse_str(e) else {
+                let Some(e) = ErrorCode::parse_str(e) else {
                     panic!("invalid error value: {e}");
                 };
-                if let ErrorCode::ErrCustom(_) = &e.err_type {
+                if let ErrorCode::ErrCustom(_) = &e {
                     if !self.options.custom_errors {
                         return Err(CompileError::DisabledFeature(
                             self.compile_context(&pair),
@@ -194,7 +196,12 @@ impl TreeTransformer {
                         ));
                     }
                 }
-                Ok(Expr::Value(v_error(e)))
+                let mut msg_part = None;
+                if let Some(msg) = inner.next() {
+                    msg_part = Some(Box::new(self.clone().parse_expr(msg.into_inner())?));
+                }
+
+                Ok(Expr::Error(e, msg_part))
             }
             _ => {
                 panic!("Unimplemented atom: {:?}", pair);
@@ -1464,13 +1471,13 @@ pub fn unquote_str(s: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use moor_var::{E_INVARG, E_PROPNF, E_VARNF, ErrCustom, Symbol, v_none};
-    use moor_var::{Var, v_err, v_float, v_int, v_objid, v_str};
+    use moor_var::{Var, v_float, v_int, v_objid, v_str};
 
     use crate::CompileOptions;
     use crate::ast::Arg::{Normal, Splice};
     use crate::ast::BinaryOp::Add;
     use crate::ast::Expr::{
-        Call, ComprehendList, ComprehendRange, Flyweight, Id, Prop, Value, Verb,
+        Call, ComprehendList, ComprehendRange, Error, Flyweight, Id, Prop, Value, Verb,
     };
     use crate::ast::{
         BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
@@ -2366,7 +2373,7 @@ mod tests {
                 }],
                 excepts: vec![ExceptArm {
                     id: None,
-                    codes: CatchCodes::Codes(vec![Normal(Value(v_err(E_PROPNF)))]),
+                    codes: CatchCodes::Codes(vec![Normal(Error(E_PROPNF, None))]),
                     statements: vec![Stmt {
                         node: StmtNode::mk_return_none(),
                         line_col: (4, 29),
@@ -2553,7 +2560,7 @@ mod tests {
         let program = "return {`x ! e_varnf => 666'};";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
 
-        let varnf = Normal(Value(v_err(E_VARNF)));
+        let varnf = Normal(Error(E_VARNF, None));
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::mk_return(Expr::List(vec![Normal(
@@ -2570,7 +2577,7 @@ mod tests {
     fn try_catch_any_expr() {
         let program = "`raise(E_INVARG) ! ANY';";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let invarg = Normal(Value(v_err(E_INVARG)));
+        let invarg = Normal(Error(E_INVARG, None));
 
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -3113,16 +3120,34 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Return(Some(Box::new(Expr::List(
                 vec![
-                    Normal(Value(v_err(E_INVARG))),
-                    Normal(Value(v_err(E_PROPNF))),
-                    Normal(Value(v_err(ErrCustom("e_custom".into())))),
-                    Normal(Value(v_err(ErrCustom("e__ultra_long_custom".into())))),
-                    Normal(Value(v_err(ErrCustom("e_unknown".into())))),
+                    Normal(Error(E_INVARG, None)),
+                    Normal(Error(E_PROPNF, None)),
+                    Normal(Error(ErrCustom("e_custom".into()), None)),
+                    Normal(Error(ErrCustom("e__ultra_long_custom".into()), None)),
+                    Normal(Error(ErrCustom("e_unknown".into()), None)),
                 ]
             )))))]
         )
     }
 
+    #[test]
+    fn test_errors_args_parsing() {
+        let program = r#"return {e_invarg("test"), e_propnf(5), e_custom("booo")};"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Expr::Return(Some(Box::new(Expr::List(
+                vec![
+                    Normal(Error(E_INVARG, Some(Box::new(Value(v_str("test")))))),
+                    Normal(Error(E_PROPNF, Some(Box::new(Value(v_int(5)))))),
+                    Normal(Error(
+                        ErrCustom("e_custom".into()),
+                        Some(Box::new(Value(v_str("booo"))))
+                    )),
+                ]
+            )))))]
+        )
+    }
     #[test]
     fn test_for_value_key() {
         let program = r#"for v, k in ([1->2, 3->4]) endfor"#;
