@@ -57,7 +57,9 @@ bf_declare!(tostr, bf_tostr);
 fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Convert scalar values to symbols.
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("tosym() requires exactly 1 argument"),
+        ));
     }
 
     match bf_args.args[0].variant() {
@@ -68,14 +70,18 @@ fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Variant::Str(s) => Ok(Ret(v_sym_str(s.as_str()))),
         Variant::Err(e) => Ok(Ret(v_sym(e.name()))),
         Variant::Sym(s) => Ok(Ret(v_sym(*s))),
-        _ => Err(BfErr::Code(E_TYPE)),
+        _ => Err(BfErr::ErrValue(E_TYPE.msg(
+            "tosym() requires a string, boolean, error, or symbol argument",
+        ))),
     }
 }
 bf_declare!(tosym, bf_tosym);
 
 fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("toliteral() requires exactly 1 argument"),
+        ));
     }
     let literal = to_literal(&bf_args.args[0]);
     Ok(Ret(v_str(literal.as_str())))
@@ -84,7 +90,9 @@ bf_declare!(toliteral, bf_toliteral);
 
 fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("toint() requires exactly 1 argument"),
+        ));
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_int(*i))),
@@ -99,24 +107,32 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
         Variant::Err(e) => {
             let Some(v) = e.to_int() else {
-                return Err(BfErr::Code(E_INVARG));
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("cannot convert this error to integer"),
+                ));
             };
 
             Ok(Ret(v_int(v as i64)))
         }
-        _ => Err(BfErr::Code(E_INVARG)),
+        _ => Err(BfErr::ErrValue(
+            E_INVARG.msg("cannot convert this type to integer"),
+        )),
     }
 }
 bf_declare!(toint, bf_toint);
 
 fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("toobj() requires exactly 1 argument"),
+        ));
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => {
             let i = if *i < i32::MIN as i64 || *i > i32::MAX as i64 {
-                return Err(BfErr::Code(E_RANGE));
+                return Err(BfErr::ErrValue(
+                    E_RANGE.msg("integer value outside valid object ID range"),
+                ));
             } else {
                 *i as i32
             };
@@ -124,7 +140,9 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
         Variant::Float(f) => {
             let f = if *f < i32::MIN as f64 || *f > i32::MAX as f64 {
-                return Err(BfErr::Code(E_RANGE));
+                return Err(BfErr::ErrValue(
+                    E_RANGE.msg("float value outside valid object ID range"),
+                ));
             } else {
                 *f as i32
             };
@@ -145,14 +163,18 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             }
         }
         Variant::Obj(o) => Ok(Ret(v_obj(o.clone()))),
-        _ => Err(BfErr::Code(E_INVARG)),
+        _ => Err(BfErr::ErrValue(
+            E_INVARG.msg("cannot convert this type to object"),
+        )),
     }
 }
 bf_declare!(toobj, bf_toobj);
 
 fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("tofloat() requires exactly 1 argument"),
+        ));
     }
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_float(*i as f64))),
@@ -167,19 +189,25 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
         Variant::Err(e) => {
             let Some(v) = e.to_int() else {
-                return Err(BfErr::Code(E_INVARG));
+                return Err(BfErr::ErrValue(
+                    E_INVARG.msg("cannot convert this error to float"),
+                ));
             };
 
             Ok(Ret(v_float(v as f64)))
         }
-        _ => Err(BfErr::Code(E_INVARG)),
+        _ => Err(BfErr::ErrValue(
+            E_INVARG.msg("cannot convert this type to float"),
+        )),
     }
 }
 bf_declare!(tofloat, bf_tofloat);
 
 fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("equal() requires exactly 2 arguments"),
+        ));
     }
     let (a1, a2) = (&bf_args.args[0], &bf_args.args[1]);
     let result = a1.eq_case_sensitive(a2);
@@ -189,7 +217,9 @@ bf_declare!(equal, bf_equal);
 
 fn bf_value_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("value_bytes() requires exactly 1 argument"),
+        ));
     }
     let count = bf_args.args[0].size_bytes();
     Ok(Ret(v_int(count as i64)))
@@ -198,7 +228,9 @@ bf_declare!(value_bytes, bf_value_bytes);
 
 fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("value_hash() requires exactly 1 argument"),
+        ));
     }
     let s = to_literal(&bf_args.args[0]);
     let hash_digest = md5::Md5::digest(s.as_bytes());
@@ -210,7 +242,9 @@ bf_declare!(value_hash, bf_value_hash);
 
 fn bf_length(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("length() requires exactly 1 argument"),
+        ));
     }
 
     match bf_args.args[0].len() {
@@ -222,13 +256,17 @@ bf_declare!(length, bf_length);
 
 fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("object_bytes() requires exactly 1 argument"),
+        ));
     }
     let Variant::Obj(o) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("object_bytes() requires an object argument"),
+        ));
     };
     if !bf_args.world_state.valid(o).map_err(world_state_bf_err)? {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(E_INVARG.msg("object is not valid")));
     };
     let size = bf_args
         .world_state
@@ -286,7 +324,6 @@ pub(crate) fn register_bf_values(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("object_bytes")] = Box::new(BfObjectBytes {});
     builtins[offset_for_builtin("value_hash")] = Box::new(BfValueHash {});
     builtins[offset_for_builtin("length")] = Box::new(BfLength {});
-
     builtins[offset_for_builtin("error_code")] = Box::new(BfErrorCode {});
     builtins[offset_for_builtin("error_message")] = Box::new(BfErrorMessage {});
 }
