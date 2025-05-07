@@ -28,7 +28,7 @@ use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_common::model::CompileError;
 use moor_common::model::WorldStateError;
 use moor_compiler::Label;
-use moor_var::{Error, NOTHING, Sequence, Variant, v_list, v_map};
+use moor_var::{Error, ErrorCode, NOTHING, Sequence, Variant, v_error, v_list, v_map};
 use moor_var::{
     List, Symbol, Var, VarType, v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str, v_sym,
 };
@@ -191,11 +191,11 @@ impl<R: Read> TextdumpReader<R> {
                     Ok(e_num) => {
                         let etype: Error =
                             Error::from_repr(e_num as u8).expect("Invalid error code");
-                        v_err(etype)
+                        v_error(etype)
                     }
                     Err(..) => {
                         let s = Symbol::mk_case_insensitive(&s);
-                        v_err(Error::Custom(s))
+                        v_err(ErrorCode::ErrCustom(s))
                     }
                 }
             }

@@ -324,11 +324,7 @@ impl Task {
                     return None;
                 };
 
-                warn!(
-                    task_id = self.task_id,
-                    msg = exception.msg,
-                    "Task exception"
-                );
+                warn!(task_id = self.task_id, ?exception, "Task exception");
                 self.vm_host.stop();
 
                 task_scheduler_client.exception(exception);
@@ -773,7 +769,7 @@ mod tests {
     use moor_common::util::BitEnum;
     use moor_compiler::{CompileOptions, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
-    use moor_var::Error::E_DIV;
+    use moor_var::E_DIV;
     use moor_var::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
     use moor_var::{Symbol, v_obj};
     use moor_var::{v_int, v_str};
@@ -959,7 +955,7 @@ mod tests {
         let TaskControlMsg::TaskException(exception) = msg else {
             panic!("Expected TaskException, got {:?}", msg);
         };
-        assert_eq!(exception.code, E_DIV);
+        assert_eq!(exception.error.err_type, E_DIV);
     }
 
     // notify() will dispatch to the scheduler

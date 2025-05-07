@@ -15,8 +15,8 @@ use crate::builtins::BuiltinId;
 use crate::labels::{Label, Offset};
 use crate::names::Name;
 use bincode::{Decode, Encode};
-use moor_var::Obj;
-use moor_var::{Error, VarType};
+use moor_var::VarType;
+use moor_var::{ErrorCode, Obj};
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
 pub enum Op {
@@ -58,7 +58,6 @@ pub enum Op {
     ImmBigInt(i64),
     ImmFloat(f64),
     ImmEmptyList,
-    ImmErr(Error),
     ImmInt(i32),
     ImmType(VarType),
     ImmNone,
@@ -73,6 +72,11 @@ pub enum Op {
     ListAddTail,
     ListAppend,
     Lt,
+    /// Pushes just an error code, and is used when the literal has no message portion.
+    ImmErr(ErrorCode),
+    /// Operand is used because not doing so blew us over our 16-byte limit for some reason.
+    /// Expects stack to contain a message portion of the error, immediately after.
+    MakeError(Offset),
     MakeSingletonList,
     MakeMap,
     MapInsert,

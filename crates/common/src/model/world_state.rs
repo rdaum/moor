@@ -27,8 +27,8 @@ use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};
 use crate::model::{ObjAttr, Vid};
 use crate::util::{BitEnum, PerfCounter};
-use moor_var::Symbol;
 use moor_var::Var;
+use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RECMOVE, E_TYPE, E_VERBNF, Symbol};
 use moor_var::{Error, Obj};
 
 /// Errors related to the world state and operations on it.
@@ -85,20 +85,32 @@ pub enum WorldStateError {
 
 /// Translations from WorldStateError to MOO error codes.
 impl WorldStateError {
-    pub fn to_error_code(&self) -> Error {
+    pub fn to_error(&self) -> Error {
         match self {
-            Self::ObjectNotFound(_) => Error::E_INVIND,
-            Self::ObjectPermissionDenied => Error::E_PERM,
-            Self::RecursiveMove(_, _) => Error::E_RECMOVE,
-            Self::VerbNotFound(_, _) => Error::E_VERBNF,
-            Self::VerbPermissionDenied => Error::E_PERM,
-            Self::InvalidVerb(_) => Error::E_VERBNF,
-            Self::DuplicateVerb(_, _) => Error::E_INVARG,
-            Self::PropertyNotFound(_, _) => Error::E_PROPNF,
-            Self::PropertyPermissionDenied => Error::E_PERM,
-            Self::PropertyDefinitionNotFound(_, _) => Error::E_PROPNF,
-            Self::DuplicatePropertyDefinition(_, _) => Error::E_INVARG,
-            Self::PropertyTypeMismatch => Error::E_TYPE,
+            Self::ObjectNotFound(o) => E_INVIND.with_msg(|| format!("Object not found: {}", o)),
+            Self::ObjectPermissionDenied => E_PERM.into(),
+            Self::RecursiveMove(a, b) => {
+                E_RECMOVE.with_msg(|| format!("Recursive move detected: {} -> {}", a, b))
+            }
+            Self::VerbNotFound(o, v) => {
+                E_VERBNF.with_msg(|| format!("Verb not found: {}:{}", o, v))
+            }
+            Self::VerbPermissionDenied => E_PERM.into(),
+            Self::InvalidVerb(_) => E_VERBNF.into(),
+            Self::DuplicateVerb(o, v) => {
+                E_INVARG.with_msg(|| format!("Duplicate verb: {}:{}", o, v))
+            }
+            Self::PropertyNotFound(o, p) => {
+                E_PROPNF.with_msg(|| format!("Property not found: {}.{}", o, p))
+            }
+            Self::PropertyPermissionDenied => E_PERM.into(),
+            Self::PropertyDefinitionNotFound(p, d) => {
+                E_PROPNF.with_msg(|| format!("Property not found: {}.{}", p, d))
+            }
+            Self::DuplicatePropertyDefinition(o, p) => {
+                E_INVARG.with_msg(|| format!("Duplicate property definition: {}.{}", o, p))
+            }
+            Self::PropertyTypeMismatch => E_TYPE.msg("Property type mismatch"),
             _ => {
                 panic!("Unhandled error code: {:?}", self);
             }
@@ -116,7 +128,7 @@ impl WorldStateError {
 
 impl From<WorldStateError> for Error {
     fn from(val: WorldStateError) -> Self {
-        val.to_error_code()
+        val.to_error()
     }
 }
 

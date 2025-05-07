@@ -11,14 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::util::quote_str;
-use moor_var::{Obj, Sequence, Var, Variant};
-use std::collections::HashMap;
-
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
 use crate::{Name, ast};
+use moor_common::util::quote_str;
+use moor_var::{Obj, Sequence, Var, Variant};
+use std::collections::HashMap;
 
 use crate::names::UnboundName;
 
@@ -70,6 +69,7 @@ impl Expr {
             Expr::Index(_, _) => 2,
 
             Expr::Value(_) => 1,
+            Expr::Error(_, _) => 1,
             Expr::Id(_) => 1,
             Expr::TypeConstant(_) => 1,
             Expr::List(_) => 1,
@@ -165,6 +165,14 @@ impl<'a> Unparse<'a> {
                 buffer.push('(');
                 buffer.push_str(self.unparse_args(args).unwrap().as_str());
                 buffer.push(')');
+                Ok(buffer)
+            }
+            Expr::Error(code, value) => {
+                let mut buffer: String = (*code).into();
+                if let Some(value) = value {
+                    let value = self.unparse_expr(value).unwrap();
+                    buffer.push_str(format!("({})", value).as_str());
+                }
                 Ok(buffer)
             }
             Expr::Value(var) => Ok(self.unparse_var(var, false)),

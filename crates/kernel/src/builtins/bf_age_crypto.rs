@@ -28,9 +28,8 @@ use crate::bf_declare;
 use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_compiler::offset_for_builtin;
-use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_var::Sequence;
-use moor_var::Variant;
+use moor_var::{E_ARGS, Sequence};
+use moor_var::{E_INVARG, E_TYPE, Variant};
 use moor_var::{v_list, v_string};
 
 /// Function: list age_generate_keypair()
@@ -47,7 +46,9 @@ use moor_var::{v_list, v_string};
 /// ```
 fn bf_age_generate_keypair(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("age_generate_keypair() does not take any arguments"),
+        ));
     }
 
     // Check for programmer permissions
@@ -83,7 +84,9 @@ bf_declare!(age_generate_keypair, bf_age_generate_keypair);
 /// ```
 fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("age_encrypt() requires exactly two arguments"),
+        ));
     }
 
     // Check for programmer permissions
@@ -96,17 +99,33 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Get the message to encrypt
     let message = match bf_args.args[0].variant() {
         Variant::Str(s) => s.as_str(),
-        _ => return Err(BfErr::Code(E_TYPE)),
+        _ => {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "age_encrypt() first argument must be a string, was {}",
+                    bf_args.args[0].type_code().to_literal()
+                )
+            })));
+        }
     };
 
     // Get the recipients list
     let recipients_list = match bf_args.args[1].variant() {
         Variant::List(l) => l,
-        _ => return Err(BfErr::Code(E_TYPE)),
+        _ => {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "age_encrypt() second argument must be a list, was {}",
+                    bf_args.args[1].type_code().to_literal()
+                )
+            })));
+        }
     };
 
     if recipients_list.is_empty() {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("age_encrypt() requires at least one recipient"),
+        ));
     }
 
     // Process each recipient
@@ -114,7 +133,14 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     for recipient_var in recipients_list.iter() {
         let recipient_str = match recipient_var.variant() {
             Variant::Str(s) => s.as_str(),
-            _ => return Err(BfErr::Code(E_TYPE)),
+            _ => {
+                return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                    format!(
+                        "age_encrypt() recipient must be a string, was {}",
+                        recipient_var.type_code().to_literal()
+                    )
+                })));
+            }
         };
 
         if let Ok(x25519_recipient) = recipient_str.parse::<Recipient>() {
@@ -123,12 +149,14 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
         let ssh_key = PublicKey::from_openssh(recipient_str).map_err(|_| {
             warn!("Failed to parse SSH key");
-            BfErr::Code(E_INVARG)
+            BfErr::ErrValue(E_INVARG.msg("age_encrypt() failed to parse SSH key"))
         })?;
 
         let ssh_recipient = age::ssh::Recipient::from_str(&ssh_key.to_string()).map_err(|_| {
             warn!("Failed to create age recipient from SSH key");
-            BfErr::Code(E_INVARG)
+            BfErr::ErrValue(
+                E_INVARG.msg("age_encrypt() failed to create age recipient from SSH key"),
+            )
         })?;
         recipients.push(Box::new(ssh_recipient) as Box<dyn AgeRecipient>);
     }
@@ -137,14 +165,14 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let encryptor =
         Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref())).map_err(|_| {
             error!("Failed to create encryptor");
-            BfErr::Code(E_INVARG)
+            BfErr::ErrValue(E_INVARG.msg("age_encrypt() failed to create encryptor"))
         })?;
 
     // Encrypt the message
     let mut encrypted = Vec::new();
     let mut writer = encryptor.wrap_output(&mut encrypted).map_err(|e| {
         error!("Failed to create encryption writer: {}", e);
-        BfErr::Code(E_INVARG)
+        BfErr::ErrValue(E_INVARG.msg("age_encrypt() failed to create encryption writer"))
     })?;
 
     writer
@@ -152,7 +180,9 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .and_then(|_| writer.finish())
         .map_err(|e| {
             error!("Failed to write message for encryption: {}", e);
-            BfErr::Code(E_INVARG)
+            BfErr::ErrValue(
+                E_INVARG.msg("age_encrypt() failed to write message for encryption"),
+            )
         })?;
 
     // Base64 encode the encrypted data
@@ -179,7 +209,9 @@ bf_declare!(age_encrypt, bf_age_encrypt);
 /// ```
 fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("age_decrypt() requires exactly two arguments"),
+        ));
     }
 
     // Check for programmer permissions
@@ -192,7 +224,14 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Get the encrypted message
     let encrypted_b64 = match bf_args.args[0].variant() {
         Variant::Str(s) => s.as_str(),
-        _ => return Err(BfErr::Code(E_TYPE)),
+        _ => {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "age_decrypt() first argument must be a string, was {}",
+                    bf_args.args[0].type_code().to_literal()
+                )
+            })));
+        }
     };
 
     // Decode the base64 message
@@ -200,18 +239,29 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Ok(data) => data,
         Err(_) => {
             warn!("Invalid base64 data for decryption");
-            return Err(BfErr::Code(E_INVARG));
+            return Err(BfErr::ErrValue(
+                E_INVARG.msg("age_decrypt() failed to decode base64 data"),
+            ));
         }
     };
 
     // Get the private keys list
     let private_keys_list = match bf_args.args[1].variant() {
         Variant::List(l) => l,
-        _ => return Err(BfErr::Code(E_TYPE)),
+        _ => {
+            return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                format!(
+                    "age_decrypt() second argument must be a list, was {}",
+                    bf_args.args[1].type_code().to_literal()
+                )
+            })));
+        }
     };
 
     if private_keys_list.is_empty() {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("age_decrypt() requires at least one private key"),
+        ));
     }
 
     // Process each private key
@@ -219,7 +269,14 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     for key_var in private_keys_list.iter() {
         let key_str = match key_var.variant() {
             Variant::Str(s) => s.as_str(),
-            _ => return Err(BfErr::Code(E_TYPE)),
+            _ => {
+                return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
+                    format!(
+                        "age_decrypt() private key must be a string, was {}",
+                        key_var.type_code().to_literal()
+                    )
+                })));
+            }
         };
 
         // Try to parse as an age identity
@@ -260,11 +317,13 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     if identities.is_empty() {
         warn!("No valid identities found for decryption");
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("age_decrypt() no valid identities found for decryption"),
+        ));
     }
     let decryptor = Decryptor::new_buffered(&encrypted[..]).map_err(|_| {
         error!("Failed to create decryptor");
-        BfErr::Code(E_INVARG)
+        BfErr::ErrValue(E_INVARG.msg("age_decrypt() failed to create decryptor"))
     })?;
 
     // Create a decryptor
@@ -272,14 +331,16 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .decrypt(identities.iter().map(|i| i.as_ref()))
         .map_err(|_| {
             warn!("Failed to create decryptor");
-            BfErr::Code(E_INVARG)
+            BfErr::ErrValue(E_INVARG.msg("age_decrypt() failed to create decryptor"))
         })?;
     let mut decrypted = String::new();
     match reader.read_to_string(&mut decrypted) {
         Ok(_) => Ok(Ret(v_string(decrypted))),
         Err(_) => {
             warn!("Decrypted data is not valid UTF-8");
-            Err(BfErr::Code(E_INVARG))
+            Err(BfErr::ErrValue(
+                E_INVARG.msg("age_decrypt() decrypted data is not valid UTF-8"),
+            ))
         }
     }
 }

@@ -85,6 +85,26 @@ copy and update like other MOO primitive types.
 
 Performance wise, construction and lookup are O(log n) operations, and iteration is O(n).
 
+### Custom errors and errors with attached messages
+
+LambdaMOO had a set of hardcoded builtin-in errors with numeric values. It also uses the same errors for exceptions,
+and allows optional messages an an optional value to be passed when raising them, but these are not part of the error
+value itself.
+
+`mooR` adds support for custom errors, where any value that comes after `E_` is treated as an error identifier, though
+it does not have a numeric value (and will raise error if you try to call `tonum()` on it).
+
+Additionally, `mooR` extends errors with an optional message component which can be used to provide more context:
+
+```moo
+E_PROPNF("$foo.bar does not exist")
+```
+
+This is useful for debugging and error handling, as it allows you to provide more information about the error.
+
+Most of the builtin functions and builtin types have been updated to produce more descriptive error messages
+when they fail. This can help greatly with debugging and understanding what went wrong in your code.
+
 ### Symbol type
 
 `mooR` adds a symbol type which represents interned strings similar to those found in Lisp, Scheme and other languages.

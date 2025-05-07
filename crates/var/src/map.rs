@@ -13,7 +13,7 @@
 
 use crate::Associative;
 use crate::Error;
-use crate::Error::{E_RANGE, E_TYPE};
+use crate::error::ErrorCode::{E_RANGE, E_TYPE};
 use crate::var::Var;
 use crate::variant::Variant;
 use bincode::de::{BorrowDecoder, Decoder};
@@ -101,7 +101,7 @@ impl Associative for Map {
                 let entry = &self.0[pos];
                 Ok(entry.1.clone())
             }
-            Err(_) => Err(E_RANGE),
+            Err(_) => Err(E_RANGE.with_msg(|| format!("Key not found: {:?}", key))),
         }
     }
 
@@ -109,7 +109,12 @@ impl Associative for Map {
         // Stunt has a restriction that non-scalars cannot be keys (unless they're strings).
         // So we enforce that here, even though it's not strictly necessary.
         if !key.is_scalar() && !key.is_string() {
-            return Err(E_TYPE);
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Key must be a string or scalar, was {}",
+                    key.type_code().to_literal()
+                )
+            }));
         }
 
         // If the key is already in the map, we replace the value.
@@ -145,7 +150,7 @@ impl Associative for Map {
         // Find start with binary search.
         let start = match self.0.binary_search_by(|(k, _)| k.cmp(from)) {
             Ok(pos) => pos,
-            Err(_) => return Err(E_RANGE),
+            Err(_) => return Err(E_RANGE.with_msg(|| format!("Key not found: {:?}", from))),
         };
 
         // Now scan forward to find the end.
@@ -163,34 +168,7 @@ impl Associative for Map {
     }
 
     fn range_set(&self, _from: &Var, _to: &Var, _with: &Var) -> Result<Var, Error> {
-        // We reject range assignment, because it's tricky to get right, and Stunt does weird
-        // things. But code to do it is here, if we ever need it.
-        return Err(E_TYPE);
-
-        #[allow(unreachable_code)]
-        {
-            let with = match _with.variant() {
-                Variant::Map(m) => m,
-                _ => return Err(E_TYPE),
-            };
-
-            let mut new_pairs = Vec::with_capacity(self.len() + with.len());
-            for (k, v) in self.iter() {
-                if k.eq(_from)
-                    || k.cmp(_from) == Ordering::Greater && k.cmp(_to) == Ordering::Less
-                    || k.eq(_to)
-                {
-                    continue;
-                }
-
-                new_pairs.push((k, v));
-            }
-            for (k, v) in with.iter() {
-                new_pairs.push((k, v));
-            }
-
-            Ok(Self::build(new_pairs.iter()))
-        }
+        Err(E_TYPE.msg("Range assignment not supported on maps"))
     }
 
     fn keys(&self) -> Vec<Var> {

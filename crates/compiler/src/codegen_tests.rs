@@ -20,10 +20,9 @@ mod tests {
     use crate::opcode::Op::*;
     use crate::opcode::{ForSequenceOperand, ScatterArgs, ScatterLabel};
     use moor_common::model::CompileError;
-    use moor_var::Error::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE};
-    use moor_var::Obj;
     use moor_var::SYSTEM_OBJECT;
     use moor_var::Symbol;
+    use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, Obj};
 
     #[test]
     fn test_simple_add_expr() {

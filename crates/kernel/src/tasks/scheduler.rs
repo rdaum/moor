@@ -59,8 +59,8 @@ use moor_common::tasks::{
 use moor_common::util::PerfTimerGuard;
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
-use moor_var::Error::{E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_var::{AsByteBuffer, SYSTEM_OBJECT, v_list};
+use moor_var::{E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};
 use moor_var::{Obj, Variant};
 
@@ -1246,7 +1246,7 @@ impl Scheduler {
                 };
                 let result = match self.system_control.unlisten(port, &host_type) {
                     Ok(_) => None,
-                    Err(_) => Some(E_PERM),
+                    Err(_) => Some(E_PERM.msg("Permission denied on unlisten")),
                 };
                 reply.send(result).expect("Could not send unlisten reply");
             }
@@ -1259,7 +1259,7 @@ impl Scheduler {
                 let Some(task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for force input request");
 
-                    reply.send(Err(E_INVIND)).ok();
+                    reply.send(Err(E_INVIND.msg("Task not found"))).ok();
                     return;
                 };
                 let new_session = task.session.clone().fork().unwrap();
@@ -1287,7 +1287,11 @@ impl Scheduler {
                 match result {
                     Err(e) => {
                         error!(?e, "Could not start task thread");
-                        reply.send(Err(E_INVIND)).ok();
+                        reply
+                            .send(Err(E_INVIND.with_msg(|| {
+                                format!("Could not start thread for force_input: {e:?}")
+                            })))
+                            .ok();
                     }
                     Ok(th) => {
                         reply.send(Ok(th.0)).ok();

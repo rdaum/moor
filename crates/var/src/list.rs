@@ -12,9 +12,9 @@
 //
 
 use crate::Error;
-use crate::Error::E_RANGE;
 use crate::Sequence;
 use crate::Var;
+use crate::error::ErrorCode::{E_RANGE, E_TYPE};
 use crate::v_list_iter;
 use crate::variant::Variant;
 use bincode::de::{BorrowDecoder, Decoder};
@@ -71,7 +71,7 @@ impl List {
 
     pub fn pop_front(&self) -> Result<(Var, Var), Error> {
         if self.is_empty() {
-            return Err(E_RANGE);
+            return Err(E_RANGE.msg("attempt to pop from empty list"));
         }
         let mut l = self.0.clone();
         let first = l.pop_front().unwrap();
@@ -120,14 +120,26 @@ impl Sequence for List {
 
     fn index(&self, index: usize) -> Result<Var, Error> {
         if index >= self.len() {
-            return Err(E_RANGE);
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "attempt to index {} in list of length {}",
+                    index,
+                    self.len()
+                )
+            }));
         }
         Ok(self.0[index].clone())
     }
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
         if index >= self.len() {
-            return Err(E_RANGE);
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "attempt to set index {} in list of length {}",
+                    index,
+                    self.len()
+                )
+            }));
         }
         let mut new = self.0.clone();
         new[index] = value.clone();
@@ -153,7 +165,12 @@ impl Sequence for List {
             return Ok(Var::mk_list(&[]));
         }
         if from > len + 1 || to > len {
-            return Err(E_RANGE);
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "attempt to access out of bounds range {}..{} in list of length {}",
+                    from, to, len
+                )
+            }));
         }
         let (from, to) = (max(from, 0) as usize, to as usize);
         let range_iter = self.iter().skip(from).take(to - from + 1);
@@ -163,13 +180,15 @@ impl Sequence for List {
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
         let with_val = match with.variant() {
             Variant::List(s) => s,
-            _ => return Err(Error::E_TYPE),
+            _ => return Err(E_TYPE.msg("attempt to set range with non-list")),
         };
 
         let base_len = self.len();
 
         if from < 0 {
-            return Err(E_RANGE);
+            return Err(
+                E_RANGE.with_msg(|| format!("attempt to set range with negative index {}", from))
+            );
         }
 
         // 1..0 is a "special" MOO-ism that is short for "insert at front" and rather than trying
@@ -184,7 +203,12 @@ impl Sequence for List {
 
         // E_RANGE if from is greater than the length of the list + 1
         if from > base_len + 1 {
-            return Err(E_RANGE);
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "attempt to set range with index {} in list of length {}",
+                    from, base_len
+                )
+            }));
         }
 
         // MOO does a weird thing where it allows you to set a range where the end is out of bounds,
@@ -215,7 +239,7 @@ impl Sequence for List {
     fn append(&self, other: &Var) -> Result<Var, Error> {
         let other = match other.variant() {
             Variant::List(l) => l,
-            _ => return Err(Error::E_TYPE),
+            _ => return Err(E_TYPE.msg("attempt to append non-list")),
         };
 
         let mut result = self.0.clone();
@@ -225,7 +249,13 @@ impl Sequence for List {
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
         if index >= self.len() {
-            return Err(E_RANGE);
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "attempt to remove index {} in list of length {}",
+                    index,
+                    self.len()
+                )
+            }));
         }
 
         let mut new = self.0.clone();
@@ -352,7 +382,7 @@ impl std::iter::FromIterator<Var> for List {
 #[cfg(test)]
 mod tests {
     use crate::Error;
-    use crate::Error::{E_RANGE, E_TYPE};
+    use crate::error::ErrorCode::{E_RANGE, E_TYPE};
     use crate::v_bool_int;
     use crate::var::{Var, v_empty_list, v_int, v_list, v_str};
     use crate::variant::Variant;
@@ -455,7 +485,7 @@ mod tests {
             IndexMode::ZeroBased,
         );
         assert!(fail_bad_index.is_err());
-        assert_eq!(fail_bad_index.unwrap_err(), crate::Error::E_RANGE);
+        assert_eq!(fail_bad_index.unwrap_err(), E_RANGE);
     }
 
     #[test]
@@ -550,13 +580,13 @@ mod tests {
         let int_list = v_list(&[1.into(), 2.into(), 3.into()]);
         assert_eq!(
             int_list.range(&v_int(2), &v_int(4), IndexMode::ZeroBased),
-            Err(E_RANGE)
+            Err(E_RANGE.into())
         );
         // test on type mismatch
         let var_int = v_int(10);
         assert_eq!(
             var_int.range(&v_int(1), &v_int(5), IndexMode::ZeroBased),
-            Err(E_TYPE)
+            Err(E_TYPE.into())
         );
 
         let list = v_list(&[v_int(0), v_int(0)]);
@@ -743,7 +773,7 @@ mod tests {
             &v_list(&[v_int(6), v_int(7), v_int(8)]),
             IndexMode::OneBased,
         );
-        assert_eq!(r, Err(E_RANGE));
+        assert_eq!(r, Err(E_RANGE.into()));
 
         //;;a = {}; a[1..0] = {"test"}; return a;
         // => {"test"}

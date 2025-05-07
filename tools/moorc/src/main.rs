@@ -351,10 +351,7 @@ fn main() {
                 Ok(rv) => rv,
                 Err(e) => match e {
                     SchedulerError::TaskAbortedException(e) => {
-                        error!(
-                            "Test {}:{} aborted: {} ({}): {:?}",
-                            o, verb, e.code, e.msg, e.value
-                        );
+                        error!("Test {}:{} aborted: {}", o, verb, e.error);
                         for l in e.backtrace {
                             let Variant::Str(s) = l.variant() else {
                                 continue;

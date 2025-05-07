@@ -12,8 +12,8 @@
 //
 
 use crate::Error;
-use crate::Error::{E_INVARG, E_RANGE, E_TYPE};
 use crate::Sequence;
+use crate::error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE};
 use crate::var::Var;
 use crate::variant::Variant;
 use bincode::{Decode, Encode};
@@ -60,7 +60,14 @@ impl Sequence for Str {
     fn index_in(&self, value: &Var, case_sensitive: bool) -> Result<Option<usize>, Error> {
         let value = match value.variant() {
             Variant::Str(s) => s,
-            _ => return Err(E_TYPE),
+            _ => {
+                return Err(E_TYPE.with_msg(|| {
+                    format!(
+                        "Cannot index string with {}",
+                        value.type_code().to_literal()
+                    )
+                }));
+            }
         };
 
         let s = self.as_str();
@@ -78,7 +85,14 @@ impl Sequence for Str {
     fn contains(&self, value: &Var, case_sensitive: bool) -> Result<bool, Error> {
         let value = match value.variant() {
             Variant::Str(s) => s,
-            _ => return Err(E_TYPE),
+            _ => {
+                return Err(E_TYPE.with_msg(|| {
+                    format!(
+                        "Cannot check if string contains {}",
+                        value.type_code().to_literal()
+                    )
+                }));
+            }
         };
 
         let s = self.as_str();
@@ -94,7 +108,13 @@ impl Sequence for Str {
 
     fn index(&self, index: usize) -> Result<Var, Error> {
         if index >= self.as_str().len() {
-            return Err(E_RANGE);
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "Index {} out of range for string of length {}",
+                    index,
+                    self.len()
+                )
+            }));
         }
         let c = self.as_str().chars().nth(index).unwrap();
         let c_str = c.to_string();
@@ -103,7 +123,13 @@ impl Sequence for Str {
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
         if index >= self.as_str().len() {
-            return Err(E_RANGE);
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "Index {} out of range for string of length {}",
+                    index,
+                    self.len()
+                )
+            }));
         }
 
         // Index set for strings requires that the `value` being set is a string, otherwise it's.
@@ -111,11 +137,19 @@ impl Sequence for Str {
         // And it must be a single character character, otherwise, E_INVARG is returned.
         let value = match value.variant() {
             Variant::Str(s) => s,
-            _ => return Err(E_TYPE),
+            _ => {
+                return Err(E_TYPE.with_msg(|| {
+                    format!(
+                        "Cannot set string index {} with {}",
+                        index,
+                        value.type_code().to_literal()
+                    )
+                }));
+            }
         };
 
         if value.len() != 1 {
-            return Err(E_INVARG);
+            return Err(E_INVARG.msg("String index set value must be a single character"));
         }
 
         let mut s = self.as_str().to_string();
@@ -126,7 +160,11 @@ impl Sequence for Str {
     fn push(&self, value: &Var) -> Result<Var, Error> {
         let value = match value.variant() {
             Variant::Str(s) => s,
-            _ => return Err(E_TYPE),
+            _ => {
+                return Err(E_TYPE.with_msg(|| {
+                    format!("Cannot push {} to string", value.type_code().to_literal())
+                }));
+            }
         };
 
         let mut new_copy = self.as_str().to_string();
@@ -138,7 +176,14 @@ impl Sequence for Str {
         // If value is not a string, return E_TYPE.
         let value = match value.variant() {
             Variant::Str(s) => s,
-            _ => return Err(E_TYPE),
+            _ => {
+                return Err(E_TYPE.with_msg(|| {
+                    format!(
+                        "Cannot insert {} into string",
+                        value.type_code().to_literal()
+                    )
+                }));
+            }
         };
 
         let mut new_copy = self.as_str().to_string();
@@ -154,7 +199,14 @@ impl Sequence for Str {
         let start = max(from, 0) as usize;
         let to = to as usize;
         if start >= s.len() || to >= s.len() {
-            return Err(E_RANGE);
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "Range {}..{} out of bounds for string of length {}",
+                    from,
+                    to,
+                    s.len()
+                )
+            }));
         }
         let s = s.get(start..=to).unwrap();
         Ok(Var::mk_str(s))
@@ -163,7 +215,14 @@ impl Sequence for Str {
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
         let with_val = match with.variant() {
             Variant::Str(s) => s,
-            _ => return Err(Error::E_TYPE),
+            _ => {
+                return Err(E_TYPE.with_msg(|| {
+                    format!(
+                        "Cannot set string range with {}",
+                        with.type_code().to_literal()
+                    )
+                }));
+            }
         };
 
         let base_str = self.as_str();
@@ -191,7 +250,11 @@ impl Sequence for Str {
     fn append(&self, other: &Var) -> Result<Var, Error> {
         let other = match other.variant() {
             Variant::Str(s) => s,
-            _ => return Err(E_TYPE),
+            _ => {
+                return Err(E_TYPE.with_msg(|| {
+                    format!("Cannot append {} to string", other.type_code().to_literal())
+                }));
+            }
         };
 
         let mut new_copy = self.as_str().to_string();
@@ -201,7 +264,13 @@ impl Sequence for Str {
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
         if index >= self.as_str().len() {
-            return Err(E_RANGE);
+            return Err(E_RANGE.with_msg(|| {
+                format!(
+                    "Index {} out of range for string of length {}",
+                    index,
+                    self.len()
+                )
+            }));
         }
 
         let mut new_copy = self.as_str().to_string();
@@ -260,6 +329,7 @@ impl From<String> for Str {
 #[cfg(test)]
 mod tests {
     use crate::IndexMode;
+    use crate::error::ErrorCode::E_RANGE;
     use crate::v_bool_int;
     use crate::var::{Var, v_int, v_str};
     use crate::variant::Variant;
@@ -333,7 +403,7 @@ mod tests {
             IndexMode::ZeroBased,
         );
         assert!(fail_bad_index.is_err());
-        assert_eq!(fail_bad_index.unwrap_err(), crate::Error::E_RANGE);
+        assert_eq!(fail_bad_index.unwrap_err(), E_RANGE);
     }
 
     #[test]
@@ -436,7 +506,7 @@ mod tests {
 
         let fail_bad_index = s.remove_at(&Var::mk_integer(10), IndexMode::ZeroBased);
         assert!(fail_bad_index.is_err());
-        assert_eq!(fail_bad_index.unwrap_err(), crate::Error::E_RANGE);
+        assert_eq!(fail_bad_index.unwrap_err(), E_RANGE);
     }
 
     #[test]

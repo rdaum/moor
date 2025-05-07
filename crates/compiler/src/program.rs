@@ -18,8 +18,8 @@ use crate::unparse::to_literal;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use lazy_static::lazy_static;
-use moor_var::Var;
 use moor_var::{AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError};
+use moor_var::{ErrorCode, Var};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -44,6 +44,8 @@ pub struct Program {
     pub range_comprehensions: Vec<RangeComprehend>,
     /// List comprehensions, referenced by the list comprehension opcode.
     pub list_comprehensions: Vec<ListComprehend>,
+    /// All the error operands referenced in by MakeError in the program.
+    pub error_operands: Vec<ErrorCode>,
     /// The actual program code.
     pub main_vector: Arc<Vec<Op>>,
     /// The program code for each fork.
@@ -67,6 +69,7 @@ impl Program {
             main_vector: Arc::new(Vec::new()),
             fork_vectors: Vec::new(),
             line_number_spans: Vec::new(),
+            error_operands: vec![],
         }
     }
 

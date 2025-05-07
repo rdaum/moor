@@ -174,8 +174,10 @@ pub fn json_as_var(j: &serde_json::Value) -> Result<Var, JsonParseError> {
             }
 
             if let Some(error_name) = o.get("error") {
+                // TODO: support messages & values from the errors
+
                 // Match against the symbols in Error
-                let e = moor_var::Error::parse_str(
+                let e = moor_var::ErrorCode::parse_str(
                     error_name
                         .as_str()
                         .ok_or(JsonParseError::InvalidRepresentation)?,
@@ -208,7 +210,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use moor_var::{v_err, v_float, v_int, v_str};
+    use moor_var::{E_ARGS, v_err, v_float, v_int, v_str};
 
     #[test]
     fn test_int_to_fro() {
@@ -236,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_error_to_fro() {
-        let n = v_err(moor_var::Error::E_ARGS);
+        let n = v_err(E_ARGS);
         let j = super::var_as_json(&n);
         let n2 = super::json_as_var(&j).unwrap();
         assert_eq!(n, n2);

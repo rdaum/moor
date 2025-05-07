@@ -30,11 +30,11 @@ use moor_compiler::offset_for_builtin;
 use moor_compiler::program_to_tree;
 use moor_compiler::unparse;
 use moor_compiler::{compile, to_literal};
-use moor_var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::Obj;
 use moor_var::Symbol;
 use moor_var::Variant;
 use moor_var::{AsByteBuffer, Sequence};
+use moor_var::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, v_list_iter};
 use moor_var::{List, v_bool};
 use moor_var::{Var, v_empty_list, v_list, v_none, v_obj, v_str, v_string};
@@ -122,7 +122,7 @@ fn get_verbdef(obj: &Obj, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<Ve
 
 fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
     if info.len() != 3 {
-        return Err(E_INVARG);
+        return Err(E_INVARG.msg("verb_info requires 3 elements"));
     }
     match (
         info.index(0)?.variant(),
@@ -137,7 +137,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
                     'w' => perms |= VerbFlag::Write,
                     'x' => perms |= VerbFlag::Exec,
                     'd' => perms |= VerbFlag::Debug,
-                    _ => return Err(E_INVARG),
+                    _ => return Err(E_INVARG.msg("Invalid verb permissions")),
                 }
             }
 
@@ -158,7 +158,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
                 binary: None,
             })
         }
-        _ => Err(E_INVARG),
+        _ => Err(E_INVARG.msg("Invalid verb info")),
     }
 }
 
@@ -176,7 +176,7 @@ fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if info.len() != 3 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let update_attrs = parse_verb_info(info).map_err(BfErr::Code)?;
+    let update_attrs = parse_verb_info(info).map_err(BfErr::ErrValue)?;
 
     if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
         return Err(BfErr::Code(E_INVARG));
@@ -234,7 +234,7 @@ bf_declare!(verb_args, bf_verb_args);
 
 fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
     if verbinfo.len() != 3 {
-        return Err(E_ARGS);
+        return Err(E_ARGS.msg("verb_args requires 3 elements"));
     }
     match (
         verbinfo.index(0)?.variant(),
@@ -247,11 +247,11 @@ fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
                 parse_preposition_spec(prep_str.as_str()),
                 ArgSpec::from_string(iobj_str.as_str()),
             ) else {
-                return Err(E_INVARG);
+                return Err(E_INVARG.msg("Invalid verb args"));
             };
             Ok(VerbArgsSpec { dobj, prep, iobj })
         }
-        _ => Err(E_INVARG),
+        _ => Err(E_INVARG.msg("Invalid verb args")),
     }
 }
 
@@ -273,7 +273,7 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_INVARG));
     }
 
-    let args = parse_verb_args(verbinfo).map_err(BfErr::Code)?;
+    let args = parse_verb_args(verbinfo).map_err(BfErr::ErrValue)?;
 
     let update_attrs = VerbAttrs {
         definer: None,
@@ -482,8 +482,8 @@ fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     {
         return Err(BfErr::Code(E_PERM));
     }
-    let verbargs = parse_verb_args(args).map_err(BfErr::Code)?;
-    let verbinfo = parse_verb_info(info).map_err(BfErr::Code)?;
+    let verbargs = parse_verb_args(args).map_err(BfErr::ErrValue)?;
+    let verbinfo = parse_verb_info(info).map_err(BfErr::ErrValue)?;
 
     bf_args
         .world_state
@@ -638,7 +638,7 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_INVARG));
     }
 
-    let name = bf_args.args[1].as_symbol().map_err(BfErr::Code)?;
+    let name = bf_args.args[1].as_symbol().map_err(BfErr::ErrValue)?;
 
     let Ok((_, vd)) = bf_args
         .world_state

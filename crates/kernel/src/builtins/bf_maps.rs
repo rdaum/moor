@@ -14,28 +14,31 @@
 use crate::bf_declare;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
-use moor_var::Error::{E_ARGS, E_RANGE, E_TYPE};
-use moor_var::{Associative, Sequence};
+use moor_var::{Associative, E_ARGS, E_RANGE, E_TYPE, Sequence};
 use moor_var::{Var, Variant, v_list};
 /// Returns a copy of map with the value corresponding to key removed. If key is not a valid key, then E_RANGE is raised.
 fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("mapdelete() takes 2 arguments")));
     }
 
     let Variant::Map(m) = &bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("mapdelete first argument must be a map"),
+        ));
     };
 
     if matches!(
         bf_args.args[1].variant(),
         Variant::Map(_) | Variant::List(_)
     ) {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("mapdelete second argument must be a scalar"),
+        ));
     }
 
     let (nm, Some(_)) = m.remove(&bf_args.args[1], false) else {
-        return Err(BfErr::Code(E_RANGE));
+        return Err(BfErr::ErrValue(E_RANGE.msg("mapdelete key not found")));
     };
 
     Ok(BfRet::Ret(nm))
@@ -44,11 +47,13 @@ bf_declare!(mapdelete, bf_mapdelete);
 
 fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("mapkeys() takes 1 argument")));
     }
 
     let Variant::Map(m) = &bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("mapkeys first argument must be a map"),
+        ));
     };
 
     let keys: Vec<Var> = m.iter().map(|kv| kv.0.clone()).collect();
@@ -59,11 +64,13 @@ bf_declare!(mapkeys, bf_mapkeys);
 
 fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("mapvalues() takes 1 argument")));
     }
 
     let Variant::Map(m) = &bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("mapvalues first argument must be a map"),
+        ));
     };
 
     let values: Vec<Var> = m.iter().map(|kv| kv.1.clone()).collect();
@@ -74,23 +81,27 @@ bf_declare!(mapvalues, bf_mapvalues);
 
 fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("maphaskey() takes 2 arguments")));
     }
 
     let Variant::Map(m) = &bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("maphaskey first argument must be a map"),
+        ));
     };
 
     if matches!(
         bf_args.args[1].variant(),
         Variant::Map(_) | Variant::List(_)
     ) {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("maphaskey second argument must be a scalar"),
+        ));
     }
 
     let contains = m
         .contains_key(&bf_args.args[1], false)
-        .map_err(BfErr::Code)?;
+        .map_err(BfErr::ErrValue)?;
     Ok(BfRet::Ret(bf_args.v_bool(contains)))
 }
 bf_declare!(maphaskey, bf_maphaskey);

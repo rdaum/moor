@@ -12,6 +12,7 @@
 //
 
 use std::io::Read;
+use std::ops::Deref;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local, TimeZone};
@@ -20,7 +21,7 @@ use iana_time_zone::get_timezone;
 use tracing::{error, info, warn};
 
 use crate::bf_declare;
-use crate::builtins::BfErr::Code;
+use crate::builtins::BfErr::{Code, ErrValue};
 use crate::builtins::BfRet::{Ret, VmInstr};
 use crate::builtins::{
     BfCallState, BfErr, BfRet, BuiltinFunction, bf_perf_counters, world_state_bf_err,
@@ -36,9 +37,8 @@ use moor_common::tasks::{NarrativeEvent, Presentation};
 use moor_common::util::PerfCounter;
 use moor_compiler::compile;
 use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
-use moor_var::Error::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_var::VarType::TYPE_STR;
-use moor_var::{Error, Symbol, v_list_iter};
+use moor_var::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Symbol, v_list_iter};
 use moor_var::{Sequence, v_map};
 use moor_var::{Var, v_float, v_int, v_list, v_none, v_obj, v_str, v_string};
 use moor_var::{Variant, v_sym};
@@ -48,11 +48,10 @@ fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         "Builtin function {} is not implemented, called with arguments: ({:?})",
         bf_args.name, bf_args.args
     );
-    Err(BfErr::Raise(
-        E_INVIND,
-        Some(format!("Builtin {} is not implemented", bf_args.name)),
-        Some(v_str(bf_args.name.as_str())),
-    ))
+    Err(BfErr::Raise(E_INVIND.with_msg_and_value(
+        || format!("Builtin {} is not implemented", bf_args.name),
+        v_str(bf_args.name.as_str()),
+    )))
 }
 bf_declare!(noop, bf_noop);
 
@@ -61,20 +60,24 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Otherwise, it can send any value, and it's up to the host/client to interpret it.
     if !bf_args.config.rich_notify {
         if bf_args.args.len() != 2 {
-            return Err(BfErr::Code(E_ARGS));
+            return Err(ErrValue(E_ARGS.msg("notify() requires 2 arguments")));
         }
         if bf_args.args[1].type_code() != TYPE_STR {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("notify() requires a string as the second argument"),
+            ));
         }
     }
 
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("notify() requires 2 or 3 arguments")));
     }
 
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("notify() requires an object as the first argument"),
+        ));
     };
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
@@ -84,7 +87,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     let content_type = if bf_args.config.rich_notify && bf_args.args.len() == 3 {
-        let content_type = bf_args.args[2].as_symbol().map_err(Code)?;
+        let content_type = bf_args.args[2].as_symbol().map_err(ErrValue)?;
         Some(content_type)
     } else {
         None
@@ -108,16 +111,21 @@ bf_declare!(notify, bf_notify);
 /// If only the first two arguments are provided, the client should "unpresent" the presentation with that ID.
 fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.config.rich_notify {
-        return Err(BfErr::Code(E_PERM));
+        return Err(ErrValue(E_PERM.msg("present() is not available")));
     };
 
     if bf_args.args.len() < 2 || bf_args.args.len() > 6 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("present() requires 2 to 6 arguments")));
     }
 
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "present() requires an object as the first argument, got {:?}",
+                bf_args.args[0].type_code().to_literal()
+            )
+        })));
     };
 
     // If player is not the calling task perms, or a caller is not a wizard, raise E_PERM.
@@ -128,7 +136,11 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let id = match bf_args.args[1].variant() {
         Variant::Str(id) => id,
-        _ => return Err(BfErr::Code(E_TYPE)),
+        _ => {
+            return Err(ErrValue(
+                E_TYPE.msg("present() requires a string as the second argument"),
+            ));
+        }
     };
 
     // This is unpresent
@@ -145,19 +157,39 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     if bf_args.args.len() < 5 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.with_msg(|| {
+            format!(
+                "present() requires at least 5 arguments, got {}",
+                bf_args.args.len()
+            )
+        })));
     }
 
     let Variant::Str(content_type) = bf_args.args[2].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "present() requires a string as the third argument, got {:?}",
+                bf_args.args[2].type_code().to_literal()
+            )
+        })));
     };
 
     let Variant::Str(target) = bf_args.args[3].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "present() requires a string as the fourth argument, got {:?}",
+                bf_args.args[3].type_code().to_literal()
+            )
+        })));
     };
 
     let Variant::Str(content) = bf_args.args[4].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(E_TYPE.with_msg(|| {
+            format!(
+                "present() requires a string as the fifth argument, got {:?}",
+                bf_args.args[4].type_code().to_literal()
+            )
+        })));
     };
 
     let mut attributes = vec![];
@@ -169,20 +201,28 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     match item.variant() {
                         Variant::List(l) => {
                             if l.len() != 2 {
-                                return Err(BfErr::Code(E_ARGS));
+                                return Err(ErrValue(E_ARGS.msg(
+                                    "present() requires a list of { string, string } pairs as the sixth argument",
+                                )));
                             }
                             let key = match l[0].variant() {
                                 Variant::Str(s) => s,
-                                _ => return Err(BfErr::Code(E_TYPE)),
+                                _ => return Err(ErrValue(E_TYPE.msg(
+                                    "present() requires a list of { string, string } pairs as the sixth argument",
+                                ))),
                             };
                             let value = match l[1].variant() {
                                 Variant::Str(s) => s,
-                                _ => return Err(BfErr::Code(E_TYPE)),
+                                _ => return Err(ErrValue(E_TYPE.msg(
+                                    "present() requires a list of { string, string } pairs as the sixth argument",
+                                ))),
                             };
                             attributes.push((key.as_str().to_string(), value.as_str().to_string()));
                         }
                         _ => {
-                            return Err(BfErr::Code(E_TYPE));
+                            return Err(ErrValue(E_TYPE.msg(
+                                "present() requires a list of { string, string } pairs as the sixth argument",
+                            )));
                         }
                     }
                 }
@@ -191,17 +231,23 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 for (key, value) in m.iter() {
                     let key = match key.variant() {
                         Variant::Str(s) => s,
-                        _ => return Err(BfErr::Code(E_TYPE)),
+                        _ => return Err(ErrValue(E_TYPE.msg(
+                            "present() requires a map of string -> string pairs as the sixth argument",
+                        ))),
                     };
                     let value = match value.variant() {
                         Variant::Str(s) => s,
-                        _ => return Err(BfErr::Code(E_TYPE)),
+                        _ => return Err(ErrValue(E_TYPE.msg(
+                            "present() requires a map of string -> string pairs as the sixth argument",
+                        ))),
                     };
                     attributes.push((key.as_str().to_string(), value.as_str().to_string()));
                 }
             }
             _ => {
-                return Err(BfErr::Code(E_TYPE));
+                return Err(ErrValue(E_TYPE.msg(
+                    "present() requires a list of { string, string } pairs or a map of string -> string pairs as the sixth argument",
+                )));
             }
         }
     }
@@ -229,7 +275,9 @@ bf_declare!(present, bf_present);
 fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let include_all = if bf_args.args.len() == 1 {
         let Variant::Int(include_all) = bf_args.args[0].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(E_TYPE.msg(
+                "connected_players() requires an integer as the first argument",
+            )));
         };
         *include_all == 1
     } else {
@@ -252,16 +300,22 @@ bf_declare!(connected_players, bf_connected_players);
 
 fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("is_player() requires 1 argument")));
     }
     let player = bf_args.args[0].variant();
     let Variant::Obj(player) = player else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("is_player() requires an object as the first argument"),
+        ));
     };
 
     let is_player = match bf_args.world_state.flags_of(player) {
         Ok(flags) => flags.contains(ObjFlag::User),
-        Err(WorldStateError::ObjectNotFound(_)) => return Err(BfErr::Code(E_ARGS)),
+        Err(WorldStateError::ObjectNotFound(_)) => {
+            return Err(ErrValue(
+                E_ARGS.msg("is_player() requires a valid object as the first argument"),
+            ));
+        }
         Err(e) => return Err(world_state_bf_err(e)),
     };
     Ok(Ret(bf_args.v_bool(is_player)))
@@ -270,7 +324,9 @@ bf_declare!(is_player, bf_is_player);
 
 fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("caller_perms() does not take any arguments"),
+        ));
     }
 
     Ok(Ret(v_obj(bf_args.caller_perms())))
@@ -279,16 +335,20 @@ bf_declare!(caller_perms, bf_caller_perms);
 
 fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("set_task_perms() requires 1 argument")));
     }
     let Variant::Obj(perms_for) = bf_args.args[0].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("set_task_perms() requires an object as the first argument"),
+        ));
     };
 
     // If the caller is not a wizard, perms_for must be the caller
     let perms = bf_args.task_perms().map_err(world_state_bf_err)?;
     if !perms.check_is_wizard().map_err(world_state_bf_err)? && perms_for != perms.who {
-        return Err(BfErr::Code(E_PERM));
+        return Err(ErrValue(E_PERM.msg(
+            "set_task_perms() requires the caller to be a wizard or the caller itself",
+        )));
     }
     bf_args.exec_state.set_task_perms(perms_for);
 
@@ -298,7 +358,9 @@ bf_declare!(set_task_perms, bf_set_task_perms);
 
 fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("callers() does not take any arguments"),
+        ));
     }
 
     // We have to exempt ourselves from the callers list.
@@ -325,7 +387,9 @@ bf_declare!(callers, bf_callers);
 
 fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("task_id() does not take any arguments"),
+        ));
     }
 
     Ok(Ret(v_int(bf_args.exec_state.task_id as i64)))
@@ -334,13 +398,17 @@ bf_declare!(task_id, bf_task_id);
 
 fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("idle_seconds() requires 1 argument")));
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("idle_seconds() requires an object as the first argument"),
+        ));
     };
     let Ok(idle_seconds) = bf_args.session.idle_seconds(who.clone()) else {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(ErrValue(E_INVARG.msg(
+            "idle_seconds() requires a valid object as the first argument",
+        )));
     };
 
     Ok(Ret(v_int(idle_seconds as i64)))
@@ -349,13 +417,19 @@ bf_declare!(idle_seconds, bf_idle_seconds);
 
 fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("connected_seconds() requires 1 argument"),
+        ));
     }
     let Variant::Obj(who) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(E_TYPE.msg(
+            "connected_seconds() requires an object as the first argument",
+        )));
     };
     let Ok(connected_seconds) = bf_args.session.connected_seconds(who.clone()) else {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(ErrValue(E_INVARG.msg(
+            "connected_seconds() requires a valid object as the first argument",
+        )));
     };
 
     Ok(Ret(v_int(connected_seconds as i64)))
@@ -371,11 +445,15 @@ Returns a network-specific string identifying the connection being used by the g
  */
 fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("connection_name() requires 1 argument"),
+        ));
     }
 
     let Variant::Obj(player) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("connection_name() requires an object as the first argument"),
+        ));
     };
 
     let caller = bf_args.caller_perms();
@@ -386,11 +464,15 @@ fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?
         && caller != *player
     {
-        return Err(BfErr::Code(E_PERM));
+        return Err(ErrValue(E_PERM.msg(
+            "connection_name() requires the caller to be a wizard or the caller itself",
+        )));
     }
 
     let Ok(connection_name) = bf_args.session.connection_name(player.clone()) else {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg(
+            "connection_name() requires a valid object as the first argument",
+        )));
     };
 
     Ok(Ret(v_string(connection_name)))
@@ -399,13 +481,15 @@ bf_declare!(connection_name, bf_connection_name);
 
 fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("shutdown() requires 0 or 1 arguments")));
     }
     let msg = if bf_args.args.is_empty() {
         None
     } else {
         let Variant::Str(msg) = bf_args.args[0].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("shutdown() requires a string as the first argument"),
+            ));
         };
         Some(msg.as_str().to_string())
     };
@@ -424,7 +508,7 @@ bf_declare!(shutdown, bf_shutdown);
 
 fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("time() does not take any arguments")));
     }
     Ok(Ret(v_int(
         SystemTime::now()
@@ -437,13 +521,15 @@ bf_declare!(time, bf_time);
 
 fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("ftime() requires 0 or 1 arguments")));
     }
 
     // If argument is provided and equals 1, return uptime
     if bf_args.args.len() == 1 {
         let Variant::Int(arg) = bf_args.args[0].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("ftime() requires an integer as the first argument"),
+            ));
         };
 
         if *arg == 1 {
@@ -461,7 +547,9 @@ fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // ftime(0) behaves the same as ftime()
             // Fall through to the default case
         } else {
-            return Err(BfErr::Code(E_INVARG));
+            return Err(ErrValue(
+                E_INVARG.msg("ftime() requires 0 or 1 as the first argument"),
+            ));
         }
     }
 
@@ -477,13 +565,15 @@ bf_declare!(ftime, bf_ftime);
 
 fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("ctime() requires 0 or 1 arguments")));
     }
     let time = if bf_args.args.is_empty() {
         SystemTime::now()
     } else {
         let Variant::Int(time) = bf_args.args[0].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("ctime() requires an integer as the first argument"),
+            ));
         };
         if *time < 0 {
             SystemTime::UNIX_EPOCH - Duration::from_secs(time.unsigned_abs())
@@ -513,16 +603,20 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // and <value>, which defaults to zero, are made available to any `try'-`except' statements that catch the error.  If the error is not caught, then <message> will
     // appear on the first line of the traceback printed to the user.
     if bf_args.args.is_empty() || bf_args.args.len() > 3 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("raise() requires 1 to 3 arguments")));
     }
 
     let Variant::Err(err) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("raise() requires an error as the first argument"),
+        ));
     };
 
     let msg = if bf_args.args.len() > 1 {
         let Variant::Str(msg) = bf_args.args[1].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("raise() requires a string as the second argument"),
+            ));
         };
         Some(msg.as_str().to_string())
     } else {
@@ -535,14 +629,21 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         None
     };
 
-    Err(BfErr::Raise(*err, msg, value))
+    if err.msg.is_some() || err.value.is_some() {
+        return Err(ErrValue(
+            E_INVARG.msg("raise() requires an error with no message or value"),
+        ));
+    }
+    Err(BfErr::Raise(Error::new(err.err_type, msg, value)))
 }
 
 bf_declare!(raise, bf_raise);
 
 fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("server_version() does not take any arguments"),
+        ));
     }
     let version_string = format!("{}+{}", PKG_VERSION, SHORT_COMMIT);
     Ok(Ret(v_string(version_string)))
@@ -551,7 +652,7 @@ bf_declare!(server_version, bf_server_version);
 
 fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("suspend() requires 0 or 1 arguments")));
     }
 
     let suspend_condition = if bf_args.args.is_empty() {
@@ -560,10 +661,16 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let seconds = match bf_args.args[0].variant() {
             Variant::Float(seconds) => *seconds,
             Variant::Int(seconds) => *seconds as f64,
-            _ => return Err(BfErr::Code(E_TYPE)),
+            _ => {
+                return Err(ErrValue(
+                    E_TYPE.msg("suspend() requires a number as the first argument"),
+                ));
+            }
         };
         if seconds < 0.0 {
-            return Err(BfErr::Code(E_INVARG));
+            return Err(ErrValue(
+                E_INVARG.msg("suspend() requires a positive number as the first argument"),
+            ));
         }
         TaskSuspend::Timed(Duration::from_secs_f64(seconds))
     };
@@ -574,7 +681,7 @@ bf_declare!(suspend, bf_suspend);
 
 fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("commit() does not take any arguments")));
     }
 
     Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit)))
@@ -590,7 +697,7 @@ fn bf_rollback(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("rollback() requires 0 or 1 arguments")));
     }
 
     let output_session = !bf_args.args.is_empty() && bf_args.args[0].is_true();
@@ -601,11 +708,13 @@ bf_declare!(rollback, bf_rollback);
 
 fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("wait_task() requires 1 argument")));
     }
 
     let Variant::Int(task_id) = bf_args.args[0].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("wait_task() requires an integer as the first argument"),
+        ));
     };
 
     Ok(VmInstr(ExecutionResult::TaskSuspend(
@@ -616,7 +725,7 @@ bf_declare!(wait_task, bf_wait_task);
 
 fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("read() requires 0 or 1 arguments")));
     }
 
     // We don't actually support reading from arbitrary connections that aren't the current player,
@@ -624,7 +733,9 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // network listener model.
     if bf_args.args.len() == 1 {
         let Variant::Obj(requested_player) = bf_args.args[0].variant() else {
-            return Err(BfErr::Code(E_ARGS));
+            return Err(ErrValue(
+                E_ARGS.msg("read() requires an object as the first argument"),
+            ));
         };
         let player = &bf_args.exec_state.top().player;
         if requested_player != player {
@@ -634,7 +745,9 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 caller = ?bf_args.exec_state.caller(),
                 ?player,
                 "read() called with non-current player");
-            return Err(BfErr::Code(E_ARGS));
+            return Err(ErrValue(
+                E_ARGS.msg("read() requires the current player as the first argument"),
+            ));
         }
     }
 
@@ -644,7 +757,9 @@ bf_declare!(read, bf_read);
 
 fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("queued_tasks() does not take any arguments"),
+        ));
     }
 
     // Ask the scheduler (through its mailbox) to describe all the tasks.
@@ -694,7 +809,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let tasks = match bf_args.task_scheduler_client.active_tasks() {
         Ok(tasks) => tasks,
         Err(e) => {
-            return Err(BfErr::Code(e));
+            return Err(ErrValue(e));
         }
     };
 
@@ -798,14 +913,18 @@ bf_declare!(active_tasks, bf_active_tasks);
 /// It is guaranteed that queue_info(X) will return zero for any X not in the result of queue_info().
 fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("queue_info() requires 0 or 1 arguments"),
+        ));
     }
 
     let player = if bf_args.args.is_empty() {
         None
     } else {
         let Variant::Obj(player) = bf_args.args[0].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("queue_info() requires an object as the first argument"),
+            ));
         };
         Some(player)
     };
@@ -835,7 +954,9 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // Player must be either a wizard, or the player themselves.
             let perms = bf_args.task_perms().map_err(world_state_bf_err)?;
             if !perms.check_is_wizard().map_err(world_state_bf_err)? && !p.eq(&perms.who) {
-                return Err(BfErr::Code(E_PERM));
+                return Err(ErrValue(E_PERM.msg(
+                    "queue_info() requires the caller to be a wizard or the caller itself",
+                )));
             }
             let queued_tasks = tasks.iter().filter(|t| &t.permissions == p).count();
             Ok(Ret(v_int(queued_tasks as i64)))
@@ -850,11 +971,13 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Kills the task with the given <task-id>.
     // The task can be suspended / queued or running.
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("kill_task() requires 1 argument")));
     }
 
     let Variant::Int(victim_task_id) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("kill_task() requires an integer as the first argument"),
+        ));
     };
 
     // If the task ID is itself, that means returning an Complete execution result, which will cascade
@@ -871,7 +994,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.task_perms().map_err(world_state_bf_err)?,
     );
     if let Variant::Err(err) = result.variant() {
-        return Err(BfErr::Code(*err));
+        return Err(ErrValue(err.deref().clone()));
     }
     Ok(Ret(result))
 }
@@ -881,11 +1004,13 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax: resume(INT task-ID[, ANY value])
     // Resumes a previously suspended task, optionally with a value to pass back to the suspend() call
     if bf_args.args.len() > 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("resume() requires 1 or 2 arguments")));
     }
 
     let Variant::Int(resume_task_id) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("resume() requires an integer as the first argument"),
+        ));
     };
 
     // Optional 2nd argument is the value to return from suspend() in the resumed task.
@@ -899,7 +1024,9 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Resuming ourselves makes no sense, it's not suspended. E_INVARG.
     if task_id == bf_args.exec_state.task_id {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("resume() cannot resume the current task"),
+        ));
     }
 
     let result = bf_args.task_scheduler_client.resume_task(
@@ -908,7 +1035,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return_value.clone(),
     );
     if let Variant::Err(err) = result.variant() {
-        return Err(BfErr::Code(*err));
+        return Err(ErrValue(err.deref().clone()));
     }
     Ok(Ret(result))
 }
@@ -919,7 +1046,9 @@ fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     //
     // Returns the number of ticks left in the current time slice.
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("ticks_left() does not take any arguments"),
+        ));
     }
 
     let ticks_left = bf_args
@@ -936,7 +1065,9 @@ fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     //
     // Returns the number of seconds left in the current time slice.
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("seconds_left() does not take any arguments"),
+        ));
     }
 
     let seconds_left = match bf_args.exec_state.time_left() {
@@ -953,16 +1084,20 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     //
     // Disconnects the player with the given object number.
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("boot_player() requires 1 argument")));
     }
 
     let Variant::Obj(player) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("boot_player() requires an object as the first argument"),
+        ));
     };
 
     let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
     if task_perms.who != *player && !task_perms.check_is_wizard().map_err(world_state_bf_err)? {
-        return Err(BfErr::Code(E_PERM));
+        return Err(ErrValue(E_PERM.msg(
+            "boot_player() requires the caller to be a wizard or the caller itself",
+        )));
     }
 
     bf_args.task_scheduler_client.boot_player(player.clone());
@@ -976,22 +1111,29 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     //
     // Calls the given function with the given arguments and returns the result.
     if bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("call_function() requires at least 1 argument"),
+        ));
     }
 
-    let func_name = bf_args.args[0].as_symbol().map_err(Code)?;
+    let func_name = bf_args.args[0].as_symbol().map_err(ErrValue)?;
 
     // Arguments are everything left, if any.
-    let (_, args) = bf_args.args.pop_front().map_err(|_| BfErr::Code(E_ARGS))?;
+    let (_, args) = bf_args
+        .args
+        .pop_front()
+        .map_err(|_| ErrValue(E_ARGS.msg("call_function() requires at least 1 argument")))?;
     let Variant::List(arguments) = args.variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("call_function() requires a list as the second argument"),
+        ));
     };
 
     // Find the function id for the given function name.
 
-    let builtin = BUILTINS
-        .find_builtin(func_name)
-        .ok_or(BfErr::Code(E_INVARG))?;
+    let builtin = BUILTINS.find_builtin(func_name).ok_or(ErrValue(
+        E_INVARG.msg("call_function() requires a valid function name as the first argument"),
+    ))?;
 
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
     Ok(VmInstr(ExecutionResult::DispatchBuiltin {
@@ -1009,16 +1151,22 @@ is not a wizard, then `E_PERM' is raised.  If <is-error> is provided and true, t
 */
 fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("server_log() requires 1 or 2 arguments"),
+        ));
     }
 
     let Variant::Str(message) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("server_log() requires a string as the first argument"),
+        ));
     };
 
     let is_error = if bf_args.args.len() == 2 {
         let Variant::Int(is_error) = bf_args.args[1].variant() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("server_log() requires an integer as the second argument"),
+            ));
         };
         *is_error == 1
     } else {
@@ -1031,7 +1179,9 @@ fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_is_wizard()
         .map_err(world_state_bf_err)?
     {
-        return Err(BfErr::Code(E_PERM));
+        return Err(ErrValue(
+            E_PERM.msg("server_log() requires the caller to be a wizard"),
+        ));
     }
 
     if is_error {
@@ -1077,16 +1227,20 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
 
 fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("function_info() requires 0 or 1 arguments"),
+        ));
     }
 
     if bf_args.args.len() == 1 {
-        let func_name = bf_args.args[0].as_symbol().map_err(BfErr::Code)?;
-        let bf = BUILTINS
-            .find_builtin(func_name)
-            .ok_or(BfErr::Code(E_ARGS))?;
+        let func_name = bf_args.args[0].as_symbol().map_err(ErrValue)?;
+        let bf = BUILTINS.find_builtin(func_name).ok_or(ErrValue(
+            E_ARGS.msg("function_info() requires a valid function name as the first argument"),
+        ))?;
         let Some(desc) = BUILTINS.description_for(bf) else {
-            return Err(BfErr::Code(E_ARGS));
+            return Err(ErrValue(E_ARGS.msg(
+                "function_info() requires a valid function name as the first argument",
+            )));
         };
         let desc = bf_function_info_to_list(desc);
         return Ok(Ret(desc));
@@ -1115,27 +1269,35 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("listen() requires 2 to 4 arguments")));
     }
 
     let Variant::Obj(object) = bf_args.args[0].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("listen() requires an object as the first argument"),
+        ));
     };
 
     // point is a protocol specific value, but for now we'll just assume it's an integer for port
     let Variant::Int(point) = bf_args.args[1].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("listen() requires an integer as the second argument"),
+        ));
     };
 
     if point < 0 || point > (u16::MAX as i64) {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(ErrValue(E_INVARG.msg(
+            "listen() requires a positive integer as the second argument",
+        )));
     }
 
     let port = point as u16;
 
     let print_messages = if bf_args.args.len() >= 3 {
         let Variant::Int(print_messages) = bf_args.args[2].variant().clone() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("listen() requires an integer as the third argument"),
+            ));
         };
         print_messages == 1
     } else {
@@ -1144,7 +1306,9 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let host_type = if bf_args.args.len() == 4 {
         let Variant::Str(host_type) = bf_args.args[3].variant().clone() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("listen() requires a string as the fourth argument"),
+            ));
         };
         host_type.as_str().to_string()
     } else {
@@ -1157,7 +1321,7 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .task_scheduler_client
             .listen(object, host_type, port, print_messages)
     {
-        return Err(BfErr::Code(error));
+        return Err(ErrValue(error));
     }
 
     // "Listen() returns canon, a `canonicalized' version of point, with any configuration-specific defaulting or aliasing accounted for. "
@@ -1176,7 +1340,9 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("listeners() does not take any arguments"),
+        ));
     }
 
     let listeners = bf_args.task_scheduler_client.listeners();
@@ -1205,22 +1371,28 @@ fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("unlisten() requires 1 or 2 arguments")));
     }
 
     // point is a protocol specific value, but for now we'll just assume it's an integer for port
     let Variant::Int(point) = bf_args.args[0].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("unlisten() requires an integer as the first argument"),
+        ));
     };
 
     if point < 0 || point > (u16::MAX as i64) {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(ErrValue(E_INVARG.msg(
+            "unlisten() requires a positive integer as the first argument",
+        )));
     }
 
     let port = point as u16;
     let host_type = if bf_args.args.len() == 4 {
         let Variant::Str(host_type) = bf_args.args[3].variant().clone() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(ErrValue(
+                E_TYPE.msg("unlisten() requires a string as the second argument"),
+            ));
         };
         host_type.as_str().to_string()
     } else {
@@ -1228,7 +1400,7 @@ fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     if let Some(err) = bf_args.task_scheduler_client.unlisten(host_type, port) {
-        return Err(BfErr::Code(err));
+        return Err(ErrValue(err));
     }
 
     Ok(Ret(v_none()))
@@ -1245,10 +1417,12 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_programmer()
         .map_err(world_state_bf_err)?;
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(E_ARGS.msg("bf_eval() requires 1 argument")));
     }
     let Variant::Str(program_code) = bf_args.args[0].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("bf_eval() requires a string as the first argument"),
+        ));
     };
 
     let tramp = bf_args
@@ -1301,7 +1475,9 @@ bf_declare!(dump_database, bf_dump_database);
 
 fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("memory_usage() does not take any arguments"),
+        ));
     }
 
     // Must be wizard.
@@ -1314,28 +1490,28 @@ fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Get system page size
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     if page_size == -1 {
-        return Err(BfErr::Code(Error::E_QUOTA));
+        return Err(Code(E_QUOTA));
     }
 
     // Then read /proc/self/statm
     let mut statm = String::new();
     std::fs::File::open("/proc/self/statm")
-        .map_err(|_| BfErr::Code(Error::E_QUOTA))?
+        .map_err(|_| Code(E_QUOTA))?
         .read_to_string(&mut statm)
-        .map_err(|_| BfErr::Code(Error::E_QUOTA))?;
+        .map_err(|_| Code(E_QUOTA))?;
 
     // Split on whitespace -- then we have VmSize and VmRSS in pages
     let mut statm = statm.split_whitespace();
     let vm_size = statm
         .next()
-        .ok_or(BfErr::Code(Error::E_QUOTA))?
+        .ok_or(Code(E_QUOTA))?
         .parse::<i64>()
-        .map_err(|_| BfErr::Code(Error::E_QUOTA))?;
+        .map_err(|_| Code(E_QUOTA))?;
     let vm_rss = statm
         .next()
-        .ok_or(BfErr::Code(Error::E_QUOTA))?
+        .ok_or(Code(E_QUOTA))?
         .parse::<i64>()
-        .map_err(|_| BfErr::Code(Error::E_QUOTA))?;
+        .map_err(|_| Code(E_QUOTA))?;
 
     // Return format for memory_usage is:
     // {block-size, nused, nfree}
@@ -1358,7 +1534,9 @@ fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     //
     // Returns the number of bytes currently occupied by the database on disk.
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("db_disk_size() does not take any arguments"),
+        ));
     }
 
     // Must be wizard.
@@ -1382,7 +1560,9 @@ bf_declare!(db_disk_size, db_disk_size);
 */
 fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("load_server_options() does not take any arguments"),
+        ));
     }
 
     bf_args
@@ -1482,23 +1662,27 @@ fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     /*Syntax:  force_input (obj <conn>, str <line> [, <at-front>])   => none
      */
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(ErrValue(
+            E_ARGS.msg("force_input() requires 2 or 3 arguments"),
+        ));
     }
 
     // We always ignore 3rd argument ("at_front"), it makes no sense in mooR.
     let Variant::Obj(conn) = bf_args.args[0].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(ErrValue(
+            E_TYPE.msg("force_input() requires an object as the first argument"),
+        ));
     };
 
     // Must be either player or wizard
     let perms = bf_args.task_perms().map_err(world_state_bf_err)?;
 
     if perms.who != conn && !perms.check_is_wizard().map_err(world_state_bf_err)? {
-        return Err(BfErr::Code(E_PERM));
+        return Err(Code(E_PERM));
     }
 
     let Variant::Str(line) = bf_args.args[1].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(Code(E_TYPE));
     };
 
     match bf_args
@@ -1506,7 +1690,7 @@ fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .force_input(conn, line.as_str().to_string())
     {
         Ok(task_id) => Ok(Ret(v_int(task_id as i64))),
-        Err(e) => Err(Code(e)),
+        Err(e) => Err(ErrValue(e)),
     }
 }
 bf_declare!(force_input, bf_force_input);
@@ -1523,10 +1707,10 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
 
     if bf_args.args.len() < 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(Code(E_ARGS));
     }
 
-    let worker_type = bf_args.args[0].as_symbol().map_err(BfErr::Code)?;
+    let worker_type = bf_args.args[0].as_symbol().map_err(ErrValue)?;
 
     // The args are everything after the first argument
     let args = bf_args.args.iter().skip(1).collect();

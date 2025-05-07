@@ -25,8 +25,8 @@ mod tests {
         v_obj, v_objid, v_str, v_sym_str,
     };
 
-    use moor_var::Error::*;
     use moor_var::NOTHING;
+    use moor_var::*;
     use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
 
     use crate::builtins::BuiltinRegistry;
@@ -50,6 +50,7 @@ mod tests {
             for_sequence_operands: vec![],
             range_comprehensions: vec![],
             list_comprehensions: vec![],
+            error_operands: vec![],
             main_vector: Arc::new(main_vector),
             fork_vectors: vec![],
             line_number_spans: vec![],

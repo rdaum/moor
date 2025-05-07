@@ -344,7 +344,7 @@ pub mod scheduler_test_utils {
     use std::time::Duration;
 
     use moor_common::tasks::{CommandError, SchedulerError};
-    use moor_var::{Error::E_VERBNF, Obj, SYSTEM_OBJECT, Var};
+    use moor_var::{E_VERBNF, Obj, SYSTEM_OBJECT, Var};
 
     use super::{TaskHandle, TaskResult};
     use crate::config::FeaturesConfig;
@@ -373,8 +373,10 @@ pub mod scheduler_test_utils {
         {
             // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
             // `moot` tests can match against them.
-            Err(TaskAbortedException(Exception { code, .. })) => Ok(code.into()),
-            Err(CommandExecutionError(CommandError::NoCommandMatch)) => Ok(E_VERBNF.into()),
+            Err(TaskAbortedException(Exception { error, .. })) => Ok(error.into()),
+            Err(CommandExecutionError(CommandError::NoCommandMatch)) => {
+                Ok(E_VERBNF.msg("No command match").into())
+            }
             Err(err) => Err(err),
             Ok(TaskResult::Result(var)) => Ok(var),
             Ok(TaskResult::Replaced(_)) => panic!("Unexpected task restart"),

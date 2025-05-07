@@ -14,8 +14,7 @@
 use rand::Rng;
 
 use moor_compiler::offset_for_builtin;
-use moor_var::Error::{E_ARGS, E_INVARG, E_TYPE};
-use moor_var::{Sequence, Var, Variant};
+use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Var, Variant};
 use moor_var::{v_float, v_int, v_str};
 
 use crate::bf_declare;
@@ -24,26 +23,28 @@ use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 
 fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("abs() takes 1 argument")));
     }
 
     match bf_args.args[0].variant() {
         Variant::Int(i) => Ok(Ret(v_int(i.abs()))),
         Variant::Float(f) => Ok(Ret(v_float(f.abs()))),
-        _ => Err(BfErr::Code(E_TYPE)),
+        _ => Err(BfErr::ErrValue(E_TYPE.msg("abs() takes a number"))),
     }
 }
 bf_declare!(abs, bf_abs);
 
 fn bf_min(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("min() takes at least 1 argument"),
+        ));
     }
     let expected_type = bf_args.args[0].type_code();
     let mut minimum = bf_args.args[0].clone();
     for arg in bf_args.args.iter() {
         if arg.type_code() != expected_type {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(BfErr::ErrValue(E_TYPE.msg("min() takes numbers")));
         }
         if arg.lt(&minimum) {
             minimum = arg.clone();
@@ -55,13 +56,15 @@ bf_declare!(min, bf_min);
 
 fn bf_max(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("max() takes at least 1 argument"),
+        ));
     }
     let expected_type = bf_args.args[0].type_code();
     let mut maximum = bf_args.args[0].clone();
     for arg in bf_args.args.iter() {
         if arg.type_code() != expected_type {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(BfErr::ErrValue(E_TYPE.msg("max() takes numbers")));
         }
         if arg.gt(&maximum) {
             maximum = arg.clone();
@@ -74,7 +77,9 @@ bf_declare!(max, bf_max);
 
 fn bf_random(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("random() takes 0 or 1 argument"),
+        ));
     }
 
     let mut rng = rand::thread_rng();
@@ -92,17 +97,27 @@ bf_declare!(random, bf_random);
 
 fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("floatstr() takes 2 or 3 arguments"),
+        ));
     }
 
     let x = match bf_args.args[0].variant() {
         Variant::Float(f) => f,
-        _ => return Err(BfErr::Code(E_TYPE)),
+        _ => {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("floatstr() first argument must be a float"),
+            ));
+        }
     };
 
     let precision = match &bf_args.args[1].variant() {
         Variant::Int(i) if *i > 0 => *i as usize,
-        _ => return Err(BfErr::Code(E_TYPE)),
+        _ => {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("floatstr() second argument must be a positive integer"),
+            ));
+        }
     };
 
     let scientific = bf_args.args.len() == 3 && bf_args.args[2].is_true();
@@ -120,7 +135,7 @@ fn numeric_arg(arg: &Var) -> Result<f64, BfErr> {
     let x = match arg.variant() {
         Variant::Int(i) => *i as f64,
         Variant::Float(f) => *f,
-        _ => return Err(BfErr::Code(E_TYPE)),
+        _ => return Err(BfErr::ErrValue(E_TYPE.msg("non-numeric argument"))),
     };
 
     Ok(x)
@@ -128,7 +143,7 @@ fn numeric_arg(arg: &Var) -> Result<f64, BfErr> {
 
 fn bf_sin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("sin() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -139,7 +154,7 @@ bf_declare!(sin, bf_sin);
 
 fn bf_cos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("cos() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -150,7 +165,7 @@ bf_declare!(cos, bf_cos);
 
 fn bf_tan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("tan() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -161,13 +176,15 @@ bf_declare!(tan, bf_tan);
 
 fn bf_sqrt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("sqrt() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
 
     if x < 0.0 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("sqrt() takes a non-negative number"),
+        ));
     }
 
     Ok(Ret(v_float(x.sqrt())))
@@ -176,13 +193,15 @@ bf_declare!(sqrt, bf_sqrt);
 
 fn bf_asin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("asin() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
 
     if !(-1.0..=1.0).contains(&x) {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("asin() takes a number between -1 and 1"),
+        ));
     }
 
     Ok(Ret(v_float(x.asin())))
@@ -191,13 +210,15 @@ bf_declare!(asin, bf_asin);
 
 fn bf_acos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("acos() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
 
     if !(-1.0..=1.0).contains(&x) {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("acos() takes a number between -1 and 1"),
+        ));
     }
 
     Ok(Ret(v_float(x.acos())))
@@ -206,7 +227,7 @@ bf_declare!(acos, bf_acos);
 
 fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("atan() takes 1 or 2 arguments")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -218,7 +239,7 @@ bf_declare!(atan, bf_atan);
 
 fn bf_sinh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("sinh() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -229,7 +250,7 @@ bf_declare!(sinh, bf_sinh);
 
 fn bf_cosh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("cosh() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -240,7 +261,7 @@ bf_declare!(cosh, bf_cosh);
 
 fn bf_tanh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("tanh() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -251,7 +272,7 @@ bf_declare!(tanh, bf_tanh);
 
 fn bf_exp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("exp() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -262,13 +283,13 @@ bf_declare!(exp, bf_exp);
 
 fn bf_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("log() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
 
     if x <= 0.0 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("log() takes a positive number")));
     }
 
     Ok(Ret(v_float(x.ln())))
@@ -277,13 +298,15 @@ bf_declare!(log, bf_log);
 
 fn bf_log10(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("log10() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
 
     if x <= 0.0 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("log10() takes a positive number"),
+        ));
     }
 
     Ok(Ret(v_float(x.log10())))
@@ -292,7 +315,7 @@ bf_declare!(log10, bf_log10);
 
 fn bf_ceil(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("ceil() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -303,7 +326,7 @@ bf_declare!(ceil, bf_ceil);
 
 fn bf_floor(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("floor() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;
@@ -314,7 +337,7 @@ bf_declare!(floor, bf_floor);
 
 fn bf_trunc(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("trunc() takes 1 argument")));
     }
 
     let x = numeric_arg(&bf_args.args[0])?;

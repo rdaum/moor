@@ -37,9 +37,9 @@ use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
 use moor_common::util::PerfCounter;
 use moor_compiler::{BUILTINS, BuiltinId};
-use moor_var::Symbol;
 use moor_var::Var;
 use moor_var::{Error, List};
+use moor_var::{ErrorCode, Symbol};
 use moor_var::{Obj, v_bool_int};
 
 mod bf_age_crypto;
@@ -210,9 +210,11 @@ pub enum BfRet {
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum BfErr {
     #[error("Error in built-in function: {0}")]
-    Code(Error),
-    #[error("Raised error: {0:?} {1:?} {2:?}")]
-    Raise(Error, Option<String>, Option<Var>),
+    ErrValue(Error),
+    #[error("Error in built-in function: {0}")]
+    Code(ErrorCode),
+    #[error("Raised error: {0:?}")]
+    Raise(Error),
     #[error("Transaction rollback-retry")]
     Rollback,
 }
@@ -242,6 +244,6 @@ macro_rules! bf_declare {
 pub(crate) fn world_state_bf_err(err: WorldStateError) -> BfErr {
     match err {
         WorldStateError::RollbackRetry => BfErr::Rollback,
-        _ => BfErr::Code(err.into()),
+        _ => BfErr::ErrValue(err.into()),
     }
 }

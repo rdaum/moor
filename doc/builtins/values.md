@@ -129,3 +129,28 @@ Computes an MD5 hash of a value's literal representation.
 Note: Most of these functions follow a consistent pattern of validating arguments and providing appropriate error
 handling. Type conversion functions generally attempt to convert intelligently between types and provide sensible
 defaults or errors when conversion isn't possible.
+
+## Error Handling Functions
+
+### `error_message`
+
+Returns the error message associated with an error value.
+
+**Description:****Arguments:**
+
+- `error`: The error value to get the message from
+
+**Returns:** The error message string
+
+### `error_code`
+
+Strips off the message from an error value and returns just the error without it.
+
+**Description:****Arguments:**
+
+- `error`: The error value to get the code from
+
+**Returns:** The error code of the error value
+
+
+

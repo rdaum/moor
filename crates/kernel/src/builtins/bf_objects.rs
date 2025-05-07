@@ -19,7 +19,7 @@ use moor_common::model::WorldStateError;
 use moor_common::model::{ObjFlag, ValSet};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
-use moor_var::Error::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
+use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
 use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Sequence, Symbol, v_list};
@@ -45,10 +45,12 @@ Returns a non-zero integer (i.e., a true value) if object is a valid object (one
 */
 fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("valid() takes 1 argument")));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("valid() first argument must be an object"),
+        ));
     };
     let is_valid = bf_args.world_state.valid(obj).map_err(world_state_bf_err)?;
     Ok(Ret(bf_args.v_bool(is_valid)))
@@ -57,13 +59,17 @@ bf_declare!(valid, bf_valid);
 
 fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("parent() takes 1 argument")));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("parent() first argument must be an object"),
+        ));
     };
     if !obj.is_positive() || !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("parent() argument must be a valid object"),
+        ));
     }
     let parent = bf_args
         .world_state
@@ -75,13 +81,17 @@ bf_declare!(parent, bf_parent);
 
 fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("chparent() takes 2 arguments")));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("chparent() first argument must be an object"),
+        ));
     };
     let Variant::Obj(new_parent) = bf_args.args[1].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("chparent() second argument must be an object"),
+        ));
     };
     // If object is not valid, or if new-parent is neither valid nor equal to #-1, then E_INVARG is raised.
     if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)?
@@ -91,7 +101,9 @@ fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 .valid(new_parent)
                 .map_err(world_state_bf_err)?)
     {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("chparent() arguments must be valid objects"),
+        ));
     }
     bf_args
         .world_state
@@ -103,13 +115,17 @@ bf_declare!(chparent, bf_chparent);
 
 fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("children() takes 1 argument")));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("children() first argument must be an object"),
+        ));
     };
     if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("children() argument must be a valid object"),
+        ));
     }
     let children = bf_args
         .world_state
@@ -123,13 +139,19 @@ bf_declare!(children, bf_children);
 
 fn bf_descendants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("descendants() takes 1 argument"),
+        ));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("descendants() first argument must be an object"),
+        ));
     };
     if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("descendants() argument must be a valid object"),
+        ));
     }
     let descendants = bf_args
         .world_state
@@ -143,10 +165,14 @@ bf_declare!(descendants, bf_descendants);
 
 fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("ancestors() takes 1 or 2 arguments"),
+        ));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("ancestors() first argument must be an object"),
+        ));
     };
     let add_self = if bf_args.args.len() == 2 {
         bf_args.args[1].is_true()
@@ -155,7 +181,9 @@ fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("ancestors() argument must be a valid object"),
+        ));
     }
     let ancestors = bf_args
         .world_state
@@ -172,13 +200,17 @@ Syntax: isa (obj <object>, obj <possible_ancestor>) => int
 */
 fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("isa() takes 2 arguments")));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("isa() first argument must be an object"),
+        ));
     };
     let Variant::Obj(possible_ancestor) = bf_args.args[1].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("isa() second argument must be an object"),
+        ));
     };
 
     if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)?
@@ -187,7 +219,9 @@ fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .valid(possible_ancestor)
             .map_err(world_state_bf_err)?
     {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("isa() arguments must be valid objects"),
+        ));
     }
 
     let ancestors = bf_args
@@ -208,14 +242,20 @@ const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
 fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("create() takes 1 or 2 arguments"),
+        ));
     }
     let Variant::Obj(parent) = bf_args.args[0].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("create() first argument must be an object"),
+        ));
     };
     let owner = if bf_args.args.len() == 2 {
         let Variant::Obj(owner) = bf_args.args[1].variant().clone() else {
-            return Err(BfErr::Code(E_TYPE));
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("create() second argument must be an object"),
+            ));
         };
         owner
     } else {
@@ -290,10 +330,12 @@ const BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC: usize = 0;
 const BF_RECYCLE_TRAMPOLINE_DONE_MOVE: usize = 1;
 fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("recycle() takes 1 argument")));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("recycle() first argument must be an object"),
+        ));
     };
 
     let valid = bf_args.world_state.valid(&obj);
@@ -303,7 +345,9 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .map(|e| e.database_error_msg() == Some("NotFound"))
             .unwrap_or_default()
     {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("recycle() argument must be a valid object"),
+        ));
     }
 
     // Check if the given task perms can control the object before continuing.
@@ -312,7 +356,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .controls(&bf_args.task_perms_who(), &obj)
         .map_err(world_state_bf_err)?
     {
-        return Err(BfErr::Code(E_PERM));
+        return Err(BfErr::ErrValue(E_PERM.msg("recycle() permission denied")));
     }
 
     // Before actually recycling the object, we need to move all its contents to #-1. While
@@ -345,7 +389,9 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         Err(WorldStateError::VerbNotFound(_, _)) => {}
                         Err(e) => {
                             error!("Error looking up exitfunc verb: {:?}", e);
-                            return Err(BfErr::Code(E_NACC));
+                            return Err(BfErr::ErrValue(
+                                E_NACC.msg("recycle() error looking up exitfunc"),
+                            ));
                         }
                     }
                 }
@@ -384,9 +430,10 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         bf_frame.bf_trampoline_arg = Some(contents);
                         // Fall through to the next case.
                     }
-                    Err(e) => {
-                        error!("Error looking up recycle verb: {:?}", e);
-                        return Err(BfErr::Code(E_NACC));
+                    Err(_) => {
+                        return Err(BfErr::ErrValue(
+                            E_NACC.msg("recycle() error looking up recycle"),
+                        ));
                     }
                 }
             }
@@ -464,7 +511,9 @@ bf_declare!(recycle, bf_recycle);
 
 fn bf_max_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("max_object() takes no arguments"),
+        ));
     }
     let max_obj = bf_args
         .world_state
@@ -481,13 +530,17 @@ const BF_MOVE_TRAMPOLINE_DONE: usize = 3;
 
 fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("move() takes 2 arguments")));
     }
     let Variant::Obj(what) = bf_args.args[0].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("move() first argument must be an object"),
+        ));
     };
     let Variant::Obj(whereto) = bf_args.args[1].variant().clone() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("move() second argument must be an object"),
+        ));
     };
 
     // World state will reject this move if it's recursive.
@@ -700,10 +753,12 @@ bf_declare!(move, bf_move);
 
 fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("verbs() takes 1 argument")));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("verbs() first argument must be an object"),
+        ));
     };
     let verbs = bf_args
         .world_state
@@ -723,10 +778,12 @@ Returns a list of the names of the properties defined directly on the given obje
  */
 fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("properties() takes 1 argument")));
     }
     let Variant::Obj(obj) = bf_args.args[0].variant() else {
-        return Err(BfErr::Code(E_TYPE));
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("properties() first argument must be an object"),
+        ));
     };
     let props = bf_args
         .world_state
@@ -743,13 +800,17 @@ bf_declare!(properties, bf_properties);
 
 fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("set_player_flag() takes 2 arguments"),
+        ));
     }
 
     let (Variant::Obj(obj), Variant::Int(f)) =
         (bf_args.args[0].variant(), bf_args.args[1].variant())
     else {
-        return Err(BfErr::Code(E_INVARG));
+        return Err(BfErr::ErrValue(E_INVARG.msg(
+            "set_player_flag() arguments must be an object and an integer",
+        )));
     };
 
     let f = *f == 1;
@@ -789,7 +850,7 @@ bf_declare!(set_player_flag, bf_set_player_flag);
 
 fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
-        return Err(BfErr::Code(E_ARGS));
+        return Err(BfErr::ErrValue(E_ARGS.msg("players() takes no arguments")));
     }
     let players = bf_args.world_state.players().map_err(world_state_bf_err)?;
 

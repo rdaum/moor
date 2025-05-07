@@ -22,8 +22,7 @@ use moor_common::model::VerbFlag;
 use moor_common::tasks::Exception;
 use moor_common::util::PerfTimerGuard;
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
-use moor_var::NOTHING;
-use moor_var::{Error, ErrorPack};
+use moor_var::{Error, NOTHING, v_error, v_string};
 use moor_var::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
 use tracing::trace;
 
@@ -80,7 +79,7 @@ impl VMExecState {
     }
 
     /// Compose a backtrace list of strings for an error, starting from the current stack frame.
-    fn make_backtrace(activations: &[Activation], raise_msg: &str) -> Vec<Var> {
+    fn make_backtrace(activations: &[Activation], error: &Error) -> Vec<Var> {
         // Walk live activation frames and produce a written representation of a traceback for each
         // frame.
         let mut backtrace_list = vec![];
@@ -106,6 +105,7 @@ impl VMExecState {
                 pieces.push(format!(" (line {})", line_num));
             }
             if i == 0 {
+                let raise_msg = format!("{} ({})", error.err_type, error.message());
                 pieces.push(format!(": {}", raise_msg));
             }
             let piece = pieces.join("");
@@ -115,109 +115,75 @@ impl VMExecState {
         backtrace_list
     }
 
-    /// Raise an error.
+    /// Explicitly raise an error.
     /// Finds the catch handler for the given error if there is one, and unwinds the stack to it.
     /// If there is no handler, creates an 'Uncaught' reason with backtrace, and unwinds with that.
-    fn raise_error_pack(&mut self, p: ErrorPack) -> ExecutionResult {
-        trace!(error = ?p, "raising error");
+    pub fn throw_error(&mut self, error: Error) -> ExecutionResult {
+        trace!(error = ?error, "raising error");
 
         let stack = Self::make_stack_list(&self.stack);
-        let backtrace = Self::make_backtrace(&self.stack, &p.msg);
+        let backtrace = Self::make_backtrace(&self.stack, &error);
         let exception = Exception {
-            code: p.code,
-            msg: p.msg,
-            value: p.value,
+            error,
             stack,
             backtrace,
         };
         self.unwind_stack(FinallyReason::Raise(exception))
     }
 
-    /// Push/raise a full error pack and raise it depending on the `d` flag
-    pub(crate) fn push_error_pack(&mut self, p: ErrorPack) -> ExecutionResult {
-        trace!(error = ?p, "push_error");
-        self.set_return_value(v_err(p.code));
+    /// Push an error up the activation stack (set returned value), and raise it depending on the `d` flag
+    pub(crate) fn push_error(&mut self, error: Error) -> ExecutionResult {
+        trace!(?error, "push_error");
+        self.set_return_value(v_error(error.clone()));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {
             if activation.verbdef.flags().contains(VerbFlag::Debug) {
-                return self.raise_error_pack(p);
+                return self.throw_error(error);
             }
         }
         ExecutionResult::More
     }
+    /// Only raise an error if the 'd' bit is set on the running verb. Most times this is what we
+    /// want.
+    pub(crate) fn raise_error(&mut self, error: Error) -> ExecutionResult {
+        trace!(?error, "maybe_raise_error");
 
-    /// Push an error to the stack and raise it depending on the `d` flag
-    pub(crate) fn push_error(&mut self, code: Error) -> ExecutionResult {
-        trace!(?code, "push_error");
-        self.set_return_value(v_err(code));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
-        if let Some(activation) = self.stack.last() {
+        // Filter out frames for builtin invocations
+        let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
+        if let Some(activation) = verb_frame {
             if activation.verbdef.flags().contains(VerbFlag::Debug) {
-                return self.raise_error_pack(code.make_error_pack(None, None));
+                return self.throw_error(error);
             }
         }
         ExecutionResult::More
     }
 
     /// Same as push_error, but for returns from builtin functions.
-    pub(crate) fn push_bf_error(
-        &mut self,
-        code: Error,
-        msg: Option<String>,
-        value: Option<Var>,
-    ) -> ExecutionResult {
+    pub(crate) fn push_bf_error(&mut self, error: Error) -> ExecutionResult {
         // TODO: revisit this now that Bf frames are a thing...
         //   We should be able to come up with a way to propagate and unwind for any kind of frame...
         //   And not have a special case here
 
-        trace!(?code, "push_bf_error");
+        trace!(?error, "push_bf_error");
         // No matter what, the error value has to be on the stack of the *calling* verb, not on this
         // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
         // function.
         self.parent_activation_mut()
             .frame
-            .set_return_value(v_err(code));
+            .set_return_value(v_error(error.clone()));
 
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         // Filter out frames for builtin invocations
         let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
         if let Some(activation) = verb_frame {
             if activation.verbdef.flags().contains(VerbFlag::Debug) {
-                return self.raise_error_pack(code.make_error_pack(msg, value));
+                return self.throw_error(error);
             }
         }
         // If we're not unwinding, we need to pop the builtin function's activation frame.
         self.stack.pop();
         ExecutionResult::More
-    }
-
-    /// Push an error to the stack with a description and raise it.
-    pub(crate) fn push_error_msg(&mut self, code: Error, msg: String) -> ExecutionResult {
-        trace!(?code, msg, "push_error_msg");
-        self.set_return_value(v_err(code));
-        self.raise_error(code)
-    }
-
-    /// Only raise an error if the 'd' bit is set on the running verb. Most times this is what we
-    /// want.
-    pub(crate) fn raise_error(&mut self, code: Error) -> ExecutionResult {
-        trace!(?code, "maybe_raise_error");
-
-        // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
-        // Filter out frames for builtin invocations
-        let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
-        if let Some(activation) = verb_frame {
-            if activation.verbdef.flags().contains(VerbFlag::Debug) {
-                return self.raise_error_pack(code.make_error_pack(None, None));
-            }
-        }
-        ExecutionResult::More
-    }
-
-    /// Explicitly raise an error, regardless of the 'd' bit.
-    pub(crate) fn throw_error(&mut self, code: Error) -> ExecutionResult {
-        trace!(?code, "raise_error");
-        self.raise_error_pack(code.make_error_pack(None, None))
     }
 
     /// Unwind the stack with the given reason and return an execution result back to the VM loop
@@ -256,25 +222,20 @@ impl VMExecState {
                                 return ExecutionResult::More;
                             }
                             ScopeType::TryCatch(catches) => {
-                                if let FinallyReason::Raise(Exception {
-                                    code,
-                                    msg,
-                                    value,
-                                    stack,
-                                    ..
-                                }) = &why
-                                {
+                                if let FinallyReason::Raise(Exception { error, stack, .. }) = &why {
                                     for catch in catches {
                                         let found = match catch.0 {
                                             CatchType::Any => true,
-                                            CatchType::Errors(e) => e.contains(code),
+                                            CatchType::Errors(e) => e.contains(error),
                                         };
                                         if found {
+                                            let value =
+                                                error.value.as_deref().cloned().unwrap_or(v_none());
                                             frame.jump(&catch.1);
                                             frame.push(v_list(&[
-                                                v_err(*code),
-                                                v_str(msg),
-                                                value.clone(),
+                                                v_err(error.err_type),
+                                                v_string(error.message()),
+                                                value,
                                                 v_list(stack),
                                             ]));
                                             return ExecutionResult::More;

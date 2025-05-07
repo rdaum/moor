@@ -12,7 +12,8 @@
 //
 
 use crate::Associative;
-use crate::Error::{E_INVARG, E_RANGE, E_TYPE};
+use crate::error::ErrorCode;
+use crate::error::ErrorCode::{E_INVARG, E_RANGE, E_TYPE};
 use crate::list::List;
 use crate::variant::Variant;
 use crate::{BincodeAsByteBufferExt, Symbol};
@@ -22,6 +23,7 @@ use bincode::{Decode, Encode};
 use std::cmp::{Ordering, min};
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
+use std::sync::Arc;
 
 #[derive(Clone, Encode, Decode)]
 pub struct Var(Variant);
@@ -61,7 +63,7 @@ impl Var {
     }
 
     pub fn mk_error(e: Error) -> Self {
-        Var(Variant::Err(e))
+        Var(Variant::Err(Arc::new(e)))
     }
 
     pub fn mk_object(o: Obj) -> Self {
@@ -119,7 +121,9 @@ impl Var {
             Variant::Str(s) => Ok(Symbol::mk_case_insensitive(s.as_str())),
             Variant::Sym(s) => Ok(*s),
             Variant::Err(e) => Ok(e.name()),
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE.with_msg(|| {
+                format!("Cannot convert {} to symbol", self.type_code().to_literal())
+            })),
         }
     }
 
@@ -147,18 +151,30 @@ impl Var {
     /// Otherwise returns the value
     pub fn index(&self, index: &Var, index_mode: IndexMode) -> Result<Self, Error> {
         if self.type_class().is_scalar() {
-            return Err(E_TYPE);
+            return Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index into scalar value {}",
+                    self.type_code().to_literal()
+                )
+            }));
         }
         let idx = match index.variant() {
             Variant::Int(i) => {
                 let i = index_mode.adjust_i64(*i);
                 if i < 0 {
-                    return Err(E_RANGE);
+                    return Err(E_RANGE.with_msg(|| {
+                        format!("Cannot index into sequence with negative index {}", i)
+                    }));
                 }
                 i as usize
             }
             _ => {
-                return Err(E_TYPE);
+                return Err(E_TYPE.with_msg(|| {
+                    format!(
+                        "Cannot index into sequence with non-integer index {}",
+                        index.type_code().to_literal()
+                    )
+                }));
             }
         };
 
@@ -171,7 +187,8 @@ impl Var {
                 let value = a.index(idx)?;
                 Ok(value.1)
             }
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot index into type {}", self.type_code().to_literal()))),
         }
     }
 
@@ -190,7 +207,12 @@ impl Var {
                 let value = a.get(key)?;
                 Ok(value)
             }
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index value from type {}",
+                    self.type_code().to_literal()
+                )
+            })),
         }
     }
 
@@ -202,7 +224,9 @@ impl Var {
                 Ok(value)
             }
             TypeClass::Associative(s) => s.set(key, value),
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE.with_msg(|| {
+                format!("Cannot set value in type {}", self.type_code().to_literal())
+            })),
         }
     }
 
@@ -220,15 +244,26 @@ impl Var {
                         let i = index_mode.adjust_i64(*i);
 
                         if i < 0 {
-                            return Err(E_RANGE);
+                            return Err(E_RANGE.with_msg(|| {
+                                format!("Cannot index into sequence with negative index {}", i)
+                            }));
                         }
                         i as usize
                     }
-                    _ => return Err(E_INVARG),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                idx.type_code().to_literal()
+                            )
+                        }));
+                    }
                 };
                 s.index_set(idx, value)
             }
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE.with_msg(|| {
+                format!("Cannot set value in type {}", self.type_code().to_literal())
+            })),
         }
     }
 
@@ -241,7 +276,14 @@ impl Var {
             TypeClass::Sequence(s) => {
                 let index = match index.variant() {
                     Variant::Int(i) => index_mode.adjust_i64(*i),
-                    _ => return Err(E_INVARG),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot insert into sequence with non-integer index {}",
+                                index.type_code().to_literal()
+                            )
+                        }));
+                    }
                 };
                 let index = if index < 0 {
                     0
@@ -250,12 +292,19 @@ impl Var {
                 };
 
                 if index > s.len() {
-                    return Err(E_RANGE);
+                    return Err(E_RANGE.with_msg(|| {
+                        format!(
+                            "Cannot insert into sequence with index {} greater than length {}",
+                            index,
+                            s.len()
+                        )
+                    }));
                 }
 
                 s.insert(index, value)
             }
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot insert into type {}", self.type_code().to_literal()))),
         }
     }
 
@@ -264,18 +313,37 @@ impl Var {
             TypeClass::Sequence(s) => {
                 let from = match from.variant() {
                     Variant::Int(i) => index_mode.adjust_i64(*i),
-                    _ => return Err(E_INVARG),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                from.type_code().to_literal()
+                            )
+                        }));
+                    }
                 };
 
                 let to = match to.variant() {
                     Variant::Int(i) => index_mode.adjust_i64(*i),
-                    _ => return Err(E_INVARG),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                to.type_code().to_literal()
+                            )
+                        }));
+                    }
                 };
 
                 s.range(from, to)
             }
             TypeClass::Associative(a) => a.range(from, to),
-            TypeClass::Scalar => Err(E_TYPE),
+            TypeClass::Scalar => Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index into scalar value {}",
+                    self.type_code().to_literal()
+                )
+            })),
         }
     }
 
@@ -290,32 +358,53 @@ impl Var {
             TypeClass::Sequence(s) => {
                 let from = match from.variant() {
                     Variant::Int(i) => index_mode.adjust_i64(*i),
-                    _ => return Err(E_INVARG),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                from.type_code().to_literal()
+                            )
+                        }));
+                    }
                 };
 
                 let to = match to.variant() {
                     Variant::Int(i) => index_mode.adjust_i64(*i),
-                    _ => return Err(E_INVARG),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                to.type_code().to_literal()
+                            )
+                        }));
+                    }
                 };
 
                 s.range_set(from, to, with)
             }
             TypeClass::Associative(a) => a.range_set(from, to, with),
-            TypeClass::Scalar => Err(E_TYPE),
+            TypeClass::Scalar => Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot index into scalar value {}",
+                    self.type_code().to_literal()
+                )
+            })),
         }
     }
 
     pub fn append(&self, other: &Var) -> Result<Var, Error> {
         match self.type_class() {
             TypeClass::Sequence(s) => s.append(other),
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot append to type {}", self.type_code().to_literal()))),
         }
     }
 
     pub fn push(&self, value: &Var) -> Result<Var, Error> {
         match self.type_class() {
             TypeClass::Sequence(s) => s.push(value),
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot push to type {}", self.type_code().to_literal()))),
         }
     }
 
@@ -329,7 +418,12 @@ impl Var {
                 let c = a.contains_key(value, case_sensitive)?;
                 Ok(v_bool_int(c))
             }
-            TypeClass::Scalar => Err(E_INVARG),
+            TypeClass::Scalar => Err(E_INVARG.with_msg(|| {
+                format!(
+                    "Cannot check for membership in scalar value {}",
+                    self.type_code().to_literal()
+                )
+            })),
         }
     }
 
@@ -354,7 +448,12 @@ impl Var {
                     .unwrap_or(-1);
                 Ok(v_int(index_mode.reverse_adjust_isize(idx as isize) as i64))
             }
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE.with_msg(|| {
+                format!(
+                    "Cannot check for membership in type {}",
+                    self.type_code().to_literal()
+                )
+            })),
         }
     }
 
@@ -363,23 +462,34 @@ impl Var {
             TypeClass::Sequence(s) => {
                 let index = match index.variant() {
                     Variant::Int(i) => index_mode.adjust_i64(*i),
-                    _ => return Err(E_INVARG),
+                    _ => {
+                        return Err(E_INVARG.with_msg(|| {
+                            format!(
+                                "Cannot index into sequence with non-integer index {}",
+                                index.type_code().to_literal()
+                            )
+                        }));
+                    }
                 };
 
                 if index < 0 {
-                    return Err(E_RANGE);
+                    return Err(E_RANGE.with_msg(|| {
+                        format!("Cannot index into sequence with negative index {}", index)
+                    }));
                 }
 
                 s.remove_at(index as usize)
             }
-            _ => Err(E_TYPE),
+            _ => Err(E_TYPE
+                .with_msg(|| format!("Cannot remove from type {}", self.type_code().to_literal()))),
         }
     }
 
     pub fn remove(&self, value: &Var, case_sensitive: bool) -> Result<(Var, Option<Var>), Error> {
         match self.type_class() {
             TypeClass::Associative(a) => Ok(a.remove(value, case_sensitive)),
-            _ => Err(E_INVARG),
+            _ => Err(E_INVARG
+                .with_msg(|| format!("Cannot remove from type {}", self.type_code().to_literal()))),
         }
     }
 
@@ -403,7 +513,12 @@ impl Var {
         match self.type_class() {
             TypeClass::Sequence(s) => Ok(s.is_empty()),
             TypeClass::Associative(a) => Ok(a.is_empty()),
-            TypeClass::Scalar => Err(E_INVARG),
+            TypeClass::Scalar => Err(E_INVARG.with_msg(|| {
+                format!(
+                    "Cannot check if scalar value {} is empty",
+                    self.type_code().to_literal()
+                )
+            })),
         }
     }
 
@@ -451,7 +566,12 @@ impl Var {
         match self.type_class() {
             TypeClass::Sequence(s) => Ok(s.len()),
             TypeClass::Associative(a) => Ok(a.len()),
-            TypeClass::Scalar => Err(E_INVARG),
+            TypeClass::Scalar => Err(E_INVARG.with_msg(|| {
+                format!(
+                    "Cannot get length of scalar value {}",
+                    self.type_code().to_literal()
+                )
+            })),
         }
     }
 
@@ -513,7 +633,11 @@ pub fn v_float(f: f64) -> Var {
     Var::mk_float(f)
 }
 
-pub fn v_err(e: Error) -> Var {
+pub fn v_err(e: ErrorCode) -> Var {
+    Var::mk_error(e.into())
+}
+
+pub fn v_error(e: Error) -> Var {
     Var::mk_error(e)
 }
 

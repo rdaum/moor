@@ -76,7 +76,7 @@ impl ObjectRef {
 impl Display for ObjectRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Id(id) => write!(f, "#{}", id),
+            Self::Id(id) => write!(f, "{}", id),
             Self::SysObj(symbols) => {
                 let mut s = String::new();
                 for sym in symbols {

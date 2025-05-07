@@ -35,7 +35,11 @@ impl SystemControl for RpcServer {
     ) -> Result<(), moor_var::Error> {
         let host_type = match host_type {
             "tcp" => HostType::TCP,
-            _ => return Err(moor_var::Error::E_INVARG),
+            _ => {
+                return Err(
+                    moor_var::E_INVARG.with_msg(|| format!("Unhandled host type: {host_type}"))
+                );
+            }
         };
 
         let event = HostBroadcastEvent::Listen {
@@ -59,7 +63,7 @@ impl SystemControl for RpcServer {
                 })
                 .map_err(|e| {
                     error!("Could not send Listen event: {}", e);
-                    moor_var::Error::E_INVARG
+                    moor_var::E_INVARG.msg("Unable to send Listen event")
                 })?;
         }
 
@@ -69,7 +73,7 @@ impl SystemControl for RpcServer {
     fn unlisten(&self, port: u16, host_type: &str) -> Result<(), moor_var::Error> {
         let host_type = match host_type {
             "tcp" => HostType::TCP,
-            _ => return Err(moor_var::Error::E_INVARG),
+            _ => return Err(moor_var::E_INVARG.msg("Invalid host type")),
         };
 
         let event = HostBroadcastEvent::Unlisten { host_type, port };
@@ -88,7 +92,7 @@ impl SystemControl for RpcServer {
                 })
                 .map_err(|e| {
                     error!("Could not send Unlisten event: {}", e);
-                    moor_var::Error::E_INVARG
+                    moor_var::E_INVARG.msg("Unable to send Unlisten event")
                 })?;
         }
         Ok(())

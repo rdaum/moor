@@ -83,7 +83,6 @@ pub struct NarrativeOutput {
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Traceback {
     error: String,
-    msg: String,
     traceback: Vec<String>,
 }
 
@@ -626,9 +625,8 @@ impl WebSocketConnection {
                 present: None,
                 unpresent: None,
                 traceback: Some(Traceback {
-                    error: exception.code.message(),
+                    error: format!("{}", exception),
                     traceback,
-                    msg: exception.msg.clone(),
                 }),
             },
         )
