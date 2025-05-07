@@ -58,7 +58,6 @@ pub enum Op {
     ImmBigInt(i64),
     ImmFloat(f64),
     ImmEmptyList,
-    ImmErr(ErrorCode),
     ImmInt(i32),
     ImmType(VarType),
     ImmNone,
@@ -73,7 +72,10 @@ pub enum Op {
     ListAddTail,
     ListAppend,
     Lt,
+    /// Pushes just an error code, and is used when the literal has no message portion.
+    ImmErr(ErrorCode),
     /// Operand is used because not doing so blew us over our 16-byte limit for some reason.
+    /// Expects stack to contain a message portion of the error, immediately after.
     MakeError(Offset),
     MakeSingletonList,
     MakeMap,

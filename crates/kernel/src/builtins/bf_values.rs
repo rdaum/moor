@@ -16,9 +16,9 @@ use crate::builtins::BfRet::Ret;
 use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use md5::Digest;
 use moor_compiler::{offset_for_builtin, to_literal};
-use moor_var::Variant;
 use moor_var::{AsByteBuffer, Sequence};
 use moor_var::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
+use moor_var::{Variant, v_err};
 use moor_var::{v_float, v_int, v_obj, v_objid, v_str, v_sym, v_sym_str};
 
 fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -238,6 +238,40 @@ fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 bf_declare!(object_bytes, bf_object_bytes);
 
+/// Strip off the message and value from an error object
+fn bf_error_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("error_code() takes one argument"),
+        ));
+    }
+    let Variant::Err(e) = bf_args.args[0].variant() else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("error_code() takes an error object"),
+        ));
+    };
+    let code = e.err_type;
+    Ok(Ret(v_err(code)))
+}
+bf_declare!(error_message, bf_error_message);
+
+/// Return the message from an error object
+fn bf_error_message(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("error_message() takes one argument"),
+        ));
+    }
+    let Variant::Err(e) = bf_args.args[0].variant() else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("error_message() takes an error object"),
+        ));
+    };
+    let msg = e.message();
+    Ok(Ret(v_str(msg.as_str())))
+}
+bf_declare!(error_code, bf_error_code);
+
 pub(crate) fn register_bf_values(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("typeof")] = Box::new(BfTypeof {});
     builtins[offset_for_builtin("tostr")] = Box::new(BfTostr {});
@@ -252,4 +286,7 @@ pub(crate) fn register_bf_values(builtins: &mut [Box<dyn BuiltinFunction>]) {
     builtins[offset_for_builtin("object_bytes")] = Box::new(BfObjectBytes {});
     builtins[offset_for_builtin("value_hash")] = Box::new(BfValueHash {});
     builtins[offset_for_builtin("length")] = Box::new(BfLength {});
+
+    builtins[offset_for_builtin("error_code")] = Box::new(BfErrorCode {});
+    builtins[offset_for_builtin("error_message")] = Box::new(BfErrorMessage {});
 }
