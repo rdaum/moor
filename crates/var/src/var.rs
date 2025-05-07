@@ -23,6 +23,7 @@ use bincode::{Decode, Encode};
 use std::cmp::{Ordering, min};
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
+use std::sync::Arc;
 
 #[derive(Clone, Encode, Decode)]
 pub struct Var(Variant);
@@ -62,7 +63,7 @@ impl Var {
     }
 
     pub fn mk_error(e: Error) -> Self {
-        Var(Variant::Err(e))
+        Var(Variant::Err(Arc::new(e)))
     }
 
     pub fn mk_object(o: Obj) -> Self {

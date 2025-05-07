@@ -21,6 +21,7 @@ use bincode::{Decode, Encode};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 /// Our series of types
 #[derive(Clone, Encode, Decode)]
@@ -33,7 +34,7 @@ pub enum Variant {
     List(List),
     Str(string::Str),
     Map(map::Map),
-    Err(Error),
+    Err(Arc<Error>),
     Flyweight(Flyweight),
     Sym(Symbol),
 }

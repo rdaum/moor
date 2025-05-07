@@ -17,11 +17,12 @@ use ErrorCode::*;
 use bincode::{Decode, Encode};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 
 #[derive(Clone, Eq, Ord, PartialOrd, Encode, Decode)]
 pub struct Error {
     pub err_type: ErrorCode,
-    pub msg: Option<String>,
+    pub msg: Option<Box<String>>,
     pub value: Option<Box<Var>>,
 }
 
@@ -35,7 +36,7 @@ impl Error {
     pub fn new(err_type: ErrorCode, msg: Option<String>, value: Option<Var>) -> Self {
         Self {
             err_type,
-            msg,
+            msg: msg.map(Box::new),
             value: value.map(Box::new),
         }
     }
@@ -246,7 +247,7 @@ impl Error {
     #[must_use]
     pub fn message(&self) -> String {
         if let Some(msg) = &self.msg {
-            return msg.clone();
+            return msg.deref().clone();
         }
         // Default message if one not provided.
         match self.err_type {
@@ -276,5 +277,16 @@ impl Error {
     #[must_use]
     pub fn name(&self) -> Symbol {
         Symbol::mk(&format!("{}", self.err_type))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem::size_of;
+
+    #[test]
+    fn test_error_size() {
+        assert_eq!(size_of::<Error>(), 32);
     }
 }

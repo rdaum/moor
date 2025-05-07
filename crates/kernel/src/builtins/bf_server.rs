@@ -12,6 +12,7 @@
 //
 
 use std::io::Read;
+use std::ops::Deref;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local, TimeZone};
@@ -993,7 +994,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.task_perms().map_err(world_state_bf_err)?,
     );
     if let Variant::Err(err) = result.variant() {
-        return Err(ErrValue(err.clone()));
+        return Err(ErrValue(err.deref().clone()));
     }
     Ok(Ret(result))
 }
@@ -1034,7 +1035,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return_value.clone(),
     );
     if let Variant::Err(err) = result.variant() {
-        return Err(ErrValue(err.clone()));
+        return Err(ErrValue(err.deref().clone()));
     }
     Ok(Ret(result))
 }

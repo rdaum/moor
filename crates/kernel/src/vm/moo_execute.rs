@@ -26,7 +26,7 @@ use moor_var::{
     v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_sym,
 };
 use moor_var::{Symbol, VarType};
-use std::ops::Add;
+use std::ops::{Add, Deref};
 use std::time::Duration;
 
 lazy_static! {
@@ -777,8 +777,12 @@ pub fn moo_frame_execute(
                             };
                             e.clone()
                         });
-                        f.catch_stack
-                            .push((CatchType::Errors(error_codes.into_iter().collect()), *label));
+                        f.catch_stack.push((
+                            CatchType::Errors(
+                                error_codes.into_iter().map(|x| x.deref().clone()).collect(),
+                            ),
+                            *label,
+                        ));
                     }
                     Variant::Int(0) => {
                         f.catch_stack.push((CatchType::Any, *label));
