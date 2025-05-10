@@ -78,18 +78,7 @@ pub(crate) enum ExecutionResult {
         args: List,
     },
     /// Perform the verb dispatch, building the stack frame and executing it.
-    DispatchVerb {
-        /// The applicable permissions context.
-        permissions: Obj,
-        /// The requested verb.
-        resolved_verb: VerbDef,
-        /// And its binary
-        binary: ByteView,
-        /// The call parameters that were used to resolve the verb.
-        call: VerbCall,
-        /// The parsed user command that led to this verb dispatch, if any.
-        command: Option<Box<ParsedCommand>>,
-    },
+    DispatchVerb(Box<VerbExecutionRequest>),
     /// Request `eval` execution, which is a kind of special activation creation where we've already
     /// been given the program to execute instead of having to look it up.
     DispatchEval {
@@ -122,6 +111,7 @@ pub(crate) enum ExecutionResult {
     /// Just rollback and die. Kills all task DB mutations. Output (Session) is optionally committed.
     TaskRollback(bool),
 }
+
 /// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.
 pub struct VmHost {
     /// Where we store current execution state for this host. Includes all activations and the
@@ -180,14 +170,14 @@ impl VmHost {
         command: ParsedCommand,
         permissions: &Obj,
     ) {
-        let program = Self::decode_program(verb.1.binary_type(), verb.0);
-        let call_request = VerbExecutionRequest {
+        let program = decode_program(verb.1.binary_type(), verb.0);
+        let call_request = Box::new(VerbExecutionRequest {
             permissions: permissions.clone(),
             resolved_verb: verb.1,
-            call: verb_call,
+            call: Box::new(verb_call),
             command: Some(Box::new(command)),
             program,
-        };
+        });
 
         self.start_execution(task_id, call_request)
     }
@@ -200,15 +190,15 @@ impl VmHost {
         verb_info: (ByteView, VerbDef),
         verb_call: VerbCall,
     ) {
-        let binary = Self::decode_program(verb_info.1.binary_type(), verb_info.0);
+        let binary = decode_program(verb_info.1.binary_type(), verb_info.0);
 
-        let call_request = VerbExecutionRequest {
+        let call_request = Box::new(VerbExecutionRequest {
             permissions: perms.clone(),
             resolved_verb: verb_info.1,
-            call: verb_call,
+            call: Box::new(verb_call),
             command: None,
             program: binary,
-        };
+        });
 
         self.start_execution(task_id, call_request)
     }
@@ -227,7 +217,7 @@ impl VmHost {
     pub fn start_execution(
         &mut self,
         task_id: TaskId,
-        verb_execution_request: VerbExecutionRequest,
+        verb_execution_request: Box<VerbExecutionRequest>,
     ) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.maximum_time = Some(self.max_time);
@@ -339,26 +329,10 @@ impl VmHost {
                         .unwrap_or_else(ExecutionResult::PushError);
                     continue;
                 }
-                ExecutionResult::DispatchVerb {
-                    permissions,
-                    resolved_verb,
-                    binary,
-                    call,
-                    command,
-                } => {
+                ExecutionResult::DispatchVerb(exec_request) => {
                     let _t = PerfTimerGuard::new(&counters.start_dispatch_verb);
 
-                    let program = Self::decode_program(resolved_verb.binary_type(), binary);
-
-                    let call_request = VerbExecutionRequest {
-                        permissions,
-                        resolved_verb,
-                        call,
-                        command,
-                        program,
-                    };
-
-                    self.vm_exec_state.exec_call_request(call_request);
+                    self.vm_exec_state.exec_call_request(exec_request);
                     return ContinueOk;
                 }
                 ExecutionResult::DispatchEval {
@@ -524,14 +498,6 @@ impl VmHost {
         self.running = false;
     }
 
-    pub fn decode_program(binary_type: BinaryType, binary_bytes: ByteView) -> VerbProgram {
-        match binary_type {
-            BinaryType::LambdaMoo18X => VerbProgram::Moo(Box::new(
-                Program::from_bytes(binary_bytes).expect("Could not decode MOO program"),
-            )),
-            _ => panic!("Unsupported binary type {:?}", binary_type),
-        }
-    }
     pub fn set_variable(&mut self, task_id_var: &Name, value: Var) {
         self.vm_exec_state
             .top_mut()
@@ -617,5 +583,14 @@ impl<'de, C> BorrowDecode<'de, C> for VmHost {
             running: true,
             unsync: Default::default(),
         })
+    }
+}
+
+pub fn decode_program(binary_type: BinaryType, binary_bytes: ByteView) -> VerbProgram {
+    match binary_type {
+        BinaryType::LambdaMoo18X => VerbProgram::Moo(Box::new(
+            Program::from_bytes(binary_bytes).expect("Could not decode MOO program"),
+        )),
+        _ => panic!("Unsupported binary type {:?}", binary_type),
     }
 }

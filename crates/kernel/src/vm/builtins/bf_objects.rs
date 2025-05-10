@@ -25,10 +25,11 @@ use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Sequence, Symbol, v_list};
 use moor_var::{v_int, v_none, v_obj, v_str, v_sym_str};
 
-use crate::vm::VerbCall;
 use crate::vm::builtins::BfRet::{Ret, VmInstr};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use crate::vm::vm_host::ExecutionResult::DispatchVerb;
+use crate::vm::vm_host::decode_program;
+use crate::vm::{VerbCall, VerbExecutionRequest};
 
 lazy_static! {
     static ref INITIALIZE_SYM: Symbol = Symbol::mk("initialize");
@@ -281,11 +282,13 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
             bf_frame.bf_trampoline_arg = Some(v_obj(new_obj.clone()));
-            Ok(VmInstr(DispatchVerb {
+
+            let program = decode_program(resolved_verb.binary_type(), binary);
+            let ve = VerbExecutionRequest {
                 permissions: bf_args.task_perms_who(),
                 resolved_verb,
-                binary,
-                call: VerbCall {
+                program,
+                call: Box::new(VerbCall {
                     verb_name: *INITIALIZE_SYM,
                     location: v_obj(new_obj.clone()),
                     this: v_obj(new_obj),
@@ -293,9 +296,10 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     args: List::mk_list(&[]),
                     argstr: "".to_string(),
                     caller: bf_args.exec_state.top().this.clone(),
-                },
+                }),
                 command: None,
-            }))
+            };
+            Ok(VmInstr(DispatchVerb(Box::new(ve))))
         }
         BF_CREATE_OBJECT_TRAMPOLINE_DONE => {
             // The trampoline argument is the object we just created.
@@ -397,11 +401,12 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = Some(contents);
 
-                        return Ok(VmInstr(DispatchVerb {
+                        let program = decode_program(resolved_verb.binary_type(), binary);
+                        return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
-                            binary,
-                            call: VerbCall {
+                            program: program,
+                            call: Box::new(VerbCall {
                                 verb_name: *RECYCLE_SYM,
                                 location: v_obj(obj.clone()),
                                 this: v_obj(obj),
@@ -409,9 +414,9 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 args: List::mk_list(&[]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
-                            },
+                            }),
                             command: None,
-                        }));
+                        }))));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         // Short-circuit fake-tramp state change.
@@ -467,11 +472,12 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
 
                     // Call :exitfunc on the head object.
-                    return Ok(VmInstr(DispatchVerb {
+                    let program = decode_program(resolved_verb.binary_type(), binary);
+                    return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                         permissions: bf_args.task_perms_who(),
                         resolved_verb,
-                        binary,
-                        call: VerbCall {
+                        program,
+                        call: Box::new(VerbCall {
                             verb_name: *EXITFUNC_SYM,
                             location: v_obj(head_obj.clone()),
                             this: v_obj(head_obj.clone()),
@@ -479,9 +485,9 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             args: List::mk_list(&[v_obj(obj)]),
                             argstr: "".to_string(),
                             caller: bf_args.exec_state.top().this.clone(),
-                        },
+                        }),
                         command: None,
-                    }));
+                    }))));
                 }
             }
             Some(BF_RECYCLE_TRAMPOLINE_DONE_MOVE) => {
@@ -573,11 +579,12 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = None;
-                        return Ok(VmInstr(DispatchVerb {
+                        let program = decode_program(resolved_verb.binary_type(), binary);
+                        return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
-                            binary,
-                            call: VerbCall {
+                            program,
+                            call: Box::new(VerbCall {
                                 verb_name: *ACCEPT_SYM,
                                 location: v_obj(whereto.clone()),
                                 this: v_obj(whereto.clone()),
@@ -585,9 +592,9 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
-                            },
+                            }),
                             command: None,
-                        }));
+                        }))));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         if !perms.check_is_wizard().map_err(world_state_bf_err)? {
@@ -651,11 +658,12 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC);
                         bf_frame.bf_trampoline_arg = None;
 
-                        let continuation = DispatchVerb {
+                        let program = decode_program(resolved_verb.binary_type(), binary);
+                        let continuation = DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
-                            binary,
-                            call: VerbCall {
+                            program,
+                            call: Box::new(VerbCall {
                                 verb_name: *EXITFUNC_SYM,
                                 location: v_obj(original_location.clone()),
                                 this: v_obj(original_location),
@@ -663,9 +671,9 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
-                            },
+                            }),
                             command: None,
-                        };
+                        }));
                         return Ok(VmInstr(continuation));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
@@ -698,11 +706,12 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_DONE);
                         bf_frame.bf_trampoline_arg = None;
 
-                        return Ok(VmInstr(DispatchVerb {
+                        let program = decode_program(resolved_verb.binary_type(), binary);
+                        return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
-                            binary,
-                            call: VerbCall {
+                            program,
+                            call: Box::new(VerbCall {
                                 verb_name: *ENTERFUNC_SYM,
                                 location: v_obj(whereto.clone()),
                                 this: v_obj(whereto),
@@ -710,9 +719,9 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
-                            },
+                            }),
                             command: None,
-                        }));
+                        }))));
                     }
                     Err(WorldStateError::VerbNotFound(_, _)) => {
                         // Short-circuit fake-tramp state change.

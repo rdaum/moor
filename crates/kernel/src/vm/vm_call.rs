@@ -18,8 +18,9 @@ use crate::vm::VerbCall;
 use crate::vm::activation::{Activation, Frame};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters};
 use crate::vm::exec_state::{VMExecState, vm_counters};
-use crate::vm::vm_host::ExecutionResult;
+use crate::vm::vm_host::{ExecutionResult, decode_program};
 use crate::vm::vm_unwind::FinallyReason;
+
 use lazy_static::lazy_static;
 use moor_common::matching::ParsedCommand;
 use moor_common::model::VerbDef;
@@ -55,7 +56,7 @@ pub struct VerbExecutionRequest {
     /// The resolved verb.
     pub resolved_verb: VerbDef,
     /// The call parameters that were used to resolve the verb.
-    pub call: VerbCall,
+    pub call: Box<VerbCall>,
     /// The parsed user command that led to this verb dispatch, if any.
     pub command: Option<Box<ParsedCommand>>,
     /// The decoded MOO Binary that contains the verb to be executed.
@@ -204,13 +205,14 @@ impl VMExecState {
         // Permissions for the activation are the verb's owner.
         let permissions = resolved_verb.owner();
 
-        ExecutionResult::DispatchVerb {
+        let program = decode_program(resolved_verb.binary_type(), binary);
+        ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
             permissions,
             resolved_verb,
-            binary,
-            call,
+            call: Box::new(call),
             command: self.top().command.clone(),
-        }
+            program,
+        }))
     }
 
     /// Setup the VM to execute the verb of the same current name, but using the parent's
@@ -265,19 +267,20 @@ impl VMExecState {
             caller,
         };
 
-        ExecutionResult::DispatchVerb {
+        let program = decode_program(resolved_verb.binary_type(), binary);
+        ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
             permissions: permissions.clone(),
             resolved_verb,
-            binary,
-            call,
+            call: Box::new(call),
             command: self.top().command.clone(),
-        }
+            program: program,
+        }))
     }
 
     /// Entry point from scheduler for actually beginning the dispatch of a method execution
     /// (non-command) in this VM.
     /// Actually creates the activation record and puts it on the stack.
-    pub fn exec_call_request(&mut self, call_request: VerbExecutionRequest) {
+    pub fn exec_call_request(&mut self, call_request: Box<VerbExecutionRequest>) {
         let a = Activation::for_call(call_request);
         self.stack.push(a);
     }
@@ -349,13 +352,17 @@ impl VMExecState {
             argstr: "".to_string(),
             caller: self.caller(),
         };
-        Some(ExecutionResult::DispatchVerb {
-            permissions: self.top().permissions.clone(),
-            resolved_verb,
-            binary,
-            call,
-            command: self.top().command.clone(),
-        })
+
+        let program = decode_program(resolved_verb.binary_type(), binary);
+        Some(ExecutionResult::DispatchVerb(Box::new(
+            VerbExecutionRequest {
+                permissions: self.top().permissions.clone(),
+                resolved_verb,
+                program,
+                call: Box::new(call),
+                command: self.top().command.clone(),
+            },
+        )))
     }
 
     /// Call into a builtin function.

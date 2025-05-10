@@ -220,7 +220,7 @@ impl Activation {
     }
 
     #[allow(irrefutable_let_patterns)] // We know this is a Moo frame. We're just making room
-    pub fn for_call(verb_call_request: VerbExecutionRequest) -> Self {
+    pub fn for_call(verb_call_request: Box<VerbExecutionRequest>) -> Self {
         let program = verb_call_request.program;
         let verb_owner = verb_call_request.resolved_verb.owner();
 
