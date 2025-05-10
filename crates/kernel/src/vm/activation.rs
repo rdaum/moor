@@ -22,7 +22,7 @@ use uuid::Uuid;
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbDef;
 use moor_common::model::{BinaryType, VerbFlag};
-use moor_common::util::BitEnum;
+use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_compiler::Name;
 use moor_compiler::Program;
 use moor_compiler::{BuiltinId, GlobalName};
@@ -35,6 +35,7 @@ use moor_var::{Var, v_empty_list, v_obj, v_str, v_string};
 use crate::vm::VerbExecutionRequest;
 use crate::vm::moo_frame::MooStackFrame;
 use crate::vm::vm_call::VerbProgram;
+use crate::vm_counters;
 use moor_common::matching::ParsedCommand;
 
 lazy_static! {
@@ -223,6 +224,8 @@ impl Activation {
     #[allow(clippy::boxed_local)] // It gets called w/ a Box so shut up, I have no choice, clippy
     // is a Moo frame. We're just making room
     pub fn for_call(verb_call_request: Box<VerbExecutionRequest>) -> Self {
+        let counters = vm_counters();
+        let _counter = PerfTimerGuard::new(&counters.prepare_verb_activation);
         let program = verb_call_request.program;
         let verb_owner = verb_call_request.resolved_verb.owner();
 

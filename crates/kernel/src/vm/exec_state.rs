@@ -28,8 +28,8 @@ lazy_static! {
     static ref VM_COUNTERS: Arc<VmCounters> = Arc::new(VmCounters::new());
 }
 
-pub fn vm_counters() -> Arc<VmCounters> {
-    VM_COUNTERS.clone()
+pub fn vm_counters<'a>() -> &'a Arc<VmCounters> {
+    &VM_COUNTERS
 }
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
@@ -207,6 +207,7 @@ pub struct VmCounters {
     pub find_line_no: PerfCounter,
     pub opcode_execution: PerfCounter,
     pub start_dispatch_verb: PerfCounter,
+    pub prepare_verb_activation: PerfCounter,
 }
 
 impl VmCounters {
@@ -222,6 +223,7 @@ impl VmCounters {
             find_line_no: PerfCounter::new("find_line_no"),
             opcode_execution: PerfCounter::new("opcode_execution"),
             start_dispatch_verb: PerfCounter::new("start_dispatch_verb"),
+            prepare_verb_activation: PerfCounter::new("prepare_verb_activation"),
         }
     }
 
@@ -236,6 +238,8 @@ impl VmCounters {
             &self.get_property,
             &self.find_line_no,
             &self.opcode_execution,
+            &self.start_dispatch_verb,
+            &self.prepare_verb_activation,
         ]
     }
 }

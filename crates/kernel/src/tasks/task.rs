@@ -408,9 +408,6 @@ impl Task {
                 args,
                 argstr,
             } => {
-                // We should never be asked to start a command while we're already running one.
-                trace!(?verb, ?player, ?vloc, ?args, "Starting verb");
-
                 let verb_call = VerbCall {
                     verb_name: *verb,
                     location: vloc.clone(),
