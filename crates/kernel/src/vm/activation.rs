@@ -219,7 +219,9 @@ impl Activation {
         matches!(self.frame, Frame::Bf(_))
     }
 
-    #[allow(irrefutable_let_patterns)] // We know this is a Moo frame. We're just making room
+    #[allow(irrefutable_let_patterns)] // We know this
+    #[allow(clippy::boxed_local)] // It gets called w/ a Box so shut up, I have no choice, clippy
+    // is a Moo frame. We're just making room
     pub fn for_call(verb_call_request: Box<VerbExecutionRequest>) -> Self {
         let program = verb_call_request.program;
         let verb_owner = verb_call_request.resolved_verb.owner();

@@ -259,7 +259,7 @@ pub mod vm_test_utils {
                     panic!("Unexpected abort: {:?}", a);
                 }
                 VMHostResponse::CompleteException(e) => {
-                    return Err(e);
+                    return Err(e.as_ref().clone());
                 }
                 VMHostResponse::CompleteSuccess(v) => {
                     return Ok(v);
@@ -424,7 +424,7 @@ pub enum TaskStart {
     /// ForkRequest contains the information on the fork vector and other information needed to
     /// set up execution.
     StartFork {
-        fork_request: Fork,
+        fork_request: Box<Fork>,
         // If we're starting in a suspended state. If this is true, an explicit Resume from the
         // scheduler will be required to start the task.
         suspended: bool,

@@ -29,7 +29,7 @@ use tracing::trace;
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum FinallyReason {
     Fallthrough,
-    Raise(Exception),
+    Raise(Box<Exception>),
     Return(Var),
     Abort,
     Exit { stack: Offset, label: Label },
@@ -123,11 +123,11 @@ impl VMExecState {
 
         let stack = Self::make_stack_list(&self.stack);
         let backtrace = Self::make_backtrace(&self.stack, &error);
-        let exception = Exception {
+        let exception = Box::new(Exception {
             error,
             stack,
             backtrace,
-        };
+        });
         self.unwind_stack(FinallyReason::Raise(exception))
     }
 
@@ -222,21 +222,25 @@ impl VMExecState {
                                 return ExecutionResult::More;
                             }
                             ScopeType::TryCatch(catches) => {
-                                if let FinallyReason::Raise(Exception { error, stack, .. }) = &why {
+                                if let FinallyReason::Raise(e) = &why {
                                     for catch in catches {
                                         let found = match catch.0 {
                                             CatchType::Any => true,
-                                            CatchType::Errors(e) => e.contains(error),
+                                            CatchType::Errors(errs) => errs.contains(&e.error),
                                         };
                                         if found {
-                                            let value =
-                                                error.value.as_deref().cloned().unwrap_or(v_none());
+                                            let value = e
+                                                .error
+                                                .value
+                                                .as_deref()
+                                                .cloned()
+                                                .unwrap_or(v_none());
                                             frame.jump(&catch.1);
                                             frame.push(v_list(&[
-                                                v_err(error.err_type),
-                                                v_string(error.message()),
+                                                v_err(e.error.err_type),
+                                                v_string(e.error.message()),
                                                 value,
-                                                v_list(stack),
+                                                v_list(&e.stack),
                                             ]));
                                             return ExecutionResult::More;
                                         }

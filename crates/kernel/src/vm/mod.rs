@@ -64,7 +64,7 @@ pub enum VMHostResponse {
     /// Tell the task to just keep on letting us do what we're doing.
     ContinueOk,
     /// Tell the task to ask the scheduler to dispatch a fork request, and then resume execution.
-    DispatchFork(Fork),
+    DispatchFork(Box<Fork>),
     /// Tell the task to suspend us.
     Suspend(TaskSuspend),
     /// Tell the task Johnny 5 needs input from the client (`read` invocation).
@@ -76,7 +76,7 @@ pub enum VMHostResponse {
     /// The VM aborted. (FinallyReason::Abort in MOO VM)
     CompleteAbort,
     /// The VM threw an exception. (FinallyReason::Uncaught in MOO VM)
-    CompleteException(Exception),
+    CompleteException(Box<Exception>),
     /// Finish the task with a DB rollback. Second argument is whether to commit the session.
     CompleteRollback(bool),
     /// A rollback-retry was requested.
@@ -109,4 +109,20 @@ pub struct VerbCall {
     pub args: List,
     pub argstr: String,
     pub caller: Var,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::vm::VMHostResponse;
+
+    #[test]
+    fn test_width_structs_enums() {
+        // This was insanely huge (>4k) so some boxing made it smaller, let's see if we can
+        // keep it small.
+        assert!(
+            size_of::<VMHostResponse>() <= 32,
+            "VMHostResponse is too big: {}",
+            size_of::<VMHostResponse>()
+        );
+    }
 }

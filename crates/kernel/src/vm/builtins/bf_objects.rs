@@ -405,7 +405,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
-                            program: program,
+                            program,
                             call: Box::new(VerbCall {
                                 verb_name: *RECYCLE_SYM,
                                 location: v_obj(obj.clone()),

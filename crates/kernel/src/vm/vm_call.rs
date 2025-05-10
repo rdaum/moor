@@ -273,7 +273,7 @@ impl VMExecState {
             resolved_verb,
             call: Box::new(call),
             command: self.top().command.clone(),
-            program: program,
+            program,
         }))
     }
 

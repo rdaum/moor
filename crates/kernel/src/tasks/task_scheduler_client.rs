@@ -70,14 +70,14 @@ impl TaskSchedulerClient {
     }
 
     /// Send a message to the scheduler that an exception was thrown while executing the verb.
-    pub fn exception(&self, exception: Exception) {
+    pub fn exception(&self, exception: Box<Exception>) {
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::TaskException(exception)))
             .expect("Could not deliver client message -- scheduler shut down?");
     }
 
     /// Send a message to the scheduler that the task is requesting to fork itself.
-    pub fn request_fork(&self, fork: Fork) -> TaskId {
+    pub fn request_fork(&self, fork: Box<Fork>) -> TaskId {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::TaskRequestFork(fork, reply)))
@@ -308,9 +308,9 @@ pub enum TaskControlMsg {
     /// The verb to be executed was not found.
     TaskVerbNotFound(Var, Symbol),
     /// An exception was thrown while executing the verb.
-    TaskException(Exception),
+    TaskException(Box<Exception>),
     /// The task is requesting that it be forked.
-    TaskRequestFork(Fork, oneshot::Sender<TaskId>),
+    TaskRequestFork(Box<Fork>, oneshot::Sender<TaskId>),
     /// The task is letting us know it was cancelled.
     TaskAbortCancelled,
     /// The task is letting us know that it has reached its abort limits.

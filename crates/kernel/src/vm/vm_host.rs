@@ -364,7 +364,7 @@ impl VmHost {
                     let a = self.vm_exec_state.top().clone();
                     let parent_task_id = self.vm_exec_state.task_id;
                     let new_activation = a.clone();
-                    let fork_request = Fork {
+                    let fork_request = Box::new(Fork {
                         player: a.player.clone(),
                         progr: a.permissions.clone(),
                         parent_task_id,
@@ -372,7 +372,7 @@ impl VmHost {
                         activation: new_activation,
                         fork_vector_offset: fv_offset,
                         task_id,
-                    };
+                    });
                     return DispatchFork(fork_request);
                 }
                 ExecutionResult::TaskSuspend(delay) => {

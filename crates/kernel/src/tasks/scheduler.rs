@@ -1039,7 +1039,7 @@ impl Scheduler {
                     NarrativeEvent {
                         timestamp: SystemTime::now(),
                         author: v_obj(task.player.clone()),
-                        event: Event::Traceback(exception.clone()),
+                        event: Event::Traceback(exception.as_ref().clone()),
                     },
                 ) {
                     warn!("Could not send traceback to player: {:?}", send_error);
@@ -1047,7 +1047,10 @@ impl Scheduler {
 
                 let _ = task.session.commit();
 
-                task_q.send_task_result(task_id, Err(TaskAbortedException(exception)));
+                task_q.send_task_result(
+                    task_id,
+                    Err(TaskAbortedException(exception.as_ref().clone())),
+                );
             }
             TaskControlMsg::TaskRequestFork(fork_request, reply) => {
                 let perfc = sched_counters();
@@ -1449,7 +1452,7 @@ impl Scheduler {
     #[instrument(skip(self, session))]
     fn process_fork_request(
         &mut self,
-        fork_request: Fork,
+        fork_request: Box<Fork>,
         reply: oneshot::Sender<TaskId>,
         session: Arc<dyn Session>,
     ) {
