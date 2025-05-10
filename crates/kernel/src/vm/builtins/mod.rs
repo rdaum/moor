@@ -26,7 +26,7 @@ use crate::vm::builtins::bf_maps::register_bf_maps;
 use crate::vm::builtins::bf_num::register_bf_num;
 use crate::vm::builtins::bf_objects::register_bf_objects;
 use crate::vm::builtins::bf_properties::register_bf_properties;
-use crate::vm::builtins::bf_server::{BfNoop, register_bf_server};
+use crate::vm::builtins::bf_server::{bf_noop, register_bf_server};
 use crate::vm::builtins::bf_strings::register_bf_strings;
 use crate::vm::builtins::bf_values::register_bf_values;
 use crate::vm::builtins::bf_verbs::register_bf_verbs;
@@ -96,7 +96,7 @@ pub fn bf_perf_counters() -> Arc<BfCounters> {
 /// The bundle of builtins are stored here, and passed around globally.
 pub struct BuiltinRegistry {
     // The set of built-in functions, indexed by their Name offset in the variable stack.
-    pub(crate) builtins: Arc<Vec<Box<dyn BuiltinFunction>>>,
+    pub(crate) builtins: Arc<Vec<Box<BuiltinFunction>>>,
 }
 
 impl Default for BuiltinRegistry {
@@ -107,9 +107,9 @@ impl Default for BuiltinRegistry {
 
 impl BuiltinRegistry {
     pub fn new() -> Self {
-        let mut builtins: Vec<Box<dyn BuiltinFunction>> = Vec::with_capacity(BUILTINS.len());
+        let mut builtins: Vec<Box<BuiltinFunction>> = Vec::with_capacity(BUILTINS.len());
         for _ in 0..BUILTINS.len() {
-            builtins.push(Box::new(BfNoop {}))
+            builtins.push(Box::new(bf_noop))
         }
         register_bf_server(&mut builtins);
         register_bf_num(&mut builtins);
@@ -121,15 +121,15 @@ impl BuiltinRegistry {
         register_bf_verbs(&mut builtins);
         register_bf_properties(&mut builtins);
         register_bf_flyweights(&mut builtins);
-        register_bf_age_crypto(&mut builtins);
+        register_bf_age_crypto(builtins.as_mut());
 
         BuiltinRegistry {
             builtins: Arc::new(builtins),
         }
     }
 
-    pub(crate) fn builtin_for(&self, id: &BuiltinId) -> &dyn BuiltinFunction {
-        &*self.builtins[id.0 as usize]
+    pub(crate) fn builtin_for(&self, id: &BuiltinId) -> &BuiltinFunction {
+        &self.builtins[id.0 as usize]
     }
 }
 
@@ -156,7 +156,6 @@ impl BfCallState<'_> {
     pub fn caller_perms(&self) -> Obj {
         self.exec_state.caller_perms()
     }
-
     pub fn task_perms_who(&self) -> Obj {
         self.exec_state.task_perms()
     }
@@ -185,6 +184,8 @@ impl BfCallState<'_> {
         frame
     }
 
+    /// Construct a boolean value from a truthy value but convert to mooR boolean only if that
+    /// feature is enabled.
     pub fn v_bool(&self, truthy: bool) -> Var {
         if !self.config.use_boolean_returns {
             v_bool_int(truthy)
@@ -194,11 +195,7 @@ impl BfCallState<'_> {
     }
 }
 
-pub(crate) trait BuiltinFunction: Sync + Send {
-    #[allow(dead_code)]
-    fn name(&self) -> &str;
-    fn call(&self, bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr>;
-}
+pub(crate) type BuiltinFunction = fn(&mut BfCallState<'_>) -> Result<BfRet, BfErr>;
 
 /// Return possibilities from a built-in function.
 pub(crate) enum BfRet {
@@ -219,28 +216,6 @@ pub(crate) enum BfErr {
     Raise(Error),
     #[error("Transaction rollback-retry")]
     Rollback,
-}
-
-#[macro_export]
-macro_rules! bf_declare {
-    ( $name:ident, $action:expr ) => {
-        paste::item! {
-            pub(crate) struct [<Bf $name:camel >] {}
-            impl BuiltinFunction for [<Bf $name:camel >] {
-                fn name(&self) -> &str {
-                    return stringify!($name)
-                }
-                // TODO use the descriptor in BUILTIN_DESCRIPTORS to check the arguments
-                // instead of doing it manually in each BF?
-                fn call(
-                    &self,
-                    bf_args: &mut BfCallState<'_>
-                ) -> Result<BfRet, BfErr> {
-                    $action(bf_args)
-                }
-            }
-        }
-    };
 }
 
 pub(crate) fn world_state_bf_err(err: WorldStateError) -> BfErr {

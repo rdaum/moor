@@ -20,7 +20,6 @@ use moor_var::{E_ARGS, E_INVARG, E_TYPE};
 use moor_var::{List, v_empty_list};
 use moor_var::{v_list, v_none, v_obj, v_string};
 
-use crate::bf_declare;
 use crate::vm::builtins::BfErr::{Code, ErrValue};
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
@@ -47,7 +46,6 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_list(&[v_obj(owner), v_string(perms)])))
 }
-bf_declare!(property_info, bf_property_info);
 
 enum InfoParseResult {
     Fail(moor_var::Error),
@@ -123,7 +121,6 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
-bf_declare!(set_property_info, bf_set_property_info);
 
 fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -139,7 +136,6 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(bf_args.v_bool(is_clear)))
 }
-bf_declare!(is_clear_property, bf_is_clear_property);
 
 fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -155,7 +151,6 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
-bf_declare!(set_clear_property, bf_clear_property);
 
 // add_property (obj <object>, str <prop-name>, <value>, list <info>) => none
 fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -195,7 +190,6 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_none()))
 }
-bf_declare!(add_property, bf_add_property);
 
 fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -211,13 +205,12 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
-bf_declare!(delete_property, bf_delete_property);
 
-pub(crate) fn register_bf_properties(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("property_info")] = Box::new(BfPropertyInfo {});
-    builtins[offset_for_builtin("set_property_info")] = Box::new(BfSetPropertyInfo {});
-    builtins[offset_for_builtin("is_clear_property")] = Box::new(BfIsClearProperty {});
-    builtins[offset_for_builtin("clear_property")] = Box::new(BfSetClearProperty {});
-    builtins[offset_for_builtin("add_property")] = Box::new(BfAddProperty {});
-    builtins[offset_for_builtin("delete_property")] = Box::new(BfDeleteProperty {});
+pub(crate) fn register_bf_properties(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("property_info")] = Box::new(bf_property_info);
+    builtins[offset_for_builtin("set_property_info")] = Box::new(bf_set_property_info);
+    builtins[offset_for_builtin("is_clear_property")] = Box::new(bf_is_clear_property);
+    builtins[offset_for_builtin("clear_property")] = Box::new(bf_clear_property);
+    builtins[offset_for_builtin("add_property")] = Box::new(bf_add_property);
+    builtins[offset_for_builtin("delete_property")] = Box::new(bf_delete_property);
 }

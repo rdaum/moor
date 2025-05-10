@@ -25,7 +25,6 @@ use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Sequence, Symbol, v_list};
 use moor_var::{v_int, v_none, v_obj, v_str, v_sym_str};
 
-use crate::bf_declare;
 use crate::vm::VerbCall;
 use crate::vm::builtins::BfRet::{Ret, VmInstr};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
@@ -55,7 +54,6 @@ fn bf_valid(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let is_valid = bf_args.world_state.valid(obj).map_err(world_state_bf_err)?;
     Ok(Ret(bf_args.v_bool(is_valid)))
 }
-bf_declare!(valid, bf_valid);
 
 fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -77,7 +75,6 @@ fn bf_parent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_obj(parent)))
 }
-bf_declare!(parent, bf_parent);
 
 fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -111,7 +108,6 @@ fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_none()))
 }
-bf_declare!(chparent, bf_chparent);
 
 fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -135,7 +131,6 @@ fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let children = children.iter().map(v_obj).collect::<Vec<_>>();
     Ok(Ret(v_list(&children)))
 }
-bf_declare!(children, bf_children);
 
 fn bf_descendants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -161,7 +156,6 @@ fn bf_descendants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let descendants = descendants.iter().map(v_obj).collect::<Vec<_>>();
     Ok(Ret(v_list(&descendants)))
 }
-bf_declare!(descendants, bf_descendants);
 
 fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 2 {
@@ -193,7 +187,6 @@ fn bf_ancestors(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let ancestors = ancestors.iter().map(v_obj).collect::<Vec<_>>();
     Ok(Ret(v_list(&ancestors)))
 }
-bf_declare!(ancestors, bf_ancestors);
 
 /*
 Syntax: isa (obj <object>, obj <possible_ancestor>) => int
@@ -233,7 +226,6 @@ fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_bool(isa)))
 }
-bf_declare!(isa, bf_isa);
 /*
 Syntax:  create (obj <parent> [, obj <owner>])   => obj
  */
@@ -318,7 +310,6 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 }
-bf_declare!(create, bf_create);
 /*
 Function: none recycle (obj object)
 The given object is destroyed, irrevocably. The programmer must either own object or be a wizard; otherwise, E_PERM is raised. If object is not valid, then E_INVARG is raised. The children of object are reparented to the parent of object. Before object is recycled, each object in its contents is moved to #-1 (implying a call to object's exitfunc verb, if any) and then object's `recycle' verb, if any, is called with no arguments.
@@ -507,7 +498,6 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 }
-bf_declare!(recycle, bf_recycle);
 
 fn bf_max_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -521,7 +511,6 @@ fn bf_max_object(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_obj(max_obj)))
 }
-bf_declare!(max_object, bf_max_object);
 
 const BF_MOVE_TRAMPOLINE_START_ACCEPT: usize = 0;
 const BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC: usize = 1;
@@ -749,7 +738,6 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 }
-bf_declare!(move, bf_move);
 
 fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -770,7 +758,6 @@ fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .collect();
     Ok(Ret(v_list(&verbs)))
 }
-bf_declare!(verbs, bf_verbs);
 
 /*
 Function: list properties (obj object)
@@ -796,7 +783,6 @@ fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     Ok(Ret(v_list(&props)))
 }
-bf_declare!(properties, bf_properties);
 
 fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -846,7 +832,6 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(set_player_flag, bf_set_player_flag);
 
 fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -856,22 +841,21 @@ fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_list_iter(players.iter().map(v_obj))))
 }
-bf_declare!(players, bf_players);
 
-pub(crate) fn register_bf_objects(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("create")] = Box::new(BfCreate {});
-    builtins[offset_for_builtin("valid")] = Box::new(BfValid {});
-    builtins[offset_for_builtin("verbs")] = Box::new(BfVerbs {});
-    builtins[offset_for_builtin("properties")] = Box::new(BfProperties {});
-    builtins[offset_for_builtin("parent")] = Box::new(BfParent {});
-    builtins[offset_for_builtin("children")] = Box::new(BfChildren {});
-    builtins[offset_for_builtin("ancestors")] = Box::new(BfAncestors {});
-    builtins[offset_for_builtin("isa")] = Box::new(BfIsa {});
-    builtins[offset_for_builtin("descendants")] = Box::new(BfDescendants {});
-    builtins[offset_for_builtin("move")] = Box::new(BfMove {});
-    builtins[offset_for_builtin("chparent")] = Box::new(BfChparent {});
-    builtins[offset_for_builtin("set_player_flag")] = Box::new(BfSetPlayerFlag {});
-    builtins[offset_for_builtin("recycle")] = Box::new(BfRecycle {});
-    builtins[offset_for_builtin("max_object")] = Box::new(BfMaxObject {});
-    builtins[offset_for_builtin("players")] = Box::new(BfPlayers {});
+pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("create")] = Box::new(bf_create);
+    builtins[offset_for_builtin("valid")] = Box::new(bf_valid);
+    builtins[offset_for_builtin("verbs")] = Box::new(bf_verbs);
+    builtins[offset_for_builtin("properties")] = Box::new(bf_properties);
+    builtins[offset_for_builtin("parent")] = Box::new(bf_parent);
+    builtins[offset_for_builtin("children")] = Box::new(bf_children);
+    builtins[offset_for_builtin("ancestors")] = Box::new(bf_ancestors);
+    builtins[offset_for_builtin("isa")] = Box::new(bf_isa);
+    builtins[offset_for_builtin("descendants")] = Box::new(bf_descendants);
+    builtins[offset_for_builtin("move")] = Box::new(bf_move);
+    builtins[offset_for_builtin("chparent")] = Box::new(bf_chparent);
+    builtins[offset_for_builtin("set_player_flag")] = Box::new(bf_set_player_flag);
+    builtins[offset_for_builtin("recycle")] = Box::new(bf_recycle);
+    builtins[offset_for_builtin("max_object")] = Box::new(bf_max_object);
+    builtins[offset_for_builtin("players")] = Box::new(bf_players);
 }

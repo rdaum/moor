@@ -14,7 +14,6 @@
 use strum::EnumCount;
 use tracing::{error, warn};
 
-use crate::bf_declare;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_common::model::WorldStateError;
@@ -87,7 +86,6 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let result = v_list(&[v_obj(owner), v_string(perms_string), v_string(verb_names)]);
     Ok(Ret(result))
 }
-bf_declare!(verb_info, bf_verb_info);
 
 fn get_verbdef(obj: &Obj, verbspec: Var, bf_args: &BfCallState<'_>) -> Result<VerbDef, BfErr> {
     let verbspec_result = match verbspec.variant() {
@@ -206,7 +204,6 @@ fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(set_verb_info, bf_set_verb_info);
 
 fn bf_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -230,7 +227,6 @@ fn bf_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     ]);
     Ok(Ret(result))
 }
-bf_declare!(verb_args, bf_verb_args);
 
 fn parse_verb_args(verbinfo: &List) -> Result<VerbArgsSpec, Error> {
     if verbinfo.len() != 3 {
@@ -307,7 +303,6 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     Ok(Ret(v_none()))
 }
-bf_declare!(set_verb_args, bf_set_verb_args);
 
 fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     //verb_code (obj object, str verb-desc [, fully-paren [, indent]]) => list
@@ -378,7 +373,6 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     Ok(Ret(v_list_iter(unparsed.iter().map(|s| v_str(s)))))
 }
-bf_declare!(verb_code, bf_verb_code);
 
 // Function: list set_verb_code (obj object, str verb-desc, list code)
 fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -453,7 +447,6 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_none()))
 }
-bf_declare!(set_verb_code, bf_set_verb_code);
 
 // Function: none add_verb (obj object, list info, list args)
 fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -501,7 +494,6 @@ fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(add_verb, bf_add_verb);
 
 //Function: none delete_verb (obj object, str verb-desc)
 fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -534,7 +526,6 @@ fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(delete_verb, bf_delete_verb);
 
 // Syntax:  disassemble (obj <object>, str <verb-desc>)   => list
 //
@@ -623,7 +614,6 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_list(&disassembly)))
 }
-bf_declare!(disassemble, bf_disassemble);
 
 fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -665,17 +655,16 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Ok(Ret(v_bool(true)))
     }
 }
-bf_declare!(respond_to, bf_respond_to);
 
-pub(crate) fn register_bf_verbs(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("verb_info")] = Box::new(BfVerbInfo {});
-    builtins[offset_for_builtin("set_verb_info")] = Box::new(BfSetVerbInfo {});
-    builtins[offset_for_builtin("verb_args")] = Box::new(BfVerbArgs {});
-    builtins[offset_for_builtin("set_verb_args")] = Box::new(BfSetVerbArgs {});
-    builtins[offset_for_builtin("verb_code")] = Box::new(BfVerbCode {});
-    builtins[offset_for_builtin("set_verb_code")] = Box::new(BfSetVerbCode {});
-    builtins[offset_for_builtin("add_verb")] = Box::new(BfAddVerb {});
-    builtins[offset_for_builtin("delete_verb")] = Box::new(BfDeleteVerb {});
-    builtins[offset_for_builtin("disassemble")] = Box::new(BfDisassemble {});
-    builtins[offset_for_builtin("respond_to")] = Box::new(BfRespondTo {});
+pub(crate) fn register_bf_verbs(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("verb_info")] = Box::new(bf_verb_info);
+    builtins[offset_for_builtin("set_verb_info")] = Box::new(bf_set_verb_info);
+    builtins[offset_for_builtin("verb_args")] = Box::new(bf_verb_args);
+    builtins[offset_for_builtin("set_verb_args")] = Box::new(bf_set_verb_args);
+    builtins[offset_for_builtin("verb_code")] = Box::new(bf_verb_code);
+    builtins[offset_for_builtin("set_verb_code")] = Box::new(bf_set_verb_code);
+    builtins[offset_for_builtin("add_verb")] = Box::new(bf_add_verb);
+    builtins[offset_for_builtin("delete_verb")] = Box::new(bf_delete_verb);
+    builtins[offset_for_builtin("disassemble")] = Box::new(bf_disassemble);
+    builtins[offset_for_builtin("respond_to")] = Box::new(bf_respond_to);
 }

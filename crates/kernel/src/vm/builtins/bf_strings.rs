@@ -25,7 +25,6 @@ use rand::{Rng, thread_rng};
 use serde_json::{self, Value as JsonValue};
 use tracing::warn;
 
-use crate::bf_declare;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 
@@ -77,7 +76,6 @@ fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
-bf_declare!(strsub, bf_strsub);
 
 fn str_index(subject: &str, what: &str, case_matters: bool) -> i64 {
     if case_matters {
@@ -125,7 +123,6 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
-bf_declare!(index, bf_index);
 
 fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
@@ -149,7 +146,6 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
-bf_declare!(rindex, bf_rindex);
 
 fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -163,7 +159,6 @@ fn bf_strcmp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
-bf_declare!(strcmp, bf_strcmp);
 
 /// Generate a random cryptographically secure salt string, for use with crypt & argon2
 /// Note: This is not (for now) compatible with the `salt` function in ToastStunt, which takes
@@ -178,7 +173,6 @@ fn bf_salt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let salt = v_str(salt.as_str());
     Ok(Ret(salt))
 }
-bf_declare!(salt, bf_salt);
 
 /*
 str crypt (str text [, str salt])
@@ -215,7 +209,6 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Err(BfErr::Code(E_TYPE))
     }
 }
-bf_declare!(crypt, bf_crypt);
 
 fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -231,14 +224,11 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => Err(BfErr::Code(E_INVARG)),
     }
 }
-bf_declare!(string_hash, bf_string_hash);
 
 fn bf_binary_hash(_bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Err(BfErr::Code(E_INVARG))
 }
-bf_declare!(binary_hash, bf_binary_hash);
 
-bf_declare!(argon2, bf_argon2);
 // password (string), salt (string), iterations, memory, parallelism
 fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Must be wizard.
@@ -335,7 +325,6 @@ fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .is_ok();
     Ok(Ret(bf_args.v_bool(validated)))
 }
-bf_declare!(argon2_verify, bf_argon2_verify);
 
 /// Function: str encode_base64(str text)
 ///
@@ -353,7 +342,6 @@ fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let encoded = general_purpose::STANDARD.encode(text.as_str().as_bytes());
     Ok(Ret(v_string(encoded)))
 }
-bf_declare!(encode_base64, bf_encode_base64);
 
 /// Function: str decode_base64(str encoded_text)
 ///
@@ -378,7 +366,6 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_string(decoded)))
 }
-bf_declare!(decode_base64, bf_decode_base64);
 
 /// Convert a MOO value to a JSON string
 fn bf_generate_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -394,7 +381,6 @@ fn bf_generate_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Err(_) => Err(BfErr::Code(E_INVARG)),
     }
 }
-bf_declare!(generate_json, bf_generate_json);
 
 /// Convert a MOO value to a JSON value
 fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
@@ -482,23 +468,21 @@ fn bf_parse_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-bf_declare!(parse_json, bf_parse_json);
-
-pub(crate) fn register_bf_strings(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("strsub")] = Box::new(BfStrsub {});
-    builtins[offset_for_builtin("index")] = Box::new(BfIndex {});
-    builtins[offset_for_builtin("rindex")] = Box::new(BfRindex {});
-    builtins[offset_for_builtin("strcmp")] = Box::new(BfStrcmp {});
-    builtins[offset_for_builtin("crypt")] = Box::new(BfCrypt {});
-    builtins[offset_for_builtin("argon2")] = Box::new(BfArgon2 {});
-    builtins[offset_for_builtin("argon2_verify")] = Box::new(BfArgon2Verify {});
-    builtins[offset_for_builtin("string_hash")] = Box::new(BfStringHash {});
-    builtins[offset_for_builtin("binary_hash")] = Box::new(BfBinaryHash {});
-    builtins[offset_for_builtin("salt")] = Box::new(BfSalt {});
-    builtins[offset_for_builtin("encode_base64")] = Box::new(BfEncodeBase64 {});
-    builtins[offset_for_builtin("decode_base64")] = Box::new(BfDecodeBase64 {});
-    builtins[offset_for_builtin("generate_json")] = Box::new(BfGenerateJson {});
-    builtins[offset_for_builtin("parse_json")] = Box::new(BfParseJson {});
+pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("strsub")] = Box::new(bf_strsub);
+    builtins[offset_for_builtin("index")] = Box::new(bf_index);
+    builtins[offset_for_builtin("rindex")] = Box::new(bf_rindex);
+    builtins[offset_for_builtin("strcmp")] = Box::new(bf_strcmp);
+    builtins[offset_for_builtin("crypt")] = Box::new(bf_crypt);
+    builtins[offset_for_builtin("argon2")] = Box::new(bf_argon2);
+    builtins[offset_for_builtin("argon2_verify")] = Box::new(bf_argon2_verify);
+    builtins[offset_for_builtin("string_hash")] = Box::new(bf_string_hash);
+    builtins[offset_for_builtin("binary_hash")] = Box::new(bf_binary_hash);
+    builtins[offset_for_builtin("salt")] = Box::new(bf_salt);
+    builtins[offset_for_builtin("encode_base64")] = Box::new(bf_encode_base64);
+    builtins[offset_for_builtin("decode_base64")] = Box::new(bf_decode_base64);
+    builtins[offset_for_builtin("generate_json")] = Box::new(bf_generate_json);
+    builtins[offset_for_builtin("parse_json")] = Box::new(bf_parse_json);
 }
 
 #[cfg(test)]

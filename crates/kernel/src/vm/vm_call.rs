@@ -408,7 +408,7 @@ impl VMExecState {
             .cumulative_duration_nanos
             .add(elapsed_nanos as isize);
 
-        let result = bf.call(&mut bf_args);
+        let result = bf(&mut bf_args);
         let elapsed_nanos = start.elapsed().as_nanos();
         bf_counters
             .counter_for(bf_id)
@@ -472,7 +472,7 @@ impl VMExecState {
             .cumulative_duration_nanos
             .add(elapsed_nanos as isize);
 
-        let result = bf.call(&mut bf_args);
+        let result = bf(&mut bf_args);
         let elapsed_nanos = start.elapsed().as_nanos();
         let bf_counters = bf_perf_counters();
         bf_counters

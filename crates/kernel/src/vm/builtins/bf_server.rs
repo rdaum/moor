@@ -20,7 +20,6 @@ use chrono_tz::{OffsetName, Tz};
 use iana_time_zone::get_timezone;
 use tracing::{error, info, warn};
 
-use crate::bf_declare;
 use crate::tasks::{TaskStart, sched_counters};
 use crate::vm::TaskSuspend;
 use crate::vm::builtins::BfErr::{Code, ErrValue};
@@ -44,7 +43,7 @@ use moor_var::{Sequence, v_map};
 use moor_var::{Var, v_float, v_int, v_list, v_none, v_obj, v_str, v_string};
 use moor_var::{Variant, v_sym};
 
-fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+pub(crate) fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     error!(
         "Builtin function {} is not implemented, called with arguments: ({:?})",
         bf_args.name, bf_args.args
@@ -54,7 +53,6 @@ fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         v_str(bf_args.name.as_str()),
     )))
 }
-bf_declare!(noop, bf_noop);
 
 fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // If in non rich-mode `notify` can only send text.
@@ -103,7 +101,6 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
 }
-bf_declare!(notify, bf_notify);
 
 /// presentation(player, id : string, [content_type : string, target : string, content: string, [ attributes : list / map]])
 /// Emits a presentation event to the client. The client should interpret this as a request to present
@@ -271,7 +268,6 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(present, bf_present);
 
 fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let include_all = if bf_args.args.len() == 1 {
@@ -297,7 +293,6 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     });
     Ok(Ret(v_list_iter(map)))
 }
-bf_declare!(connected_players, bf_connected_players);
 
 fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -321,7 +316,6 @@ fn bf_is_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     Ok(Ret(bf_args.v_bool(is_player)))
 }
-bf_declare!(is_player, bf_is_player);
 
 fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -332,7 +326,6 @@ fn bf_caller_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_obj(bf_args.caller_perms())))
 }
-bf_declare!(caller_perms, bf_caller_perms);
 
 fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -355,7 +348,6 @@ fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(set_task_perms, bf_set_task_perms);
 
 fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -384,7 +376,6 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         v_list(&callers)
     }))))
 }
-bf_declare!(callers, bf_callers);
 
 fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -395,7 +386,6 @@ fn bf_task_id(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_int(bf_args.exec_state.task_id as i64)))
 }
-bf_declare!(task_id, bf_task_id);
 
 fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -414,7 +404,6 @@ fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_int(idle_seconds as i64)))
 }
-bf_declare!(idle_seconds, bf_idle_seconds);
 
 fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -435,7 +424,6 @@ fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_int(connected_seconds as i64)))
 }
-bf_declare!(connected_seconds, bf_connected_seconds);
 
 /*
 Syntax:  connection_name (obj <player>)   => str
@@ -478,7 +466,6 @@ fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_string(connection_name)))
 }
-bf_declare!(connection_name, bf_connection_name);
 
 fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
@@ -505,7 +492,6 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(shutdown, bf_shutdown);
 
 fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -518,7 +504,6 @@ fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .as_secs() as i64,
     )))
 }
-bf_declare!(time, bf_time);
 
 fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
@@ -562,7 +547,6 @@ fn bf_ftime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_float(seconds + nanos)))
 }
-bf_declare!(ftime, bf_ftime);
 
 fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
@@ -596,7 +580,6 @@ fn bf_ctime(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_string(datetime_str.to_string())))
 }
-bf_declare!(ctime, bf_ctime);
 fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  raise (<code> [, str <message> [, <value>]])   => none
     //
@@ -638,8 +621,6 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Err(BfErr::Raise(Error::new(err.err_type, msg, value)))
 }
 
-bf_declare!(raise, bf_raise);
-
 fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
         return Err(ErrValue(
@@ -649,7 +630,6 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let version_string = format!("{}+{}", PKG_VERSION, SHORT_COMMIT);
     Ok(Ret(v_string(version_string)))
 }
-bf_declare!(server_version, bf_server_version);
 
 fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
@@ -678,7 +658,6 @@ fn bf_suspend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(VmInstr(ExecutionResult::TaskSuspend(suspend_condition)))
 }
-bf_declare!(suspend, bf_suspend);
 
 fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -687,7 +666,6 @@ fn bf_commit(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(VmInstr(ExecutionResult::TaskSuspend(TaskSuspend::Commit)))
 }
-bf_declare!(commit, bf_commit);
 
 fn bf_rollback(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Rollback is wizard only
@@ -705,7 +683,6 @@ fn bf_rollback(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(VmInstr(ExecutionResult::TaskRollback(output_session)))
 }
-bf_declare!(rollback, bf_rollback);
 
 fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
@@ -722,7 +699,6 @@ fn bf_wait_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         TaskSuspend::WaitTask(task_id as TaskId),
     )))
 }
-bf_declare!(wait_task, bf_wait_task);
 
 fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
@@ -754,7 +730,6 @@ fn bf_read(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(VmInstr(ExecutionResult::TaskNeedInput))
 }
-bf_declare!(read, bf_read);
 
 fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -792,7 +767,6 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_list_iter(tasks)))
 }
-bf_declare!(queued_tasks, bf_queued_tasks);
 
 /// Function: active_tasks()
 /// Returns the list of active running (not suspended/queued) running tasks.
@@ -906,7 +880,6 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_list_iter(output)))
 }
-bf_declare!(active_tasks, bf_active_tasks);
 
 /// Function: list queue_info ([obj player])
 /// If player is omitted, returns a list of object numbers naming all players that currently have active task
@@ -964,7 +937,6 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 }
-bf_declare!(queue_info, bf_queue_info);
 
 fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  kill_task(<task-id>)   => none
@@ -999,7 +971,6 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     Ok(Ret(result))
 }
-bf_declare!(kill_task, bf_kill_task);
 
 fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax: resume(INT task-ID[, ANY value])
@@ -1040,7 +1011,6 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     Ok(Ret(result))
 }
-bf_declare!(resume, bf_resume);
 
 fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  ticks_left()   => int
@@ -1059,7 +1029,6 @@ fn bf_ticks_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_int(ticks_left as i64)))
 }
-bf_declare!(ticks_left, bf_ticks_left);
 
 fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  seconds_left()   => int
@@ -1078,7 +1047,6 @@ fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(seconds_left))
 }
-bf_declare!(seconds_left, bf_seconds_left);
 
 fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  boot_player(<player>)   => none
@@ -1105,7 +1073,6 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(boot_player, bf_boot_player);
 
 fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  call_function(<func>, <arg1>, <arg2>, ...)   => value
@@ -1142,7 +1109,6 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         arguments: arguments.clone(),
     }))
 }
-bf_declare!(call_function, bf_call_function);
 
 /*Syntax:  server_log (str <message> [, <is-error>])   => none
 
@@ -1201,7 +1167,6 @@ fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(server_log, bf_server_log);
 
 fn bf_function_info_to_list(bf: &Builtin) -> Var {
     let min_args = match bf.min_args {
@@ -1253,7 +1218,6 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map(bf_function_info_to_list);
     Ok(Ret(v_list_iter(bf_list)))
 }
-bf_declare!(function_info, bf_function_info);
 
 /// Function: value listen (obj object, point [, print-messages], [host-type])
 /// Start listening for connections on the given port.
@@ -1330,8 +1294,6 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_int(port as i64)))
 }
 
-bf_declare!(listen, bf_listen);
-
 fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Requires wizard permissions.
     bf_args
@@ -1360,7 +1322,6 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(listeners))
 }
-bf_declare!(listeners, bf_listeners);
 
 // unlisten(port, [host-type])
 fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -1406,7 +1367,6 @@ fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(unlisten, bf_unlisten);
 
 pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
@@ -1459,7 +1419,6 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 }
-bf_declare!(eval, bf_eval);
 
 fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
@@ -1472,7 +1431,6 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(bf_args.v_bool(true)))
 }
-bf_declare!(dump_database, bf_dump_database);
 
 fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if !bf_args.args.is_empty() {
@@ -1528,7 +1486,6 @@ fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_list(&[block_size, nused, nfree])))
 }
-bf_declare!(memory_usage, bf_memory_usage);
 
 fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Syntax:  db_disk_size()   => int
@@ -1551,7 +1508,6 @@ fn db_disk_size(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_int(disk_size as i64)))
 }
-bf_declare!(db_disk_size, db_disk_size);
 
 /* Function: none load_server_options ()
 
@@ -1576,7 +1532,6 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_none()))
 }
-bf_declare!(load_server_options, load_server_options);
 
 fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
     let mut result = vec![];
@@ -1612,7 +1567,6 @@ fn bf_bf_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
     )))
 }
-bf_declare!(bf_counters, bf_bf_counters);
 
 fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
@@ -1627,7 +1581,6 @@ fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
     )))
 }
-bf_declare!(db_counters, bf_db_counters);
 
 fn bf_vm_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
@@ -1642,7 +1595,6 @@ fn bf_vm_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
     )))
 }
-bf_declare!(vm_counters, bf_vm_counters);
 
 fn bf_sched_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
@@ -1657,7 +1609,6 @@ fn bf_sched_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
     )))
 }
-bf_declare!(sched_counters, bf_sched_counters);
 
 fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     /*Syntax:  force_input (obj <conn>, str <line> [, <at-front>])   => none
@@ -1694,7 +1645,6 @@ fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Err(e) => Err(ErrValue(e)),
     }
 }
-bf_declare!(force_input, bf_force_input);
 
 /// worker_request(worker_type, args, ...)
 /// Sends a request to a worker (e.g. outbound HTTP, files, etc.) to perform some action.
@@ -1719,54 +1669,53 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         TaskSuspend::WorkerRequest(worker_type, args),
     )))
 }
-bf_declare!(worker_request, bf_worker_request);
 
-pub(crate) fn register_bf_server(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("notify")] = Box::new(BfNotify {});
-    builtins[offset_for_builtin("connected_players")] = Box::new(BfConnectedPlayers {});
-    builtins[offset_for_builtin("is_player")] = Box::new(BfIsPlayer {});
-    builtins[offset_for_builtin("caller_perms")] = Box::new(BfCallerPerms {});
-    builtins[offset_for_builtin("set_task_perms")] = Box::new(BfSetTaskPerms {});
-    builtins[offset_for_builtin("callers")] = Box::new(BfCallers {});
-    builtins[offset_for_builtin("task_id")] = Box::new(BfTaskId {});
-    builtins[offset_for_builtin("idle_seconds")] = Box::new(BfIdleSeconds {});
-    builtins[offset_for_builtin("connected_seconds")] = Box::new(BfConnectedSeconds {});
-    builtins[offset_for_builtin("connection_name")] = Box::new(BfConnectionName {});
-    builtins[offset_for_builtin("time")] = Box::new(BfTime {});
-    builtins[offset_for_builtin("ftime")] = Box::new(BfFtime {});
-    builtins[offset_for_builtin("ctime")] = Box::new(BfCtime {});
-    builtins[offset_for_builtin("raise")] = Box::new(BfRaise {});
-    builtins[offset_for_builtin("server_version")] = Box::new(BfServerVersion {});
-    builtins[offset_for_builtin("shutdown")] = Box::new(BfShutdown {});
-    builtins[offset_for_builtin("suspend")] = Box::new(BfSuspend {});
-    builtins[offset_for_builtin("queued_tasks")] = Box::new(BfQueuedTasks {});
-    builtins[offset_for_builtin("active_tasks")] = Box::new(BfActiveTasks {});
-    builtins[offset_for_builtin("queue_info")] = Box::new(BfQueueInfo {});
-    builtins[offset_for_builtin("kill_task")] = Box::new(BfKillTask {});
-    builtins[offset_for_builtin("resume")] = Box::new(BfResume {});
-    builtins[offset_for_builtin("ticks_left")] = Box::new(BfTicksLeft {});
-    builtins[offset_for_builtin("seconds_left")] = Box::new(BfSecondsLeft {});
-    builtins[offset_for_builtin("boot_player")] = Box::new(BfBootPlayer {});
-    builtins[offset_for_builtin("call_function")] = Box::new(BfCallFunction {});
-    builtins[offset_for_builtin("server_log")] = Box::new(BfServerLog {});
-    builtins[offset_for_builtin("function_info")] = Box::new(BfFunctionInfo {});
-    builtins[offset_for_builtin("listeners")] = Box::new(BfListeners {});
-    builtins[offset_for_builtin("listen")] = Box::new(BfListen {});
-    builtins[offset_for_builtin("unlisten")] = Box::new(BfUnlisten {});
-    builtins[offset_for_builtin("eval")] = Box::new(BfEval {});
-    builtins[offset_for_builtin("read")] = Box::new(BfRead {});
-    builtins[offset_for_builtin("dump_database")] = Box::new(BfDumpDatabase {});
-    builtins[offset_for_builtin("memory_usage")] = Box::new(BfMemoryUsage {});
-    builtins[offset_for_builtin("db_disk_size")] = Box::new(BfDbDiskSize {});
-    builtins[offset_for_builtin("load_server_options")] = Box::new(BfLoadServerOptions {});
-    builtins[offset_for_builtin("bf_counters")] = Box::new(BfBfCounters {});
-    builtins[offset_for_builtin("db_counters")] = Box::new(BfDbCounters {});
-    builtins[offset_for_builtin("vm_counters")] = Box::new(BfVmCounters {});
-    builtins[offset_for_builtin("sched_counters")] = Box::new(BfSchedCounters {});
-    builtins[offset_for_builtin("force_input")] = Box::new(BfForceInput {});
-    builtins[offset_for_builtin("wait_task")] = Box::new(BfWaitTask {});
-    builtins[offset_for_builtin("commit")] = Box::new(BfCommit {});
-    builtins[offset_for_builtin("rollback")] = Box::new(BfRollback {});
-    builtins[offset_for_builtin("present")] = Box::new(BfPresent {});
-    builtins[offset_for_builtin("worker_request")] = Box::new(BfWorkerRequest {});
+pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("notify")] = Box::new(bf_notify);
+    builtins[offset_for_builtin("connected_players")] = Box::new(bf_connected_players);
+    builtins[offset_for_builtin("is_player")] = Box::new(bf_is_player);
+    builtins[offset_for_builtin("caller_perms")] = Box::new(bf_caller_perms);
+    builtins[offset_for_builtin("set_task_perms")] = Box::new(bf_set_task_perms);
+    builtins[offset_for_builtin("callers")] = Box::new(bf_callers);
+    builtins[offset_for_builtin("task_id")] = Box::new(bf_task_id);
+    builtins[offset_for_builtin("idle_seconds")] = Box::new(bf_idle_seconds);
+    builtins[offset_for_builtin("connected_seconds")] = Box::new(bf_connected_seconds);
+    builtins[offset_for_builtin("connection_name")] = Box::new(bf_connection_name);
+    builtins[offset_for_builtin("time")] = Box::new(bf_time);
+    builtins[offset_for_builtin("ftime")] = Box::new(bf_ftime);
+    builtins[offset_for_builtin("ctime")] = Box::new(bf_ctime);
+    builtins[offset_for_builtin("raise")] = Box::new(bf_raise);
+    builtins[offset_for_builtin("server_version")] = Box::new(bf_server_version);
+    builtins[offset_for_builtin("shutdown")] = Box::new(bf_shutdown);
+    builtins[offset_for_builtin("suspend")] = Box::new(bf_suspend);
+    builtins[offset_for_builtin("queued_tasks")] = Box::new(bf_queued_tasks);
+    builtins[offset_for_builtin("active_tasks")] = Box::new(bf_active_tasks);
+    builtins[offset_for_builtin("queue_info")] = Box::new(bf_queue_info);
+    builtins[offset_for_builtin("kill_task")] = Box::new(bf_kill_task);
+    builtins[offset_for_builtin("resume")] = Box::new(bf_resume);
+    builtins[offset_for_builtin("ticks_left")] = Box::new(bf_ticks_left);
+    builtins[offset_for_builtin("seconds_left")] = Box::new(bf_seconds_left);
+    builtins[offset_for_builtin("boot_player")] = Box::new(bf_boot_player);
+    builtins[offset_for_builtin("call_function")] = Box::new(bf_call_function);
+    builtins[offset_for_builtin("server_log")] = Box::new(bf_server_log);
+    builtins[offset_for_builtin("function_info")] = Box::new(bf_function_info);
+    builtins[offset_for_builtin("listeners")] = Box::new(bf_listeners);
+    builtins[offset_for_builtin("listen")] = Box::new(bf_listen);
+    builtins[offset_for_builtin("unlisten")] = Box::new(bf_unlisten);
+    builtins[offset_for_builtin("eval")] = Box::new(bf_eval);
+    builtins[offset_for_builtin("read")] = Box::new(bf_read);
+    builtins[offset_for_builtin("dump_database")] = Box::new(bf_dump_database);
+    builtins[offset_for_builtin("memory_usage")] = Box::new(bf_memory_usage);
+    builtins[offset_for_builtin("db_disk_size")] = Box::new(db_disk_size);
+    builtins[offset_for_builtin("load_server_options")] = Box::new(load_server_options);
+    builtins[offset_for_builtin("bf_counters")] = Box::new(bf_bf_counters);
+    builtins[offset_for_builtin("db_counters")] = Box::new(bf_db_counters);
+    builtins[offset_for_builtin("vm_counters")] = Box::new(bf_vm_counters);
+    builtins[offset_for_builtin("sched_counters")] = Box::new(bf_sched_counters);
+    builtins[offset_for_builtin("force_input")] = Box::new(bf_force_input);
+    builtins[offset_for_builtin("wait_task")] = Box::new(bf_wait_task);
+    builtins[offset_for_builtin("commit")] = Box::new(bf_commit);
+    builtins[offset_for_builtin("rollback")] = Box::new(bf_rollback);
+    builtins[offset_for_builtin("present")] = Box::new(bf_present);
+    builtins[offset_for_builtin("worker_request")] = Box::new(bf_worker_request);
 }

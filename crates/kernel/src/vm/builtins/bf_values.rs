@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::bf_declare;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use md5::Digest;
@@ -25,7 +24,6 @@ fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg = &bf_args.args[0];
     Ok(Ret(v_int(arg.type_code() as i64)))
 }
-bf_declare!(typeof, bf_typeof);
 
 fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut result = String::new();
@@ -52,7 +50,6 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     Ok(Ret(v_str(result.as_str())))
 }
-bf_declare!(tostr, bf_tostr);
 
 fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Convert scalar values to symbols.
@@ -75,7 +72,6 @@ fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         ))),
     }
 }
-bf_declare!(tosym, bf_tosym);
 
 fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -86,7 +82,6 @@ fn bf_toliteral(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let literal = to_literal(&bf_args.args[0]);
     Ok(Ret(v_str(literal.as_str())))
 }
-bf_declare!(toliteral, bf_toliteral);
 
 fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -119,7 +114,6 @@ fn bf_toint(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         )),
     }
 }
-bf_declare!(toint, bf_toint);
 
 fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -168,7 +162,6 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         )),
     }
 }
-bf_declare!(toobj, bf_toobj);
 
 fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -201,7 +194,6 @@ fn bf_tofloat(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         )),
     }
 }
-bf_declare!(tofloat, bf_tofloat);
 
 fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -213,7 +205,6 @@ fn bf_equal(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let result = a1.eq_case_sensitive(a2);
     Ok(Ret(bf_args.v_bool(result)))
 }
-bf_declare!(equal, bf_equal);
 
 fn bf_value_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -224,7 +215,6 @@ fn bf_value_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let count = bf_args.args[0].size_bytes();
     Ok(Ret(v_int(count as i64)))
 }
-bf_declare!(value_bytes, bf_value_bytes);
 
 fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -238,7 +228,6 @@ fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         format!("{:x}", hash_digest).to_uppercase().as_str(),
     )))
 }
-bf_declare!(value_hash, bf_value_hash);
 
 fn bf_length(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -252,7 +241,6 @@ fn bf_length(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Err(e) => Err(BfErr::ErrValue(e)),
     }
 }
-bf_declare!(length, bf_length);
 
 fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -274,7 +262,6 @@ fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_int(size as i64)))
 }
-bf_declare!(object_bytes, bf_object_bytes);
 
 /// Strip off the message and value from an error object
 fn bf_error_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -291,7 +278,6 @@ fn bf_error_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let code = e.err_type;
     Ok(Ret(v_err(code)))
 }
-bf_declare!(error_message, bf_error_message);
 
 /// Return the message from an error object
 fn bf_error_message(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -308,22 +294,21 @@ fn bf_error_message(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let msg = e.message();
     Ok(Ret(v_str(msg.as_str())))
 }
-bf_declare!(error_code, bf_error_code);
 
-pub(crate) fn register_bf_values(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("typeof")] = Box::new(BfTypeof {});
-    builtins[offset_for_builtin("tostr")] = Box::new(BfTostr {});
-    builtins[offset_for_builtin("tosym")] = Box::new(BfTosym {});
-    builtins[offset_for_builtin("toliteral")] = Box::new(BfToliteral {});
-    builtins[offset_for_builtin("toint")] = Box::new(BfToint {});
-    builtins[offset_for_builtin("tonum")] = Box::new(BfToint {});
-    builtins[offset_for_builtin("toobj")] = Box::new(BfToobj {});
-    builtins[offset_for_builtin("tofloat")] = Box::new(BfTofloat {});
-    builtins[offset_for_builtin("equal")] = Box::new(BfEqual {});
-    builtins[offset_for_builtin("value_bytes")] = Box::new(BfValueBytes {});
-    builtins[offset_for_builtin("object_bytes")] = Box::new(BfObjectBytes {});
-    builtins[offset_for_builtin("value_hash")] = Box::new(BfValueHash {});
-    builtins[offset_for_builtin("length")] = Box::new(BfLength {});
-    builtins[offset_for_builtin("error_code")] = Box::new(BfErrorCode {});
-    builtins[offset_for_builtin("error_message")] = Box::new(BfErrorMessage {});
+pub(crate) fn register_bf_values(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("typeof")] = Box::new(bf_typeof);
+    builtins[offset_for_builtin("tostr")] = Box::new(bf_tostr);
+    builtins[offset_for_builtin("tosym")] = Box::new(bf_tosym);
+    builtins[offset_for_builtin("toliteral")] = Box::new(bf_toliteral);
+    builtins[offset_for_builtin("toint")] = Box::new(bf_toint);
+    builtins[offset_for_builtin("tonum")] = Box::new(bf_toint);
+    builtins[offset_for_builtin("toobj")] = Box::new(bf_toobj);
+    builtins[offset_for_builtin("tofloat")] = Box::new(bf_tofloat);
+    builtins[offset_for_builtin("equal")] = Box::new(bf_equal);
+    builtins[offset_for_builtin("value_bytes")] = Box::new(bf_value_bytes);
+    builtins[offset_for_builtin("object_bytes")] = Box::new(bf_object_bytes);
+    builtins[offset_for_builtin("value_hash")] = Box::new(bf_value_hash);
+    builtins[offset_for_builtin("length")] = Box::new(bf_length);
+    builtins[offset_for_builtin("error_code")] = Box::new(bf_error_code);
+    builtins[offset_for_builtin("error_message")] = Box::new(bf_error_message);
 }

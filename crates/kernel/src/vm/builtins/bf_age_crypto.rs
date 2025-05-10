@@ -24,7 +24,6 @@ use ssh_key::public::PublicKey;
 use std::io::Read;
 use tracing::{error, warn};
 
-use crate::bf_declare;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_compiler::offset_for_builtin;
@@ -65,7 +64,6 @@ fn bf_age_generate_keypair(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr
 
     Ok(Ret(v_list(&[v_string(public_key), v_string(private_key)])))
 }
-bf_declare!(age_generate_keypair, bf_age_generate_keypair);
 
 /// Function: str age_encrypt(str message, list recipients)
 ///
@@ -188,7 +186,6 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_string(encoded)))
 }
-bf_declare!(age_encrypt, bf_age_encrypt);
 
 /// Function: str age_decrypt(str encrypted_message, list private_keys)
 ///
@@ -342,10 +339,9 @@ fn bf_age_decrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 }
-bf_declare!(age_decrypt, bf_age_decrypt);
 
-pub(crate) fn register_bf_age_crypto(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("age_generate_keypair")] = Box::new(BfAgeGenerateKeypair {});
-    builtins[offset_for_builtin("age_encrypt")] = Box::new(BfAgeEncrypt {});
-    builtins[offset_for_builtin("age_decrypt")] = Box::new(BfAgeDecrypt {});
+pub(crate) fn register_bf_age_crypto(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("age_generate_keypair")] = Box::new(bf_age_generate_keypair);
+    builtins[offset_for_builtin("age_encrypt")] = Box::new(bf_age_encrypt);
+    builtins[offset_for_builtin("age_decrypt")] = Box::new(bf_age_decrypt);
 }

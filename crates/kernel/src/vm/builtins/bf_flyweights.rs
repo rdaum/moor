@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::bf_declare;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_common::model::WorldState;
@@ -163,7 +162,6 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let result = v_list(&output_tree);
     Ok(Ret(result))
 }
-bf_declare!(xml_parse, bf_xml_parse);
 
 enum Tag {
     StartElement(String, Vec<(String, String)>),
@@ -352,7 +350,6 @@ fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     })?;
     Ok(Ret(v_string(output_as_string)))
 }
-bf_declare!(to_xml, bf_to_xml);
 
 /// slots(flyweight) - returns the set of slots on the flyweight as a map
 fn bf_slots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -384,7 +381,6 @@ fn bf_slots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(map))
 }
-bf_declare!(slots, bf_slots);
 
 // remove_slot(flyweight, symbol) - return copy of the same flyweight but with the slot of `symbol` name removed.
 // No error is returned if the slot isn't present.
@@ -430,7 +426,6 @@ fn bf_remove_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let f = v_flyweight(f.delegate().clone(), &slots, f.contents().clone(), None);
     Ok(Ret(f))
 }
-bf_declare!(remove_slot, bf_remove_slot);
 
 /// add_slot(flyweight, key, value) - return copy of the same flyweight but with the slot of `key` name added or updated.
 fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -475,12 +470,11 @@ fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let f = v_flyweight(f.delegate().clone(), &slots, f.contents().clone(), None);
     Ok(Ret(f))
 }
-bf_declare!(add_slot, bf_add_slot);
 
-pub(crate) fn register_bf_flyweights(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("xml_parse")] = Box::new(BfXmlParse {});
-    builtins[offset_for_builtin("to_xml")] = Box::new(BfToXml {});
-    builtins[offset_for_builtin("slots")] = Box::new(BfSlots {});
-    builtins[offset_for_builtin("remove_slot")] = Box::new(BfRemoveSlot {});
-    builtins[offset_for_builtin("add_slot")] = Box::new(BfAddSlot {});
+pub(crate) fn register_bf_flyweights(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("xml_parse")] = Box::new(bf_xml_parse);
+    builtins[offset_for_builtin("to_xml")] = Box::new(bf_to_xml);
+    builtins[offset_for_builtin("slots")] = Box::new(bf_slots);
+    builtins[offset_for_builtin("remove_slot")] = Box::new(bf_remove_slot);
+    builtins[offset_for_builtin("add_slot")] = Box::new(bf_add_slot);
 }

@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::bf_declare;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
 use moor_var::{Associative, E_ARGS, E_RANGE, E_TYPE, Sequence};
@@ -43,7 +42,6 @@ fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(BfRet::Ret(nm))
 }
-bf_declare!(mapdelete, bf_mapdelete);
 
 fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -60,7 +58,6 @@ fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(BfRet::Ret(v_list(&keys)))
 }
-bf_declare!(mapkeys, bf_mapkeys);
 
 fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
@@ -77,7 +74,6 @@ fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(BfRet::Ret(v_list(&values)))
 }
-bf_declare!(mapvalues, bf_mapvalues);
 
 fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -104,11 +100,10 @@ fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(BfErr::ErrValue)?;
     Ok(BfRet::Ret(bf_args.v_bool(contains)))
 }
-bf_declare!(maphaskey, bf_maphaskey);
 
-pub(crate) fn register_bf_maps(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("mapdelete")] = Box::new(BfMapdelete {});
-    builtins[offset_for_builtin("mapkeys")] = Box::new(BfMapkeys {});
-    builtins[offset_for_builtin("mapvalues")] = Box::new(BfMapvalues {});
-    builtins[offset_for_builtin("maphaskey")] = Box::new(BfMaphaskey {});
+pub(crate) fn register_bf_maps(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("mapdelete")] = Box::new(bf_mapdelete);
+    builtins[offset_for_builtin("mapkeys")] = Box::new(bf_mapkeys);
+    builtins[offset_for_builtin("mapvalues")] = Box::new(bf_mapvalues);
+    builtins[offset_for_builtin("maphaskey")] = Box::new(bf_maphaskey);
 }

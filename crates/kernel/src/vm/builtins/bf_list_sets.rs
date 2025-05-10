@@ -23,7 +23,6 @@ use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
 use std::ops::BitOr;
 use std::sync::Mutex;
 
-use crate::bf_declare;
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 
@@ -55,7 +54,6 @@ fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
-bf_declare!(is_member, bf_is_member);
 
 fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
@@ -75,8 +73,6 @@ fn bf_listinsert(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(res.map_err(BfErr::ErrValue)?))
 }
 
-bf_declare!(listinsert, bf_listinsert);
-
 fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(BfErr::Code(E_ARGS));
@@ -94,7 +90,6 @@ fn bf_listappend(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let res = list.insert(index, value, IndexMode::ZeroBased);
     Ok(Ret(res.map_err(BfErr::ErrValue)?))
 }
-bf_declare!(listappend, bf_listappend);
 
 fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -106,7 +101,6 @@ fn bf_listdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .remove_at(&index, IndexMode::OneBased)
         .map_err(BfErr::ErrValue)?))
 }
-bf_declare!(listdelete, bf_listdelete);
 
 fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 3 {
@@ -122,7 +116,6 @@ fn bf_listset(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .index_set(&index, &value, IndexMode::OneBased)
         .map_err(BfErr::ErrValue)?))
 }
-bf_declare!(listset, bf_listset);
 
 fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -135,7 +128,6 @@ fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     Ok(Ret(list.set_add(&value).map_err(BfErr::ErrValue)?))
 }
-bf_declare!(setadd, bf_setadd);
 
 fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -148,7 +140,6 @@ fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     Ok(Ret(list.set_remove(&value).map_err(BfErr::ErrValue)?))
 }
-bf_declare!(setremove, bf_setremove);
 
 /// Translate a MOO pattern into a more standard syntax.  Effectively, this
 /// just involves remove `%' escapes into `\' escapes.
@@ -317,12 +308,10 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Bf
 fn bf_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     do_re_match(bf_args, false)
 }
-bf_declare!(match, bf_match);
 
 fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     do_re_match(bf_args, true)
 }
-bf_declare!(rmatch, bf_rmatch);
 
 lazy_static! {
     static ref PCRE_PATTERN_CACHE: Mutex<HashMap<(String, bool), Result<onig::Regex, onig::Error>>> =
@@ -555,7 +544,6 @@ fn bf_pcre_replace(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Err(err) => Err(BfErr::ErrValue(err)),
     }
 }
-bf_declare!(pcre_replace, bf_pcre_replace);
 /*
 From Toast:
 
@@ -613,7 +601,6 @@ fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
     Ok(Ret(Var::from_variant(Variant::List(result))))
 }
-bf_declare!(pcre_match, bf_pcre_match);
 
 fn substitute(template: &str, subs: &[(isize, isize)], source: &str) -> Result<String, Error> {
     // textual patterns of form %<int> (e.g. %1, %9, %11) are replaced by the text matched by the
@@ -730,7 +717,6 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Err(e) => Err(BfErr::ErrValue(e)),
     }
 }
-bf_declare!(substitute, bf_substitute);
 
 /// ```moo
 /// list slice(list|map alist [, list|str index [, any default_value]])
@@ -891,22 +877,21 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         _ => Err(BfErr::Code(E_TYPE)),
     }
 }
-bf_declare!(slice, bf_slice);
 
-pub(crate) fn register_bf_list_sets(builtins: &mut [Box<dyn BuiltinFunction>]) {
-    builtins[offset_for_builtin("is_member")] = Box::new(BfIsMember {});
-    builtins[offset_for_builtin("listinsert")] = Box::new(BfListinsert {});
-    builtins[offset_for_builtin("listappend")] = Box::new(BfListappend {});
-    builtins[offset_for_builtin("listdelete")] = Box::new(BfListdelete {});
-    builtins[offset_for_builtin("listset")] = Box::new(BfListset {});
-    builtins[offset_for_builtin("setadd")] = Box::new(BfSetadd {});
-    builtins[offset_for_builtin("setremove")] = Box::new(BfSetremove {});
-    builtins[offset_for_builtin("match")] = Box::new(BfMatch {});
-    builtins[offset_for_builtin("rmatch")] = Box::new(BfRmatch {});
-    builtins[offset_for_builtin("substitute")] = Box::new(BfSubstitute {});
-    builtins[offset_for_builtin("pcre_match")] = Box::new(BfPcreMatch {});
-    builtins[offset_for_builtin("pcre_replace")] = Box::new(BfPcreReplace {});
-    builtins[offset_for_builtin("slice")] = Box::new(BfSlice {});
+pub(crate) fn register_bf_list_sets(builtins: &mut [Box<BuiltinFunction>]) {
+    builtins[offset_for_builtin("is_member")] = Box::new(bf_is_member);
+    builtins[offset_for_builtin("listinsert")] = Box::new(bf_listinsert);
+    builtins[offset_for_builtin("listappend")] = Box::new(bf_listappend);
+    builtins[offset_for_builtin("listdelete")] = Box::new(bf_listdelete);
+    builtins[offset_for_builtin("listset")] = Box::new(bf_listset);
+    builtins[offset_for_builtin("setadd")] = Box::new(bf_setadd);
+    builtins[offset_for_builtin("setremove")] = Box::new(bf_setremove);
+    builtins[offset_for_builtin("match")] = Box::new(bf_match);
+    builtins[offset_for_builtin("rmatch")] = Box::new(bf_rmatch);
+    builtins[offset_for_builtin("substitute")] = Box::new(bf_substitute);
+    builtins[offset_for_builtin("pcre_match")] = Box::new(bf_pcre_match);
+    builtins[offset_for_builtin("pcre_replace")] = Box::new(bf_pcre_replace);
+    builtins[offset_for_builtin("slice")] = Box::new(bf_slice);
 }
 
 #[cfg(test)]
