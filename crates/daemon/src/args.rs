@@ -272,7 +272,6 @@ pub struct ImportExportArgs {
     pub export: Option<PathBuf>,
 
     #[arg(
-        short,
         long,
         value_name = "import-format",
         help = "Format to import from.",
@@ -281,7 +280,6 @@ pub struct ImportExportArgs {
     pub import_format: Format,
 
     #[arg(
-        short,
         long,
         value_name = "export-format",
         help = "Format to export into.",
