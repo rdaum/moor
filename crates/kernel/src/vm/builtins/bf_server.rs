@@ -21,14 +21,15 @@ use iana_time_zone::get_timezone;
 use tracing::{error, info, warn};
 
 use crate::bf_declare;
-use crate::builtins::BfErr::{Code, ErrValue};
-use crate::builtins::BfRet::{Ret, VmInstr};
-use crate::builtins::{
+use crate::tasks::{TaskStart, sched_counters};
+use crate::vm::TaskSuspend;
+use crate::vm::builtins::BfErr::{Code, ErrValue};
+use crate::vm::builtins::BfRet::{Ret, VmInstr};
+use crate::vm::builtins::{
     BfCallState, BfErr, BfRet, BuiltinFunction, bf_perf_counters, world_state_bf_err,
 };
-use crate::tasks::{TaskStart, sched_counters};
 use crate::vm::exec_state::vm_counters;
-use crate::vm::{ExecutionResult, TaskSuspend};
+use crate::vm::vm_host::ExecutionResult;
 use moor_common::build::{PKG_VERSION, SHORT_COMMIT};
 use moor_common::model::{Named, ObjFlag, WorldStateError};
 use moor_common::tasks::Event::{Present, Unpresent};

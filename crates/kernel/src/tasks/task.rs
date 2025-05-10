@@ -45,17 +45,18 @@ use moor_var::{NOTHING, SYSTEM_OBJECT};
 use moor_var::{Obj, v_obj};
 use moor_var::{Symbol, Variant};
 
-use crate::builtins::BuiltinRegistry;
 use crate::config::{Config, FeaturesConfig};
-use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
-use crate::tasks::vm_host::VmHost;
-use crate::tasks::{ServerOptions, TaskStart, VerbCall, sched_counters};
-use crate::vm::{VMExecState, VMHostResponse};
+use crate::tasks::{ServerOptions, TaskStart, sched_counters};
+use crate::vm::builtins::BuiltinRegistry;
+use crate::vm::exec_state::VMExecState;
+use crate::vm::vm_host::VmHost;
+use crate::vm::{VMHostResponse, VerbCall};
 use moor_common::matching::{
     CommandParser, DefaultObjectNameMatcher, DefaultParseCommand, ParseCommandError, ParsedCommand,
     WsMatchEnv,
 };
+use moor_common::tasks::Session;
 
 lazy_static! {
     static ref HUH_SYM: Symbol = Symbol::mk("huh");
@@ -774,13 +775,13 @@ mod tests {
     use moor_var::{Symbol, v_obj};
     use moor_var::{v_int, v_str};
 
-    use crate::builtins::BuiltinRegistry;
     use crate::config::Config;
-    use crate::tasks::sessions::NoopClientSession;
     use crate::tasks::task::Task;
     use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
     use crate::tasks::{ServerOptions, TaskStart};
     use crate::vm::activation::Frame;
+    use crate::vm::builtins::BuiltinRegistry;
+    use moor_common::tasks::NoopClientSession;
 
     struct TestVerb {
         name: Symbol,

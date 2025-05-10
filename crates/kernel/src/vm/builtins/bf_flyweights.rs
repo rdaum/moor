@@ -12,8 +12,8 @@
 //
 
 use crate::bf_declare;
-use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::vm::builtins::BfRet::Ret;
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_common::model::WorldState;
 use moor_compiler::offset_for_builtin;
 use moor_var::{

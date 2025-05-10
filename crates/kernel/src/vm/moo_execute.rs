@@ -12,9 +12,9 @@
 //
 
 use crate::config::FeaturesConfig;
-use crate::vm::ExecutionResult;
 use crate::vm::exec_state::vm_counters;
 use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
+use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
 use moor_common::model::WorldState;

@@ -12,8 +12,8 @@
 //
 
 use crate::rpc_server::RpcServer;
-use moor_kernel::tasks::sessions::SessionError::DeliveryError;
-use moor_kernel::tasks::sessions::SystemControl;
+use moor_common::tasks::SessionError::DeliveryError;
+use moor_common::tasks::SystemControl;
 use moor_var::Obj;
 use rpc_common::{HOST_BROADCAST_TOPIC, HostBroadcastEvent, HostType};
 use std::sync::atomic::Ordering;

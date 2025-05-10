@@ -26,8 +26,8 @@ use serde_json::{self, Value as JsonValue};
 use tracing::warn;
 
 use crate::bf_declare;
-use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::vm::builtins::BfRet::Ret;
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 
 fn strsub(subject: &str, what: &str, with: &str, case_matters: bool) -> String {
     let mut result = String::new();
@@ -503,7 +503,7 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<dyn BuiltinFunction>]) {
 
 #[cfg(test)]
 mod tests {
-    use crate::builtins::bf_strings::{json_value_to_moo, moo_value_to_json, strsub};
+    use crate::vm::builtins::bf_strings::{json_value_to_moo, moo_value_to_json, strsub};
     use moor_var::{Associative, v_int, v_list, v_map, v_str};
     use serde_json::json;
 

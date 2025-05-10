@@ -15,7 +15,7 @@ use std::time::{Duration, SystemTime};
 
 use uuid::Uuid;
 
-use moor_kernel::tasks::sessions::SessionError;
+use moor_common::tasks::SessionError;
 use moor_var::Obj;
 use rpc_common::RpcMessageError;
 

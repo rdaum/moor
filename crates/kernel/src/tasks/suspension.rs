@@ -25,9 +25,9 @@ use uuid::Uuid;
 
 use moor_var::Obj;
 
-use crate::tasks::sessions::{NoopClientSession, Session, SessionFactory};
 use crate::tasks::task::Task;
 use crate::tasks::{TaskDescription, TaskResult, TasksDb};
+use moor_common::tasks::{NoopClientSession, Session, SessionFactory};
 use moor_common::tasks::{SchedulerError, TaskId};
 
 /// State a suspended task sits in inside the `suspended` side of the task queue.

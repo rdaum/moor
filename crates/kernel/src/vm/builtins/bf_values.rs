@@ -12,8 +12,8 @@
 //
 
 use crate::bf_declare;
-use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::vm::builtins::BfRet::Ret;
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use md5::Digest;
 use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{AsByteBuffer, Sequence};

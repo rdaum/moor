@@ -23,9 +23,9 @@ use moor_var::{List, Obj, Symbol, Var};
 
 use crate::config::FeaturesConfig;
 use crate::tasks::TaskHandle;
-use crate::tasks::sessions::Session;
 use moor_common::tasks::SchedulerError;
 use moor_common::tasks::SchedulerError::CompilationError;
+use moor_common::tasks::Session;
 
 /// A handle for talking to the scheduler from the outside world.
 /// This is not meant to be used by running tasks, but by the rpc daemon, tests, etc.

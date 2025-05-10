@@ -26,10 +26,10 @@ use moor_var::{Sequence, Symbol, v_list};
 use moor_var::{v_int, v_none, v_obj, v_str, v_sym_str};
 
 use crate::bf_declare;
-use crate::builtins::BfRet::{Ret, VmInstr};
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
-use crate::tasks::VerbCall;
-use crate::vm::ExecutionResult::DispatchVerb;
+use crate::vm::VerbCall;
+use crate::vm::builtins::BfRet::{Ret, VmInstr};
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::vm::vm_host::ExecutionResult::DispatchVerb;
 
 lazy_static! {
     static ref INITIALIZE_SYM: Symbol = Symbol::mk("initialize");

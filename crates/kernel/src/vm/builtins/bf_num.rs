@@ -18,8 +18,8 @@ use moor_var::{E_ARGS, E_INVARG, E_TYPE, Sequence, Var, Variant};
 use moor_var::{v_float, v_int, v_str};
 
 use crate::bf_declare;
-use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::vm::builtins::BfRet::Ret;
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 
 fn bf_abs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {

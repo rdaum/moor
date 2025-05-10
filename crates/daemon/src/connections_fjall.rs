@@ -16,7 +16,7 @@ use bincode::{Decode, Encode};
 use byteview::ByteView;
 use eyre::{Error, bail};
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
-use moor_kernel::tasks::sessions::SessionError;
+use moor_common::tasks::SessionError;
 use moor_var::{AsByteBuffer, BINCODE_CONFIG, Obj};
 use rpc_common::RpcMessageError;
 use std::collections::HashMap;

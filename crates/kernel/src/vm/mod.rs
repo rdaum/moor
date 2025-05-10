@@ -11,28 +11,17 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! A LambdaMOO 1.8.x compatibl(ish) virtual machine.
-//! Executes opcodes which are essentially 1:1 with LambdaMOO's.
-//! Aims to be semantically identical, so as to be able to run existing LambdaMOO compatible cores
-//! without blocking issues.
-
 use std::time::Duration;
 
 use bincode::{Decode, Encode};
-use byteview::ByteView;
-pub use exec_state::VMExecState;
 pub use exec_state::vm_counters;
-use moor_common::matching::ParsedCommand;
-use moor_common::model::VerbDef;
 use moor_common::tasks::{AbortLimitReason, Exception, TaskId};
-use moor_compiler::{BuiltinId, Name};
-use moor_compiler::{Offset, Program};
-use moor_var::{Error, List, Obj, Symbol, Var};
+use moor_compiler::Name;
+use moor_compiler::Offset;
+use moor_var::{List, Obj, Symbol, Var};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 
-// Exports to the rest of the kernel
-use crate::tasks::VerbCall;
 use crate::vm::activation::Activation;
 
 pub(crate) mod activation;
@@ -41,97 +30,11 @@ pub(crate) mod moo_execute;
 pub(crate) mod vm_call;
 pub(crate) mod vm_unwind;
 
+pub mod builtins;
 mod moo_frame;
+pub mod vm_host;
 #[cfg(test)]
 mod vm_test;
-
-#[derive(Debug, Clone)]
-pub enum TaskSuspend {
-    /// Suspend forever.
-    Never,
-    /// Suspend for a given duration.
-    Timed(Duration),
-    /// Suspend until another task completes (or never exists)
-    WaitTask(TaskId),
-    /// Just commit and resume immediately.
-    Commit,
-    /// Ask the scheduler to ask a worker to do some work, suspend us, and then resume us when
-    /// the work is done.
-    WorkerRequest(Symbol, Vec<Var>),
-}
-
-/// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
-#[derive(Debug, Clone)]
-pub enum ExecutionResult {
-    /// All is well. The task should let the VM continue executing.
-    More,
-    /// Execution of this stack frame is complete with a return value.
-    Complete(Var),
-    /// An error occurred during execution, that we might need to push to the stack and
-    /// potentially resume or unwind, depending on the context.
-    PushError(Error),
-    /// An error occurred during execution, that should definitely be treated as a proper "raise"
-    /// and unwind event unless there's a catch handler in place
-    RaiseError(Error),
-    /// An explicit stack unwind (for a reason other than a return.)
-    Unwind(FinallyReason),
-    /// Explicit return, unwind stack
-    Return(Var),
-    /// An exception was raised during execution.
-    Exception(FinallyReason),
-    /// Create the frames necessary to perform a `pass` up the inheritance chain.
-    DispatchVerbPass(List),
-    /// Begin preparing to call a verb, by looking up the verb and preparing the dispatch.
-    PrepareVerbDispatch {
-        this: Var,
-        verb_name: Symbol,
-        args: List,
-    },
-    /// Perform the verb dispatch, building the stack frame and executing it.
-    DispatchVerb {
-        /// The applicable permissions context.
-        permissions: Obj,
-        /// The requested verb.
-        resolved_verb: VerbDef,
-        /// And its binary
-        binary: ByteView,
-        /// The call parameters that were used to resolve the verb.
-        call: VerbCall,
-        /// The parsed user command that led to this verb dispatch, if any.
-        command: Option<Box<ParsedCommand>>,
-    },
-    /// Request `eval` execution, which is a kind of special activation creation where we've already
-    /// been given the program to execute instead of having to look it up.
-    DispatchEval {
-        /// The permissions context for the eval.
-        permissions: Obj,
-        /// The player who is performing the eval.
-        player: Obj,
-        /// The program to execute.
-        program: Box<Program>,
-    },
-    /// Request dispatch of a builtin function with the given arguments.
-    DispatchBuiltin { builtin: BuiltinId, arguments: List },
-    /// Request start of a new task as a fork, at a given offset into the fork vector of the
-    /// current program. If the duration is None, the task should be started immediately, otherwise
-    /// it should be scheduled to start after the given delay.
-    /// If a Name is provided, the task ID of the new task should be stored in the variable with
-    /// that in the parent activation.
-    TaskStartFork(Option<Duration>, Option<Name>, Offset),
-    /// Request that this task be suspended for a duration of time.
-    /// This leads to the task performing a commit, being suspended for a delay, and then being
-    /// resumed under a new transaction.
-    /// If the duration is None, then the task is suspended indefinitely, until it is killed or
-    /// resumed using `resume()` or `kill_task()`.
-    TaskSuspend(TaskSuspend),
-    /// Request input from the client.
-    TaskNeedInput,
-    /// Rollback the current transaction and restart the task in a new transaction.
-    /// This can happen when a conflict occurs during execution, independent of a commit.
-    TaskRollbackRestart,
-    /// Just rollback and die. Kills all task DB mutations. Output (Session) is optionally committed.
-    TaskRollback(bool),
-}
 
 /// The set of parameters for a VM-requested fork.
 #[derive(Debug, Clone, Encode, Decode)]
@@ -178,4 +81,32 @@ pub enum VMHostResponse {
     CompleteRollback(bool),
     /// A rollback-retry was requested.
     RollbackRetry,
+}
+
+/// Response back to our caller (scheduler) that we would like to be suspended in the manner described.
+#[derive(Debug, Clone)]
+pub enum TaskSuspend {
+    /// Suspend forever.
+    Never,
+    /// Suspend for a given duration.
+    Timed(Duration),
+    /// Suspend until another task completes (or never exists)
+    WaitTask(TaskId),
+    /// Just commit and resume immediately.
+    Commit,
+    /// Ask the scheduler to ask a worker to do some work, suspend us, and then resume us when
+    /// the work is done.
+    WorkerRequest(Symbol, Vec<Var>),
+}
+
+/// The minimum set of information needed to make a *resolution* call for a verb.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct VerbCall {
+    pub verb_name: Symbol,
+    pub location: Var,
+    pub this: Var,
+    pub player: Obj,
+    pub args: List,
+    pub argstr: String,
+    pub caller: Var,
 }

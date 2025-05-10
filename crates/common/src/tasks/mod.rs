@@ -13,11 +13,16 @@
 
 mod errors;
 mod events;
+mod sessions;
+
+pub type TaskId = usize;
 
 pub use errors::{
     AbortLimitReason, CommandError, Exception, SchedulerError, VerbProgramError, WorkerError,
 };
 
 pub use events::{Event, NarrativeEvent, Presentation};
-
-pub type TaskId = usize;
+pub use sessions::{
+    MockClientSession, NoopClientSession, NoopSystemControl, Session, SessionError, SessionFactory,
+    SystemControl,
+};

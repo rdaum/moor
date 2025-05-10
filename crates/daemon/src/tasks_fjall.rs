@@ -108,7 +108,7 @@ impl TasksDb for FjallTasksDB {
 #[cfg(test)]
 mod tests {
     use crate::tasks_fjall::FjallTasksDB;
-    use moor_kernel::tasks::sessions::NoopClientSession;
+    use moor_common::tasks::NoopClientSession;
     use moor_kernel::tasks::{ServerOptions, TaskStart, TasksDb};
     use moor_kernel::{SuspendedTask, Task, WakeCondition};
     use moor_var::SYSTEM_OBJECT;

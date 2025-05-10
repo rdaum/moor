@@ -27,14 +27,12 @@ use moor_common::tasks::{SchedulerError, TaskId};
 use moor_common::util::PerfCounter;
 
 pub mod scheduler;
-pub mod sessions;
 
 pub(crate) mod scheduler_client;
 pub(crate) mod suspension;
 pub(crate) mod task;
 pub mod task_scheduler_client;
 mod tasks_db;
-pub mod vm_host;
 pub mod workers;
 
 pub const DEFAULT_FG_TICKS: usize = 60_000;
@@ -88,18 +86,6 @@ impl TaskHandle {
     pub fn receiver(&self) -> &oneshot::Receiver<Result<TaskResult, SchedulerError>> {
         &self.1
     }
-}
-
-/// The minimum set of information needed to make a *resolution* call for a verb.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct VerbCall {
-    pub verb_name: Symbol,
-    pub location: Var,
-    pub this: Var,
-    pub player: Obj,
-    pub args: List,
-    pub argstr: String,
-    pub caller: Var,
 }
 
 /// External interface description of a task, for purpose of e.g. the queued_tasks() builtin.
@@ -225,13 +211,13 @@ pub mod vm_test_utils {
     use moor_var::{Obj, Var};
     use moor_var::{Symbol, v_obj};
 
-    use crate::builtins::BuiltinRegistry;
     use crate::config::FeaturesConfig;
-    use crate::tasks::VerbCall;
-    use crate::tasks::sessions::Session;
-    use crate::tasks::vm_host::VmHost;
     use crate::vm::VMHostResponse;
+    use crate::vm::VerbCall;
+    use crate::vm::builtins::BuiltinRegistry;
+    use crate::vm::vm_host::VmHost;
     use moor_common::tasks::Exception;
+    use moor_common::tasks::Session;
 
     pub type ExecResult = Result<Var, Exception>;
 
@@ -349,9 +335,9 @@ pub mod scheduler_test_utils {
     use super::{TaskHandle, TaskResult};
     use crate::config::FeaturesConfig;
     use crate::tasks::scheduler_client::SchedulerClient;
-    use crate::tasks::sessions::Session;
     use moor_common::tasks::Exception;
     use moor_common::tasks::SchedulerError::{CommandExecutionError, TaskAbortedException};
+    use moor_common::tasks::Session;
 
     pub type ExecResult = Result<Var, Exception>;
 

@@ -24,8 +24,8 @@ use std::ops::BitOr;
 use std::sync::Mutex;
 
 use crate::bf_declare;
-use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::vm::builtins::BfRet::Ret;
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 
 fn bf_is_member(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
@@ -911,7 +911,7 @@ pub(crate) fn register_bf_list_sets(builtins: &mut [Box<dyn BuiltinFunction>]) {
 
 #[cfg(test)]
 mod tests {
-    use crate::builtins::bf_list_sets::{
+    use crate::vm::builtins::bf_list_sets::{
         perform_pcre_match, perform_pcre_replace, perform_regex_match, substitute,
     };
     use moor_compiler::to_literal;

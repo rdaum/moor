@@ -16,25 +16,26 @@ use lazy_static::lazy_static;
 use std::sync::Arc;
 use thiserror::Error;
 
-use crate::builtins::bf_age_crypto::register_bf_age_crypto;
-use crate::builtins::bf_flyweights::register_bf_flyweights;
-use crate::builtins::bf_list_sets::register_bf_list_sets;
-use crate::builtins::bf_maps::register_bf_maps;
-use crate::builtins::bf_num::register_bf_num;
-use crate::builtins::bf_objects::register_bf_objects;
-use crate::builtins::bf_properties::register_bf_properties;
-use crate::builtins::bf_server::{BfNoop, register_bf_server};
-use crate::builtins::bf_strings::register_bf_strings;
-use crate::builtins::bf_values::register_bf_values;
-use crate::builtins::bf_verbs::register_bf_verbs;
 use crate::config::FeaturesConfig;
-use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::activation::{BfFrame, Frame};
-use crate::vm::{ExecutionResult, VMExecState};
+use crate::vm::builtins::bf_age_crypto::register_bf_age_crypto;
+use crate::vm::builtins::bf_flyweights::register_bf_flyweights;
+use crate::vm::builtins::bf_list_sets::register_bf_list_sets;
+use crate::vm::builtins::bf_maps::register_bf_maps;
+use crate::vm::builtins::bf_num::register_bf_num;
+use crate::vm::builtins::bf_objects::register_bf_objects;
+use crate::vm::builtins::bf_properties::register_bf_properties;
+use crate::vm::builtins::bf_server::{BfNoop, register_bf_server};
+use crate::vm::builtins::bf_strings::register_bf_strings;
+use crate::vm::builtins::bf_values::register_bf_values;
+use crate::vm::builtins::bf_verbs::register_bf_verbs;
+use crate::vm::exec_state::VMExecState;
+use crate::vm::vm_host::ExecutionResult;
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
+use moor_common::tasks::Session;
 use moor_common::util::PerfCounter;
 use moor_compiler::{BUILTINS, BuiltinId};
 use moor_var::Var;
@@ -127,13 +128,13 @@ impl BuiltinRegistry {
         }
     }
 
-    pub fn builtin_for(&self, id: &BuiltinId) -> &dyn BuiltinFunction {
+    pub(crate) fn builtin_for(&self, id: &BuiltinId) -> &dyn BuiltinFunction {
         &*self.builtins[id.0 as usize]
     }
 }
 
 /// The arguments and other state passed to a built-in function.
-pub struct BfCallState<'a> {
+pub(crate) struct BfCallState<'a> {
     /// The name of the invoked function.
     pub(crate) name: Symbol,
     /// Arguments passed to the function.
@@ -193,13 +194,14 @@ impl BfCallState<'_> {
     }
 }
 
-pub trait BuiltinFunction: Sync + Send {
+pub(crate) trait BuiltinFunction: Sync + Send {
+    #[allow(dead_code)]
     fn name(&self) -> &str;
     fn call(&self, bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr>;
 }
 
 /// Return possibilities from a built-in function.
-pub enum BfRet {
+pub(crate) enum BfRet {
     /// Successful return, with a value to be pushed to the value stack.
     Ret(Var),
     /// BF wants to return control back to the VM, with specific instructions to things like
@@ -208,7 +210,7 @@ pub enum BfRet {
 }
 
 #[derive(Debug, Clone, PartialEq, Error)]
-pub enum BfErr {
+pub(crate) enum BfErr {
     #[error("Error in built-in function: {0}")]
     ErrValue(Error),
     #[error("Error in built-in function: {0}")]
@@ -223,7 +225,7 @@ pub enum BfErr {
 macro_rules! bf_declare {
     ( $name:ident, $action:expr ) => {
         paste::item! {
-            pub struct [<Bf $name:camel >] {}
+            pub(crate) struct [<Bf $name:camel >] {}
             impl BuiltinFunction for [<Bf $name:camel >] {
                 fn name(&self) -> &str {
                     return stringify!($name)

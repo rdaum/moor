@@ -25,8 +25,8 @@ use std::io::Read;
 use tracing::{error, warn};
 
 use crate::bf_declare;
-use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::vm::builtins::BfRet::Ret;
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, Sequence};
 use moor_var::{E_INVARG, E_TYPE, Variant};
@@ -180,9 +180,7 @@ fn bf_age_encrypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .and_then(|_| writer.finish())
         .map_err(|e| {
             error!("Failed to write message for encryption: {}", e);
-            BfErr::ErrValue(
-                E_INVARG.msg("age_encrypt() failed to write message for encryption"),
-            )
+            BfErr::ErrValue(E_INVARG.msg("age_encrypt() failed to write message for encryption"))
         })?;
 
     // Base64 encode the encrypted data

@@ -21,7 +21,6 @@ pub use moor_common::tasks::TaskId;
 use std::cell::Cell;
 use std::marker::PhantomData;
 
-pub mod builtins;
 pub mod config;
 pub mod tasks;
 pub mod vm;

@@ -12,7 +12,7 @@
 //
 
 use crate::bf_declare;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
 use moor_compiler::offset_for_builtin;
 use moor_var::{Associative, E_ARGS, E_RANGE, E_TYPE, Sequence};
 use moor_var::{Var, Variant, v_list};

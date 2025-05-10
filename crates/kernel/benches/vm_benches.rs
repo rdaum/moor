@@ -25,16 +25,16 @@ use moor_common::model::VerbArgsSpec;
 use moor_common::model::{BinaryType, VerbFlag};
 use moor_common::model::{WorldState, WorldStateSource};
 use moor_common::tasks::AbortLimitReason;
+use moor_common::tasks::{NoopClientSession, Session};
 use moor_common::util::BitEnum;
 use moor_compiler::{CompileOptions, compile};
 use moor_db::{DatabaseConfig, TxDB};
-use moor_kernel::builtins::BuiltinRegistry;
 use moor_kernel::config::FeaturesConfig;
-use moor_kernel::tasks::VerbCall;
-use moor_kernel::tasks::sessions::{NoopClientSession, Session};
 use moor_kernel::tasks::task_scheduler_client::TaskSchedulerClient;
-use moor_kernel::tasks::vm_host::VmHost;
 use moor_kernel::vm::VMHostResponse;
+use moor_kernel::vm::VerbCall;
+use moor_kernel::vm::builtins::BuiltinRegistry;
+use moor_kernel::vm::vm_host::VmHost;
 use moor_var::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 use moor_var::{List, Symbol, v_obj};
 
@@ -232,9 +232,9 @@ fn opcode_throughput(c: &mut Criterion) {
                             for i in ({1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10})
                             endfor
                           endwhile"#,
-                num_ticks,
-                iters,
-            )    .0
+                       num_ticks,
+                       iters,
+            ).0
         });
     });
     // Measure how costly it is to append to a list

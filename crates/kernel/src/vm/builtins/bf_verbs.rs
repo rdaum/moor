@@ -15,8 +15,8 @@ use strum::EnumCount;
 use tracing::{error, warn};
 
 use crate::bf_declare;
-use crate::builtins::BfRet::Ret;
-use crate::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
+use crate::vm::builtins::BfRet::Ret;
+use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_common::model::WorldStateError;
 use moor_common::model::{ArgSpec, VerbArgsSpec};
 use moor_common::model::{BinaryType, VerbAttrs, VerbFlag};

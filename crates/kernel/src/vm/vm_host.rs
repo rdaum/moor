@@ -25,31 +25,103 @@ use tracing::{debug, error, warn};
 use moor_common::model::{BinaryType, ObjFlag};
 use moor_common::model::{VerbDef, WorldState};
 use moor_common::tasks::{AbortLimitReason, TaskId};
-use moor_compiler::Name;
 use moor_compiler::Program;
+use moor_compiler::{BuiltinId, Name, Offset};
 use moor_compiler::{CompileOptions, compile};
-use moor_var::E_MAXREC;
 use moor_var::Obj;
 use moor_var::Var;
 use moor_var::{AsByteBuffer, List};
+use moor_var::{E_MAXREC, Error};
 use moor_var::{Symbol, v_none};
 
 use crate::PhantomUnsync;
-use crate::builtins::BuiltinRegistry;
 use crate::config::FeaturesConfig;
-use crate::tasks::VerbCall;
-use crate::tasks::sessions::Session;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
+use crate::vm::FinallyReason;
 use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::vm::activation::Frame;
-use crate::vm::exec_state::vm_counters;
+use crate::vm::builtins::BuiltinRegistry;
+use crate::vm::exec_state::{VMExecState, vm_counters};
 use crate::vm::moo_execute::moo_frame_execute;
 use crate::vm::vm_call::{VerbProgram, VmExecParams};
-use crate::vm::{ExecutionResult, Fork, VMHostResponse, VerbExecutionRequest};
-use crate::vm::{FinallyReason, VMExecState};
+use crate::vm::{Fork, VMHostResponse, VerbExecutionRequest};
+use crate::vm::{TaskSuspend, VerbCall};
 use moor_common::matching::ParsedCommand;
+use moor_common::tasks::Session;
 use moor_common::util::PerfTimerGuard;
 
+/// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
+#[derive(Debug, Clone)]
+pub(crate) enum ExecutionResult {
+    /// All is well. The task should let the VM continue executing.
+    More,
+    /// Execution of this stack frame is complete with a return value.
+    Complete(Var),
+    /// An error occurred during execution, that we might need to push to the stack and
+    /// potentially resume or unwind, depending on the context.
+    PushError(Error),
+    /// An error occurred during execution, that should definitely be treated as a proper "raise"
+    /// and unwind event unless there's a catch handler in place
+    RaiseError(Error),
+    /// An explicit stack unwind (for a reason other than a return.)
+    Unwind(FinallyReason),
+    /// Explicit return, unwind stack
+    Return(Var),
+    /// An exception was raised during execution.
+    Exception(FinallyReason),
+    /// Create the frames necessary to perform a `pass` up the inheritance chain.
+    DispatchVerbPass(List),
+    /// Begin preparing to call a verb, by looking up the verb and preparing the dispatch.
+    PrepareVerbDispatch {
+        this: Var,
+        verb_name: Symbol,
+        args: List,
+    },
+    /// Perform the verb dispatch, building the stack frame and executing it.
+    DispatchVerb {
+        /// The applicable permissions context.
+        permissions: Obj,
+        /// The requested verb.
+        resolved_verb: VerbDef,
+        /// And its binary
+        binary: ByteView,
+        /// The call parameters that were used to resolve the verb.
+        call: VerbCall,
+        /// The parsed user command that led to this verb dispatch, if any.
+        command: Option<Box<ParsedCommand>>,
+    },
+    /// Request `eval` execution, which is a kind of special activation creation where we've already
+    /// been given the program to execute instead of having to look it up.
+    DispatchEval {
+        /// The permissions context for the eval.
+        permissions: Obj,
+        /// The player who is performing the eval.
+        player: Obj,
+        /// The program to execute.
+        program: Box<Program>,
+    },
+    /// Request dispatch of a builtin function with the given arguments.
+    DispatchBuiltin { builtin: BuiltinId, arguments: List },
+    /// Request start of a new task as a fork, at a given offset into the fork vector of the
+    /// current program. If the duration is None, the task should be started immediately, otherwise
+    /// it should be scheduled to start after the given delay.
+    /// If a Name is provided, the task ID of the new task should be stored in the variable with
+    /// that in the parent activation.
+    TaskStartFork(Option<Duration>, Option<Name>, Offset),
+    /// Request that this task be suspended for a duration of time.
+    /// This leads to the task performing a commit, being suspended for a delay, and then being
+    /// resumed under a new transaction.
+    /// If the duration is None, then the task is suspended indefinitely, until it is killed or
+    /// resumed using `resume()` or `kill_task()`.
+    TaskSuspend(TaskSuspend),
+    /// Request input from the client.
+    TaskNeedInput,
+    /// Rollback the current transaction and restart the task in a new transaction.
+    /// This can happen when a conflict occurs during execution, independent of a commit.
+    TaskRollbackRestart,
+    /// Just rollback and die. Kills all task DB mutations. Output (Session) is optionally committed.
+    TaskRollback(bool),
+}
 /// A 'host' for running some kind of interpreter / virtual machine inside a running moor task.
 pub struct VmHost {
     /// Where we store current execution state for this host. Includes all activations and the
@@ -367,7 +439,7 @@ impl VmHost {
         VMHostResponse::CompleteAbort
     }
 
-    pub fn run_interpreter(
+    pub(crate) fn run_interpreter(
         &mut self,
         vm_exec_params: &VmExecParams,
         world_state: &mut dyn WorldState,
@@ -435,12 +507,12 @@ impl VmHost {
     }
 
     /// Get a copy of the current VM state, for later restoration.
-    pub fn snapshot_state(&self) -> VMExecState {
+    pub(crate) fn snapshot_state(&self) -> VMExecState {
         self.vm_exec_state.clone()
     }
 
     /// Restore from a snapshot.
-    pub fn restore_state(&mut self, state: &VMExecState) {
+    pub(crate) fn restore_state(&mut self, state: &VMExecState) {
         self.vm_exec_state = state.clone();
     }
 

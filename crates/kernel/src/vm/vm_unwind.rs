@@ -13,9 +13,9 @@
 //
 
 use crate::vm::activation::{Activation, Frame};
-use crate::vm::exec_state::vm_counters;
+use crate::vm::exec_state::{VMExecState, vm_counters};
 use crate::vm::moo_frame::{CatchType, ScopeType};
-use crate::vm::{ExecutionResult, VMExecState};
+use crate::vm::vm_host::ExecutionResult;
 use bincode::{Decode, Encode};
 use moor_common::model::Named;
 use moor_common::model::VerbFlag;
