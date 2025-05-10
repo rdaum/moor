@@ -119,7 +119,7 @@ fn execute(
             world_state,
             task_scheduler_client.clone(),
             session.clone(),
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             config.clone(),
         ) {
             VMHostResponse::ContinueOk => {

@@ -70,7 +70,7 @@ pub enum VerbProgram {
 /// The set of parameters & utilities passed to the VM for execution of a given task.
 pub struct VmExecParams {
     pub task_scheduler_client: TaskSchedulerClient,
-    pub builtin_registry: Arc<BuiltinRegistry>,
+    pub builtin_registry: BuiltinRegistry,
     pub max_stack_depth: usize,
     pub config: FeaturesConfig,
 }

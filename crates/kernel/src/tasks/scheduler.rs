@@ -104,7 +104,7 @@ pub struct Scheduler {
 
     server_options: ServerOptions,
 
-    builtin_registry: Arc<BuiltinRegistry>,
+    builtin_registry: BuiltinRegistry,
 
     system_control: Arc<dyn SystemControl>,
 
@@ -185,7 +185,7 @@ impl Scheduler {
             fg_ticks: DEFAULT_FG_TICKS,
             max_stack_depth: DEFAULT_MAX_STACK_DEPTH,
         };
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         Self {
             version,
             running: false,
@@ -1547,7 +1547,7 @@ impl TaskQ {
         server_options: &ServerOptions,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
-        builtin_registry: Arc<BuiltinRegistry>,
+        builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
     ) -> Result<TaskHandle, SchedulerError> {
         let perfc = sched_counters();
@@ -1672,7 +1672,7 @@ impl TaskQ {
         result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
-        builtin_registry: Arc<BuiltinRegistry>,
+        builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
     ) -> Result<(), SchedulerError> {
         let perfc = sched_counters();
@@ -1758,7 +1758,7 @@ impl TaskQ {
         mut task: Task,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
-        builtin_registry: Arc<BuiltinRegistry>,
+        builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
     ) {
         let perfc = sched_counters();
@@ -1907,7 +1907,7 @@ impl TaskQ {
         return_value: Var,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
-        builtin_registry: Arc<BuiltinRegistry>,
+        builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
     ) -> Var {
         // Task can't resume itself, it couldn't be queued. Builtin should not have sent this

@@ -123,7 +123,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -145,7 +145,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -176,7 +176,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -200,7 +200,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -235,7 +235,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -284,7 +284,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -302,7 +302,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -322,7 +322,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -367,7 +367,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -403,7 +403,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -444,7 +444,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test_call_verb",
             List::mk_list(&[]),
         );
@@ -471,7 +471,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -487,7 +487,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -503,7 +503,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -519,7 +519,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -548,7 +548,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -576,7 +576,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -602,7 +602,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -626,7 +626,7 @@ mod tests {
                          endtry"#;
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session,
@@ -645,7 +645,7 @@ mod tests {
             r#"try 5; except error (E_RANGE) return 1; endtry for x in [1..1] return 5; endfor"#;
         let mut state = world_with_test_program(program);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
 
         let result = call_verb(
             state.as_mut(),
@@ -665,7 +665,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -683,7 +683,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -702,7 +702,7 @@ mod tests {
             .new_world_state()
             .unwrap();
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
 
         let result = call_verb(
             state.as_mut(),
@@ -743,7 +743,7 @@ mod tests {
             ),
         ]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -763,7 +763,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -780,7 +780,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -805,7 +805,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -831,7 +831,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -857,7 +857,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -887,7 +887,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -914,7 +914,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -938,7 +938,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -962,7 +962,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -988,7 +988,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -1008,7 +1008,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -1030,7 +1030,7 @@ mod tests {
         let compiled = compile(program, CompileOptions::default()).unwrap();
         let mut state = world_with_test_programs(&[("test", &compiled)]);
         let session = Arc::new(NoopClientSession::new());
-        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        let builtin_registry = BuiltinRegistry::new();
         let result = call_verb(
             state.as_mut(),
             session.clone(),
@@ -1152,7 +1152,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1167,7 +1167,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1185,7 +1185,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1208,7 +1208,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1227,7 +1227,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1253,7 +1253,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1269,7 +1269,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1285,7 +1285,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1300,7 +1300,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1315,7 +1315,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1339,7 +1339,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1360,7 +1360,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );
@@ -1384,7 +1384,7 @@ mod tests {
         let result = call_verb(
             state.as_mut(),
             session,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             "test",
             List::mk_list(&[]),
         );

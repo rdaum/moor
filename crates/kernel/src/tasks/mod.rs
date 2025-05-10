@@ -224,7 +224,7 @@ pub mod vm_test_utils {
     fn execute<F>(
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
-        builtins: Arc<BuiltinRegistry>,
+        builtins: BuiltinRegistry,
         fun: F,
     ) -> ExecResult
     where
@@ -286,7 +286,7 @@ pub mod vm_test_utils {
     pub fn call_verb(
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
-        builtins: Arc<BuiltinRegistry>,
+        builtins: BuiltinRegistry,
         verb_name: &str,
         args: List,
     ) -> ExecResult {
@@ -315,7 +315,7 @@ pub mod vm_test_utils {
     pub fn call_eval_builtin(
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
-        builtins: Arc<BuiltinRegistry>,
+        builtins: BuiltinRegistry,
         player: Obj,
         program: Box<Program>,
     ) -> ExecResult {

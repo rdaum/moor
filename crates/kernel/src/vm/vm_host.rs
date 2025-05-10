@@ -272,7 +272,7 @@ impl VmHost {
         world_state: &mut dyn WorldState,
         task_scheduler_client: TaskSchedulerClient,
         session: Arc<dyn Session>,
-        builtin_registry: Arc<BuiltinRegistry>,
+        builtin_registry: BuiltinRegistry,
         config: FeaturesConfig,
     ) -> VMHostResponse {
         let counters = vm_counters();

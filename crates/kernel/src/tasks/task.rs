@@ -125,7 +125,7 @@ impl Task {
         task_scheduler_client: &TaskSchedulerClient,
         session: Arc<dyn Session>,
         mut world_state: Box<dyn WorldState>,
-        builtin_registry: Arc<BuiltinRegistry>,
+        builtin_registry: BuiltinRegistry,
         config: Arc<Config>,
     ) {
         while task.vm_host.is_running() {
@@ -162,7 +162,7 @@ impl Task {
         task_scheduler_client: &TaskSchedulerClient,
         session: Arc<dyn Session>,
         mut world_state: Box<dyn WorldState>,
-        builtin_registry: Arc<BuiltinRegistry>,
+        builtin_registry: BuiltinRegistry,
         config: FeaturesConfig,
     ) -> Option<(Self, Box<dyn WorldState>)> {
         let perfc = sched_counters();
@@ -921,7 +921,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -946,7 +946,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -971,7 +971,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -1006,7 +1006,7 @@ mod tests {
             &task_scheduler_client,
             session.clone(),
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -1027,7 +1027,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
         let (task_id, msg) = control_receiver.recv().unwrap();
@@ -1050,7 +1050,7 @@ mod tests {
             &task_scheduler_client,
             session.clone(),
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -1072,7 +1072,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -1108,7 +1108,7 @@ mod tests {
                 &task_scheduler_client,
                 session,
                 tx,
-                Arc::new(BuiltinRegistry::new()),
+                BuiltinRegistry::new(),
                 Arc::new(Config::default()),
             );
         });
@@ -1157,7 +1157,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -1190,7 +1190,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -1221,7 +1221,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -1253,7 +1253,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 
@@ -1293,7 +1293,7 @@ mod tests {
             &task_scheduler_client,
             session,
             tx,
-            Arc::new(BuiltinRegistry::new()),
+            BuiltinRegistry::new(),
             Arc::new(Config::default()),
         );
 

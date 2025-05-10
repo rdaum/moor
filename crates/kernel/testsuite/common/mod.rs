@@ -108,7 +108,7 @@ pub fn run_as_verb(db: &dyn Database, expression: &str) -> ExecResult {
     let verb_uuid = Uuid::new_v4().to_string();
     compile_verbs(db, &[(&verb_uuid, &binary)]);
     let mut state = db.new_world_state().unwrap();
-    let builtin_registry = Arc::new(BuiltinRegistry::new());
+    let builtin_registry = BuiltinRegistry::new();
     let result = vm_test_utils::call_verb(
         state.as_mut(),
         Arc::new(NoopClientSession::new()),
@@ -129,7 +129,7 @@ pub fn eval(
 ) -> eyre::Result<ExecResult> {
     let binary = compile(expression, CompileOptions::default())?;
     let mut state = db.new_world_state()?;
-    let builtin_registry = Arc::new(BuiltinRegistry::new());
+    let builtin_registry = BuiltinRegistry::new();
     let result =
         vm_test_utils::call_eval_builtin(state.as_mut(), session, builtin_registry, player, binary);
     state.commit()?;

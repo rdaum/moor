@@ -94,6 +94,7 @@ pub fn bf_perf_counters() -> Arc<BfCounters> {
 }
 
 /// The bundle of builtins are stored here, and passed around globally.
+#[derive(Clone)]
 pub struct BuiltinRegistry {
     // The set of built-in functions, indexed by their Name offset in the variable stack.
     pub(crate) builtins: Arc<Vec<Box<BuiltinFunction>>>,
