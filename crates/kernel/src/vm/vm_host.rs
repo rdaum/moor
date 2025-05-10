@@ -41,14 +41,13 @@ use crate::vm::FinallyReason;
 use crate::vm::VMHostResponse::{AbortLimit, ContinueOk, DispatchFork, Suspend};
 use crate::vm::activation::Frame;
 use crate::vm::builtins::BuiltinRegistry;
-use crate::vm::exec_state::{VMExecState, vm_counters};
+use crate::vm::exec_state::VMExecState;
 use crate::vm::moo_execute::moo_frame_execute;
 use crate::vm::vm_call::{VerbProgram, VmExecParams};
 use crate::vm::{Fork, VMHostResponse, VerbExecutionRequest};
 use crate::vm::{TaskSuspend, VerbCall};
 use moor_common::matching::ParsedCommand;
 use moor_common::tasks::Session;
-use moor_common::util::PerfTimerGuard;
 
 /// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
 #[derive(Debug, Clone)]
@@ -265,7 +264,6 @@ impl VmHost {
         builtin_registry: BuiltinRegistry,
         config: FeaturesConfig,
     ) -> VMHostResponse {
-        let counters = vm_counters();
         self.vm_exec_state.task_id = task_id;
 
         let exec_params = VmExecParams {
@@ -330,8 +328,6 @@ impl VmHost {
                     continue;
                 }
                 ExecutionResult::DispatchVerb(exec_request) => {
-                    let _t = PerfTimerGuard::new(&counters.start_dispatch_verb);
-
                     self.vm_exec_state.exec_call_request(exec_request);
                     return ContinueOk;
                 }
@@ -438,8 +434,6 @@ impl VmHost {
 
         let (result, new_tick_count) = match &mut activation.frame {
             Frame::Moo(fr) => {
-                let perfc = vm_counters();
-                let _t = PerfTimerGuard::new(&perfc.opcode_execution);
                 let result = moo_frame_execute(
                     tick_slice,
                     &mut tick_count,

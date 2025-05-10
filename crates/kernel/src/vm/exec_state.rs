@@ -205,8 +205,6 @@ pub struct VmCounters {
     pub unwind_stack: PerfCounter,
     pub get_property: PerfCounter,
     pub find_line_no: PerfCounter,
-    pub opcode_execution: PerfCounter,
-    pub start_dispatch_verb: PerfCounter,
     pub prepare_verb_activation: PerfCounter,
 }
 
@@ -221,8 +219,6 @@ impl VmCounters {
             unwind_stack: PerfCounter::new("unwind_stack"),
             get_property: PerfCounter::new("get_property"),
             find_line_no: PerfCounter::new("find_line_no"),
-            opcode_execution: PerfCounter::new("opcode_execution"),
-            start_dispatch_verb: PerfCounter::new("start_dispatch_verb"),
             prepare_verb_activation: PerfCounter::new("prepare_verb_activation"),
         }
     }
@@ -237,8 +233,6 @@ impl VmCounters {
             &self.unwind_stack,
             &self.get_property,
             &self.find_line_no,
-            &self.opcode_execution,
-            &self.start_dispatch_verb,
             &self.prepare_verb_activation,
         ]
     }
