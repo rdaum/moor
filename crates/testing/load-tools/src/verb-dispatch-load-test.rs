@@ -101,9 +101,9 @@ try
     add_property(player, "test_objects", {}, {player, "rw"});
     notify(player, "Added test_objects property");
     for i in [1..num_objects]
-        let obj = create(player);
-        player.test_objects = {@player.test_objects, obj};
-        notify(player, "Created object: " + toliteral(obj));
+        let object = create(player);
+        player.test_objects = {@player.test_objects, object};
+        notify(player, "Created object: " + toliteral(object));
     endfor
     add_verb(player, {player, "rx", "invoke_load_test"}, {"this", "none", "this"});
     add_verb(player, {player, "rx", "load_test"}, {"this", "none", "this"});
@@ -116,8 +116,8 @@ notify(player, "Initialized load test objects");
 const LOAD_TEST_INVOKE_VERB: &str = r#"
 let num_verb_invocations = args[1];
 for i in [1..num_verb_invocations]
-    for obj in (player.test_objects)
-        obj:load_test();
+    for object in (player.test_objects)
+        object:load_test();
     endfor
 endfor
 "#;

@@ -35,6 +35,33 @@ allow_warnings = true
 need_stdout = true
 env.RUST_BACKTRACE = "full"
 
+[jobs.daemon-debug]
+command = [
+    "cargo",
+    "run",
+    "-p",
+    "moor-daemon",
+    "--",
+    "development.db",
+    "--import",
+    "JHCore-DEV-2.db",
+    "--export",
+    "development-export",
+    "--import-format",
+    "textdump",
+    "--export-format",
+    "objdef",
+    "--checkpoint-interval-seconds",
+    "360",
+    "--use-boolean-returns",
+    "false",
+    "--custom-errors",
+    "true",
+]
+allow_warnings = true
+need_stdout = true
+env.RUST_BACKTRACE = "full"
+
 [jobs.telnet]
 command = ["cargo", "run", "-p", "moor-telnet-host"]
 allow_warnings = true
