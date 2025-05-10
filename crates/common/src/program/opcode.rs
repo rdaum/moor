@@ -11,9 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::builtins::BuiltinId;
-use crate::labels::{Label, Offset};
-use crate::names::Name;
+use crate::program::builtins::BuiltinId;
+use crate::program::labels::{Label, Offset};
+use crate::program::names::Name;
 use bincode::{Decode, Encode};
 use moor_var::VarType;
 use moor_var::{ErrorCode, Obj};
@@ -194,12 +194,12 @@ pub struct ScatterArgs {
 
 #[cfg(test)]
 mod tests {
-    use crate::names::Name;
-    use crate::{Label, Offset};
+    use crate::program::labels::{Label, Offset};
+    use crate::program::names::Name;
+    use crate::program::opcode::Op;
 
     #[test]
     fn size_opcode() {
-        use crate::opcode::Op;
         use std::mem::size_of;
         assert_eq!(size_of::<Op>(), 16);
         assert_eq!(size_of::<Name>(), 2);

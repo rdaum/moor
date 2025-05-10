@@ -13,52 +13,29 @@
 
 #[macro_use]
 extern crate pest_derive;
-pub use names::Names;
-
-use strum::{Display, EnumCount, EnumIter, FromRepr};
+pub use moor_common::program::names::Names;
 
 mod ast;
-mod builtins;
 mod codegen;
 mod decompile;
-mod labels;
 mod parse;
 mod unparse;
 
 mod codegen_tests;
-mod names;
 mod objdef;
-mod opcode;
-mod program;
 
-pub use crate::builtins::{ArgCount, ArgType, BUILTINS, Builtin, BuiltinId, offset_for_builtin};
 pub use crate::codegen::compile;
 pub use crate::decompile::program_to_tree;
-pub use crate::labels::{JumpLabel, Label, Offset};
-pub use crate::names::{Name, UnboundNames};
 pub use crate::objdef::{
     ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition,
     compile_object_definitions,
 };
-pub use crate::opcode::{Op, ScatterLabel};
 pub use crate::parse::CompileOptions;
-pub use crate::program::{EMPTY_PROGRAM, Program};
 pub use crate::unparse::{to_literal, to_literal_objsub, unparse};
-
-/// The set of known variable names that are always set for every verb invocation.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FromRepr, EnumCount, Display, EnumIter)]
-#[repr(usize)]
-#[allow(non_camel_case_types, non_snake_case)]
-pub enum GlobalName {
-    player,
-    this,
-    caller,
-    verb,
-    args,
-    argstr,
-    dobj,
-    dobjstr,
-    prepstr,
-    iobj,
-    iobjstr,
-}
+pub use moor_common::program::builtins::{
+    ArgCount, ArgType, BUILTINS, Builtin, BuiltinId, offset_for_builtin,
+};
+pub use moor_common::program::labels::{JumpLabel, Label, Offset};
+pub use moor_common::program::names::UnboundNames;
+pub use moor_common::program::opcode::{Op, ScatterLabel};
+pub use moor_common::program::program::{EMPTY_PROGRAM, Program};

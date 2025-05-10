@@ -11,15 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
-use crate::{Name, ast};
+use moor_common::program::names::{Name, UnboundName};
 use moor_common::util::quote_str;
 use moor_var::{Obj, Sequence, Var, Variant};
 use std::collections::HashMap;
-
-use crate::names::UnboundName;
 
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]

@@ -17,6 +17,7 @@ use shadow_rs::shadow;
 
 pub mod matching;
 pub mod model;
+pub mod program;
 pub mod tasks;
 pub mod util;
 

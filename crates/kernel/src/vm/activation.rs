@@ -23,9 +23,8 @@ use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbDef;
 use moor_common::model::{BinaryType, VerbFlag};
 use moor_common::util::{BitEnum, PerfTimerGuard};
-use moor_compiler::Name;
+use moor_compiler::BuiltinId;
 use moor_compiler::Program;
-use moor_compiler::{BuiltinId, GlobalName};
 use moor_var::Obj;
 use moor_var::{AsByteBuffer, Symbol};
 use moor_var::{Error, v_empty_str};
@@ -37,6 +36,7 @@ use crate::vm::moo_frame::MooStackFrame;
 use crate::vm::vm_call::VerbProgram;
 use crate::vm_counters;
 use moor_common::matching::ParsedCommand;
+use moor_common::program::names::{GlobalName, Name};
 
 lazy_static! {
     static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");

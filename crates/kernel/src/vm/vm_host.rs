@@ -26,7 +26,7 @@ use moor_common::model::{BinaryType, ObjFlag};
 use moor_common::model::{VerbDef, WorldState};
 use moor_common::tasks::{AbortLimitReason, TaskId};
 use moor_compiler::Program;
-use moor_compiler::{BuiltinId, Name, Offset};
+use moor_compiler::{BuiltinId, Offset};
 use moor_compiler::{CompileOptions, compile};
 use moor_var::Obj;
 use moor_var::Var;
@@ -47,6 +47,7 @@ use crate::vm::vm_call::{VerbProgram, VmExecParams};
 use crate::vm::{Fork, VMHostResponse, VerbExecutionRequest};
 use crate::vm::{TaskSuspend, VerbCall};
 use moor_common::matching::ParsedCommand;
+use moor_common::program::names::Name;
 use moor_common::tasks::Session;
 
 /// Possible outcomes from VM execution inner loop, which are used to determine what to do next.

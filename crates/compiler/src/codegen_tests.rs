@@ -14,12 +14,12 @@
 #[cfg(test)]
 mod tests {
     use crate::CompileOptions;
-    use crate::builtins::BUILTINS;
     use crate::codegen::compile;
-    use crate::labels::{Label, Offset};
-    use crate::opcode::Op::*;
-    use crate::opcode::{ForSequenceOperand, ScatterArgs, ScatterLabel};
     use moor_common::model::CompileError;
+    use moor_common::program::builtins::BUILTINS;
+    use moor_common::program::labels::{Label, Offset};
+    use moor_common::program::opcode::Op::*;
+    use moor_common::program::opcode::{ForSequenceOperand, ScatterArgs, ScatterLabel};
     use moor_var::SYSTEM_OBJECT;
     use moor_var::Symbol;
     use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RANGE, Obj};

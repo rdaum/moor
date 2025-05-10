@@ -26,19 +26,19 @@ use crate::Op::{
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
-use crate::builtins::BUILTINS;
-use crate::labels::{JumpLabel, Label, Offset};
-use crate::names::{Name, Names, UnboundName};
-use crate::opcode::Op::Jump;
-use crate::opcode::{
+use crate::parse::moo::Rule;
+use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
+use moor_common::model::CompileError::InvalidAssignemnt;
+use moor_common::model::{CompileContext, CompileError};
+use moor_common::program::builtins::BUILTINS;
+use moor_common::program::labels::{JumpLabel, Label, Offset};
+use moor_common::program::names::{Name, Names, UnboundName};
+use moor_common::program::opcode::Op::Jump;
+use moor_common::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
     ScatterLabel,
 };
-use crate::parse::moo::Rule;
-use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
-use crate::program::Program;
-use moor_common::model::CompileError::InvalidAssignemnt;
-use moor_common::model::{CompileContext, CompileError};
+use moor_common::program::program::Program;
 
 pub struct Loop {
     loop_name: Option<Name>,

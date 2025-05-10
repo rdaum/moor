@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::names::Name;
+use crate::program::names::Name;
 use bincode::{Decode, Encode};
 
 /// A JumpLabel is what a labels resolve to in the program.

@@ -11,25 +11,24 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_var::{Symbol, Var, v_int, v_none, v_obj};
-use moor_var::{Variant, v_float};
-use std::collections::{HashMap, VecDeque};
-
 use crate::BUILTINS;
 use crate::ast::Expr::ComprehendRange;
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
     StmtNode, UnaryOp,
 };
-use crate::builtins::BuiltinId;
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
-use crate::labels::{JumpLabel, Label};
-use crate::names::{Name, UnboundName, UnboundNames};
-use crate::opcode::{
+use crate::parse::Parse;
+use moor_common::program::builtins::BuiltinId;
+use moor_common::program::labels::{JumpLabel, Label};
+use moor_common::program::names::{Name, UnboundName, UnboundNames};
+use moor_common::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterLabel,
 };
-use crate::parse::Parse;
-use crate::program::Program;
+use moor_common::program::program::Program;
+use moor_var::{Symbol, Var, v_int, v_none, v_obj};
+use moor_var::{Variant, v_float};
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {

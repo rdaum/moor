@@ -29,18 +29,17 @@ use pest::pratt_parser::{Assoc, Op, PrattParser};
 use moor_var::Obj;
 use moor_var::{v_float, v_int, v_obj, v_str, v_string};
 
-use crate::Name;
 use crate::ast::Arg::{Normal, Splice};
 use crate::ast::StmtNode::Scope;
 use crate::ast::{
     Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
     StmtNode, UnaryOp,
 };
-use crate::names::{Names, UnboundName, UnboundNames};
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
 use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
 use moor_common::model::{CompileContext, CompileError};
+use moor_common::program::names::{Name, Names, UnboundName, UnboundNames};
 
 pub mod moo {
     #[derive(Parser)]
@@ -1483,10 +1482,10 @@ mod tests {
         BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
         StmtNode, UnaryOp, assert_trees_match_recursive,
     };
-    use crate::names::UnboundName;
     use crate::parse::{parse_program, unquote_str};
     use crate::unparse::annotate_line_numbers;
     use moor_common::model::CompileError;
+    use moor_common::program::names::UnboundName;
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()

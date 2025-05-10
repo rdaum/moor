@@ -11,13 +11,34 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::GlobalName;
-use crate::names::Binding::{Named, Register};
+use crate::model::CompileError;
+use crate::program::names::Binding::{Named, Register};
 use bincode::{Decode, Encode};
-use moor_common::model::CompileError;
 use moor_var::Symbol;
 use std::collections::HashMap;
-use strum::IntoEnumIterator;
+use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
+
+/// A Name is a unique identifier for a variable in the program's environment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Hash)]
+pub struct Name(pub u16);
+
+/// The set of known variable names that are always set for every verb invocation.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FromRepr, EnumCount, Display, EnumIter)]
+#[repr(usize)]
+#[allow(non_camel_case_types, non_snake_case)]
+pub enum GlobalName {
+    player,
+    this,
+    caller,
+    verb,
+    args,
+    argstr,
+    dobj,
+    dobjstr,
+    prepstr,
+    iobj,
+    iobjstr,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UnboundNames {
@@ -35,8 +56,8 @@ pub enum Binding {
 impl Binding {
     pub fn to_symbol(&self) -> Symbol {
         match self {
-            Binding::Named(sym) => *sym,
-            Binding::Register(r) => Symbol::mk(&format!("<register_{}>", r)),
+            Named(sym) => *sym,
+            Register(r) => Symbol::mk(&format!("<register_{}>", r)),
         }
     }
 }
@@ -256,10 +277,6 @@ impl UnboundNames {
     }
 }
 
-/// A Name is a unique identifier for a variable in the program's environment.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Hash)]
-pub struct Name(pub u16);
-
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct Names {
     /// The set of bound variables and their names.
@@ -347,7 +364,7 @@ impl Names {
 
 #[cfg(test)]
 mod tests {
-    use crate::UnboundNames;
+    use crate::program::names::UnboundNames;
 
     /// Verify simple binding of variables with just one scope.
     #[test]

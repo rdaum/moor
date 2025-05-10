@@ -17,8 +17,8 @@ use std::fmt::Display;
 use moor_var::Var;
 
 /// The abstract syntax tree produced by the parser and converted by codegen into opcodes.
-use crate::names::UnboundName;
-use crate::opcode::Op;
+use moor_common::program::names::UnboundName;
+use moor_common::program::opcode::Op;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Arg {

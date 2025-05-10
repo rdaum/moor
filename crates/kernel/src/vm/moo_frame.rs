@@ -17,9 +17,9 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
+use moor_common::program::names::{GlobalName, Name};
 use moor_common::util::{BitArray, Bitset16, PerfTimerGuard};
-use moor_compiler::Name;
-use moor_compiler::{GlobalName, Label, Op, Program};
+use moor_compiler::{Label, Op, Program};
 use moor_var::{Error, Var, v_none};
 
 /// The MOO stack-frame specific portions of the activation:

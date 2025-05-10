@@ -11,10 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::labels::{JumpLabel, Label};
-use crate::names::{Name, Names};
-use crate::opcode::{ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs};
-use crate::unparse::to_literal;
+use crate::program::labels::{JumpLabel, Label};
+use crate::program::names::{Name, Names};
+use crate::program::opcode::{
+    ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
+};
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use lazy_static::lazy_static;
@@ -99,7 +100,7 @@ impl Display for Program {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write literals indexed by their offset #
         for (i, l) in self.literals.iter().enumerate() {
-            writeln!(f, "L{}: {}", i, to_literal(l))?;
+            writeln!(f, "L{}: {:?}", i, l)?;
         }
 
         // Write jump labels indexed by their offset & showing position & optional name
