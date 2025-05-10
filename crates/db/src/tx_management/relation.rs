@@ -16,10 +16,11 @@
 use crate::tx_management::relation_tx::{OpType, RelationTransaction, WorkingSet};
 use crate::tx_management::{Canonical, Error, Provider, SizedCache, Timestamp, Tx};
 use ahash::AHasher;
+use minstant::Instant;
 use moor_var::Symbol;
 use std::hash::{BuildHasherDefault, Hash};
 use std::sync::{Arc, RwLock, RwLockWriteGuard};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq)]

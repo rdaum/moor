@@ -21,6 +21,7 @@ use crate::ws_transaction::WorldStateTransaction;
 use crate::{BytesHolder, CommitSet, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
+use minstant::Instant;
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{Obj, Symbol, Var};
@@ -28,7 +29,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tempfile::TempDir;
 use tracing::{error, warn};
 

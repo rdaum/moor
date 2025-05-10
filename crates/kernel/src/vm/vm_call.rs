@@ -22,6 +22,7 @@ use crate::vm::vm_host::{ExecutionResult, decode_program};
 use crate::vm::vm_unwind::FinallyReason;
 
 use lazy_static::lazy_static;
+use minstant::Instant;
 use moor_common::matching::ParsedCommand;
 use moor_common::model::VerbDef;
 use moor_common::model::WorldState;
@@ -34,7 +35,6 @@ use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_var::{List, Obj};
 use moor_var::{Var, v_int, v_obj};
 use std::sync::Arc;
-use std::time::Instant;
 
 lazy_static! {
     static ref LIST_SYM: Symbol = Symbol::mk("list");

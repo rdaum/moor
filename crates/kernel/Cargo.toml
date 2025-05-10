@@ -62,6 +62,7 @@ crossbeam-channel.workspace = true
 fast-counter.workspace = true
 lazy_static.workspace = true
 libc.workspace = true
+minstant.workspace = true
 oneshot.workspace = true
 semver.workspace = true
 serde.workspace = true

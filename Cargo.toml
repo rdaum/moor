@@ -119,6 +119,7 @@ im = "15.1.0"
 indexmap = "2.9"
 itertools = "0.14"
 lazy_static = "1.5"
+minstant = { version = "0.1", features = ["fallback-coarse"] }
 num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
 semver = "1.0"

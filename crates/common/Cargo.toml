@@ -25,6 +25,7 @@ enum-primitive-derive.workspace = true
 fast-counter.workspace = true
 itertools.workspace = true
 lazy_static.workspace = true
+minstant.workspace = true
 num-traits.workspace = true
 serde.workspace = true
 shadow-rs.workspace = true

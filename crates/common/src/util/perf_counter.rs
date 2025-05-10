@@ -12,8 +12,8 @@
 //
 
 use fast_counter::ConcurrentCounter;
+use minstant::Instant;
 use moor_var::Symbol;
-use std::time::Instant;
 
 pub struct PerfCounter {
     pub operation: Symbol,

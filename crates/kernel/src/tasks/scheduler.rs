@@ -15,13 +15,14 @@ use ahash::AHasher;
 use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use lazy_static::lazy_static;
+use minstant::Instant;
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::yield_now;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
