@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::yield_now;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use moor_common::model::{CommitResult, Perms};
@@ -208,7 +208,6 @@ impl Scheduler {
     }
 
     /// Execute the scheduler loop, run from the server process.
-    #[instrument(skip(self, bg_session_factory))]
     pub fn run(mut self, bg_session_factory: Arc<dyn SessionFactory>) {
         // Rehydrate suspended tasks.
         self.task_q.suspended.load_tasks(bg_session_factory);
@@ -319,7 +318,6 @@ impl Scheduler {
     /// Start a transaction, match the object name and verb name, and if it exists and the
     /// permissions are correct, program the verb with the given code.
     // TODO: this probably doesn't belong on scheduler
-    #[instrument(skip(self))]
     fn program_verb(
         &self,
         player: &Obj,
@@ -478,7 +476,6 @@ impl Scheduler {
             } => {
                 // Validate that the given input request is valid, and if so, resume the task, sending it
                 // the given input, clearing the input request out.
-                trace!(?input_request_id, ?input, "Received input for task");
 
                 // Find the task that requested this input, if any
                 let Some(sr) = task_q
@@ -910,7 +907,6 @@ impl Scheduler {
 
     /// Handle task control messages inbound from tasks.
     /// Note: this function should never be allowed to panic, as it is called from the scheduler main loop.
-    #[instrument(skip(self))]
     fn handle_task_msg(&mut self, task_id: TaskId, msg: TaskControlMsg) {
         let counters = sched_counters();
         let _t = PerfTimerGuard::new(&counters.handle_task_msg);
@@ -927,13 +923,11 @@ impl Scheduler {
                     warn!("Could not commit session; aborting task");
                     return task_q.send_task_result(task_id, Err(TaskAbortedError));
                 };
-                trace!(?task_id, result = ?value, "Task succeeded");
                 task_q.send_task_result(task_id, Ok(value))
             }
             TaskControlMsg::TaskConflictRetry(task) => {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.task_conflict_retry);
-                trace!(?task_id, "Task retrying due to conflict");
 
                 // Ask the task to restart itself, using its stashed original start info, but with
                 // a brand new transaction.
@@ -945,15 +939,11 @@ impl Scheduler {
                     self.config.clone(),
                 );
             }
-            TaskControlMsg::TaskVerbNotFound(this, verb) => {
-                // I'd make this 'warn' but `do_command` gets invoked for every command and
-                // many cores don't have it at all. So it would just be way too spammy.
-                trace!(this = ?this, ?verb, ?task_id, "Verb not found, task cancelled");
+            TaskControlMsg::TaskVerbNotFound(..) => {
                 task_q.send_task_result(task_id, Err(TaskAbortedError));
             }
             TaskControlMsg::TaskCommandError(parse_command_error) => {
                 // This is a common occurrence, so we don't want to log it at warn level.
-                trace!(?task_id, error = ?parse_command_error, "command parse error");
                 task_q.send_task_result(task_id, Err(CommandExecutionError(parse_command_error)));
             }
             TaskControlMsg::TaskAbortCancelled => {
@@ -1015,7 +1005,6 @@ impl Scheduler {
             TaskControlMsg::TaskException(exception) => {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.task_exception);
-                debug!(?task_id, finally_reason = ?exception, "Task threw exception");
 
                 let Some(task) = task_q.active.get_mut(&task_id) else {
                     warn!(task_id, "Task not found for abort");
@@ -1045,8 +1034,6 @@ impl Scheduler {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.fork_task);
 
-                trace!(?task_id,  delay=?fork_request.delay, "Task requesting fork");
-
                 // Task has requested a fork. Dispatch it and reply with the new task id.
                 // Gotta dump this out til we exit the loop tho, since self.tasks is already
                 // borrowed here.
@@ -1062,10 +1049,6 @@ impl Scheduler {
             TaskControlMsg::TaskSuspend(wake_condition, task) => {
                 let perfc = sched_counters();
                 let _t = PerfTimerGuard::new(&perfc.suspend_task);
-                debug!(
-                    task_id,
-                    "Handling task suspension until {:?}", wake_condition
-                );
                 // Task is suspended. The resume time (if any) is the system time at which
                 // the scheduler should try to wake us up.
 
@@ -1113,8 +1096,6 @@ impl Scheduler {
                 task_q
                     .suspended
                     .add_task(wake_condition, task, tc.session, tc.result_sender);
-
-                debug!(task_id, "Task suspended");
             }
             TaskControlMsg::TaskRequestInput(task) => {
                 // Task has gone into suspension waiting for input from the client.
@@ -1143,8 +1124,6 @@ impl Scheduler {
                     tc.session,
                     tc.result_sender,
                 );
-
-                trace!(?task_id, "Task suspended waiting for input");
             }
 
             TaskControlMsg::RequestTasks(reply) => {
@@ -1414,10 +1393,8 @@ impl Scheduler {
                         return;
                     };
 
-                    trace!("Creating textdump...");
                     let textdump = make_textdump(loader_client.as_ref(), version_string);
 
-                    debug!(?textdump_path, "Writing textdump..");
                     let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
                     if let Err(e) = writer.write_textdump(&textdump) {
                         error!(?e, "Could not write textdump");
@@ -1438,7 +1415,6 @@ impl Scheduler {
 
         Ok(())
     }
-    #[instrument(skip(self, session))]
     fn process_fork_request(
         &mut self,
         fork_request: Box<Fork>,
@@ -1527,7 +1503,6 @@ impl Scheduler {
 
 impl TaskQ {
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, control_sender, database, session, builtin_registry))]
     fn start_task_thread(
         &mut self,
         task_id: TaskId,
@@ -1621,13 +1596,11 @@ impl TaskQ {
         std::thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
-                trace!(?task_id, "Starting up task");
                 // Start the db transaction, which will initially be used to resolve the verb before the task
                 // starts executing.
                 if !task.setup_task_start(&control_sender, world_state.as_mut()) {
                     // Log level should be low here as this happens on every command if `do_command`
                     // is not found.
-                    trace!(task_start = ?task.task_start, task_id, "Could not setup task start");
                     return;
                 }
                 task.retry_state = task.vm_host.snapshot_state();
@@ -1640,7 +1613,6 @@ impl TaskQ {
                     builtin_registry,
                     config,
                 );
-                trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");
 
@@ -1648,14 +1620,6 @@ impl TaskQ {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(
-        self,
-        result_sender,
-        control_sender,
-        database,
-        session,
-        builtin_registry
-    ))]
     fn resume_task_thread(
         &mut self,
         mut task: Task,
@@ -1715,7 +1679,6 @@ impl TaskQ {
                     builtin_registry,
                     config,
                 );
-                trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");
 
@@ -1744,7 +1707,6 @@ impl TaskQ {
         }
     }
 
-    #[instrument(skip(self, control_sender, builtin_registry, database))]
     fn retry_task(
         &mut self,
         mut task: Task,
@@ -1828,12 +1790,10 @@ impl TaskQ {
                     builtin_registry,
                     config,
                 );
-                trace!(?task_id, "Completed task");
             })
             .expect("Could not spawn task thread");
     }
 
-    #[instrument(skip(self))]
     fn kill_task(&mut self, victim_task_id: TaskId, sender_permissions: Perms) -> Var {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.kill_task);
@@ -1890,7 +1850,6 @@ impl TaskQ {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, control_sender, database, builtin_registry))]
     fn resume_task(
         &mut self,
         requesting_task_id: TaskId,
@@ -1947,7 +1906,6 @@ impl TaskQ {
         v_none()
     }
 
-    #[instrument(skip(self))]
     fn disconnect_task(&mut self, disconnect_task_id: TaskId, player: &Obj) {
         let Some(task) = self.active.get_mut(&disconnect_task_id) else {
             warn!(task = disconnect_task_id, "Disconnecting task not found");

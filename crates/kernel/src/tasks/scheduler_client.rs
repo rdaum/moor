@@ -14,7 +14,6 @@
 use crossbeam_channel::Sender;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{instrument, trace};
 use uuid::Uuid;
 
 use moor_common::model::{ObjectRef, PropDef, PropPerms, VerbDef, VerbDefs};
@@ -41,7 +40,6 @@ impl SchedulerClient {
     }
 
     /// Submit a command to the scheduler for execution.
-    #[instrument(skip(self, session))]
     pub fn submit_command_task(
         &self,
         handler_object: &Obj,
@@ -49,7 +47,6 @@ impl SchedulerClient {
         command: &str,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
-        trace!(?player, ?command, "Command submitting");
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitCommandTask {
@@ -69,7 +66,6 @@ impl SchedulerClient {
     /// Submit a verb task to the scheduler for execution.
     /// (This path is really only used for the invocations from the serving processes like login,
     /// user_connected, or the do_command invocation which precedes an internal parser attempt.)
-    #[instrument(skip(self, session))]
     // Yes yes I know it's a lot of arguments, but wrapper object here is redundant.
     #[allow(clippy::too_many_arguments)]
     pub fn submit_verb_task(
@@ -82,7 +78,6 @@ impl SchedulerClient {
         perms: &Obj,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
-        trace!(?player, ?verb, ?args, "Verb submitting");
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitVerbTask {
@@ -127,7 +122,6 @@ impl SchedulerClient {
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
-    #[instrument(skip(self, session))]
     pub fn submit_out_of_band_task(
         &self,
         handler_object: &Obj,
@@ -136,7 +130,6 @@ impl SchedulerClient {
         argstr: String,
         session: Arc<dyn Session>,
     ) -> Result<TaskHandle, SchedulerError> {
-        trace!(?player, ?command, "Out-of-band task submitting");
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitOobTask {
@@ -155,7 +148,6 @@ impl SchedulerClient {
     }
 
     /// Submit an eval task to the scheduler for execution.
-    #[instrument(skip(self, sessions))]
     pub fn submit_eval_task(
         &self,
         player: &Obj,
@@ -186,7 +178,6 @@ impl SchedulerClient {
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
-    #[instrument(skip(self))]
     pub fn submit_shutdown(&self, msg: &str) -> Result<(), SchedulerError> {
         // If we can't deliver a shutdown message, that's really a cause for panic!
         let (send, reply) = oneshot::channel();

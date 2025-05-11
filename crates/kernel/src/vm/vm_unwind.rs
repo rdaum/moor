@@ -24,7 +24,6 @@ use moor_common::util::PerfTimerGuard;
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
 use moor_var::{Error, NOTHING, v_error, v_string};
 use moor_var::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
-use tracing::trace;
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum FinallyReason {
@@ -119,8 +118,6 @@ impl VMExecState {
     /// Finds the catch handler for the given error if there is one, and unwinds the stack to it.
     /// If there is no handler, creates an 'Uncaught' reason with backtrace, and unwinds with that.
     pub fn throw_error(&mut self, error: Error) -> ExecutionResult {
-        trace!(error = ?error, "raising error");
-
         let stack = Self::make_stack_list(&self.stack);
         let backtrace = Self::make_backtrace(&self.stack, &error);
         let exception = Box::new(Exception {
@@ -133,7 +130,6 @@ impl VMExecState {
 
     /// Push an error up the activation stack (set returned value), and raise it depending on the `d` flag
     pub(crate) fn push_error(&mut self, error: Error) -> ExecutionResult {
-        trace!(?error, "push_error");
         self.set_return_value(v_error(error.clone()));
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         if let Some(activation) = self.stack.last() {
@@ -146,8 +142,6 @@ impl VMExecState {
     /// Only raise an error if the 'd' bit is set on the running verb. Most times this is what we
     /// want.
     pub(crate) fn raise_error(&mut self, error: Error) -> ExecutionResult {
-        trace!(?error, "maybe_raise_error");
-
         // Check 'd' bit of running verb. If it's set, we raise the error. Otherwise nope.
         // Filter out frames for builtin invocations
         let verb_frame = self.stack.iter().rev().find(|a| !a.is_builtin_frame());
@@ -165,7 +159,6 @@ impl VMExecState {
         //   We should be able to come up with a way to propagate and unwind for any kind of frame...
         //   And not have a special case here
 
-        trace!(?error, "push_bf_error");
         // No matter what, the error value has to be on the stack of the *calling* verb, not on this
         // frame; as we are incapable of doing anything with it, we'll never pop it, being a builtin
         // function.

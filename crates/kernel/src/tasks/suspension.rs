@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use moor_var::Obj;
@@ -110,8 +110,6 @@ impl SuspensionQ {
             .expect("Unable to reconstitute tasks from tasks database");
         let num_tasks = tasks.len();
         for mut task in tasks {
-            debug!(wake_condition = ?task.wake_condition, task_id = task.task.task_id,
-                start = ?task.task.task_start , "Loaded suspended task from tasks database");
             task.session = bg_session_factory
                 .clone()
                 .mk_background_session(&task.task.player)

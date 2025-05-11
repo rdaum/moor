@@ -21,6 +21,7 @@ use moor_common::program::names::{GlobalName, Name};
 use moor_common::util::{BitArray, Bitset16, PerfTimerGuard};
 use moor_compiler::{Label, Op, Program};
 use moor_var::{Error, Var, v_none};
+use smallvec::SmallVec;
 
 /// The MOO stack-frame specific portions of the activation:
 ///   the value stack, local variables, program, program counter, handler stack, etc.
@@ -35,10 +36,10 @@ pub(crate) struct MooStackFrame {
     /// The current used scope size, used when entering and exiting local scopes.
     pub(crate) environment_width: usize,
     /// The value stack.
-    pub(crate) valstack: Vec<Var>,
+    pub(crate) valstack: SmallVec<Var, 16>,
     /// A stack of active scopes. Used for catch and finally blocks and in the future for lexical
     /// scoping as well.
-    pub(crate) scope_stack: Vec<Scope>,
+    pub(crate) scope_stack: SmallVec<Scope, 8>,
     /// Scratch space for PushTemp and PutTemp opcodes.
     pub(crate) temp: Var,
     /// Scratch space for constructing the catch handlers for a forthcoming try scope.
@@ -117,11 +118,11 @@ impl<C> Decode<C> for MooStackFrame {
             }
         }
         let environment_width = usize::decode(decoder)?;
-        let valstack = Vec::decode(decoder)?;
-        let scope_stack = Vec::decode(decoder)?;
+        let valstack = Vec::decode(decoder)?.into();
+        let scope_stack = Vec::decode(decoder)?.into();
         let temp = Var::decode(decoder)?;
-        let catch_stack = Vec::decode(decoder)?;
-        let finally_stack = Vec::decode(decoder)?;
+        let catch_stack = Vec::decode(decoder)?.into();
+        let finally_stack = Vec::decode(decoder)?.into();
         Ok(Self {
             program,
             pc,
@@ -149,11 +150,11 @@ impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
             }
         }
         let environment_width = usize::borrow_decode(decoder)?;
-        let valstack = Vec::borrow_decode(decoder)?;
-        let scope_stack = Vec::borrow_decode(decoder)?;
+        let valstack = Vec::borrow_decode(decoder)?.into();
+        let scope_stack = Vec::borrow_decode(decoder)?.into();
         let temp = Var::borrow_decode(decoder)?;
-        let catch_stack = Vec::borrow_decode(decoder)?;
-        let finally_stack = Vec::borrow_decode(decoder)?;
+        let catch_stack = Vec::borrow_decode(decoder)?.into();
+        let finally_stack = Vec::borrow_decode(decoder)?.into();
         Ok(Self {
             program,
             pc,

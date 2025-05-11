@@ -216,7 +216,7 @@ pub mod vm_test_utils {
     use crate::vm::VerbCall;
     use crate::vm::builtins::BuiltinRegistry;
     use crate::vm::vm_host::VmHost;
-    
+
     use moor_common::tasks::Exception;
     use moor_common::tasks::Session;
 

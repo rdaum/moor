@@ -65,6 +65,7 @@ libc.workspace = true
 minstant.workspace = true
 oneshot.workspace = true
 semver.workspace = true
+smallvec.workspace = true
 serde.workspace = true
 strum.workspace = true
 uuid.workspace = true

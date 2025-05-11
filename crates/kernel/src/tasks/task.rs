@@ -32,7 +32,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use crossbeam_channel::Sender;
 use lazy_static::lazy_static;
-use tracing::{error, trace, warn};
+use tracing::{error, warn};
 
 use moor_common::model::{CommitResult, VerbDef, WorldState, WorldStateError};
 use moor_common::tasks::CommandError;
@@ -131,7 +131,6 @@ impl Task {
         while task.vm_host.is_running() {
             // Check kill switch.
             if task.kill_switch.load(std::sync::atomic::Ordering::Relaxed) {
-                trace!(task_id = ?task.task_id, "Task killed");
                 task_scheduler_client.abort_cancelled();
                 break;
             }
@@ -184,7 +183,6 @@ impl Task {
         // Having done that, what should we now do?
         match vm_exec_result {
             VMHostResponse::DispatchFork(fork_request) => {
-                trace!(task_id = self.task_id, ?fork_request, "Task fork");
                 // To fork a new task, we need to get the scheduler to do some work for us. So we'll
                 // send a message back asking it to fork the task and return the new task id on a
                 // reply channel.
@@ -198,8 +196,6 @@ impl Task {
                 Some((self, world_state))
             }
             VMHostResponse::Suspend(delay) => {
-                trace!(task_id = self.task_id, delay = ?delay, "Task suspend");
-
                 // VMHost is now suspended for execution, and we'll be waiting for a Resume
                 let commit_result = world_state
                     .commit()
@@ -212,7 +208,6 @@ impl Task {
                 }
 
                 self.retry_state = self.vm_host.snapshot_state();
-                trace!(task_id = self.task_id, "Task suspended");
                 self.vm_host.stop();
 
                 // Let the scheduler know about our suspension, which can be of the form:
@@ -225,8 +220,6 @@ impl Task {
                 None
             }
             VMHostResponse::SuspendNeedInput => {
-                trace!(task_id = self.task_id, "Task suspend need input");
-
                 // VMHost is now suspended for input, and we'll be waiting for a ResumeReceiveInput
 
                 // Attempt commit... See comments/notes on Suspend above.
@@ -240,7 +233,6 @@ impl Task {
                     return None;
                 }
                 self.retry_state = self.vm_host.snapshot_state();
-                trace!(task_id = self.task_id, "Task suspended for input");
                 self.vm_host.stop();
 
                 // Consume us, passing back to the scheduler that we're waiting for input.
@@ -250,8 +242,6 @@ impl Task {
             VMHostResponse::ContinueOk => Some((self, world_state)),
 
             VMHostResponse::CompleteSuccess(result) => {
-                trace!(task_id = self.task_id, result = ?result, "Task complete, success");
-
                 // Special case: in case of return from $do_command @ top-level, we need to look at the results:
                 //      non-true value? => parse_command and restart (in same transaction)
                 //      true value? => commit and return success.
@@ -441,8 +431,6 @@ impl Task {
                     verb_call.verb_name,
                 ) {
                     Err(WorldStateError::VerbNotFound(_, _)) => {
-                        trace!(task_id = ?self.task_id, this = ?verb_call.this,
-                              verb = ?verb_call.verb_name, "Verb not found");
                         control_sender
                             .send((
                                 self.task_id,
@@ -474,7 +462,6 @@ impl Task {
                 fork_request,
                 suspended,
             } => {
-                trace!(task_id = ?self.task_id, suspended, "Setting up fork");
                 self.vm_host
                     .start_fork(self.task_id, fork_request, *suspended);
             }
