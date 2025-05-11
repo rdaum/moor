@@ -158,26 +158,51 @@ impl RpcServer {
                 }
             })?;
 
-        let rpc_socket = self.zmq_context.socket(zmq::REP)?;
-        rpc_socket.bind(&rpc_endpoint)?;
+        let num_io_threads = self.zmq_context.get_io_threads().unwrap();
+        info!("0mq server listening on {rpc_endpoint} with {num_io_threads} IO threads",);
 
-        info!(
-            "0mq server listening on {} with {} IO threads",
-            rpc_endpoint,
-            self.zmq_context.get_io_threads().unwrap()
-        );
+        // Start the RPC server in a background thread.
+        let rpc_this = self.clone();
+        std::thread::Builder::new()
+            .name("moor-rpc-srvr".to_string())
+            .spawn(move || {
+                rpc_this
+                    .clone()
+                    .rpc_process_loop(rpc_endpoint.as_str(), scheduler_client)
+                    .expect("Unable to process RPC requests");
+            })?;
 
-        let this = self.clone();
         loop {
             if self.kill_switch.load(Ordering::Relaxed) {
                 info!("Kill switch activated, exiting");
                 return Ok(());
             }
+
             // Check any task handles for completion.
+            // TODO: rewrite the task completion checking here to not poll and use a lock.
+            //  we can probably do something much nicer with channels, etc.
             self.clone().process_task_completions();
 
+            std::thread::sleep(std::time::Duration::from_micros(1));
+        }
+    }
+
+    fn rpc_process_loop(
+        self: Arc<Self>,
+        rpc_endpoint: &str,
+        scheduler_client: SchedulerClient,
+    ) -> eyre::Result<()> {
+        let rpc_socket = self.zmq_context.socket(zmq::REP)?;
+        rpc_socket.bind(&rpc_endpoint)?;
+        let this = self.clone();
+        loop {
+            if this.kill_switch.load(Ordering::Relaxed) {
+                info!("Kill switch activated, exiting");
+                return Ok(());
+            }
+
             let poll_result = rpc_socket
-                .poll(zmq::POLLIN, 100)
+                .poll(zmq::POLLIN, 10)
                 .with_context(|| "Error polling ZMQ socket. Bailing out.")?;
             if poll_result == 0 {
                 continue;
