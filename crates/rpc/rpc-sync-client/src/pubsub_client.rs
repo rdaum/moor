@@ -12,7 +12,6 @@
 //
 
 /// RPC related functions, for talking to/from the RPC daemon over ZMQ.
-use tracing::trace;
 use uuid::Uuid;
 use zmq::Socket;
 
@@ -62,7 +61,6 @@ pub fn broadcast_recv(subscribe: &mut Socket) -> Result<ClientsBroadcastEvent, R
         ));
     };
 
-    trace!(message = ?inbound, "broadcast_message");
     if inbound.len() != 2 {
         return Err(RpcError::CouldNotDecode(format!(
             "Unexpected message length: {}",

@@ -121,8 +121,8 @@ impl<C> Decode<C> for MooStackFrame {
         let valstack = Vec::decode(decoder)?.into();
         let scope_stack = Vec::decode(decoder)?.into();
         let temp = Var::decode(decoder)?;
-        let catch_stack = Vec::decode(decoder)?.into();
-        let finally_stack = Vec::decode(decoder)?.into();
+        let catch_stack = Vec::decode(decoder)?;
+        let finally_stack = Vec::decode(decoder)?;
         Ok(Self {
             program,
             pc,
@@ -153,8 +153,8 @@ impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
         let valstack = Vec::borrow_decode(decoder)?.into();
         let scope_stack = Vec::borrow_decode(decoder)?.into();
         let temp = Var::borrow_decode(decoder)?;
-        let catch_stack = Vec::borrow_decode(decoder)?.into();
-        let finally_stack = Vec::borrow_decode(decoder)?.into();
+        let catch_stack = Vec::borrow_decode(decoder)?;
+        let finally_stack = Vec::borrow_decode(decoder)?;
         Ok(Self {
             program,
             pc,

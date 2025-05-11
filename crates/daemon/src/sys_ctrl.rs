@@ -99,7 +99,7 @@ impl SystemControl for RpcServer {
     }
 
     fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, moor_var::Error> {
-        let hosts = self.hosts.lock().unwrap();
+        let hosts = self.hosts.read().unwrap();
         let listeners = hosts
             .listeners()
             .iter()

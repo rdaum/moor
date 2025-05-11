@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use eyre::{Context, Error};
@@ -53,7 +53,7 @@ use rusty_paseto::core::{
 };
 use rusty_paseto::prelude::Key;
 use serde_json::json;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use zmq::{Socket, SocketType};
 
@@ -66,11 +66,11 @@ pub struct RpcServer {
     task_handles: Mutex<HashMap<TaskId, (Uuid, TaskHandle)>>,
     config: Arc<Config>,
     pub(crate) kill_switch: Arc<AtomicBool>,
-    pub(crate) hosts: Arc<Mutex<Hosts>>,
 
-    pub(crate) host_token_cache: Arc<Mutex<HashMap<HostToken, (Instant, HostType)>>>,
-    pub(crate) auth_token_cache: Arc<Mutex<HashMap<AuthToken, (Instant, Obj)>>>,
-    pub(crate) client_token_cache: Arc<Mutex<HashMap<ClientToken, Instant>>>,
+    pub(crate) hosts: Arc<RwLock<Hosts>>,
+    pub(crate) host_token_cache: Arc<RwLock<HashMap<HostToken, (Instant, HostType)>>>,
+    pub(crate) auth_token_cache: Arc<RwLock<HashMap<AuthToken, (Instant, Obj)>>>,
+    pub(crate) client_token_cache: Arc<RwLock<HashMap<ClientToken, Instant>>>,
 }
 
 /// If we don't hear from a host in this time, we consider it dead and its listeners gone.
@@ -132,9 +132,9 @@ impl RpcServer {
             config,
             kill_switch,
             hosts: Default::default(),
-            host_token_cache: Arc::new(Mutex::new(Default::default())),
-            auth_token_cache: Arc::new(Mutex::new(Default::default())),
-            client_token_cache: Arc::new(Mutex::new(Default::default())),
+            host_token_cache: Arc::new(RwLock::new(Default::default())),
+            auth_token_cache: Arc::new(RwLock::new(Default::default())),
+            client_token_cache: Arc::new(RwLock::new(Default::default())),
         }
     }
 
@@ -188,8 +188,6 @@ impl RpcServer {
                     return Ok(());
                 }
                 Ok(request) => {
-                    trace!(num_parts = request.len(), "ZQM Request received");
-
                     // Components are: [msg_type,  request_body]
 
                     if request.len() != 2 {
@@ -312,7 +310,6 @@ impl RpcServer {
         host_token: HostToken,
         host_message: HostToDaemonMessage,
     ) -> Vec<u8> {
-        let mut hosts = self.hosts.lock().unwrap();
         match host_message {
             HostToDaemonMessage::RegisterHost(_, host_type, listeners) => {
                 info!(
@@ -320,6 +317,7 @@ impl RpcServer {
                     host_token.0,
                     listeners.len()
                 );
+                let mut hosts = self.hosts.write().unwrap();
                 // Record this as a ping. If it's a new host, log that.
                 hosts.receive_ping(host_token, host_type, listeners);
 
@@ -330,6 +328,7 @@ impl RpcServer {
                 // Record this to our hosts DB.
                 // This will update the last-seen time for the host and its listeners-set.
                 let num_listeners = listeners.len();
+                let mut hosts = self.hosts.write().unwrap();
                 if hosts.receive_ping(host_token.clone(), host_type, listeners) {
                     info!(
                         "Host {} registered with {} listeners",
@@ -386,6 +385,7 @@ impl RpcServer {
                 )))
             }
             HostToDaemonMessage::DetachHost => {
+                let mut hosts = self.hosts.write().unwrap();
                 hosts.unregister_host(&host_token);
                 pack_host_response(Ok(DaemonToHostReply::Ack))
             }
@@ -419,7 +419,6 @@ impl RpcServer {
                 let client_token = self.make_client_token(client_id);
 
                 if let Some(connect_type) = connect_type {
-                    trace!(?player, "Submitting user_connected task");
                     if let Err(e) = self.clone().submit_connected_task(
                         &handler_object,
                         scheduler_client,
@@ -866,12 +865,6 @@ impl RpcServer {
             }
         };
 
-        // Update the connection records.
-        trace!(
-            ?connection,
-            ?player,
-            "Transitioning connection record to logged in"
-        );
         let Ok(_) = self
             .connections
             .update_client_connection(connection.clone(), player.clone())
@@ -882,7 +875,6 @@ impl RpcServer {
         };
 
         if attach {
-            trace!(?player, "Submitting user_connected task");
             if let Err(e) = self.clone().submit_connected_task(
                 handler_object,
                 scheduler_client,
@@ -1315,7 +1307,7 @@ impl RpcServer {
             })?;
         }
 
-        let mut hosts = self.hosts.lock().unwrap();
+        let mut hosts = self.hosts.write().unwrap();
         hosts.ping_check(HOST_TIMEOUT);
         Ok(())
     }
@@ -1365,7 +1357,7 @@ impl RpcServer {
     fn validate_host_token(&self, token: &HostToken) -> Result<HostType, RpcMessageError> {
         // Check cache first.
         {
-            let host_tokens = self.host_token_cache.lock().unwrap();
+            let host_tokens = self.host_token_cache.read().unwrap();
 
             if let Some((t, host_type)) = host_tokens.get(token) {
                 if t.elapsed().as_secs() <= 60 {
@@ -1392,7 +1384,7 @@ impl RpcServer {
         };
 
         // Cache the result.
-        let mut host_tokens = self.host_token_cache.lock().unwrap();
+        let mut host_tokens = self.host_token_cache.write().unwrap();
         host_tokens.insert(token.clone(), (Instant::now(), host_type));
 
         Ok(host_type)
@@ -1406,7 +1398,7 @@ impl RpcServer {
         client_id: Uuid,
     ) -> Result<(), RpcMessageError> {
         {
-            let client_tokens = self.client_token_cache.lock().unwrap();
+            let client_tokens = self.client_token_cache.read().unwrap();
             if let Some(t) = client_tokens.get(&token) {
                 if t.elapsed().as_secs() <= 60 {
                     return Ok(());
@@ -1455,7 +1447,7 @@ impl RpcServer {
             return Err(RpcMessageError::PermissionDenied);
         }
 
-        let mut client_tokens = self.client_token_cache.lock().unwrap();
+        let mut client_tokens = self.client_token_cache.write().unwrap();
         client_tokens.insert(token.clone(), Instant::now());
 
         Ok(())
@@ -1473,7 +1465,7 @@ impl RpcServer {
         objid: Option<&Obj>,
     ) -> Result<Obj, RpcMessageError> {
         {
-            let auth_tokens = self.auth_token_cache.lock().unwrap();
+            let auth_tokens = self.auth_token_cache.read().unwrap();
             if let Some((t, o)) = auth_tokens.get(&token) {
                 if t.elapsed().as_secs() <= 60 {
                     return Ok(o.clone());
@@ -1527,7 +1519,7 @@ impl RpcServer {
         //   code with checks to make sure that the player objid is valid before letting it go
         //   forwards.
 
-        let mut auth_tokens = self.auth_token_cache.lock().unwrap();
+        let mut auth_tokens = self.auth_token_cache.write().unwrap();
         auth_tokens.insert(token.clone(), (Instant::now(), token_player.clone()));
         Ok(token_player)
     }

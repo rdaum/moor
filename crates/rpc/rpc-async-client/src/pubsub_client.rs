@@ -14,7 +14,6 @@
 /// RPC related functions, for talking to/from the RPC daemon over ZMQ.
 use futures_util::StreamExt;
 use tmq::subscribe::Subscribe;
-use tracing::trace;
 use uuid::Uuid;
 
 use rpc_common::{
@@ -69,7 +68,6 @@ pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<ClientsBroadcas
         ));
     };
 
-    trace!(message = ?inbound, "broadcast_message");
     if inbound.len() != 2 {
         return Err(RpcError::CouldNotDecode(format!(
             "Unexpected message length: {}",
@@ -110,7 +108,6 @@ pub async fn hosts_events_recv(subscribe: &mut Subscribe) -> Result<HostBroadcas
         ));
     };
 
-    trace!(message = ?inbound, "host_broadcast_message");
     if inbound.len() != 2 {
         return Err(RpcError::CouldNotDecode(format!(
             "Unexpected message length: {}",
@@ -153,7 +150,6 @@ pub async fn workers_events_recv(
         ));
     };
 
-    trace!(message = ?inbound, "worker_broadcast_message");
     if inbound.len() != 2 {
         return Err(RpcError::CouldNotDecode(format!(
             "Unexpected message length: {}",

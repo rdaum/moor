@@ -14,7 +14,6 @@
 use std::sync::Arc;
 
 use std::sync::Mutex;
-use tracing::trace;
 use uuid::Uuid;
 
 use moor_common::tasks::NarrativeEvent;
@@ -48,7 +47,6 @@ impl RpcSession {
 
 impl Session for RpcSession {
     fn commit(&self) -> Result<(), SessionError> {
-        trace!(player = ?self.player, client_id = ?self.client_id, "Committing session");
         let events: Vec<_> = {
             let mut session_buffer = self.session_buffer.lock().unwrap();
             session_buffer.drain(..).collect()
@@ -64,10 +62,6 @@ impl Session for RpcSession {
 
     fn rollback(&self) -> Result<(), SessionError> {
         let mut session_buffer = self.session_buffer.lock().unwrap();
-        trace!(
-            "Rolling back {} events from session buffer",
-            session_buffer.len()
-        );
         session_buffer.clear();
         Ok(())
     }
