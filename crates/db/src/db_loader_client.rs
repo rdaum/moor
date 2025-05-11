@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use byteview::ByteView;
 use uuid::Uuid;
 
 use crate::db_worldstate::DbWorldState;
@@ -20,11 +19,12 @@ use moor_common::model::ObjSet;
 use moor_common::model::PropFlag;
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbDefs;
+use moor_common::model::VerbFlag;
 use moor_common::model::loader::LoaderInterface;
-use moor_common::model::{BinaryType, VerbFlag};
 use moor_common::model::{CommitResult, WorldStateError};
 use moor_common::model::{HasUuid, PropPerms, ValSet};
 use moor_common::model::{PropDef, PropDefs};
+use moor_common::program::ProgramType;
 use moor_common::util::BitEnum;
 use moor_var::Obj;
 use moor_var::Symbol;
@@ -55,7 +55,7 @@ impl LoaderInterface for DbWorldState {
         owner: &Obj,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
-        binary: Vec<u8>,
+        program: ProgramType,
     ) -> Result<(), WorldStateError> {
         self.get_tx_mut().add_object_verb(
             obj,
@@ -64,8 +64,7 @@ impl LoaderInterface for DbWorldState {
                 .iter()
                 .map(|s| Symbol::mk_case_insensitive(s))
                 .collect(),
-            binary,
-            BinaryType::LambdaMoo18X,
+            program,
             flags,
             args,
         )?;
@@ -147,8 +146,8 @@ impl LoaderInterface for DbWorldState {
         self.get_tx().get_verbs(objid)
     }
 
-    fn get_verb_binary(&self, objid: &Obj, uuid: Uuid) -> Result<ByteView, WorldStateError> {
-        self.get_tx().get_verb_binary(objid, uuid)
+    fn get_verb_program(&self, objid: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError> {
+        self.get_tx().get_verb_program(objid, uuid)
     }
 
     fn get_object_properties(&self, objid: &Obj) -> Result<PropDefs, WorldStateError> {

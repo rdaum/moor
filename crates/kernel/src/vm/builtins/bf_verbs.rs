@@ -18,10 +18,11 @@ use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_common::model::WorldStateError;
 use moor_common::model::{ArgSpec, VerbArgsSpec};
-use moor_common::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_common::model::{HasUuid, Named};
 use moor_common::model::{ObjFlag, verb_perms_string};
+use moor_common::model::{VerbAttrs, VerbFlag};
 use moor_common::model::{VerbDef, parse_preposition_spec, preposition_to_string};
+use moor_common::program::ProgramType;
 use moor_common::program::names::GlobalName;
 use moor_common::util::BitEnum;
 use moor_compiler::Program;
@@ -30,9 +31,9 @@ use moor_compiler::program_to_tree;
 use moor_compiler::unparse;
 use moor_compiler::{compile, to_literal};
 use moor_var::Obj;
+use moor_var::Sequence;
 use moor_var::Symbol;
 use moor_var::Variant;
-use moor_var::{AsByteBuffer, Sequence};
 use moor_var::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, v_list_iter};
 use moor_var::{List, v_bool};
@@ -152,8 +153,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
                 names: Some(name_strings),
                 flags: Some(perms),
                 args_spec: None,
-                binary_type: None,
-                binary: None,
+                program: None,
             })
         }
         _ => Err(E_INVARG.msg("Invalid verb info")),
@@ -277,8 +277,7 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         names: None,
         flags: None,
         args_spec: Some(args),
-        binary_type: None,
-        binary: None,
+        program: None,
     };
     match bf_args.args[1].variant() {
         Variant::Int(verb_index) => {
@@ -327,14 +326,6 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let verbdef = get_verbdef(obj, bf_args.args[1].clone(), bf_args)?;
 
-    // If the verb is not binary type MOO, we don't support decompilation or listing
-    // of it yet.
-    if verbdef.binary_type() != BinaryType::LambdaMoo18X {
-        warn!(object=?bf_args.args[0], verb=?bf_args.args[1], binary_type=?verbdef.binary_type(), 
-            "verb_code: verb is not binary type MOO");
-        return Err(BfErr::Code(E_TYPE));
-    }
-
     // TODO: bf_verbs: fully-paren and indent options. For now we ignore these.
 
     // Retrieve the binary for the verb.
@@ -348,16 +339,16 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Ok(Ret(v_empty_list()));
     }
 
-    // Decode.
-    let program = Program::from_bytes(verb_info.0).map_err(|_| {
-        error!(object=?bf_args.args[0], verb=?bf_args.args[1], "verb_code: verb program could not be decoded");
-        BfErr::Code(E_INVARG)
-    })?;
-    let decompiled = match program_to_tree(&program) {
+    #[allow(irrefutable_let_patterns)]
+    let ProgramType::MooR(program) = &verb_info.0 else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("verb_code: verb program is not Moo"),
+        ));
+    };
+    let decompiled = match program_to_tree(program) {
         Ok(decompiled) => decompiled,
         Err(e) => {
-            warn!(object=?bf_args.args[0], verb=?bf_args.args[1], error = ?e,
-            binary_type=?verbdef.binary_type(), "verb_code: verb program could not be decompiled");
+            warn!(object=?bf_args.args[0], verb=?bf_args.args[1], error = ?e, "verb_code: verb program could not be decompiled");
             return Err(BfErr::Code(E_INVARG));
         }
     };
@@ -365,9 +356,7 @@ fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let unparsed = match unparse(&decompiled) {
         Ok(unparsed) => unparsed,
         Err(e) => {
-            warn!(object=?bf_args.args[0], verb=?bf_args.args[1], error = ?e, 
-                binary_type=?verbdef.binary_type(), 
-            "verb_code: verb program could not be unparsed");
+            warn!(object=?bf_args.args[0], verb=?bf_args.args[1], error = ?e, "verb_code: verb program could not be unparsed");
             return Err(BfErr::Code(E_INVARG));
         }
     };
@@ -400,7 +389,6 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let verbdef = get_verbdef(obj, bf_args.args[1].clone(), bf_args)?;
 
     // Right now set_verb_code is going to always compile to LambdaMOO 1.8.x. binary type.
-    let binary_type = BinaryType::LambdaMoo18X;
     let program_code = match bf_args.args[2].variant() {
         Variant::List(code) => code,
         _ => return Err(BfErr::Code(E_TYPE)),
@@ -427,10 +415,6 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             return Ok(Ret(v_list(&[v_str(e.to_string().as_str())])));
         }
     };
-    // Now we have a program, we need to encode it.
-    let binary = program
-        .with_byte_buffer(|d| Vec::from(d))
-        .expect("Failed to encode program byte stream");
     // Now we can update the verb.
     let update_attrs = VerbAttrs {
         definer: None,
@@ -438,8 +422,7 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         names: None,
         flags: None,
         args_spec: None,
-        binary_type: Some(binary_type),
-        binary: Some(binary),
+        program: Some(ProgramType::MooR(program)),
     };
     bf_args
         .world_state
@@ -487,8 +470,7 @@ fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             &verbinfo.owner.unwrap(),
             verbinfo.flags.unwrap(),
             verbargs,
-            Vec::new(),
-            BinaryType::LambdaMoo18X,
+            ProgramType::MooR(Program::new()),
         )
         .map_err(world_state_bf_err)?;
 
@@ -545,25 +527,21 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let verbdef = get_verbdef(obj, bf_args.args[1].clone(), bf_args)?;
 
-    if verbdef.binary_type() != BinaryType::LambdaMoo18X {
-        warn!(object=?bf_args.args[0], verb=?bf_args.args[1], binary_type=?verbdef.binary_type(),
-            "disassemble: verb is not binary type MOO");
-        return Err(BfErr::Code(E_TYPE));
-    }
-
-    let (binary, _) = bf_args
+    let (program, _) = bf_args
         .world_state
         .retrieve_verb(&bf_args.task_perms_who(), obj, verbdef.uuid())
         .map_err(world_state_bf_err)?;
 
-    if binary.is_empty() {
+    if program.is_empty() {
         return Ok(Ret(v_empty_list()));
     }
 
-    let program = Program::from_bytes(binary).map_err(|_| {
-        error!(object=?bf_args.args[0], verb=?bf_args.args[1], "disassemble: verb program could not be decoded");
-        BfErr::Code(E_INVARG)
-    })?;
+    #[allow(irrefutable_let_patterns)]
+    let ProgramType::MooR(program) = &program else {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("disassemble(): verb program is not Moo"),
+        ));
+    };
 
     // The output of disassemble is a list of strings, one for each instruction in the verb's program.
     // But we also want some basic information on # of labels. Fork vectors. Jazz like that.
@@ -572,18 +550,18 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut disassembly = Vec::new();
     // Write literals indexed by their offset #
     disassembly.push(v_str("LITERALS:"));
-    for (i, l) in program.literals.iter().enumerate() {
+    for (i, l) in program.literals().iter().enumerate() {
         disassembly.push(v_string(format!("{: >3}: {}", i, to_literal(l))));
     }
 
     // Write jump labels indexed by their offset & showing position & optional name
     disassembly.push(v_str("JUMP LABELS:"));
-    for (i, l) in program.jump_labels.iter().enumerate() {
+    for (i, l) in program.jump_labels().iter().enumerate() {
         if i < GlobalName::COUNT {
             continue;
         }
         let name_of = match &l.name {
-            Some(name) => format!(" ({})", program.var_names.name_of(name).unwrap()),
+            Some(name) => format!(" ({})", program.var_names().name_of(name).unwrap()),
             None => "".to_string(),
         };
         disassembly.push(v_string(format!("{: >3}: {}{}", i, l.position.0, name_of)));
@@ -591,7 +569,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Write variable names indexed by their offset
     disassembly.push(v_str("VARIABLES:"));
-    for (i, v) in program.var_names.symbols().iter().enumerate() {
+    for (i, v) in program.var_names().symbols().iter().enumerate() {
         disassembly.push(v_string(format!("{: >3}: {}", i, v)));
     }
 
@@ -599,10 +577,10 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Display main vector (program); opcodes are indexed by their offset
     disassembly.push(v_str("OPCODES:"));
-    for (i, op) in program.main_vector.iter().enumerate() {
+    for (i, op) in program.main_vector().iter().enumerate() {
         let mut line_no_string = String::new();
         let mut last_line_no = 0;
-        for (pc, line_no) in &program.line_number_spans {
+        for (pc, line_no) in program.line_number_spans().iter() {
             if *pc == i {
                 line_no_string = format!("\t\t(line {})", last_line_no);
                 break;

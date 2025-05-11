@@ -75,7 +75,7 @@ pub fn moo_frame_execute(
     features_config: &FeaturesConfig,
 ) -> ExecutionResult {
     // To avoid borrowing issues when mutating the frame elsewhere...
-    let opcodes = f.program.main_vector.clone();
+    let opcodes = f.program.main_vector().clone();
 
     // Special case for empty opcodes set, just return v_none() immediately.
     if opcodes.is_empty() {
@@ -146,7 +146,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::ForSequence(offset) => {
-                let operand = f.program.for_sequence_operands[offset.0 as usize].clone();
+                let operand = f.program.for_sequence_operand(*offset).clone();
                 if operand.environment_width != 0 {
                     f.push_scope(
                         ScopeType::For,
@@ -318,7 +318,7 @@ pub fn moo_frame_execute(
                         continue;
                     }
                     _ => {
-                        let value = &f.program.literals[slot.0 as usize];
+                        let value = &f.program.find_literal(slot).expect("literal not found");
                         f.push(value.clone());
                     }
                 }
@@ -384,7 +384,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::MakeError(offset) => {
-                let code = f.program.error_operands[offset.0 as usize];
+                let code = *f.program.error_operand(*offset);
 
                 // Expect an argument on stack (otherwise we would have used ImmErr)
                 let err_msg = f.pop();
@@ -561,7 +561,7 @@ pub fn moo_frame_execute(
             }
             Op::Push(ident) => {
                 let Some(v) = f.get_env(ident) else {
-                    if let Some(var_name) = f.program.var_names.name_of(ident) {
+                    if let Some(var_name) = f.program.var_names().name_of(ident) {
                         return ExecutionResult::PushError(
                             E_VARNF.with_msg(|| format!("Variable `{var_name}` not found")),
                         );
@@ -879,7 +879,7 @@ pub fn moo_frame_execute(
                 //   do with translating fairly directly from the lambdamoo sources.
                 // It would be nice to be able to eliminate the clone here, but if we don't we get
                 // multiple borrow issues.
-                let table = &f.program.scatter_tables[sa.0 as usize].clone();
+                let table = &f.program.scatter_table(*sa).clone();
                 let (nargs, rest, nreq) = {
                     let mut nargs = 0;
                     let mut rest = 0;
@@ -1002,7 +1002,7 @@ pub fn moo_frame_execute(
                 f.push_scope(ScopeType::Comprehension, 1, end_label);
             }
             Op::ComprehendRange(offset) => {
-                let range_comprehension = f.program.range_comprehensions[offset.0 as usize].clone();
+                let range_comprehension = f.program.range_comprehension(*offset).clone();
                 let end_of_range = f
                     .get_env(&range_comprehension.end_of_range_register)
                     .unwrap()
@@ -1016,7 +1016,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::ComprehendList(offset) => {
-                let list_comprehension = f.program.list_comprehensions[offset.0 as usize].clone();
+                let list_comprehension = f.program.list_comprehension(*offset).clone();
                 let list = f
                     .get_env(&list_comprehension.list_register)
                     .unwrap()

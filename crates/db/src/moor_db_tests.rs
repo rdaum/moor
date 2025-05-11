@@ -15,12 +15,14 @@
 mod tests {
     use crate::DatabaseConfig;
     use crate::moor_db::MoorDB;
-    use moor_common::model::{BinaryType, ObjFlag, VerbAttrs};
     use moor_common::model::{CommitResult, WorldStateError};
     use moor_common::model::{HasUuid, Named};
     use moor_common::model::{ObjAttrs, PropFlag, ValSet};
+    use moor_common::model::{ObjFlag, VerbAttrs};
     use moor_common::model::{ObjSet, ObjectRef};
     use moor_common::model::{VerbArgsSpec, VerbFlag};
+    use moor_common::program::ProgramType;
+    use moor_common::program::program::Program;
     use moor_common::util::BitEnum;
     use moor_var::Obj;
     use moor_var::Symbol;
@@ -445,8 +447,7 @@ mod tests {
             &oid,
             &oid,
             vec![Symbol::mk_case_insensitive("test")],
-            vec![],
-            BinaryType::LambdaMoo18X,
+            ProgramType::MooR(Program::new()),
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
         )
@@ -475,8 +476,7 @@ mod tests {
                 names: Some(vec![Symbol::mk_case_insensitive("test2")]),
                 flags: None,
                 args_spec: None,
-                binary_type: None,
-                binary: None,
+                program: None,
             },
         )
         .unwrap();
@@ -775,8 +775,7 @@ mod tests {
             &a,
             &a,
             vec![Symbol::mk_case_insensitive("test")],
-            vec![],
-            BinaryType::LambdaMoo18X,
+            ProgramType::MooR(Program::new()),
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
         )
@@ -815,15 +814,17 @@ mod tests {
             )
             .unwrap()
             .uuid();
-        assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![].into());
+        assert_eq!(
+            tx.get_verb_program(&a, v_uuid).unwrap(),
+            ProgramType::MooR(Program::new())
+        );
 
         // Add a second verb with a different name
         tx.add_object_verb(
             &a,
             &a,
             vec![Symbol::mk_case_insensitive("test2")],
-            vec![],
-            BinaryType::LambdaMoo18X,
+            ProgramType::MooR(Program::new()),
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
         )
@@ -893,8 +894,7 @@ mod tests {
             &a,
             &a,
             vec![Symbol::mk_case_insensitive("test")],
-            vec![],
-            BinaryType::LambdaMoo18X,
+            ProgramType::MooR(Program::new()),
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
         )
@@ -933,7 +933,10 @@ mod tests {
             )
             .unwrap()
             .uuid();
-        assert_eq!(tx.get_verb_binary(&a, v_uuid).unwrap(), vec![].into());
+        assert_eq!(
+            tx.get_verb_program(&a, v_uuid).unwrap(),
+            ProgramType::MooR(Program::new())
+        );
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
@@ -956,8 +959,7 @@ mod tests {
                 .iter()
                 .map(|s| Symbol::mk_case_insensitive(s))
                 .collect(),
-            vec![],
-            BinaryType::LambdaMoo18X,
+            ProgramType::MooR(Program::new()),
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
         )
@@ -1444,8 +1446,7 @@ mod tests {
             &a,
             &a,
             vec![Symbol::mk("test")],
-            vec![],
-            BinaryType::LambdaMoo18X,
+            ProgramType::MooR(Program::new()),
             VerbFlag::rw(),
             VerbArgsSpec::none_none_none(),
         )

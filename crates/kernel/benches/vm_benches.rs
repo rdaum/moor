@@ -14,6 +14,7 @@
 //! Benchmarks of various virtual machine executions
 //! In general attempting to keep isolated from the object/world-state and simply execute
 //! program code that doesn't interact with the DB, to measure opcode execution efficiency.
+#![recursion_limit = "256"]
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,8 +23,9 @@ use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 use moor_common::model::CommitResult;
 use moor_common::model::VerbArgsSpec;
-use moor_common::model::{BinaryType, VerbFlag};
+use moor_common::model::VerbFlag;
 use moor_common::model::{WorldState, WorldStateSource};
+use moor_common::program::ProgramType;
 use moor_common::tasks::AbortLimitReason;
 use moor_common::tasks::{NoopClientSession, Session};
 use moor_common::util::BitEnum;
@@ -35,8 +37,8 @@ use moor_kernel::vm::VMHostResponse;
 use moor_kernel::vm::VerbCall;
 use moor_kernel::vm::builtins::BuiltinRegistry;
 use moor_kernel::vm::vm_host::VmHost;
-use moor_var::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
 use moor_var::{List, Symbol, v_obj};
+use moor_var::{NOTHING, SYSTEM_OBJECT};
 
 fn create_db() -> TxDB {
     let (ws_source, _) = TxDB::open(None, DatabaseConfig::default());
@@ -57,13 +59,13 @@ pub fn prepare_call_verb(
     let mut vm_host = VmHost::new(0, 20, max_ticks, Duration::from_secs(1000));
 
     let verb_name = Symbol::mk(verb_name);
-    let vi = world_state
+    let (program, verbdef) = world_state
         .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
         .unwrap();
     vm_host.start_call_method_verb(
         0,
         &SYSTEM_OBJECT,
-        vi,
+        (program, verbdef),
         VerbCall {
             verb_name,
             location: v_obj(SYSTEM_OBJECT),
@@ -82,7 +84,7 @@ fn prepare_vm_execution(
     program: &str,
     max_ticks: usize,
 ) -> VmHost {
-    let binary = compile(program, CompileOptions::default()).unwrap();
+    let program = compile(program, CompileOptions::default()).unwrap();
     let mut tx = ws_source.new_world_state().unwrap();
     tx.add_verb(
         &SYSTEM_OBJECT,
@@ -91,8 +93,7 @@ fn prepare_vm_execution(
         &SYSTEM_OBJECT,
         VerbFlag::rxd(),
         VerbArgsSpec::this_none_this(),
-        binary.make_copy_as_vec().unwrap(),
-        BinaryType::LambdaMoo18X,
+        ProgramType::MooR(program),
     )
     .unwrap();
     let vm_host = prepare_call_verb(tx.as_mut(), "test", List::mk_list(&[]), max_ticks);

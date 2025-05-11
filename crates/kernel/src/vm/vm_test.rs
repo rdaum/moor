@@ -17,7 +17,7 @@ mod tests {
 
     use moor_common::model::PropFlag;
     use moor_common::model::VerbArgsSpec;
-    use moor_common::model::{BinaryType, VerbFlag};
+    use moor_common::model::VerbFlag;
     use moor_common::model::{WorldState, WorldStateSource};
     use moor_common::util::BitEnum;
     use moor_var::{
@@ -26,11 +26,13 @@ mod tests {
     };
 
     use moor_var::NOTHING;
+    use moor_var::SYSTEM_OBJECT;
     use moor_var::*;
-    use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
 
     use crate::tasks::vm_test_utils::call_verb;
     use crate::vm::builtins::BuiltinRegistry;
+    use moor_common::program::ProgramType;
+    use moor_common::program::program::PrgInner;
     use moor_common::tasks::NoopClientSession;
     use moor_compiler::Op;
     use moor_compiler::Op::*;
@@ -42,7 +44,7 @@ mod tests {
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
-        Program {
+        Program(Box::new(PrgInner {
             literals,
             jump_labels: vec![],
             var_names,
@@ -54,7 +56,7 @@ mod tests {
             main_vector: Arc::new(main_vector),
             fork_vectors: vec![],
             line_number_spans: vec![],
-        }
+        }))
     }
 
     // Create an in memory db with a single object (#0) containing a single provided verb.
@@ -89,7 +91,6 @@ mod tests {
         .unwrap();
 
         for (verb_name, program) in verbs {
-            let binary = program.make_copy_as_vec().unwrap();
             tx.add_verb(
                 &SYSTEM_OBJECT,
                 &sysobj.clone(),
@@ -97,8 +98,7 @@ mod tests {
                 &sysobj.clone(),
                 VerbFlag::rxd(),
                 VerbArgsSpec::this_none_this(),
-                binary,
-                BinaryType::LambdaMoo18X,
+                ProgramType::MooR((*program).clone()),
             )
             .unwrap();
         }

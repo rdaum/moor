@@ -12,7 +12,6 @@
 //
 
 use bincode::{Decode, Encode};
-use byteview::ByteView;
 use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
@@ -23,9 +22,10 @@ use crate::model::objset::ObjSet;
 use crate::model::propdef::{PropDef, PropDefs};
 use crate::model::props::{PropAttrs, PropFlag};
 use crate::model::verbdef::{VerbDef, VerbDefs};
-use crate::model::verbs::{BinaryType, VerbAttrs, VerbFlag};
+use crate::model::verbs::{VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};
 use crate::model::{ObjAttr, Vid};
+use crate::program::ProgramType;
 use crate::util::{BitEnum, PerfCounter};
 use moor_var::Var;
 use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RECMOVE, E_TYPE, E_VERBNF, Symbol};
@@ -292,8 +292,7 @@ pub trait WorldState: Send {
         owner: &Obj,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
-        binary: Vec<u8>,
-        binary_type: BinaryType,
+        program: ProgramType,
     ) -> Result<(), WorldStateError>;
 
     /// Remove a verb from the given object.
@@ -342,7 +341,7 @@ pub trait WorldState: Send {
         perms: &Obj,
         obj: &Obj,
         uuid: Uuid,
-    ) -> Result<(ByteView, VerbDef), WorldStateError>;
+    ) -> Result<(ProgramType, VerbDef), WorldStateError>;
 
     /// Retrieve a verb/method from the given object (or its parents).
     fn find_method_verb_on(
@@ -350,7 +349,7 @@ pub trait WorldState: Send {
         perms: &Obj,
         obj: &Obj,
         vname: Symbol,
-    ) -> Result<(ByteView, VerbDef), WorldStateError>;
+    ) -> Result<(ProgramType, VerbDef), WorldStateError>;
 
     /// Seek the verb referenced by the given command on the given object.
     fn find_command_verb_on(
@@ -361,7 +360,7 @@ pub trait WorldState: Send {
         dobj: &Obj,
         prep: PrepSpec,
         iobj: &Obj,
-    ) -> Result<Option<(ByteView, VerbDef)>, WorldStateError>;
+    ) -> Result<Option<(ProgramType, VerbDef)>, WorldStateError>;
 
     /// Get the object that is the parent of the given object.
     fn parent_of(&self, perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError>;

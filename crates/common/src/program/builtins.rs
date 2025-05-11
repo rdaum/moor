@@ -1276,7 +1276,7 @@ impl Builtins {
         self.names.get(&offset).cloned()
     }
 
-    pub fn len(&self) -> usize {
+    pub fn number_of(&self) -> usize {
         self.offsets.len()
     }
 

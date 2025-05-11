@@ -28,7 +28,6 @@ use moor_var::{v_int, v_none, v_obj, v_str, v_sym_str};
 use crate::vm::builtins::BfRet::{Ret, VmInstr};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use crate::vm::vm_host::ExecutionResult::DispatchVerb;
-use crate::vm::vm_host::decode_program;
 use crate::vm::{VerbCall, VerbExecutionRequest};
 
 lazy_static! {
@@ -271,7 +270,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // We're going to try to call :initialize on the new object.
             // Then trampoline into the done case.
             // If :initialize doesn't exist, we'll just skip ahead.
-            let Ok((binary, resolved_verb)) = bf_args.world_state.find_method_verb_on(
+            let Ok((program, resolved_verb)) = bf_args.world_state.find_method_verb_on(
                 &bf_args.task_perms_who(),
                 &new_obj,
                 *INITIALIZE_SYM,
@@ -283,7 +282,6 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
             bf_frame.bf_trampoline_arg = Some(v_obj(new_obj.clone()));
 
-            let program = decode_program(resolved_verb.binary_type(), binary);
             let ve = VerbExecutionRequest {
                 permissions: bf_args.task_perms_who(),
                 resolved_verb,
@@ -396,12 +394,11 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     &obj,
                     *RECYCLE_SYM,
                 ) {
-                    Ok((binary, resolved_verb)) => {
+                    Ok((program, resolved_verb)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = Some(contents);
 
-                        let program = decode_program(resolved_verb.binary_type(), binary);
                         return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
@@ -457,7 +454,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     // :exitfunc *should* exist because we looked for it earlier, and we're supposed to
                     // be transactionally isolated. But we need to do resolution anyways, so we will
                     // look again anyways.
-                    let Ok((binary, resolved_verb)) = bf_args.world_state.find_method_verb_on(
+                    let Ok((program, resolved_verb)) = bf_args.world_state.find_method_verb_on(
                         &bf_args.task_perms_who(),
                         head_obj,
                         *EXITFUNC_SYM,
@@ -472,7 +469,6 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     bf_frame.bf_trampoline = Some(BF_RECYCLE_TRAMPOLINE_CALL_EXITFUNC);
 
                     // Call :exitfunc on the head object.
-                    let program = decode_program(resolved_verb.binary_type(), binary);
                     return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                         permissions: bf_args.task_perms_who(),
                         resolved_verb,
@@ -575,11 +571,10 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     &whereto,
                     *ACCEPT_SYM,
                 ) {
-                    Ok((binary, resolved_verb)) => {
+                    Ok((program, resolved_verb)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC);
                         bf_frame.bf_trampoline_arg = None;
-                        let program = decode_program(resolved_verb.binary_type(), binary);
                         return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
@@ -653,12 +648,11 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     &original_location,
                     *EXITFUNC_SYM,
                 ) {
-                    Ok((binary, resolved_verb)) => {
+                    Ok((program, resolved_verb)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_CALL_ENTERFUNC);
                         bf_frame.bf_trampoline_arg = None;
 
-                        let program = decode_program(resolved_verb.binary_type(), binary);
                         let continuation = DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,
@@ -701,12 +695,11 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     &whereto,
                     *ENTERFUNC_SYM,
                 ) {
-                    Ok((binary, resolved_verb)) => {
+                    Ok((program, resolved_verb)) => {
                         let bf_frame = bf_args.bf_frame_mut();
                         bf_frame.bf_trampoline = Some(BF_MOVE_TRAMPOLINE_DONE);
                         bf_frame.bf_trampoline_arg = None;
 
-                        let program = decode_program(resolved_verb.binary_type(), binary);
                         return Ok(VmInstr(DispatchVerb(Box::new(VerbExecutionRequest {
                             permissions: bf_args.task_perms_who(),
                             resolved_verb,

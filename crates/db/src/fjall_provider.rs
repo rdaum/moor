@@ -25,7 +25,7 @@ use tracing::error;
 
 enum WriteOp<
     Domain: Clone + Eq + PartialEq + AsByteBuffer,
-    Codomain: Clone + Eq + PartialEq + AsByteBuffer,
+    Codomain: Clone + PartialEq + AsByteBuffer,
 > {
     Insert(Timestamp, Domain, Codomain),
     Delete(Domain),
@@ -36,7 +36,7 @@ enum WriteOp<
 pub(crate) struct FjallProvider<Domain, Codomain>
 where
     Domain: Clone + Eq + PartialEq + AsByteBuffer,
-    Codomain: Clone + Eq + PartialEq + AsByteBuffer,
+    Codomain: Clone + PartialEq + AsByteBuffer,
 {
     fjall_partition: fjall::PartitionHandle,
     ops: Sender<WriteOp<Domain, Codomain>>,
@@ -69,7 +69,7 @@ where
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
 where
     Domain: Clone + Eq + PartialEq + AsByteBuffer + Send + 'static,
-    Codomain: Clone + Eq + PartialEq + AsByteBuffer + Send + 'static,
+    Codomain: Clone + PartialEq + AsByteBuffer + Send + 'static,
 {
     pub fn new(relation_name: &str, fjall_partition: fjall::PartitionHandle) -> Self {
         let kill_switch = Arc::new(AtomicBool::new(false));
@@ -136,7 +136,7 @@ where
 impl<Domain, Codomain> Provider<Domain, Codomain> for FjallProvider<Domain, Codomain>
 where
     Domain: Clone + Eq + PartialEq + AsByteBuffer,
-    Codomain: Clone + Eq + PartialEq + AsByteBuffer,
+    Codomain: Clone + PartialEq + AsByteBuffer,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error> {
         let key = domain.as_bytes().map_err(|_| Error::EncodingFailure)?;
@@ -204,7 +204,7 @@ where
 impl<Domain, Codomain> Drop for FjallProvider<Domain, Codomain>
 where
     Domain: Clone + Eq + PartialEq + AsByteBuffer,
-    Codomain: Clone + Eq + PartialEq + AsByteBuffer,
+    Codomain: Clone + PartialEq + AsByteBuffer,
 {
     fn drop(&mut self) {
         self.stop().unwrap();

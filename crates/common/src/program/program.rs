@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::program::labels::{JumpLabel, Label};
+use crate::program::labels::{JumpLabel, Label, Offset};
 use crate::program::names::{Name, Names};
 use crate::program::opcode::{
     ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
@@ -30,7 +30,10 @@ lazy_static! {
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
 #[derive(Clone, Debug, PartialEq, Encode, Decode)]
-pub struct Program {
+pub struct Program(pub Box<PrgInner>);
+
+#[derive(Clone, Debug, PartialEq, Encode, Decode)]
+pub struct PrgInner {
     /// All the literals referenced in this program.
     pub literals: Vec<Var>,
     /// All the jump offsets used in this program.
@@ -56,10 +59,9 @@ pub struct Program {
     /// TODO: fork vector offsets... Have to think about that one.
     pub line_number_spans: Vec<(usize, usize)>,
 }
-
 impl Program {
     pub fn new() -> Self {
-        Program {
+        Program(Box::new(PrgInner {
             literals: Vec::new(),
             jump_labels: Vec::new(),
             var_names: Names::new(0),
@@ -71,22 +73,99 @@ impl Program {
             fork_vectors: Vec::new(),
             line_number_spans: Vec::new(),
             error_operands: vec![],
-        }
+        }))
+    }
+
+    pub fn switch_to_fork_vector(&mut self, fork_vector_offset: Offset) {
+        self.0.main_vector = Arc::new(self.0.fork_vectors[fork_vector_offset.0 as usize].clone());
     }
 
     pub fn find_var(&self, v: &str) -> Name {
-        self.var_names
+        self.0
+            .var_names
             .find_name(v)
             .unwrap_or_else(|| panic!("variable not found: {}", v))
     }
 
-    pub fn find_literal(&self, l: Var) -> Label {
+    pub fn find_label_for_literal(&self, l: Var) -> Label {
         Label(
-            self.literals
+            self.0
+                .literals
                 .iter()
                 .position(|x| *x == l)
                 .expect("literal not found") as u16,
         )
+    }
+
+    pub fn var_names(&self) -> &Names {
+        &self.0.var_names
+    }
+
+    pub fn line_number_spans(&self) -> &[(usize, usize)] {
+        &self.0.line_number_spans
+    }
+
+    pub fn literals(&self) -> &[Var] {
+        &self.0.literals
+    }
+
+    pub fn jump_labels(&self) -> &[JumpLabel] {
+        &self.0.jump_labels
+    }
+
+    pub fn find_literal(&self, label: &Label) -> Option<Var> {
+        self.0.literals.get(label.0 as usize).cloned()
+    }
+
+    pub fn error_operand(&self, offset: Offset) -> &ErrorCode {
+        &self.0.error_operands[offset.0 as usize]
+    }
+
+    pub fn scatter_table(&self, offset: Offset) -> &ScatterArgs {
+        &self.0.scatter_tables[offset.0 as usize]
+    }
+
+    pub fn for_sequence_operand(&self, offset: Offset) -> &ForSequenceOperand {
+        &self.0.for_sequence_operands[offset.0 as usize]
+    }
+
+    pub fn range_comprehension(&self, offset: Offset) -> &RangeComprehend {
+        &self.0.range_comprehensions[offset.0 as usize]
+    }
+
+    pub fn list_comprehension(&self, offset: Offset) -> &ListComprehend {
+        &self.0.list_comprehensions[offset.0 as usize]
+    }
+
+    pub fn jump_label(&self, offset: Label) -> &JumpLabel {
+        &self.0.jump_labels[offset.0 as usize]
+    }
+
+    pub fn jump_label_mut(&mut self, offset: Offset) -> &mut JumpLabel {
+        &mut self.0.jump_labels[offset.0 as usize]
+    }
+
+    pub fn fork_vector(&self, offset: Offset) -> &Vec<Op> {
+        &self.0.fork_vectors[offset.0 as usize]
+    }
+
+    pub fn main_vector(&self) -> &Arc<Vec<Op>> {
+        &self.0.main_vector
+    }
+
+    pub fn find_jump(&self, label: &Label) -> Option<JumpLabel> {
+        self.0.jump_labels.iter().find(|j| &j.id == label).cloned()
+    }
+
+    pub fn line_num_for_position(&self, position: usize) -> usize {
+        let mut last_line_num = 1;
+        for (offset, line_no) in &self.0.line_number_spans {
+            if *offset >= position {
+                return last_line_num;
+            }
+            last_line_num = *line_no
+        }
+        last_line_num
     }
 }
 
@@ -99,28 +178,28 @@ impl Default for Program {
 impl Display for Program {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write literals indexed by their offset #
-        for (i, l) in self.literals.iter().enumerate() {
+        for (i, l) in self.0.literals.iter().enumerate() {
             writeln!(f, "L{}: {:?}", i, l)?;
         }
 
         // Write jump labels indexed by their offset & showing position & optional name
-        for (i, l) in self.jump_labels.iter().enumerate() {
+        for (i, l) in self.0.jump_labels.iter().enumerate() {
             write!(f, "J{}: {}", i, l.position.0)?;
             if let Some(name) = &l.name {
-                write!(f, " ({})", self.var_names.name_of(name).unwrap())?;
+                write!(f, " ({})", self.0.var_names.name_of(name).unwrap())?;
             }
             writeln!(f)?;
         }
 
         // Write variable names indexed by their offset
-        for (i, v) in self.var_names.symbols().iter().enumerate() {
+        for (i, v) in self.0.var_names.symbols().iter().enumerate() {
             writeln!(f, "V{}: {}", i, v)?;
         }
 
         // TODO: print fork vectors
 
         // Display main vector (program); opcodes are indexed by their offset
-        for (i, op) in self.main_vector.iter().enumerate() {
+        for (i, op) in self.0.main_vector.iter().enumerate() {
             writeln!(f, "{}: {:?}", i, op)?;
         }
 

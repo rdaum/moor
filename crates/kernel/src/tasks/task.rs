@@ -30,7 +30,6 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use byteview::ByteView;
 use crossbeam_channel::Sender;
 use lazy_static::lazy_static;
 use tracing::{error, trace, warn};
@@ -56,6 +55,7 @@ use moor_common::matching::{
     CommandParser, DefaultObjectNameMatcher, DefaultParseCommand, ParseCommandError, ParsedCommand,
     WsMatchEnv,
 };
+use moor_common::program::ProgramType;
 use moor_common::tasks::Session;
 
 lazy_static! {
@@ -460,11 +460,11 @@ impl Task {
                                "World state error while resolving verb: {:?}", e);
                         panic!("Could not resolve verb: {:?}", e);
                     }
-                    Ok(verb_info) => {
+                    Ok((program, verbdef)) => {
                         self.vm_host.start_call_method_verb(
                             self.task_id,
                             &self.perms,
-                            verb_info,
+                            (program, verbdef),
                             verb_call,
                         );
                     }
@@ -521,7 +521,7 @@ impl Task {
             Err(WorldStateError::VerbNotFound(_, _)) => {
                 self.setup_start_parse_command(player, command, world_state)?;
             }
-            Ok(verb_info) => {
+            Ok((program, verbdef)) => {
                 let arguments = parse_into_words(command);
                 let args = List::from_iter(arguments.iter().map(|s| v_str(s)));
                 let verb_call = VerbCall {
@@ -536,7 +536,7 @@ impl Task {
                 self.vm_host.start_call_method_verb(
                     self.task_id,
                     &self.perms,
-                    verb_info,
+                    (program, verbdef),
                     verb_call,
                 );
                 self.task_start = TaskStart::StartDoCommand {
@@ -598,18 +598,9 @@ impl Task {
         // Look for the verb...
         let parse_results =
             find_verb_for_command(player, &player_location, &parsed_command, world_state)?;
-        let (verb_info, target) = match parse_results {
+        let ((program, verbdef), target) = match parse_results {
             // If we have a successful match, that's what we'll call into
-            Some((verb_info, target)) => {
-                trace!(
-                    ?parsed_command,
-                    ?player,
-                    ?target,
-                    ?verb_info,
-                    "Starting command"
-                );
-                (verb_info, target)
-            }
+            Some((verb_info, target)) => (verb_info, target),
             // Otherwise, we want to try to call :huh, if it exists.
             None => {
                 if player_location == NOTHING {
@@ -617,16 +608,12 @@ impl Task {
                 }
                 // Try to find :huh. If it exists, we'll dispatch to that, instead.
                 // If we don't find it, that's the end of the line.
-                let Ok(verb_info) =
+                let Ok((program, verbdef)) =
                     world_state.find_method_verb_on(&self.perms, &player_location, *HUH_SYM)
                 else {
                     return Err(CommandError::NoCommandMatch);
                 };
-                let words = parse_into_words(command);
-                trace!(?verb_info, ?player, ?player_location, args = ?words,
-                            "Dispatching to :huh");
-
-                (verb_info, player_location)
+                ((program, verbdef), player_location)
             }
         };
         let verb_call = VerbCall {
@@ -640,7 +627,7 @@ impl Task {
         };
         self.vm_host.start_call_command_verb(
             self.task_id,
-            verb_info,
+            (program, verbdef),
             verb_call,
             parsed_command,
             &self.perms,
@@ -655,7 +642,7 @@ fn find_verb_for_command(
     player_location: &Obj,
     pc: &ParsedCommand,
     ws: &mut dyn WorldState,
-) -> Result<Option<((ByteView, VerbDef), Obj)>, CommandError> {
+) -> Result<Option<((ProgramType, VerbDef), Obj)>, CommandError> {
     let perfc = sched_counters();
     let _t = PerfTimerGuard::new(&perfc.find_verb_for_command);
     let targets_to_search = vec![
@@ -761,14 +748,15 @@ mod tests {
     use crossbeam_channel::{Receiver, unbounded};
 
     use moor_common::model::{
-        ArgSpec, BinaryType, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
+        ArgSpec, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
     };
+    use moor_common::program::ProgramType;
     use moor_common::tasks::{CommandError, Event, TaskId};
     use moor_common::util::BitEnum;
     use moor_compiler::{CompileOptions, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::E_DIV;
-    use moor_var::{AsByteBuffer, NOTHING, SYSTEM_OBJECT};
+    use moor_var::{NOTHING, SYSTEM_OBJECT};
     use moor_var::{Symbol, v_obj};
     use moor_var::{v_int, v_str};
 
@@ -782,7 +770,7 @@ mod tests {
 
     struct TestVerb {
         name: Symbol,
-        program: Box<Program>,
+        program: Program,
         argspec: VerbArgsSpec,
     }
 
@@ -840,7 +828,6 @@ mod tests {
             argspec,
         } in programs
         {
-            let binary = program.make_copy_as_vec().unwrap();
             tx.add_verb(
                 &SYSTEM_OBJECT,
                 &SYSTEM_OBJECT,
@@ -848,8 +835,7 @@ mod tests {
                 &SYSTEM_OBJECT,
                 BitEnum::new_with(VerbFlag::Exec),
                 *argspec,
-                binary,
-                BinaryType::LambdaMoo18X,
+                ProgramType::MooR(program.clone()),
             )
             .unwrap();
         }
@@ -1125,7 +1111,7 @@ mod tests {
                 fork_request.activation.frame
             );
         };
-        assert_eq!(moo_frame.program, *program);
+        assert_eq!(moo_frame.program.as_ref(), program);
 
         // Reply back with the new task id.
         reply_channel.send(2).unwrap();

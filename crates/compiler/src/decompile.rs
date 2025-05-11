@@ -20,7 +20,7 @@ use crate::ast::{
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::parse::Parse;
 use moor_common::program::builtins::BuiltinId;
-use moor_common::program::labels::{JumpLabel, Label};
+use moor_common::program::labels::{JumpLabel, Label, Offset};
 use moor_common::program::names::{Name, UnboundName, UnboundNames};
 use moor_common::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterLabel,
@@ -61,8 +61,8 @@ struct Decompile {
 impl Decompile {
     fn opcode_vector(&self) -> &[Op] {
         match self.fork_vector {
-            Some(fv) => &self.program.fork_vectors[fv],
-            None => &self.program.main_vector,
+            Some(fv) => self.program.fork_vector(Offset(fv as u16)),
+            None => self.program.main_vector(),
         }
     }
 
@@ -87,18 +87,13 @@ impl Decompile {
 
     fn find_jump(&self, label: &Label) -> Result<JumpLabel, DecompileError> {
         self.program
-            .jump_labels
-            .iter()
-            .find(|j| &j.id == label)
+            .find_jump(label)
             .ok_or(DecompileError::LabelNotFound(*label))
-            .cloned()
     }
 
     pub fn find_literal(&self, label: &Label) -> Result<Var, DecompileError> {
         self.program
-            .literals
-            .get(label.0 as usize)
-            .cloned()
+            .find_literal(label)
             .ok_or(DecompileError::LabelNotFound(*label))
     }
 
@@ -176,21 +171,10 @@ impl Decompile {
         }
     }
 
-    fn line_num_for_position(&self) -> usize {
-        let mut last_line_num = 1;
-        for (offset, line_no) in &self.program.line_number_spans {
-            if *offset >= self.position {
-                return last_line_num;
-            }
-            last_line_num = *line_no
-        }
-        last_line_num
-    }
-
     fn decompile(&mut self) -> Result<(), DecompileError> {
         let opcode = self.next()?;
 
-        let line_num = (self.line_num_for_position(), 0);
+        let line_num = (self.program.line_num_for_position(self.position), 0);
         match opcode {
             Op::If(otherwise_label, environment_width) => {
                 let cond = self.pop_expr()?;
@@ -289,7 +273,7 @@ impl Decompile {
                     key_bind,
                     end_label: label,
                     environment_width,
-                } = self.program.for_sequence_operands[offset.0 as usize];
+                } = self.program.for_sequence_operand(offset).clone();
                 let body = self.decompile_statements_until(&label)?;
                 let value_id = self.decompile_name(&value_bind)?;
                 let key_id = match key_bind {
@@ -416,7 +400,7 @@ impl Decompile {
                     statements: vec![],
                     names_mapping: self.names_mapping.clone(),
                 };
-                let fv_len = self.program.fork_vectors[fv_offset.0 as usize].len();
+                let fv_len = self.program.fork_vector(fv_offset).len();
                 while fork_decompile.position < fv_len {
                     fork_decompile.decompile()?;
                 }
@@ -656,7 +640,7 @@ impl Decompile {
                 self.push_expr(Expr::Flyweight(Box::new(delegate), slots, contents));
             }
             Op::MakeError(offset) => {
-                let error_code = self.program.error_operands[offset.0 as usize];
+                let error_code = *self.program.error_operand(offset);
                 // The value for the error is on the stack.
                 let value = self.pop_expr()?;
                 self.push_expr(Expr::Error(error_code, Some(Box::new(value))))
@@ -674,12 +658,7 @@ impl Decompile {
                 // optional scatters. We will use this later to compute the end of optional
                 // assignment expressions in the scatter.
                 let mut opt_jump_labels = vec![];
-                let scatter_table = self
-                    .program
-                    .scatter_tables
-                    .get(sa.0 as usize)
-                    .ok_or_else(|| MalformedProgram(format!("scatter table {} not found", sa.0)))?
-                    .clone();
+                let scatter_table = self.program.scatter_table(sa).clone();
                 for scatter_label in scatter_table.labels.iter() {
                     if let ScatterLabel::Optional(_, Some(label)) = scatter_label {
                         opt_jump_labels.push(label);
@@ -1008,14 +987,7 @@ impl Decompile {
                             position,
                             end_of_range_register,
                             end_label,
-                        } = self
-                            .program
-                            .range_comprehensions
-                            .get(offset.0 as usize)
-                            .ok_or_else(|| {
-                                MalformedProgram(format!("comprehend range {:?} not found", offset))
-                            })?
-                            .clone();
+                        } = self.program.range_comprehension(offset).clone();
                         self.decompile_statements_until(&end_label)?;
                         let producer_expr = self.pop_expr()?;
 
@@ -1061,14 +1033,7 @@ impl Decompile {
                             list_register,
                             item_variable,
                             end_label,
-                        } = self
-                            .program
-                            .list_comprehensions
-                            .get(offset.0 as usize)
-                            .ok_or_else(|| {
-                                MalformedProgram(format!("comprehend list {:?} not found", offset))
-                            })?
-                            .clone();
+                        } = self.program.list_comprehension(offset).clone();
                         self.decompile_statements_until(&end_label)?;
                         let producer_expr = self.pop_expr()?;
 
@@ -1117,8 +1082,9 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     let mut unbound_names = UnboundNames::new();
     let mut bound_to_unbound = HashMap::new();
     let mut unbound_to_bound = HashMap::new();
-    for bound_name in program.var_names.names() {
-        let ub = match program.var_names.name_of(&bound_name) {
+    let var_names = program.var_names();
+    for bound_name in var_names.names() {
+        let ub = match var_names.name_of(&bound_name) {
             None => unbound_names
                 .declare_register()
                 .map_err(|_| DecompileError::NameNotFound(bound_name))?,
@@ -1148,7 +1114,7 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
 
     Ok(Parse {
         stmts: decompile.statements,
-        names: program.var_names.clone(),
+        names: program.var_names().clone(),
         unbound_names,
         names_mapping: unbound_to_bound,
     })

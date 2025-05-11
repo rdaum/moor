@@ -18,7 +18,7 @@ use crate::vm::VerbCall;
 use crate::vm::activation::{Activation, Frame};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters};
 use crate::vm::exec_state::{VMExecState, vm_counters};
-use crate::vm::vm_host::{ExecutionResult, decode_program};
+use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 
 use lazy_static::lazy_static;
@@ -27,6 +27,7 @@ use moor_common::matching::ParsedCommand;
 use moor_common::model::VerbDef;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
+use moor_common::program::ProgramType;
 use moor_common::tasks::Session;
 use moor_common::util::PerfTimerGuard;
 use moor_compiler::{BUILTINS, BuiltinId, Program};
@@ -60,12 +61,7 @@ pub struct VerbExecutionRequest {
     /// The parsed user command that led to this verb dispatch, if any.
     pub command: Option<Box<ParsedCommand>>,
     /// The decoded MOO Binary that contains the verb to be executed.
-    pub program: VerbProgram,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum VerbProgram {
-    Moo(Box<Program>),
+    pub program: ProgramType,
 }
 
 /// The set of parameters & utilities passed to the VM for execution of a given task.
@@ -180,7 +176,7 @@ impl VMExecState {
             return self.push_error(E_INVIND.msg("Invalid object for verb dispatch"));
         }
         // Find the callable verb ...
-        let (binary, resolved_verb) =
+        let (program, resolved_verb) =
             match world_state.find_method_verb_on(&self.top().permissions, &location, verb_name) {
                 Ok(vi) => vi,
                 Err(WorldStateError::ObjectPermissionDenied) => {
@@ -204,8 +200,6 @@ impl VMExecState {
 
         // Permissions for the activation are the verb's owner.
         let permissions = resolved_verb.owner();
-
-        let program = decode_program(resolved_verb.binary_type(), binary);
         ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
             permissions,
             resolved_verb,
@@ -247,7 +241,7 @@ impl VMExecState {
         }
 
         // call verb on parent, but with our current 'this'
-        let (binary, resolved_verb) =
+        let (program, resolved_verb) =
             match world_state.find_method_verb_on(permissions, &parent, verb) {
                 Ok(vi) => vi,
                 Err(WorldStateError::RollbackRetry) => {
@@ -267,7 +261,6 @@ impl VMExecState {
             caller,
         };
 
-        let program = decode_program(resolved_verb.binary_type(), binary);
         ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
             permissions: permissions.clone(),
             resolved_verb,
@@ -285,7 +278,7 @@ impl VMExecState {
         self.stack.push(a);
     }
 
-    pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Box<Program>) {
+    pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Program) {
         let a = Activation::for_eval(permissions.clone(), player, program);
 
         self.stack.push(a);
@@ -307,9 +300,9 @@ impl VMExecState {
             panic!("Attempt to fork a non-MOO frame");
         };
 
-        frame.program.main_vector = Arc::new(
-            frame.program.fork_vectors[fork_request.fork_vector_offset.0 as usize].clone(),
-        );
+        frame
+            .program
+            .switch_to_fork_vector(fork_request.fork_vector_offset);
         frame.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
             frame.set_variable(&task_id_name, v_int(self.task_id as i64));
@@ -339,7 +332,7 @@ impl VMExecState {
         let bf_override_name = Symbol::mk(&format!("bf_{}", bf_name));
 
         // Look for it...
-        let (binary, resolved_verb) = world_state
+        let (program, resolved_verb) = world_state
             .find_method_verb_on(&self.top().permissions, &SYSTEM_OBJECT, bf_override_name)
             .ok()?;
 
@@ -353,7 +346,6 @@ impl VMExecState {
             caller: self.caller(),
         };
 
-        let program = decode_program(resolved_verb.binary_type(), binary);
         Some(ExecutionResult::DispatchVerb(Box::new(
             VerbExecutionRequest {
                 permissions: self.top().permissions.clone(),

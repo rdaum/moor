@@ -169,11 +169,11 @@ impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
 }
 
 impl MooStackFrame {
-    pub(crate) fn new(program: Box<Program>) -> Self {
+    pub(crate) fn new(program: Program) -> Self {
         let environment = BitArray::new();
-        let environment_width = program.var_names.global_width();
+        let environment_width = program.var_names().global_width();
         Self {
-            program,
+            program: Box::new(program),
             environment,
             environment_width,
             pc: 0,
@@ -189,19 +189,7 @@ impl MooStackFrame {
         let vm_counters = vm_counters();
         let _t = PerfTimerGuard::new(&vm_counters.find_line_no);
 
-        if self.program.line_number_spans.is_empty() {
-            return None;
-        }
-        // Seek through the line # spans looking for the first offset (first part of tuple) which is
-        // equal to or higher than `pc`. If we don't find one, return the last one.
-        let mut last_line_num = 1;
-        for (offset, line_no) in &self.program.line_number_spans {
-            if *offset >= pc {
-                return Some(last_line_num);
-            }
-            last_line_num = *line_no
-        }
-        Some(last_line_num)
+        Some(self.program.line_num_for_position(pc))
     }
 
     #[inline]
@@ -221,13 +209,13 @@ impl MooStackFrame {
     /// Return the value of a local variable.
     #[inline]
     pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
-        let offset = self.program.var_names.offset_for(id)?;
+        let offset = self.program.var_names().offset_for(id)?;
         self.environment.get(offset)
     }
 
     #[inline]
     pub fn lookahead(&self) -> Option<Op> {
-        self.program.main_vector.get(self.pc).cloned()
+        self.program.main_vector().get(self.pc).cloned()
     }
 
     #[inline]
@@ -283,7 +271,7 @@ impl MooStackFrame {
 
     #[inline]
     pub fn jump(&mut self, label_id: &Label) {
-        let label = &self.program.jump_labels[label_id.0 as usize];
+        let label = &self.program.jump_label(*label_id);
         self.pc = label.position.0 as usize;
 
         // Pop all scopes until we find one whose end_pos is > our jump point
@@ -301,7 +289,7 @@ impl MooStackFrame {
         // (This is just updating environment_width)
         self.environment_width += scope_width as usize;
 
-        let end_pos = self.program.jump_labels[end_label.0 as usize].position.0 as usize;
+        let end_pos = self.program.jump_label(*end_label).position.0 as usize;
         self.scope_stack.push(Scope {
             scope_type: scope,
             valstack_pos: self.valstack.len(),

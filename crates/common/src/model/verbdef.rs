@@ -13,7 +13,7 @@
 
 use crate::model::defset::{Defs, HasUuid, Named};
 use crate::model::r#match::VerbArgsSpec;
-use crate::model::verbs::{BinaryType, VerbFlag};
+use crate::model::verbs::VerbFlag;
 use crate::util::BitEnum;
 use crate::util::verbname_cmp;
 use bincode::{Decode, Encode};
@@ -22,14 +22,13 @@ use moor_var::Obj;
 use moor_var::Symbol;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Encode, Decode)]
 pub struct VerbDef {
     #[bincode(with_serde)]
     uuid: Uuid,
     location: Obj,
     owner: Obj,
     flags: BitEnum<VerbFlag>,
-    binary_type: BinaryType,
     args: VerbArgsSpec,
     names: Vec<Symbol>,
 }
@@ -42,7 +41,6 @@ impl VerbDef {
         owner: Obj,
         names: &[&str],
         flags: BitEnum<VerbFlag>,
-        binary_type: BinaryType,
         args: VerbArgsSpec,
     ) -> Self {
         Self {
@@ -50,7 +48,6 @@ impl VerbDef {
             location,
             owner,
             flags,
-            binary_type,
             args,
             names: names.iter().map(|s| (*s).into()).collect(),
         }
@@ -70,10 +67,6 @@ impl VerbDef {
         self.flags
     }
 
-    #[must_use]
-    pub fn binary_type(&self) -> BinaryType {
-        self.binary_type
-    }
     #[must_use]
     pub fn args(&self) -> VerbArgsSpec {
         self.args

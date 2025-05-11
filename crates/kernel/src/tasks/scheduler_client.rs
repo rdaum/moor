@@ -395,7 +395,7 @@ pub enum SchedulerClientMsg {
     SubmitEvalTask {
         player: Obj,
         perms: Obj,
-        program: Box<Program>,
+        program: Program,
         sessions: Arc<dyn Session>,
         reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },

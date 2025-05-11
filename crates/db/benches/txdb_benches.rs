@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#![recursion_limit = "256"]
+
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use moor_common::model::{CommitResult, PropFlag, WorldStateSource};
 use moor_common::util::BitEnum;

@@ -15,11 +15,12 @@ use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{
     HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, prop_flags_string, verb_perms_string,
 };
+use moor_common::program::ProgramType;
 use moor_compiler::{
-    ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, Program, program_to_tree,
-    to_literal, to_literal_objsub, unparse,
+    ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, program_to_tree, to_literal,
+    to_literal_objsub, unparse,
 };
-use moor_var::{AsByteBuffer, NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_str, v_string};
+use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_str, v_string};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
@@ -57,14 +58,14 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
             .expect("Failed to get object verbs");
         for v in verbs.iter() {
             let binary = loader
-                .get_verb_binary(&o, v.uuid())
+                .get_verb_program(&o, v.uuid())
                 .expect("Failed to get verb binary");
             let ov = ObjVerbDef {
                 names: v.names().iter().map(|s| Symbol::mk(s)).collect(),
                 argspec: v.args(),
                 owner: v.owner(),
                 flags: v.flags(),
-                binary,
+                program: binary,
             };
             od.verbs.push(ov);
             num_verbdefs += 1;
@@ -325,9 +326,11 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
             };
 
             // decompile the verb
-            let program =
-                Program::from_bytes(v.binary.clone()).expect("Failed to parse verb binary");
-            let decompiled = program_to_tree(&program).expect("Failed to decompile verb binary");
+            #[allow(irrefutable_let_patterns)]
+            let ProgramType::MooR(program) = &v.program else {
+                panic!("Verb program is not Moo");
+            };
+            let decompiled = program_to_tree(program).expect("Failed to decompile verb binary");
             let unparsed = unparse(&decompiled).expect("Failed to unparse verb binary");
             let mut body = String::new();
             for line in unparsed {

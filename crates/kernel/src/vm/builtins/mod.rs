@@ -69,8 +69,8 @@ impl Default for BfCounters {
 
 impl BfCounters {
     pub fn new() -> Self {
-        let mut counters = Vec::with_capacity(BUILTINS.len());
-        for i in 0..BUILTINS.len() {
+        let mut counters = Vec::with_capacity(BUILTINS.number_of());
+        for i in 0..BUILTINS.number_of() {
             counters.push(PerfCounter {
                 operation: BUILTINS.names[&BuiltinId(i as u16)],
                 invocations: ConcurrentCounter::new(0),
@@ -108,8 +108,8 @@ impl Default for BuiltinRegistry {
 
 impl BuiltinRegistry {
     pub fn new() -> Self {
-        let mut builtins: Vec<Box<BuiltinFunction>> = Vec::with_capacity(BUILTINS.len());
-        for _ in 0..BUILTINS.len() {
+        let mut builtins: Vec<Box<BuiltinFunction>> = Vec::with_capacity(BUILTINS.number_of());
+        for _ in 0..BUILTINS.number_of() {
             builtins.push(Box::new(bf_noop))
         }
         register_bf_server(&mut builtins);

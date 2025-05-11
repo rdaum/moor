@@ -29,7 +29,7 @@ mod tests {
         let program = "1 + 2;";
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![ImmInt(1), ImmInt(2), Add, Pop, Done]
         );
     }
@@ -50,7 +50,7 @@ mod tests {
            "  6: 030 010 * AND 10",
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![ImmInt(1), ImmInt(2), Add, Put(a), Pop, Done],
         );
     }
@@ -63,7 +63,7 @@ mod tests {
         let a = binary.find_var("a");
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 ImmInt(2),
@@ -103,7 +103,7 @@ mod tests {
 
                 */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 ImmInt(2),
@@ -154,7 +154,7 @@ mod tests {
         "  8: 107 000               JUMP 0",
                  */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 While {
@@ -198,7 +198,7 @@ mod tests {
         22: 107 000               JUMP 0
                         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 WhileId {
@@ -249,7 +249,7 @@ mod tests {
         " 23: 107 000               JUMP 0"
                  */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 While {
@@ -285,7 +285,7 @@ mod tests {
                 Done
             ]
         );
-        assert_eq!(binary.jump_labels[0].position.0, 0);
+        assert_eq!(binary.jump_label(Label(0)).position.0, 0);
     }
     #[test]
     fn test_for_in_list_stmt() {
@@ -313,7 +313,7 @@ mod tests {
                  */
         // The label for the ForList is not quite right here
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 MakeSingletonList,
@@ -334,15 +334,15 @@ mod tests {
             ]
         );
         assert_eq!(
-            binary.for_sequence_operands[0],
-            ForSequenceOperand {
+            binary.for_sequence_operand(Offset(0)),
+            &ForSequenceOperand {
                 value_bind: x,
                 key_bind: None,
                 end_label: 1.into(),
                 environment_width: 0,
             }
         );
-        assert_eq!(binary.jump_labels[0].position.0, 7);
+        assert_eq!(binary.jump_label(Label(0)).position.0, 7);
     }
 
     #[test]
@@ -353,7 +353,7 @@ mod tests {
         let player = binary.find_var("player");
         let a = binary.find_var("a");
         let n = binary.find_var("n");
-        let tell = binary.find_literal("tell".into());
+        let tell = binary.find_label_for_literal("tell".into());
 
         /*
          0: 124                   NUM 1
@@ -368,7 +368,7 @@ mod tests {
         12: 107 002               JUMP 2
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 ImmInt(5),
@@ -396,11 +396,11 @@ mod tests {
         let binary = compile(program, CompileOptions::default()).unwrap();
 
         let player = binary.find_var("player");
-        let a = binary.find_literal("a".into());
-        let tell = binary.find_literal("tell".into());
+        let a = binary.find_label_for_literal("a".into());
+        let tell = binary.find_label_for_literal("tell".into());
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(5),
                 Fork {
@@ -411,7 +411,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            binary.fork_vectors[0],
+            binary.fork_vector(Offset(0)).to_vec(),
             vec![
                 Push(player), // player
                 Imm(tell),    // tell
@@ -431,10 +431,10 @@ mod tests {
 
         let player = binary.find_var("player");
         let fid = binary.find_var("fid");
-        let tell = binary.find_literal("tell".into());
+        let tell = binary.find_label_for_literal("tell".into());
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(5),
                 Fork {
@@ -445,7 +445,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            binary.fork_vectors[0],
+            binary.fork_vector(Offset(0)).to_vec(),
             vec![
                 Push(player), // player
                 Imm(tell),    // tell
@@ -474,7 +474,7 @@ mod tests {
          8: 111                   POP
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 And(0.into()),
@@ -486,8 +486,8 @@ mod tests {
                 Done
             ]
         );
-        assert_eq!(binary.jump_labels[0].position.0, 3);
-        assert_eq!(binary.jump_labels[1].position.0, 5);
+        assert_eq!(binary.jump_label(Label(0)).position.0, 3);
+        assert_eq!(binary.jump_label(Label(1)).position.0, 5);
     }
 
     #[test]
@@ -506,7 +506,7 @@ mod tests {
         let binary = compile(program, CompileOptions::default()).unwrap();
 
         let player = binary.find_var("player");
-        let test = binary.find_literal("test".into());
+        let test = binary.find_label_for_literal("test".into());
         /*
          0: 072                   PUSH player
          1: 016                 * MAKE_SINGLETON_LIST
@@ -517,7 +517,7 @@ mod tests {
         */
         let disassemble = BUILTINS.find_builtin(Symbol::mk("disassemble")).unwrap();
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(player), // Player
                 MakeSingletonList,
@@ -549,7 +549,7 @@ mod tests {
         10: 111                   POP
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 ImmInt(2),
@@ -571,8 +571,8 @@ mod tests {
         let binary = compile(program, CompileOptions::default()).unwrap();
 
         let player = binary.find_var("player");
-        let tell = binary.find_literal("tell".into());
-        let test = binary.find_literal("test".into());
+        let tell = binary.find_label_for_literal("tell".into());
+        let test = binary.find_label_for_literal("test".into());
 
         /*
               0: 072                   PUSH player
@@ -583,7 +583,7 @@ mod tests {
               7: 111                   POP
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(player), // Player
                 Imm(tell),
@@ -601,7 +601,7 @@ mod tests {
         let program = "return \"test\"[1];";
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![Imm(0.into()), ImmInt(1), Ref, Return, Pop, Done]
         );
     }
@@ -611,7 +611,7 @@ mod tests {
         let program = "return \"test\"[1..2];";
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Imm(0.into()),
                 ImmInt(1),
@@ -631,7 +631,7 @@ mod tests {
         let a = binary.find_var("a");
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(a),
                 ImmInt(2),
@@ -654,7 +654,7 @@ mod tests {
         let a = binary.find_var("a");
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(a),
                 ImmInt(2),
@@ -676,7 +676,7 @@ mod tests {
         let program = "return {1,2,3}[1];";
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 MakeSingletonList,
@@ -698,7 +698,7 @@ mod tests {
         let program = "return {1,2,3}[1..2];";
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 MakeSingletonList,
@@ -743,7 +743,7 @@ mod tests {
         17: 030 021             * AND 21
                 */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             [
                 ImmInt(1),
                 MakeSingletonList,
@@ -780,7 +780,7 @@ mod tests {
         */
         let args = binary.find_var("args");
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(args),
                 ImmInt(1),
@@ -812,7 +812,7 @@ mod tests {
         11: 112 006               CONTINUE
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 TryFinally {
                     end_label: 0.into(),
@@ -865,7 +865,7 @@ mod tests {
 
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmErr(E_INVARG),
                 MakeSingletonList,
@@ -922,7 +922,7 @@ mod tests {
         let x = binary.find_var("x");
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmErr(E_PROPNF),
                 MakeSingletonList,
@@ -965,7 +965,7 @@ mod tests {
         */
         let raise = BUILTINS.find_builtin(Symbol::mk("raise")).unwrap();
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(0),
                 PushCatchLabel(0.into()),
@@ -991,8 +991,8 @@ mod tests {
         let program = "$string_utils:from_list(test_string);";
         let binary = compile(program, CompileOptions::default()).unwrap();
 
-        let string_utils = binary.find_literal("string_utils".into());
-        let from_list = binary.find_literal("from_list".into());
+        let string_utils = binary.find_label_for_literal("string_utils".into());
+        let from_list = binary.find_label_for_literal("from_list".into());
         let test_string = binary.find_var("test_string");
         /*
          0: 100 000               PUSH_LITERAL #0
@@ -1004,7 +1004,7 @@ mod tests {
          9: 010                 * CALL_VERB
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmObjid(SYSTEM_OBJECT),
                 Imm(string_utils),
@@ -1023,9 +1023,9 @@ mod tests {
     fn test_sysverbcall() {
         let program = "$verb_metadata(#1, 1);";
         let binary = compile(program, CompileOptions::default()).unwrap();
-        let verb_metadata = binary.find_literal("verb_metadata".into());
+        let verb_metadata = binary.find_label_for_literal("verb_metadata".into());
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmObjid(SYSTEM_OBJECT),
                 Imm(verb_metadata),
@@ -1056,10 +1056,10 @@ mod tests {
         */
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![Push(binary.find_var("args")), Scatter(Offset(0)), Pop, Done]
         );
-        let sa = binary.scatter_tables[0].clone();
+        let sa = binary.scatter_table(Offset(0)).clone();
         assert_eq!(
             sa,
             ScatterArgs {
@@ -1092,7 +1092,7 @@ mod tests {
          15: 111                   POP
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(binary.find_var("args")),
                 Scatter(Offset(0)),
@@ -1104,7 +1104,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            binary.scatter_tables[0].clone(),
+            binary.scatter_table(Offset(0)).clone(),
             ScatterArgs {
                 labels: vec![
                     ScatterLabel::Required(first),
@@ -1138,7 +1138,7 @@ mod tests {
             binary.find_var("d"),
         );
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(binary.find_var("args")),
                 Scatter(Offset(0)),
@@ -1150,7 +1150,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            binary.scatter_tables[0].clone(),
+            binary.scatter_table(Offset(0)).clone(),
             ScatterArgs {
                 labels: vec![
                     ScatterLabel::Required(a),
@@ -1190,7 +1190,7 @@ mod tests {
          25: 111                   POP
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(binary.find_var("args")),
                 Scatter(Offset(0)),
@@ -1205,7 +1205,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            binary.scatter_tables[0].clone(),
+            binary.scatter_table(Offset(0)).clone(),
             ScatterArgs {
                 labels: vec![
                     ScatterLabel::Required(a),
@@ -1258,14 +1258,14 @@ mod tests {
                */
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 MakeSingletonList,
                 ImmInt(2),
                 ListAddTail,
                 Push(binary.find_var("player")),
-                Imm(binary.find_literal("kill".into())),
+                Imm(binary.find_label_for_literal("kill".into())),
                 Push(b),
                 MakeSingletonList,
                 CallVerb,
@@ -1287,7 +1287,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            binary.scatter_tables[0].clone(),
+            binary.scatter_table(Offset(0)).clone(),
             ScatterArgs {
                 labels: vec![
                     ScatterLabel::Required(a),
@@ -1318,10 +1318,10 @@ mod tests {
                  10: 106                   PUSH_TEMP
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(binary.find_var("this")),
-                Imm(binary.find_literal("stack".into())),
+                Imm(binary.find_label_for_literal("stack".into())),
                 PushGetProp,
                 ImmInt(5),
                 ImmInt(5),
@@ -1367,7 +1367,7 @@ mod tests {
         */
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmInt(1),
                 Put(x),
@@ -1398,10 +1398,10 @@ mod tests {
         let binary = compile(program, CompileOptions::default()).unwrap();
 
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(binary.find_var("this")),
-                Imm(binary.find_literal("stack".into())),
+                Imm(binary.find_label_for_literal("stack".into())),
                 GetProp,
                 Return,
                 Pop,
@@ -1415,10 +1415,10 @@ mod tests {
         let program = r#"#0:test_verb();"#;
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmObjid(Obj::mk_id(0)),
-                Imm(binary.find_literal("test_verb".into())),
+                Imm(binary.find_label_for_literal("test_verb".into())),
                 ImmEmptyList,
                 CallVerb,
                 Pop,
@@ -1431,7 +1431,7 @@ mod tests {
     fn test_0_arg_return() {
         let program = r#"return;"#;
         let binary = compile(program, CompileOptions::default()).unwrap();
-        assert_eq!(*binary.main_vector.as_ref(), vec![Return0, Pop, Done])
+        assert_eq!(binary.main_vector().to_vec(), vec![Return0, Pop, Done])
     }
 
     #[test]
@@ -1449,7 +1449,7 @@ mod tests {
         let args = binary.find_var("args");
         let blop = binary.find_var("blop");
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 Push(args),
                 CheckListForSplice,
@@ -1510,7 +1510,7 @@ mod tests {
         33: 110                   DONE
                 */
         assert_eq!(
-            *program.main_vector.as_ref(),
+            program.main_vector().to_vec(),
             vec![
                 ImmErr(E_RANGE),
                 MakeSingletonList,
@@ -1554,7 +1554,7 @@ mod tests {
         19: 030 023             * AND 23
         */
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 ImmErr(E_INVIND),
                 MakeSingletonList,
@@ -1578,7 +1578,7 @@ mod tests {
         let program = r#"return[ "a"->5, "b"->"another_seq"[1..$]];"#;
         let binary = compile(program, CompileOptions::default()).unwrap();
         assert_eq!(
-            *binary.main_vector.as_ref(),
+            binary.main_vector().to_vec(),
             vec![
                 MakeMap,
                 Imm(Label(0)),

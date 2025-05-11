@@ -11,6 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+#![recursion_limit = "256"]
+
 #[cfg(test)]
 mod test {
     use semver::Version;
@@ -27,14 +29,15 @@ mod test {
     use moor_common::model::loader::LoaderInterface;
     use moor_common::model::{CommitResult, ValSet};
     use moor_common::model::{HasUuid, Named};
-    use moor_compiler::{CompileOptions, Program};
+    use moor_common::program::ProgramType;
+    use moor_compiler::CompileOptions;
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_textdump::{
         EncodingMode, LambdaMOODBVersion, TextdumpReader, TextdumpVersion, TextdumpWriter,
         make_textdump, read_textdump, textdump_load,
     };
+    use moor_var::SYSTEM_OBJECT;
     use moor_var::Symbol;
-    use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
     use moor_var::{NOTHING, Obj};
 
     fn get_minimal_db() -> File {
@@ -410,13 +413,19 @@ mod test {
 
                 // We want to actually decode and compare the opcode streams rather than
                 // the binary, so that we can make meaningful error reports.
-                let binary1 = tx1.get_verb_binary(&o, v1.uuid()).unwrap();
-                let binary2 = tx2.get_verb_binary(&o, v2.uuid()).unwrap();
+                let prg1 = tx1.get_verb_program(&o, v1.uuid()).unwrap();
+                let prg2 = tx2.get_verb_program(&o, v2.uuid()).unwrap();
 
-                let program1 =
-                    moor_compiler::program_to_tree(&Program::from_bytes(binary1).unwrap()).unwrap();
-                let program2 =
-                    moor_compiler::program_to_tree(&Program::from_bytes(binary2).unwrap()).unwrap();
+                #[allow(irrefutable_let_patterns)]
+                let ProgramType::MooR(program1) = &prg1 else {
+                    panic!("ProgramType::Moo expected");
+                };
+                #[allow(irrefutable_let_patterns)]
+                let ProgramType::MooR(program2) = &prg2 else {
+                    panic!("ProgramType::Moo expected");
+                };
+                let program1 = moor_compiler::program_to_tree(program1).unwrap();
+                let program2 = moor_compiler::program_to_tree(program2).unwrap();
 
                 assert_eq!(
                     program1.unbound_names, program2.unbound_names,

@@ -21,8 +21,9 @@ use uuid::Uuid;
 use moor_common::model::CommitResult;
 use moor_common::model::Named;
 use moor_common::model::VerbArgsSpec;
+use moor_common::model::VerbFlag;
 use moor_common::model::WorldStateSource;
-use moor_common::model::{BinaryType, VerbFlag};
+use moor_common::program::ProgramType;
 use moor_common::tasks::NoopClientSession;
 use moor_common::tasks::Session;
 use moor_compiler::Program;
@@ -33,8 +34,8 @@ use moor_kernel::tasks::vm_test_utils::ExecResult;
 use moor_kernel::vm::builtins::BuiltinRegistry;
 use moor_moot::test_db_path;
 use moor_textdump::textdump_load;
+use moor_var::SYSTEM_OBJECT;
 use moor_var::Symbol;
-use moor_var::{AsByteBuffer, SYSTEM_OBJECT};
 use moor_var::{List, Obj};
 
 #[allow(dead_code)]
@@ -68,7 +69,6 @@ pub fn create_db() -> Box<dyn Database> {
 pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
     let mut tx = db.new_world_state().unwrap();
     for (verb_name, program) in verbs {
-        let binary = program.make_copy_as_vec().unwrap();
         let verb_name = Symbol::mk(verb_name);
         tx.add_verb(
             &Obj::mk_id(3),
@@ -77,8 +77,7 @@ pub fn compile_verbs(db: &dyn Database, verbs: &[(&str, &Program)]) {
             &Obj::mk_id(3),
             VerbFlag::rx(),
             VerbArgsSpec::this_none_this(),
-            binary,
-            BinaryType::LambdaMoo18X,
+            ProgramType::MooR((*program).clone()),
         )
         .unwrap();
 

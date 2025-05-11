@@ -14,6 +14,8 @@
 //! Create a world state DB, populate it with a pile of random objects and properties, and then
 //! commit. Then reload it and verify the presence of all such properties.
 
+#![recursion_limit = "256"]
+
 #[cfg(test)]
 mod tests {
     use moor_common::model::{ObjFlag, PropFlag, WorldStateSource};

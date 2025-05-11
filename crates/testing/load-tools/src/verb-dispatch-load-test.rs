@@ -26,7 +26,7 @@ use clap_derive::Parser;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use moor_common::model::ObjectRef;
-use moor_var::{Obj, Symbol, Var, v_int};
+use moor_var::{Obj, Symbol, Var, Variant, v_int};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{make_host_token, start_host_session};
 use rpc_common::DaemonToClientReply::TaskSubmitted;
@@ -117,9 +117,12 @@ const LOAD_TEST_INVOKE_VERB: &str = r#"
 let num_verb_invocations = args[1];
 for i in [1..num_verb_invocations]
     for object in (player.test_objects)
-        object:load_test();
+        if (object:load_test() != 1) 
+            raise(E_INVARG, "Load test failed");
+        endif
     endfor
 endfor
+return 1;
 "#;
 
 const LOAD_TEST_VERB: &str = r#"
@@ -174,7 +177,7 @@ async fn workload(
         };
 
         let wait_time = Instant::now();
-        loop {
+        let results = loop {
             {
                 let mut tasks = task_results.lock().await;
                 if let Some(results) = tasks.remove(&task_id) {
@@ -188,6 +191,13 @@ async fn workload(
             }
         }
         .expect("Task results not found");
+
+        let Variant::Int(result) = results.variant() else {
+            panic!("Unexpected task result: {:?}", results);
+        };
+        if *result != 1 {
+            panic!("Load test failed");
+        }
     }
 
     Ok(start_time.elapsed())

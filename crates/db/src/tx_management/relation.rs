@@ -37,7 +37,7 @@ pub struct Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
 {
     relation_name: Symbol,
 
@@ -49,7 +49,7 @@ where
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
     Source: Provider<Domain, Codomain>,
 {
     pub fn new(relation_name: Symbol, provider: Arc<Source>) -> Self {
@@ -72,7 +72,7 @@ where
 pub struct RelationIndex<Domain, Codomain>
 where
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
 {
     /// Internal index of the cache.
     entries: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
@@ -86,7 +86,7 @@ where
 pub struct CheckRelation<Domain, Codomain, P>
 where
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
     P: Provider<Domain, Codomain>,
 {
     index: RelationIndex<Domain, Codomain>,
@@ -98,7 +98,7 @@ where
 impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
 where
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
     P: Provider<Domain, Codomain>,
 {
     pub fn num_entries(&self) -> usize {
@@ -224,7 +224,7 @@ impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
 {
     pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
         let index = self.index.read().unwrap();
@@ -251,7 +251,7 @@ where
 impl<Domain, Codomain> RelationIndex<Domain, Codomain>
 where
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
 {
     fn insert_entry(
         &mut self,
@@ -300,7 +300,7 @@ where
 impl<Domain, Codomain, Source> Canonical<Domain, Codomain> for Relation<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
     Source: Provider<Domain, Codomain>,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error> {
@@ -336,7 +336,7 @@ where
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
     Source: Provider<Domain, Codomain>,
 {
     pub fn stop_provider(&self) -> Result<(), Error> {
@@ -347,7 +347,7 @@ where
 impl<Domain, Codomain, Source> SizedCache for Relation<Domain, Codomain, Source>
 where
     Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq + Eq,
+    Codomain: Clone + PartialEq,
     Source: Provider<Domain, Codomain>,
 {
     fn select_victims(&self) {

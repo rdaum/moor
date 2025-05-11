@@ -17,14 +17,14 @@ use crate::{
     Object, Propval, Textdump, VF_ASPEC_ANY, VF_ASPEC_NONE, VF_ASPEC_THIS, VF_DOBJSHIFT,
     VF_IOBJSHIFT, Verb, Verbdef,
 };
+use moor_common::model::VerbFlag;
 use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
-use moor_common::model::{BinaryType, VerbFlag};
 use moor_common::model::{HasUuid, Named};
+use moor_common::program::ProgramType;
 use moor_common::util::BitEnum;
-use moor_compiler::Program;
+use moor_var::NOTHING;
 use moor_var::v_none;
-use moor_var::{AsByteBuffer, NOTHING};
 
 /// Convert verbargs spec to flags & preps accordingly
 fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
@@ -166,26 +166,20 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
             .collect();
         // Produce the verbmap
         for (verbnum, verb) in db_verbdefs.iter().enumerate() {
-            // Get and decompile the binary. We only support MOO for now.
-            if verb.binary_type() != BinaryType::LambdaMoo18X {
-                panic!("Unsupported binary type: {:?}", verb.binary_type());
-            }
-
-            let binary = tx
-                .get_verb_binary(db_objid, verb.uuid())
+            let program = tx
+                .get_verb_program(db_objid, verb.uuid())
                 .expect("Failed to get verb binary");
 
-            let program = if !binary.is_empty() {
-                let program = Program::from_bytes(binary).expect("Failed to parse verb binary");
-                if !program.main_vector.is_empty() {
-                    let ast = moor_compiler::program_to_tree(&program)
-                        .expect("Failed to decompile verb binary");
-                    let program =
-                        moor_compiler::unparse(&ast).expect("Failed to decompile verb binary");
-                    Some(program.join("\n"))
-                } else {
-                    None
-                }
+            #[allow(irrefutable_let_patterns)]
+            let ProgramType::MooR(program) = program else {
+                panic!("Expected Moo program, got {:?}", program);
+            };
+            let prgstr = if !program.main_vector().is_empty() {
+                let ast = moor_compiler::program_to_tree(&program)
+                    .expect("Failed to decompile verb binary");
+                let program =
+                    moor_compiler::unparse(&ast).expect("Failed to decompile verb binary");
+                Some(program.join("\n"))
             } else {
                 None
             };
@@ -196,7 +190,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
                 Verb {
                     objid: objid.clone(),
                     verbnum,
-                    program,
+                    program: prgstr,
                 },
             );
         }

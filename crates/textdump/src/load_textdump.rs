@@ -23,12 +23,13 @@ use moor_common::model::VerbFlag;
 use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{ArgSpec, PrepSpec, VerbArgsSpec};
 use moor_common::model::{ObjAttrs, ObjFlag};
+use moor_common::program::ProgramType;
 use moor_common::util::BitEnum;
 use moor_compiler::compile;
 use moor_compiler::{CompileOptions, Program};
+use moor_var::NOTHING;
 use moor_var::Obj;
 use moor_var::Var;
-use moor_var::{AsByteBuffer, NOTHING};
 use semver::Version;
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -283,15 +284,18 @@ pub fn read_textdump<T: io::Read>(
                 })?,
                 // If the verb program is missing, then it's an empty program, and we'll put in
                 // an empty binary.
-                _ => Box::new(Program::new()),
+                _ => Program::new(),
             };
 
-            let binary =
-                // Encode the binary (for now using bincode)
-                program.with_byte_buffer(|d| Vec::from(d)).expect("Failed to encode program");
-
             loader
-                .add_verb(objid, names.clone(), &v.owner, flags, argspec, binary)
+                .add_verb(
+                    objid,
+                    names.clone(),
+                    &v.owner,
+                    flags,
+                    argspec,
+                    ProgramType::MooR(program),
+                )
                 .map_err(|e| {
                     TextdumpReaderError::LoadError(
                         format!("adding verb #{}/{} ({:?})", objid, vn, names),

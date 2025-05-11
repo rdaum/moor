@@ -12,6 +12,7 @@
 //
 
 use crate::model::r#match::VerbArgsSpec;
+use crate::program::ProgramType;
 use crate::util::BitEnum;
 use binary_layout::LayoutAs;
 use bincode::{Decode, Encode};
@@ -153,13 +154,12 @@ impl LayoutAs<u8> for BinaryType {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VerbAttrs {
     pub definer: Option<Obj>,
     pub owner: Option<Obj>,
     pub names: Option<Vec<Symbol>>,
     pub flags: Option<BitEnum<VerbFlag>>,
     pub args_spec: Option<VerbArgsSpec>,
-    pub binary_type: Option<BinaryType>,
-    pub binary: Option<Vec<u8>>,
+    pub program: Option<ProgramType>,
 }

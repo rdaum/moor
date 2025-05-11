@@ -18,11 +18,12 @@ use crate::prop_cache::PropResolutionCache;
 use crate::tx_management::{Relation, SizedCache, Timestamp, Tx, WorkingSet};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::ws_transaction::WorldStateTransaction;
-use crate::{BytesHolder, CommitSet, ObjAndUUIDHolder, StringHolder};
+use crate::{CommitSet, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use minstant::Instant;
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
+use moor_common::program::ProgramType;
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{Obj, Symbol, Var};
 use std::path::Path;
@@ -47,7 +48,7 @@ pub struct MoorDB {
     object_name: R<Obj, StringHolder>,
 
     object_verbdefs: R<Obj, VerbDefs>,
-    object_verbs: R<ObjAndUUIDHolder, BytesHolder>,
+    object_verbs: R<ObjAndUUIDHolder, ProgramType>,
     object_propdefs: R<Obj, PropDefs>,
     object_propvalues: R<ObjAndUUIDHolder, Var>,
     object_propflags: R<ObjAndUUIDHolder, PropPerms>,
@@ -79,7 +80,7 @@ pub(crate) struct WorkingSets {
     pub(crate) object_owner: WorkingSet<Obj, Obj>,
     pub(crate) object_name: WorkingSet<Obj, StringHolder>,
     pub(crate) object_verbdefs: WorkingSet<Obj, VerbDefs>,
-    pub(crate) object_verbs: WorkingSet<ObjAndUUIDHolder, BytesHolder>,
+    pub(crate) object_verbs: WorkingSet<ObjAndUUIDHolder, ProgramType>,
     pub(crate) object_propdefs: WorkingSet<Obj, PropDefs>,
     pub(crate) object_propvalues: WorkingSet<ObjAndUUIDHolder, Var>,
     pub(crate) object_propflags: WorkingSet<ObjAndUUIDHolder, PropPerms>,

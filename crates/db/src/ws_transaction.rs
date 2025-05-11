@@ -17,15 +17,15 @@ use crate::moor_db::WorkingSets;
 use crate::prop_cache::PropResolutionCache;
 use crate::tx_management::{Relation, RelationTransaction, Tx};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
-use crate::{BytesHolder, CommitSet, Error, ObjAndUUIDHolder, StringHolder};
+use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
-use byteview::ByteView;
 use crossbeam_channel::Sender;
 use moor_common::model::{
-    BinaryType, CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectRef, PropDef,
-    PropDefs, PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
+    CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectRef, PropDef, PropDefs,
+    PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
     WorldStateError,
 };
+use moor_common::program::ProgramType;
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -65,7 +65,7 @@ pub struct WorldStateTransaction {
     pub(crate) object_name: RTx<Obj, StringHolder>,
 
     pub(crate) object_verbdefs: RTx<Obj, VerbDefs>,
-    pub(crate) object_verbs: RTx<ObjAndUUIDHolder, BytesHolder>,
+    pub(crate) object_verbs: RTx<ObjAndUUIDHolder, ProgramType>,
     pub(crate) object_propdefs: RTx<Obj, PropDefs>,
     pub(crate) object_propvalues: RTx<ObjAndUUIDHolder, Var>,
     pub(crate) object_propflags: RTx<ObjAndUUIDHolder, PropPerms>,
@@ -94,7 +94,7 @@ fn upsert<Domain, Codomain>(
 ) -> Result<Option<Codomain>, Error>
 where
     Domain: AsByteBuffer + Clone + Eq + Hash,
-    Codomain: AsByteBuffer + Clone + Eq,
+    Codomain: AsByteBuffer + Clone + PartialEq,
 {
     let size = d.size_bytes() + c.size_bytes();
     table.upsert(d, c, size)
@@ -599,7 +599,9 @@ impl WorldStateTransaction {
         let propvalues = propdefs
             .iter()
             .map(|p| self.retrieve_property(obj, p.uuid()));
-        let verbs = verbdefs.iter().map(|v| self.get_verb_binary(obj, v.uuid()));
+        let verbs = verbdefs
+            .iter()
+            .map(|v| self.get_verb_program(obj, v.uuid()));
 
         let mut size = flags.size_bytes();
         size += name.map(|n| n.size_bytes()).unwrap_or_default();
@@ -616,7 +618,7 @@ impl WorldStateTransaction {
                 .unwrap_or_default();
         }
         for v in verbs {
-            size += v.map(|v| v.len()).unwrap_or_default();
+            size += v?.size_bytes();
         }
 
         Ok(size)
@@ -721,20 +723,20 @@ impl WorldStateTransaction {
         Ok(r.unwrap_or_else(VerbDefs::empty))
     }
 
-    pub fn get_verb_binary(&self, obj: &Obj, uuid: Uuid) -> Result<ByteView, WorldStateError> {
+    pub fn get_verb_program(&self, obj: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError> {
         let r = self
             .object_verbs
             .get(&ObjAndUUIDHolder::new(obj, uuid))
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error getting verb binary: {:?}", e))
             })?;
-        let Some(binary) = r else {
+        let Some(program) = r else {
             return Err(WorldStateError::VerbNotFound(
                 obj.clone(),
                 format!("{}", uuid),
             ));
         };
-        Ok(ByteView::from(binary.0))
+        Ok(program)
     }
 
     pub fn get_verb_by_name(&self, obj: &Obj, name: Symbol) -> Result<VerbDef, WorldStateError> {
@@ -870,7 +872,6 @@ impl WorldStateTransaction {
                 verb_attrs.owner.clone().unwrap_or(ov.owner()),
                 &names,
                 verb_attrs.flags.unwrap_or(ov.flags()),
-                verb_attrs.binary_type.unwrap_or(ov.binary_type()),
                 verb_attrs.args_spec.unwrap_or(ov.args()),
             )
         }) else {
@@ -886,11 +887,11 @@ impl WorldStateTransaction {
         })?;
         self.has_mutations = true;
 
-        if verb_attrs.binary.is_some() {
+        if verb_attrs.program.is_some() {
             upsert(
                 &mut self.object_verbs,
                 ObjAndUUIDHolder::new(obj, uuid),
-                BytesHolder(verb_attrs.binary.unwrap()),
+                verb_attrs.program.unwrap(),
             )
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error setting verb binary: {:?}", e))
@@ -905,8 +906,7 @@ impl WorldStateTransaction {
         oid: &Obj,
         owner: &Obj,
         names: Vec<Symbol>,
-        binary: Vec<u8>,
-        binary_type: BinaryType,
+        program: ProgramType,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
     ) -> Result<(), WorldStateError> {
@@ -919,7 +919,6 @@ impl WorldStateTransaction {
             owner.clone(),
             &names.iter().map(|n| n.as_str()).collect::<Vec<&str>>(),
             flags,
-            binary_type,
             args,
         );
 
@@ -934,7 +933,7 @@ impl WorldStateTransaction {
         upsert(
             &mut self.object_verbs,
             ObjAndUUIDHolder::new(oid, uuid),
-            BytesHolder(binary),
+            program,
         )
         .map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb binary: {:?}", e))

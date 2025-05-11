@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use byteview::ByteView;
 use uuid::Uuid;
 
 use crate::model::ObjSet;
@@ -22,6 +21,7 @@ use crate::model::VerbFlag;
 use crate::model::{CommitResult, WorldStateError};
 use crate::model::{ObjAttrs, PropPerms};
 use crate::model::{PropDef, PropDefs};
+use crate::program::ProgramType;
 use crate::util::BitEnum;
 use moor_var::Obj;
 use moor_var::Var;
@@ -47,7 +47,7 @@ pub trait LoaderInterface: Send {
         owner: &Obj,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
-        binary: Vec<u8>,
+        program: ProgramType,
     ) -> Result<(), WorldStateError>;
 
     fn define_property(
@@ -86,7 +86,7 @@ pub trait LoaderInterface: Send {
     fn get_object_verbs(&self, objid: &Obj) -> Result<VerbDefs, WorldStateError>;
 
     /// Get the binary for a given verb
-    fn get_verb_binary(&self, objid: &Obj, uuid: Uuid) -> Result<ByteView, WorldStateError>;
+    fn get_verb_program(&self, objid: &Obj, uuid: Uuid) -> Result<ProgramType, WorldStateError>;
 
     /// Get the properties defined on a given object
     fn get_object_properties(&self, objid: &Obj) -> Result<PropDefs, WorldStateError>;

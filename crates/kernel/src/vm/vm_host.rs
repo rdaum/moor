@@ -19,18 +19,17 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use byteview::ByteView;
 use tracing::{debug, error, warn};
 
-use moor_common::model::{BinaryType, ObjFlag};
+use moor_common::model::ObjFlag;
 use moor_common::model::{VerbDef, WorldState};
 use moor_common::tasks::{AbortLimitReason, TaskId};
 use moor_compiler::Program;
 use moor_compiler::{BuiltinId, Offset};
 use moor_compiler::{CompileOptions, compile};
+use moor_var::List;
 use moor_var::Obj;
 use moor_var::Var;
-use moor_var::{AsByteBuffer, List};
 use moor_var::{E_MAXREC, Error};
 use moor_var::{Symbol, v_none};
 
@@ -43,10 +42,11 @@ use crate::vm::activation::Frame;
 use crate::vm::builtins::BuiltinRegistry;
 use crate::vm::exec_state::VMExecState;
 use crate::vm::moo_execute::moo_frame_execute;
-use crate::vm::vm_call::{VerbProgram, VmExecParams};
+use crate::vm::vm_call::VmExecParams;
 use crate::vm::{Fork, VMHostResponse, VerbExecutionRequest};
 use crate::vm::{TaskSuspend, VerbCall};
 use moor_common::matching::ParsedCommand;
+use moor_common::program::ProgramType;
 use moor_common::program::names::Name;
 use moor_common::tasks::Session;
 
@@ -87,7 +87,7 @@ pub(crate) enum ExecutionResult {
         /// The player who is performing the eval.
         player: Obj,
         /// The program to execute.
-        program: Box<Program>,
+        program: Program,
     },
     /// Request dispatch of a builtin function with the given arguments.
     DispatchBuiltin { builtin: BuiltinId, arguments: List },
@@ -165,18 +165,17 @@ impl VmHost {
     pub fn start_call_command_verb(
         &mut self,
         task_id: TaskId,
-        verb: (ByteView, VerbDef),
+        verb: (ProgramType, VerbDef),
         verb_call: VerbCall,
         command: ParsedCommand,
         permissions: &Obj,
     ) {
-        let program = decode_program(verb.1.binary_type(), verb.0);
         let call_request = Box::new(VerbExecutionRequest {
             permissions: permissions.clone(),
             resolved_verb: verb.1,
             call: Box::new(verb_call),
             command: Some(Box::new(command)),
-            program,
+            program: verb.0,
         });
 
         self.start_execution(task_id, call_request)
@@ -187,17 +186,15 @@ impl VmHost {
         &mut self,
         task_id: TaskId,
         perms: &Obj,
-        verb_info: (ByteView, VerbDef),
+        verb_info: (ProgramType, VerbDef),
         verb_call: VerbCall,
     ) {
-        let binary = decode_program(verb_info.1.binary_type(), verb_info.0);
-
         let call_request = Box::new(VerbExecutionRequest {
             permissions: perms.clone(),
             resolved_verb: verb_info.1,
             call: Box::new(verb_call),
             command: None,
-            program: binary,
+            program: verb_info.0,
         });
 
         self.start_execution(task_id, call_request)
@@ -232,7 +229,7 @@ impl VmHost {
         &mut self,
         task_id: TaskId,
         player: &Obj,
-        program: Box<Program>,
+        program: Program,
         world_state: &dyn WorldState,
     ) {
         let is_programmer = world_state
@@ -578,14 +575,5 @@ impl<'de, C> BorrowDecode<'de, C> for VmHost {
             running: true,
             unsync: Default::default(),
         })
-    }
-}
-
-pub fn decode_program(binary_type: BinaryType, binary_bytes: ByteView) -> VerbProgram {
-    match binary_type {
-        BinaryType::LambdaMoo18X => VerbProgram::Moo(Box::new(
-            Program::from_bytes(binary_bytes).expect("Could not decode MOO program"),
-        )),
-        _ => panic!("Unsupported binary type {:?}", binary_type),
     }
 }

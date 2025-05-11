@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbDef;
-use moor_common::model::{BinaryType, VerbFlag};
+use moor_common::model::VerbFlag;
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_compiler::BuiltinId;
 use moor_compiler::Program;
@@ -33,9 +33,9 @@ use moor_var::{Var, v_empty_list, v_obj, v_str, v_string};
 
 use crate::vm::VerbExecutionRequest;
 use crate::vm::moo_frame::MooStackFrame;
-use crate::vm::vm_call::VerbProgram;
 use crate::vm_counters;
 use moor_common::matching::ParsedCommand;
+use moor_common::program::ProgramType;
 use moor_common::program::names::{GlobalName, Name};
 
 lazy_static! {
@@ -229,7 +229,7 @@ impl Activation {
         let program = verb_call_request.program;
         let verb_owner = verb_call_request.resolved_verb.owner();
 
-        let VerbProgram::Moo(program) = program else {
+        let ProgramType::MooR(program) = program else {
             unimplemented!("Only MOO programs are supported")
         };
         let frame = MooStackFrame::new(program);
@@ -302,14 +302,13 @@ impl Activation {
         }
     }
 
-    pub fn for_eval(permissions: Obj, player: &Obj, program: Box<Program>) -> Self {
+    pub fn for_eval(permissions: Obj, player: &Obj, program: Program) -> Self {
         let verbdef = VerbDef::new(
             Uuid::new_v4(),
             NOTHING,
             NOTHING,
             &["eval"],
             BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Debug,
-            BinaryType::None,
             VerbArgsSpec::this_none_this(),
         );
 
@@ -353,7 +352,6 @@ impl Activation {
             NOTHING,
             &[bf_name.as_str()],
             BitEnum::new_with(VerbFlag::Exec),
-            BinaryType::None,
             VerbArgsSpec::this_none_this(),
         );
 

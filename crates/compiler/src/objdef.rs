@@ -16,16 +16,16 @@ use crate::ObjDefParseError::VerbCompileError;
 use crate::codegen::compile_tree;
 use crate::parse::moo::{MooParser, Rule};
 use crate::parse::unquote_str;
-use byteview::ByteView;
 use itertools::Itertools;
 use moor_common::model::{
     ArgSpec, CompileContext, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec,
     VerbFlag,
 };
+use moor_common::program::ProgramType;
 use moor_common::util::BitEnum;
 use moor_var::{
-    AsByteBuffer, ErrorCode, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_err,
-    v_float, v_flyweight, v_int, v_list, v_map, v_obj, v_str,
+    ErrorCode, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_err, v_float,
+    v_flyweight, v_int, v_list, v_map, v_obj, v_str,
 };
 use pest::Parser;
 use pest::error::LineColLocation;
@@ -64,7 +64,7 @@ pub struct ObjVerbDef {
     pub argspec: VerbArgsSpec,
     pub owner: Obj,
     pub flags: BitEnum<VerbFlag>,
-    pub binary: ByteView,
+    pub program: ProgramType,
 }
 
 pub struct ObjPropDef {
@@ -633,7 +633,7 @@ fn parse_verb_decl(
         argspec: VerbArgsSpec::this_none_this(),
         owner: NOTHING,
         flags: VerbFlag::r(),
-        binary: Default::default(),
+        program: ProgramType::MooR(Default::default()),
     };
 
     let verb_names = pairs.next().unwrap();
@@ -721,10 +721,7 @@ fn parse_verb_decl(
     };
 
     // Encode the program
-    vd.binary = program
-        .with_byte_buffer(|d| Vec::from(d))
-        .expect("Failed to encode program byte stream")
-        .into();
+    vd.program = ProgramType::MooR(program);
 
     Ok(vd)
 }
@@ -805,7 +802,6 @@ mod tests {
         assert_eq!(odef.verbs[0].argspec.iobj, ArgSpec::Any);
         assert_eq!(odef.verbs[0].owner, Obj::mk_id(2));
         assert_eq!(odef.verbs[0].flags, VerbFlag::rxd());
-        assert!(!odef.verbs[0].binary.is_empty());
 
         assert_eq!(odef.verbs[1].names.len(), 1);
         assert_eq!(odef.verbs[1].names[0], Symbol::mk("another_test"));
@@ -814,7 +810,6 @@ mod tests {
         assert_eq!(odef.verbs[1].argspec.iobj, ArgSpec::This);
         assert_eq!(odef.verbs[1].owner, Obj::mk_id(2));
         assert_eq!(odef.verbs[1].flags, VerbFlag::r());
-        assert!(!odef.verbs[1].binary.is_empty());
     }
 
     // Verify property definition / setting

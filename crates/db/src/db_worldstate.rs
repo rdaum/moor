@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use byteview::ByteView;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -21,14 +20,15 @@ use moor_common::model::Perms;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
 use moor_common::model::{ArgSpec, PrepSpec, VerbArgsSpec};
-use moor_common::model::{BinaryType, VerbAttrs, VerbFlag};
 use moor_common::model::{CommitResult, PropPerms, ValSet};
 use moor_common::model::{HasUuid, ObjectRef};
 use moor_common::model::{ObjAttrs, ObjFlag};
 use moor_common::model::{ObjSet, WorldStatePerf};
 use moor_common::model::{PropAttrs, PropFlag};
 use moor_common::model::{PropDef, PropDefs};
+use moor_common::model::{VerbAttrs, VerbFlag};
 use moor_common::model::{VerbDef, VerbDefs};
+use moor_common::program::ProgramType;
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::NOTHING;
 use moor_var::Variant;
@@ -87,7 +87,7 @@ impl DbWorldState {
         perms.check_verb_allows(&verbdef.owner(), verbdef.flags(), VerbFlag::Write)?;
 
         // If the verb code is being altered, a programmer or wizard bit is required.
-        if verb_attrs.binary.is_some()
+        if verb_attrs.program.is_some()
             && !perms.check_is_wizard()?
             && !perms.flags.contains(ObjFlag::Programmer)
         {
@@ -562,8 +562,7 @@ impl WorldState for DbWorldState {
         owner: &Obj,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
-        binary: Vec<u8>,
-        binary_type: BinaryType,
+        program: ProgramType,
     ) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.add_verb);
         let (objflags, obj_owner) = (self.flags_of(obj)?, self.owner_of(obj)?);
@@ -571,7 +570,7 @@ impl WorldState for DbWorldState {
             .check_object_allows(&obj_owner, objflags, ObjFlag::Write.into())?;
 
         self.get_tx_mut()
-            .add_object_verb(obj, owner, names, binary, binary_type, flags, args)?;
+            .add_object_verb(obj, owner, names, program, flags, args)?;
         Ok(())
     }
 
@@ -658,7 +657,7 @@ impl WorldState for DbWorldState {
         perms: &Obj,
         obj: &Obj,
         uuid: Uuid,
-    ) -> Result<(ByteView, VerbDef), WorldStateError> {
+    ) -> Result<(ProgramType, VerbDef), WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.retrieve_verb);
         let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
@@ -666,7 +665,7 @@ impl WorldState for DbWorldState {
             .ok_or(WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
-        let binary = self.get_tx().get_verb_binary(&vh.location(), vh.uuid())?;
+        let binary = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
         Ok((binary, vh))
     }
 
@@ -675,7 +674,7 @@ impl WorldState for DbWorldState {
         perms: &Obj,
         obj: &Obj,
         vname: Symbol,
-    ) -> Result<(ByteView, VerbDef), WorldStateError> {
+    ) -> Result<(ProgramType, VerbDef), WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.find_method_verb_on);
         let vh = self.get_tx().resolve_verb(
             obj,
@@ -686,7 +685,7 @@ impl WorldState for DbWorldState {
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
 
-        let binary = self.get_tx().get_verb_binary(&vh.location(), vh.uuid())?;
+        let binary = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
         Ok((binary, vh))
     }
 
@@ -698,7 +697,7 @@ impl WorldState for DbWorldState {
         dobj: &Obj,
         prep: PrepSpec,
         iobj: &Obj,
-    ) -> Result<Option<(ByteView, VerbDef)>, WorldStateError> {
+    ) -> Result<Option<(ProgramType, VerbDef)>, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.find_command_verb_on);
         if !self.valid(obj)? {
             return Ok(None);
@@ -741,8 +740,8 @@ impl WorldState for DbWorldState {
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
 
-        let binary = self.get_tx().get_verb_binary(&vh.location(), vh.uuid())?;
-        Ok(Some((binary, vh)))
+        let program = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
+        Ok(Some((program, vh)))
     }
 
     fn parent_of(&self, _perms: &Obj, obj: &Obj) -> Result<Obj, WorldStateError> {

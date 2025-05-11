@@ -216,6 +216,7 @@ pub mod vm_test_utils {
     use crate::vm::VerbCall;
     use crate::vm::builtins::BuiltinRegistry;
     use crate::vm::vm_host::VmHost;
+    
     use moor_common::tasks::Exception;
     use moor_common::tasks::Session;
 
@@ -292,13 +293,13 @@ pub mod vm_test_utils {
     ) -> ExecResult {
         execute(world_state, session, builtins, |world_state, vm_host| {
             let verb_name = Symbol::mk_case_insensitive(verb_name);
-            let vi = world_state
+            let (program, verbdef) = world_state
                 .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
                 .unwrap();
             vm_host.start_call_method_verb(
                 0,
                 &SYSTEM_OBJECT,
-                vi,
+                (program, verbdef),
                 VerbCall {
                     verb_name,
                     location: v_obj(SYSTEM_OBJECT),
@@ -317,7 +318,7 @@ pub mod vm_test_utils {
         session: Arc<dyn Session>,
         builtins: BuiltinRegistry,
         player: Obj,
-        program: Box<Program>,
+        program: Program,
     ) -> ExecResult {
         execute(world_state, session, builtins, |world_state, vm_host| {
             vm_host.start_eval(0, &player, program, world_state);
@@ -430,7 +431,7 @@ pub enum TaskStart {
         suspended: bool,
     },
     /// The scheduler is telling the task to evaluate a specific (MOO) program.
-    StartEval { player: Obj, program: Box<Program> },
+    StartEval { player: Obj, program: Program },
 }
 
 impl TaskStart {

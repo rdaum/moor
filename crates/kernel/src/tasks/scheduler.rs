@@ -26,10 +26,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
-use moor_common::model::{BinaryType, HasUuid, ObjectRef, ValSet, VerbAttrs};
 use moor_common::model::{CommitResult, Perms};
+use moor_common::model::{HasUuid, ObjectRef, ValSet, VerbAttrs};
 use moor_common::model::{WorldState, WorldStateError};
-use moor_compiler::{Program, compile, program_to_tree, to_literal, unparse};
+use moor_compiler::{compile, program_to_tree, to_literal, unparse};
 use moor_db::Database;
 
 use crate::config::{Config, ImportExportFormat};
@@ -48,6 +48,7 @@ use crate::vm::{Fork, TaskSuspend};
 use moor_common::matching::ObjectNameMatcher;
 use moor_common::matching::match_env::DefaultObjectNameMatcher;
 use moor_common::matching::ws_match_env::WsMatchEnv;
+use moor_common::program::ProgramType;
 use moor_common::tasks::SchedulerError::{
     CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
     TaskAbortedException, TaskAbortedLimit, VerbProgramFailed,
@@ -60,10 +61,10 @@ use moor_common::tasks::{Session, SessionFactory, SystemControl};
 use moor_common::util::PerfTimerGuard;
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
-use moor_var::{AsByteBuffer, SYSTEM_OBJECT, v_list};
 use moor_var::{E_INVARG, E_INVIND, E_PERM, E_TYPE};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};
 use moor_var::{Obj, Variant};
+use moor_var::{SYSTEM_OBJECT, v_list};
 
 // How long to pause between scheduler loop iterations when there is no work to do.
 // The higher this number the lower the background CPU usage but the higher the latency for response
@@ -351,10 +352,6 @@ impl Scheduler {
             )
             .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?;
 
-            // Now we have a program, we need to encode it.
-            let binary = program
-                .with_byte_buffer(|d| Vec::from(d))
-                .expect("Failed to encode program byte stream");
             // Now we can update the verb.
             let update_attrs = VerbAttrs {
                 definer: None,
@@ -362,8 +359,7 @@ impl Scheduler {
                 names: None,
                 flags: None,
                 args_spec: None,
-                binary_type: Some(BinaryType::LambdaMoo18X),
-                binary: Some(binary),
+                program: Some(ProgramType::MooR(program)),
             };
             tx.update_verb_with_id(perms, &o, verbdef.uuid(), update_attrs)
                 .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
@@ -817,41 +813,33 @@ impl Scheduler {
                     return;
                 };
 
-                let (binary, verbdef) = match world_state.find_method_verb_on(&perms, &object, verb)
-                {
-                    Ok(v) => v,
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
-                            .expect("Could not send verb code reply");
-                        return;
-                    }
-                };
-
-                if verbdef.binary_type() != BinaryType::LambdaMoo18X {
-                    reply
-                        .send(Err(SchedulerError::VerbRetrievalFailed(
-                            WorldStateError::DatabaseError("Unsupported binary type".to_string()),
-                        )))
-                        .expect("Could not send verb code reply");
-                    return;
-                }
+                let (program, verbdef) =
+                    match world_state.find_method_verb_on(&perms, &object, verb) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            reply
+                                .send(Err(SchedulerError::VerbRetrievalFailed(e)))
+                                .expect("Could not send verb code reply");
+                            return;
+                        }
+                    };
 
                 // If the binary is empty, just return empty rather than try to decode it.
-                if binary.is_empty() {
+                if program.is_empty() {
                     reply
                         .send(Ok((verbdef, Vec::new())))
                         .expect("Could not send verb code reply");
                     return;
                 }
 
-                // Decode.
-                let Ok(program) = Program::from_bytes(binary) else {
+                #[allow(irrefutable_let_patterns)]
+                let ProgramType::MooR(program) = program else {
                     reply
                         .send(Err(SchedulerError::VerbRetrievalFailed(
-                            WorldStateError::DatabaseError(
-                                "Could not decode verb binary".to_string(),
-                            ),
+                            WorldStateError::DatabaseError(format!(
+                                "Could not decompile verb binary, expected Moo program, got {:?}",
+                                program
+                            )),
                         )))
                         .expect("Could not send verb code reply");
                     return;

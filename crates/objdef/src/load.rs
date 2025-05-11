@@ -207,7 +207,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         &v.owner,
                         v.flags,
                         v.argspec,
-                        v.binary.to_vec(),
+                        v.program.clone(),
                     )
                     .map_err(|wse| {
                         DirDumpReaderError::CouldNotDefineVerb(
