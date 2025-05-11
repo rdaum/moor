@@ -193,7 +193,7 @@ impl RpcServer {
         scheduler_client: SchedulerClient,
     ) -> eyre::Result<()> {
         let rpc_socket = self.zmq_context.socket(zmq::REP)?;
-        rpc_socket.bind(&rpc_endpoint)?;
+        rpc_socket.bind(rpc_endpoint)?;
         let this = self.clone();
         loop {
             if this.kill_switch.load(Ordering::Relaxed) {
