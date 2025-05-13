@@ -94,6 +94,8 @@ pub(crate) fn pack_host_response(result: Result<DaemonToHostReply, RpcMessageErr
     bincode::encode_to_vec(&rpc_result, bincode::config::standard()).unwrap()
 }
 
+// TODO: ditch the Arc<Self> stuff here completely, use channels instead.
+
 impl RpcServer {
     pub fn new(
         public_key: Key<32>,
@@ -153,28 +155,53 @@ impl RpcServer {
             .name("rpc-ping-pong".to_string())
             .spawn(move || {
                 loop {
-                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(5));
                     t_rpc_server.ping_pong().expect("Unable to play ping-pong");
                 }
             })?;
 
-        let num_io_threads = self.zmq_context.get_io_threads().unwrap();
+        let num_io_threads = self.zmq_context.get_io_threads()?;
         info!("0mq server listening on {rpc_endpoint} with {num_io_threads} IO threads",);
 
-        // Start the RPC server in a background thread.
-        let rpc_this = self.clone();
+        let mut clients = self.zmq_context.socket(zmq::ROUTER)?;
+        let mut workers = self.zmq_context.socket(zmq::DEALER)?;
+
+        clients.bind(&rpc_endpoint)?;
+        workers.bind("inproc://rpc-workers")?;
+
+        // Start N  RPC servers in a background thread. We match the # of IO threads, minus 1
+        // which we use for the proxy.
+        for i in 0..num_io_threads - 1 {
+            let rpc_this = self.clone();
+            let sched_client = scheduler_client.clone();
+            std::thread::Builder::new()
+                .name(format!("moor-rpc-srv{i}"))
+                .spawn(move || {
+                    rpc_this
+                        .clone()
+                        .rpc_process_loop(sched_client)
+                        .expect("Unable to process RPC requests");
+                })?;
+        }
+
+        // Start the proxy in a background thread, which will route messages between
+        // clients and workers.
+        let mut control_socket = self.zmq_context.socket(zmq::REP)?;
+        control_socket.bind("inproc://rpc-proxy-steer")?;
         std::thread::Builder::new()
-            .name("moor-rpc-srvr".to_string())
+            .name("moor-rpc-proxy".to_string())
             .spawn(move || {
-                rpc_this
-                    .clone()
-                    .rpc_process_loop(rpc_endpoint.as_str(), scheduler_client)
-                    .expect("Unable to process RPC requests");
+                zmq::proxy_steerable(&mut clients, &mut workers, &mut control_socket)
+                    .expect("Unable to start proxy");
             })?;
 
+        // Final piece processes the task completions, and the kill switch.
+        let control_socket = self.zmq_context.socket(zmq::REQ)?;
+        control_socket.connect("inproc://rpc-proxy-steer")?;
         loop {
             if self.kill_switch.load(Ordering::Relaxed) {
                 info!("Kill switch activated, exiting");
+                control_socket.send("TERMINATE", 0)?;
                 return Ok(());
             }
 
@@ -183,21 +210,16 @@ impl RpcServer {
             //  we can probably do something much nicer with channels, etc.
             self.clone().process_task_completions();
 
-            std::thread::sleep(std::time::Duration::from_micros(1));
+            std::thread::sleep(Duration::from_micros(1));
         }
     }
 
-    fn rpc_process_loop(
-        self: Arc<Self>,
-        rpc_endpoint: &str,
-        scheduler_client: SchedulerClient,
-    ) -> eyre::Result<()> {
-        let rpc_socket = self.zmq_context.socket(zmq::REP)?;
-        rpc_socket.bind(rpc_endpoint)?;
+    fn rpc_process_loop(self: Arc<Self>, scheduler_client: SchedulerClient) -> eyre::Result<()> {
         let this = self.clone();
+        let rpc_socket = this.zmq_context.clone().socket(zmq::REP)?;
+        rpc_socket.connect("inproc://rpc-workers")?;
         loop {
             if this.kill_switch.load(Ordering::Relaxed) {
-                info!("Kill switch activated, exiting");
                 return Ok(());
             }
 
@@ -310,7 +332,7 @@ impl RpcServer {
         }
     }
 
-    fn reply_invalid_request(socket: &zmq::Socket, reason: &str) -> eyre::Result<()> {
+    fn reply_invalid_request(socket: &Socket, reason: &str) -> eyre::Result<()> {
         warn!("Invalid request received, replying with error: {reason}");
         socket.send_multipart(
             vec![pack_client_response(Err(RpcMessageError::InvalidRequest(
@@ -930,7 +952,7 @@ impl RpcServer {
         client_id: Uuid,
         player: &Obj,
         initiation_type: ConnectType,
-    ) -> Result<(), eyre::Error> {
+    ) -> Result<(), Error> {
         let session = self
             .clone()
             .new_session(client_id, player.clone())
@@ -961,7 +983,7 @@ impl RpcServer {
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         player: &Obj,
-    ) -> Result<(), eyre::Error> {
+    ) -> Result<(), Error> {
         let session = self
             .clone()
             .new_session(client_id, player.clone())
