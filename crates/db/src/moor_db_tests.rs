@@ -1475,4 +1475,49 @@ mod tests {
         let r = tx.commit().unwrap();
         assert_eq!(r, CommitResult::Success);
     }
+
+    #[test]
+    fn test_transaction_serialization_property_conflicts() {
+        let db = test_db();
+
+        // Create initial object with property
+        let mut tx1 = db.start_transaction();
+        let obj = tx1.create_object(None, Default::default()).unwrap();
+        let prop_uuid = tx1
+            .define_property(
+                &obj,
+                &obj,
+                Symbol::mk("test"),
+                &obj,
+                BitEnum::new(),
+                Some(v_str("initial")),
+            )
+            .unwrap();
+        tx1.commit().unwrap();
+
+        // Start two concurrent transactions
+        let mut tx2 = db.start_transaction();
+        let mut tx3 = db.start_transaction();
+
+        // Modify property in tx2
+        tx2.set_property(&obj, prop_uuid, v_str("tx2_value"))
+            .unwrap();
+
+        // Modify same property in tx3
+        tx3.set_property(&obj, prop_uuid, v_str("tx3_value"))
+            .unwrap();
+
+        // First commit should succeed
+        assert_eq!(tx2.commit().unwrap(), CommitResult::Success);
+
+        // Second commit should fail due to conflict
+        assert_eq!(tx3.commit().unwrap(), CommitResult::ConflictRetry);
+
+        // Verify final value
+        let tx4 = db.start_transaction();
+        assert_eq!(
+            tx4.retrieve_property(&obj, prop_uuid).unwrap().0.unwrap(),
+            v_str("tx2_value")
+        );
+    }
 }

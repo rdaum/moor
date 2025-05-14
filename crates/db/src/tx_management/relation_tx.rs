@@ -142,6 +142,7 @@ where
 
             // Check to see if we already have an operations-log entry for this domain.
             // If we do, we can update it to its new state.
+            let read_ts = entry.ts;
             if let Some(old_entry) = index.operations.get_mut(domain) {
                 old_entry.operation = match old_entry.operation {
                     OpType::Update => OpType::Update,
@@ -156,7 +157,7 @@ where
                 index.operations.insert(
                     domain.clone(),
                     Op {
-                        read_ts: self.tx.ts,
+                        read_ts,
                         write_ts: self.tx.ts,
                         operation: OpType::Update,
                     },
@@ -268,10 +269,11 @@ where
             } else {
                 // Upstream may or may not have this key to delete, but we'll log the operation
                 // anyways.
+                let read_ts = entry.ts;
                 index.operations.insert(
                     domain.clone(),
                     Op {
-                        read_ts: self.tx.ts,
+                        read_ts,
                         write_ts: self.tx.ts,
                         operation: OpType::Delete,
                     },
