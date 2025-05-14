@@ -136,6 +136,11 @@ where
 
         // Is this already in the index?
         if let Some(entry) = index.entries.get_mut(domain) {
+            if entry.ts > self.tx.ts {
+                // We can't update it, it's too new.
+                return Ok(None);
+            }
+
             let old_value = entry.value.clone();
             entry.value = value.clone();
             entry.size_bytes = size_bytes;
@@ -188,6 +193,11 @@ where
             },
         );
 
+        // If the timestamp is greater than our own, we can't update it, we shouldn't have seen it.
+        if read_ts > self.tx.ts {
+            return Ok(None);
+        }
+
         // Put in operations log
         // Copy into the local cache, but with updated value.
         index.operations.insert(
@@ -234,7 +244,7 @@ where
             Some((read_ts, value, size_bytes)) if read_ts < self.tx.ts => {
                 // Shove in local index.
                 let entry = Entry {
-                    ts: self.tx.ts,
+                    ts: read_ts,
                     hits: 0,
                     value,
                     size_bytes,
