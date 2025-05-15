@@ -1254,12 +1254,12 @@ impl RpcServer {
 
     pub(crate) fn publish_narrative_events(
         &self,
-        events: &[(Obj, NarrativeEvent)],
+        events: &[(Obj, Box<NarrativeEvent>)],
     ) -> Result<(), Error> {
         let publish = self.events_publish.lock().unwrap();
         for (player, event) in events {
             let client_ids = self.connections.client_ids_for(player.clone())?;
-            let event = ClientEvent::Narrative(player.clone(), event.clone());
+            let event = ClientEvent::Narrative(player.clone(), event.as_ref().clone());
             let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
             for client_id in &client_ids {
                 let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];

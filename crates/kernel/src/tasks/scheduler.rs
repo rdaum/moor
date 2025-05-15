@@ -1014,11 +1014,11 @@ impl Scheduler {
                 // Compose a string out of the backtrace
                 if let Err(send_error) = task.session.send_event(
                     task.player.clone(),
-                    NarrativeEvent {
+                    Box::new(NarrativeEvent {
                         timestamp: SystemTime::now(),
                         author: v_obj(task.player.clone()),
                         event: Event::Traceback(exception.as_ref().clone()),
-                    },
+                    }),
                 ) {
                     warn!("Could not send traceback to player: {:?}", send_error);
                 }
@@ -1622,7 +1622,7 @@ impl TaskQ {
     #[allow(clippy::too_many_arguments)]
     fn resume_task_thread(
         &mut self,
-        mut task: Task,
+        mut task: Box<Task>,
         resume_val: Var,
         session: Arc<dyn Session>,
         result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
@@ -1709,7 +1709,7 @@ impl TaskQ {
 
     fn retry_task(
         &mut self,
-        mut task: Task,
+        mut task: Box<Task>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,

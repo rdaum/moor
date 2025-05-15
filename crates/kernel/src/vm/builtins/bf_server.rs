@@ -96,7 +96,9 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.args[1].clone(),
         content_type,
     );
-    bf_args.task_scheduler_client.notify(player.clone(), event);
+    bf_args
+        .task_scheduler_client
+        .notify(player.clone(), Box::new(event));
 
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
@@ -149,7 +151,9 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             author: bf_args.exec_state.this(),
             event,
         };
-        bf_args.task_scheduler_client.notify(player.clone(), event);
+        bf_args
+            .task_scheduler_client
+            .notify(player.clone(), Box::new(event));
 
         return Ok(Ret(v_int(1)));
     }
@@ -264,7 +268,9 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         event: Present(event),
     };
 
-    bf_args.task_scheduler_client.notify(player.clone(), event);
+    bf_args
+        .task_scheduler_client
+        .notify(player.clone(), Box::new(event));
 
     Ok(Ret(v_none()))
 }

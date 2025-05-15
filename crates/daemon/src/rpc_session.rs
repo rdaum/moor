@@ -31,7 +31,7 @@ pub struct RpcSession {
     //  should be mmap'd to disk or something.
     // TODO: We could also use Boxcar or other append-only lockless container for this, since we only
     //  ever append.
-    session_buffer: Mutex<Vec<(Obj, NarrativeEvent)>>,
+    session_buffer: Mutex<Vec<(Obj, Box<NarrativeEvent>)>>,
 }
 
 impl RpcSession {
@@ -83,7 +83,7 @@ impl Session for RpcSession {
         Ok(())
     }
 
-    fn send_event(&self, player: Obj, event: NarrativeEvent) -> Result<(), SessionError> {
+    fn send_event(&self, player: Obj, event: Box<NarrativeEvent>) -> Result<(), SessionError> {
         self.session_buffer.lock().unwrap().push((player, event));
         Ok(())
     }

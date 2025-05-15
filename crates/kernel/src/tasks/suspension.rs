@@ -35,7 +35,7 @@ use moor_common::tasks::{SchedulerError, TaskId};
 /// When tasks are not running they are moved into these.
 pub struct SuspendedTask {
     pub wake_condition: WakeCondition,
-    pub task: Task,
+    pub task: Box<Task>,
     pub session: Arc<dyn Session>,
     pub result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
 }
@@ -127,7 +127,7 @@ impl SuspensionQ {
     pub(crate) fn add_task(
         &mut self,
         wake_condition: WakeCondition,
-        task: Task,
+        task: Box<Task>,
         session: Arc<dyn Session>,
         result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
     ) {
@@ -330,7 +330,7 @@ impl Encode for SuspendedTask {
 impl<C> Decode<C> for SuspendedTask {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let wake_condition = WakeCondition::decode(decoder)?;
-        let task = Task::decode(decoder)?;
+        let task = Box::new(Task::decode(decoder)?);
         Ok(SuspendedTask {
             wake_condition,
             task,
@@ -343,7 +343,7 @@ impl<C> Decode<C> for SuspendedTask {
 impl<'de, C> BorrowDecode<'de, C> for SuspendedTask {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let wake_condition = WakeCondition::borrow_decode(decoder)?;
-        let task = Task::borrow_decode(decoder)?;
+        let task = Box::new(Task::borrow_decode(decoder)?);
         Ok(SuspendedTask {
             wake_condition,
             task,

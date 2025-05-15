@@ -93,7 +93,7 @@ impl Task {
         perms: Obj,
         server_options: &ServerOptions,
         kill_switch: Arc<AtomicBool>,
-    ) -> Self {
+    ) -> Box<Self> {
         let is_background = task_start.is_background();
 
         // Find out max ticks, etc. for this task. These are either pulled from server constants in
@@ -108,7 +108,7 @@ impl Task {
         );
 
         let retry_state = vm_host.snapshot_state();
-        Task {
+        Box::new(Self {
             task_id,
             player,
             task_start,
@@ -117,11 +117,11 @@ impl Task {
             kill_switch,
             retries: 0,
             retry_state,
-        }
+        })
     }
 
     pub fn run_task_loop(
-        mut task: Task,
+        mut task: Box<Task>,
         task_scheduler_client: &TaskSchedulerClient,
         session: Arc<dyn Session>,
         mut world_state: Box<dyn WorldState>,
@@ -157,13 +157,13 @@ impl Task {
     /// If we are to be consumed (because ownership transferred back to the scheduler), we will
     /// return None, otherwise we will return ourselves.
     fn vm_dispatch(
-        mut self,
+        mut self: Box<Self>,
         task_scheduler_client: &TaskSchedulerClient,
         session: Arc<dyn Session>,
         mut world_state: Box<dyn WorldState>,
         builtin_registry: BuiltinRegistry,
         config: FeaturesConfig,
-    ) -> Option<(Self, Box<dyn WorldState>)> {
+    ) -> Option<(Box<Self>, Box<dyn WorldState>)> {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.vm_dispatch);
 
@@ -767,7 +767,7 @@ mod tests {
         programs: &[TestVerb],
     ) -> (
         Arc<AtomicBool>,
-        Task,
+        Box<Task>,
         TxDB,
         Box<dyn WorldState>,
         TaskSchedulerClient,
@@ -844,7 +844,7 @@ mod tests {
         program: &str,
     ) -> (
         Arc<AtomicBool>,
-        Task,
+        Box<Task>,
         TxDB,
         Box<dyn WorldState>,
         TaskSchedulerClient,
@@ -864,7 +864,7 @@ mod tests {
         verbs: &[TestVerb],
     ) -> (
         Arc<AtomicBool>,
-        Task,
+        Box<Task>,
         TxDB,
         Box<dyn WorldState>,
         TaskSchedulerClient,

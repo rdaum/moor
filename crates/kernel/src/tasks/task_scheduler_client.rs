@@ -49,7 +49,7 @@ impl TaskSchedulerClient {
 
     /// Send a message to the scheduler that the task has hit a transaction conflict and needs to be
     /// retried from the beginning.
-    pub fn conflict_retry(&self, task: Task) {
+    pub fn conflict_retry(&self, task: Box<Task>) {
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::TaskConflictRetry(task)))
             .expect("Could not deliver client message -- scheduler shut down?");
@@ -111,7 +111,7 @@ impl TaskSchedulerClient {
     }
 
     /// Send a message to the scheduler that the task should be suspended.
-    pub fn suspend(&self, resume_condition: TaskSuspend, task: Task) {
+    pub fn suspend(&self, resume_condition: TaskSuspend, task: Box<Task>) {
         self.scheduler_sender
             .send((
                 self.task_id,
@@ -122,7 +122,7 @@ impl TaskSchedulerClient {
 
     /// Send a message to the scheduler that the task is requesting input from the client.
     /// Moves this task into the suspension queue until the client provides input.
-    pub fn request_input(&self, task: Task) {
+    pub fn request_input(&self, task: Box<Task>) {
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::TaskRequestInput(task)))
             .expect("Could not deliver client message -- scheduler shut down?");
@@ -196,7 +196,7 @@ impl TaskSchedulerClient {
     }
 
     /// Ask the scheduler to dispatch a session notification to a player.
-    pub fn notify(&self, player: Obj, event: NarrativeEvent) {
+    pub fn notify(&self, player: Obj, event: Box<NarrativeEvent>) {
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::Notify { player, event }))
             .expect("Could not deliver client message -- scheduler shut down?");
@@ -282,7 +282,7 @@ impl TaskSchedulerClient {
             .expect("Could not receive task id -- scheduler shut down?")
     }
 
-    pub fn active_tasks(&self) -> Result<Vec<(TaskId, Obj, TaskStart)>, Error> {
+    pub fn active_tasks(&self) -> Result<ActiveTaskDescriptions, Error> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send((self.task_id, TaskControlMsg::ActiveTasks { reply }))
@@ -302,7 +302,7 @@ pub enum TaskControlMsg {
     TaskSuccess(Var),
     /// The task hit an unresolvable transaction serialization conflict, and needs to be restarted
     /// in a new transaction.
-    TaskConflictRetry(Task),
+    TaskConflictRetry(Box<Task>),
     /// A 'StartCommandVerb' type task failed to parse or match the command.
     TaskCommandError(CommandError),
     /// The verb to be executed was not found.
@@ -316,9 +316,9 @@ pub enum TaskControlMsg {
     /// The task is letting us know that it has reached its abort limits.
     TaskAbortLimitsReached(AbortLimitReason, Var, Symbol, usize),
     /// Tell the scheduler that the task in a suspended state, with a time to resume (if any)
-    TaskSuspend(TaskSuspend, Task),
+    TaskSuspend(TaskSuspend, Box<Task>),
     /// Tell the scheduler we're suspending until we get input from the client.
-    TaskRequestInput(Task),
+    TaskRequestInput(Box<Task>),
     /// Task is requesting a list of all other tasks known to the scheduler.
     RequestTasks(oneshot::Sender<Vec<TaskDescription>>),
     /// Task is requesting that the scheduler abort another task.
@@ -342,7 +342,7 @@ pub enum TaskControlMsg {
     Checkpoint,
     Notify {
         player: Obj,
-        event: NarrativeEvent,
+        event: Box<NarrativeEvent>,
     },
     GetListeners(oneshot::Sender<Vec<(Obj, String, u16, bool)>>),
     /// Ask hosts to listen for connections on `port` and send them to `handler_object`
@@ -375,4 +375,19 @@ pub enum TaskControlMsg {
     ActiveTasks {
         reply: oneshot::Sender<Result<ActiveTaskDescriptions, Error>>,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    /// Measure size of TaskControlMsg
+    use super::*;
+    #[test]
+    fn test_task_control_msg_size() {
+        use std::mem::size_of;
+        assert!(
+            size_of::<TaskControlMsg>() <= 64,
+            "TaskControlMsg is too large: {} bytes",
+            size_of::<TaskControlMsg>()
+        );
+    }
 }

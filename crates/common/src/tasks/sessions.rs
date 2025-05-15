@@ -70,7 +70,7 @@ pub trait Session: Send + Sync {
     /// Spool output to the given player's connection.
     /// The actual output will not be sent until the task commits, and will be thrown out on
     /// rollback.
-    fn send_event(&self, player: Obj, event: NarrativeEvent) -> Result<(), SessionError>;
+    fn send_event(&self, player: Obj, event: Box<NarrativeEvent>) -> Result<(), SessionError>;
 
     /// Send non-spooled output to the given player's connection
     /// Examples of the kinds of messages that would be sent here are state-independent messages
@@ -177,7 +177,7 @@ impl Session for NoopClientSession {
         )
     }
 
-    fn send_event(&self, _player: Obj, _msg: NarrativeEvent) -> Result<(), SessionError> {
+    fn send_event(&self, _player: Obj, _msg: Box<NarrativeEvent>) -> Result<(), SessionError> {
         Ok(())
     }
 
@@ -239,8 +239,8 @@ impl SystemControl for NoopSystemControl {
 /// For now that's all it does, but facilities for pretending players are connected, mocking
 /// hostnames, etc. can be added later.
 struct Inner {
-    received: Vec<NarrativeEvent>,
-    committed: Vec<NarrativeEvent>,
+    received: Vec<Box<NarrativeEvent>>,
+    committed: Vec<Box<NarrativeEvent>>,
 }
 pub struct MockClientSession {
     inner: RwLock<Inner>,
@@ -256,11 +256,11 @@ impl MockClientSession {
             system: Arc::new(Default::default()),
         }
     }
-    pub fn received(&self) -> Vec<NarrativeEvent> {
+    pub fn received(&self) -> Vec<Box<NarrativeEvent>> {
         let inner = self.inner.read().unwrap();
         inner.received.clone()
     }
-    pub fn committed(&self) -> Vec<NarrativeEvent> {
+    pub fn committed(&self) -> Vec<Box<NarrativeEvent>> {
         let inner = self.inner.read().unwrap();
         inner.committed.clone()
     }
@@ -304,7 +304,7 @@ impl Session for MockClientSession {
         )
     }
 
-    fn send_event(&self, _player: Obj, msg: NarrativeEvent) -> Result<(), SessionError> {
+    fn send_event(&self, _player: Obj, msg: Box<NarrativeEvent>) -> Result<(), SessionError> {
         self.inner.write().unwrap().received.push(msg);
         Ok(())
     }
