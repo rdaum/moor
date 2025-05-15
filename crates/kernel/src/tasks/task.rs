@@ -1098,7 +1098,7 @@ mod tests {
                 fork_request.activation.frame
             );
         };
-        assert_eq!(moo_frame.program.as_ref(), program);
+        assert_eq!(&moo_frame.program, program);
 
         // Reply back with the new task id.
         reply_channel.send(2).unwrap();

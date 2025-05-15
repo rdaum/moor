@@ -30,7 +30,7 @@ lazy_static! {
 
 /// The result of compilation. The set of instructions, fork vectors, variable offsets, literals.
 #[derive(Clone, Debug, PartialEq, Encode, Decode)]
-pub struct Program(pub Box<PrgInner>);
+pub struct Program(pub Arc<PrgInner>);
 
 #[derive(Clone, Debug, PartialEq, Encode, Decode)]
 pub struct PrgInner {
@@ -51,7 +51,7 @@ pub struct PrgInner {
     /// All the error operands referenced in by MakeError in the program.
     pub error_operands: Vec<ErrorCode>,
     /// The actual program code.
-    pub main_vector: Arc<Vec<Op>>,
+    pub main_vector: Vec<Op>,
     /// The program code for each fork.
     pub fork_vectors: Vec<Vec<Op>>,
     /// As each statement is pushed, the line number is recorded, along with its offset in the main
@@ -61,7 +61,7 @@ pub struct PrgInner {
 }
 impl Program {
     pub fn new() -> Self {
-        Program(Box::new(PrgInner {
+        Program(Arc::new(PrgInner {
             literals: Vec::new(),
             jump_labels: Vec::new(),
             var_names: Names::new(0),
@@ -69,15 +69,11 @@ impl Program {
             for_sequence_operands: vec![],
             range_comprehensions: vec![],
             list_comprehensions: vec![],
-            main_vector: Arc::new(Vec::new()),
-            fork_vectors: Vec::new(),
-            line_number_spans: Vec::new(),
+            main_vector: vec![],
+            fork_vectors: vec![],
+            line_number_spans: vec![],
             error_operands: vec![],
         }))
-    }
-
-    pub fn switch_to_fork_vector(&mut self, fork_vector_offset: Offset) {
-        self.0.main_vector = Arc::new(self.0.fork_vectors[fork_vector_offset.0 as usize].clone());
     }
 
     pub fn find_var(&self, v: &str) -> Name {
@@ -141,15 +137,11 @@ impl Program {
         &self.0.jump_labels[offset.0 as usize]
     }
 
-    pub fn jump_label_mut(&mut self, offset: Offset) -> &mut JumpLabel {
-        &mut self.0.jump_labels[offset.0 as usize]
-    }
-
     pub fn fork_vector(&self, offset: Offset) -> &Vec<Op> {
         &self.0.fork_vectors[offset.0 as usize]
     }
 
-    pub fn main_vector(&self) -> &Arc<Vec<Op>> {
+    pub fn main_vector(&self) -> &Vec<Op> {
         &self.0.main_vector
     }
 

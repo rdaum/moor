@@ -44,7 +44,7 @@ mod tests {
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
-        Program(Box::new(PrgInner {
+        Program(Arc::new(PrgInner {
             literals,
             jump_labels: vec![],
             var_names,
@@ -53,7 +53,7 @@ mod tests {
             range_comprehensions: vec![],
             list_comprehensions: vec![],
             error_operands: vec![],
-            main_vector: Arc::new(main_vector),
+            main_vector,
             fork_vectors: vec![],
             line_number_spans: vec![],
         }))

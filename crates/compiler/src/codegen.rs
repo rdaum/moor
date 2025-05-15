@@ -1064,7 +1064,7 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
         )
     }
 
-    let program = Box::new(PrgInner {
+    let program = Arc::new(PrgInner {
         literals: cg_state.literals,
         jump_labels: cg_state.jumps,
         var_names: cg_state.var_names,
@@ -1072,7 +1072,7 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
         range_comprehensions: cg_state.range_comprehensions,
         list_comprehensions: cg_state.list_comprehensions,
         for_sequence_operands: cg_state.for_sequence_operands,
-        main_vector: Arc::new(cg_state.ops),
+        main_vector: cg_state.ops,
         fork_vectors: cg_state.fork_vectors,
         line_number_spans: cg_state.line_number_spans,
         error_operands: cg_state.error_operands,

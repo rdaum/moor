@@ -299,9 +299,7 @@ impl VMExecState {
             panic!("Attempt to fork a non-MOO frame");
         };
 
-        frame
-            .program
-            .switch_to_fork_vector(fork_request.fork_vector_offset);
+        frame.switch_to_fork_vector(fork_request.fork_vector_offset);
         frame.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
             frame.set_variable(&task_id_name, v_int(self.task_id as i64));

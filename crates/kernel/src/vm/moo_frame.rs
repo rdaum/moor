@@ -17,8 +17,9 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
+use moor_common::program::labels::Offset;
 use moor_common::program::names::{GlobalName, Name};
-use moor_common::util::{BitArray, Bitset16, PerfTimerGuard};
+use moor_common::util::{BitArray, Bitset64, PerfTimerGuard};
 use moor_compiler::{Label, Op, Program};
 use moor_var::{Error, Var, v_none};
 use smallvec::SmallVec;
@@ -28,11 +29,13 @@ use smallvec::SmallVec;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct MooStackFrame {
     /// The program of the verb that is currently being executed.
-    pub(crate) program: Box<Program>,
+    pub(crate) program: Program,
     /// The program counter.
     pub(crate) pc: usize,
+    /// Where is the PC pointing to?
+    pub(crate) pc_type: PcType,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: BitArray<Var, 256, Bitset16<16>>,
+    pub(crate) environment: BitArray<Var, 256, Bitset64<4>>,
     /// The current used scope size, used when entering and exiting local scopes.
     pub(crate) environment_width: usize,
     /// The value stack.
@@ -47,6 +50,12 @@ pub(crate) struct MooStackFrame {
     /// Scratch space for holding finally-reasons to be popped off the stack when a finally block
     /// is ended.
     pub(crate) finally_stack: Vec<FinallyReason>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
+pub enum PcType {
+    Main,
+    ForkVector(Offset),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
@@ -83,101 +92,16 @@ pub(crate) struct Scope {
     pub(crate) environment_width: usize,
 }
 
-impl Encode for MooStackFrame {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.program.encode(encoder)?;
-        self.pc.encode(encoder)?;
-
-        // Environment is custom, is not bincodable, so we need to encode it manually, but we just
-        // do it as an array of Option<Var>
-        let mut env = vec![None; 256];
-        let env_iter = self.environment.iter();
-        for (i, v) in env_iter {
-            env[i] = Some(v.clone())
-        }
-        env.encode(encoder)?;
-        self.environment_width.encode(encoder)?;
-        self.valstack.encode(encoder)?;
-        self.scope_stack.encode(encoder)?;
-        self.temp.encode(encoder)?;
-        self.catch_stack.encode(encoder)?;
-        self.finally_stack.encode(encoder)
-    }
-}
-
-impl<C> Decode<C> for MooStackFrame {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Box::new(Program::decode(decoder)?);
-        let pc = usize::decode(decoder)?;
-
-        let env: Vec<Option<Var>> = Vec::decode(decoder)?;
-        let mut environment = BitArray::new();
-        for (i, v) in env.iter().enumerate() {
-            if let Some(v) = v {
-                environment.set(i, v.clone());
-            }
-        }
-        let environment_width = usize::decode(decoder)?;
-        let valstack = Vec::decode(decoder)?.into();
-        let scope_stack = Vec::decode(decoder)?.into();
-        let temp = Var::decode(decoder)?;
-        let catch_stack = Vec::decode(decoder)?;
-        let finally_stack = Vec::decode(decoder)?;
-        Ok(Self {
-            program,
-            pc,
-            environment,
-            environment_width,
-            valstack,
-            scope_stack,
-            temp,
-            catch_stack,
-            finally_stack,
-        })
-    }
-}
-
-impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Box::new(Program::borrow_decode(decoder)?);
-        let pc = usize::borrow_decode(decoder)?;
-
-        let env: Vec<Option<Var>> = Vec::borrow_decode(decoder)?;
-        let mut environment = BitArray::new();
-        for (i, v) in env.iter().enumerate() {
-            if let Some(v) = v {
-                environment.set(i, v.clone());
-            }
-        }
-        let environment_width = usize::borrow_decode(decoder)?;
-        let valstack = Vec::borrow_decode(decoder)?.into();
-        let scope_stack = Vec::borrow_decode(decoder)?.into();
-        let temp = Var::borrow_decode(decoder)?;
-        let catch_stack = Vec::borrow_decode(decoder)?;
-        let finally_stack = Vec::borrow_decode(decoder)?;
-        Ok(Self {
-            program,
-            pc,
-            environment,
-            environment_width,
-            valstack,
-            scope_stack,
-            temp,
-            catch_stack,
-            finally_stack,
-        })
-    }
-}
-
 impl MooStackFrame {
     pub(crate) fn new(program: Program) -> Self {
         let environment = BitArray::new();
         let environment_width = program.var_names().global_width();
         Self {
-            program: Box::new(program),
+            program,
             environment,
             environment_width,
             pc: 0,
+            pc_type: PcType::Main,
             temp: v_none(),
             valstack: Default::default(),
             scope_stack: Default::default(),
@@ -212,6 +136,11 @@ impl MooStackFrame {
     pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
         let offset = self.program.var_names().offset_for(id)?;
         self.environment.get(offset)
+    }
+
+    pub(crate) fn switch_to_fork_vector(&mut self, fork_vector: Offset) {
+        self.pc_type = PcType::ForkVector(fork_vector);
+        self.pc = 0;
     }
 
     #[inline]
@@ -307,5 +236,93 @@ impl MooStackFrame {
         self.environment.truncate(scope.environment_width);
         self.environment_width = scope.environment_width;
         Some(scope)
+    }
+}
+
+impl Encode for MooStackFrame {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.program.encode(encoder)?;
+        self.pc.encode(encoder)?;
+        self.pc_type.encode(encoder)?;
+        // Environment is custom, is not bincodable, so we need to encode it manually, but we just
+        // do it as an array of Option<Var>
+        let mut env = vec![None; 256];
+        let env_iter = self.environment.iter();
+        for (i, v) in env_iter {
+            env[i] = Some(v.clone())
+        }
+        env.encode(encoder)?;
+        self.environment_width.encode(encoder)?;
+        self.valstack.encode(encoder)?;
+        self.scope_stack.encode(encoder)?;
+        self.temp.encode(encoder)?;
+        self.catch_stack.encode(encoder)?;
+        self.finally_stack.encode(encoder)
+    }
+}
+
+impl<C> Decode<C> for MooStackFrame {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let program = Program::decode(decoder)?;
+        let pc = usize::decode(decoder)?;
+        let pc_type = PcType::decode(decoder)?;
+        let env: Vec<Option<Var>> = Vec::decode(decoder)?;
+        let mut environment = BitArray::new();
+        for (i, v) in env.iter().enumerate() {
+            if let Some(v) = v {
+                environment.set(i, v.clone());
+            }
+        }
+        let environment_width = usize::decode(decoder)?;
+        let valstack = Vec::decode(decoder)?.into();
+        let scope_stack = Vec::decode(decoder)?.into();
+        let temp = Var::decode(decoder)?;
+        let catch_stack = Vec::decode(decoder)?;
+        let finally_stack = Vec::decode(decoder)?;
+        Ok(Self {
+            program,
+            pc,
+            pc_type,
+            environment,
+            environment_width,
+            valstack,
+            scope_stack,
+            temp,
+            catch_stack,
+            finally_stack,
+        })
+    }
+}
+
+impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let program = Program::borrow_decode(decoder)?;
+        let pc = usize::borrow_decode(decoder)?;
+        let pc_type = PcType::borrow_decode(decoder)?;
+        let env: Vec<Option<Var>> = Vec::borrow_decode(decoder)?;
+        let mut environment = BitArray::new();
+        for (i, v) in env.iter().enumerate() {
+            if let Some(v) = v {
+                environment.set(i, v.clone());
+            }
+        }
+        let environment_width = usize::borrow_decode(decoder)?;
+        let valstack = Vec::borrow_decode(decoder)?.into();
+        let scope_stack = Vec::borrow_decode(decoder)?.into();
+        let temp = Var::borrow_decode(decoder)?;
+        let catch_stack = Vec::borrow_decode(decoder)?;
+        let finally_stack = Vec::borrow_decode(decoder)?;
+        Ok(Self {
+            program,
+            pc,
+            pc_type,
+            environment,
+            environment_width,
+            valstack,
+            scope_stack,
+            temp,
+            catch_stack,
+            finally_stack,
+        })
     }
 }
