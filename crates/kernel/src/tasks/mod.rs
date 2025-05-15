@@ -45,8 +45,8 @@ lazy_static! {
     static ref SCHED_COUNTERS: Arc<SchedulerPerfCounters> = Arc::new(SchedulerPerfCounters::new());
 }
 
-pub fn sched_counters() -> Arc<SchedulerPerfCounters> {
-    SCHED_COUNTERS.clone()
+pub fn sched_counters<'a>() -> &'a SchedulerPerfCounters {
+    &SCHED_COUNTERS
 }
 
 /// Just a handle to a task, with a receiver for the result.
@@ -238,17 +238,17 @@ pub mod vm_test_utils {
 
         fun(world_state, &mut vm_host);
 
-        let config = FeaturesConfig::default();
+        let config = Arc::new(FeaturesConfig::default());
 
         // Call repeatedly into exec until we ge either an error or Complete.
         loop {
             match vm_host.exec_interpreter(
                 0,
                 world_state,
-                task_scheduler_client.clone(),
-                session.clone(),
-                builtins.clone(),
-                config.clone(),
+                &task_scheduler_client,
+                session.as_ref(),
+                &builtins,
+                config.as_ref(),
             ) {
                 VMHostResponse::ContinueOk => {
                     continue;
@@ -386,7 +386,13 @@ pub mod scheduler_test_utils {
         code: String,
     ) -> Result<Var, SchedulerError> {
         execute(|| {
-            scheduler.submit_eval_task(player, player, code, session, FeaturesConfig::default())
+            scheduler.submit_eval_task(
+                player,
+                player,
+                code,
+                session,
+                Arc::new(FeaturesConfig::default()),
+            )
         })
     }
 }

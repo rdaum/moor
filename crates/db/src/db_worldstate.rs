@@ -52,8 +52,8 @@ lazy_static! {
     static ref WORLD_STATE_PERF: Arc<WorldStatePerf> = Arc::new(WorldStatePerf::new());
 }
 
-pub fn db_counters() -> Arc<WorldStatePerf> {
-    WORLD_STATE_PERF.clone()
+pub fn db_counters<'a>() -> &'a WorldStatePerf {
+    &WORLD_STATE_PERF
 }
 
 pub struct DbWorldState {

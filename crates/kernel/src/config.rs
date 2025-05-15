@@ -20,12 +20,13 @@ use moor_textdump::{EncodingMode, TextdumpVersion};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub database_config: DatabaseConfig,
-    pub features_config: FeaturesConfig,
+    pub features_config: Arc<FeaturesConfig>,
     pub import_export_config: ImportExportConfig,
 }
 

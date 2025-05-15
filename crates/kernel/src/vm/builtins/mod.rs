@@ -89,8 +89,8 @@ impl BfCounters {
     }
 }
 
-pub fn bf_perf_counters() -> Arc<BfCounters> {
-    BF_COUNTERS.clone()
+pub fn bf_perf_counters<'a>() -> &'a BfCounters {
+    &BF_COUNTERS
 }
 
 /// The bundle of builtins are stored here, and passed around globally.
@@ -146,11 +146,11 @@ pub(crate) struct BfCallState<'a> {
     /// Handle to the current database transaction.
     pub(crate) world_state: &'a mut dyn WorldState,
     /// For connection / message management.
-    pub(crate) session: Arc<dyn Session>,
+    pub(crate) session: &'a dyn Session,
     /// For sending messages up to the scheduler
-    pub(crate) task_scheduler_client: TaskSchedulerClient,
+    pub(crate) task_scheduler_client: &'a TaskSchedulerClient,
     /// Config
-    pub(crate) config: FeaturesConfig,
+    pub(crate) config: &'a FeaturesConfig,
 }
 
 impl BfCallState<'_> {

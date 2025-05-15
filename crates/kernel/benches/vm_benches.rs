@@ -118,10 +118,10 @@ fn execute(
         match vm_host.exec_interpreter(
             0,
             world_state,
-            task_scheduler_client.clone(),
-            session.clone(),
-            BuiltinRegistry::new(),
-            config.clone(),
+            &task_scheduler_client,
+            session.as_ref(),
+            &BuiltinRegistry::new(),
+            &config,
         ) {
             VMHostResponse::ContinueOk => {
                 continue;

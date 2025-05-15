@@ -20,6 +20,7 @@ use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
 use crossbeam_channel::Sender;
+use crossbeam_utils::CachePadded;
 use moor_common::model::{
     CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectRef, PropDef, PropDefs,
     PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
@@ -70,7 +71,7 @@ pub struct WorldStateTransaction {
     pub(crate) object_propvalues: RTx<ObjAndUUIDHolder, Var>,
     pub(crate) object_propflags: RTx<ObjAndUUIDHolder, PropPerms>,
 
-    pub(crate) sequences: [Arc<AtomicI64>; 16],
+    pub(crate) sequences: [Arc<CachePadded<AtomicI64>>; 16],
 
     /// Our fork of the global verb resolution cache. We fill or flush in our local copy, and
     /// when we submit ours becomes the new global.

@@ -304,7 +304,7 @@ fn main() {
     }
 
     let config = Config {
-        features_config: features,
+        features_config: Arc::new(features),
         ..Default::default()
     };
     let scheduler = Scheduler::new(

@@ -154,7 +154,7 @@ impl SchedulerClient {
         perms: &Obj,
         code: String,
         sessions: Arc<dyn Session>,
-        config: FeaturesConfig,
+        config: Arc<FeaturesConfig>,
     ) -> Result<TaskHandle, SchedulerError> {
         // Compile the text into a verb.
         let program = match compile(code.as_str(), config.compile_options()) {

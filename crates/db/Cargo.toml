@@ -29,6 +29,7 @@ moor-var = { path = "../var" }
 ahash.workspace = true
 byteview.workspace = true
 crossbeam-channel.workspace = true
+crossbeam-utils.workspace = true
 fjall.workspace = true
 im.workspace = true
 indexmap.workspace = true

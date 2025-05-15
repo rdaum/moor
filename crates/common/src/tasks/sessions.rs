@@ -239,8 +239,8 @@ impl SystemControl for NoopSystemControl {
 /// For now that's all it does, but facilities for pretending players are connected, mocking
 /// hostnames, etc. can be added later.
 struct Inner {
-    received: Vec<Box<NarrativeEvent>>,
-    committed: Vec<Box<NarrativeEvent>>,
+    received: Vec<NarrativeEvent>,
+    committed: Vec<NarrativeEvent>,
 }
 pub struct MockClientSession {
     inner: RwLock<Inner>,
@@ -256,11 +256,11 @@ impl MockClientSession {
             system: Arc::new(Default::default()),
         }
     }
-    pub fn received(&self) -> Vec<Box<NarrativeEvent>> {
+    pub fn received(&self) -> Vec<NarrativeEvent> {
         let inner = self.inner.read().unwrap();
         inner.received.clone()
     }
-    pub fn committed(&self) -> Vec<Box<NarrativeEvent>> {
+    pub fn committed(&self) -> Vec<NarrativeEvent> {
         let inner = self.inner.read().unwrap();
         inner.committed.clone()
     }
@@ -305,7 +305,7 @@ impl Session for MockClientSession {
     }
 
     fn send_event(&self, _player: Obj, msg: Box<NarrativeEvent>) -> Result<(), SessionError> {
-        self.inner.write().unwrap().received.push(msg);
+        self.inner.write().unwrap().received.push(*msg);
         Ok(())
     }
 

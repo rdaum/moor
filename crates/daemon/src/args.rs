@@ -17,6 +17,7 @@ use moor_db::DatabaseConfig;
 use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig, ImportExportFormat};
 use moor_textdump::EncodingMode;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 #[allow(dead_code)]
@@ -388,7 +389,9 @@ impl Args {
             args.merge_config(&mut config.import_export_config);
         }
         if let Some(args) = self.feature_args.as_ref() {
-            args.merge_config(&mut config.features_config);
+            let mut copy = config.features_config.as_ref().clone();
+            args.merge_config(&mut copy);
+            config.features_config = Arc::new(copy);
         }
         self.db_args.merge_config(&mut config.database_config);
 

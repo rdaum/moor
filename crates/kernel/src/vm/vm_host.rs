@@ -12,7 +12,6 @@
 //
 
 use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use bincode::de::{BorrowDecoder, Decoder};
@@ -257,15 +256,15 @@ impl VmHost {
         &mut self,
         task_id: TaskId,
         world_state: &mut dyn WorldState,
-        task_scheduler_client: TaskSchedulerClient,
-        session: Arc<dyn Session>,
-        builtin_registry: BuiltinRegistry,
-        config: FeaturesConfig,
+        task_scheduler_client: &TaskSchedulerClient,
+        session: &dyn Session,
+        builtin_registry: &BuiltinRegistry,
+        config: &FeaturesConfig,
     ) -> VMHostResponse {
         self.vm_exec_state.task_id = task_id;
 
         let exec_params = VmExecParams {
-            task_scheduler_client: task_scheduler_client.clone(),
+            task_scheduler_client,
             builtin_registry,
             max_stack_depth: self.max_stack_depth,
             config,
@@ -286,7 +285,7 @@ impl VmHost {
         self.vm_exec_state.tick_slice = self.max_ticks - self.vm_exec_state.tick_count;
 
         // Actually invoke the VM, asking it to loop until it's ready to yield back to us.
-        let mut result = self.run_interpreter(&exec_params, world_state, session.clone());
+        let mut result = self.run_interpreter(&exec_params, world_state, session);
         while self.is_running() {
             match result {
                 ExecutionResult::More => return ContinueOk,
@@ -350,7 +349,7 @@ impl VmHost {
                         args,
                         &exec_params,
                         world_state,
-                        session.clone(),
+                        session,
                     );
                     continue;
                 }
@@ -411,7 +410,7 @@ impl VmHost {
         &mut self,
         vm_exec_params: &VmExecParams,
         world_state: &mut dyn WorldState,
-        session: Arc<dyn Session>,
+        session: &dyn Session,
     ) -> ExecutionResult {
         // No activations? Nothing to do.
         if self.vm_exec_state.stack.is_empty() {
@@ -438,7 +437,7 @@ impl VmHost {
                     activation.permissions.clone(),
                     fr,
                     world_state,
-                    &vm_exec_params.config,
+                    vm_exec_params.config,
                 );
                 (result, tick_count)
             }

@@ -20,6 +20,7 @@ use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::ws_transaction::WorldStateTransaction;
 use crate::{CommitSet, ObjAndUUIDHolder, StringHolder};
 use crossbeam_channel::Sender;
+use crossbeam_utils::CachePadded;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use minstant::Instant;
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
@@ -35,7 +36,7 @@ use tempfile::TempDir;
 use tracing::{error, warn};
 
 pub struct MoorDB {
-    monotonic: AtomicU64,
+    monotonic: CachePadded<AtomicU64>,
 
     keyspace: fjall::Keyspace,
 
@@ -53,7 +54,7 @@ pub struct MoorDB {
     object_propvalues: R<ObjAndUUIDHolder, Var>,
     object_propflags: R<ObjAndUUIDHolder, PropPerms>,
 
-    sequences: [Arc<AtomicI64>; 16],
+    sequences: [Arc<CachePadded<AtomicI64>>; 16],
     sequences_partition: PartitionHandle,
 
     kill_switch: Arc<AtomicBool>,
@@ -121,7 +122,7 @@ impl MoorDB {
             .open_partition("sequences", PartitionCreateOptions::default())
             .unwrap();
 
-        let sequences = [(); 16].map(|_| Arc::new(AtomicI64::new(-1)));
+        let sequences = [(); 16].map(|_| Arc::new(CachePadded::new(AtomicI64::new(-1))));
 
         let mut fresh = false;
         if !keyspace.partition_exists("object_location") {
@@ -245,7 +246,7 @@ impl MoorDB {
         let prop_resolution_cache = RwLock::new(PropResolutionCache::new());
         let ancestry_cache = RwLock::new(AncestryCache::default());
         let s = Arc::new(Self {
-            monotonic: AtomicU64::new(start_tx_num),
+            monotonic: CachePadded::new(AtomicU64::new(start_tx_num)),
             object_location,
             object_contents,
             object_flags,
@@ -280,7 +281,7 @@ impl MoorDB {
         let tx = Tx {
             ts: Timestamp(
                 self.monotonic
-                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             ),
         };
 
@@ -634,7 +635,7 @@ impl MoorDB {
                     // Now write out the current state of the sequences to the seq partition.
                     // Start by making sure that the monotonic sequence is written out.
                     this.sequences[15].store(
-                        this.monotonic.load(std::sync::atomic::Ordering::SeqCst) as i64,
+                        this.monotonic.load(std::sync::atomic::Ordering::Relaxed) as i64,
                         std::sync::atomic::Ordering::Relaxed,
                     );
                     for (i, seq) in this.sequences.iter().enumerate() {

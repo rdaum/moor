@@ -136,10 +136,10 @@ impl Task {
             }
             if let Some(continuation_task) = task.vm_dispatch(
                 task_scheduler_client,
-                session.clone(),
+                session.as_ref(),
                 world_state,
-                builtin_registry.clone(),
-                config.features_config.clone(),
+                &builtin_registry,
+                config.features_config.as_ref(),
             ) {
                 (task, world_state) = continuation_task;
             } else {
@@ -159,10 +159,10 @@ impl Task {
     fn vm_dispatch(
         mut self: Box<Self>,
         task_scheduler_client: &TaskSchedulerClient,
-        session: Arc<dyn Session>,
+        session: &dyn Session,
         mut world_state: Box<dyn WorldState>,
-        builtin_registry: BuiltinRegistry,
-        config: FeaturesConfig,
+        builtin_registry: &BuiltinRegistry,
+        config: &FeaturesConfig,
     ) -> Option<(Box<Self>, Box<dyn WorldState>)> {
         let perfc = sched_counters();
         let _t = PerfTimerGuard::new(&perfc.vm_dispatch);
@@ -171,8 +171,8 @@ impl Task {
         let vm_exec_result = self.vm_host.exec_interpreter(
             self.task_id,
             world_state.as_mut(),
-            task_scheduler_client.clone(),
-            session.clone(),
+            task_scheduler_client,
+            session,
             builtin_registry,
             config,
         );

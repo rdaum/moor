@@ -82,7 +82,7 @@ clap_derive = "4.5"
 
 ## HTTP/websockets front-end
 axum = { version = "0.8", features = ["ws"] }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive", "rc"] }
 
 serde_derive = "1.0"
 serde_json = "1.0"
@@ -105,13 +105,14 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # General usefulness
-ahash = "0.8.11"
+ahash = "0.8"
 binary-layout = "4.0"
 bincode = { version = "2.0", features = ["serde"] }
 byteview = "0.6"
 chrono = "0.4"
 criterion = { version = "0.5", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
+crossbeam-utils = "0.8"
 encoding_rs = "0.8"
 enum-primitive-derive = "0.3"
 fast-counter = "1.0.0"

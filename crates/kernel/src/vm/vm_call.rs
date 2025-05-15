@@ -35,7 +35,6 @@ use moor_var::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_var::{List, Obj};
 use moor_var::{Var, v_int, v_obj};
-use std::sync::Arc;
 
 lazy_static! {
     static ref LIST_SYM: Symbol = Symbol::mk("list");
@@ -65,11 +64,11 @@ pub struct VerbExecutionRequest {
 }
 
 /// The set of parameters & utilities passed to the VM for execution of a given task.
-pub struct VmExecParams {
-    pub task_scheduler_client: TaskSchedulerClient,
-    pub builtin_registry: BuiltinRegistry,
+pub struct VmExecParams<'a> {
+    pub task_scheduler_client: &'a TaskSchedulerClient,
+    pub builtin_registry: &'a BuiltinRegistry,
     pub max_stack_depth: usize,
-    pub config: FeaturesConfig,
+    pub config: &'a FeaturesConfig,
 }
 
 impl VMExecState {
@@ -146,7 +145,7 @@ impl VMExecState {
                 (arguments.clone(), v_obj(prop_val.clone()), prop_val.clone())
             }
         };
-        Ok(self.prepare_call_verb(world_state, location, this, verb, args.clone()))
+        Ok(self.prepare_call_verb(world_state, location, this, verb, args))
     }
 
     fn prepare_call_verb(
@@ -364,7 +363,7 @@ impl VMExecState {
         args: List,
         exec_args: &VmExecParams,
         world_state: &mut dyn WorldState,
-        session: Arc<dyn Session>,
+        session: &dyn Session,
     ) -> ExecutionResult {
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
         let start = Instant::now();
@@ -393,10 +392,10 @@ impl VMExecState {
             exec_state: self,
             name: bf_name,
             world_state,
-            session: session.clone(),
+            session,
             args,
-            task_scheduler_client: exec_args.task_scheduler_client.clone(),
-            config: exec_args.config.clone(),
+            task_scheduler_client: exec_args.task_scheduler_client,
+            config: exec_args.config,
         };
         let bf_counters = bf_perf_counters();
         bf_counters.counter_for(bf_id).invocations.add(1);
@@ -414,7 +413,7 @@ impl VMExecState {
             .cumulative_duration_nanos
             .add(elapsed_nanos as isize);
         match result {
-            Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
+            Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result)),
             Err(BfErr::ErrValue(e)) => self.push_bf_error(e),
             Err(BfErr::Code(c)) => self.push_bf_error(c.into()),
             Err(BfErr::Raise(e)) => self.push_bf_error(e),
@@ -428,7 +427,7 @@ impl VMExecState {
         &mut self,
         exec_args: &VmExecParams,
         world_state: &mut dyn WorldState,
-        session: Arc<dyn Session>,
+        session: &dyn Session,
     ) -> ExecutionResult {
         let start = Instant::now();
         let bf_frame = match self.top().frame {
@@ -448,17 +447,16 @@ impl VMExecState {
         let bf_id = bf_frame.bf_id;
         let bf = exec_args.builtin_registry.builtin_for(&bf_id);
         let verb_name = self.top().verb_name;
-        let sessions = session.clone();
         let args = self.top().args.clone();
         let mut bf_args = BfCallState {
             exec_state: self,
             name: verb_name,
             world_state,
-            session: sessions,
+            session,
             // TODO: avoid copy here by using List inside BfCallState
             args,
-            task_scheduler_client: exec_args.task_scheduler_client.clone(),
-            config: exec_args.config.clone(),
+            task_scheduler_client: exec_args.task_scheduler_client,
+            config: exec_args.config,
         };
 
         let elapsed_nanos = start.elapsed().as_nanos();
