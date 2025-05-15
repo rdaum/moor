@@ -151,6 +151,3 @@ Strips off the message from an error value and returns just the error without it
 - `error`: The error value to get the code from
 
 **Returns:** The error code of the error value
-
-
-

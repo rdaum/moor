@@ -124,10 +124,10 @@ minstant = { version = "0.1", features = ["fallback-coarse"] }
 num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
 semver = "1.0"
-smallvec = "2.0.0-alpha.11"
 shadow-rs = "1.1"
 similar = "*"
 similar-asserts = "*"
+smallvec = "2.0.0-alpha.11"
 strum = { version = "0.27", features = ["derive"] }
 ustr = "1.0"
 uuid = { version = "1.16", features = ["v4", "serde"] }
