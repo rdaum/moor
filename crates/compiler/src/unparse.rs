@@ -15,7 +15,7 @@ use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
-use moor_common::program::names::{Name, UnboundName};
+use moor_common::program::names::{Name, Variable};
 use moor_common::util::quote_str;
 use moor_var::{Obj, Sequence, Var, Variant};
 use std::collections::HashMap;
@@ -721,7 +721,7 @@ impl<'a> Unparse<'a> {
         Ok(results)
     }
 
-    fn unparse_name(&self, name: &UnboundName) -> Name {
+    fn unparse_name(&self, name: &Variable) -> Name {
         *self.tree.names_mapping.get(name).unwrap()
     }
 }

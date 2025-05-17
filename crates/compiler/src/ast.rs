@@ -11,14 +11,12 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+/// The abstract syntax tree produced by the parser and converted by codegen into opcodes.
+use moor_common::program::names::Variable;
+use moor_common::program::opcode::Op;
+use moor_var::Var;
 use moor_var::{ErrorCode, Symbol, VarType};
 use std::fmt::Display;
-
-use moor_var::Var;
-
-/// The abstract syntax tree produced by the parser and converted by codegen into opcodes.
-use moor_common::program::names::UnboundName;
-use moor_common::program::opcode::Op;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Arg {
@@ -36,7 +34,7 @@ pub enum ScatterKind {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ScatterItem {
     pub kind: ScatterKind,
-    pub id: UnboundName,
+    pub id: Variable,
     pub expr: Option<Expr>,
 }
 
@@ -131,7 +129,7 @@ pub enum Expr {
     TypeConstant(VarType),
     Value(Var),
     Error(ErrorCode, Option<Box<Expr>>),
-    Id(UnboundName),
+    Id(Variable),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),
     Or(Box<Expr>, Box<Expr>),
@@ -171,15 +169,15 @@ pub enum Expr {
     Scatter(Vec<ScatterItem>, Box<Expr>),
     Length,
     ComprehendList {
-        variable: UnboundName,
-        position_register: UnboundName,
-        list_register: UnboundName,
+        variable: Variable,
+        position_register: Variable,
+        list_register: Variable,
         producer_expr: Box<Expr>,
         list: Box<Expr>,
     },
     ComprehendRange {
-        variable: UnboundName,
-        end_of_range_register: UnboundName,
+        variable: Variable,
+        end_of_range_register: Variable,
         producer_expr: Box<Expr>,
         from: Box<Expr>,
         to: Box<Expr>,
@@ -202,7 +200,7 @@ pub struct ElseArm {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ExceptArm {
-    pub id: Option<UnboundName>,
+    pub id: Option<Variable>,
     pub codes: CatchCodes,
     pub statements: Vec<Stmt>,
 }
@@ -237,27 +235,27 @@ pub enum StmtNode {
         otherwise: Option<ElseArm>,
     },
     ForList {
-        value_binding: UnboundName,
-        key_binding: Option<UnboundName>,
+        value_binding: Variable,
+        key_binding: Option<Variable>,
         expr: Expr,
         body: Vec<Stmt>,
         environment_width: usize,
     },
     ForRange {
-        id: UnboundName,
+        id: Variable,
         from: Expr,
         to: Expr,
         body: Vec<Stmt>,
         environment_width: usize,
     },
     While {
-        id: Option<UnboundName>,
+        id: Option<Variable>,
         condition: Expr,
         body: Vec<Stmt>,
         environment_width: usize,
     },
     Fork {
-        id: Option<UnboundName>,
+        id: Option<Variable>,
         time: Expr,
         body: Vec<Stmt>,
     },
@@ -278,10 +276,10 @@ pub enum StmtNode {
         body: Vec<Stmt>,
     },
     Break {
-        exit: Option<UnboundName>,
+        exit: Option<Variable>,
     },
     Continue {
-        exit: Option<UnboundName>,
+        exit: Option<Variable>,
     },
     Expr(Expr),
 }

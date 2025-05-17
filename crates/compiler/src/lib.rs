@@ -23,6 +23,7 @@ mod unparse;
 
 mod codegen_tests;
 mod objdef;
+mod var_scope;
 
 pub use crate::codegen::compile;
 pub use crate::decompile::program_to_tree;
@@ -36,6 +37,6 @@ pub use moor_common::program::builtins::{
     ArgCount, ArgType, BUILTINS, Builtin, BuiltinId, offset_for_builtin,
 };
 pub use moor_common::program::labels::{JumpLabel, Label, Offset};
-pub use moor_common::program::names::UnboundNames;
 pub use moor_common::program::opcode::{Op, ScatterLabel};
 pub use moor_common::program::program::{EMPTY_PROGRAM, Program};
+pub use var_scope::VarScope;

@@ -34,11 +34,11 @@ mod tests {
     use moor_common::program::ProgramType;
     use moor_common::program::program::PrgInner;
     use moor_common::tasks::NoopClientSession;
-    use moor_compiler::Op;
     use moor_compiler::Op::*;
     use moor_compiler::Program;
+    use moor_compiler::compile;
     use moor_compiler::{CompileOptions, Names};
-    use moor_compiler::{UnboundNames, compile};
+    use moor_compiler::{Op, VarScope};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::Symbol;
     use test_case::test_case;
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_list_set_range() {
-        let mut var_names = UnboundNames::new();
+        let mut var_names = VarScope::new();
         let a = var_names.find_or_add_name_global("a").unwrap();
         let (var_names, mapping) = var_names.bind();
         let a = mapping[&a];
@@ -331,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_string_set_range() {
-        let mut var_names = UnboundNames::new();
+        let mut var_names = VarScope::new();
         let a = var_names.find_or_add_name_global("a").unwrap();
         let (var_names, mapping) = var_names.bind();
         let a = mapping[&a];

@@ -32,7 +32,7 @@ use moor_common::model::CompileError::InvalidAssignemnt;
 use moor_common::model::{CompileContext, CompileError};
 use moor_common::program::builtins::BUILTINS;
 use moor_common::program::labels::{JumpLabel, Label, Offset};
-use moor_common::program::names::{Name, Names, UnboundName};
+use moor_common::program::names::{Name, Names, Variable};
 use moor_common::program::opcode::Op::Jump;
 use moor_common::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
@@ -53,7 +53,7 @@ pub struct CodegenState {
     pub(crate) ops: Vec<Op>,
     pub(crate) jumps: Vec<JumpLabel>,
     pub(crate) var_names: Names,
-    pub(crate) binding_mappings: HashMap<UnboundName, Name>,
+    pub(crate) binding_mappings: HashMap<Variable, Name>,
     pub(crate) literals: Vec<Var>,
     pub(crate) loops: Vec<Loop>,
     pub(crate) saved_stack: Option<Offset>,
@@ -74,7 +74,7 @@ impl CodegenState {
     pub fn new(
         compile_options: CompileOptions,
         var_names: Names,
-        binding_mappings: HashMap<UnboundName, Name>,
+        binding_mappings: HashMap<Variable, Name>,
     ) -> Self {
         Self {
             ops: vec![],

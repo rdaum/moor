@@ -19,9 +19,10 @@ use crate::ast::{
 };
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::parse::Parse;
+use crate::var_scope::VarScope;
 use moor_common::program::builtins::BuiltinId;
 use moor_common::program::labels::{JumpLabel, Label, Offset};
-use moor_common::program::names::{Name, UnboundName, UnboundNames};
+use moor_common::program::names::{Name, Variable};
 use moor_common::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterLabel,
 };
@@ -55,7 +56,7 @@ struct Decompile {
     position: usize,
     expr_stack: VecDeque<Expr>,
     statements: Vec<Stmt>,
-    names_mapping: HashMap<Name, UnboundName>,
+    names_mapping: HashMap<Name, Variable>,
 }
 
 impl Decompile {
@@ -1066,7 +1067,7 @@ impl Decompile {
         Ok(())
     }
 
-    fn decompile_name(&self, name: &Name) -> Result<UnboundName, DecompileError> {
+    fn decompile_name(&self, name: &Name) -> Result<Variable, DecompileError> {
         self.names_mapping
             .get(name)
             .cloned()
@@ -1079,7 +1080,7 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     // Reconstruct a fake "unbound names" from the program's var_names.
     // TODO: this is broken for scopes, but we don't have a way to represent that yet
     //  inside bound names.
-    let mut unbound_names = UnboundNames::new();
+    let mut unbound_names = VarScope::new();
     let mut bound_to_unbound = HashMap::new();
     let mut unbound_to_bound = HashMap::new();
     let var_names = program.var_names();

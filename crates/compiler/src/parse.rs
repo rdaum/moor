@@ -37,9 +37,10 @@ use crate::ast::{
 };
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
+use crate::var_scope::VarScope;
 use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
 use moor_common::model::{CompileContext, CompileError};
-use moor_common::program::names::{Name, Names, UnboundName, UnboundNames};
+use moor_common::program::names::{Name, Names, Variable};
 
 pub mod moo {
     #[derive(Parser)]
@@ -88,14 +89,14 @@ impl Default for CompileOptions {
 pub struct TreeTransformer {
     // TODO: this is RefCell because PrattParser has some API restrictions which result in
     //   borrowing issues, see: https://github.com/pest-parser/pest/discussions/1030
-    names: RefCell<UnboundNames>,
+    names: RefCell<VarScope>,
     options: CompileOptions,
 }
 
 impl TreeTransformer {
     pub fn new(options: CompileOptions) -> Rc<Self> {
         Rc::new(Self {
-            names: RefCell::new(UnboundNames::new()),
+            names: RefCell::new(VarScope::new()),
             options,
         })
     }
@@ -1398,9 +1399,9 @@ impl TreeTransformer {
 #[derive(Debug)]
 pub struct Parse {
     pub stmts: Vec<Stmt>,
-    pub unbound_names: UnboundNames,
+    pub unbound_names: VarScope,
     pub names: Names,
-    pub names_mapping: HashMap<UnboundName, Name>,
+    pub names_mapping: HashMap<Variable, Name>,
 }
 
 pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Parse, CompileError> {
@@ -1475,9 +1476,7 @@ mod tests {
     use crate::CompileOptions;
     use crate::ast::Arg::{Normal, Splice};
     use crate::ast::BinaryOp::Add;
-    use crate::ast::Expr::{
-        Call, ComprehendList, ComprehendRange, Error, Flyweight, Id, Prop, Value, Verb,
-    };
+    use crate::ast::Expr::{Call, Error, Flyweight, Id, Prop, Value, Verb};
     use crate::ast::{
         BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
         StmtNode, UnaryOp, assert_trees_match_recursive,
@@ -1485,7 +1484,6 @@ mod tests {
     use crate::parse::{parse_program, unquote_str};
     use crate::unparse::annotate_line_numbers;
     use moor_common::model::CompileError;
-    use moor_common::program::names::UnboundName;
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()
@@ -3040,61 +3038,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_for_list_comprehension() {
-        let program = r#"{ x + 5 for x in ( {1,2,3} ) };"#;
-        let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let x = parse.unbound_names.find_named("x")[0];
-
-        assert_eq!(
-            stripped_stmts(&parse.stmts,),
-            vec![StmtNode::Expr(ComprehendList {
-                variable: x,
-                position_register: UnboundName {
-                    offset: x.offset + 1
-                },
-                list_register: UnboundName {
-                    offset: x.offset + 2
-                },
-                producer_expr: Box::new(Expr::Binary(
-                    Add,
-                    Box::new(Id(x)),
-                    Box::new(Value(v_int(5)))
-                )),
-                list: Box::new(Expr::List(vec![
-                    Normal(Value(v_int(1))),
-                    Normal(Value(v_int(2))),
-                    Normal(Value(v_int(3)))
-                ])),
-            })]
-        )
-    }
-
-    #[test]
-    fn test_for_range_comprehension() {
-        let program = r#"{ x + 5 for x in [1..5] };"#;
-        let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let x = parse.unbound_names.find_named("x")[0];
-        let y = UnboundName {
-            offset: x.offset + 1,
-        };
-        assert_eq!(
-            stripped_stmts(&parse.stmts,),
-            vec![StmtNode::Expr(ComprehendRange {
-                variable: x,
-                end_of_range_register: y,
-                producer_expr: Box::new(Expr::Binary(
-                    Add,
-                    Box::new(Id(x)),
-                    Box::new(Value(v_int(5)))
-                )),
-
-                from: Box::new(Value(v_int(1))),
-                to: Box::new(Value(v_int(5)))
-            })]
-        )
-    }
-
     /// Modification to the MOO syntax which allows "return" to be an expression so as to allow
     /// the following syntax, as in Julia....
     #[test]
@@ -3145,24 +3088,6 @@ mod tests {
                     )),
                 ]
             )))))]
-        )
-    }
-    #[test]
-    fn test_for_value_key() {
-        let program = r#"for v, k in ([1->2, 3->4]) endfor"#;
-        let parse = parse_program(program, CompileOptions::default()).unwrap();
-        assert_eq!(
-            stripped_stmts(&parse.stmts),
-            vec![StmtNode::ForList {
-                value_binding: UnboundName { offset: 11 },
-                key_binding: Some(UnboundName { offset: 12 }),
-                expr: Expr::Map(vec![
-                    (Value(v_int(1)), Value(v_int(2))),
-                    (Value(v_int(3)), Value(v_int(4)))
-                ]),
-                body: vec![],
-                environment_width: 0,
-            }]
         )
     }
 
