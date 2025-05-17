@@ -145,7 +145,12 @@ impl MooStackFrame {
 
     #[inline]
     pub fn lookahead(&self) -> Option<Op> {
-        self.program.main_vector().get(self.pc).cloned()
+        match self.pc_type {
+            PcType::Main => self.program.main_vector().get(self.pc).cloned(),
+            PcType::ForkVector(fork_vector) => {
+                self.program.fork_vector(fork_vector).get(self.pc).cloned()
+            }
+        }
     }
 
     #[inline]
