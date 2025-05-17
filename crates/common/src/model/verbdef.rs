@@ -97,7 +97,6 @@ impl Named for VerbDef {
             .any(|verb| verbname_cmp(verb.to_lowercase().as_str(), name.as_str()))
     }
 
-    #[must_use]
     fn names(&self) -> Vec<&str> {
         self.names.iter().map(|s| s.as_str()).collect()
     }

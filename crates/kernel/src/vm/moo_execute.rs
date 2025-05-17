@@ -122,7 +122,9 @@ pub fn moo_frame_execute(
                     Op::While { .. } => ScopeType::While,
                     _ => unreachable!(),
                 };
-                f.push_scope(scope_type, *environment_width, label);
+                if *environment_width != 0 {
+                    f.push_scope(scope_type, *environment_width, label);
+                }
                 let cond = f.pop();
                 if !cond.is_true() {
                     f.jump(label);
@@ -161,6 +163,7 @@ pub fn moo_frame_execute(
                         &operand.end_label,
                     );
                 }
+
                 // Pop the count and list off the stack. We push back later when we re-enter.
 
                 let (count, seq) = f.peek2();
@@ -862,14 +865,17 @@ pub fn moo_frame_execute(
             } => {
                 f.push_scope(ScopeType::Block, *num_bindings, end_label);
             }
-            Op::EndScope { num_bindings: _ } => {
-                let Some(_scope) = f.pop_scope() else {
+            Op::EndScope { num_bindings } => {
+                let scope_width = f.environment_width;
+                let Some(scope) = f.pop_scope() else {
                     panic!(
                         "EndScope without a scope @ {} ({})",
                         f.pc,
                         f.find_line_no(f.pc).unwrap_or(0)
                     );
                 };
+                let expected_width = scope_width - (*num_bindings as usize);
+                assert_eq!(scope.environment_width, expected_width);
             }
             Op::ExitId(label) => {
                 f.jump(label);

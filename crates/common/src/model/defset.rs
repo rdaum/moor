@@ -71,7 +71,6 @@ impl<T: AsByteBuffer, I: Iterator<Item = T>> Iterator for DefsIter<T, I> {
 }
 
 impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
-    #[must_use]
     fn empty() -> Self {
         Self {
             contents: Vec::new(),
@@ -89,12 +88,10 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
         }
     }
     // Provides the number of items in the buffer.
-    #[must_use]
     fn len(&self) -> usize {
         self.iter().count()
     }
 
-    #[must_use]
     fn is_empty(&self) -> bool {
         self.iter().next().is_none()
     }

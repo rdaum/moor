@@ -37,9 +37,10 @@ use crate::ast::{
 };
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
+use crate::var_scope::{DeclType, VarScope};
 use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
 use moor_common::model::{CompileContext, CompileError};
-use moor_common::program::names::{Name, Names, UnboundName, UnboundNames};
+use moor_common::program::names::{Name, Names, Variable};
 
 pub mod moo {
     #[derive(Parser)]
@@ -88,14 +89,14 @@ impl Default for CompileOptions {
 pub struct TreeTransformer {
     // TODO: this is RefCell because PrattParser has some API restrictions which result in
     //   borrowing issues, see: https://github.com/pest-parser/pest/discussions/1030
-    names: RefCell<UnboundNames>,
+    names: RefCell<VarScope>,
     options: CompileOptions,
 }
 
 impl TreeTransformer {
     pub fn new(options: CompileOptions) -> Rc<Self> {
         Rc::new(Self {
-            names: RefCell::new(UnboundNames::new()),
+            names: RefCell::new(VarScope::new()),
             options,
         })
     }
@@ -107,16 +108,11 @@ impl TreeTransformer {
     fn parse_atom(self: Rc<Self>, pair: Pair<Rule>) -> Result<Expr, CompileError> {
         match pair.as_rule() {
             Rule::ident => {
-                let Some(name) = self
+                let name = self
                     .names
                     .borrow_mut()
-                    .find_or_add_name_global(pair.as_str().trim())
-                else {
-                    return Err(DuplicateVariable(
-                        self.compile_context(&pair),
-                        pair.as_str().into(),
-                    ));
-                };
+                    .find_or_add_name_global(pair.as_str().trim(), DeclType::Unknown)
+                    .unwrap();
                 Ok(Expr::Id(name))
             }
             Rule::type_constant => {
@@ -487,17 +483,14 @@ impl TreeTransformer {
                         }
                         let mut inner = primary.into_inner();
 
-                        let producer_expr = primary_self
-                            .clone()
-                            .parse_expr(inner.next().unwrap().into_inner())?;
+                        let producer_portion = inner.next().unwrap().into_inner();
 
                         let variable_ident = inner.next().unwrap();
                         let varname = variable_ident.as_str().trim();
                         let variable = match variable_ident.as_rule() {
                             Rule::ident => {
-                                let Some(name) =
-                                    self.names.borrow_mut().find_or_add_name_global(varname)
-                                else {
+                                let mut names = self.names.borrow_mut();
+                                let Some(name) = names.declare_name(varname, DeclType::For) else {
                                     return Err(DuplicateVariable(
                                         self.compile_context(&variable_ident),
                                         varname.into(),
@@ -509,6 +502,7 @@ impl TreeTransformer {
                                 panic!("Unexpected rule: {:?}", variable_ident.as_rule());
                             }
                         };
+                        let producer_expr = primary_self.clone().parse_expr(producer_portion)?;
                         let clause = inner.next().unwrap();
 
                         match clause.as_rule() {
@@ -690,12 +684,19 @@ impl TreeTransformer {
                         let right = postfix_self
                             .clone()
                             .parse_expr(parts.next().unwrap().into_inner())?;
-                        // If the variable referenced in the LHS is const, we can't assign to it.
-                        // TODO this likely needs to recurse down this tree.
                         let lhs = lhs?;
                         if let Expr::Id(name) = &lhs {
-                            let names = self.names.borrow();
-                            let decl = names.decl_for(name);
+                            let mut names = self.names.borrow_mut();
+                            let decl = names.decl_for_mut(name);
+
+                            // If the variable referenced was not introduced by a let/const clause,
+                            // and doesn't have a prior declaration, mark this as its declaration.
+                            if decl.decl_type == DeclType::Unknown {
+                                decl.decl_type = DeclType::Assign;
+                            }
+
+                            // If the variable referenced in the LHS is const, we can't assign to it.
+                            // TODO this likely needs to recurse down this tree.
                             if decl.constant {
                                 return Err(CompileError::AssignToConst(
                                     self.compile_context(&op),
@@ -762,11 +763,11 @@ impl TreeTransformer {
                 Ok(None)
             }
             Rule::while_statement => {
-                self.enter_scope();
                 let mut parts = pair.into_inner();
                 let condition = self
                     .clone()
                     .parse_expr(parts.next().unwrap().into_inner())?;
+                self.enter_scope();
                 let body = self
                     .clone()
                     .parse_statements(parts.next().unwrap().into_inner())?;
@@ -782,15 +783,19 @@ impl TreeTransformer {
                 )))
             }
             Rule::labelled_while_statement => {
-                self.enter_scope();
                 let mut parts = pair.into_inner();
                 let varname = parts.next().unwrap().as_str();
-                let Some(id) = self.names.borrow_mut().find_or_add_name_global(varname) else {
+                let Some(id) = self
+                    .names
+                    .borrow_mut()
+                    .declare_name(varname, DeclType::WhileLabel)
+                else {
                     return Err(DuplicateVariable(context, varname.into()));
                 };
                 let condition = self
                     .clone()
                     .parse_expr(parts.next().unwrap().into_inner())?;
+                self.enter_scope();
                 let body = self
                     .clone()
                     .parse_statements(parts.next().unwrap().into_inner())?;
@@ -911,14 +916,15 @@ impl TreeTransformer {
             //     Ok(Some(Stmt::new(StmtNode::Return(expr), line_col)))
             // }
             Rule::for_range_statement => {
-                self.enter_scope();
                 let mut parts = pair.into_inner();
 
                 let varname = parts.next().unwrap().as_str();
-                let Some(value_binding) = self.names.borrow_mut().find_or_add_name_global(varname)
-                else {
-                    return Err(DuplicateVariable(context, varname.into()));
+                let value_binding = {
+                    let mut names = self.names.borrow_mut();
+
+                    names.declare_or_use_name(varname, DeclType::For)
                 };
+                self.enter_scope();
                 let clause = parts.next().unwrap();
                 let body = self
                     .clone()
@@ -946,29 +952,30 @@ impl TreeTransformer {
                 }
             }
             Rule::for_in_statement => {
-                self.enter_scope();
                 let mut parts = pair.into_inner();
 
                 let mut index_clause = parts.next().unwrap().into_inner();
                 // index_clause can have 1 or 2 elements, if there's 2 then there's a "key" as well as a "value" var
                 let first_index_rule = index_clause.next().unwrap();
                 let varname = first_index_rule.as_str();
-                let Some(value_binding) = self.names.borrow_mut().find_or_add_name_global(varname)
-                else {
-                    return Err(DuplicateVariable(context, varname.into()));
+                let value_binding = {
+                    let mut names = self.names.borrow_mut();
+
+                    names.declare_or_use_name(varname, DeclType::For)
                 };
                 let key_binding = match index_clause.next() {
                     None => None,
                     Some(s) => {
                         let varname = s.as_str();
                         let Some(key_var) =
-                            self.names.borrow_mut().find_or_add_name_global(varname)
+                            self.names.borrow_mut().declare_name(varname, DeclType::For)
                         else {
                             return Err(DuplicateVariable(context, varname.into()));
                         };
                         Some(key_var)
                     }
                 };
+                self.enter_scope();
 
                 let clause = parts.next().unwrap();
                 let body = self
@@ -1019,6 +1026,7 @@ impl TreeTransformer {
                 let body = self
                     .clone()
                     .parse_statements(parts.next().unwrap().into_inner())?;
+                let environment_width = self.exit_scope();
                 let mut excepts = vec![];
                 for except in parts {
                     match except.as_rule() {
@@ -1029,10 +1037,9 @@ impl TreeTransformer {
                                 Rule::labelled_except => {
                                     let mut my_parts = clause.into_inner();
                                     let exception = my_parts.next().map(|id| {
-                                        self.names.borrow_mut().find_or_add_name_global(id.as_str())
+                                        let mut names = self.names.borrow_mut();
+                                        names.declare_or_use_name(id.as_str(), DeclType::Except)
                                     });
-
-                                    let exception = exception.map(|id| id.unwrap());
 
                                     let codes = self.clone().parse_except_codes(
                                         my_parts.next().unwrap().into_inner().next().unwrap(),
@@ -1051,7 +1058,6 @@ impl TreeTransformer {
                             let statements = self.clone().parse_statements(
                                 except_clause_parts.next().unwrap().into_inner(),
                             )?;
-
                             excepts.push(ExceptArm {
                                 id,
                                 codes,
@@ -1061,7 +1067,6 @@ impl TreeTransformer {
                         _ => panic!("Unimplemented except clause: {:?}", except),
                     }
                 }
-                let environment_width = self.exit_scope();
                 Ok(Some(Stmt::new(
                     StmtNode::TryExcept {
                         body,
@@ -1089,7 +1094,11 @@ impl TreeTransformer {
             Rule::labelled_fork_statement => {
                 let mut parts = pair.into_inner();
                 let varname = parts.next().unwrap().as_str();
-                let Some(id) = self.names.borrow_mut().find_or_add_name_global(varname) else {
+                let Some(id) = self
+                    .names
+                    .borrow_mut()
+                    .find_or_add_name_global(varname, DeclType::ForkLabel)
+                else {
                     return Err(DuplicateVariable(context, varname.into()));
                 };
                 let time = self
@@ -1170,8 +1179,13 @@ impl TreeTransformer {
                 // global x, or global x = y
                 let mut parts = pair.into_inner();
                 let varname = parts.next().unwrap().as_str();
-                let Some(id) = self.names.borrow_mut().find_or_add_name_global(varname) else {
-                    return Err(DuplicateVariable(context, varname.into()));
+                let id = {
+                    let mut names = self.names.borrow_mut();
+                    let Some(id) = names.find_or_add_name_global(varname, DeclType::Global) else {
+                        return Err(DuplicateVariable(context, varname.into()));
+                    };
+                    names.decl_for_mut(&id).decl_type = DeclType::Global;
+                    id
                 };
                 let expr = parts
                     .next()
@@ -1226,8 +1240,12 @@ impl TreeTransformer {
         let mut parts = pair.into_inner();
 
         let varname = parts.next().unwrap().as_str();
-        let Some(id) = self.names.borrow_mut().declare(varname, is_const, false) else {
-            return Err(DuplicateVariable(context, varname.into()));
+        let id = {
+            let mut names = self.names.borrow_mut();
+            let Some(id) = names.declare(varname, is_const, false, DeclType::Let) else {
+                return Err(DuplicateVariable(context, varname.into()));
+            };
+            id
         };
         let expr = parts
             .next()
@@ -1258,12 +1276,12 @@ impl TreeTransformer {
                 Rule::scatter_optional => {
                     let mut inner = scatter_item.into_inner();
                     let id = inner.next().unwrap().as_str();
-                    let Some(id) =
-                        self.clone()
-                            .names
-                            .borrow_mut()
-                            .declare(id, is_const, !local_scope)
-                    else {
+                    let Some(id) = self.clone().names.borrow_mut().declare(
+                        id,
+                        is_const,
+                        !local_scope,
+                        DeclType::Assign,
+                    ) else {
                         return Err(DuplicateVariable(context, id.into()));
                     };
 
@@ -1279,12 +1297,12 @@ impl TreeTransformer {
                 Rule::scatter_target => {
                     let mut inner = scatter_item.into_inner();
                     let id = inner.next().unwrap().as_str();
-                    let Some(id) =
-                        self.clone()
-                            .names
-                            .borrow_mut()
-                            .declare(id, is_const, !local_scope)
-                    else {
+                    let Some(id) = self.clone().names.borrow_mut().declare(
+                        id,
+                        is_const,
+                        !local_scope,
+                        DeclType::Assign,
+                    ) else {
                         return Err(DuplicateVariable(context, id.into()));
                     };
                     items.push(ScatterItem {
@@ -1296,12 +1314,12 @@ impl TreeTransformer {
                 Rule::scatter_rest => {
                     let mut inner = scatter_item.into_inner();
                     let id = inner.next().unwrap().as_str();
-                    let Some(id) =
-                        self.clone()
-                            .names
-                            .borrow_mut()
-                            .declare(id, is_const, !local_scope)
-                    else {
+                    let Some(id) = self.clone().names.borrow_mut().declare(
+                        id,
+                        is_const,
+                        !local_scope,
+                        DeclType::Assign,
+                    ) else {
                         return Err(DuplicateVariable(context, id.into()));
                     };
                     items.push(ScatterItem {
@@ -1318,7 +1336,7 @@ impl TreeTransformer {
         Ok(Expr::Scatter(items, Box::new(rhs)))
     }
 
-    fn compile_program(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
+    fn transform_tree(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
         let mut program = Vec::new();
         for pair in pairs {
             match pair.as_rule() {
@@ -1343,10 +1361,10 @@ impl TreeTransformer {
             }
         }
 
-        self.do_compile(program)
+        self.do_transform(program)
     }
 
-    fn compile_statements(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
+    fn transform_statements(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
         let mut program = Vec::new();
         for pair in pairs {
             match pair.as_rule() {
@@ -1362,20 +1380,18 @@ impl TreeTransformer {
             }
         }
 
-        self.do_compile(program)
+        self.do_transform(program)
     }
 
-    fn do_compile(self: Rc<Self>, mut program: Vec<Stmt>) -> Result<Parse, CompileError> {
-        let names = self.names.borrow_mut();
+    fn do_transform(self: Rc<Self>, mut program: Vec<Stmt>) -> Result<Parse, CompileError> {
+        let unbound_names = self.names.borrow_mut();
         // Annotate the "true" line numbers of the AST nodes.
         annotate_line_numbers(1, &mut program);
-
-        let (bound_names, names_mapping) = names.bind();
-
+        let (names, names_mapping) = unbound_names.bind();
         Ok(Parse {
             stmts: program,
-            unbound_names: names.clone(),
-            names: bound_names,
+            variables: unbound_names.clone(),
+            names,
             names_mapping,
         })
     }
@@ -1398,9 +1414,9 @@ impl TreeTransformer {
 #[derive(Debug)]
 pub struct Parse {
     pub stmts: Vec<Stmt>,
-    pub unbound_names: UnboundNames,
+    pub variables: VarScope,
     pub names: Names,
-    pub names_mapping: HashMap<UnboundName, Name>,
+    pub names_mapping: HashMap<Variable, Name>,
 }
 
 pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Parse, CompileError> {
@@ -1424,12 +1440,12 @@ pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Pars
 
     // TODO: this is in Rc because of borrowing issues in the Pratt parser
     let tree_transform = TreeTransformer::new(options);
-    tree_transform.compile_program(pairs)
+    tree_transform.transform_tree(pairs)
 }
 
 pub fn parse_tree(pairs: Pairs<Rule>, options: CompileOptions) -> Result<Parse, CompileError> {
     let tree_transform = TreeTransformer::new(options);
-    tree_transform.compile_statements(pairs)
+    tree_transform.transform_statements(pairs)
 }
 
 // Lex a simple MOO string literal.  Expectation is:
@@ -1475,9 +1491,7 @@ mod tests {
     use crate::CompileOptions;
     use crate::ast::Arg::{Normal, Splice};
     use crate::ast::BinaryOp::Add;
-    use crate::ast::Expr::{
-        Call, ComprehendList, ComprehendRange, Error, Flyweight, Id, Prop, Value, Verb,
-    };
+    use crate::ast::Expr::{Call, Error, Flyweight, Id, Prop, Value, Verb};
     use crate::ast::{
         BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
         StmtNode, UnaryOp, assert_trees_match_recursive,
@@ -1485,7 +1499,6 @@ mod tests {
     use crate::parse::{parse_program, unquote_str};
     use crate::unparse::annotate_line_numbers;
     use moor_common::model::CompileError;
-    use moor_common::program::names::UnboundName;
 
     fn stripped_stmts(statements: &[Stmt]) -> Vec<StmtNode> {
         statements.iter().map(|s| s.node.clone()).collect()
@@ -1537,7 +1550,7 @@ mod tests {
     fn test_parse_simple_var_assignment_precedence() {
         let program = "a = 1 + 2;";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let a = parse.unbound_names.find_name("a").unwrap();
+        let a = parse.variables.find_name("a").unwrap();
 
         assert_eq!(parse.stmts.len(), 1);
         assert_eq!(
@@ -1747,7 +1760,7 @@ mod tests {
                                 property: Box::new(Value(v_str("network"))),
                             }),
                             verb: Box::new(Value(v_str("is_connected"))),
-                            args: vec![Normal(Id(parse.unbound_names.find_name("this").unwrap()))],
+                            args: vec![Normal(Id(parse.variables.find_name("this").unwrap()))],
                         }),
                     ),
                     statements: vec![Stmt {
@@ -1765,8 +1778,8 @@ mod tests {
     fn test_parse_for_loop() {
         let program = "for x in ({1,2,3}) b = x + 5; endfor";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let x = parse.unbound_names.find_name("x").unwrap();
-        let b = parse.unbound_names.find_name("b").unwrap();
+        let x = parse.variables.find_name("x").unwrap();
+        let b = parse.variables.find_name("b").unwrap();
         assert_same_single(
             &parse.stmts,
             StmtNode::ForList {
@@ -1799,8 +1812,8 @@ mod tests {
         let program = "for x in [1..5] b = x + 5; endfor";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         assert_eq!(parse.stmts.len(), 1);
-        let x = parse.unbound_names.find_name("x").unwrap();
-        let b = parse.unbound_names.find_name("b").unwrap();
+        let x = parse.variables.find_name("x").unwrap();
+        let b = parse.variables.find_name("b").unwrap();
         assert_same_single(
             &parse.stmts,
             StmtNode::ForRange {
@@ -1829,8 +1842,8 @@ mod tests {
         let program = "a = {1, 2, 3}; b = a[2..$];";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         let (a, b) = (
-            parse.unbound_names.find_name("a").unwrap(),
-            parse.unbound_names.find_name("b").unwrap(),
+            parse.variables.find_name("a").unwrap(),
+            parse.variables.find_name("b").unwrap(),
         );
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -1859,7 +1872,7 @@ mod tests {
     fn test_parse_while() {
         let program = "while (1) x = x + 1; if (x > 5) break; endif endwhile";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let x = parse.unbound_names.find_name("x").unwrap();
+        let x = parse.variables.find_name("x").unwrap();
 
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -1909,8 +1922,8 @@ mod tests {
     fn test_parse_labelled_while() {
         let program = "while chuckles (1) x = x + 1; if (x > 5) break chuckles; endif endwhile";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let chuckles = parse.unbound_names.find_name("chuckles").unwrap();
-        let x = parse.unbound_names.find_name("x").unwrap();
+        let chuckles = parse.variables.find_name("chuckles").unwrap();
+        let x = parse.variables.find_name("x").unwrap();
         assert_same_single(
             &parse.stmts,
             StmtNode::While {
@@ -1961,7 +1974,7 @@ mod tests {
     fn test_sysobjref() {
         let program = "$string_utils:from_list(test_string);";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let test_string = parse.unbound_names.find_name("test_string").unwrap();
+        let test_string = parse.variables.find_name("test_string").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Verb {
@@ -1979,8 +1992,8 @@ mod tests {
     fn test_scatter_assign() {
         let program = "{connection} = args;";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let connection = parse.unbound_names.find_name("connection").unwrap();
-        let args = parse.unbound_names.find_name("args").unwrap();
+        let connection = parse.variables.find_name("connection").unwrap();
+        let args = parse.variables.find_name("args").unwrap();
 
         let scatter_items = vec![ScatterItem {
             kind: ScatterKind::Required,
@@ -2000,8 +2013,8 @@ mod tests {
         // assignment was incorrect.
         let program = "{connection} = args[1];";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let connection = parse.unbound_names.find_name("connection").unwrap();
-        let args = parse.unbound_names.find_name("args").unwrap();
+        let connection = parse.variables.find_name("connection").unwrap();
+        let args = parse.variables.find_name("args").unwrap();
 
         let scatter_items = vec![ScatterItem {
             kind: ScatterKind::Required,
@@ -2021,9 +2034,9 @@ mod tests {
     fn test_indexed_list() {
         let program = "{a,b,c}[1];";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let a = parse.unbound_names.find_name("a").unwrap();
-        let b = parse.unbound_names.find_name("b").unwrap();
-        let c = parse.unbound_names.find_name("c").unwrap();
+        let a = parse.variables.find_name("a").unwrap();
+        let b = parse.variables.find_name("b").unwrap();
+        let c = parse.variables.find_name("c").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Index(
@@ -2041,9 +2054,9 @@ mod tests {
     fn test_assigned_indexed_list() {
         let program = "a = {a,b,c}[1];";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let a = parse.unbound_names.find_name("a").unwrap();
-        let b = parse.unbound_names.find_name("b").unwrap();
-        let c = parse.unbound_names.find_name("c").unwrap();
+        let a = parse.variables.find_name("a").unwrap();
+        let b = parse.variables.find_name("b").unwrap();
+        let c = parse.variables.find_name("c").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Assign {
@@ -2064,7 +2077,7 @@ mod tests {
     fn test_indexed_assign() {
         let program = "this.stack[5] = 5;";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let this = parse.unbound_names.find_name("this").unwrap();
+        let this = parse.variables.find_name("this").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Assign {
@@ -2084,7 +2097,7 @@ mod tests {
     fn test_for_list() {
         let program = "for i in ({1,2,3}) endfor return i;";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let i = parse.unbound_names.find_name("i").unwrap();
+        let i = parse.variables.find_name("i").unwrap();
         // Verify the structure of the syntax tree for a for-list loop.
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -2115,21 +2128,21 @@ mod tests {
                 vec![
                     ScatterItem {
                         kind: ScatterKind::Required,
-                        id: parse.unbound_names.find_name("a").unwrap(),
+                        id: parse.variables.find_name("a").unwrap(),
                         expr: None,
                     },
                     ScatterItem {
                         kind: ScatterKind::Required,
-                        id: parse.unbound_names.find_name("b").unwrap(),
+                        id: parse.variables.find_name("b").unwrap(),
                         expr: None,
                     },
                     ScatterItem {
                         kind: ScatterKind::Required,
-                        id: parse.unbound_names.find_name("c").unwrap(),
+                        id: parse.variables.find_name("c").unwrap(),
                         expr: None,
                     },
                 ],
-                Box::new(Id(parse.unbound_names.find_name("args").unwrap())),
+                Box::new(Id(parse.variables.find_name("args").unwrap())),
             ))]
         );
     }
@@ -2138,8 +2151,8 @@ mod tests {
     fn test_valid_underscore_and_no_underscore_ident() {
         let program = "_house == home;";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let house = parse.unbound_names.find_name("_house").unwrap();
-        let home = parse.unbound_names.find_name("home").unwrap();
+        let house = parse.variables.find_name("_house").unwrap();
+        let home = parse.variables.find_name("home").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Binary(
@@ -2152,14 +2165,13 @@ mod tests {
 
     #[test]
     fn test_arg_splice() {
-        let program = "return {@results, frozzbozz(@args)};";
+        let program = "return {@args, frozzbozz(@args)};";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let results = parse.unbound_names.find_name("results").unwrap();
-        let args = parse.unbound_names.find_name("args").unwrap();
+        let args = parse.variables.find_name("args").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::mk_return(Expr::List(vec![
-                Splice(Id(results)),
+                Splice(Id(args)),
                 Normal(Call {
                     function: Symbol::mk("frozzbozz"),
                     args: vec![Splice(Id(args))],
@@ -2202,9 +2214,9 @@ mod tests {
         "#;
 
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let a = parse.unbound_names.find_name("a").unwrap();
-        let info = parse.unbound_names.find_name("info").unwrap();
-        let forgotten = parse.unbound_names.find_name("forgotten").unwrap();
+        let a = parse.variables.find_name("a").unwrap();
+        let info = parse.variables.find_name("info").unwrap();
+        let forgotten = parse.variables.find_name("forgotten").unwrap();
 
         assert_eq!(
             stripped_stmts(&parse.stmts),
@@ -2397,7 +2409,7 @@ mod tests {
     fn test_in_range() {
         let program = "a in {1,2,3};";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let a = parse.unbound_names.find_name("a").unwrap();
+        let a = parse.variables.find_name("a").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Binary(
@@ -2429,7 +2441,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Verb {
-                location: Box::new(Id(parse.unbound_names.find_name("this").unwrap())),
+                location: Box::new(Id(parse.variables.find_name("this").unwrap())),
                 verb: Box::new(Value(v_str("verb"))),
                 args: vec![
                     Normal(Value(v_int(1))),
@@ -2447,7 +2459,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Prop {
-                location: Box::new(Id(parse.unbound_names.find_name("this").unwrap())),
+                location: Box::new(Id(parse.variables.find_name("this").unwrap())),
                 property: Box::new(Value(v_str("prop"))),
             })]
         );
@@ -2468,10 +2480,10 @@ mod tests {
 
     #[test]
     fn test_comparison_assign_chain() {
-        let program = "(2 <= (len = length(text)));";
+        let program = "(2 <= (len = length(player)));";
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let len = parse.unbound_names.find_name("len").unwrap();
-        let text = parse.unbound_names.find_name("text").unwrap();
+        let len = parse.variables.find_name("len").unwrap();
+        let text = parse.variables.find_name("player").unwrap();
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Binary(
@@ -2495,7 +2507,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Assign {
-                left: Box::new(Id(parse.unbound_names.find_name("a").unwrap())),
+                left: Box::new(Id(parse.variables.find_name("a").unwrap())),
                 right: Box::new(Expr::Cond {
                     condition: Box::new(Expr::Binary(
                         BinaryOp::Eq,
@@ -2518,10 +2530,10 @@ mod tests {
             vec![StmtNode::Expr(Expr::Binary(
                 BinaryOp::Eq,
                 Box::new(Expr::List(vec![Normal(Id(parse
-                    .unbound_names
+                    .variables
                     .find_name("what")
                     .unwrap())),])),
-                Box::new(Id(parse.unbound_names.find_name("args").unwrap())),
+                Box::new(Id(parse.variables.find_name("args").unwrap())),
             ))]
         );
     }
@@ -2540,7 +2552,7 @@ mod tests {
             vec![
                 StmtNode::ForList {
                     environment_width: 0,
-                    value_binding: parse.unbound_names.find_name("line").unwrap(),
+                    value_binding: parse.variables.find_name("line").unwrap(),
                     key_binding: None,
                     expr: Expr::List(vec![
                         Normal(Value(v_int(1))),
@@ -2564,7 +2576,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::mk_return(Expr::List(vec![Normal(
                 Expr::TryCatch {
-                    trye: Box::new(Id(parse.unbound_names.find_name("x").unwrap())),
+                    trye: Box::new(Id(parse.variables.find_name("x").unwrap())),
                     codes: CatchCodes::Codes(vec![varnf]),
                     except: Some(Box::new(Value(v_int(666)))),
                 }
@@ -2606,7 +2618,7 @@ mod tests {
                     }),
                     verb: Box::new(Value(v_str("finish_get"))),
                     args: vec![Normal(Prop {
-                        location: Box::new(Id(parse.unbound_names.find_name("this").unwrap())),
+                        location: Box::new(Id(parse.variables.find_name("this").unwrap())),
                         property: Box::new(Value(v_str("connection"))),
                     })],
                 }),
@@ -2659,17 +2671,17 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![
                 StmtNode::Expr(Expr::Assign {
-                    left: Box::new(Id(parse.unbound_names.find_name("result").unwrap())),
+                    left: Box::new(Id(parse.variables.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass {
-                        args: vec![Splice(Id(parse.unbound_names.find_name("args").unwrap()))],
+                        args: vec![Splice(Id(parse.variables.find_name("args").unwrap()))],
                     }),
                 }),
                 StmtNode::Expr(Expr::Assign {
-                    left: Box::new(Id(parse.unbound_names.find_name("result").unwrap())),
+                    left: Box::new(Id(parse.variables.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass { args: vec![] }),
                 }),
                 StmtNode::Expr(Expr::Assign {
-                    left: Box::new(Id(parse.unbound_names.find_name("result").unwrap())),
+                    left: Box::new(Id(parse.variables.find_name("result").unwrap())),
                     right: Box::new(Expr::Pass {
                         args: vec![
                             Normal(Value(v_int(1))),
@@ -2680,10 +2692,10 @@ mod tests {
                     }),
                 }),
                 StmtNode::Expr(Expr::Assign {
-                    left: Box::new(Id(parse.unbound_names.find_name("pass").unwrap())),
-                    right: Box::new(Id(parse.unbound_names.find_name("blop").unwrap())),
+                    left: Box::new(Id(parse.variables.find_name("pass").unwrap())),
+                    right: Box::new(Id(parse.variables.find_name("blop").unwrap())),
                 }),
-                StmtNode::mk_return(Id(parse.unbound_names.find_name("pass").unwrap())),
+                StmtNode::mk_return(Id(parse.variables.find_name("pass").unwrap())),
             ]
         );
     }
@@ -2739,14 +2751,14 @@ mod tests {
                                end
                                return x;"#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let x_names = parse.unbound_names.find_named("x");
-        let y_names = parse.unbound_names.find_named("y");
-        let z_names = parse.unbound_names.find_named("z");
-        let o_names = parse.unbound_names.find_named("o");
+        let x_names = parse.variables.find_named("x");
+        let y_names = parse.variables.find_named("y");
+        let z_names = parse.variables.find_named("z");
+        let o_names = parse.variables.find_named("o");
         let inner_y = y_names[0];
         let inner_z = z_names[0];
         let inner_o = o_names[0];
-        let global_a = parse.unbound_names.find_named("a")[0];
+        let global_a = parse.variables.find_named("a")[0];
         assert_eq!(x_names.len(), 2);
         let global_x = x_names[1];
         // Declared first, so appears in unbound names first, though in the bound names it will
@@ -2829,10 +2841,7 @@ mod tests {
         lets = 5;
         "#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        parse
-            .unbound_names
-            .find_name("lets")
-            .expect("lets not found");
+        parse.variables.find_name("lets").expect("lets not found");
     }
 
     #[test]
@@ -2905,11 +2914,11 @@ mod tests {
         end
         "#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let a_outer = parse.unbound_names.find_named("a")[0];
-        let a_inner = parse.unbound_names.find_named("a")[1];
-        let b = parse.unbound_names.find_named("b")[0];
-        assert_eq!(parse.unbound_names.decl_for(&a_inner).depth, 2);
-        assert_eq!(parse.unbound_names.decl_for(&b).depth, 2);
+        let a_outer = parse.variables.find_named("a")[0];
+        let a_inner = parse.variables.find_named("a")[1];
+        let b = parse.variables.find_named("b")[0];
+        assert_eq!(parse.variables.decl_for(&a_inner).depth, 2);
+        assert_eq!(parse.variables.decl_for(&b).depth, 2);
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Scope {
@@ -3040,61 +3049,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_for_list_comprehension() {
-        let program = r#"{ x + 5 for x in ( {1,2,3} ) };"#;
-        let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let x = parse.unbound_names.find_named("x")[0];
-
-        assert_eq!(
-            stripped_stmts(&parse.stmts,),
-            vec![StmtNode::Expr(ComprehendList {
-                variable: x,
-                position_register: UnboundName {
-                    offset: x.offset + 1
-                },
-                list_register: UnboundName {
-                    offset: x.offset + 2
-                },
-                producer_expr: Box::new(Expr::Binary(
-                    Add,
-                    Box::new(Id(x)),
-                    Box::new(Value(v_int(5)))
-                )),
-                list: Box::new(Expr::List(vec![
-                    Normal(Value(v_int(1))),
-                    Normal(Value(v_int(2))),
-                    Normal(Value(v_int(3)))
-                ])),
-            })]
-        )
-    }
-
-    #[test]
-    fn test_for_range_comprehension() {
-        let program = r#"{ x + 5 for x in [1..5] };"#;
-        let parse = parse_program(program, CompileOptions::default()).unwrap();
-        let x = parse.unbound_names.find_named("x")[0];
-        let y = UnboundName {
-            offset: x.offset + 1,
-        };
-        assert_eq!(
-            stripped_stmts(&parse.stmts,),
-            vec![StmtNode::Expr(ComprehendRange {
-                variable: x,
-                end_of_range_register: y,
-                producer_expr: Box::new(Expr::Binary(
-                    Add,
-                    Box::new(Id(x)),
-                    Box::new(Value(v_int(5)))
-                )),
-
-                from: Box::new(Value(v_int(1))),
-                to: Box::new(Value(v_int(5)))
-            })]
-        )
-    }
-
     /// Modification to the MOO syntax which allows "return" to be an expression so as to allow
     /// the following syntax, as in Julia....
     #[test]
@@ -3147,24 +3101,6 @@ mod tests {
             )))))]
         )
     }
-    #[test]
-    fn test_for_value_key() {
-        let program = r#"for v, k in ([1->2, 3->4]) endfor"#;
-        let parse = parse_program(program, CompileOptions::default()).unwrap();
-        assert_eq!(
-            stripped_stmts(&parse.stmts),
-            vec![StmtNode::ForList {
-                value_binding: UnboundName { offset: 11 },
-                key_binding: Some(UnboundName { offset: 12 }),
-                expr: Expr::Map(vec![
-                    (Value(v_int(1)), Value(v_int(2))),
-                    (Value(v_int(3)), Value(v_int(4)))
-                ]),
-                body: vec![],
-                environment_width: 0,
-            }]
-        )
-    }
 
     #[test]
     fn test_return_x_regression() {
@@ -3175,7 +3111,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::Return(Some(Box::new(Id(parse
-                .unbound_names
+                .variables
                 .find_name("returnval")
                 .unwrap())))))]
         );

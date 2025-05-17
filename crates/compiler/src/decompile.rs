@@ -19,9 +19,10 @@ use crate::ast::{
 };
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::parse::Parse;
+use crate::var_scope::{DeclType, VarScope};
 use moor_common::program::builtins::BuiltinId;
 use moor_common::program::labels::{JumpLabel, Label, Offset};
-use moor_common::program::names::{Name, UnboundName, UnboundNames};
+use moor_common::program::names::{Name, Variable};
 use moor_common::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterLabel,
 };
@@ -55,7 +56,7 @@ struct Decompile {
     position: usize,
     expr_stack: VecDeque<Expr>,
     statements: Vec<Stmt>,
-    names_mapping: HashMap<Name, UnboundName>,
+    names_mapping: HashMap<Name, Variable>,
 }
 
 impl Decompile {
@@ -202,18 +203,18 @@ impl Decompile {
                 // otherwise branch.
                 let mut otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
 
-                // Resulting thing should be a Scope, or empty.
+                // Resulting thing should be a Scope, or empty, or the scope itself may have been
+                // optimized out (no scope-local variables)
                 let else_arm = if otherwise_stmts.is_empty() {
                     None
                 } else {
-                    let Some(Stmt {
-                        node: StmtNode::Scope { num_bindings, body },
-                        ..
-                    }) = otherwise_stmts.pop()
-                    else {
-                        return Err(MalformedProgram(
-                            "expected Scope as otherwise branch".to_string(),
-                        ));
+                    let (num_bindings, body) = match otherwise_stmts.pop() {
+                        Some(Stmt {
+                            node: StmtNode::Scope { num_bindings, body },
+                            ..
+                        }) => (num_bindings, body),
+                        Some(body) => (0, vec![body]),
+                        None => (0, vec![]),
                     };
 
                     Some(ElseArm {
@@ -1066,7 +1067,7 @@ impl Decompile {
         Ok(())
     }
 
-    fn decompile_name(&self, name: &Name) -> Result<UnboundName, DecompileError> {
+    fn decompile_name(&self, name: &Name) -> Result<Variable, DecompileError> {
         self.names_mapping
             .get(name)
             .cloned()
@@ -1079,7 +1080,7 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     // Reconstruct a fake "unbound names" from the program's var_names.
     // TODO: this is broken for scopes, but we don't have a way to represent that yet
     //  inside bound names.
-    let mut unbound_names = UnboundNames::new();
+    let mut unbound_names = VarScope::new();
     let mut bound_to_unbound = HashMap::new();
     let mut unbound_to_bound = HashMap::new();
     let var_names = program.var_names();
@@ -1089,7 +1090,8 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
                 .declare_register()
                 .map_err(|_| DecompileError::NameNotFound(bound_name))?,
             Some(n) => {
-                let Some(n) = unbound_names.find_or_add_name_global(n.as_str()) else {
+                let Some(n) = unbound_names.find_or_add_name_global(n.as_str(), DeclType::Unknown)
+                else {
                     return Err(DecompileError::NameNotFound(bound_name));
                 };
                 n
@@ -1115,7 +1117,7 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     Ok(Parse {
         stmts: decompile.statements,
         names: program.var_names().clone(),
-        unbound_names,
+        variables: unbound_names,
         names_mapping: unbound_to_bound,
     })
 }
