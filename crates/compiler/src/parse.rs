@@ -921,8 +921,8 @@ impl TreeTransformer {
                 let varname = parts.next().unwrap().as_str();
                 let value_binding = {
                     let mut names = self.names.borrow_mut();
-                    let value_binding = names.declare_or_use_name(varname, DeclType::For);
-                    value_binding
+                    
+                    names.declare_or_use_name(varname, DeclType::For)
                 };
                 self.enter_scope();
                 let clause = parts.next().unwrap();
@@ -960,8 +960,8 @@ impl TreeTransformer {
                 let varname = first_index_rule.as_str();
                 let value_binding = {
                     let mut names = self.names.borrow_mut();
-                    let value_binding = names.declare_or_use_name(varname, DeclType::For);
-                    value_binding
+                    
+                    names.declare_or_use_name(varname, DeclType::For)
                 };
                 let key_binding = match index_clause.next() {
                     None => None,

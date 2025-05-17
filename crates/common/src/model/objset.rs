@@ -210,12 +210,10 @@ impl ObjSet {
 }
 
 impl ValSet<Obj> for ObjSet {
-    #[must_use]
     fn empty() -> Self {
         EMPTY_OBJSET.clone()
     }
 
-    #[must_use]
     fn from_items(oids: &[Obj]) -> Self {
         if oids.is_empty() {
             return EMPTY_OBJSET.clone();
@@ -233,7 +231,6 @@ impl ValSet<Obj> for ObjSet {
         }
     }
 
-    #[must_use]
     fn len(&self) -> usize {
         if self.0.is_empty() {
             return 0;
@@ -241,7 +238,6 @@ impl ValSet<Obj> for ObjSet {
         self.0.len() / size_of::<Obj>()
     }
 
-    #[must_use]
     fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
