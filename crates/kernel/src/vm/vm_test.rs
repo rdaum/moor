@@ -1299,4 +1299,25 @@ mod tests {
             v_list(&[v_int(1), v_str("a"), v_int(2), v_str("b")])
         );
     }
+
+    #[test]
+    fn test_scope_width_regression() {
+        let program = r#"
+        let x = 1;
+        for i in [0..1024]
+            let y = 2 * i;
+        endfor
+        return 0;
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_int(0));
+    }
 }

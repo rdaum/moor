@@ -222,7 +222,6 @@ impl MooStackFrame {
     pub fn push_scope(&mut self, scope: ScopeType, scope_width: u16, end_label: &Label) {
         // If this is a lexical scope, expand the environment to accommodate the new variables.
         // (This is just updating environment_width)
-        self.environment_width += scope_width as usize;
 
         let end_pos = self.program.jump_label(*end_label).position.0 as usize;
         self.scope_stack.push(Scope {
@@ -231,6 +230,7 @@ impl MooStackFrame {
             environment_width: self.environment_width,
             end_pos,
         });
+        self.environment_width += scope_width as usize;
     }
 
     pub fn pop_scope(&mut self) -> Option<Scope> {

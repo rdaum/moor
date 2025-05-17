@@ -112,7 +112,6 @@ mod tests {
                 ImmInt(5),
                 Return,
                 Pop,
-                EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
                 ImmInt(2),
                 ImmInt(3),
@@ -121,16 +120,10 @@ mod tests {
                 ImmInt(3),
                 Return,
                 Pop,
-                EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
-                BeginScope {
-                    num_bindings: 0,
-                    end_label: 3.into()
-                },
                 ImmInt(6),
                 Return,
                 Pop,
-                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -167,7 +160,6 @@ mod tests {
                 Put(x),
                 Pop,
                 Jump { label: 0.into() },
-                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -216,10 +208,8 @@ mod tests {
                 Gt,
                 If(3.into(), 0),
                 ExitId(1.into()),
-                EndScope { num_bindings: 0 },
                 Jump { label: 2.into() },
                 Jump { label: 0.into() },
-                EndScope { num_bindings: 0 },
                 Done,
             ]
         );
@@ -269,19 +259,12 @@ mod tests {
                     stack: 0.into(),
                     label: 1.into()
                 },
-                EndScope { num_bindings: 0 },
                 Jump { label: 2.into() },
-                BeginScope {
-                    num_bindings: 0,
-                    end_label: 4.into()
-                },
                 Exit {
                     stack: 0.into(),
                     label: 0.into()
                 },
-                EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
-                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -329,7 +312,6 @@ mod tests {
                 Put(b),
                 Pop,
                 Jump { label: 0.into() },
-                EndScope { num_bindings: 0 },
                 Done
             ]
         );
@@ -384,7 +366,6 @@ mod tests {
                 CallVerb,
                 Pop,
                 Jump { label: 0.into() },
-                EndScope { num_bindings: 0 },
                 Done
             ]
         );

@@ -203,18 +203,18 @@ impl Decompile {
                 // otherwise branch.
                 let mut otherwise_stmts = self.decompile_statements_until(&end_of_otherwise)?;
 
-                // Resulting thing should be a Scope, or empty.
+                // Resulting thing should be a Scope, or empty, or the scope itself may have been
+                // optimized out (no scope-local variables)
                 let else_arm = if otherwise_stmts.is_empty() {
                     None
                 } else {
-                    let Some(Stmt {
-                        node: StmtNode::Scope { num_bindings, body },
-                        ..
-                    }) = otherwise_stmts.pop()
-                    else {
-                        return Err(MalformedProgram(
-                            "expected Scope as otherwise branch".to_string(),
-                        ));
+                    let (num_bindings, body) = match otherwise_stmts.pop() {
+                        Some(Stmt {
+                            node: StmtNode::Scope { num_bindings, body },
+                            ..
+                        }) => (num_bindings, body),
+                        Some(body) => (0, vec![body]),
+                        None => (0, vec![]),
                     };
 
                     Some(ElseArm {
