@@ -1334,7 +1334,7 @@ impl WorldStateTransaction {
         let object_propvalues = self.object_propvalues.working_set();
         let object_propflags = self.object_propflags.working_set();
 
-        let ws = WorkingSets {
+        let ws = Box::new(WorkingSets {
             tx: self.tx,
             object_location,
             object_contents,
@@ -1351,7 +1351,7 @@ impl WorldStateTransaction {
             verb_resolution_cache: self.verb_resolution_cache,
             prop_resolution_cache: self.prop_resolution_cache,
             ancestry_cache: self.ancestry_cache,
-        };
+        });
 
         let tuple_count = ws.total_tuples();
 
