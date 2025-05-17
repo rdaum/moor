@@ -141,7 +141,7 @@ impl<'de, C> BorrowDecode<'de, C> for Activation {
 }
 #[derive(Clone, Debug, Encode, Decode)]
 pub enum Frame {
-    Moo(MooStackFrame),
+    Moo(Box<MooStackFrame>),
     Bf(BfFrame),
 }
 
@@ -232,7 +232,7 @@ impl Activation {
         let ProgramType::MooR(program) = program else {
             unimplemented!("Only MOO programs are supported")
         };
-        let frame = MooStackFrame::new(program);
+        let frame = Box::new(MooStackFrame::new(program));
         let mut frame = Frame::Moo(frame);
         frame.set_global_variable(GlobalName::this, verb_call_request.call.this.clone());
         frame.set_global_variable(
@@ -312,7 +312,7 @@ impl Activation {
             VerbArgsSpec::this_none_this(),
         );
 
-        let frame = MooStackFrame::new(program);
+        let frame = Box::new(MooStackFrame::new(program));
         let mut frame = Frame::Moo(frame);
 
         frame.set_global_variable(GlobalName::this, v_obj(NOTHING));
