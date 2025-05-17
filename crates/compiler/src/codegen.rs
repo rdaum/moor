@@ -162,20 +162,22 @@ impl CodegenState {
     }
 
     fn find_loop(&self, loop_label: &Name) -> Result<&Loop, CompileError> {
-        let Some(l) = self.loops.iter().find(|l| {
-            if let Some(name) = &l.loop_name {
-                name.eq(loop_label)
-            } else {
-                false
+        for l in self.loops.iter() {
+            if l.loop_name.is_none() {
+                continue;
             }
-        }) else {
-            let loop_name = self.var_names.name_of(loop_label).unwrap();
-            return Err(CompileError::UnknownLoopLabel(
-                CompileContext::new(self.current_line_col),
-                loop_name.to_string(),
-            ));
-        };
-        Ok(l)
+            if let Some(name) = &l.loop_name {
+                if name.eq(loop_label) {
+                    return Ok(l);
+                }
+            }
+        }
+        // If we don't find a loop with the given name, that's an error.as
+        let loop_name = self.var_names.name_of(loop_label).unwrap();
+        Err(CompileError::UnknownLoopLabel(
+            CompileContext::new(self.current_line_col),
+            loop_name.to_string(),
+        ))
     }
 
     fn push_stack(&mut self, n: usize) {
@@ -789,6 +791,7 @@ impl CodegenState {
                     bottom_label: end_label,
                     bottom_stack: (self.cur_stack - 2).into(),
                 });
+
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
@@ -991,7 +994,7 @@ impl CodegenState {
             }
             StmtNode::Break { exit: Some(l) } => {
                 let l = self.binding_mappings[l];
-                let l = self.find_loop(&l).expect("invalid loop for break/continue");
+                let l = self.find_loop(&l)?;
                 self.emit(Op::ExitId(l.bottom_label));
             }
             StmtNode::Continue { exit: None } => {

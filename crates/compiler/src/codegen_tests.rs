@@ -1596,4 +1596,19 @@ mod tests {
             ]
         );
     }
+
+    /// If the same variable is used in two different loops, the compiler was not handling the
+    /// break label correctly.
+    #[test]
+    fn regression_test_for_in_list_break() {
+        let program =
+            r#"for x in ({1,2,3,4}) break x; endfor for x in ({1,2,3,4}) break x; endfor"#;
+        compile(program, CompileOptions::default()).unwrap();
+    }
+
+    #[test]
+    fn regression_test_for_in_range_break() {
+        let program = r#"for x in [1..5] break x; endfor for x in [1..5] break x; endfor"#;
+        compile(program, CompileOptions::default()).unwrap();
+    }
 }

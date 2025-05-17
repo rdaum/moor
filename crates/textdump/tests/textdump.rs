@@ -428,7 +428,7 @@ mod test {
                 let program2 = moor_compiler::program_to_tree(program2).unwrap();
 
                 assert_eq!(
-                    program1.unbound_names, program2.unbound_names,
+                    program1.variables, program2.variables,
                     "{}:{}, variable names mismatch",
                     o, v1_name
                 );

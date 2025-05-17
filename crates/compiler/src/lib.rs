@@ -39,4 +39,4 @@ pub use moor_common::program::builtins::{
 pub use moor_common::program::labels::{JumpLabel, Label, Offset};
 pub use moor_common::program::opcode::{Op, ScatterLabel};
 pub use moor_common::program::program::{EMPTY_PROGRAM, Program};
-pub use var_scope::VarScope;
+pub use var_scope::{DeclType, VarScope};

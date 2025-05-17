@@ -19,7 +19,7 @@ use crate::ast::{
 };
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::parse::Parse;
-use crate::var_scope::VarScope;
+use crate::var_scope::{DeclType, VarScope};
 use moor_common::program::builtins::BuiltinId;
 use moor_common::program::labels::{JumpLabel, Label, Offset};
 use moor_common::program::names::{Name, Variable};
@@ -1090,7 +1090,8 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
                 .declare_register()
                 .map_err(|_| DecompileError::NameNotFound(bound_name))?,
             Some(n) => {
-                let Some(n) = unbound_names.find_or_add_name_global(n.as_str()) else {
+                let Some(n) = unbound_names.find_or_add_name_global(n.as_str(), DeclType::Unknown)
+                else {
                     return Err(DecompileError::NameNotFound(bound_name));
                 };
                 n
@@ -1116,7 +1117,7 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     Ok(Parse {
         stmts: decompile.statements,
         names: program.var_names().clone(),
-        unbound_names,
+        variables: unbound_names,
         names_mapping: unbound_to_bound,
     })
 }

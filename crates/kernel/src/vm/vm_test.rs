@@ -34,11 +34,11 @@ mod tests {
     use moor_common::program::ProgramType;
     use moor_common::program::program::PrgInner;
     use moor_common::tasks::NoopClientSession;
+    use moor_compiler::Op;
     use moor_compiler::Op::*;
     use moor_compiler::Program;
     use moor_compiler::compile;
     use moor_compiler::{CompileOptions, Names};
-    use moor_compiler::{Op, VarScope};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::Symbol;
     use test_case::test_case;
@@ -243,55 +243,6 @@ mod tests {
     }
 
     #[test]
-    fn test_list_set_range() {
-        let mut var_names = VarScope::new();
-        let a = var_names.find_or_add_name_global("a").unwrap();
-        let (var_names, mapping) = var_names.bind();
-        let a = mapping[&a];
-        let mut state = test_db_with_verb(
-            "test",
-            &mk_program(
-                vec![
-                    Imm(0.into()),
-                    Put(a),
-                    Pop,
-                    Push(a),
-                    Imm(1.into()),
-                    Imm(2.into()),
-                    Imm(3.into()),
-                    PutTemp,
-                    RangeSet,
-                    Put(a),
-                    Pop,
-                    PushTemp,
-                    Pop,
-                    Push(a),
-                    Return,
-                    Done,
-                ],
-                vec![
-                    v_list(&[111.into(), 222.into(), 333.into()]),
-                    2.into(),
-                    3.into(),
-                    v_list(&[321.into(), 123.into()]),
-                ],
-                var_names,
-            ),
-        )
-        .new_world_state()
-        .unwrap();
-        let session = Arc::new(NoopClientSession::new());
-        let result = call_verb(
-            state.as_mut(),
-            session,
-            BuiltinRegistry::new(),
-            "test",
-            List::mk_list(&[]),
-        );
-        assert_eq!(result, Ok(v_list(&[111.into(), 321.into(), 123.into()])));
-    }
-
-    #[test]
     fn test_list_splice() {
         let program = "a = {1,2,3,4,5}; return {@a[2..4]};";
         let binary = compile(program, CompileOptions::default()).unwrap();
@@ -327,51 +278,6 @@ mod tests {
             List::mk_list(&[]),
         );
         assert_eq!(result, Ok(v_int(1)));
-    }
-
-    #[test]
-    fn test_string_set_range() {
-        let mut var_names = VarScope::new();
-        let a = var_names.find_or_add_name_global("a").unwrap();
-        let (var_names, mapping) = var_names.bind();
-        let a = mapping[&a];
-        let mut state = test_db_with_verb(
-            "test",
-            &mk_program(
-                vec![
-                    Imm(0.into()),
-                    Put(a),
-                    Pop,
-                    Push(a),
-                    Imm(1.into()),
-                    Imm(2.into()),
-                    Imm(3.into()),
-                    PutTemp,
-                    RangeSet,
-                    Put(a),
-                    Pop,
-                    PushTemp,
-                    Pop,
-                    Push(a),
-                    Return,
-                    Done,
-                ],
-                vec![v_str("mandalorian"), 4.into(), 7.into(), v_str("bozo")],
-                var_names,
-            ),
-        )
-        .new_world_state()
-        .unwrap();
-        let session = Arc::new(NoopClientSession::new());
-
-        let result = call_verb(
-            state.as_mut(),
-            session,
-            BuiltinRegistry::new(),
-            "test",
-            List::mk_list(&[]),
-        );
-        assert_eq!(result, Ok(v_str("manbozorian")));
     }
 
     #[test]

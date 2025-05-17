@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
+use crate::{DeclType, ast};
 use moor_common::program::names::{Name, Variable};
 use moor_common::util::quote_str;
 use moor_var::{Obj, Sequence, Var, Variant};
@@ -314,7 +314,7 @@ impl<'a> Unparse<'a> {
                 });
                 let is_const = vars
                     .iter()
-                    .any(|var| self.tree.unbound_names.decl_for(&var.id).constant);
+                    .any(|var| self.tree.variables.decl_for(&var.id).constant);
                 if is_local {
                     if is_const {
                         buffer.push_str("const ");
@@ -669,14 +669,11 @@ impl<'a> Unparse<'a> {
                 let left_frag = match left.as_ref() {
                     Expr::Id(id) => {
                         // If this Id is in non-zero scope, we need to prefix with "let"
-                        let bound_name = self.tree.names_mapping[id];
-                        let scope_depth = self.tree.names.depth_of(&bound_name).unwrap();
-                        let prefix = if scope_depth > 0 {
-                            "let "
-                        } else {
-                            // TODO: could have 'global' prefix here when in a certain mode.
-                            //   instead of having it implied.
-                            ""
+                        let decl = self.tree.variables.find_decl(id).unwrap();
+                        let prefix = match decl.decl_type {
+                            DeclType::Let => "let ",
+                            DeclType::Global => "global ",
+                            _ => "",
                         };
                         let suffix = self.tree.names.name_of(&self.unparse_name(id)).unwrap();
                         format!("{}{}", prefix, suffix)
@@ -1036,7 +1033,7 @@ mod tests {
   "#; "exception handling")]
     #[test_case(r#"
   try
-    basic;
+    basic = 5;
   finally
     finalize();
   endtry
