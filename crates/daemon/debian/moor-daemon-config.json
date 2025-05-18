@@ -1,0 +1,28 @@
+{
+  "import_export_config": {
+    "input_path": "/var/lib/moor/JHCore-DEV-2.db",
+    "import_format": "Textdump",
+    "output_path": "/var/spool/moor-daemon/core.export",
+    "export_format": "Objdef",
+    "output_encoding": "UTF8",
+    "checkpoint_interval": {
+      "secs": 600,
+      "nanos": 0
+    }
+  },
+  "database_config": {},
+  "features_config": {
+    "persistent_tasks": true,
+    "rich_notify": true,
+    "lexical_scopes": true,
+    "map_type": true,
+    "type_dispatch": true,
+    "flyweight_type": true,
+    "list_comprehensions": true,
+    "bool_type": true,
+    "use_boolean_returns": false,
+    "custom_errors": true,
+    "symbol_type": true,
+    "use_symbols_in_builtins": false
+  }
+}

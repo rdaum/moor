@@ -276,7 +276,8 @@ pub struct ImportExportArgs {
         long,
         value_name = "import-format",
         help = "Format to import from.",
-        value_enum
+        value_enum,
+        default_value_t = Format::Textdump
     )]
     pub import_format: Format,
 
@@ -284,7 +285,8 @@ pub struct ImportExportArgs {
         long,
         value_name = "export-format",
         help = "Format to export into.",
-        value_enum
+        value_enum,
+        default_value_t = Format::Objdef
     )]
     pub export_format: Format,
 
@@ -374,10 +376,10 @@ impl DatabaseArgs {
     #[allow(dead_code)]
     pub fn merge_config(&self, config: &mut DatabaseConfig) {
         if let Some(args) = self.cache_eviction_interval {
-            config.cache_eviction_interval = Duration::from_secs(args);
+            config.cache_eviction_interval = Some(Duration::from_secs(args));
         }
         if let Some(args) = self.default_eviction_threshold {
-            config.default_eviction_threshold = args;
+            config.default_eviction_threshold = Some(args);
         }
     }
 }
@@ -393,7 +395,9 @@ impl Args {
             args.merge_config(&mut copy);
             config.features_config = Arc::new(copy);
         }
-        self.db_args.merge_config(&mut config.database_config);
+        if let Some(database_config) = config.database_config.as_mut() {
+            self.db_args.merge_config(database_config);
+        }
 
         config
     }

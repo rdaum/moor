@@ -1,0 +1,15 @@
+[Unit]
+AssertPathExists=/usr/bin/moor-daemon
+
+[Service]
+Environment="RUST_BACKTRACE=full"
+ExecStart=/usr/bin/moor-daemon --private-key=/var/lib/moor/moor-signing-key.pem --public-key=/var/lib/moor/moor-verifying-key.pem --config-file /etc/moor-daemon/config.json /var/spool/moor-daemon/moor.db
+WorkingDirectory=/var/spool/moor-daemon
+Restart=always
+PrivateTmp=true
+NoNewPrivileges=true
+User=moor
+Group=moor
+
+[Install]
+WantedBy=default.target

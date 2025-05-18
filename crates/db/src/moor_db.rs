@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::config::DatabaseConfig;
+use crate::config::{DEFAULT_EVICTION_INTERVAL, DatabaseConfig};
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::prop_cache::PropResolutionCache;
@@ -151,58 +151,121 @@ impl MoorDB {
         let object_location = keyspace
             .open_partition(
                 "object_location",
-                config.object_location.partition_options(),
+                config
+                    .object_location
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
             )
             .unwrap();
         let object_contents = keyspace
             .open_partition(
                 "object_contents",
-                config.object_contents.partition_options(),
+                config
+                    .object_contents
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
             )
             .unwrap();
         let object_flags = keyspace
-            .open_partition("object_flags", config.object_flags.partition_options())
+            .open_partition(
+                "object_flags",
+                config
+                    .object_flags
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
+            )
             .unwrap();
         let object_parent = keyspace
-            .open_partition("object_parent", config.object_parent.partition_options())
+            .open_partition(
+                "object_parent",
+                config
+                    .object_parent
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
+            )
             .unwrap();
         let object_children = keyspace
             .open_partition(
                 "object_children",
-                config.object_children.partition_options(),
+                config
+                    .object_children
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
             )
             .unwrap();
         let object_owner = keyspace
-            .open_partition("object_owner", config.object_owner.partition_options())
+            .open_partition(
+                "object_owner",
+                config
+                    .object_owner
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
+            )
             .unwrap();
         let object_name = keyspace
-            .open_partition("object_name", config.object_name.partition_options())
+            .open_partition(
+                "object_name",
+                config
+                    .object_name
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
+            )
             .unwrap();
         let object_verbdefs = keyspace
             .open_partition(
                 "object_verbdefs",
-                config.object_verbdefs.partition_options(),
+                config
+                    .object_verbdefs
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
             )
             .unwrap();
         let object_verbs = keyspace
-            .open_partition("object_verbs", config.object_verbs.partition_options())
+            .open_partition(
+                "object_verbs",
+                config
+                    .object_verbs
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
+            )
             .unwrap();
         let object_propdefs = keyspace
             .open_partition(
                 "object_propdefs",
-                config.object_propdefs.partition_options(),
+                config
+                    .object_propdefs
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
             )
             .unwrap();
         let object_propvalues = keyspace
             .open_partition(
                 "object_propvalues",
-                config.object_propvalues.partition_options(),
+                config
+                    .object_propvalues
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
             )
             .unwrap();
         let object_propflags = keyspace
             .open_partition(
                 "object_propflags",
-                config.object_propflags.partition_options(),
+                config
+                    .object_propflags
+                    .clone()
+                    .unwrap_or_default()
+                    .partition_options(),
             )
             .unwrap();
 
@@ -411,7 +474,8 @@ impl MoorDB {
                     }
 
                     // If eviction processing interval has passed, check for evictions.
-                    if last_eviction_check.elapsed() > config.cache_eviction_interval {
+                    let evict_interval = config.cache_eviction_interval.unwrap_or(DEFAULT_EVICTION_INTERVAL);
+                    if last_eviction_check.elapsed() > evict_interval {
                         let mut total_evicted_entries = 0;
                         let mut total_evicted_bytes = 0;
                         for cache in this.caches() {

@@ -78,6 +78,7 @@ lto = "fat"
 # the binary.
 debug = "full"
 
+
 [workspace.dependencies]
 ## Command line arguments parsing.
 clap = "4.5"
