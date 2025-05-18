@@ -16,10 +16,11 @@
 //! program code that doesn't interact with the DB, to measure opcode execution efficiency.
 #![recursion_limit = "256"]
 
+use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Duration;
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 use moor_common::model::CommitResult;
 use moor_common::model::VerbArgsSpec;

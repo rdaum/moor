@@ -113,13 +113,13 @@ binary-layout = "4.0"
 bincode = { version = "2.0", features = ["serde"] }
 byteview = "0.6"
 chrono = "0.4"
-criterion = { version = "0.5", features = ["async_tokio"] }
+criterion = { version = "0.6", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
 crossbeam-utils = "0.8"
 encoding_rs = "0.8"
 enum-primitive-derive = "0.3"
-fast-counter = "1.0.0"
-im = "15.1.0"
+fast-counter = "1.0"
+im = "15.1"
 indexmap = "2.9"
 itertools = "0.14"
 lazy_static = "1.5"
