@@ -17,7 +17,7 @@ use crate::vm::Fork;
 use crate::vm::VerbCall;
 use crate::vm::activation::{Activation, Frame};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinRegistry, bf_perf_counters};
-use crate::vm::exec_state::{VMExecState, vm_counters};
+use crate::vm::exec_state::VMExecState;
 use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 
@@ -29,7 +29,6 @@ use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
 use moor_common::program::ProgramType;
 use moor_common::tasks::Session;
-use moor_common::util::PerfTimerGuard;
 use moor_compiler::{BUILTINS, BuiltinId, Program};
 use moor_var::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
@@ -82,8 +81,6 @@ impl VMExecState {
         verb: Symbol,
         args: List,
     ) -> Result<ExecutionResult, Error> {
-        let vm_counters = vm_counters();
-        let _t = PerfTimerGuard::new(&vm_counters.prepare_verb_dispatch);
         let (args, this, location) = match target.variant() {
             Variant::Obj(o) => (args, target.clone(), o.clone()),
             Variant::Flyweight(f) => (args, target.clone(), f.delegate().clone()),
@@ -216,8 +213,6 @@ impl VMExecState {
         world_state: &mut dyn WorldState,
         args: &List,
     ) -> ExecutionResult {
-        let vm_counters = vm_counters();
-        let _t = PerfTimerGuard::new(&vm_counters.prepare_pass_verb);
         // get parent of verb definer object & current verb name.
         let definer = self.top().verb_definer();
         let permissions = &self.top().permissions;
@@ -288,8 +283,6 @@ impl VMExecState {
     /// We get an activation record which is a copy of where it was borked from, and a new Program
     /// which is the new task's code, derived from a fork vector in the original task.
     pub(crate) fn exec_fork_vector(&mut self, fork_request: Fork) {
-        let vm_counters = vm_counters();
-        let _t = PerfTimerGuard::new(&vm_counters.prepare_exec_fork_vector);
         // Set the activation up with the new task ID, and the new code.
         let mut a = fork_request.activation;
 
@@ -385,7 +378,6 @@ impl VMExecState {
             flags,
             self.top().player.clone(),
         ));
-        let vm_counters = vm_counters();
         let mut bf_args = BfCallState {
             exec_state: self,
             name: bf_name,
@@ -397,12 +389,6 @@ impl VMExecState {
         };
         let bf_counters = bf_perf_counters();
         bf_counters.counter_for(bf_id).invocations.add(1);
-        let elapsed_nanos = start.elapsed().as_nanos();
-        vm_counters.prepare_builtin_function.invocations.add(1);
-        vm_counters
-            .prepare_builtin_function
-            .cumulative_duration_nanos
-            .add(elapsed_nanos as isize);
 
         let result = bf(&mut bf_args);
         let elapsed_nanos = start.elapsed().as_nanos();
@@ -456,16 +442,6 @@ impl VMExecState {
             task_scheduler_client: exec_args.task_scheduler_client,
             config: exec_args.config,
         };
-
-        let elapsed_nanos = start.elapsed().as_nanos();
-        vm_counters()
-            .prepare_reenter_builtin_function
-            .invocations
-            .add(1);
-        vm_counters()
-            .prepare_reenter_builtin_function
-            .cumulative_duration_nanos
-            .add(elapsed_nanos as isize);
 
         let result = bf(&mut bf_args);
         let elapsed_nanos = start.elapsed().as_nanos();

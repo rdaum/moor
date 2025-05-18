@@ -74,6 +74,9 @@ codegen-units = 1
 # Link-time optimization (LTO) is a whole-program optimization technique that can improve runtime
 # speed by 10-20% or more, and also reduce binary size, at the cost of worse compile times.
 lto = "fat"
+# Having full debug info in release builds can be useful for debugging/profiling, but it will increase the size of
+# the binary.
+debug = "full"
 
 [workspace.dependencies]
 ## Command line arguments parsing.
@@ -187,3 +190,6 @@ edn-format = "3.3"
 
 # For benching / testing
 csv = "1.3.1"
+
+# Allocation
+tikv-jemallocator = "0.6"

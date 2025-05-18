@@ -47,14 +47,14 @@ struct Inner {
 }
 
 impl PropResolutionCache {
-    pub(crate) fn fork(&self) -> Self {
+    pub(crate) fn fork(&self) -> Box<Self> {
         let inner = self.inner.read().unwrap();
         let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
-        Self {
+        Box::new(Self {
             inner: RwLock::new(forked_inner),
-        }
+        })
     }
 
     pub(crate) fn has_changed(&self) -> bool {

@@ -15,7 +15,6 @@ pub use crate::tasks::ServerOptions;
 pub use crate::tasks::scheduler_client::SchedulerClient;
 pub use crate::tasks::suspension::{SuspendedTask, WakeCondition};
 pub use crate::tasks::task::Task;
-pub use crate::vm::vm_counters;
 pub use moor_common::tasks::TaskId;
 
 use std::cell::Cell;

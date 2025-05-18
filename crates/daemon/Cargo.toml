@@ -55,3 +55,6 @@ zmq.workspace = true
 
 # Auth/Auth
 rusty_paseto.workspace = true
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator.workspace = true

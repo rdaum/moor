@@ -12,7 +12,6 @@
 //
 
 use bincode::{Decode, Encode};
-use lazy_static::lazy_static;
 use moor_var::NOTHING;
 use moor_var::{Obj, Symbol};
 use moor_var::{Var, v_obj};
@@ -21,15 +20,6 @@ use std::time::{Duration, SystemTime};
 use crate::PhantomUnsync;
 use crate::vm::activation::{Activation, Frame};
 use moor_common::tasks::TaskId;
-use moor_common::util::PerfCounter;
-
-lazy_static! {
-    static ref VM_COUNTERS: VmCounters = VmCounters::new();
-}
-
-pub fn vm_counters<'a>() -> &'a VmCounters {
-    &VM_COUNTERS
-}
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -69,7 +59,7 @@ impl VMExecState {
     pub fn new(task_id: TaskId, max_ticks: usize) -> Self {
         Self {
             task_id,
-            stack: vec![],
+            stack: Vec::with_capacity(32),
             tick_count: 0,
             start_time: None,
             max_ticks,
@@ -192,47 +182,5 @@ impl VMExecState {
             .unwrap();
 
         max_time.checked_sub(elapsed)
-    }
-}
-
-pub struct VmCounters {
-    pub prepare_verb_dispatch: PerfCounter,
-    pub prepare_pass_verb: PerfCounter,
-    pub prepare_exec_fork_vector: PerfCounter,
-    pub prepare_builtin_function: PerfCounter,
-    pub prepare_reenter_builtin_function: PerfCounter,
-    pub unwind_stack: PerfCounter,
-    pub get_property: PerfCounter,
-    pub find_line_no: PerfCounter,
-    pub prepare_verb_activation: PerfCounter,
-}
-
-impl VmCounters {
-    fn new() -> Self {
-        Self {
-            prepare_verb_dispatch: PerfCounter::new("prepare_verb_dispatch"),
-            prepare_pass_verb: PerfCounter::new("prepare_pass_verb"),
-            prepare_exec_fork_vector: PerfCounter::new("prepare_exec_fork_vector"),
-            prepare_builtin_function: PerfCounter::new("prepare_builtin_function"),
-            prepare_reenter_builtin_function: PerfCounter::new("prepare_reenter_builtin_function"),
-            unwind_stack: PerfCounter::new("unwind_stack"),
-            get_property: PerfCounter::new("get_property"),
-            find_line_no: PerfCounter::new("find_line_no"),
-            prepare_verb_activation: PerfCounter::new("prepare_verb_activation"),
-        }
-    }
-
-    pub fn all_counters(&self) -> Vec<&PerfCounter> {
-        vec![
-            &self.prepare_verb_dispatch,
-            &self.prepare_pass_verb,
-            &self.prepare_exec_fork_vector,
-            &self.prepare_builtin_function,
-            &self.prepare_reenter_builtin_function,
-            &self.unwind_stack,
-            &self.get_property,
-            &self.find_line_no,
-            &self.prepare_verb_activation,
-        ]
     }
 }

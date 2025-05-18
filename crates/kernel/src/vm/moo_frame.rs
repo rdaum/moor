@@ -12,14 +12,13 @@
 //
 
 use crate::vm::FinallyReason;
-use crate::vm::exec_state::vm_counters;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use moor_common::program::labels::Offset;
 use moor_common::program::names::{GlobalName, Name};
-use moor_common::util::{BitArray, Bitset64, PerfTimerGuard};
+use moor_common::util::{BitArray, Bitset64};
 use moor_compiler::{Label, Op, Program};
 use moor_var::{Error, Var, v_none};
 use smallvec::SmallVec;
@@ -111,9 +110,6 @@ impl MooStackFrame {
     }
 
     pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
-        let vm_counters = vm_counters();
-        let _t = PerfTimerGuard::new(&vm_counters.find_line_no);
-
         Some(self.program.line_num_for_position(pc))
     }
 

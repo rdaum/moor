@@ -12,13 +12,11 @@
 //
 
 use crate::config::FeaturesConfig;
-use crate::vm::exec_state::vm_counters;
 use crate::vm::moo_frame::{CatchType, MooStackFrame, PcType, ScopeType};
 use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
 use moor_common::model::WorldState;
-use moor_common::util::PerfTimerGuard;
 use moor_compiler::{Op, ScatterLabel, to_literal};
 use moor_var::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_error};
 use moor_var::{
@@ -1090,9 +1088,6 @@ fn get_property(
     propname: Symbol,
     features_config: &FeaturesConfig,
 ) -> Result<Var, Error> {
-    let vm_counters = vm_counters();
-    let _t = PerfTimerGuard::new(&vm_counters.get_property);
-
     match obj.variant() {
         Variant::Obj(obj) => {
             let result = world_state.retrieve_property(permissions, obj, propname);

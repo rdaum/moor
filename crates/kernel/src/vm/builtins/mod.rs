@@ -69,7 +69,7 @@ impl Default for BfCounters {
 impl BfCounters {
     pub fn new() -> Self {
         let mut counters = Vec::with_capacity(BUILTINS.number_of());
-        for (_, b) in &BUILTINS.names {
+        for b in BUILTINS.names.values() {
             counters.push(PerfCounter::new(b.as_str()));
         }
         Self(counters)

@@ -32,10 +32,10 @@ use moor_common::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
 use moor_common::tasks::{Session, SessionError};
 use moor_common::util::parse_into_words;
 use moor_db::db_counters;
+use moor_kernel::SchedulerClient;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::{TaskHandle, TaskResult, sched_counters};
 use moor_kernel::vm::builtins::bf_perf_counters;
-use moor_kernel::{SchedulerClient, vm_counters};
 use moor_var::SYSTEM_OBJECT;
 use moor_var::{List, Variant};
 use moor_var::{Obj, Var};
@@ -408,16 +408,6 @@ impl RpcServer {
                 }
                 all_counters.push((Symbol::mk("db"), db));
 
-                let mut vm = vec![];
-                for c in vm_counters().all_counters() {
-                    vm.push((
-                        c.operation,
-                        c.invocations.sum(),
-                        c.cumulative_duration_nanos.sum(),
-                    ));
-                }
-                all_counters.push((Symbol::mk("vm"), vm));
-
                 let mut bf = vec![];
                 for c in bf_perf_counters().all_counters() {
                     bf.push((
@@ -426,6 +416,8 @@ impl RpcServer {
                         c.cumulative_duration_nanos.sum(),
                     ));
                 }
+                all_counters.push((Symbol::mk("bf"), bf));
+
                 pack_host_response(Ok(DaemonToHostReply::PerfCounters(
                     SystemTime::now(),
                     all_counters,

@@ -220,7 +220,6 @@ impl Scheduler {
             // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
             let active_tasks = self.task_q.active.keys().copied().collect::<Vec<_>>();
             let to_wake = self.task_q.suspended.collect_wake_tasks(&active_tasks);
-            let mut found_work = !to_wake.is_empty();
             for sr in to_wake {
                 let task_id = sr.task.task_id;
                 if let Err(e) = self.task_q.resume_task_thread(
@@ -239,23 +238,20 @@ impl Scheduler {
             // Handle any scheduler submissions...
             if let Ok(msg) = self.scheduler_receiver.try_recv() {
                 self.handle_scheduler_msg(msg);
-                found_work = true;
             }
 
             // Handle any worker responses
             if let Some(worker_response_recv) = self.worker_request_recv.as_ref() {
                 if let Ok(worker_response) = worker_response_recv.try_recv() {
                     self.handle_worker_response(worker_response);
-                    found_work = true;
                 }
             }
 
-            if let Ok((task_id, msg)) = self.task_control_receiver.try_recv() {
+            if let Ok((task_id, msg)) = self
+                .task_control_receiver
+                .recv_timeout(SCHEDULER_YIELD_TIME)
+            {
                 self.handle_task_msg(task_id, msg);
-                found_work = true;
-            }
-            if !found_work {
-                std::thread::sleep(SCHEDULER_YIELD_TIME);
             }
         }
 

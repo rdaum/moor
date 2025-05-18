@@ -27,7 +27,6 @@ use crate::vm::builtins::BfRet::{Ret, VmInstr};
 use crate::vm::builtins::{
     BfCallState, BfErr, BfRet, BuiltinFunction, bf_perf_counters, world_state_bf_err,
 };
-use crate::vm::exec_state::vm_counters;
 use crate::vm::vm_host::ExecutionResult;
 use moor_common::build::{PKG_VERSION, SHORT_COMMIT};
 use moor_common::model::{Named, ObjFlag, WorldStateError};
@@ -1588,20 +1587,6 @@ fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
-fn bf_vm_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    bf_args
-        .task_perms()
-        .map_err(world_state_bf_err)?
-        .check_wizard()
-        .map_err(world_state_bf_err)?;
-
-    let counters = vm_counters();
-    Ok(Ret(counter_map(
-        &counters.all_counters(),
-        bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
-    )))
-}
-
 fn bf_sched_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     bf_args
         .task_perms()
@@ -1716,7 +1701,6 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("load_server_options")] = Box::new(load_server_options);
     builtins[offset_for_builtin("bf_counters")] = Box::new(bf_bf_counters);
     builtins[offset_for_builtin("db_counters")] = Box::new(bf_db_counters);
-    builtins[offset_for_builtin("vm_counters")] = Box::new(bf_vm_counters);
     builtins[offset_for_builtin("sched_counters")] = Box::new(bf_sched_counters);
     builtins[offset_for_builtin("force_input")] = Box::new(bf_force_input);
     builtins[offset_for_builtin("wait_task")] = Box::new(bf_wait_task);

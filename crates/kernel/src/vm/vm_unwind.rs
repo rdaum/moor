@@ -13,14 +13,13 @@
 //
 
 use crate::vm::activation::{Activation, Frame};
-use crate::vm::exec_state::{VMExecState, vm_counters};
+use crate::vm::exec_state::VMExecState;
 use crate::vm::moo_frame::{CatchType, ScopeType};
 use crate::vm::vm_host::ExecutionResult;
 use bincode::{Decode, Encode};
 use moor_common::model::Named;
 use moor_common::model::VerbFlag;
 use moor_common::tasks::Exception;
-use moor_common::util::PerfTimerGuard;
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
 use moor_var::{Error, NOTHING, v_error, v_string};
 use moor_var::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
@@ -185,9 +184,6 @@ impl VMExecState {
     ///     * Error raises of various kinds
     ///     * Return common
     pub(crate) fn unwind_stack(&mut self, why: FinallyReason) -> ExecutionResult {
-        let vm_counters = vm_counters();
-        let _t = PerfTimerGuard::new(&vm_counters.unwind_stack);
-
         // Walk activation stack from bottom to top, tossing frames as we go.
         while let Some(a) = self.stack.last_mut() {
             // If this is an error or exit attempt to find a handler for it.

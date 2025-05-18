@@ -286,7 +286,11 @@ enum CommitSet {
     CommitWrites(Box<WorkingSets>, oneshot::Sender<CommitResult>),
     /// This is a read only commit, we didn't do any mutations. We can just fire and forget,
     /// just (maybe) updating the caches on the DB side, no need for locks, flushes, anything.
-    CommitReadOnly(VerbResolutionCache, PropResolutionCache, AncestryCache),
+    CommitReadOnly(
+        Box<VerbResolutionCache>,
+        Box<PropResolutionCache>,
+        AncestryCache,
+    ),
 }
 
 #[cfg(test)]

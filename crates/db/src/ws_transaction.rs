@@ -75,10 +75,10 @@ pub struct WorldStateTransaction {
 
     /// Our fork of the global verb resolution cache. We fill or flush in our local copy, and
     /// when we submit ours becomes the new global.
-    pub(crate) verb_resolution_cache: VerbResolutionCache,
+    pub(crate) verb_resolution_cache: Box<VerbResolutionCache>,
 
     /// Same as above but for properties.
-    pub(crate) prop_resolution_cache: PropResolutionCache,
+    pub(crate) prop_resolution_cache: Box<PropResolutionCache>,
 
     /// A (local-tx-only for now) cache of the ancestors of objects, as we look them up.
     pub(crate) ancestry_cache: AncestryCache,

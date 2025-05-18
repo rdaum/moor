@@ -14,7 +14,6 @@
 use std::time::Duration;
 
 use bincode::{Decode, Encode};
-pub use exec_state::vm_counters;
 pub use moor_common::program::ProgramType;
 use moor_common::program::names::Name;
 use moor_common::tasks::{AbortLimitReason, Exception, TaskId};

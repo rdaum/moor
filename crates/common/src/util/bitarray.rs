@@ -269,7 +269,6 @@ where
                 unsafe { self.storage[i].assume_init_drop() }
             }
         }
-        self.bitset.clear();
     }
 }
 

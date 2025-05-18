@@ -61,8 +61,8 @@ pub struct MoorDB {
     commit_channel: Sender<CommitSet>,
     usage_send: Sender<oneshot::Sender<usize>>,
 
-    verb_resolution_cache: RwLock<VerbResolutionCache>,
-    prop_resolution_cache: RwLock<PropResolutionCache>,
+    verb_resolution_cache: RwLock<Box<VerbResolutionCache>>,
+    prop_resolution_cache: RwLock<Box<PropResolutionCache>>,
     ancestry_cache: RwLock<AncestryCache>,
 
     jh: Mutex<Option<JoinHandle<()>>>,
@@ -85,8 +85,8 @@ pub(crate) struct WorkingSets {
     pub(crate) object_propdefs: WorkingSet<Obj, PropDefs>,
     pub(crate) object_propvalues: WorkingSet<ObjAndUUIDHolder, Var>,
     pub(crate) object_propflags: WorkingSet<ObjAndUUIDHolder, PropPerms>,
-    pub(crate) verb_resolution_cache: VerbResolutionCache,
-    pub(crate) prop_resolution_cache: PropResolutionCache,
+    pub(crate) verb_resolution_cache: Box<VerbResolutionCache>,
+    pub(crate) prop_resolution_cache: Box<PropResolutionCache>,
     pub(crate) ancestry_cache: AncestryCache,
 }
 
@@ -242,8 +242,8 @@ impl MoorDB {
         let (commit_channel, commit_receiver) = crossbeam_channel::unbounded();
         let (usage_send, usage_recv) = crossbeam_channel::unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
-        let verb_resolution_cache = RwLock::new(VerbResolutionCache::new());
-        let prop_resolution_cache = RwLock::new(PropResolutionCache::new());
+        let verb_resolution_cache = RwLock::new(Box::new(VerbResolutionCache::new()));
+        let prop_resolution_cache = RwLock::new(Box::new(PropResolutionCache::new()));
         let ancestry_cache = RwLock::new(AncestryCache::default());
         let s = Arc::new(Self {
             monotonic: CachePadded::new(AtomicU64::new(start_tx_num)),
