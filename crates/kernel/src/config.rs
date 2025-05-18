@@ -25,7 +25,7 @@ use std::time::Duration;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub database_config: DatabaseConfig,
+    pub database_config: Option<DatabaseConfig>,
     pub features_config: Arc<FeaturesConfig>,
     pub import_export_config: ImportExportConfig,
 }

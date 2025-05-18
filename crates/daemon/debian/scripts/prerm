@@ -1,0 +1,5 @@
+#!/bin/sh
+
+#DEBHELPER#
+
+deb-systemd-invoke stop moor-daemon

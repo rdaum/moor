@@ -11,6 +11,20 @@ repository.workspace = true
 rust-version.workspace = true
 description = "The actual moor binary that runs as an RPC-accessible daemon that various frontends can connect to."
 
+[package.metadata.deb]
+depends = "$auto, systemd, openssl"
+extended-description = "Daemon for the Moor virtual machine. This is the main process that runs the Moor VM and provides an RPC interface for clients to connect to."
+section = "net"
+license-file = ["../../LICENSE", "0"]
+priority = "optional"
+assets = [
+    ["target/release/moor-daemon", "/usr/bin/moor-daemon", "755"],
+    ["debian/moor-daemon.service", "/lib/systemd/system/moor-daemon.service", "644"],
+    ["debian/moor-daemon-config.json", "/etc/moor-daemon/config.json", "644"],
+]
+maintainer-scripts = "debian/scripts"
+systemd-units = { enable = false }
+
 [lib]
 name = "bincommon"
 path = "src/lib.rs"

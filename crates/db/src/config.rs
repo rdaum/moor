@@ -15,50 +15,52 @@ use fjall::PartitionCreateOptions;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+pub const DEFAULT_EVICTION_INTERVAL: Duration = Duration::from_secs(60);
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     /// The rate to run cache eviction cycles at.
-    pub cache_eviction_interval: Duration,
+    pub cache_eviction_interval: Option<Duration>,
     /// The default eviction threshold for each transaction-global cache. If a value is not specified
     /// for a specific table, this value will be used.
     /// Every `cache_eviction_interval` seconds, the total memory usage of the cache will be checked,
     /// and if it exceeds this threshold, random entries will be put onto the eviction queue.
     /// If they are still there, untouched, by the next eviction cycle, they will be removed.
-    pub default_eviction_threshold: usize,
+    pub default_eviction_threshold: Option<usize>,
 
     /// Per-table configurations
-    pub object_location: TableConfig,
-    pub object_contents: TableConfig,
-    pub object_flags: TableConfig,
-    pub object_parent: TableConfig,
-    pub object_children: TableConfig,
-    pub object_owner: TableConfig,
-    pub object_name: TableConfig,
-    pub object_verbdefs: TableConfig,
-    pub object_verbs: TableConfig,
-    pub object_propdefs: TableConfig,
-    pub object_propvalues: TableConfig,
-    pub object_propflags: TableConfig,
+    pub object_location: Option<TableConfig>,
+    pub object_contents: Option<TableConfig>,
+    pub object_flags: Option<TableConfig>,
+    pub object_parent: Option<TableConfig>,
+    pub object_children: Option<TableConfig>,
+    pub object_owner: Option<TableConfig>,
+    pub object_name: Option<TableConfig>,
+    pub object_verbdefs: Option<TableConfig>,
+    pub object_verbs: Option<TableConfig>,
+    pub object_propdefs: Option<TableConfig>,
+    pub object_propvalues: Option<TableConfig>,
+    pub object_propflags: Option<TableConfig>,
 }
 
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            cache_eviction_interval: Duration::from_secs(60),
+            cache_eviction_interval: Some(DEFAULT_EVICTION_INTERVAL),
             // 64MB.
-            default_eviction_threshold: 1 << 26,
-            object_location: TableConfig::default(),
-            object_contents: TableConfig::default(),
-            object_flags: TableConfig::default(),
-            object_parent: TableConfig::default(),
-            object_children: TableConfig::default(),
-            object_owner: TableConfig::default(),
-            object_name: TableConfig::default(),
-            object_verbdefs: TableConfig::default(),
-            object_verbs: TableConfig::default(),
-            object_propdefs: TableConfig::default(),
-            object_propvalues: TableConfig::default(),
-            object_propflags: TableConfig::default(),
+            default_eviction_threshold: Some(1 << 26),
+            object_location: None,
+            object_contents: None,
+            object_flags: None,
+            object_parent: None,
+            object_children: None,
+            object_owner: None,
+            object_name: None,
+            object_verbdefs: None,
+            object_verbs: None,
+            object_propdefs: None,
+            object_propvalues: None,
+            object_propflags: None,
         }
     }
 }

@@ -20,8 +20,6 @@ command = [
     "JHCore-DEV-2.db",
     "--export",
     "development-export",
-    "--import-format",
-    "textdump",
     "--export-format",
     "objdef",
     "--checkpoint-interval-seconds",
@@ -30,10 +28,11 @@ command = [
     "false",
     "--custom-errors",
     "true",
+    "--write-merged-config",
+    "moor-daemon-config.json",
 ]
 allow_warnings = true
 need_stdout = true
-env.RUST_BACKTRACE = "full"
 
 [jobs.daemon-debug]
 command = [
@@ -47,8 +46,6 @@ command = [
     "JHCore-DEV-2.db",
     "--export",
     "development-export",
-    "--import-format",
-    "textdump",
     "--export-format",
     "objdef",
     "--checkpoint-interval-seconds",
@@ -57,10 +54,11 @@ command = [
     "false",
     "--custom-errors",
     "true",
+    "--write-merged-config",
+    "moor-daemon-config.json",
 ]
 allow_warnings = true
 need_stdout = true
-env.RUST_BACKTRACE = "full"
 
 [jobs.telnet]
 command = ["cargo", "run", "-p", "moor-telnet-host"]

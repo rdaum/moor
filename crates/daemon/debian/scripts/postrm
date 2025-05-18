@@ -1,0 +1,39 @@
+#!/bin/sh
+
+MOOR_CONF=/etc/moor-daemon/config.json
+
+case "$1" in
+purge)
+    # Per https://www.debian.org/doc/debian-policy/ch-files.html#behavior
+    # "configuration files must be preserved when the package is removed, and
+    #  only deleted when the package is purged."
+    if [ -f ${MOOR_CONF} ]; then
+        rm ${MOOR_CONF}
+    fi
+
+    # Same for /var/spool/moor-daemon contents (where databsse is)
+    if [ -d /var/spool/moor-daemon ]; then
+        rm -rf /var/spool/moor-daemon
+    fi
+
+    # And /var/lib/moor (where keys and textdump import is)
+    if [ -d /var/lib/moor ]; then
+        rm -rf /var/lib/moor
+    fi
+
+    ;;
+esac
+
+#DEBHELPER#
+
+# In case this system is running systemd, we make systemd reload the unit files
+# to pick up changes.
+if [ -d /run/systemd/system ] ; then
+	systemctl --system daemon-reload >/dev/null || true
+fi
+
+if [ "$1" = "remove" ]; then
+	if [ -x "/usr/bin/deb-systemd-helper" ]; then
+		deb-systemd-helper mask moor-daemon.service >/dev/null
+	fi
+fi

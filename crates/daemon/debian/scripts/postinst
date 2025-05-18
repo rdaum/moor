@@ -1,0 +1,62 @@
+#!/bin/sh
+set -e
+
+MOOR_USER="moor"
+DATABASE_DIR="/var/spool/moor-daemon"
+LIB_DIR="/var/lib/moor"
+MOOR_HOME=${DATABASE_DIR}
+
+create_user() {
+  if id ${MOOR_USER} > /dev/null 2>&1; then return; fi
+  adduser --system --home "${MOOR_HOME}" --group ${MOOR_USER}
+}
+
+create_directories() {
+  mkdir -p ${DATABASE_DIR}
+  mkdir -p ${LIB_DIR}
+  chown -R ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}
+  chown -R ${MOOR_USER}:${MOOR_USER} ${DATABASE_DIR}
+
+  echo ""
+  echo "** Please remember to source a textdump file (e.g. LambdaCore or JHCore) and put it in /var/lib/moor and update the config file to point to it."
+  echo "** Config file is at /etc/moor-daemon/config.json; textdump import specified by import_export_config.input_path."
+  echo "** ... Then restart the daemon with 'systemctl restart moor-daemon'."
+  echo ""
+}
+
+generate_keys() {
+  echo "** Generating signing and verifying keys for the daemon and the processes that use it."
+  openssl genpkey -algorithm ed25519 -out ${LIB_DIR}/moor-signing-key.pem
+  openssl pkey -in ${LIB_DIR}/moor-signing-key.pem -pubout -out ${LIB_DIR}/moor-verifying-key.pem
+
+  # Set permissions on the keys
+  chown ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}/moor-signing-key.pem
+  chown ${MOOR_USER}:${MOOR_USER} ${LIB_DIR}/moor-verifying-key.pem
+}
+
+
+case "$1" in
+configure)
+    create_user
+    create_directories
+    generate_keys
+    ;;
+esac
+
+## This will only remove masks created by d-s-h on package removal.
+deb-systemd-helper unmask moor-daemon.service > /dev/null || true
+
+# was-enabled defaults to true, so new installations run enable.
+if deb-systemd-helper --quiet was-enabled moor-daemon.service
+then
+	# Enables the unit on first installation, creates new
+	# symlinks on upgrades if the unit file has changed.
+	deb-systemd-helper enable moor-daemon.service > /dev/null || true
+	deb-systemd-invoke start moor-daemon
+else
+	# Update the statefile to add new symlinks (if any), which need to be
+	# cleaned up on purge. Also remove old symlinks.
+	deb-systemd-helper update-state moor-daemon.service > /dev/null || true
+fi
+
+#DEBHELPER#

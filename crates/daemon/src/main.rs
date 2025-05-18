@@ -110,8 +110,10 @@ fn main() -> Result<(), Report> {
         "moor {} daemon starting. Using database at {:?}",
         version, args.db_args.db
     );
-    let (database, freshly_made) =
-        TxDB::open(Some(&args.db_args.db), config.database_config.clone());
+    let (database, freshly_made) = TxDB::open(
+        Some(&args.db_args.db),
+        config.database_config.clone().unwrap_or_default(),
+    );
     let database = Box::new(database);
     info!(path = ?args.db_args.db, "Opened database");
 
