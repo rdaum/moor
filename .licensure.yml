@@ -79,4 +79,6 @@ excludes:
   - core
   - node_modules
   - crates/daemon/debian/*
+  - crates/telnet-host/debian/*
+  - crates/web-host/debian/*
   - .*\.(md|rst|txt|yml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css|gz|tgz|tar|zip|awk)

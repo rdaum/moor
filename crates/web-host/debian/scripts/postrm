@@ -1,0 +1,34 @@
+#!/bin/sh
+
+WEB_CONF=/etc/moor/web-host-config.json
+SPOOL_DIR="/var/spool/moor-web-host"
+
+case "$1" in
+purge)
+    # Per https://www.debian.org/doc/debian-policy/ch-files.html#behavior
+    # "configuration files must be preserved when the package is removed, and
+    #  only deleted when the package is purged."
+    # We leave the directory in place, but remove the contents for the web-host
+    if [ -f ${WEB_CONF} ]; then
+        rm ${WEB_CONF}
+    fi
+
+    if [ -d ${SPOOL_DIR} ]; then
+        rm -rf ${SPOOL_DIR}
+    fi
+    ;;
+esac
+
+#DEBHELPER#
+
+# In case this system is running systemd, we make systemd reload the unit files
+# to pick up changes.
+if [ -d /run/systemd/system ] ; then
+	systemctl --system web-host-reload >/dev/null || true
+fi
+
+if [ "$1" = "remove" ]; then
+	if [ -x "/usr/bin/deb-systemd-helper" ]; then
+		deb-systemd-helper mask moor-web-host.service >/dev/null
+	fi
+fi

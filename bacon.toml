@@ -28,8 +28,6 @@ command = [
     "false",
     "--custom-errors",
     "true",
-    "--write-merged-config",
-    "moor-daemon-config.json",
 ]
 allow_warnings = true
 need_stdout = true

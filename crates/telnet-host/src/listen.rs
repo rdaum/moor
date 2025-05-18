@@ -85,6 +85,7 @@ impl Listeners {
                     self.listeners
                         .insert(addr, Listener::new(terminate_send, handler.clone()));
 
+                    info!("Listening @ {}", addr);
                     let zmq_ctx = self.zmq_ctx.clone();
                     let rpc_address = self.rpc_address.clone();
                     let events_address = self.events_address.clone();

@@ -1,0 +1,15 @@
+[Unit]
+AssertPathExists=/usr/bin/moor-telnet-host
+
+[Service]
+Environment="RUST_BACKTRACE=full"
+ExecStart=/usr/bin/moor-telnet-host --private-key=/var/lib/moor/moor-signing-key.pem --public-key=/var/lib/moor/moor-verifying-key.pem --config-file /etc/moor/telnet-host.yaml
+WorkingDirectory=/tmp
+Restart=always
+PrivateTmp=false
+NoNewPrivileges=true
+User=moor
+Group=moor
+
+[Install]
+WantedBy=default.target

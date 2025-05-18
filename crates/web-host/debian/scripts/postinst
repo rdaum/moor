@@ -1,0 +1,41 @@
+#!/bin/sh
+set -e
+
+MOOR_USER="moor"
+SPOOL_DIR="/var/spool/moor-web-host"
+
+create_user() {
+  if id ${MOOR_USER} > /dev/null 2>&1; then return; fi
+  adduser --system --home "${MOOR_HOME}" --group ${MOOR_USER}
+}
+
+create_directories() {
+  mkdir -p ${SPOOL_DIR}
+  chown ${MOOR_USER}:${MOOR_USER} ${SPOOL_DIR}
+}
+
+
+## This will only remove masks created by d-s-h on package removal.
+deb-systemd-helper unmask moor-web-host.service > /dev/null || true
+
+# was-enabled defaults to true, so new installations run enable.
+if deb-systemd-helper --quiet was-enabled moor-web-host.service
+then
+	# Enables the unit on first installation, creates new
+	# symlinks on upgrades if the unit file has changed.
+	deb-systemd-helper enable moor-web-host.service > /dev/null || true
+	deb-systemd-invoke start moor-web-host
+else
+	# Update the statefile to add new symlinks (if any), which need to be
+	# cleaned up on purge. Also remove old symlinks.
+	deb-systemd-helper update-state moor-web-host.service > /dev/null || true
+fi
+
+case "$1" in
+configure)
+    create_user
+    create_directories
+    ;;
+esac
+
+#DEBHELPER#

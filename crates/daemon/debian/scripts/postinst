@@ -19,7 +19,7 @@ create_directories() {
 
   echo ""
   echo "** Please remember to source a textdump file (e.g. LambdaCore or JHCore) and put it in /var/lib/moor and update the config file to point to it."
-  echo "** Config file is at /etc/moor-daemon/config.json; textdump import specified by import_export_config.input_path."
+  echo "** Config file is at /etc/moor/daemon-config.json; textdump import specified by import_export_config.input_path."
   echo "** ... Then restart the daemon with 'systemctl restart moor-daemon'."
   echo ""
 }

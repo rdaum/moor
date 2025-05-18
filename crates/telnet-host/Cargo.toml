@@ -9,7 +9,21 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a moor daemon."
+description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a mooR daemon."
+
+[package.metadata.deb]
+depends = "$auto, systemd, openssl"
+extended-description = "Process for listening for telnet sessions and forwarding them to a mooR daemon."
+section = "net"
+license-file = ["../../LICENSE", "0"]
+priority = "optional"
+assets = [
+    ["target/release/moor-telnet-host", "/usr/bin/moor-telnet-host", "755"],
+    ["debian/moor-telnet-host.service", "/lib/systemd/system/moor-telnet-host.service", "644"],
+    ["debian/telnet-host.yaml", "/etc/moor/telnet-host.yaml", "644"],
+]
+maintainer-scripts = "debian/scripts"
+systemd-units = { enable = false }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
@@ -27,7 +41,6 @@ clap.workspace = true
 clap_derive.workspace = true
 figment.workspace = true
 serde.workspace = true
-serde_yaml.workspace = true
 
 ## General.
 color-eyre.workspace = true

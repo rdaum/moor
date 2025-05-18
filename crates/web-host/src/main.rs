@@ -25,6 +25,8 @@ use axum::extract::State;
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
+use figment::Figment;
+use figment::providers::{Format, Serialized, Yaml};
 use futures_util::future::OptionFuture;
 use moor_var::{Obj, SYSTEM_OBJECT};
 use rolldown::{
@@ -36,6 +38,7 @@ use rpc_async_client::{
 };
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{HostType, load_keypair};
+use serde_derive::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -48,7 +51,7 @@ use tower_http::services::ServeDir;
 use tracing::{info, warn};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize, Deserialize)]
 struct Args {
     #[command(flatten)]
     client_args: RpcClientArgs,
@@ -88,6 +91,9 @@ struct Args {
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     pub debug: bool,
+
+    #[arg(long, help = "Yaml config file to use, overrides values in CLI args")]
+    config_file: Option<String>,
 }
 
 struct Listeners {
@@ -340,7 +346,13 @@ fn mk_js_bundler(src_dir: &Path) -> Arc<Mutex<Bundler>> {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), eyre::Error> {
     color_eyre::install()?;
-    let args: Args = Args::parse();
+    let cli_args = Args::parse();
+    let config_file = cli_args.config_file.clone();
+    let mut args_figment = Figment::new().merge(Serialized::defaults(cli_args));
+    if let Some(config_file) = config_file {
+        args_figment = args_figment.merge(Yaml::file(config_file));
+    }
+    let args = args_figment.extract::<Args>().unwrap();
 
     let main_subscriber = tracing_subscriber::fmt()
         .compact()

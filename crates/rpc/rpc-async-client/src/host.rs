@@ -80,7 +80,7 @@ pub async fn start_host_session(
         // narrative subscription.
         let mut rpc_client = RpcSendClient::new(rpc_request_sock);
 
-        info!("Registering host with daemon...");
+        info!("Registering host with daemon via {}...", rpc_address);
         let host_hello = HostToDaemonMessage::RegisterHost(
             SystemTime::now(),
             HostType::TCP,

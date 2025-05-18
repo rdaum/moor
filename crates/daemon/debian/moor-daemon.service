@@ -3,10 +3,12 @@ AssertPathExists=/usr/bin/moor-daemon
 
 [Service]
 Environment="RUST_BACKTRACE=full"
-ExecStart=/usr/bin/moor-daemon --private-key=/var/lib/moor/moor-signing-key.pem --public-key=/var/lib/moor/moor-verifying-key.pem --config-file /etc/moor-daemon/config.json /var/spool/moor-daemon/moor.db
+ExecStart=/usr/bin/moor-daemon --private-key=/var/lib/moor/moor-signing-key.pem --public-key=/var/lib/moor/moor-verifying-key.pem --config-file /etc/moor/daemon-config.json /var/spool/moor-daemon/moor.db
 WorkingDirectory=/var/spool/moor-daemon
 Restart=always
-PrivateTmp=true
+# TODO: This is off so that IPC files can be shared between the daemon and the hosts
+#   but we should be bale to maybe put the IPC files in a different directory, but requires changes to config files
+PrivateTmp=false
 NoNewPrivileges=true
 User=moor
 Group=moor
