@@ -42,7 +42,7 @@ moor-textdump = { path = "../textdump" }
 moor-var = { path = "../var" }
 rpc-common = { path = "../rpc/rpc-common" }
 
-## Command line arguments parsing.
+## Command line arguments parsing & configuration generally.
 clap.workspace = true
 clap_derive.workspace = true
 

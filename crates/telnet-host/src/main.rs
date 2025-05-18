@@ -16,10 +16,13 @@
 use crate::listen::Listeners;
 use clap::Parser;
 use clap_derive::Parser;
+use figment::Figment;
+use figment::providers::{Format, Serialized, Yaml};
 use moor_var::SYSTEM_OBJECT;
 use rpc_async_client::{make_host_token, process_hosts_events, start_host_session};
 use rpc_common::client_args::RpcClientArgs;
 use rpc_common::{HostType, load_keypair};
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -31,7 +34,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 mod connection;
 mod listen;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize, Deserialize)]
 struct Args {
     #[command(flatten)]
     client_args: RpcClientArgs,
@@ -54,12 +57,21 @@ struct Args {
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
+
+    #[arg(long, help = "Yaml config file to use, overrides values in CLI args")]
+    config_file: Option<String>,
 }
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), eyre::Error> {
     color_eyre::install()?;
-    let args: Args = Args::parse();
+    let cli_args = Args::parse();
+    let config_file = cli_args.config_file.clone();
+    let mut args_figment = Figment::new().merge(Serialized::defaults(cli_args));
+    if let Some(config_file) = config_file {
+        args_figment = args_figment.merge(Yaml::file(config_file));
+    }
+    let args = args_figment.extract::<Args>().unwrap();
 
     let main_subscriber = tracing_subscriber::fmt()
         .compact()

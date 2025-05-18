@@ -12,10 +12,11 @@
 //
 
 use clap_derive::Parser;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Common command line arguments for hosts / clients
-#[derive(Clone, Parser, Debug)] // requires `derive` feature
+/// Common command line / config arguments for hosts / clients
+#[derive(Clone, Parser, Debug, Serialize, Deserialize)] // requires `derive` feature
 pub struct RpcClientArgs {
     #[arg(
         long,

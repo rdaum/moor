@@ -22,9 +22,12 @@ moor-var = { path = "../var" }
 rpc-async-client = { path = "../rpc/rpc-async-client" }
 rpc-common = { path = "../rpc/rpc-common" }
 
-## Command line arguments parsing.
+## Command line arguments & config parsing.
 clap.workspace = true
 clap_derive.workspace = true
+figment.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
 
 ## General.
 color-eyre.workspace = true

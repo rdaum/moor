@@ -19,6 +19,7 @@ moor-var = { path = "../../var" }
 bincode.workspace = true
 clap.workspace = true
 clap_derive.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 
 # Auth/Auth

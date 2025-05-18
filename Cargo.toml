@@ -84,12 +84,16 @@ debug = "full"
 clap = "4.5"
 clap_derive = "4.5"
 
+# Formats/ config
+figment = { version = "0.10", features = ["yaml", "json"] }
+serde_derive = "1.0"
+serde_json = "1.0"
+serde_yaml = "0.9"
+
 ## HTTP/websockets front-end
 axum = { version = "0.8", features = ["ws"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 
-serde_derive = "1.0"
-serde_json = "1.0"
 
 ## Asynchronous transaction processing & networking, used in web-host and telnet-host.
 ## the daemon itself uses its own threading
