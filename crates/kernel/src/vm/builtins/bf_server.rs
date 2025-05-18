@@ -37,6 +37,7 @@ use moor_common::tasks::{NarrativeEvent, Presentation};
 use moor_common::util::PerfCounter;
 use moor_compiler::compile;
 use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
+use moor_db::db_counters;
 use moor_var::VarType::TYPE_STR;
 use moor_var::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Symbol, v_list_iter};
 use moor_var::{Sequence, v_map};
@@ -1581,9 +1582,8 @@ fn bf_db_counters(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    let counters = bf_args.world_state.perf_counters();
     Ok(Ret(counter_map(
-        &counters.all_counters(),
+        &db_counters().all_counters(),
         bf_args.config.use_symbols_in_builtins && bf_args.config.symbol_type,
     )))
 }

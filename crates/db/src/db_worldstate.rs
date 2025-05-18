@@ -12,7 +12,6 @@
 //
 
 use lazy_static::lazy_static;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::ws_transaction::WorldStateTransaction;
@@ -49,7 +48,7 @@ lazy_static! {
     static ref W_SYM: Symbol = Symbol::mk("w");
     static ref F_SYM: Symbol = Symbol::mk("f");
     static ref ALIASES_SYM: Symbol = Symbol::mk("aliases");
-    static ref WORLD_STATE_PERF: Arc<WorldStatePerf> = Arc::new(WorldStatePerf::new());
+    static ref WORLD_STATE_PERF: WorldStatePerf = WorldStatePerf::new();
 }
 
 pub fn db_counters<'a>() -> &'a WorldStatePerf {
@@ -849,9 +848,5 @@ impl WorldState for DbWorldState {
     fn rollback(self: Box<Self>) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.rollback);
         self.tx.rollback()
-    }
-
-    fn perf_counters(&self) -> Arc<WorldStatePerf> {
-        WORLD_STATE_PERF.clone()
     }
 }

@@ -12,7 +12,6 @@
 //
 
 use bincode::{Decode, Encode};
-use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -405,8 +404,6 @@ pub trait WorldState: Send {
 
     /// Rollback all modifications made to the state of this world since the start of its transaction.
     fn rollback(self: Box<Self>) -> Result<(), WorldStateError>;
-
-    fn perf_counters(&self) -> Arc<WorldStatePerf>;
 }
 
 pub trait WorldStateSource: Send {

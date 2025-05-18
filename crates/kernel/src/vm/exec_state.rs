@@ -16,7 +16,6 @@ use lazy_static::lazy_static;
 use moor_var::NOTHING;
 use moor_var::{Obj, Symbol};
 use moor_var::{Var, v_obj};
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use crate::PhantomUnsync;
@@ -25,10 +24,10 @@ use moor_common::tasks::TaskId;
 use moor_common::util::PerfCounter;
 
 lazy_static! {
-    static ref VM_COUNTERS: Arc<VmCounters> = Arc::new(VmCounters::new());
+    static ref VM_COUNTERS: VmCounters = VmCounters::new();
 }
 
-pub fn vm_counters<'a>() -> &'a Arc<VmCounters> {
+pub fn vm_counters<'a>() -> &'a VmCounters {
     &VM_COUNTERS
 }
 

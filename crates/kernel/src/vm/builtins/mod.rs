@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use fast_counter::ConcurrentCounter;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 use thiserror::Error;
@@ -56,7 +55,7 @@ mod bf_values;
 mod bf_verbs;
 
 lazy_static! {
-    static ref BF_COUNTERS: Arc<BfCounters> = Arc::new(BfCounters::new());
+    static ref BF_COUNTERS: BfCounters = BfCounters::new();
 }
 
 pub struct BfCounters(Vec<PerfCounter>);
@@ -70,12 +69,8 @@ impl Default for BfCounters {
 impl BfCounters {
     pub fn new() -> Self {
         let mut counters = Vec::with_capacity(BUILTINS.number_of());
-        for i in 0..BUILTINS.number_of() {
-            counters.push(PerfCounter {
-                operation: BUILTINS.names[&BuiltinId(i as u16)],
-                invocations: ConcurrentCounter::new(0),
-                cumulative_duration_nanos: ConcurrentCounter::new(0),
-            });
+        for (_, b) in &BUILTINS.names {
+            counters.push(PerfCounter::new(b.as_str()));
         }
         Self(counters)
     }

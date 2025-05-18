@@ -12,7 +12,6 @@
 //
 
 use std::fmt::Debug;
-use std::sync::Arc;
 use std::time::SystemTime;
 
 use bincode::{Decode, Encode};
@@ -42,7 +41,7 @@ pub const DEFAULT_BG_SECONDS: u64 = 3;
 pub const DEFAULT_MAX_STACK_DEPTH: usize = 50;
 
 lazy_static! {
-    static ref SCHED_COUNTERS: Arc<SchedulerPerfCounters> = Arc::new(SchedulerPerfCounters::new());
+    static ref SCHED_COUNTERS: SchedulerPerfCounters = SchedulerPerfCounters::new();
 }
 
 pub fn sched_counters<'a>() -> &'a SchedulerPerfCounters {
