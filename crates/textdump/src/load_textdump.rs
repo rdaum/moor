@@ -85,7 +85,6 @@ fn cv_aspec_flag(flags: u16) -> ArgSpec {
     }
 }
 
-#[tracing::instrument(skip(ldr))]
 pub fn textdump_load(
     ldr: &mut dyn LoaderInterface,
     path: PathBuf,
@@ -207,7 +206,6 @@ pub fn read_textdump<T: io::Read>(
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(resolved.flags);
             if resolved.definer == *objid {
-                trace!(definer = ?objid, name = resolved.name, "Defining property");
                 let value = Some(resolved.value);
                 loader
                     .define_property(

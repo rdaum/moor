@@ -11,13 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::args::Args;
 use crate::rpc_server::RpcServer;
 use crate::workers_server::WorkersServer;
 use clap::Parser;
-use eyre::Report;
+use eyre::{Report, bail};
 use moor_common::build;
 use moor_db::{Database, TxDB};
 use moor_kernel::config::ImportExportFormat;
@@ -26,7 +27,7 @@ use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_objdef::ObjectDefinitionLoader;
 use moor_textdump::textdump_load;
 use rpc_common::load_keypair;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 mod connections;
@@ -41,12 +42,55 @@ mod tasks_fjall;
 mod workers_server;
 
 // main.rs
+use moor_common::model::CommitResult;
+use moor_common::model::loader::LoaderInterface;
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
+
+fn perform_import(
+    config: &moor_kernel::config::Config,
+    import_path: &PathBuf,
+    mut loader_interface: Box<dyn LoaderInterface>,
+    version: semver::Version,
+) -> Result<(), Report> {
+    let start = std::time::Instant::now();
+    // We have two ways of loading textdump.
+    // legacy "textdump" format from LambdaMOO,
+    // or our own exploded objdef format.
+    match &config.import_export_config.import_format {
+        ImportExportFormat::Objdef => {
+            let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
+            od.read_dirdump(
+                config.features_config.compile_options(),
+                import_path.as_ref(),
+            )
+            .unwrap();
+        }
+        ImportExportFormat::Textdump => {
+            textdump_load(
+                loader_interface.as_mut(),
+                import_path.clone(),
+                version.clone(),
+                config.features_config.compile_options(),
+            )
+            .unwrap();
+        }
+    }
+
+    let result = loader_interface.commit()?;
+
+    if result == CommitResult::Success {
+        info!("Import complete in {:?}", start.elapsed());
+    } else {
+        error!("Import failed due to commit failure: {:?}", result);
+        bail!("Import failed");
+    }
+    Ok(())
+}
 
 /// Host for the moor runtime.
 ///   * Brings up the database
@@ -123,39 +167,39 @@ fn main() -> Result<(), Report> {
             info!("Database already exists, skipping textdump import");
         } else {
             info!("Loading textdump from {:?}", import_path);
-            let start = std::time::Instant::now();
-            let mut loader_interface = database
+            let loader_interface = database
                 .loader_client()
                 .expect("Unable to get loader interface from database");
 
-            // We have two ways of loading textdump.
-            // legacy "textdump" format from LambdaMOO,
-            // or our own exploded objdef format.
-            match &config.import_export_config.import_format {
-                ImportExportFormat::Objdef => {
-                    let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
-                    od.read_dirdump(
-                        config.features_config.compile_options(),
-                        import_path.as_ref(),
-                    )
-                    .unwrap();
+            if perform_import(
+                config.as_ref(),
+                import_path,
+                loader_interface,
+                version.clone(),
+            )
+            .is_err()
+            {
+                // If import failed, we need to get the old database file out of the way. We don't want to
+                // leave a dirty empty database file around, or it will be picked up next time.
+                // We could just delete the databse, but we might have regrets about that,
+                // So let's move the whole directory to XXX.timestamp ...
+                info!("Import failed. Deleting database at {:?}", args.db_args.db);
+                let destination = format!(
+                    "{}.{}",
+                    args.db_args.db.to_str().unwrap(),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs()
+                );
+                if let Err(e) = std::fs::rename(&args.db_args.db, &destination) {
+                    panic!("Failed to rename database: {:?}", e);
+                } else {
+                    info!("Moved (likely empty) database to {:?}", destination);
                 }
-                ImportExportFormat::Textdump => {
-                    textdump_load(
-                        loader_interface.as_mut(),
-                        import_path.clone(),
-                        version.clone(),
-                        config.features_config.compile_options(),
-                    )
-                    .unwrap();
-                }
+                error!("Exiting due to import failure...");
+                std::process::exit(1);
             }
-
-            let duration = start.elapsed();
-            info!("Loaded textdump in {:?}", duration);
-            loader_interface
-                .commit()
-                .expect("Failure to commit loaded database...");
         }
     }
 
