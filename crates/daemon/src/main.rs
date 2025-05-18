@@ -193,7 +193,7 @@ fn main() -> Result<(), Report> {
                         .as_secs()
                 );
                 if let Err(e) = std::fs::rename(&args.db_args.db, &destination) {
-                    panic!("Failed to rename database: {:?}", e);
+                    error!("Failed to rename database: {:?}", e);
                 } else {
                     info!("Moved (likely empty) database to {:?}", destination);
                 }
