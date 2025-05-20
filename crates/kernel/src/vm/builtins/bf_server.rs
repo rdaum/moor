@@ -1637,7 +1637,7 @@ fn bf_force_input(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
-/// worker_request(worker_type, args, ...)
+/// worker_request(worker_type, args, ... [, timeout])
 /// Sends a request to a worker (e.g. outbound HTTP, files, etc.) to perform some action.
 /// Task then goes into suspension until the request is completed or times out.
 /// Wizard only.
@@ -1648,16 +1648,57 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    if bf_args.args.len() < 2 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
         return Err(Code(E_ARGS));
     }
 
     let worker_type = bf_args.args[0].as_symbol().map_err(ErrValue)?;
+    let request_params = match bf_args.args[1].variant() {
+        Variant::List(l) => l.iter().collect(),
+        _ => {
+            return Err(ErrValue(E_TYPE.msg(
+                "worker_request: second argument must be a list of request parameters",
+            )));
+        }
+    };
 
-    // The args are everything after the first argument
-    let args = bf_args.args.iter().skip(1).collect();
+    let mut timeout = None;
+    if bf_args.args.len() == 3 {
+        match bf_args.args[2].variant() {
+            Variant::Map(m) => {
+                for (k, v) in m.iter() {
+                    let key = k.as_symbol().map_err(ErrValue)?;
+                    if key.as_str() == "timeout_seconds" {
+                        if let Variant::Float(secs) = v.variant() {
+                            timeout = Some(Duration::from_secs_f64(*secs));
+                        }
+                    }
+                }
+            }
+            Variant::List(l) => {
+                for pair in l.iter() {
+                    match pair.variant() {
+                        Variant::List(pair_list) if pair_list.len() == 2 => {
+                            let key = pair_list[0].as_symbol().map_err(ErrValue)?;
+                            if key.as_str() == "timeout_seconds" {
+                                if let Variant::Float(secs) = pair_list[1].variant() {
+                                    timeout = Some(Duration::from_secs_f64(*secs));
+                                }
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+            }
+            _ => {
+                return Err(ErrValue(E_TYPE.msg(
+                    "worker_request: third argument must be a map or alist of worker arguments",
+                )));
+            }
+        }
+    }
     Ok(VmInstr(ExecutionResult::TaskSuspend(
-        TaskSuspend::WorkerRequest(worker_type, args),
+        TaskSuspend::WorkerRequest(worker_type, request_params, timeout),
     )))
 }
 

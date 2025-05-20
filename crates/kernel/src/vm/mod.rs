@@ -96,7 +96,7 @@ pub enum TaskSuspend {
     Commit,
     /// Ask the scheduler to ask a worker to do some work, suspend us, and then resume us when
     /// the work is done.
-    WorkerRequest(Symbol, Vec<Var>),
+    WorkerRequest(Symbol, Vec<Var>, Option<Duration>),
 }
 
 /// The minimum set of information needed to make a *resolution* call for a verb.
