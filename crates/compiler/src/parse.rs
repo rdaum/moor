@@ -967,11 +967,10 @@ impl TreeTransformer {
                     None => None,
                     Some(s) => {
                         let varname = s.as_str();
-                        let Some(key_var) =
-                            self.names.borrow_mut().declare_name(varname, DeclType::For)
-                        else {
-                            return Err(DuplicateVariable(context, varname.into()));
-                        };
+                        let key_var = self
+                            .names
+                            .borrow_mut()
+                            .declare_or_use_name(varname, DeclType::For);
                         Some(key_var)
                     }
                 };
@@ -3115,5 +3114,22 @@ mod tests {
                 .find_name("returnval")
                 .unwrap())))))]
         );
+    }
+
+    #[test]
+    fn test_scope_regression() {
+        let program = r#"
+        {dude, chamber, chamber_index} = args;
+        if (chamber.mode == "package")
+          reagent = $player_drug_reagent:create(chamber.product_name, chamber.reagents, chamber.quality);
+          this.reagents[reagent] = `this.reagents[reagent] ! ANY => 0' + 5;
+        endif
+        for quantity, reagent in (received_reagents)
+          this.reagents[reagent] = `this.reagents[reagent] ! ANY => 0' + quantity;
+        endfor
+        "#;
+
+        let options = CompileOptions::default();
+        parse_program(program, options).unwrap();
     }
 }
