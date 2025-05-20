@@ -13,23 +13,23 @@
 
 //! The core of the server logic for the RPC daemon
 
+use crossbeam_channel::{Receiver, Select, Sender};
+use eyre::{Context, Error};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
-use eyre::{Context, Error};
-
 use crate::connections::ConnectionsDB;
 use crate::connections_fjall::ConnectionsFjall;
 use crate::rpc_hosts::Hosts;
-use crate::rpc_session::RpcSession;
+use crate::rpc_session::{RpcSession, SessionActions};
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, preposition_to_string};
 use moor_common::tasks::SchedulerError::CommandExecutionError;
+use moor_common::tasks::SessionError;
 use moor_common::tasks::SessionError::DeliveryError;
 use moor_common::tasks::{CommandError, NarrativeEvent, SchedulerError, TaskId};
-use moor_common::tasks::{Session, SessionError};
 use moor_common::util::parse_into_words;
 use moor_db::db_counters;
 use moor_kernel::SchedulerClient;
@@ -57,28 +57,35 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use zmq::{Socket, SocketType};
 
+// TODO: split up the transport/rpc layer from the session handling / events logic better, and get
+//  rid of the last vestiges of Arc<Self>
+
 pub struct RpcServer {
     zmq_context: zmq::Context,
+    config: Arc<Config>,
     public_key: Key<32>,
     private_key: Key<64>,
-    pub(crate) events_publish: Arc<Mutex<Socket>>,
-    connections: Arc<dyn ConnectionsDB + Send + Sync>,
-    task_handles: Mutex<HashMap<TaskId, (Uuid, TaskHandle)>>,
-    config: Arc<Config>,
+
     pub(crate) kill_switch: Arc<AtomicBool>,
 
-    pub(crate) hosts: Arc<RwLock<Hosts>>,
-    pub(crate) host_token_cache: Arc<RwLock<HashMap<HostToken, (Instant, HostType)>>>,
-    pub(crate) auth_token_cache: Arc<RwLock<HashMap<AuthToken, (Instant, Obj)>>>,
-    pub(crate) client_token_cache: Arc<RwLock<HashMap<ClientToken, Instant>>>,
+    connections: Box<dyn ConnectionsDB + Send + Sync>,
+    task_handles: Mutex<HashMap<TaskId, (Uuid, TaskHandle)>>,
+    mailbox_receive: Receiver<SessionActions>,
+
+    pub(crate) hosts: RwLock<Hosts>,
+
+    host_token_cache: RwLock<HashMap<HostToken, (Instant, HostType)>>,
+    auth_token_cache: RwLock<HashMap<AuthToken, (Instant, Obj)>>,
+    client_token_cache: RwLock<HashMap<ClientToken, Instant>>,
+
+    pub(crate) mailbox_sender: Sender<SessionActions>,
+    pub(crate) events_publish: Mutex<Socket>,
 }
 
 /// If we don't hear from a host in this time, we consider it dead and its listeners gone.
 pub const HOST_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub(crate) fn pack_client_response(
-    result: Result<DaemonToClientReply, RpcMessageError>,
-) -> Vec<u8> {
+fn pack_client_response(result: Result<DaemonToClientReply, RpcMessageError>) -> Vec<u8> {
     let rpc_result = match result {
         Ok(r) => ReplyResult::ClientSuccess(r),
         Err(e) => ReplyResult::Failure(e),
@@ -86,15 +93,13 @@ pub(crate) fn pack_client_response(
     bincode::encode_to_vec(&rpc_result, bincode::config::standard()).unwrap()
 }
 
-pub(crate) fn pack_host_response(result: Result<DaemonToHostReply, RpcMessageError>) -> Vec<u8> {
+fn pack_host_response(result: Result<DaemonToHostReply, RpcMessageError>) -> Vec<u8> {
     let rpc_result = match result {
         Ok(r) => ReplyResult::HostSuccess(r),
         Err(e) => ReplyResult::Failure(e),
     };
     bincode::encode_to_vec(&rpc_result, bincode::config::standard()).unwrap()
 }
-
-// TODO: ditch the Arc<Self> stuff here completely, use channels instead.
 
 impl RpcServer {
     pub fn new(
@@ -118,33 +123,32 @@ impl RpcServer {
         publish
             .bind(narrative_endpoint)
             .expect("Unable to bind ZMQ PUB socket");
-        let connections = Arc::new(ConnectionsFjall::open(Some(&connections_db_path)));
+        let connections = Box::new(ConnectionsFjall::open(Some(&connections_db_path)));
         info!(
             "Created connections list, with {} initial known connections",
             connections.connections().len()
         );
         let kill_switch = Arc::new(AtomicBool::new(false));
+        let (mailbox_sender, mailbox_receive) = crossbeam_channel::unbounded();
         Self {
             public_key,
             private_key,
             connections,
-            events_publish: Arc::new(Mutex::new(publish)),
+            events_publish: Mutex::new(publish),
             zmq_context,
             task_handles: Default::default(),
             config,
             kill_switch,
             hosts: Default::default(),
-            host_token_cache: Arc::new(RwLock::new(Default::default())),
-            auth_token_cache: Arc::new(RwLock::new(Default::default())),
-            client_token_cache: Arc::new(RwLock::new(Default::default())),
+            mailbox_sender,
+            mailbox_receive,
+            host_token_cache: RwLock::new(Default::default()),
+            auth_token_cache: RwLock::new(Default::default()),
+            client_token_cache: RwLock::new(Default::default()),
         }
     }
 
-    pub(crate) fn kill_switch(&self) -> Arc<AtomicBool> {
-        self.kill_switch.clone()
-    }
-
-    pub(crate) fn request_loop(
+    pub fn request_loop(
         self: Arc<Self>,
         rpc_endpoint: String,
         scheduler_client: SchedulerClient,
@@ -195,7 +199,7 @@ impl RpcServer {
                     .expect("Unable to start proxy");
             })?;
 
-        // Final piece processes the task completions, and the kill switch.
+        // Final piece processes the session events and task completions, and the kill switch.
         let control_socket = self.zmq_context.socket(zmq::REQ)?;
         control_socket.connect("inproc://rpc-proxy-steer")?;
         loop {
@@ -205,12 +209,87 @@ impl RpcServer {
                 return Ok(());
             }
 
+            // Check the mailbox
+            if let Ok(session_event) = self.mailbox_receive.recv() {
+                match session_event {
+                    SessionActions::PublishNarrativeEvents(events) => {
+                        if let Err(e) = self.publish_narrative_events(&events) {
+                            error!(error = ?e, "Unable to publish narrative events");
+                        }
+                    }
+                    SessionActions::RequestClientInput(client_id, connection, input_request_id) => {
+                        if let Err(e) =
+                            self.request_client_input(client_id, connection, input_request_id)
+                        {
+                            error!(error = ?e, "Unable to request client input");
+                        }
+                    }
+                    SessionActions::SendSystemMessage(client_id, connection, message) => {
+                        if let Err(e) = self.send_system_message(client_id, connection, message) {
+                            error!(error = ?e, "Unable to send system message");
+                        }
+                    }
+                    SessionActions::RequestConnectionName(_client_id, connection, reply) => {
+                        let connection_send_result = match self.connection_name_for(connection) {
+                            Ok(c) => reply.send(Ok(c)),
+                            Err(e) => {
+                                error!(error = ?e, "Unable to get connection name");
+                                reply.send(Err(e))
+                            }
+                        };
+                        if let Err(e) = connection_send_result {
+                            error!(error = ?e, "Unable to send connection name");
+                        }
+                    }
+                    SessionActions::Disconnect(_client_id, connection) => {
+                        if let Err(e) = self.disconnect(connection) {
+                            error!(error = ?e, "Unable to disconnect client");
+                        }
+                    }
+                    SessionActions::RequestConnectedPlayers(_client_id, reply) => {
+                        let connected_players_send_result = match self.connected_players() {
+                            Ok(c) => reply.send(Ok(c)),
+                            Err(e) => {
+                                error!(error = ?e, "Unable to get connected players");
+                                reply.send(Err(e))
+                            }
+                        };
+                        if let Err(e) = connected_players_send_result {
+                            error!(error = ?e, "Unable to send connected players");
+                        }
+                    }
+                    SessionActions::RequestConnectedSeconds(_client_id, connection, reply) => {
+                        let connected_seconds_send_result =
+                            match self.connected_seconds_for(connection) {
+                                Ok(c) => reply.send(Ok(c)),
+                                Err(e) => {
+                                    error!(error = ?e, "Unable to get connected seconds");
+                                    reply.send(Err(e))
+                                }
+                            };
+                        if let Err(e) = connected_seconds_send_result {
+                            error!(error = ?e, "Unable to send connected seconds");
+                        }
+                    }
+                    SessionActions::RequestIdleSeconds(_client_id, connection, reply) => {
+                        let idle_seconds_send_result = match self.idle_seconds_for(connection) {
+                            Ok(c) => reply.send(Ok(c)),
+                            Err(e) => {
+                                error!(error = ?e, "Unable to get idle seconds");
+                                reply.send(Err(e))
+                            }
+                        };
+                        if let Err(e) = idle_seconds_send_result {
+                            error!(error = ?e, "Unable to send idle seconds");
+                        }
+                    }
+                }
+            }
             // Check any task handles for completion.
             // TODO: rewrite the task completion checking here to not poll and use a lock.
             //  we can probably do something much nicer with channels, etc.
-            self.clone().process_task_completions();
-
-            std::thread::sleep(Duration::from_micros(1));
+            self.clone()
+                .process_task_completions(Duration::from_millis(10));
         }
     }
 
@@ -352,8 +431,8 @@ impl RpcServer {
         Ok(connection)
     }
 
-    pub fn process_host_request(
-        self: Arc<Self>,
+    fn process_host_request(
+        &self,
         host_token: HostToken,
         host_message: HostToDaemonMessage,
     ) -> Vec<u8> {
@@ -432,8 +511,8 @@ impl RpcServer {
     }
 
     /// Process a request (originally ZMQ REQ) and produce a reply (becomes ZMQ REP)
-    pub fn process_request(
-        self: Arc<Self>,
+    fn process_request(
+        &self,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         request: HostClientToDaemonMessage,
@@ -458,7 +537,7 @@ impl RpcServer {
                 let client_token = self.make_client_token(client_id);
 
                 if let Some(connect_type) = connect_type {
-                    if let Err(e) = self.clone().submit_connected_task(
+                    if let Err(e) = self.submit_connected_task(
                         &handler_object,
                         scheduler_client,
                         client_id,
@@ -494,13 +573,12 @@ impl RpcServer {
             HostClientToDaemonMessage::RequestSysProp(token, object, property) => {
                 let connection = self.client_auth(token, client_id)?;
 
-                self.clone()
-                    .request_sys_prop(scheduler_client, connection, object, property)
+                self.request_sys_prop(scheduler_client, connection, object, property)
             }
             HostClientToDaemonMessage::LoginCommand(token, handler_object, args, attach) => {
                 let connection = self.client_auth(token, client_id)?;
 
-                self.clone().perform_login(
+                self.perform_login(
                     &handler_object,
                     scheduler_client,
                     client_id,
@@ -513,7 +591,7 @@ impl RpcServer {
                 let connection = self.client_auth(token, client_id)?;
                 self.validate_auth_token(auth_token, Some(&connection))?;
 
-                self.clone().perform_command(
+                self.perform_command(
                     scheduler_client,
                     client_id,
                     &handler_object,
@@ -525,19 +603,13 @@ impl RpcServer {
                 let connection = self.client_auth(token, client_id)?;
                 self.validate_auth_token(auth_token, Some(&connection))?;
 
-                self.clone().respond_input(
-                    scheduler_client,
-                    client_id,
-                    &connection,
-                    request_id,
-                    input,
-                )
+                self.respond_input(scheduler_client, client_id, &connection, request_id, input)
             }
             HostClientToDaemonMessage::OutOfBand(token, auth_token, handler_object, command) => {
                 let connection = self.client_auth(token, client_id)?;
                 self.validate_auth_token(auth_token, Some(&connection))?;
 
-                self.clone().perform_out_of_band(
+                self.perform_out_of_band(
                     scheduler_client,
                     &handler_object,
                     client_id,
@@ -549,15 +621,14 @@ impl RpcServer {
             HostClientToDaemonMessage::Eval(token, auth_token, evalstr) => {
                 let connection = self.client_auth(token, client_id)?;
                 self.validate_auth_token(auth_token, Some(&connection))?;
-                self.clone()
-                    .eval(scheduler_client, client_id, &connection, evalstr)
+                self.eval(scheduler_client, client_id, &connection, evalstr)
             }
 
             HostClientToDaemonMessage::InvokeVerb(token, auth_token, object, verb, args) => {
                 let connection = self.client_auth(token, client_id)?;
                 self.validate_auth_token(auth_token, Some(&connection))?;
 
-                self.clone().invoke_verb(
+                self.invoke_verb(
                     scheduler_client,
                     client_id,
                     &connection,
@@ -704,7 +775,7 @@ impl RpcServer {
                 // Submit disconnected only if this is an authenticated user... that is,
                 // the connection oid >= 0
                 if connection.is_positive() {
-                    if let Err(e) = self.clone().submit_disconnected_task(
+                    if let Err(e) = self.submit_disconnected_task(
                         &SYSTEM_OBJECT,
                         scheduler_client,
                         client_id,
@@ -726,7 +797,7 @@ impl RpcServer {
                 let connection = self.client_auth(token, client_id)?;
                 self.validate_auth_token(auth_token, Some(&connection))?;
 
-                self.clone().program_verb(
+                self.program_verb(
                     scheduler_client,
                     client_id,
                     &connection,
@@ -738,102 +809,8 @@ impl RpcServer {
         }
     }
 
-    pub(crate) fn new_session(
-        self: Arc<Self>,
-        client_id: Uuid,
-        connection: Obj,
-    ) -> Result<Arc<dyn Session>, SessionError> {
-        debug!(?client_id, ?connection, "Started session",);
-
-        Ok(Arc::new(RpcSession::new(
-            client_id,
-            self.clone(),
-            connection,
-        )))
-    }
-
-    pub(crate) fn connection_name_for(&self, player: Obj) -> Result<String, SessionError> {
-        self.connections.connection_name_for(player)
-    }
-
-    #[allow(dead_code)]
-    fn last_activity_for(&self, player: Obj) -> Result<SystemTime, SessionError> {
-        self.connections.last_activity_for(player)
-    }
-
-    pub(crate) fn idle_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
-        let last_activity = self.connections.last_activity_for(player)?;
-        Ok(last_activity
-            .elapsed()
-            .map(|e| e.as_secs_f64())
-            .unwrap_or(0.0))
-    }
-
-    pub(crate) fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
-        self.connections.connected_seconds_for(player)
-    }
-
-    // TODO this will issue physical disconnects to *all* connections for this player.
-    //   which probably isn't what you really want. This is just here to keep the existing behaviour
-    //   of @quit and @boot-player working.
-    //   in reality players using "@quit" will probably really want to just "sleep", and cores
-    //   should be modified to reflect that.
-    pub(crate) fn disconnect(&self, player: Obj) -> Result<(), SessionError> {
-        warn!("Disconnecting player: {}", player);
-        let all_client_ids = self.connections.client_ids_for(player)?;
-
-        let publish = self.events_publish.lock().unwrap();
-        let event = ClientEvent::Disconnect();
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
-            .expect("Unable to serialize disconnection event");
-        for client_id in all_client_ids {
-            let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
-            publish.send_multipart(payload, 0).map_err(|e| {
-                error!(
-                    "Unable to send disconnection event to narrative channel: {}",
-                    e
-                );
-                DeliveryError
-            })?
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn connected_players(&self) -> Result<Vec<Obj>, SessionError> {
-        let connections = self.connections.connections();
-        Ok(connections
-            .iter()
-            .filter(|o| o > &&SYSTEM_OBJECT)
-            .cloned()
-            .collect())
-    }
-
-    fn request_sys_prop(
-        self: Arc<Self>,
-        scheduler_client: SchedulerClient,
-        player: Obj,
-        object: ObjectRef,
-        property: Symbol,
-    ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let pv = match scheduler_client.request_system_property(&player, &object, property) {
-            Ok(pv) => pv,
-            Err(CommandExecutionError(CommandError::NoObjectMatch)) => {
-                return Ok(DaemonToClientReply::SysPropValue(None));
-            }
-            Err(e) => {
-                error!(error = ?e, "Error requesting system property");
-                return Err(RpcMessageError::ErrorCouldNotRetrieveSysProp(
-                    "error requesting system property".to_string(),
-                ));
-            }
-        };
-
-        Ok(DaemonToClientReply::SysPropValue(Some(pv)))
-    }
-
     fn perform_login(
-        self: Arc<Self>,
+        &self,
         handler_object: &Obj,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
@@ -853,9 +830,11 @@ impl RpcServer {
             "Performing {:?} login for client: {}, with args: {:?}",
             connect_type, client_id, args
         );
-        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
-            return Err(RpcMessageError::CreateSessionFailed);
-        };
+        let session = Arc::new(RpcSession::new(
+            client_id,
+            connection.clone(),
+            self.mailbox_sender.clone(),
+        ));
         let mut task_handle = match scheduler_client.submit_verb_task(
             connection,
             &ObjectRef::Id(handler_object.clone()),
@@ -875,11 +854,11 @@ impl RpcServer {
         let player = loop {
             let receiver = task_handle.into_receiver();
             match receiver.recv() {
-                Ok(Ok(TaskResult::Replaced(th))) => {
+                Ok((_, Ok(TaskResult::Replaced(th)))) => {
                     task_handle = th;
                     continue;
                 }
-                Ok(Ok(TaskResult::Result(v))) => {
+                Ok((_, Ok(TaskResult::Result(v)))) => {
                     // If v is an objid, we have a successful login and we need to rewrite this
                     // client id to use the player objid and then return a result to the client.
                     // with its new player objid and login result.
@@ -891,7 +870,7 @@ impl RpcServer {
                         }
                     }
                 }
-                Ok(Err(e)) => {
+                Ok((_, Err(e))) => {
                     error!(error = ?e, "Error waiting for login results");
 
                     return Err(RpcMessageError::LoginTaskFailed);
@@ -914,7 +893,7 @@ impl RpcServer {
         };
 
         if attach {
-            if let Err(e) = self.clone().submit_connected_task(
+            if let Err(e) = self.submit_connected_task(
                 handler_object,
                 scheduler_client,
                 client_id,
@@ -938,17 +917,18 @@ impl RpcServer {
     }
 
     fn submit_connected_task(
-        self: Arc<Self>,
+        &self,
         handler_object: &Obj,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         player: &Obj,
         initiation_type: ConnectType,
     ) -> Result<(), Error> {
-        let session = self
-            .clone()
-            .new_session(client_id, player.clone())
-            .with_context(|| "could not create 'connected' task session for player")?;
+        let session = Arc::new(RpcSession::new(
+            client_id,
+            player.clone(),
+            self.mailbox_sender.clone(),
+        ));
 
         let connected_verb = match initiation_type {
             ConnectType::Connected => Symbol::mk("user_connected"),
@@ -970,16 +950,17 @@ impl RpcServer {
     }
 
     fn submit_disconnected_task(
-        self: Arc<Self>,
+        &self,
         handler_object: &Obj,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         player: &Obj,
     ) -> Result<(), Error> {
-        let session = self
-            .clone()
-            .new_session(client_id, player.clone())
-            .with_context(|| "could not create 'connected' task session for player")?;
+        let session = Arc::new(RpcSession::new(
+            client_id,
+            player.clone(),
+            self.mailbox_sender.clone(),
+        ));
 
         scheduler_client
             .submit_verb_task(
@@ -996,16 +977,18 @@ impl RpcServer {
     }
 
     fn perform_command(
-        self: Arc<Self>,
+        &self,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         handler_object: &Obj,
         connection: &Obj,
         command: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
-            return Err(RpcMessageError::CreateSessionFailed);
-        };
+        let session = Arc::new(RpcSession::new(
+            client_id,
+            connection.clone(),
+            self.mailbox_sender.clone(),
+        ));
 
         if let Err(e) = self
             .connections
@@ -1037,7 +1020,7 @@ impl RpcServer {
     }
 
     fn respond_input(
-        self: Arc<Self>,
+        &self,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: &Obj,
@@ -1064,16 +1047,18 @@ impl RpcServer {
 
     /// Call $do_out_of_band(command)
     fn perform_out_of_band(
-        self: Arc<Self>,
+        &self,
         scheduler_client: SchedulerClient,
         handler_object: &Obj,
         client_id: Uuid,
         connection: &Obj,
         command: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
-            return Err(RpcMessageError::CreateSessionFailed);
-        };
+        let session = Arc::new(RpcSession::new(
+            client_id,
+            connection.clone(),
+            self.mailbox_sender.clone(),
+        ));
 
         let command_components = parse_into_words(command.as_str());
         let task_handle = match scheduler_client.submit_out_of_band_task(
@@ -1098,15 +1083,17 @@ impl RpcServer {
     }
 
     fn eval(
-        self: Arc<Self>,
+        &self,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: &Obj,
         expression: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
-            return Err(RpcMessageError::CreateSessionFailed);
-        };
+        let session = Arc::new(RpcSession::new(
+            client_id,
+            connection.clone(),
+            self.mailbox_sender.clone(),
+        ));
 
         let mut task_handle = match scheduler_client.submit_eval_task(
             connection,
@@ -1123,12 +1110,12 @@ impl RpcServer {
         };
         loop {
             match task_handle.into_receiver().recv() {
-                Ok(Ok(TaskResult::Replaced(th))) => {
+                Ok((_, Ok(TaskResult::Replaced(th)))) => {
                     task_handle = th;
                     continue;
                 }
-                Ok(Ok(TaskResult::Result(v))) => break Ok(DaemonToClientReply::EvalResult(v)),
-                Ok(Err(e)) => break Err(RpcMessageError::TaskError(e)),
+                Ok((_, Ok(TaskResult::Result(v)))) => break Ok(DaemonToClientReply::EvalResult(v)),
+                Ok((_, Err(e))) => break Err(RpcMessageError::TaskError(e)),
                 Err(e) => {
                     error!(error = ?e, "Error processing eval");
 
@@ -1139,7 +1126,7 @@ impl RpcServer {
     }
 
     fn invoke_verb(
-        self: Arc<Self>,
+        &self,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         connection: &Obj,
@@ -1147,9 +1134,11 @@ impl RpcServer {
         verb: Symbol,
         args: Vec<Var>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let Ok(session) = self.clone().new_session(client_id, connection.clone()) else {
-            return Err(RpcMessageError::CreateSessionFailed);
-        };
+        let session = Arc::new(RpcSession::new(
+            client_id,
+            connection.clone(),
+            self.mailbox_sender.clone(),
+        ));
 
         let task_handle = match scheduler_client.submit_verb_task(
             connection,
@@ -1174,22 +1163,14 @@ impl RpcServer {
     }
 
     fn program_verb(
-        self: Arc<Self>,
+        &self,
         scheduler_client: SchedulerClient,
-        client_id: Uuid,
+        _client_id: Uuid,
         connection: &Obj,
         object: &ObjectRef,
         verb: Symbol,
         code: Vec<String>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        if self
-            .clone()
-            .new_session(client_id, connection.clone())
-            .is_err()
-        {
-            return Err(RpcMessageError::CreateSessionFailed);
-        };
-
         let verb = Symbol::mk_case_insensitive(verb.as_str());
         match scheduler_client.submit_verb_program(connection, connection, object, verb, code) {
             Ok((obj, verb)) => Ok(DaemonToClientReply::ProgramResponse(
@@ -1200,122 +1181,6 @@ impl RpcServer {
             )),
             Err(e) => Err(RpcMessageError::TaskError(e)),
         }
-    }
-
-    fn process_task_completions(self: Arc<Self>) {
-        let mut th_q = self.task_handles.lock().unwrap();
-
-        let mut completed = vec![];
-        let mut gone = vec![];
-
-        for (task_id, (client_id, task_handle)) in th_q.iter() {
-            match task_handle.receiver().try_recv() {
-                Ok(result) => completed.push((*task_id, *client_id, result)),
-                Err(oneshot::TryRecvError::Disconnected) => gone.push(*task_id),
-                Err(oneshot::TryRecvError::Empty) => {
-                    continue;
-                }
-            }
-        }
-        for task_id in gone {
-            th_q.remove(&task_id);
-        }
-        if !completed.is_empty() {
-            let publish = self.events_publish.lock().unwrap();
-            for (task_id, client_id, result) in completed {
-                let result = match result {
-                    Ok(TaskResult::Result(v)) => ClientEvent::TaskSuccess(task_id, v),
-                    Ok(TaskResult::Replaced(th)) => {
-                        info!(?client_id, ?task_id, "Task restarted");
-                        th_q.insert(task_id, (client_id, th));
-                        continue;
-                    }
-                    Err(e) => ClientEvent::TaskError(task_id, e),
-                };
-                debug!(?client_id, ?task_id, ?result, "Task completed");
-                let payload = bincode::encode_to_vec(&result, bincode::config::standard())
-                    .expect("Unable to serialize task result");
-                let payload = vec![client_id.as_bytes().to_vec(), payload];
-                if let Err(e) = publish.send_multipart(payload, 0) {
-                    error!(error = ?e, "Unable to send task result");
-                }
-                th_q.remove(&task_id);
-            }
-        }
-    }
-
-    pub(crate) fn publish_narrative_events(
-        &self,
-        events: &[(Obj, Box<NarrativeEvent>)],
-    ) -> Result<(), Error> {
-        let publish = self.events_publish.lock().unwrap();
-        for (player, event) in events {
-            let client_ids = self.connections.client_ids_for(player.clone())?;
-            let event = ClientEvent::Narrative(player.clone(), event.as_ref().clone());
-            let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
-            for client_id in &client_ids {
-                let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
-                publish.send_multipart(payload, 0).map_err(|e| {
-                    error!(error = ?e, "Unable to send narrative event");
-                    DeliveryError
-                })?;
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) fn send_system_message(
-        &self,
-        client_id: Uuid,
-        player: Obj,
-        message: String,
-    ) -> Result<(), SessionError> {
-        let event = ClientEvent::SystemMessage(player, message);
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
-            .expect("Unable to serialize system message");
-        let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish.send_multipart(payload, 0).map_err(|e| {
-                error!(error = ?e, "Unable to send system message");
-                DeliveryError
-            })?;
-        }
-        Ok(())
-    }
-
-    /// Request that the client dispatch its next input event through as an input event into the
-    /// scheduler submit_input, instead, with the attached input_request_id. So send a narrative
-    /// event to this *specific* client id letting it know that it should issue a prompt.
-    pub(crate) fn request_client_input(
-        &self,
-        client_id: Uuid,
-        player: Obj,
-        input_request_id: Uuid,
-    ) -> Result<(), SessionError> {
-        // Mark this client as in `input mode`, which means that instead of dispatching its next
-        // line to the scheduler as a command, it should instead dispatch it as an input event.
-
-        // Validate first.
-        let Some(connection) = self.connections.connection_object_for_client(client_id) else {
-            return Err(SessionError::NoConnectionForPlayer(player));
-        };
-        if connection != player {
-            return Err(SessionError::NoConnectionForPlayer(player));
-        }
-
-        let event = ClientEvent::RequestInput(input_request_id);
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
-            .expect("Unable to serialize input request");
-        let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish.send_multipart(payload, 0).map_err(|e| {
-                error!(error = ?e, "Unable to send input request");
-                DeliveryError
-            })?;
-        }
-        Ok(())
     }
 
     fn ping_pong(&self) -> Result<(), SessionError> {
@@ -1561,5 +1426,217 @@ impl RpcServer {
         let mut auth_tokens = self.auth_token_cache.write().unwrap();
         auth_tokens.insert(token.clone(), (Instant::now(), token_player.clone()));
         Ok(token_player)
+    }
+
+    // Session stuff below
+
+    fn publish_narrative_events(&self, events: &[(Obj, Box<NarrativeEvent>)]) -> Result<(), Error> {
+        let publish = self.events_publish.lock().unwrap();
+        for (player, event) in events {
+            let client_ids = self.connections.client_ids_for(player.clone())?;
+            let event = ClientEvent::Narrative(player.clone(), event.as_ref().clone());
+            let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
+            for client_id in &client_ids {
+                let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
+                publish.send_multipart(payload, 0).map_err(|e| {
+                    error!(error = ?e, "Unable to send narrative event");
+                    DeliveryError
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    fn send_system_message(
+        &self,
+        client_id: Uuid,
+        player: Obj,
+        message: String,
+    ) -> Result<(), SessionError> {
+        let event = ClientEvent::SystemMessage(player, message);
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
+            .expect("Unable to serialize system message");
+        let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
+        {
+            let publish = self.events_publish.lock().unwrap();
+            publish.send_multipart(payload, 0).map_err(|e| {
+                error!(error = ?e, "Unable to send system message");
+                DeliveryError
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Request that the client dispatch its next input event through as an input event into the
+    /// scheduler submit_input, instead, with the attached input_request_id. So send a narrative
+    /// event to this *specific* client id letting it know that it should issue a prompt.
+    fn request_client_input(
+        &self,
+        client_id: Uuid,
+        player: Obj,
+        input_request_id: Uuid,
+    ) -> Result<(), SessionError> {
+        // Mark this client as in `input mode`, which means that instead of dispatching its next
+        // line to the scheduler as a command, it should instead dispatch it as an input event.
+
+        // Validate first.
+        let Some(connection) = self.connections.connection_object_for_client(client_id) else {
+            return Err(SessionError::NoConnectionForPlayer(player));
+        };
+        if connection != player {
+            return Err(SessionError::NoConnectionForPlayer(player));
+        }
+
+        let event = ClientEvent::RequestInput(input_request_id);
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
+            .expect("Unable to serialize input request");
+        let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
+        {
+            let publish = self.events_publish.lock().unwrap();
+            publish.send_multipart(payload, 0).map_err(|e| {
+                error!(error = ?e, "Unable to send input request");
+                DeliveryError
+            })?;
+        }
+        Ok(())
+    }
+
+    fn connection_name_for(&self, player: Obj) -> Result<String, SessionError> {
+        self.connections.connection_name_for(player)
+    }
+
+    #[allow(dead_code)]
+    fn last_activity_for(&self, player: Obj) -> Result<SystemTime, SessionError> {
+        self.connections.last_activity_for(player)
+    }
+
+    fn idle_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
+        let last_activity = self.connections.last_activity_for(player)?;
+        Ok(last_activity
+            .elapsed()
+            .map(|e| e.as_secs_f64())
+            .unwrap_or(0.0))
+    }
+
+    fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
+        self.connections.connected_seconds_for(player)
+    }
+
+    // TODO this will issue physical disconnects to *all* connections for this player.
+    //   which probably isn't what you really want. This is just here to keep the existing behaviour
+    //   of @quit and @boot-player working.
+    //   in reality players using "@quit" will probably really want to just "sleep", and cores
+    //   should be modified to reflect that.
+    fn disconnect(&self, player: Obj) -> Result<(), SessionError> {
+        warn!("Disconnecting player: {}", player);
+        let all_client_ids = self.connections.client_ids_for(player)?;
+
+        let publish = self.events_publish.lock().unwrap();
+        let event = ClientEvent::Disconnect();
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
+            .expect("Unable to serialize disconnection event");
+        for client_id in all_client_ids {
+            let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
+            publish.send_multipart(payload, 0).map_err(|e| {
+                error!(
+                    "Unable to send disconnection event to narrative channel: {}",
+                    e
+                );
+                DeliveryError
+            })?
+        }
+
+        Ok(())
+    }
+
+    fn connected_players(&self) -> Result<Vec<Obj>, SessionError> {
+        let connections = self.connections.connections();
+        Ok(connections
+            .iter()
+            .filter(|o| o > &&SYSTEM_OBJECT)
+            .cloned()
+            .collect())
+    }
+
+    fn request_sys_prop(
+        &self,
+        scheduler_client: SchedulerClient,
+        player: Obj,
+        object: ObjectRef,
+        property: Symbol,
+    ) -> Result<DaemonToClientReply, RpcMessageError> {
+        let pv = match scheduler_client.request_system_property(&player, &object, property) {
+            Ok(pv) => pv,
+            Err(CommandExecutionError(CommandError::NoObjectMatch)) => {
+                return Ok(DaemonToClientReply::SysPropValue(None));
+            }
+            Err(e) => {
+                error!(error = ?e, "Error requesting system property");
+                return Err(RpcMessageError::ErrorCouldNotRetrieveSysProp(
+                    "error requesting system property".to_string(),
+                ));
+            }
+        };
+
+        Ok(DaemonToClientReply::SysPropValue(Some(pv)))
+    }
+
+    // Task Q
+
+    fn process_task_completions(&self, timeout: Duration) {
+        let deadline = Instant::now() + timeout;
+        // Collect all the receives into one crossbeam select and see if any of them are ready.
+        // If so, process the first one we hit. We'll loop around and do this until we hit
+        // the deadline.
+        let mut receives = vec![];
+        let mut task_client_ids = vec![];
+        {
+            let th_q = self.task_handles.lock().unwrap();
+            for (task_id, (client_id, task_handle)) in th_q.iter() {
+                receives.push(task_handle.receiver().clone());
+                task_client_ids.push((*task_id, *client_id));
+            }
+        }
+        let mut select = Select::new();
+        for recv in &receives {
+            select.recv(recv);
+        }
+        if let Ok(index) = select.ready_deadline(deadline) {
+            let recv = &receives[index];
+            let client_id = task_client_ids[index].1;
+            match recv.recv_deadline(deadline) {
+                Ok((task_id, r)) => {
+                    let result = match r {
+                        Ok(TaskResult::Result(v)) => ClientEvent::TaskSuccess(task_id, v),
+                        Ok(TaskResult::Replaced(th)) => {
+                            info!(?client_id, ?task_id, "Task restarted");
+                            let mut th_q = self.task_handles.lock().unwrap();
+                            th_q.insert(task_id, (client_id, th));
+                            return;
+                        }
+                        Err(e) => ClientEvent::TaskError(task_id, e),
+                    };
+                    let payload = bincode::encode_to_vec(&result, bincode::config::standard())
+                        .expect("Unable to serialize task result");
+                    let payload = vec![client_id.as_bytes().to_vec(), payload];
+                    {
+                        let publish = self.events_publish.lock().unwrap();
+                        if let Err(e) = publish.send_multipart(payload, 0) {
+                            error!(error = ?e, "Unable to send task result");
+                        }
+                    }
+                    let mut th_q = self.task_handles.lock().unwrap();
+                    th_q.remove(&task_id);
+                }
+                Err(e) => {
+                    if e.is_disconnected() {
+                        // The client disconnected, so we need to remove the task handle from the
+                        // queue, and break out of this loop to avoid polling this channel again.
+                        let mut th_q = self.task_handles.lock().unwrap();
+                        th_q.remove(&task_client_ids[index].0);
+                    }
+                }
+            }
+        }
     }
 }
