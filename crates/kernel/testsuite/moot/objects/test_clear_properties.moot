@@ -1,0 +1,56 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_clear_properties
+@programmer
+; add_property($system, "x", create($nothing), {player, "wrc"});
+; $x.f = 1;
+
+; add_property($system, "a", create($x), {player, "wrc"});
+
+; add_property($x, "x", "x", {player, "rc"});
+; return property_info($a, "x");
+{player, "rc"}
+; return $a.x;
+"x"
+
+; add_property($system, "b", create($nothing), {player, "wrc"});
+; chparent($b, $x);
+; return property_info($b, "x");
+{player, "rc"}
+; return $b.x;
+"x"
+
+; $b.x = {"x"};
+; return $b.x;
+{"x"}
+
+; add_property($system, "c", create($x), {player, "wrc"});
+; return property_info($c, "x");
+{player, "rc"}
+; return $c.x;
+"x"
+
+; set_property_info($c, "x", {player, ""});
+; return property_info($c, "x");
+{player, ""}
+
+@programmer
+; $a = create($x);
+; return property_info($a, "x");
+{player, "rc"}
+; return $a.x;
+"x"
+
+; $a.x = {"x"};
+; return $a.x;
+{"x"}
+
+; $b = create($nothing);
+; chparent($b, $x);
+; return property_info($b, "x");
+{player, "rc"}
+; return $b.x;
+"x"
+
+; set_property_info($b, "x", {player, ""});
+; return property_info($b, "x");
+{player, ""}
