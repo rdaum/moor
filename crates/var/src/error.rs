@@ -150,8 +150,8 @@ impl Display for ErrorCode {
 }
 
 impl ErrorCode {
-    pub fn msg(self, s: &str) -> Error {
-        Error::new(self, Some(s.into()), None)
+    pub fn msg<S: ToString>(self, s: S) -> Error {
+        Error::new(self, Some(s.to_string()), None)
     }
 
     pub fn with_msg<F>(self, f: F) -> Error

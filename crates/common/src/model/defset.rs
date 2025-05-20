@@ -97,6 +97,15 @@ impl<T: AsByteBuffer + Clone + HasUuid + Named> ValSet<T> for Defs<T> {
     }
 }
 
+impl<T: AsByteBuffer + Clone + HasUuid + Named> IntoIterator for Defs<T> {
+    type Item = T;
+    type IntoIter = ::std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.contents.into_iter()
+    }
+}
+
 impl<T: AsByteBuffer + Clone + HasUuid + Named> FromIterator<T> for Defs<T> {
     fn from_iter<X: IntoIterator<Item = T>>(iter: X) -> Self {
         Self {

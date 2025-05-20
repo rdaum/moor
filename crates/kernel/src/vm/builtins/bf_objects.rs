@@ -90,6 +90,7 @@ fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("chparent() second argument must be an object"),
         ));
     };
+
     // If object is not valid, or if new-parent is neither valid nor equal to #-1, then E_INVARG is raised.
     if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)?
         || !(new_parent.is_nothing()
@@ -102,6 +103,7 @@ fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_INVARG.msg("chparent() arguments must be valid objects"),
         ));
     }
+
     bf_args
         .world_state
         .change_parent(&bf_args.task_perms_who(), obj, new_parent)
@@ -150,7 +152,7 @@ fn bf_descendants(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let descendants = bf_args
         .world_state
-        .descendants_of(&bf_args.task_perms_who(), obj)
+        .descendants_of(&bf_args.task_perms_who(), obj, false)
         .map_err(world_state_bf_err)?;
 
     let descendants = descendants.iter().map(v_obj).collect::<Vec<_>>();
