@@ -53,6 +53,8 @@ pub enum WorldStateError {
     PropertyDefinitionNotFound(Obj, String),
     #[error("Duplicate property definition: {0}.{1}")]
     DuplicatePropertyDefinition(Obj, String),
+    #[error("Property name conflict: {0}-or-descendants and {1}-or-ancestors both define {2}")]
+    ChparentPropertyNameConflict(Obj, Obj, String),
     #[error("Property type mismatch")]
     PropertyTypeMismatch,
 
@@ -109,6 +111,10 @@ impl WorldStateError {
             Self::DuplicatePropertyDefinition(o, p) => {
                 E_INVARG.with_msg(|| format!("Duplicate property definition: {}.{}", o, p))
             }
+            Self::ChparentPropertyNameConflict(o, new_parent, prop) => E_INVARG.msg(format!(
+                "Property name conflict: {}-or-descendants and {}-or-ancestors both define {}",
+                o, new_parent, prop
+            )),
             Self::PropertyTypeMismatch => E_TYPE.msg("Property type mismatch"),
             _ => {
                 panic!("Unhandled error code: {:?}", self);
@@ -377,7 +383,12 @@ pub trait WorldState: Send {
     fn children_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError>;
 
     /// Get the full descendant tree of the given object.
-    fn descendants_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError>;
+    fn descendants_of(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        include_self: bool,
+    ) -> Result<ObjSet, WorldStateError>;
 
     /// Get the list of ancestors of the given object (parent + parent-parents)
     fn ancestors_of(

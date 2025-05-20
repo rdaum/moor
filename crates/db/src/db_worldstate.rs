@@ -12,6 +12,7 @@
 //
 
 use lazy_static::lazy_static;
+use moor_common::model::Defs;
 use uuid::Uuid;
 
 use crate::ws_transaction::WorldStateTransaction;
@@ -110,6 +111,44 @@ impl DbWorldState {
         } else if parent.ne(&NOTHING) || (owner.ne(perms) && !createorperms.check_is_wizard()?) {
             return Err(WorldStateError::ObjectPermissionDenied);
         }
+        Ok(())
+    }
+
+    fn check_chparent_property_conflict(
+        &self,
+        perms: &Obj,
+        obj: &Obj,
+        new_parent: &Obj,
+    ) -> Result<(), WorldStateError> {
+        // If object or one of its descendants defines a property with the same name as one defined
+        // either on new-parent or on one of its ancestors, then E_INVARG is raised.
+        let obj_or_descendant_props = self
+            .descendants_of(perms, obj, true)?
+            .iter()
+            .map(|descendant| self.get_tx().get_properties(&descendant))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten();
+        let new_parent_or_ancestors_props = self
+            .ancestors_of(perms, new_parent, true)?
+            .iter()
+            .map(|ancestor| self.get_tx().get_properties(&ancestor))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Defs<_>>();
+        for obj_or_descendant_prop in obj_or_descendant_props {
+            for new_parent_or_ancestor_prop in new_parent_or_ancestors_props.iter() {
+                if obj_or_descendant_prop.name() == new_parent_or_ancestor_prop.name() {
+                    return Err(WorldStateError::ChparentPropertyNameConflict(
+                        obj.clone(),
+                        new_parent.clone(),
+                        obj_or_descendant_prop.name().to_string(),
+                    ));
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -773,6 +812,7 @@ impl WorldState for DbWorldState {
         self.check_parent(perms, new_parent, &owner)?;
         self.perms(perms)?
             .check_object_allows(&owner, objflags, ObjFlag::Write.into())?;
+        self.check_chparent_property_conflict(&owner, obj, new_parent)?;
 
         self.get_tx_mut().set_object_parent(obj, new_parent)
     }
@@ -782,9 +822,14 @@ impl WorldState for DbWorldState {
         self.get_tx().get_object_children(obj)
     }
 
-    fn descendants_of(&self, _perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+    fn descendants_of(
+        &self,
+        _perms: &Obj,
+        obj: &Obj,
+        include_self: bool,
+    ) -> Result<ObjSet, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.descendants_of);
-        self.get_tx().descendants(obj)
+        self.get_tx().descendants(obj, include_self)
     }
 
     fn ancestors_of(

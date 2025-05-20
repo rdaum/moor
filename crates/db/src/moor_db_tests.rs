@@ -193,16 +193,18 @@ mod tests {
             .unwrap();
         assert_eq!(d, Obj::mk_id(3));
 
-        let desc = tx.descendants(&a).expect("Could not retrieve descendants");
+        let desc = tx
+            .descendants(&a, false)
+            .expect("Could not retrieve descendants");
         assert!(
             desc.is_same(ObjSet::from_items(&[b.clone(), c.clone(), d.clone()])),
             "Descendants doesn't match expected is {:?}",
             desc
         );
 
-        assert_eq!(tx.descendants(&b).unwrap(), ObjSet::empty());
+        assert_eq!(tx.descendants(&b, false).unwrap(), ObjSet::empty());
         assert_eq!(
-            tx.descendants(&c).unwrap(),
+            tx.descendants(&c, false).unwrap(),
             ObjSet::from_items(&[d.clone()])
         );
 
@@ -218,16 +220,16 @@ mod tests {
             ObjSet::from_items(&[d.clone()])
         );
         assert_eq!(tx.get_object_children(&c).unwrap(), ObjSet::empty());
-        assert!(tx.descendants(&a).unwrap().is_same(ObjSet::from_items(&[
-            b.clone(),
-            c.clone(),
-            d.clone()
-        ])));
+        assert!(
+            tx.descendants(&a, false)
+                .unwrap()
+                .is_same(ObjSet::from_items(&[b.clone(), c.clone(), d.clone()]))
+        );
         assert_eq!(
-            tx.descendants(&b).unwrap(),
+            tx.descendants(&b, false).unwrap(),
             ObjSet::from_items(&[d.clone()])
         );
-        assert_eq!(tx.descendants(&c).unwrap(), ObjSet::empty());
+        assert_eq!(tx.descendants(&c, false).unwrap(), ObjSet::empty());
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
 
