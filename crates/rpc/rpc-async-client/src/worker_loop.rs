@@ -43,7 +43,10 @@ pub async fn worker_loop<ProcessFunc, Fut>(
     perform: Arc<ProcessFunc>,
 ) -> Result<(), WorkerRpcError>
 where
-    ProcessFunc: Fn(WorkerToken, Uuid, Symbol, Obj, Vec<Var>) -> Fut + Send + Sync + 'static,
+    ProcessFunc: Fn(WorkerToken, Uuid, Symbol, Obj, Vec<Var>, Option<std::time::Duration>) -> Fut
+        + Send
+        + Sync
+        + 'static,
     Fut: Future<Output = Result<Vec<Var>, WorkerError>> + Send + 'static + Sync,
 {
     let zmq_ctx = tmq::Context::new();
@@ -102,7 +105,10 @@ async fn process<ProcessFunc, Fut>(
     kill_switch: Arc<AtomicBool>,
     perform: Arc<ProcessFunc>,
 ) where
-    ProcessFunc: Fn(WorkerToken, Uuid, Symbol, Obj, Vec<Var>) -> Fut + Send + Sync + 'static,
+    ProcessFunc: Fn(WorkerToken, Uuid, Symbol, Obj, Vec<Var>, Option<std::time::Duration>) -> Fut
+        + Send
+        + Sync
+        + 'static,
     Fut: Future<Output = Result<Vec<Var>, WorkerError>> + Send + 'static + Sync,
 {
     let rpc_request_sock = request(&zmq_ctx)
@@ -129,13 +135,22 @@ async fn process<ProcessFunc, Fut>(
             id: request_id,
             perms,
             request,
+            timeout,
         } => {
             if worker_id != my_id {
                 return;
             }
 
-            // Make an outbound HTTP request w/ request
-            let result = perform(token.clone(), request_id, worker_type, perms, request).await;
+            // Make an outbound HTTP request w/ request, pass timeout if needed
+            let result = perform(
+                token.clone(),
+                request_id,
+                worker_type,
+                perms,
+                request,
+                timeout,
+            )
+            .await;
             match result {
                 Ok(r) => {
                     rpc_client

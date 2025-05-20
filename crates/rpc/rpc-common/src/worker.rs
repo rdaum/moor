@@ -33,6 +33,7 @@ pub enum DaemonToWorkerMessage {
         id: Uuid,
         perms: Obj,
         request: Vec<Var>,
+        timeout: Option<std::time::Duration>,
     },
     // TODO: sessions/connections, which are longer running multiple-request -- potentially
     //  transaction-attached, potentially bi-directional -- for things like e.g. outbound network connections

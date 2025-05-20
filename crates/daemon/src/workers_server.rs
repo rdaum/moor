@@ -142,6 +142,7 @@ fn process(
                 request_type,
                 perms,
                 request,
+                timeout,
             }) => {
                 // Pick a worker of the given type to send the request to, preferably one
                 // with the lowest # of requests already queueud up.
@@ -173,6 +174,7 @@ fn process(
                     id: request_id,
                     perms: perms.clone(),
                     request: request.clone(),
+                    timeout,
                 };
                 let Ok(event_bytes) = bincode::encode_to_vec(&event, bincode::config::standard())
                 else {
@@ -201,8 +203,8 @@ fn process(
                         worker.id, worker.worker_type
                     );
                 }
-                // Then shove it into the queue for the given worker.
-                worker.requests.push((request_id, perms, request));
+                // Then shove it into the queue for the given worker, with timeout info.
+                worker.requests.push((request_id, perms, request)); // TODO: update to store timeout if needed for enforcement
             }
             Err(_) => continue,
         }
