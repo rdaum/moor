@@ -66,7 +66,7 @@ pub enum VMHostResponse {
     /// Tell the task to ask the scheduler to dispatch a fork request, and then resume execution.
     DispatchFork(Box<Fork>),
     /// Tell the task to suspend us.
-    Suspend(TaskSuspend),
+    Suspend(Box<TaskSuspend>),
     /// Tell the task Johnny 5 needs input from the client (`read` invocation).
     SuspendNeedInput,
     /// Task timed out or exceeded ticks.
@@ -120,7 +120,7 @@ mod tests {
         // This was insanely huge (>4k) so some boxing made it smaller, let's see if we can
         // keep it small.
         assert!(
-            size_of::<VMHostResponse>() <= 32,
+            size_of::<VMHostResponse>() <= 24,
             "VMHostResponse is too big: {}",
             size_of::<VMHostResponse>()
         );

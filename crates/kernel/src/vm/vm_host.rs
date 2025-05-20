@@ -369,7 +369,7 @@ impl VmHost {
                     return DispatchFork(fork_request);
                 }
                 ExecutionResult::TaskSuspend(delay) => {
-                    return Suspend(delay);
+                    return Suspend(Box::new(delay));
                 }
                 ExecutionResult::TaskNeedInput => {
                     return VMHostResponse::SuspendNeedInput;
