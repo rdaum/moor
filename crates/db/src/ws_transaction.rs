@@ -444,7 +444,7 @@ impl WorldStateTransaction {
 
         // Now walk all-my-children and destroy all the properties whose definer is me or any
         // of my ancestors not shared by the new parent.
-        let descendants = self.descendants(o)?;
+        let descendants = self.descendants(o, false)?;
 
         let mut descendant_props: HashMap<_, _, BuildHasherDefault<AHasher>> = HashMap::default();
         for c in descendants.iter() {
@@ -540,7 +540,9 @@ impl WorldStateTransaction {
         }
         // Then put clear copies on each of the descendants ... and me.
         // This really just means defining the property with no value, which is what we do.
-        let descendants = self.descendants(o).expect("Unable to get descendants");
+        let descendants = self
+            .descendants(o, false)
+            .expect("Unable to get descendants");
         for c in descendants.iter().chain(std::iter::once(o.clone())) {
             for (p, propperms) in new_props.iter() {
                 let propperms = if propperms.flags().contains(PropFlag::Chown) && c != *o {
@@ -996,7 +998,7 @@ impl WorldStateTransaction {
         perms: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<Uuid, WorldStateError> {
-        let descendants = self.descendants(location)?;
+        let descendants = self.descendants(location, false)?;
 
         // If the property is already defined at us or above or below us, that's a failure.
         let props = self.get_properties(location)?;
@@ -1134,7 +1136,7 @@ impl WorldStateTransaction {
 
     pub fn delete_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         // delete propdef from self and all descendants
-        let descendants = self.descendants(obj)?;
+        let descendants = self.descendants(obj, false)?;
         let locations = ObjSet::from_items(&[obj.clone()]).with_concatenated(descendants);
         for location in locations.iter() {
             let props: PropDefs = self.get_properties(&location)?;
@@ -1390,7 +1392,7 @@ impl WorldStateTransaction {
         Ok(())
     }
 
-    pub fn descendants(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
+    pub fn descendants(&self, obj: &Obj, include_self: bool) -> Result<ObjSet, WorldStateError> {
         let children = self
             .object_children
             .get(obj)
@@ -1399,10 +1401,10 @@ impl WorldStateTransaction {
             })?
             .unwrap_or_else(ObjSet::empty);
 
-        let mut descendants = vec![];
+        let mut results_sans_self = vec![];
         let mut queue: VecDeque<_> = children.iter().collect();
         while let Some(o) = queue.pop_front() {
-            descendants.push(o.clone());
+            results_sans_self.push(o.clone());
             let children = self
                 .object_children
                 .get(&o)
@@ -1416,7 +1418,15 @@ impl WorldStateTransaction {
             queue.extend(children.iter());
         }
 
-        Ok(ObjSet::from_items(&descendants))
+        let descendant_set = if include_self {
+            // Chained iter of "obj" + the results
+            let chained = std::iter::once(obj.clone()).chain(results_sans_self);
+            ObjSet::from_iter(chained)
+        } else {
+            ObjSet::from_items(&results_sans_self)
+        };
+
+        Ok(descendant_set)
     }
 }
 
