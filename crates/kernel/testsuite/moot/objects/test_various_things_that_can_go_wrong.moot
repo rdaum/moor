@@ -1,0 +1,33 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_various_things_that_can_go_wrong 
+@programmer
+; add_property($system, "a", create($nothing), {player, "wrc"});
+; add_property($system, "b", create($nothing), {player, "wrc"});
+; add_property($system, "c", create($nothing), {player, "wrc"});
+
+; add_property($system, "m", create($a), {player, "wrc"});
+; add_property($system, "n", create($b), {player, "wrc"});
+
+; add_property($system, "z", create($nothing), {player, "wrc"});
+
+; add_property($a, "foo", 0, {player, ""});
+; add_property($b, "foo", 0, {player, ""});
+; add_property($c, "foo", 0, {player, ""});
+
+; add_property($m, "bar", 0, {player, ""});
+; add_property($n, "baz", 0, {player, ""});
+
+; add_property($z, "bar", 0, {player, ""});
+
+; return chparent($a, $b);
+E_INVARG
+; return chparent($a, $c);
+E_INVARG
+; return chparent($a, $z);
+E_INVARG
+
+; return chparent($c, $z);
+; return chparent($c, $nothing);
+
+; return chparent($z, $c);
+; return chparent($z, $nothing);
