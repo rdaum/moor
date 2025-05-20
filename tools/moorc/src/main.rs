@@ -348,8 +348,8 @@ fn main() {
                 .recv_timeout(Duration::from_secs(4))
                 .expect("Test timed out");
             let result_value = match result {
-                Ok(rv) => rv,
-                Err(e) => match e {
+                (_, Ok(rv)) => rv,
+                (_, Err(e)) => match e {
                     SchedulerError::TaskAbortedException(e) => {
                         error!("Test {}:{} aborted: {}", o, verb, e.error);
                         for l in e.backtrace {

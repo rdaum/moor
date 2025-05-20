@@ -223,7 +223,7 @@ fn main() -> Result<(), Report> {
         args.events_listen.as_str(),
         config.clone(),
     ));
-    let kill_switch = rpc_server.kill_switch();
+    let kill_switch = rpc_server.kill_switch.clone();
 
     let (worker_scheduler_send, worker_scheduler_recv) = crossbeam_channel::unbounded();
 

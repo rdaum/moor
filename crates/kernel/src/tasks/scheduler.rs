@@ -135,7 +135,7 @@ struct RunningTask {
     /// The connection-session for this task.
     session: Arc<dyn Session>,
     /// A mailbox to deliver the result of the task to a waiting party with a subscription, if any.
-    result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
+    result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
 }
 
 /// The internal state of the task queue.
@@ -1517,7 +1517,7 @@ impl TaskQ {
         let _t = PerfTimerGuard::new(&perfc.start_task);
         let is_background = task_start.is_background();
 
-        let (sender, receiver) = oneshot::channel();
+        let (sender, receiver) = crossbeam_channel::bounded(1);
 
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
 
@@ -1621,7 +1621,7 @@ impl TaskQ {
         mut task: Box<Task>,
         resume_val: Var,
         session: Arc<dyn Session>,
-        result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
+        result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
         control_sender: &Sender<(TaskId, TaskControlMsg)>,
         database: &dyn Database,
         builtin_registry: BuiltinRegistry,
@@ -1692,13 +1692,8 @@ impl TaskQ {
         let Some(result_sender) = result_sender else {
             return;
         };
-        // There's no guarantee that the other side didn't just go away and drop the Receiver
-        // because it's not interested in subscriptions.
-        if result_sender.is_closed() {
-            return;
-        }
         let result = result.map(|v| TaskResult::Result(v.clone()));
-        if result_sender.send(result).is_err() {
+        if result_sender.send((task_id, result)).is_err() {
             error!("Notify to task {} failed", task_id);
         }
     }
