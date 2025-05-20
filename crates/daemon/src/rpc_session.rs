@@ -13,6 +13,7 @@
 
 use std::sync::Arc;
 
+use crossbeam_channel::Sender;
 use std::sync::Mutex;
 use uuid::Uuid;
 
@@ -25,22 +26,33 @@ use crate::rpc_server::RpcServer;
 /// A "session" that runs over the RPC system.
 pub struct RpcSession {
     client_id: Uuid,
-    rpc_server: Arc<RpcServer>,
     player: Obj,
     // TODO: manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
     //  should be mmap'd to disk or something.
     // TODO: We could also use Boxcar or other append-only lockless container for this, since we only
     //  ever append.
     session_buffer: Mutex<Vec<(Obj, Box<NarrativeEvent>)>>,
+    send: Sender<SessionActions>,
+}
+
+pub(crate) enum SessionActions {
+    PublishNarrativeEvents(Vec<(Obj, Box<NarrativeEvent>)>),
+    RequestClientInput(Uuid, Obj, Uuid),
+    SendSystemMessage(Uuid, Obj, String),
+    RequestConnectionName(Uuid, Obj, oneshot::Sender<Result<String, SessionError>>),
+    Disconnect(Uuid, Obj),
+    RequestConnectedPlayers(Uuid, oneshot::Sender<Result<Vec<Obj>, SessionError>>),
+    RequestConnectedSeconds(Uuid, Obj, oneshot::Sender<Result<f64, SessionError>>),
+    RequestIdleSeconds(Uuid, Obj, oneshot::Sender<Result<f64, SessionError>>),
 }
 
 impl RpcSession {
-    pub fn new(client_id: Uuid, rpc_server: Arc<RpcServer>, player: Obj) -> Self {
+    pub fn new(client_id: Uuid, player: Obj, sender: Sender<SessionActions>) -> Self {
         Self {
             client_id,
-            rpc_server,
             player,
-            session_buffer: Default::default(),
+            session_buffer: Mutex::new(Vec::new()),
+            send: sender,
         }
     }
 }
@@ -52,11 +64,9 @@ impl Session for RpcSession {
             session_buffer.drain(..).collect()
         };
 
-        let rpc_server = self.rpc_server.clone();
-        rpc_server
-            .publish_narrative_events(&events[..])
+        self.send
+            .send(SessionActions::PublishNarrativeEvents(events))
             .map_err(|e| SessionError::CommitError(e.to_string()))?;
-
         Ok(())
     }
 
@@ -67,19 +77,21 @@ impl Session for RpcSession {
     }
 
     fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
-        // We ask the rpc server to create a new session, otherwise we'd need to have a copy of all
-        // the info to create a Publish. The rpc server has that, though.
-        let new_session = self
-            .rpc_server
-            .clone()
-            .new_session(self.client_id, self.player.clone())?;
-        Ok(new_session)
+        Ok(Arc::new(Self::new(
+            self.client_id,
+            self.player.clone(),
+            self.send.clone(),
+        )))
     }
 
     fn request_input(&self, player: Obj, input_request_id: Uuid) -> Result<(), SessionError> {
-        self.rpc_server
-            .clone()
-            .request_client_input(self.client_id, player, input_request_id)?;
+        self.send
+            .send(SessionActions::RequestClientInput(
+                self.client_id,
+                player,
+                input_request_id,
+            ))
+            .map_err(|e| SessionError::CommitError(e.to_string()))?;
         Ok(())
     }
 
@@ -89,8 +101,13 @@ impl Session for RpcSession {
     }
 
     fn send_system_msg(&self, player: Obj, msg: &str) -> Result<(), SessionError> {
-        self.rpc_server
-            .send_system_message(self.client_id, player, msg.to_string())?;
+        self.send
+            .send(SessionActions::SendSystemMessage(
+                self.client_id,
+                player,
+                msg.to_string(),
+            ))
+            .map_err(|e| SessionError::CommitError(e.to_string()))?;
         Ok(())
     }
 
@@ -99,32 +116,64 @@ impl Session for RpcSession {
             Some(msg) => format!("** Server is shutting down: {} **", msg),
             None => "** Server is shutting down ** ".to_string(),
         };
-        self.rpc_server.send_system_message(
-            self.client_id,
-            self.player.clone(),
-            shutdown_msg.clone(),
-        )?;
-        Ok(())
+        self.send
+            .send(SessionActions::SendSystemMessage(
+                self.client_id,
+                self.player.clone(),
+                shutdown_msg,
+            ))
+            .map_err(|e| SessionError::CommitError(e.to_string()))
     }
 
     fn connection_name(&self, player: Obj) -> Result<String, SessionError> {
-        self.rpc_server.connection_name_for(player)
+        let (tx, rx) = oneshot::channel();
+        self.send
+            .send(SessionActions::RequestConnectionName(
+                self.client_id,
+                player,
+                tx,
+            ))
+            .map_err(|_e| SessionError::DeliveryError)?;
+        rx.recv().map_err(|_e| SessionError::DeliveryError)?
     }
 
     fn disconnect(&self, player: Obj) -> Result<(), SessionError> {
-        self.rpc_server.disconnect(player)
+        self.send
+            .send(SessionActions::Disconnect(self.client_id, player))
+            .map_err(|_e| SessionError::DeliveryError)?;
+        Ok(())
     }
 
     fn connected_players(&self) -> Result<Vec<Obj>, SessionError> {
-        self.rpc_server.connected_players()
+        let (tx, rx) = oneshot::channel();
+        self.send
+            .send(SessionActions::RequestConnectedPlayers(self.client_id, tx))
+            .map_err(|_e| SessionError::DeliveryError)?;
+        rx.recv().map_err(|_e| SessionError::DeliveryError)?
     }
 
     fn connected_seconds(&self, player: Obj) -> Result<f64, SessionError> {
-        self.rpc_server.connected_seconds_for(player)
+        let (tx, rx) = oneshot::channel();
+        self.send
+            .send(SessionActions::RequestConnectedSeconds(
+                self.client_id,
+                player,
+                tx,
+            ))
+            .map_err(|_e| SessionError::DeliveryError)?;
+        rx.recv().map_err(|_e| SessionError::DeliveryError)?
     }
 
     fn idle_seconds(&self, player: Obj) -> Result<f64, SessionError> {
-        self.rpc_server.idle_seconds_for(player)
+        let (tx, rx) = oneshot::channel();
+        self.send
+            .send(SessionActions::RequestIdleSeconds(
+                self.client_id,
+                player,
+                tx,
+            ))
+            .map_err(|_e| SessionError::DeliveryError)?;
+        rx.recv().map_err(|_e| SessionError::DeliveryError)?
     }
 }
 
@@ -133,6 +182,9 @@ impl SessionFactory for RpcServer {
         self: Arc<Self>,
         player: &Obj,
     ) -> Result<Arc<dyn Session>, SessionError> {
-        self.clone().new_session(Uuid::new_v4(), player.clone())
+        let client_id = Uuid::new_v4();
+        let session = RpcSession::new(client_id, player.clone(), self.mailbox_sender.clone());
+        let session = Arc::new(session);
+        Ok(session)
     }
 }

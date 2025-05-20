@@ -15,6 +15,7 @@ use std::fmt::Debug;
 use std::time::SystemTime;
 
 use bincode::{Decode, Encode};
+use crossbeam_channel::Receiver;
 use lazy_static::lazy_static;
 use moor_compiler::Program;
 use moor_var::{List, Obj};
@@ -51,7 +52,7 @@ pub fn sched_counters<'a>() -> &'a SchedulerPerfCounters {
 /// Just a handle to a task, with a receiver for the result.
 pub struct TaskHandle(
     TaskId,
-    oneshot::Receiver<Result<TaskResult, SchedulerError>>,
+    Receiver<(TaskId, Result<TaskResult, SchedulerError>)>,
 );
 
 // Results from a task which are either a value or a notification that the underlying task handle
@@ -78,11 +79,11 @@ impl TaskHandle {
     }
 
     /// Dissolve the handle into a receiver for the result.
-    pub fn into_receiver(self) -> oneshot::Receiver<Result<TaskResult, SchedulerError>> {
+    pub fn into_receiver(self) -> Receiver<(TaskId, Result<TaskResult, SchedulerError>)> {
         self.1
     }
 
-    pub fn receiver(&self) -> &oneshot::Receiver<Result<TaskResult, SchedulerError>> {
+    pub fn receiver(&self) -> &Receiver<(TaskId, Result<TaskResult, SchedulerError>)> {
         &self.1
     }
 }
@@ -359,13 +360,13 @@ pub mod scheduler_test_utils {
         {
             // Some errors can be represented as a MOO `Var`; translate those to a `Var`, so that
             // `moot` tests can match against them.
-            Err(TaskAbortedException(Exception { error, .. })) => Ok(error.into()),
-            Err(CommandExecutionError(CommandError::NoCommandMatch)) => {
+            (_, Err(TaskAbortedException(Exception { error, .. }))) => Ok(error.into()),
+            (_, Err(CommandExecutionError(CommandError::NoCommandMatch))) => {
                 Ok(E_VERBNF.msg("No command match").into())
             }
-            Err(err) => Err(err),
-            Ok(TaskResult::Result(var)) => Ok(var),
-            Ok(TaskResult::Replaced(_)) => panic!("Unexpected task restart"),
+            (_, Err(err)) => Err(err),
+            (_, Ok(TaskResult::Result(var))) => Ok(var),
+            (_, Ok(TaskResult::Replaced(_))) => panic!("Unexpected task restart"),
         }
     }
 

@@ -16,6 +16,7 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
+use crossbeam_channel::Sender;
 use minstant::Instant;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
@@ -37,7 +38,7 @@ pub struct SuspendedTask {
     pub wake_condition: WakeCondition,
     pub task: Box<Task>,
     pub session: Arc<dyn Session>,
-    pub result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
+    pub result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
 }
 
 /// Possible conditions in which a suspended task can wake from suspension.
@@ -129,7 +130,7 @@ impl SuspensionQ {
         wake_condition: WakeCondition,
         task: Box<Task>,
         session: Arc<dyn Session>,
-        result_sender: Option<oneshot::Sender<Result<TaskResult, SchedulerError>>>,
+        result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
     ) {
         let task_id = task.task_id;
         let sr = SuspendedTask {
