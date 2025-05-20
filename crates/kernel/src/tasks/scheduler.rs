@@ -1066,7 +1066,7 @@ impl Scheduler {
                     TaskSuspend::Timed(t) => WakeCondition::Time(Instant::now() + t),
                     TaskSuspend::WaitTask(task_id) => WakeCondition::Task(task_id),
                     TaskSuspend::Commit => WakeCondition::Immedate,
-                    TaskSuspend::WorkerRequest(worker_type, args) => {
+                    TaskSuspend::WorkerRequest(worker_type, args, timeout) => {
                         let worker_request_id = Uuid::new_v4();
                         // Send out a message over the workers channel.
                         // If we're not set up to do workers, just abort the task.
@@ -1080,6 +1080,7 @@ impl Scheduler {
                             request_type: worker_type,
                             perms: task.perms.clone(),
                             request: args,
+                            timeout,
                         }) {
                             error!(?e, "Could not send worker request; aborting task");
                             return task_q.send_task_result(task_id, Err(TaskAbortedError));

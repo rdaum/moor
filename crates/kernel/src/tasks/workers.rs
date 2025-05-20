@@ -24,6 +24,7 @@ pub enum WorkerRequest {
         request_type: Symbol,
         perms: Obj,
         request: Vec<Var>,
+        timeout: Option<std::time::Duration>,
     },
 }
 

@@ -117,6 +117,7 @@ async fn perform_http_request(
     _worker_type: Symbol,
     _perms: Obj,
     arguments: Vec<Var>,
+    timeout: Option<std::time::Duration>,
 ) -> Result<Vec<Var>, WorkerError> {
     if arguments.len() < 2 {
         return Err(WorkerError::RequestError(
@@ -124,7 +125,16 @@ async fn perform_http_request(
         ));
     }
     // args: method (symbol or string), URL, and then headers then optionally body.
-    let client = reqwest::Client::new();
+    let client = if let Some(timeout) = timeout {
+        reqwest::Client::builder()
+            .timeout(timeout)
+            .build()
+            .map_err(|e| {
+                WorkerError::RequestError(format!("Failed to build client with timeout: {}", e))
+            })?
+    } else {
+        reqwest::Client::new()
+    };
     let method = arguments[0].as_symbol().map_err(|_| {
         WorkerError::RequestError("First argument must be a symbol or string".to_string())
     })?;
