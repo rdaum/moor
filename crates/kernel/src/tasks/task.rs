@@ -216,7 +216,7 @@ impl Task {
                 // In both cases we'll rely on the scheduler to wake us up in its processing loop
                 // rather than sleep here, which would make this thread unresponsive to other
                 // messages.
-                task_scheduler_client.suspend(delay, self);
+                task_scheduler_client.suspend(delay.as_ref().clone(), self);
                 None
             }
             VMHostResponse::SuspendNeedInput => {
