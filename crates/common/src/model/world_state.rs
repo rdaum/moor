@@ -87,39 +87,22 @@ pub enum WorldStateError {
 /// Translations from WorldStateError to MOO error codes.
 impl WorldStateError {
     pub fn to_error(&self) -> Error {
-        match self {
-            Self::ObjectNotFound(o) => E_INVIND.with_msg(|| format!("Object not found: {}", o)),
-            Self::ObjectPermissionDenied => E_PERM.into(),
-            Self::RecursiveMove(a, b) => {
-                E_RECMOVE.with_msg(|| format!("Recursive move detected: {} -> {}", a, b))
-            }
-            Self::VerbNotFound(o, v) => {
-                E_VERBNF.with_msg(|| format!("Verb not found: {}:{}", o, v))
-            }
-            Self::VerbPermissionDenied => E_PERM.into(),
-            Self::InvalidVerb(_) => E_VERBNF.into(),
-            Self::DuplicateVerb(o, v) => {
-                E_INVARG.with_msg(|| format!("Duplicate verb: {}:{}", o, v))
-            }
-            Self::PropertyNotFound(o, p) => {
-                E_PROPNF.with_msg(|| format!("Property not found: {}.{}", o, p))
-            }
-            Self::PropertyPermissionDenied => E_PERM.into(),
-            Self::PropertyDefinitionNotFound(p, d) => {
-                E_PROPNF.with_msg(|| format!("Property not found: {}.{}", p, d))
-            }
-            Self::DuplicatePropertyDefinition(o, p) => {
-                E_INVARG.with_msg(|| format!("Duplicate property definition: {}.{}", o, p))
-            }
-            Self::ChparentPropertyNameConflict(o, new_parent, prop) => E_INVARG.msg(format!(
-                "Property name conflict: {}-or-descendants and {}-or-ancestors both define {}",
-                o, new_parent, prop
-            )),
-            Self::PropertyTypeMismatch => E_TYPE.msg("Property type mismatch"),
-            _ => {
-                panic!("Unhandled error code: {:?}", self);
-            }
-        }
+        let err_code = match self {
+            Self::ObjectNotFound(_) => E_INVIND,
+            Self::ObjectPermissionDenied
+            | Self::VerbPermissionDenied
+            | Self::PropertyPermissionDenied => E_PERM,
+            Self::RecursiveMove(_, _) => E_RECMOVE,
+            Self::VerbNotFound(_, _) | Self::InvalidVerb(_) => E_VERBNF,
+            Self::DuplicateVerb(_, _)
+            | Self::DuplicatePropertyDefinition(_, _)
+            | Self::ChparentPropertyNameConflict(_, _, _) => E_INVARG,
+            Self::PropertyNotFound(_, _) | Self::PropertyDefinitionNotFound(_, _) => E_PROPNF,
+            Self::PropertyTypeMismatch => E_TYPE,
+            _ => panic!("Unhandled error code: {:?}", self),
+        };
+
+        err_code.msg(self.to_string())
     }
 
     pub fn database_error_msg(&self) -> Option<&str> {
