@@ -88,7 +88,6 @@ clap_derive = "4.5"
 figment = { version = "0.10", features = ["yaml", "json"] }
 serde_derive = "1.0"
 serde_json = "1.0"
-serde_yaml = "0.9"
 
 ## HTTP/websockets front-end
 axum = { version = "0.8", features = ["ws"] }
@@ -114,6 +113,7 @@ tracing-subscriber = "0.3"
 
 # General usefulness
 ahash = "0.8"
+arc-swap = "1.7"
 binary-layout = "4.0"
 bincode = { version = "2.0", features = ["serde"] }
 byteview = "0.6"

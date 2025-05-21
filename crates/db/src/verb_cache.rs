@@ -132,14 +132,14 @@ struct AncestryInner {
 }
 
 impl AncestryCache {
-    pub(crate) fn fork(&self) -> Self {
+    pub(crate) fn fork(&self) -> Box<Self> {
         let inner = self.inner.read().unwrap();
         let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
-        Self {
+        Box::new(Self {
             inner: RwLock::new(forked_inner),
-        }
+        })
     }
     pub(crate) fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
         let inner = self.inner.read().unwrap();
@@ -157,5 +157,10 @@ impl AncestryCache {
         let mut inner = self.inner.write().unwrap();
         inner.version += 1;
         inner.entries.insert(obj.clone(), ancestors.to_vec());
+    }
+
+    pub(crate) fn has_changed(&self) -> bool {
+        let inner = self.inner.read().unwrap();
+        inner.version > inner.orig_version
     }
 }
