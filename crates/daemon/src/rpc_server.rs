@@ -188,6 +188,22 @@ impl RpcServer {
                 })?;
         }
 
+        // Process task completions
+        let tc_self = self.clone();
+        std::thread::Builder::new()
+            .name("moor-tc".to_string())
+            .spawn(move || {
+                loop {
+                    if tc_self.kill_switch.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    // Check any task handles for completion.
+                    // TODO: rewrite the task completion checking here to not poll and use a lock.
+                    //  we can probably do something much nicer with channels, etc.
+                    tc_self.process_task_completions(Duration::from_millis(5));
+                }
+            })?;
+
         // Start the proxy in a background thread, which will route messages between
         // clients and workers.
         let mut control_socket = self.zmq_context.socket(zmq::REP)?;
@@ -210,7 +226,7 @@ impl RpcServer {
             }
 
             // Check the mailbox
-            if let Ok(session_event) = self.mailbox_receive.recv() {
+            if let Ok(session_event) = self.mailbox_receive.recv_timeout(Duration::from_millis(5)) {
                 match session_event {
                     SessionActions::PublishNarrativeEvents(events) => {
                         if let Err(e) = self.publish_narrative_events(&events) {
@@ -285,11 +301,6 @@ impl RpcServer {
                     }
                 }
             }
-            // Check any task handles for completion.
-            // TODO: rewrite the task completion checking here to not poll and use a lock.
-            //  we can probably do something much nicer with channels, etc.
-            self.clone()
-                .process_task_completions(Duration::from_millis(10));
         }
     }
 
@@ -1584,7 +1595,6 @@ impl RpcServer {
     // Task Q
 
     fn process_task_completions(&self, timeout: Duration) {
-        let deadline = Instant::now() + timeout;
         // Collect all the receives into one crossbeam select and see if any of them are ready.
         // If so, process the first one we hit. We'll loop around and do this until we hit
         // the deadline.
@@ -1601,10 +1611,10 @@ impl RpcServer {
         for recv in &receives {
             select.recv(recv);
         }
-        if let Ok(index) = select.ready_deadline(deadline) {
+        if let Ok(index) = select.ready_timeout(timeout) {
             let recv = &receives[index];
             let client_id = task_client_ids[index].1;
-            match recv.recv_deadline(deadline) {
+            match recv.recv_timeout(timeout) {
                 Ok((task_id, r)) => {
                     let result = match r {
                         Ok(TaskResult::Result(v)) => ClientEvent::TaskSuccess(task_id, v),
