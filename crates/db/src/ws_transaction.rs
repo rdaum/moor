@@ -81,7 +81,7 @@ pub struct WorldStateTransaction {
     pub(crate) prop_resolution_cache: Box<PropResolutionCache>,
 
     /// A (local-tx-only for now) cache of the ancestors of objects, as we look them up.
-    pub(crate) ancestry_cache: AncestryCache,
+    pub(crate) ancestry_cache: Box<AncestryCache>,
 
     /// True if this transaction has any *writes* at all. If not, our commits can be immediate
     /// and successful.

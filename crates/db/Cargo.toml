@@ -27,6 +27,7 @@ moor-common = { path = "../common" }
 moor-var = { path = "../var" }
 
 ahash.workspace = true
+arc-swap.workspace = true
 byteview.workspace = true
 crossbeam-channel.workspace = true
 crossbeam-utils.workspace = true

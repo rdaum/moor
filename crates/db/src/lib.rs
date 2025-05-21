@@ -289,7 +289,7 @@ enum CommitSet {
     CommitReadOnly(
         Box<VerbResolutionCache>,
         Box<PropResolutionCache>,
-        AncestryCache,
+        Box<AncestryCache>,
     ),
 }
 
