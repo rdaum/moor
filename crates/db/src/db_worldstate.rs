@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use ahash::HashSet;
 use lazy_static::lazy_static;
-use moor_common::model::Defs;
 use uuid::Uuid;
 
 use crate::ws_transaction::WorldStateTransaction;
@@ -129,23 +129,22 @@ impl DbWorldState {
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flatten();
-        let new_parent_or_ancestors_props = self
+        let new_parent_or_ancestors_property_names: HashSet<_> = self
             .ancestors_of(perms, new_parent, true)?
             .iter()
             .map(|ancestor| self.get_tx().get_properties(&ancestor))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flatten()
-            .collect::<Defs<_>>();
+            .map(|prop| prop.name().to_string())
+            .collect();
         for obj_or_descendant_prop in obj_or_descendant_props {
-            for new_parent_or_ancestor_prop in new_parent_or_ancestors_props.iter() {
-                if obj_or_descendant_prop.name() == new_parent_or_ancestor_prop.name() {
-                    return Err(WorldStateError::ChparentPropertyNameConflict(
-                        obj.clone(),
-                        new_parent.clone(),
-                        obj_or_descendant_prop.name().to_string(),
-                    ));
-                }
+            if new_parent_or_ancestors_property_names.contains(obj_or_descendant_prop.name()) {
+                return Err(WorldStateError::ChparentPropertyNameConflict(
+                    obj.clone(),
+                    new_parent.clone(),
+                    obj_or_descendant_prop.name().to_string(),
+                ));
             }
         }
 
