@@ -37,3 +37,4 @@ thiserror.workspace = true
 
 ## Logging & tracing
 tracing.workspace = true
+uuid = { version = "1.16.0", features = ["v4"] }

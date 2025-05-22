@@ -14,7 +14,7 @@
 use strum::EnumCount;
 use tracing::{error, warn};
 
-use crate::vm::builtins::BfRet::Ret;
+use crate::vm::builtins::BfRet::{Ret, RetNil};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use moor_common::model::WorldStateError;
 use moor_common::model::{ArgSpec, VerbArgsSpec};
@@ -37,7 +37,7 @@ use moor_var::Variant;
 use moor_var::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, v_list_iter};
 use moor_var::{List, v_bool};
-use moor_var::{Var, v_empty_list, v_list, v_none, v_obj, v_str, v_string};
+use moor_var::{Var, v_empty_list, v_list, v_obj, v_str, v_string};
 
 // verb_info (obj <object>, str <verb-desc>) ->  {<owner>, <perms>, <names>}
 fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -202,7 +202,7 @@ fn bf_set_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -300,7 +300,7 @@ fn bf_set_verb_args(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 .map_err(world_state_bf_err)?;
         }
     }
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -428,7 +428,7 @@ fn bf_set_verb_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .update_verb_with_id(&bf_args.task_perms_who(), obj, verbdef.uuid(), update_attrs)
         .map_err(world_state_bf_err)?;
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 // Function: none add_verb (obj object, list info, list args)
@@ -474,7 +474,7 @@ fn bf_add_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         )
         .map_err(world_state_bf_err)?;
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 //Function: none delete_verb (obj object, str verb-desc)
@@ -506,7 +506,7 @@ fn bf_delete_verb(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .remove_verb(&bf_args.task_perms_who(), obj, verbdef.uuid())
         .map_err(world_state_bf_err)?;
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 // Syntax:  disassemble (obj <object>, str <verb-desc>)   => list

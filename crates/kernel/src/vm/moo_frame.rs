@@ -18,10 +18,11 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use moor_common::program::labels::Offset;
 use moor_common::program::names::{GlobalName, Name};
-use moor_common::util::{BitArray, Bitset64};
 use moor_compiler::{Label, Op, Program};
+use moor_var::VarType::TYPE_NONE;
 use moor_var::{Error, Var, v_none};
-use smallvec::SmallVec;
+use std::cmp::max;
+use strum::EnumCount;
 
 /// The MOO stack-frame specific portions of the activation:
 ///   the value stack, local variables, program, program counter, handler stack, etc.
@@ -34,14 +35,12 @@ pub(crate) struct MooStackFrame {
     /// Where is the PC pointing to?
     pub(crate) pc_type: PcType,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: BitArray<Var, 256, Bitset64<4>>,
-    /// The current used scope size, used when entering and exiting local scopes.
-    pub(crate) environment_width: usize,
+    pub(crate) environment: Vec<Vec<Var>>,
     /// The value stack.
-    pub(crate) valstack: SmallVec<Var, 16>,
+    pub(crate) valstack: Vec<Var>,
     /// A stack of active scopes. Used for catch and finally blocks and in the future for lexical
     /// scoping as well.
-    pub(crate) scope_stack: SmallVec<Scope, 8>,
+    pub(crate) scope_stack: Vec<Scope>,
     /// Scratch space for PushTemp and PutTemp opcodes.
     pub(crate) temp: Var,
     /// Scratch space for constructing the catch handlers for a forthcoming try scope.
@@ -73,6 +72,7 @@ pub(crate) enum ScopeType {
     TryFinally(Label),
     TryCatch(Vec<(CatchType, Label)>),
     If,
+    Eif,
     While,
     For,
     Block,
@@ -88,17 +88,20 @@ pub(crate) struct Scope {
     pub(crate) scope_type: ScopeType,
     pub(crate) valstack_pos: usize,
     pub(crate) end_pos: usize,
-    pub(crate) environment_width: usize,
+    /// True if this scope has a variable environment.
+    pub(crate) environment: bool,
 }
 
 impl MooStackFrame {
     pub(crate) fn new(program: Program) -> Self {
-        let environment = BitArray::new();
-        let environment_width = program.var_names().global_width();
+        let width = max(program.var_names().global_width(), GlobalName::COUNT);
+        let mut first_env = Vec::with_capacity(width);
+        first_env.resize(width, v_none());
+        let mut environment = Vec::with_capacity(16);
+        environment.push(first_env);
         Self {
             program,
             environment,
-            environment_width,
             pc: 0,
             pc_type: PcType::Main,
             temp: v_none(),
@@ -115,7 +118,8 @@ impl MooStackFrame {
 
     #[inline]
     pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
-        self.environment.set(gname as usize, value);
+        let pos = gname as usize;
+        self.environment[0][pos] = value;
     }
 
     #[inline]
@@ -123,15 +127,20 @@ impl MooStackFrame {
         // This is a "trust us we know what we're doing" use of the explicit offset without check
         // into the names list like we did before. If the compiler produces garbage, it gets what
         // it deserves.
-        let env_offset = id.0 as usize;
-        self.environment.set(env_offset, v);
+        assert_ne!(v.type_code(), TYPE_NONE);
+        let offset = id.0 as usize;
+        let scope = id.1 as usize;
+        self.environment[scope][offset] = v;
     }
 
     /// Return the value of a local variable.
     #[inline]
     pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
-        let offset = self.program.var_names().offset_for(id)?;
-        self.environment.get(offset)
+        let v = self.environment.get(id.1 as usize)?.get(id.0 as usize)?;
+        if v.type_code() == TYPE_NONE {
+            return None;
+        }
+        Some(v)
     }
 
     pub(crate) fn switch_to_fork_vector(&mut self, fork_vector: Offset) {
@@ -203,8 +212,8 @@ impl MooStackFrame {
     #[inline]
     pub fn jump(&mut self, label_id: &Label) {
         let label = &self.program.jump_label(*label_id);
-        self.pc = label.position.0 as usize;
 
+        self.pc = label.position.0 as usize;
         // Pop all scopes until we find one whose end_pos is > our jump point
         while let Some(scope) = self.scope_stack.last() {
             if scope.end_pos > self.pc {
@@ -216,26 +225,36 @@ impl MooStackFrame {
 
     /// Enter a new lexical scope and/or try/catch handling block.
     pub fn push_scope(&mut self, scope: ScopeType, scope_width: u16, end_label: &Label) {
-        // If this is a lexical scope, expand the environment to accommodate the new variables.
-        // (This is just updating environment_width)
-
         let end_pos = self.program.jump_label(*end_label).position.0 as usize;
         self.scope_stack.push(Scope {
             scope_type: scope,
             valstack_pos: self.valstack.len(),
-            environment_width: self.environment_width,
             end_pos,
+            environment: true,
         });
-        self.environment_width += scope_width as usize;
+        let mut new_scope = Vec::with_capacity(scope_width as usize);
+        new_scope.resize(scope_width as usize, v_none());
+        self.environment.push(new_scope);
+    }
+
+    /// Enter a scope which does not restrict stack of environment size, purely for catch expressions
+    /// The scope is just used for unwinding to the catch handler purposes.
+    pub fn push_non_var_scope(&mut self, scope: ScopeType, end_label: &Label) {
+        let end_pos = self.program.jump_label(*end_label).position.0 as usize;
+        self.scope_stack.push(Scope {
+            scope_type: scope,
+            valstack_pos: self.valstack.len(),
+            end_pos,
+            environment: false,
+        });
     }
 
     pub fn pop_scope(&mut self) -> Option<Scope> {
         let scope = self.scope_stack.pop()?;
+        if scope.environment {
+            self.environment.pop();
+        }
         self.valstack.truncate(scope.valstack_pos);
-
-        // Clear out the environment for the scope that is being exited.
-        self.environment.truncate(scope.environment_width);
-        self.environment_width = scope.environment_width;
         Some(scope)
     }
 }
@@ -245,15 +264,7 @@ impl Encode for MooStackFrame {
         self.program.encode(encoder)?;
         self.pc.encode(encoder)?;
         self.pc_type.encode(encoder)?;
-        // Environment is custom, is not bincodable, so we need to encode it manually, but we just
-        // do it as an array of Option<Var>
-        let mut env = vec![None; 256];
-        let env_iter = self.environment.iter();
-        for (i, v) in env_iter {
-            env[i] = Some(v.clone())
-        }
-        env.encode(encoder)?;
-        self.environment_width.encode(encoder)?;
+        self.environment.encode(encoder)?;
         self.valstack.encode(encoder)?;
         self.scope_stack.encode(encoder)?;
         self.temp.encode(encoder)?;
@@ -267,14 +278,7 @@ impl<C> Decode<C> for MooStackFrame {
         let program = Program::decode(decoder)?;
         let pc = usize::decode(decoder)?;
         let pc_type = PcType::decode(decoder)?;
-        let env: Vec<Option<Var>> = Vec::decode(decoder)?;
-        let mut environment = BitArray::new();
-        for (i, v) in env.iter().enumerate() {
-            if let Some(v) = v {
-                environment.set(i, v.clone());
-            }
-        }
-        let environment_width = usize::decode(decoder)?;
+        let environment = Vec::decode(decoder)?.into();
         let valstack = Vec::decode(decoder)?.into();
         let scope_stack = Vec::decode(decoder)?.into();
         let temp = Var::decode(decoder)?;
@@ -285,7 +289,6 @@ impl<C> Decode<C> for MooStackFrame {
             pc,
             pc_type,
             environment,
-            environment_width,
             valstack,
             scope_stack,
             temp,
@@ -297,28 +300,20 @@ impl<C> Decode<C> for MooStackFrame {
 
 impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Program::borrow_decode(decoder)?;
-        let pc = usize::borrow_decode(decoder)?;
-        let pc_type = PcType::borrow_decode(decoder)?;
-        let env: Vec<Option<Var>> = Vec::borrow_decode(decoder)?;
-        let mut environment = BitArray::new();
-        for (i, v) in env.iter().enumerate() {
-            if let Some(v) = v {
-                environment.set(i, v.clone());
-            }
-        }
-        let environment_width = usize::borrow_decode(decoder)?;
-        let valstack = Vec::borrow_decode(decoder)?.into();
-        let scope_stack = Vec::borrow_decode(decoder)?.into();
-        let temp = Var::borrow_decode(decoder)?;
-        let catch_stack = Vec::borrow_decode(decoder)?;
-        let finally_stack = Vec::borrow_decode(decoder)?;
+        let program = Program::decode(decoder)?;
+        let pc = usize::decode(decoder)?;
+        let pc_type = PcType::decode(decoder)?;
+        let environment = Vec::decode(decoder)?.into();
+        let valstack = Vec::decode(decoder)?.into();
+        let scope_stack = Vec::decode(decoder)?.into();
+        let temp = Var::decode(decoder)?;
+        let catch_stack = Vec::decode(decoder)?;
+        let finally_stack = Vec::decode(decoder)?;
         Ok(Self {
             program,
             pc,
             pc_type,
             environment,
-            environment_width,
             valstack,
             scope_stack,
             temp,

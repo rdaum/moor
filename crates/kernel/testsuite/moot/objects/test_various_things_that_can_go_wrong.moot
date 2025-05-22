@@ -27,7 +27,11 @@ E_INVARG
 E_INVARG
 
 ; return chparent($c, $z);
+0
 ; return chparent($c, $nothing);
+0
 
 ; return chparent($z, $c);
+0
 ; return chparent($z, $nothing);
+0

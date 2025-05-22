@@ -11,6 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::program::names::Variable;
 use crate::program::program::Program;
 use bincode::{Decode, Encode};
 use moor_var::BincodeAsByteBufferExt;
@@ -36,4 +37,32 @@ impl ProgramType {
             ProgramType::MooR(p) => p.main_vector().is_empty(),
         }
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub enum DeclType {
+    Global,
+    Let,
+    Assign,
+    For,
+    Unknown,
+    Register,
+    Except,
+    WhileLabel,
+    ForkLabel,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub struct Decl {
+    /// The type of declaration, how was it declared?
+    pub decl_type: DeclType,
+    /// The name of the variable (or register id if a register).
+    pub identifier: Variable,
+    /// What scope the variable was declared in.
+    pub depth: usize,
+    /// Is this a constant? Reject subsequent assignments.
+    pub constant: bool,
+    /// The scope id of the variable.
+    /// This is used to determine the scope of the variable when binding (or rebinding at decompile)
+    pub scope_id: usize,
 }
