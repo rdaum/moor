@@ -116,13 +116,12 @@ pub fn moo_frame_execute(
                 environment_width,
             } => {
                 let scope_type = match op {
-                    Op::If(..) | Op::Eif(..) => ScopeType::If,
+                    Op::If(..) => ScopeType::If,
+                    Op::Eif(..) => ScopeType::Eif,
                     Op::While { .. } => ScopeType::While,
                     _ => unreachable!(),
                 };
-                if *environment_width != 0 {
-                    f.push_scope(scope_type, *environment_width, label);
-                }
+                f.push_scope(scope_type, *environment_width, label);
                 let cond = f.pop();
                 if !cond.is_true() {
                     f.jump(label);
@@ -142,9 +141,7 @@ pub fn moo_frame_execute(
                 end_label,
                 environment_width,
             } => {
-                if *environment_width != 0 {
-                    f.push_scope(ScopeType::While, *environment_width, end_label);
-                }
+                f.push_scope(ScopeType::While, *environment_width, end_label);
                 let v = f.pop();
                 let is_true = v.is_true();
                 f.set_variable(id, v);
@@ -154,13 +151,11 @@ pub fn moo_frame_execute(
             }
             Op::ForSequence(offset) => {
                 let operand = f_p.for_sequence_operand(*offset).clone();
-                if operand.environment_width != 0 {
-                    f.push_scope(
-                        ScopeType::For,
-                        operand.environment_width,
-                        &operand.end_label,
-                    );
-                }
+                f.push_scope(
+                    ScopeType::For,
+                    operand.environment_width,
+                    &operand.end_label,
+                );
 
                 // Pop the count and list off the stack. We push back later when we re-enter.
 
@@ -240,9 +235,7 @@ pub fn moo_frame_execute(
                 id,
                 environment_width,
             } => {
-                if *environment_width != 0 {
-                    f.push_scope(ScopeType::For, *environment_width, end_label);
-                }
+                f.push_scope(ScopeType::For, *environment_width, end_label);
 
                 // Pull the range ends off the stack.
                 let (from, next_val) = {
@@ -726,7 +719,9 @@ pub fn moo_frame_execute(
             Op::Pass => {
                 let args = f.pop();
                 let Variant::List(args) = args.variant() else {
-                    return ExecutionResult::PushError(E_TYPE.msg("invalid value in pass"));
+                    return ExecutionResult::PushError(E_TYPE.with_msg(|| {
+                        format!("Invalid target for verb dispatch: {}", to_literal(&args))
+                    }));
                 };
                 return ExecutionResult::DispatchVerbPass(args.clone());
             }
@@ -804,7 +799,6 @@ pub fn moo_frame_execute(
                 end_label,
                 environment_width,
             } => {
-                // Next opcode must be BeginScope, to define the variable scoping.
                 f.push_scope(
                     ScopeType::TryFinally(*end_label),
                     *environment_width,
@@ -813,7 +807,7 @@ pub fn moo_frame_execute(
             }
             Op::TryCatch { end_label, .. } => {
                 let catches = std::mem::take(&mut f.catch_stack);
-                f.push_scope(ScopeType::TryCatch(catches), 0, end_label);
+                f.push_non_var_scope(ScopeType::TryCatch(catches), end_label);
             }
             Op::TryExcept {
                 environment_width,
@@ -823,19 +817,22 @@ pub fn moo_frame_execute(
                 let catches = std::mem::take(&mut f.catch_stack);
                 f.push_scope(ScopeType::TryCatch(catches), *environment_width, end_label);
             }
-            Op::EndCatch(label) | Op::EndExcept(label) => {
-                let is_catch = matches!(op, Op::EndCatch(_));
-                let v = if is_catch { f.pop() } else { v_none() };
-
+            Op::EndExcept(label) => {
                 let handler = f.pop_scope().expect("Missing handler for try/catch/except");
                 let ScopeType::TryCatch(..) = handler.scope_type else {
                     panic!("Handler is not a catch handler",);
                 };
-
-                if is_catch {
-                    f.push(v);
-                }
+                f.push(v_int(0));
                 f.jump(label);
+            }
+            Op::EndCatch(label) => {
+                let stack_top = f.pop();
+                let handler = f.pop_scope().expect("Missing handler for try/catch/except");
+                let ScopeType::TryCatch(_) = handler.scope_type else {
+                    panic!("Handler is not a catch handler",);
+                };
+                f.jump(label);
+                f.push(stack_top);
             }
             Op::EndFinally => {
                 // Execution of the block completed successfully, so we can just continue with
@@ -863,17 +860,14 @@ pub fn moo_frame_execute(
             } => {
                 f.push_scope(ScopeType::Block, *num_bindings, end_label);
             }
-            Op::EndScope { num_bindings } => {
-                let scope_width = f.environment_width;
-                let Some(scope) = f.pop_scope() else {
+            Op::EndScope { .. } => {
+                let Some(..) = f.pop_scope() else {
                     panic!(
                         "EndScope without a scope @ {} ({})",
                         f.pc,
                         f.find_line_no(f.pc).unwrap_or(0)
                     );
                 };
-                let expected_width = scope_width - (*num_bindings as usize);
-                assert_eq!(scope.environment_width, expected_width);
             }
             Op::ExitId(label) => {
                 f.jump(label);

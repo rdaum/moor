@@ -2800,6 +2800,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "unindent",
+ "uuid 1.16.0",
 ]
 
 [[package]]

@@ -627,7 +627,7 @@ mod tests {
                 try
                    #1.location:cause_error();
                    return "should not reach here";
-                except error (ANY)
+                except z (ANY)
                    this:raise_error();
                    return "should not reach here";
                 endtry
@@ -1319,5 +1319,24 @@ mod tests {
             List::mk_list(&[]),
         );
         assert_eq!(result.unwrap(), v_int(0));
+    }
+
+    #[test]
+    fn test_regress_except() {
+        //    #[test_case("return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};",
+        //         v_list(&[v_int(666), v_int(321)]); "catch expr 2")]
+        let program = r#"
+        return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_list(&[v_int(666), v_int(321)]));
     }
 }

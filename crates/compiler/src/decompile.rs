@@ -19,7 +19,7 @@ use crate::ast::{
 };
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::parse::Parse;
-use crate::var_scope::{DeclType, VarScope};
+use crate::var_scope::VarScope;
 use moor_common::program::builtins::BuiltinId;
 use moor_common::program::labels::{JumpLabel, Label, Offset};
 use moor_common::program::names::{Name, Variable};
@@ -1077,37 +1077,27 @@ impl Decompile {
 
 /// Reconstruct a parse tree from opcodes.
 pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
-    // Reconstruct a fake "unbound names" from the program's var_names.
-    // TODO: this is broken for scopes, but we don't have a way to represent that yet
-    //  inside bound names.
-    let mut unbound_names = VarScope::new();
-    let mut bound_to_unbound = HashMap::new();
-    let mut unbound_to_bound = HashMap::new();
-    let var_names = program.var_names();
-    for bound_name in var_names.names() {
-        let ub = match var_names.name_of(&bound_name) {
-            None => unbound_names
-                .declare_register()
-                .map_err(|_| DecompileError::NameNotFound(bound_name))?,
-            Some(n) => {
-                let Some(n) = unbound_names.find_or_add_name_global(n.as_str(), DeclType::Unknown)
-                else {
-                    return Err(DecompileError::NameNotFound(bound_name));
-                };
-                n
-            }
-        };
-        bound_to_unbound.insert(bound_name, ub);
-        unbound_to_bound.insert(ub, bound_name);
+    let name_to_var = program.var_names().bound.clone();
+    let mut names_mapping = HashMap::new();
+
+    for (name, v) in name_to_var.iter() {
+        names_mapping.insert(*v, *name);
     }
 
+    let variables = VarScope {
+        variables: program.var_names().decls.values().cloned().collect(),
+        scopes: vec![],
+        scope_id_stack: vec![],
+        num_registers: 0,
+        scope_id_seq: 0,
+    };
     let mut decompile = Decompile {
         program: program.clone(),
         fork_vector: None,
         position: 0,
         expr_stack: Default::default(),
         statements: vec![],
-        names_mapping: bound_to_unbound,
+        names_mapping: name_to_var,
     };
     let opcode_vector_len = decompile.opcode_vector().len();
     while decompile.position < opcode_vector_len {
@@ -1117,8 +1107,8 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
     Ok(Parse {
         stmts: decompile.statements,
         names: program.var_names().clone(),
-        variables: unbound_names,
-        names_mapping: unbound_to_bound,
+        variables,
+        names_mapping,
     })
 }
 

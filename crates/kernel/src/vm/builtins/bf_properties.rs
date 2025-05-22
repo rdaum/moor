@@ -18,10 +18,10 @@ use moor_var::Sequence;
 use moor_var::Variant;
 use moor_var::{E_ARGS, E_INVARG, E_TYPE};
 use moor_var::{List, v_empty_list};
-use moor_var::{v_list, v_none, v_obj, v_string};
+use moor_var::{v_list, v_obj, v_string};
 
 use crate::vm::builtins::BfErr::{Code, ErrValue};
-use crate::vm::builtins::BfRet::Ret;
+use crate::vm::builtins::BfRet::{Ret, RetNil};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 
 // property_info (obj <object>, str <prop-name>)              => list\
@@ -188,7 +188,7 @@ fn bf_add_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Some(value),
         )
         .map_err(world_state_bf_err)?;
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {

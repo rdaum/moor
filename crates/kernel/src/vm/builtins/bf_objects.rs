@@ -23,9 +23,9 @@ use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
 use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Sequence, Symbol, v_list};
-use moor_var::{v_int, v_none, v_obj, v_str, v_sym_str};
+use moor_var::{v_int, v_obj, v_str, v_sym_str};
 
-use crate::vm::builtins::BfRet::{Ret, VmInstr};
+use crate::vm::builtins::BfRet::{Ret, RetNil, VmInstr};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
 use crate::vm::vm_host::ExecutionResult::DispatchVerb;
 use crate::vm::{VerbCall, VerbExecutionRequest};
@@ -108,7 +108,7 @@ fn bf_chparent(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .world_state
         .change_parent(&bf_args.task_perms_who(), obj, new_parent)
         .map_err(world_state_bf_err)?;
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_children(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -734,7 +734,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
                 // Enter func was called, and returned. Result is irrelevant. We're done.
                 // Return v_none.
-                return Ok(Ret(v_none()));
+                return Ok(RetNil);
             }
             _ => {
                 panic!("Invalid trampoline state: {} in bf_move", tramp);
@@ -834,7 +834,7 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         bf_args.exec_state.set_task_perms(obj.clone());
     }
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {

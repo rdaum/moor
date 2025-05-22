@@ -195,6 +195,10 @@ pub(crate) type BuiltinFunction = fn(&mut BfCallState<'_>) -> Result<BfRet, BfEr
 
 /// Return possibilities from a built-in function.
 pub(crate) enum BfRet {
+    /// Successful return with no relevant value.
+    /// This will just get turned into v_int(0), but I want to call it out as a distinct path.
+    /// We used to return v_none here, until TYPE_NONE became E_VARNF.
+    RetNil,
     /// Successful return, with a value to be pushed to the value stack.
     Ret(Var),
     /// BF wants to return control back to the VM, with specific instructions to things like

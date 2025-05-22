@@ -11,10 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
-use crate::{DeclType, ast};
+use moor_common::program::DeclType;
 use moor_common::program::names::{Name, Variable};
 use moor_common::util::quote_str;
 use moor_var::{Obj, Sequence, Var, Variant};
@@ -309,8 +310,7 @@ impl<'a> Unparse<'a> {
                 //   as the let scatter syntax does not have granularity per-var.
                 let is_local = vars.iter().any(|var| {
                     let bound_name = self.tree.names_mapping[&var.id];
-                    let scope_depth = self.tree.names.depth_of(&bound_name).unwrap();
-                    scope_depth > 0
+                    bound_name.1 > 0
                 });
                 let is_const = vars
                     .iter()

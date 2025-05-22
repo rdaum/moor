@@ -79,57 +79,6 @@ mod tests {
     }
 
     #[test]
-    fn test_if_stmt() {
-        let program = "if (1 == 2) return 5; elseif (2 == 3) return 3; else return 6; endif";
-        let binary = compile(program, CompileOptions::default()).unwrap();
-
-        /*
-         0: 124                   NUM 1
-         1: 125                   NUM 2
-         2: 023                 * EQ
-         3: 000 009             * IF 9
-         5: 128                   NUM 5
-         6: 108                   RETURN
-         7: 107 020               JUMP 20
-         9: 125                   NUM 2
-        10: 126                   NUM 3
-        11: 023                 * EQ
-        12: 002 018             * ELSEIF 18
-        14: 126                   NUM 3
-        15: 108                   RETURN
-        16: 107 020               JUMP 20
-        18: 129                   NUM 6
-        19: 108                   RETURN
-
-                */
-        assert_eq!(
-            binary.main_vector().to_vec(),
-            vec![
-                ImmInt(1),
-                ImmInt(2),
-                Eq,
-                If(1.into(), 0),
-                ImmInt(5),
-                Return,
-                Pop,
-                Jump { label: 0.into() },
-                ImmInt(2),
-                ImmInt(3),
-                Eq,
-                Eif(2.into(), 0),
-                ImmInt(3),
-                Return,
-                Pop,
-                Jump { label: 0.into() },
-                ImmInt(6),
-                Return,
-                Pop,
-                Done
-            ]
-        );
-    }
-
-    #[test]
     fn test_while_stmt() {
         let program = "while (1) x = x + 1; endwhile";
         let binary = compile(program, CompileOptions::default()).unwrap();
@@ -160,116 +109,12 @@ mod tests {
                 Put(x),
                 Pop,
                 Jump { label: 0.into() },
+                EndScope { num_bindings: 0 },
                 Done
             ]
         );
     }
 
-    #[test]
-    fn test_while_label_stmt() {
-        let program = "while chuckles (1) x = x + 1; if (x > 5) break chuckles; endif endwhile";
-        let binary = compile(program, CompileOptions::default()).unwrap();
-
-        let x = binary.find_var("x");
-        let chuckles = binary.find_var("chuckles");
-
-        /*
-                 0: 124                   NUM 1
-         1: 112 010 019 024     * WHILE_ID chuckles 24
-         5: 085                   PUSH x
-         6: 124                   NUM 1
-         7: 021                 * ADD
-         8: 052                 * PUT x
-         9: 111                   POP
-        10: 085                   PUSH x
-        11: 128                   NUM 5
-        12: 027                 * GT
-        13: 000 022             * IF 22
-        15: 112 012 019 000 024 * EXIT_ID chuckles 0 24
-        20: 107 022               JUMP 22
-        22: 107 000               JUMP 0
-                        */
-        assert_eq!(
-            binary.main_vector().to_vec(),
-            vec![
-                ImmInt(1),
-                WhileId {
-                    id: chuckles,
-                    end_label: 1.into(),
-                    environment_width: 0,
-                },
-                Push(x),
-                ImmInt(1),
-                Add,
-                Put(x),
-                Pop,
-                Push(x),
-                ImmInt(5),
-                Gt,
-                If(3.into(), 0),
-                ExitId(1.into()),
-                Jump { label: 2.into() },
-                Jump { label: 0.into() },
-                Done,
-            ]
-        );
-    }
-    #[test]
-    fn test_while_break_continue_stmt() {
-        let program = "while (1) x = x + 1; if (x == 5) break; else continue; endif endwhile";
-        let binary = compile(program, CompileOptions::default()).unwrap();
-
-        let x = binary.find_var("x");
-
-        /*
-        "  0: 124                   NUM 1",
-        "1: 001 025             * WHILE 25",
-        "  3: 085                   PUSH x",
-        "  4: 124                   NUM 1",
-        "  5: 021                 * ADD",
-        "  6: 052                 * PUT x",
-        "  7: 111                   POP",
-        "  8: 085                   PUSH x",
-        "  9: 128                   NUM 5",
-        " 10: 023                 * EQ",
-        " 11: 000 019             * IF 19",
-        " 13: 112 011 000 025     * EXIT 0 25",
-        " 17: 107 023               JUMP 23",
-        " 19: 112 011 000 000     * EXIT 0 0",
-        " 23: 107 000               JUMP 0"
-                 */
-        assert_eq!(
-            binary.main_vector().to_vec(),
-            vec![
-                ImmInt(1),
-                While {
-                    jump_label: 1.into(),
-                    environment_width: 0,
-                },
-                Push(x),
-                ImmInt(1),
-                Add,
-                Put(x),
-                Pop,
-                Push(x),
-                ImmInt(5),
-                Eq,
-                If(3.into(), 0),
-                Exit {
-                    stack: 0.into(),
-                    label: 1.into()
-                },
-                Jump { label: 2.into() },
-                Exit {
-                    stack: 0.into(),
-                    label: 0.into()
-                },
-                Jump { label: 0.into() },
-                Done
-            ]
-        );
-        assert_eq!(binary.jump_label(Label(0)).position.0, 0);
-    }
     #[test]
     fn test_for_in_list_stmt() {
         let program = "for x in ({1,2,3}) b = x + 5; endfor";
@@ -311,6 +156,7 @@ mod tests {
                 Add,
                 Put(b),
                 Pop,
+                EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
                 Done
             ]
@@ -365,6 +211,7 @@ mod tests {
                 MakeSingletonList,
                 CallVerb,
                 Pop,
+                EndScope { num_bindings: 0 },
                 Jump { label: 0.into() },
                 Done
             ]

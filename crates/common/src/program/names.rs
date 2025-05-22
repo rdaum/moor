@@ -11,14 +11,16 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::program::Decl;
 use crate::program::names::VarName::{Named, Register};
 use bincode::{Decode, Encode};
 use moor_var::Symbol;
+use std::collections::HashMap;
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 
 /// A Name is a unique identifier for a variable or register in the program's environment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Hash)]
-pub struct Name(pub u16);
+pub struct Name(pub u16, pub u8);
 
 /// The set of known variable names that are always set for every verb invocation.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FromRepr, EnumCount, Display, EnumIter)]
@@ -42,6 +44,7 @@ pub enum GlobalName {
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Encode, Decode)]
 pub struct Variable {
     pub id: u16,
+    pub scope_id: usize,
     pub nr: VarName,
 }
 
@@ -63,30 +66,30 @@ impl Variable {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct Names {
     /// The set of bound variables and their names.
-    pub bound: Vec<Variable>,
+    pub bound: HashMap<Name, Variable>,
     /// The size of the global scope, e.g. the size the environment should be when the frame
     /// is first created.
     pub global_width: usize,
-    /// The scope-depth for each variable. E.g. 0 for global and then 1..N for nested scopes.
-    pub scope_depth: Vec<u16>,
+    /// The variable decl for each variable
+    pub decls: HashMap<Name, Decl>,
 }
 
 impl Names {
     pub fn new(global_width: usize) -> Self {
         Self {
-            bound: vec![],
+            bound: HashMap::new(),
+            decls: HashMap::new(),
             global_width,
-            scope_depth: vec![],
         }
     }
 
     pub fn find_name(&self, name: &str) -> Option<Name> {
-        for (idx, n) in self.bound.iter().enumerate() {
-            let Named(sym) = n.nr else {
+        for (n, vr) in self.bound.iter() {
+            let Named(sym) = vr.nr else {
                 continue;
             };
             if sym.as_str() == name {
-                return Some(Name(idx as u16));
+                return Some(*n);
             }
         }
         None
@@ -105,19 +108,16 @@ impl Names {
 
     /// Return the symbol value of the given name offset, if it has one
     pub fn name_of(&self, name: &Name) -> Option<Symbol> {
-        if name.0 as usize >= self.bound.len() {
-            return None;
-        }
-        let Named(name) = self.bound[name.0 as usize].nr else {
-            return None;
-        };
-        Some(name)
+        self.bound.get(name).map(|v| match v.nr {
+            Named(sym) => sym,
+            Register(_) => Symbol::mk(&format!("<register_{}>", name.0)),
+        })
     }
 
     pub fn symbols(&self) -> Vec<Symbol> {
         self.bound
-            .iter()
-            .map(|b| match b.nr {
+            .values()
+            .map(|vr| match vr.nr {
                 Named(s) => s,
                 Register(r_num) => Symbol::mk(&format!("<register_{r_num}>")),
             })
@@ -125,21 +125,6 @@ impl Names {
     }
 
     pub fn names(&self) -> Vec<Name> {
-        (0..self.bound.len() as u16).map(Name).collect()
-    }
-
-    pub fn depth_of(&self, name: &Name) -> Option<u16> {
-        if name.0 as usize >= self.scope_depth.len() {
-            return None;
-        }
-        Some(self.scope_depth[name.0 as usize])
-    }
-
-    /// Get the offset for a bound variable.
-    pub fn offset_for(&self, name: &Name) -> Option<usize> {
-        if name.0 as usize >= self.bound.len() {
-            return None;
-        }
-        Some(name.0 as usize)
+        self.bound.keys().copied().collect()
     }
 }
