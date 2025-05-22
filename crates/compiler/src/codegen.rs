@@ -732,11 +732,9 @@ impl CodegenState {
                     for stmt in &arm.statements {
                         self.generate_stmt(stmt)?;
                     }
-                    if arm.environment_width > 0 {
-                        self.emit(Op::EndScope {
-                            num_bindings: arm.environment_width as u16,
-                        });
-                    }
+                    self.emit(Op::EndScope {
+                        num_bindings: arm.environment_width as u16,
+                    });
                     self.emit(Jump { label: end_label });
 
                     // This is where we jump to if the condition is false; either the end of the
@@ -748,20 +746,16 @@ impl CodegenState {
                     let end_label = self.make_jump_label(None);
                     // Decompilation has to elide this begin/end scope pair, as it's not actually
                     // present in the source code.
-                    if otherwise.environment_width > 0 {
-                        self.emit(Op::BeginScope {
-                            num_bindings: otherwise.environment_width as u16,
-                            end_label,
-                        });
-                    }
+                    self.emit(Op::BeginScope {
+                        num_bindings: otherwise.environment_width as u16,
+                        end_label,
+                    });
                     for stmt in &otherwise.statements {
                         self.generate_stmt(stmt)?;
                     }
-                    if otherwise.environment_width > 0 {
-                        self.emit(Op::EndScope {
-                            num_bindings: otherwise.environment_width as u16,
-                        });
-                    }
+                    self.emit(Op::EndScope {
+                        num_bindings: otherwise.environment_width as u16,
+                    });
                     self.commit_jump_label(end_label);
                 }
                 self.commit_jump_label(end_label);
@@ -802,11 +796,9 @@ impl CodegenState {
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
-                if *environment_width > 0 {
-                    self.emit(Op::EndScope {
-                        num_bindings: *environment_width as u16,
-                    });
-                }
+                self.emit(Op::EndScope {
+                    num_bindings: *environment_width as u16,
+                });
                 self.emit(Jump { label: loop_top });
                 self.commit_jump_label(end_label);
                 self.pop_stack(2);
@@ -839,11 +831,9 @@ impl CodegenState {
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
-                if *environment_width > 0 {
-                    self.emit(Op::EndScope {
-                        num_bindings: *environment_width as u16,
-                    });
-                }
+                self.emit(Op::EndScope {
+                    num_bindings: *environment_width as u16,
+                });
                 self.emit(Jump { label: loop_top });
                 self.commit_jump_label(end_label);
                 self.pop_stack(2);
@@ -887,11 +877,9 @@ impl CodegenState {
                 self.emit(Jump {
                     label: loop_start_label,
                 });
-                if *environment_width > 0 {
-                    self.emit(Op::EndScope {
-                        num_bindings: *environment_width as u16,
-                    });
-                }
+                self.emit(Op::EndScope {
+                    num_bindings: *environment_width as u16,
+                });
                 self.commit_jump_label(loop_end_label);
                 self.loops.pop();
             }

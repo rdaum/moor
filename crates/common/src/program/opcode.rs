@@ -202,7 +202,7 @@ mod tests {
     fn size_opcode() {
         use std::mem::size_of;
         assert_eq!(size_of::<Op>(), 16);
-        assert_eq!(size_of::<Name>(), 2);
+        assert_eq!(size_of::<Name>(), 4);
         assert_eq!(size_of::<Offset>(), 2);
         assert_eq!(size_of::<Label>(), 2);
     }

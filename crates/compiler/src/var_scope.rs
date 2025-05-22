@@ -11,43 +11,33 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
 use moor_common::model::CompileError;
 use moor_common::program::names::VarName::{Named, Register};
 use moor_common::program::names::{GlobalName, Name, Names, Variable};
+use moor_common::program::{Decl, DeclType};
 use moor_var::Symbol;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VarScope {
-    variables: Vec<Decl>,
-    scopes: Vec<Vec<Variable>>,
-    num_registers: u16,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum DeclType {
-    Global,
-    Let,
-    Assign,
-    For,
-    Unknown,
-    Register,
-    Except,
-    WhileLabel,
-    ForkLabel,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Decl {
-    /// The type of declaration, how was it declared?
-    pub decl_type: DeclType,
-    /// The name of the variable (or register id if a register).
-    pub identifier: Variable,
-    /// What scope the variable was declared in.
-    pub depth: usize,
-    /// Is this a constant? Reject subsequent assignments.
-    pub constant: bool,
+    pub variables: Vec<Decl>,
+    pub scopes: Vec<Vec<Variable>>,
+    pub scope_id_stack: Vec<usize>,
+    pub num_registers: u16,
+    pub scope_id_seq: usize,
 }
 
 /// Policy for binding a variable when new_bound is called.
@@ -65,6 +55,8 @@ impl Default for VarScope {
             variables: vec![],
             scopes: vec![Vec::new()],
             num_registers: 0,
+            scope_id_seq: 0,
+            scope_id_stack: vec![0],
         }
     }
 }
@@ -84,7 +76,7 @@ impl VarScope {
     pub fn find_or_add_name_global(&mut self, name: &str, decl_type: DeclType) -> Option<Variable> {
         let name = Symbol::mk_case_insensitive(name);
 
-        // Check the scopes, starting at the back (innermost scope)
+        // Check the current scopes, starting at the back (innermost scope)
         for scope in self.scopes.iter().rev() {
             for v in scope {
                 if let Named(sym) = v.nr {
@@ -119,18 +111,20 @@ impl VarScope {
     }
 
     /// Start a new lexical scope.
-    pub fn push_scope(&mut self) {
+    pub fn enter_new_scope(&mut self) {
+        self.scope_id_seq += 1;
+        self.scope_id_stack.push(self.scope_id_seq);
         self.scopes.push(Vec::new());
     }
 
     /// Pop the current scope.
-    pub fn pop_scope(&mut self) -> usize {
+    pub fn exit_scope(&mut self) -> usize {
         let scope = self.scopes.pop().unwrap();
+        self.scope_id_stack.pop().unwrap();
         scope.len()
     }
 
     pub fn declare_register(&mut self) -> Result<Variable, CompileError> {
-        // Registers always exist at the global level, but are unique.
         let (unbound_name, _) = self.new_unbound_register(0, false)?;
         self.scopes[0].push(unbound_name);
         Ok(unbound_name)
@@ -242,15 +236,18 @@ impl VarScope {
             }
         }
         let id = self.variables.len() as u16;
+        let scope_id = self.scope_id_stack[scope_depth];
         let vr = Variable {
             id,
             nr: Named(name),
+            scope_id,
         };
         self.variables.push(Decl {
             identifier: vr,
             depth: scope_depth,
             constant,
             decl_type,
+            scope_id,
         });
         Some(vr)
     }
@@ -263,15 +260,18 @@ impl VarScope {
         let r_num = self.num_registers;
         self.num_registers += 1;
         let id = self.variables.len() as u16;
+        let scope_id = self.scope_id_stack[0];
         let vr = Variable {
             id,
             nr: Register(r_num),
+            scope_id,
         };
         self.variables.push(Decl {
             identifier: vr,
             depth: scope,
             constant,
             decl_type: DeclType::Register,
+            scope_id,
         });
         Ok((vr, r_num))
     }
@@ -294,16 +294,26 @@ impl VarScope {
     /// Run at the end of compilation to produce valid offsets.
     pub fn bind(&self) -> (Names, HashMap<Variable, Name>) {
         let mut mapping = HashMap::new();
-        let mut bound = Vec::with_capacity(self.variables.len());
-        // Walk the scopes, binding all unbound variables.
-        // This will produce offsets for all variables in the order they should appear in the
-        // environment.
-        let mut scope_depth = Vec::with_capacity(self.variables.len());
-        for (idx, vr) in self.variables.iter().enumerate() {
-            let offset = bound.len();
-            bound.push(self.variables[idx].identifier);
-            scope_depth.push(self.variables[idx].depth as u16);
-            mapping.insert(vr.identifier, Name(offset as u16));
+
+        let mut sorted_by_depth = self.variables.clone();
+        sorted_by_depth.sort_by(|a, b| a.depth.cmp(&b.depth));
+
+        let mut current_offset = 0;
+        let mut current_scope = 0;
+        let mut bound = HashMap::new();
+        let mut decls = HashMap::new();
+        for vr in sorted_by_depth.iter() {
+            if vr.identifier.scope_id != current_scope {
+                // We've moved to a new scope.
+                current_scope = vr.identifier.scope_id;
+                current_offset = 0;
+            }
+            let offset = current_offset;
+            current_offset += 1;
+            let name = Name(offset as u16, vr.depth as u8);
+            bound.insert(name, vr.identifier);
+            mapping.insert(vr.identifier, name);
+            decls.insert(name, vr.clone());
         }
 
         let global_width = self.scopes[0].len();
@@ -311,7 +321,7 @@ impl VarScope {
             Names {
                 bound,
                 global_width,
-                scope_depth,
+                decls,
             },
             mapping,
         )
@@ -337,8 +347,8 @@ mod tests {
         let bfob = bound_names.find_name("fob").unwrap();
         assert_eq!(bfoo.0, before_width);
         assert_eq!(bfob.0, before_width + 1);
-        assert_eq!(bound_names.depth_of(&bfoo).unwrap(), 0);
-        assert_eq!(bound_names.depth_of(&bfob).unwrap(), 0);
+        assert_eq!(bfoo.1, 0);
+        assert_eq!(bfob.1, 0);
         assert_eq!(bound_names.global_width as u16, before_width + 2);
     }
 
@@ -359,9 +369,6 @@ mod tests {
         assert_eq!(bfoo.0, before_width);
         assert_eq!(bfob.0, before_width + 1);
         assert_eq!(b_reg.0, before_width + 2);
-        assert_eq!(bound_names.depth_of(&bfoo).unwrap(), 0);
-        assert_eq!(bound_names.depth_of(&bfob).unwrap(), 0);
-        assert_eq!(bound_names.depth_of(b_reg).unwrap(), 0);
         assert_eq!(bound_names.global_width as u16, before_width + 3);
     }
 
@@ -371,11 +378,11 @@ mod tests {
         let before_width = unbound_names.variables.len() as u16;
 
         let x = unbound_names.declare_name("x", DeclType::Let).unwrap();
-        unbound_names.push_scope();
+        unbound_names.enter_new_scope();
         let v = unbound_names.declare_register().unwrap();
         let y = unbound_names.declare_name("y", DeclType::Let).unwrap();
         assert_eq!(unbound_names.find_name("y").unwrap(), y);
-        unbound_names.pop_scope();
+        unbound_names.exit_scope();
         let z = unbound_names.declare_name("z", DeclType::Let).unwrap();
 
         assert_eq!(unbound_names.find_name("x").unwrap(), x);
@@ -387,10 +394,10 @@ mod tests {
         let bz = bound_names.find_name("z").unwrap();
         let bv = mappings.get(&v).unwrap();
 
-        assert_eq!(bound_names.scope_depth[bx.0 as usize], 0);
-        assert_eq!(bound_names.scope_depth[by.0 as usize], 1);
-        assert_eq!(bound_names.scope_depth[bv.0 as usize], 0);
-        assert_eq!(bound_names.scope_depth[bz.0 as usize], 0);
+        assert_eq!(bx.1, 0);
+        assert_eq!(by.1, 1);
+        assert_eq!(bz.1, 0);
+        assert_eq!(bv.1, 0);
 
         assert_eq!(bx.0, before_width);
         assert_eq!(bound_names.global_width as u16, before_width + 3);
@@ -401,11 +408,11 @@ mod tests {
         let mut unbound_names = VarScope::new();
         let before_width = unbound_names.variables.len() as u16;
         let ufoo = unbound_names.declare_name("foo", DeclType::Let).unwrap();
-        unbound_names.push_scope();
+        unbound_names.enter_new_scope();
         let ufob = unbound_names.declare_name("fob", DeclType::Let).unwrap();
         assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
         assert_eq!(unbound_names.find_name("fob").unwrap(), ufob);
-        unbound_names.pop_scope();
+        unbound_names.exit_scope();
         assert!(unbound_names.find_name("fob").is_none());
         assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
 
@@ -413,9 +420,8 @@ mod tests {
         let bfoo = bound_names.find_name("foo").unwrap();
         let bfob = bound_names.find_name("fob").unwrap();
         assert_eq!(bfoo.0, before_width);
-        assert_eq!(bfob.0, before_width + 1);
-        assert_eq!(bound_names.depth_of(&bfoo).unwrap(), 0);
-        assert_eq!(bound_names.depth_of(&bfob).unwrap(), 1);
+        assert_eq!(bfob.0, 0);
+        assert_eq!(bfob.1, 1);
         assert_eq!(bound_names.global_width as u16, before_width + 1);
     }
 
@@ -423,9 +429,9 @@ mod tests {
     fn test_bind_shadowed_variable() {
         let mut unbound_names = VarScope::new();
         unbound_names.declare_name("foo", DeclType::Let).unwrap();
-        unbound_names.push_scope();
+        unbound_names.enter_new_scope();
         let ufoo2 = unbound_names.declare_name("foo", DeclType::Let).unwrap();
         assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo2);
-        unbound_names.pop_scope();
+        unbound_names.exit_scope();
     }
 }

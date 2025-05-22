@@ -30,6 +30,7 @@ use moor_common::model::WorldStateError;
 use moor_common::program::ProgramType;
 use moor_common::tasks::Session;
 use moor_compiler::{BUILTINS, BuiltinId, Program};
+use moor_var::VarType::TYPE_NONE;
 use moor_var::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_var::{List, Obj};
@@ -397,7 +398,16 @@ impl VMExecState {
             .cumulative_duration_nanos
             .add(elapsed_nanos as isize);
         match result {
-            Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result)),
+            Ok(BfRet::Ret(result)) => {
+                assert_ne!(
+                    result.type_code(),
+                    TYPE_NONE,
+                    "Builtin {} returned TYPE_NONE",
+                    bf_name
+                );
+                self.unwind_stack(FinallyReason::Return(result))
+            }
+            Ok(BfRet::RetNil) => self.unwind_stack(FinallyReason::Return(v_int(0))),
             Err(BfErr::ErrValue(e)) => self.push_bf_error(e),
             Err(BfErr::Code(c)) => self.push_bf_error(c.into()),
             Err(BfErr::Raise(e)) => self.push_bf_error(e),
@@ -452,6 +462,7 @@ impl VMExecState {
             .add(elapsed_nanos as isize);
         match result {
             Ok(BfRet::Ret(result)) => self.unwind_stack(FinallyReason::Return(result.clone())),
+            Ok(BfRet::RetNil) => self.unwind_stack(FinallyReason::Return(v_int(0))),
             Err(BfErr::Code(c)) => self.push_bf_error(c.into()),
             Err(BfErr::ErrValue(e)) => self.push_bf_error(e),
             Err(BfErr::Raise(e)) => self.push_bf_error(e),

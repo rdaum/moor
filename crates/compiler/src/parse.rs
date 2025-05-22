@@ -37,9 +37,10 @@ use crate::ast::{
 };
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
-use crate::var_scope::{DeclType, VarScope};
+use crate::var_scope::VarScope;
 use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
 use moor_common::model::{CompileContext, CompileError};
+use moor_common::program::DeclType;
 use moor_common::program::names::{Name, Names, Variable};
 
 pub mod moo {
@@ -507,6 +508,7 @@ impl TreeTransformer {
 
                         match clause.as_rule() {
                             Rule::for_range_clause => {
+                                self.enter_scope();
                                 let mut clause_inner = clause.into_inner();
                                 let from_rule = clause_inner.next().unwrap();
                                 let to_rule = clause_inner.next().unwrap();
@@ -514,6 +516,7 @@ impl TreeTransformer {
                                 let to = self.clone().parse_expr(to_rule.into_inner())?;
                                 let end_of_range_register =
                                     self.names.borrow_mut().declare_register()?;
+                                self.exit_scope();
                                 Ok(Expr::ComprehendRange {
                                     variable,
                                     end_of_range_register,
@@ -523,12 +526,15 @@ impl TreeTransformer {
                                 })
                             }
                             Rule::for_in_clause => {
+                                self.enter_scope();
+
                                 let mut clause_inner = clause.into_inner();
                                 let in_rule = clause_inner.next().unwrap();
                                 let expr = self.clone().parse_expr(in_rule.into_inner())?;
                                 let position_register =
                                     self.names.borrow_mut().declare_register()?;
                                 let list_register = self.names.borrow_mut().declare_register()?;
+                                self.exit_scope();
                                 Ok(Expr::ComprehendList {
                                     list_register,
                                     variable,
@@ -811,13 +817,13 @@ impl TreeTransformer {
                 )))
             }
             Rule::if_statement => {
-                self.enter_scope();
                 let mut parts = pair.into_inner();
                 let mut arms = vec![];
                 let mut otherwise = None;
                 let condition = self
                     .clone()
                     .parse_expr(parts.next().unwrap().into_inner())?;
+                self.enter_scope();
                 let body = self
                     .clone()
                     .parse_statements(parts.next().unwrap().into_inner())?;
@@ -833,9 +839,7 @@ impl TreeTransformer {
                             continue;
                         }
                         Rule::elseif_clause => {
-                            {
-                                self.clone().names.borrow_mut().push_scope();
-                            }
+                            self.enter_scope();
                             let mut parts = remainder.into_inner();
                             let condition = self
                                 .clone()
@@ -851,7 +855,7 @@ impl TreeTransformer {
                             });
                         }
                         Rule::else_clause => {
-                            self.clone().names.borrow_mut().push_scope();
+                            self.enter_scope();
                             let mut parts = remainder.into_inner();
                             let otherwise_statements = self
                                 .clone()
@@ -908,13 +912,6 @@ impl TreeTransformer {
                     line_col,
                 )))
             }
-            // Rule::return_statement => {
-            //     let mut parts = pair.into_inner();
-            //     let expr = parts
-            //         .next()
-            //         .map(|expr| self.parse_expr(expr.into_inner()).unwrap());
-            //     Ok(Some(Stmt::new(StmtNode::Return(expr), line_col)))
-            // }
             Rule::for_range_statement => {
                 let mut parts = pair.into_inner();
 
@@ -924,8 +921,8 @@ impl TreeTransformer {
 
                     names.declare_or_use_name(varname, DeclType::For)
                 };
-                self.enter_scope();
                 let clause = parts.next().unwrap();
+                self.enter_scope();
                 let body = self
                     .clone()
                     .parse_statements(parts.next().unwrap().into_inner())?;
@@ -1025,8 +1022,9 @@ impl TreeTransformer {
                 let body = self
                     .clone()
                     .parse_statements(parts.next().unwrap().into_inner())?;
-                let environment_width = self.exit_scope();
                 let mut excepts = vec![];
+                let environment_width = self.exit_scope();
+
                 for except in parts {
                     match except.as_rule() {
                         Rule::except => {
@@ -1066,6 +1064,7 @@ impl TreeTransformer {
                         _ => panic!("Unimplemented except clause: {:?}", except),
                     }
                 }
+
                 Ok(Some(Stmt::new(
                     StmtNode::TryExcept {
                         body,
@@ -1397,13 +1396,13 @@ impl TreeTransformer {
 
     fn enter_scope(&self) {
         if self.options.lexical_scopes {
-            self.names.borrow_mut().push_scope();
+            self.names.borrow_mut().enter_new_scope();
         }
     }
 
     fn exit_scope(&self) -> usize {
         if self.options.lexical_scopes {
-            return self.names.borrow_mut().pop_scope();
+            return self.names.borrow_mut().exit_scope();
         }
         0
     }

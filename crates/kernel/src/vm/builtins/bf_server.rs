@@ -23,7 +23,7 @@ use tracing::{error, info, warn};
 use crate::tasks::{TaskStart, sched_counters};
 use crate::vm::TaskSuspend;
 use crate::vm::builtins::BfErr::{Code, ErrValue};
-use crate::vm::builtins::BfRet::{Ret, VmInstr};
+use crate::vm::builtins::BfRet::{Ret, RetNil, VmInstr};
 use crate::vm::builtins::{
     BfCallState, BfErr, BfRet, BuiltinFunction, bf_perf_counters, world_state_bf_err,
 };
@@ -272,7 +272,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .task_scheduler_client
         .notify(player.clone(), Box::new(event));
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -352,7 +352,7 @@ fn bf_set_task_perms(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     bf_args.exec_state.set_task_perms(perms_for);
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -496,7 +496,7 @@ fn bf_shutdown(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args.task_scheduler_client.shutdown(msg);
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_time(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -619,11 +619,6 @@ fn bf_raise(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         None
     };
 
-    if err.msg.is_some() || err.value.is_some() {
-        return Err(ErrValue(
-            E_INVARG.msg("raise() requires an error with no message or value"),
-        ));
-    }
     Err(BfErr::Raise(Error::new(err.err_type, msg, value)))
 }
 
@@ -965,7 +960,7 @@ fn bf_kill_task(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let victim_task_id = *victim_task_id as TaskId;
 
     if victim_task_id == bf_args.exec_state.task_id {
-        return Ok(VmInstr(ExecutionResult::Complete(v_none())));
+        return Ok(VmInstr(ExecutionResult::Complete(v_int(0))));
     }
 
     let result = bf_args.task_scheduler_client.kill_task(
@@ -1047,7 +1042,7 @@ fn bf_seconds_left(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 
     let seconds_left = match bf_args.exec_state.time_left() {
-        None => v_none(),
+        None => v_int(-1),
         Some(d) => v_int(d.as_secs() as i64),
     };
 
@@ -1077,7 +1072,7 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args.task_scheduler_client.boot_player(player.clone());
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -1171,7 +1166,7 @@ fn bf_server_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         );
     }
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn bf_function_info_to_list(bf: &Builtin) -> Var {
@@ -1371,7 +1366,7 @@ fn bf_unlisten(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(ErrValue(err));
     }
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
@@ -1536,7 +1531,7 @@ fn load_server_options(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args.task_scheduler_client.refresh_server_options();
 
-    Ok(Ret(v_none()))
+    Ok(RetNil)
 }
 
 fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
