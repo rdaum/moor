@@ -1,0 +1,25 @@
+// Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
+//   def test_ways_of_specifying_nothing
+
+@programmer
+; add_property($system, "b", create($nothing), {player, "wrc"});
+; add_property($system, "n", create($b), {player, "wrc"});
+
+; return parent($b);
+$nothing
+; return parent($n);
+$b
+
+// x = kahuna($nothing, $nothing, 'x')
+; add_property($system, "x", create($nothing), {player, "wrc"});
+; move($x, $nothing);
+; $x.name = "x";
+; add_property($x, "x", "x", {player, ""});
+; add_verb($x, {player, "xd", "x"}, {"this", "none", "this"});
+; set_verb_code($x, "x", {"return this.x;"});
+// EOF x = kahuna($nothing, $nothing, 'x')
+
+; recycle($x);
+
+; return create($x);
+E_PERM
