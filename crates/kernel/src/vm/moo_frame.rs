@@ -300,15 +300,15 @@ impl<C> Decode<C> for MooStackFrame {
 
 impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let program = Program::decode(decoder)?;
-        let pc = usize::decode(decoder)?;
-        let pc_type = PcType::decode(decoder)?;
-        let environment = Vec::decode(decoder)?.into();
-        let valstack = Vec::decode(decoder)?.into();
-        let scope_stack = Vec::decode(decoder)?.into();
-        let temp = Var::decode(decoder)?;
-        let catch_stack = Vec::decode(decoder)?;
-        let finally_stack = Vec::decode(decoder)?;
+        let program = Program::borrow_decode(decoder)?;
+        let pc = usize::borrow_decode(decoder)?;
+        let pc_type = PcType::borrow_decode(decoder)?;
+        let environment = Vec::borrow_decode(decoder)?.into();
+        let valstack = Vec::borrow_decode(decoder)?.into();
+        let scope_stack = Vec::borrow_decode(decoder)?.into();
+        let temp = Var::borrow_decode(decoder)?;
+        let catch_stack = Vec::borrow_decode(decoder)?;
+        let finally_stack = Vec::borrow_decode(decoder)?;
         Ok(Self {
             program,
             pc,
