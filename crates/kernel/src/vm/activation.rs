@@ -114,15 +114,15 @@ impl<C> Decode<C> for Activation {
 
 impl<'de, C> BorrowDecode<'de, C> for Activation {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let frame = Frame::decode(decoder)?;
-        let this = Var::decode(decoder)?;
-        let player = Obj::decode(decoder)?;
-        let args = Vec::<Var>::decode(decoder)?;
-        let verb_name = Symbol::decode(decoder)?;
-        let permissions = Obj::decode(decoder)?;
-        let command = Option::<Box<ParsedCommand>>::decode(decoder)?;
+        let frame = Frame::borrow_decode(decoder)?;
+        let this = Var::borrow_decode(decoder)?;
+        let player = Obj::borrow_decode(decoder)?;
+        let args = Vec::<Var>::borrow_decode(decoder)?;
+        let verb_name = Symbol::borrow_decode(decoder)?;
+        let permissions = Obj::borrow_decode(decoder)?;
+        let command = Option::<Box<ParsedCommand>>::borrow_decode(decoder)?;
 
-        let verbdef_bytes = Vec::<u8>::decode(decoder)?;
+        let verbdef_bytes = Vec::<u8>::borrow_decode(decoder)?;
         let verbdef_bytes = ByteView::from(verbdef_bytes);
         let verbdef = VerbDef::from_bytes(verbdef_bytes).unwrap();
 
