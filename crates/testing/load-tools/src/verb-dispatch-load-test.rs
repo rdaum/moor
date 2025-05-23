@@ -410,22 +410,14 @@ async fn load_test_workload(
             total_time,
             cumulative_time,
             total_verb_calls,
-            per_invocation_time: Duration::from_secs_f64(
-                cumulative_time.as_secs_f64() / total_invocations as f64,
-            ),
-            per_dispatch_time: Duration::from_secs_f64(
+            per_verb_call: Duration::from_secs_f64(
                 cumulative_time.as_secs_f64() / total_verb_calls as f64,
             ),
             counters: processed_counters,
         };
         info!(
-            "@ Concurrency: {} w/ total invocations: {}, ({total_verb_calls} total verb calls): Total Time: {:?}, Cumulative: {:?}, Per Invocation Time: {:?}, Per Verb Dispatch: {:?} ",
-            r.concurrency,
-            r.total_invocations,
-            r.total_time,
-            r.cumulative_time,
-            r.per_invocation_time,
-            r.per_dispatch_time
+            "@ Concurrency: {} w/ total invocations: {}, ({total_verb_calls} total verb calls): Total Time: {:?}, Cumulative: {:?}, Per Verb Dispatch: {:?} ",
+            r.concurrency, r.total_invocations, r.total_time, r.cumulative_time, r.per_verb_call
         );
         results.push(r);
 
@@ -450,10 +442,8 @@ struct Results {
     total_time: Duration,
     /// The cumulative time actually spent waiting for the daemon to respond
     cumulative_time: Duration,
-    /// The time per invocation
-    per_invocation_time: Duration,
     /// The time per verb dispatch
-    per_dispatch_time: Duration,
+    per_verb_call: Duration,
     /// All system performance counters aggregated before and after the load run
     counters: BTreeMap<String, (f64, f64, isize)>,
 }
@@ -518,8 +508,7 @@ async fn main() -> Result<(), eyre::Error> {
             "total_invocations".to_string(),
             "total_verb_calls".to_string(),
             "total_time_ns".to_string(),
-            "per_dispatch_time_μs".to_string(),
-            "per_invocation_time_μs".to_string(),
+            "per_dispatch_time_ns".to_string(),
         ];
         for x in first_row.counters.keys() {
             header.push(format!("{}-avg_μs", x));
@@ -533,8 +522,7 @@ async fn main() -> Result<(), eyre::Error> {
                 r.total_invocations.to_string(),
                 r.total_verb_calls.to_string(),
                 r.total_time.as_nanos().to_string(),
-                r.per_dispatch_time.as_nanos().to_string(),
-                r.per_invocation_time.as_nanos().to_string(),
+                r.per_verb_call.as_nanos().to_string(),
             ];
             for (_, (avg, total, count)) in r.counters {
                 base.push(avg.to_string());
