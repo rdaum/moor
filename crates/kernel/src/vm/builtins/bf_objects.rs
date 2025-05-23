@@ -559,12 +559,12 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     trace!(what = ?what, where_to = ?whereto, tramp, "move: looking up :accept verb");
 
     let perms = bf_args.task_perms().map_err(world_state_bf_err)?;
-    let mut shortcircuit = false;
+    let mut shortcircuit = None;
     loop {
         match tramp {
             BF_MOVE_TRAMPOLINE_START_ACCEPT => {
                 if whereto.is_nothing() {
-                    shortcircuit = true;
+                    shortcircuit = Some(1);
                     tramp = BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC;
                     continue;
                 }
@@ -599,7 +599,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         }
                         // Short-circuit fake-tramp state change.
                         tramp = BF_MOVE_TRAMPOLINE_MOVE_CALL_EXITFUNC;
-                        shortcircuit = true;
+                        shortcircuit = Some(0);
                         continue;
                     }
                     Err(e) => {
@@ -613,11 +613,9 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
                 // Accept verb has been called, and returned. Check the result. Should be in our
                 // activation's return-value.
-                // Unless short-circuited, in which case we assume *false*
-                let result = if !shortcircuit {
-                    bf_args.exec_state.top().frame.return_value()
-                } else {
-                    v_int(0)
+                let result = match shortcircuit {
+                    None => bf_args.exec_state.top().frame.return_value(),
+                    Some(n) => v_int(n),
                 };
                 // If the result is false, and we're not a wizard, then raise E_NACC.
                 if !result.is_true() && !perms.check_is_wizard().map_err(world_state_bf_err)? {
