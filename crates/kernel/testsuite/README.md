@@ -25,7 +25,7 @@ https://github.com/toddsundsted/stunt/tree/master/test
 | ✅     | `test_math.rb`                                 | `math.moot`                  |                                                                                             |
 | 🚫     | `test_miscellaneous.rb`                        | N/A                          | `moor` doesn't support this Stunt extension (`isa`)                                         |
 | ✅     | `test_moocode_parsing.rb`                      | N/A                          | Dropped tests for Stunt extensions (`^` collection, bitwise operators)                      |
-| 🚧     | `test_objects.rb`                              | `objects/{test_method}.moot` | See `test_objects` heading below                                                            |
+| ✅     | `test_objects.rb`                              | `objects/{test_method}.moot` | See `test_objects` heading below                                                            |
 | 🔜     | `test_objects_and_properties.rb`               | N/A                          |                                                                                             |
 | 🔜     | `test_objects_and_verbs.rb`                    | N/A                          |                                                                                             |
 | 🔜     | `test_primitives.rb`                           | N/A                          |                                                                                             |
