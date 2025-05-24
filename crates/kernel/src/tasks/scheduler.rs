@@ -11,14 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use ahash::AHasher;
 use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use lazy_static::lazy_static;
 use minstant::Instant;
-use std::collections::HashMap;
 use std::fs::File;
-use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::yield_now;
@@ -34,8 +31,8 @@ use moor_db::Database;
 
 use crate::config::{Config, ImportExportFormat};
 use crate::tasks::scheduler_client::{SchedulerClient, SchedulerClientMsg};
-use crate::tasks::suspension::{SuspensionQ, WakeCondition};
 use crate::tasks::task::Task;
+use crate::tasks::task_q::{RunningTask, SuspensionQ, TaskQ, WakeCondition};
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::workers::{WorkerRequest, WorkerResponse};
@@ -120,36 +117,6 @@ pub struct Scheduler {
     task_q: TaskQ,
 }
 
-/// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
-/// not shared elsewhere.
-/// The actual `Task` is owned by the task thread until it is suspended or completed.
-/// (When suspended it is moved into a `SuspendedTask` in the `.suspended` list)
-struct RunningTask {
-    /// For which player this task is running on behalf of.
-    player: Obj,
-    /// What triggered this task to start.
-    task_start: TaskStart,
-    /// A kill switch to signal the task to stop. True means the VM execution thread should stop
-    /// as soon as it can.
-    kill_switch: Arc<AtomicBool>,
-    /// The connection-session for this task.
-    session: Arc<dyn Session>,
-    /// A mailbox to deliver the result of the task to a waiting party with a subscription, if any.
-    result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
-}
-
-/// The internal state of the task queue.
-struct TaskQ {
-    /// Information about the active, running tasks. The actual `Task` is owned by the task thread
-    /// and this is just an information, and control record for communicating with it.
-    active: HashMap<TaskId, RunningTask, BuildHasherDefault<AHasher>>,
-    /// Tasks in various types of suspension:
-    ///     Forked background tasks that will execute someday
-    ///     Suspended foreground tasks that are either indefinitely suspended or will execute someday
-    ///     Suspended tasks waiting for input from the player or a task id to complete
-    suspended: SuspensionQ,
-}
-
 fn load_int_sysprop(server_options_obj: &Obj, name: Symbol, tx: &dyn WorldState) -> Option<u64> {
     let Ok(value) = tx.retrieve_property(&SYSTEM_OBJECT, server_options_obj, name) else {
         return None;
@@ -218,21 +185,21 @@ impl Scheduler {
         self.reload_server_options();
         while self.running {
             // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
-            let active_tasks = self.task_q.active.keys().copied().collect::<Vec<_>>();
-            let to_wake = self.task_q.suspended.collect_wake_tasks(&active_tasks);
-            for sr in to_wake {
-                let task_id = sr.task.task_id;
-                if let Err(e) = self.task_q.resume_task_thread(
-                    sr.task,
-                    v_int(0),
-                    sr.session,
-                    sr.result_sender,
-                    &self.task_control_sender,
-                    self.database.as_ref(),
-                    self.builtin_registry.clone(),
-                    self.config.clone(),
-                ) {
-                    error!(?task_id, ?e, "Error resuming task");
+            if let Some(to_wake) = self.task_q.collect_wake_tasks() {
+                for sr in to_wake {
+                    let task_id = sr.task.task_id;
+                    if let Err(e) = self.task_q.resume_task_thread(
+                        sr.task,
+                        v_int(0),
+                        sr.session,
+                        sr.result_sender,
+                        &self.task_control_sender,
+                        self.database.as_ref(),
+                        self.builtin_registry.clone(),
+                        self.config.clone(),
+                    ) {
+                        error!(?task_id, ?e, "Error resuming task");
+                    }
                 }
             }
             // Handle any scheduler submissions...

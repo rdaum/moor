@@ -29,8 +29,8 @@ use moor_common::util::PerfCounter;
 pub mod scheduler;
 
 pub(crate) mod scheduler_client;
-pub(crate) mod suspension;
 pub(crate) mod task;
+pub(crate) mod task_q;
 pub mod task_scheduler_client;
 mod tasks_db;
 pub mod workers;

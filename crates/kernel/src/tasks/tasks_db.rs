@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tasks::suspension::SuspendedTask;
+use crate::tasks::task_q::SuspendedTask;
 use moor_common::tasks::TaskId;
 
 #[derive(Debug, thiserror::Error)]

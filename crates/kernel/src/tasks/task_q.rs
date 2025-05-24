@@ -21,6 +21,7 @@ use minstant::Instant;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -28,9 +29,76 @@ use uuid::Uuid;
 use moor_var::Obj;
 
 use crate::tasks::task::Task;
-use crate::tasks::{TaskDescription, TaskResult, TasksDb};
+use crate::tasks::{TaskDescription, TaskResult, TaskStart, TasksDb};
 use moor_common::tasks::{NoopClientSession, Session, SessionFactory};
 use moor_common::tasks::{SchedulerError, TaskId};
+
+/// The internal state of the task queue.
+pub struct TaskQ {
+    /// Information about the active, running tasks. The actual `Task` is owned by the task thread
+    /// and this is just an information, and control record for communicating with it.
+    pub(crate) active: HashMap<TaskId, RunningTask, BuildHasherDefault<AHasher>>,
+    /// Tasks in various types of suspension:
+    ///     Forked background tasks that will execute someday
+    ///     Suspended foreground tasks that are either indefinitely suspended or will execute someday
+    ///     Suspended tasks waiting for input from the player or a task id to complete
+    pub(crate) suspended: SuspensionQ,
+}
+
+/// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
+/// not shared elsewhere.
+/// The actual `Task` is owned by the task thread until it is suspended or completed.
+/// (When suspended it is moved into a `SuspendedTask` in the `.suspended` list)
+pub(crate) struct RunningTask {
+    /// For which player this task is running on behalf of.
+    pub(crate) player: Obj,
+    /// What triggered this task to start.
+    pub(crate) task_start: TaskStart,
+    /// A kill switch to signal the task to stop. True means the VM execution thread should stop
+    /// as soon as it can.
+    pub(crate) kill_switch: Arc<AtomicBool>,
+    /// The connection-session for this task.
+    pub(crate) session: Arc<dyn Session>,
+    /// A mailbox to deliver the result of the task to a waiting party with a subscription, if any.
+    pub(crate) result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
+}
+
+impl TaskQ {
+    /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
+    pub(crate) fn collect_wake_tasks(&mut self) -> Option<Vec<SuspendedTask>> {
+        if self.suspended.tasks.is_empty() {
+            return None;
+        }
+        let now = Instant::now();
+        let mut to_wake = vec![];
+        for task in self.suspended.tasks.values() {
+            match task.wake_condition {
+                WakeCondition::Time(t) => {
+                    if t <= now {
+                        to_wake.push(task.task.task_id);
+                    }
+                }
+                WakeCondition::Task(task_id) => {
+                    if !self.suspended.tasks.contains_key(&task_id)
+                        && !self.active.contains_key(&task_id)
+                    {
+                        to_wake.push(task.task.task_id);
+                    }
+                }
+                WakeCondition::Immedate => {
+                    to_wake.push(task.task.task_id);
+                }
+                _ => {}
+            }
+        }
+        let mut tasks = vec![];
+        for task_id in to_wake {
+            let sr = self.suspended.tasks.remove(&task_id).unwrap();
+            tasks.push(sr);
+        }
+        Some(tasks)
+    }
+}
 
 /// State a suspended task sits in inside the `suspended` side of the task queue.
 /// When tasks are not running they are moved into these.
@@ -85,7 +153,7 @@ impl WakeCondition {
 /// Ties the local storage for suspended tasks in with a reference to the tasks DB, to allow for
 /// keeping them in sync.
 pub struct SuspensionQ {
-    tasks: HashMap<TaskId, SuspendedTask, BuildHasherDefault<AHasher>>,
+    pub(crate) tasks: HashMap<TaskId, SuspendedTask, BuildHasherDefault<AHasher>>,
     tasks_database: Box<dyn TasksDb>,
 }
 
@@ -163,36 +231,6 @@ impl SuspensionQ {
                 error!(?e, "Could not save suspended task");
             }
         }
-    }
-
-    /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
-    pub(crate) fn collect_wake_tasks(&mut self, running_tasks: &[TaskId]) -> Vec<SuspendedTask> {
-        let now = Instant::now();
-        let mut to_wake = vec![];
-        for task in self.tasks.values() {
-            match task.wake_condition {
-                WakeCondition::Time(t) => {
-                    if t <= now {
-                        to_wake.push(task.task.task_id);
-                    }
-                }
-                WakeCondition::Task(task_id) => {
-                    if !self.tasks.contains_key(&task_id) && !running_tasks.contains(&task_id) {
-                        to_wake.push(task.task.task_id);
-                    }
-                }
-                WakeCondition::Immedate => {
-                    to_wake.push(task.task.task_id);
-                }
-                _ => {}
-            }
-        }
-        let mut tasks = vec![];
-        for task_id in to_wake {
-            let sr = self.tasks.remove(&task_id).unwrap();
-            tasks.push(sr);
-        }
-        tasks
     }
 
     /// Pull a task from the suspended list that is waiting for input, for the given player.
