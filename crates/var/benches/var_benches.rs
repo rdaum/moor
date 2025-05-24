@@ -14,7 +14,9 @@
 const CHUNK_SIZE: usize = 100_000;
 
 use moor_var::{IndexMode, Var, v_int, v_list};
+#[cfg(target_os = "linux")]
 use perf_event::Builder;
+#[cfg(target_os = "linux")]
 use perf_event::events::Hardware;
 use std::hint::black_box;
 use std::time::Duration;
