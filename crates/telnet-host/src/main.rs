@@ -88,18 +88,37 @@ async fn main() -> Result<(), eyre::Error> {
         })
         .finish();
     tracing::subscriber::set_global_default(main_subscriber)
-        .expect("Unable to set configure logging");
+        .unwrap_or_else(|e| {
+            eprintln!("Unable to set configure logging: {}", e);
+            std::process::exit(1);
+        });
 
-    let mut hup_signal =
-        signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
-    let mut stop_signal =
-        signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
+    let mut hup_signal = match signal(SignalKind::hangup()) {
+        Ok(signal) => signal,
+        Err(e) => {
+            error!("Unable to register HUP signal handler: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let mut stop_signal = match signal(SignalKind::interrupt()) {
+        Ok(signal) => signal,
+        Err(e) => {
+            error!("Unable to register STOP signal handler: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let kill_switch = Arc::new(AtomicBool::new(false));
 
     // Parse the telnet address and port.
     let listen_addr = format!("{}:{}", args.telnet_address, args.telnet_port);
-    let telnet_sockaddr = listen_addr.parse::<SocketAddr>().unwrap();
+    let telnet_sockaddr = match listen_addr.parse::<SocketAddr>() {
+        Ok(addr) => addr,
+        Err(e) => {
+            error!("Failed to parse telnet socket address {}: {}", listen_addr, e);
+            std::process::exit(1);
+        }
+    };
 
     let zmq_ctx = tmq::Context::new();
 
@@ -116,22 +135,34 @@ async fn main() -> Result<(), eyre::Error> {
     listeners
         .add_listener(&SYSTEM_OBJECT, telnet_sockaddr)
         .await
-        .expect("Unable to start default listener");
+        .unwrap_or_else(|e| {
+            error!("Unable to start default listener: {}", e);
+            std::process::exit(1);
+        });
 
-    let (private_key, _public_key) =
-        load_keypair(&args.client_args.public_key, &args.client_args.private_key)
-            .expect("Unable to load keypair from public and private key files");
+    let (private_key, _public_key) = match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
+        Ok(keypair) => keypair,
+        Err(e) => {
+            error!("Unable to load keypair from public and private key files: {}", e);
+            std::process::exit(1);
+        }
+    };
     let host_token = make_host_token(&private_key, HostType::TCP);
 
-    let rpc_client = start_host_session(
+    let rpc_client = match start_host_session(
         &host_token,
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         kill_switch.clone(),
         listeners.clone(),
     )
-    .await
-    .expect("Unable to establish initial host session");
+    .await {
+        Ok(client) => client,
+        Err(e) => {
+            error!("Unable to establish initial host session: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let host_listen_loop = process_hosts_events(
         rpc_client,

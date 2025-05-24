@@ -60,16 +60,30 @@ async fn main() -> Result<(), eyre::Error> {
     tracing::subscriber::set_global_default(main_subscriber)
         .expect("Unable to set configure logging");
 
-    let mut hup_signal =
-        signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
-    let mut stop_signal =
-        signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
+    let mut hup_signal = match signal(SignalKind::hangup()) {
+        Ok(signal) => signal,
+        Err(e) => {
+            error!("Unable to register HUP signal handler: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let mut stop_signal = match signal(SignalKind::interrupt()) {
+        Ok(signal) => signal,
+        Err(e) => {
+            error!("Unable to register STOP signal handler: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let (private_key, _public_key) =
-        load_keypair(&args.client_args.public_key, &args.client_args.private_key)
-            .expect("Unable to load keypair from public and private key files");
+    let (private_key, _public_key) = match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
+        Ok(keypair) => keypair,
+        Err(e) => {
+            error!("Unable to load keypair from public and private key files: {}", e);
+            std::process::exit(1);
+        }
+    };
     let my_id = Uuid::new_v4();
     let worker_token = make_worker_token(&private_key, my_id);
 

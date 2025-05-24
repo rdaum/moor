@@ -118,29 +118,49 @@ fn main() -> Result<(), Report> {
         })
         .finish();
     tracing::subscriber::set_global_default(main_subscriber)
-        .expect("Unable to set configure logging");
+        .unwrap_or_else(|e| {
+            eprintln!("Unable to set configure logging: {}", e);
+            std::process::exit(1);
+        });
 
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
     // the keypair from it...
     let (private_key, public_key) = if args.public_key.exists() && args.private_key.exists() {
-        load_keypair(&args.public_key, &args.private_key)
-            .expect("Unable to load keypair from public and private key files")
+        match load_keypair(&args.public_key, &args.private_key) {
+            Ok(keypair) => keypair,
+            Err(e) => {
+                error!("Unable to load keypair from public and private key files: {}", e);
+                std::process::exit(1);
+            }
+        }
     } else {
-        panic!(
+        error!(
             "Public ({:?}) and/or private ({:?}) key files must exist",
             args.public_key, args.private_key
         );
+        std::process::exit(1);
     };
 
-    let config = args
-        .config_file
-        .as_ref()
-        .map(|path| {
-            let file = std::fs::File::open(path).expect("Unable to open config file");
+    let config = match args.config_file.as_ref() {
+        Some(path) => {
+            let file = match std::fs::File::open(path) {
+                Ok(file) => file,
+                Err(e) => {
+                    error!("Unable to open config file {}: {}", path.display(), e);
+                    std::process::exit(1);
+                }
+            };
 
-            serde_json::from_reader(file).expect("Unable to parse config file")
-        })
-        .unwrap_or_default();
+            match serde_json::from_reader(file) {
+                Ok(config) => config,
+                Err(e) => {
+                    error!("Unable to parse config file {}: {}", path.display(), e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        None => Default::default(),
+    };
     let config = Arc::new(args.merge_config(config));
 
     if let Some(write_config) = args.write_merged_config.as_ref() {
