@@ -29,6 +29,7 @@ struct Results {
 }
 
 /// Probe to see how many iterations we can do in 5 seconds
+#[cfg(target_os = "linux")]
 fn probe<F: Fn(&Var, usize, usize)>(f: &F, prepared: &Var, chunk_size: usize) -> usize {
     let start_time = minstant::Instant::now();
     let mut num_chunks = 0;
@@ -43,6 +44,7 @@ fn probe<F: Fn(&Var, usize, usize)>(f: &F, prepared: &Var, chunk_size: usize) ->
 }
 
 /// Benchmarks a function and returns the results
+#[cfg(target_os = "linux")]
 fn bench<F: Fn(&Var, usize, usize)>(
     f: &F,
     prepared: &Var,
@@ -80,6 +82,7 @@ fn bench<F: Fn(&Var, usize, usize)>(
 }
 
 /// Benchmark for addition on integers
+#[cfg(target_os = "linux")]
 pub fn op_bench<F: Fn(&Var, usize, usize)>(name: &str, f: F, prepared: Var) {
     eprintln!("Probing .... {}", name);
     let probed_iterations = probe(&f, &prepared, CHUNK_SIZE);

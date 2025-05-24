@@ -16,6 +16,7 @@ perf-event2 = "0.7.4"
 minstant.workspace = true
 
 [[bench]]
+target_os = "linux" # This is a Linux-specific benchmark, so we specify the target OS.
 name = "var_benches"
 harness = false
 
