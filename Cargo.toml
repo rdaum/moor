@@ -131,6 +131,7 @@ lazy_static = "1.5"
 minstant = { version = "0.1", features = ["fallback-coarse"] }
 num-traits = "0.2"
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
+perf-event2 = "0.7"
 semver = "1.0"
 shadow-rs = "1.1"
 similar = "*"

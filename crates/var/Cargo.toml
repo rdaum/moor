@@ -17,7 +17,6 @@ minstant.workspace = true
 
 [target.'cfg(all(target_os = "linux"))']
 [[bench]]
-target_os = "linux" # This is a Linux-specific benchmark, so we specify the target OS.
 name = "var_benches"
 harness = false
 
