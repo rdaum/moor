@@ -36,7 +36,7 @@ pub const FAILED_MATCH: Obj = Obj::mk_id(-3);
 /// For now this is the global unique DB object id.
 /// In the future this may also encode other object types (anonymous objects, etc)
 #[derive(
-    Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode, Serialize, Deserialize,
+    Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode, Serialize, Deserialize,
 )]
 pub struct Obj(u64);
 

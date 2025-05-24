@@ -48,7 +48,7 @@ impl MatchEnvironment for WsMatchEnv<'_> {
             .ws
             .contents_of(&self.perms, &location)?
             .with_concatenated(self_contents)
-            .with_appended(&[location, player.clone()]);
+            .with_appended(&[location, *player]);
         Ok(surroundings)
     }
 

@@ -83,7 +83,7 @@ impl Listeners {
                         .expect("Unable to bind listener");
                     let (terminate_send, terminate_receive) = tokio::sync::watch::channel(false);
                     self.listeners
-                        .insert(addr, Listener::new(terminate_send, handler.clone()));
+                        .insert(addr, Listener::new(terminate_send, handler));
 
                     info!("Listening @ {}", addr);
                     let zmq_ctx = self.zmq_ctx.clone();
@@ -115,7 +115,7 @@ impl Listeners {
                                                 zmq_ctx,
                                                 rpc_address,
                                                 events_address,
-                                                handler.clone(),
+                                                handler,
                                                 kill_switch,
                                                 listener_port,
                                                 stream,
@@ -146,7 +146,7 @@ impl Listeners {
                     let listeners = self
                         .listeners
                         .iter()
-                        .map(|(addr, listener)| (listener.handler_object.clone(), *addr))
+                        .map(|(addr, listener)| (listener.handler_object, *addr))
                         .collect();
                     tx.send(listeners).expect("Unable to send listeners list");
                 }

@@ -92,7 +92,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -100,7 +100,7 @@ mod tests {
         assert!(
             tx.get_object_children(&a)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[b.clone()]))
+                .is_same(ObjSet::from_items(&[b]))
         );
 
         assert_eq!(tx.get_object_parent(&a).unwrap(), NOTHING);
@@ -110,7 +110,7 @@ mod tests {
         let c = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
 
@@ -118,7 +118,7 @@ mod tests {
         assert!(
             tx.get_object_children(&a)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[b.clone(), c.clone()]))
+                .is_same(ObjSet::from_items(&[b, c]))
         );
 
         assert_eq!(tx.get_object_parent(&a).unwrap(), NOTHING);
@@ -137,21 +137,16 @@ mod tests {
         assert!(
             tx.get_object_children(&a)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[c.clone()]))
+                .is_same(ObjSet::from_items(&[c]))
         );
         assert!(
             tx.get_object_children(&d)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[b.clone()]))
+                .is_same(ObjSet::from_items(&[b]))
         );
 
         let objects = tx.get_objects().unwrap();
-        assert!(objects.is_same(ObjSet::from_items(&[
-            a.clone(),
-            b.clone(),
-            c.clone(),
-            d.clone()
-        ])));
+        assert!(objects.is_same(ObjSet::from_items(&[a, b, c, d])));
 
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
@@ -172,7 +167,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
         assert_eq!(b, Obj::mk_id(1));
@@ -180,7 +175,7 @@ mod tests {
         let c = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
         assert_eq!(c, Obj::mk_id(2));
@@ -188,7 +183,7 @@ mod tests {
         let d = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, c.clone(), NOTHING, BitEnum::new(), "test4"),
+                ObjAttrs::new(NOTHING, c, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
         assert_eq!(d, Obj::mk_id(3));
@@ -197,38 +192,32 @@ mod tests {
             .descendants(&a, false)
             .expect("Could not retrieve descendants");
         assert!(
-            desc.is_same(ObjSet::from_items(&[b.clone(), c.clone(), d.clone()])),
+            desc.is_same(ObjSet::from_items(&[b, c, d])),
             "Descendants doesn't match expected is {:?}",
             desc
         );
 
         assert_eq!(tx.descendants(&b, false).unwrap(), ObjSet::empty());
-        assert_eq!(
-            tx.descendants(&c, false).unwrap(),
-            ObjSet::from_items(&[d.clone()])
-        );
+        assert_eq!(tx.descendants(&c, false).unwrap(), ObjSet::from_items(&[d]));
 
         // Now reparent d to b
         tx.set_object_parent(&d, &b).unwrap();
         assert!(
             tx.get_object_children(&a)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[b.clone(), c.clone()]))
+                .is_same(ObjSet::from_items(&[b, c]))
         );
         assert_eq!(
             tx.get_object_children(&b).unwrap(),
-            ObjSet::from_items(&[d.clone()])
+            ObjSet::from_items(&[d])
         );
         assert_eq!(tx.get_object_children(&c).unwrap(), ObjSet::empty());
         assert!(
             tx.descendants(&a, false)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[b.clone(), c.clone(), d.clone()]))
+                .is_same(ObjSet::from_items(&[b, c, d]))
         );
-        assert_eq!(
-            tx.descendants(&b, false).unwrap(),
-            ObjSet::from_items(&[d.clone()])
-        );
+        assert_eq!(tx.descendants(&b, false).unwrap(), ObjSet::from_items(&[d]));
         assert_eq!(tx.descendants(&c, false).unwrap(), ObjSet::empty());
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
     }
@@ -248,14 +237,14 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, NOTHING, a.clone(), BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, NOTHING, a, BitEnum::new(), "test2"),
             )
             .unwrap();
 
         assert_eq!(tx.get_object_location(&b).unwrap(), a);
         assert_eq!(
             tx.get_object_contents(&a).unwrap(),
-            ObjSet::from_items(&[b.clone()])
+            ObjSet::from_items(&[b])
         );
 
         assert_eq!(tx.get_object_location(&a).unwrap(), NOTHING);
@@ -273,7 +262,7 @@ mod tests {
         assert_eq!(tx.get_object_contents(&a).unwrap(), ObjSet::empty());
         assert_eq!(
             tx.get_object_contents(&c).unwrap(),
-            ObjSet::from_items(&[b.clone()])
+            ObjSet::from_items(&[b])
         );
 
         let d = tx
@@ -286,7 +275,7 @@ mod tests {
         assert!(
             tx.get_object_contents(&c)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[b.clone(), d.clone()]))
+                .is_same(ObjSet::from_items(&[b, d]))
         );
         assert_eq!(tx.get_object_location(&d).unwrap(), c);
 
@@ -294,7 +283,7 @@ mod tests {
         assert!(
             tx.get_object_contents(&c)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[b.clone(), d.clone(), a.clone()]))
+                .is_same(ObjSet::from_items(&[b, d, a]))
         );
         assert_eq!(tx.get_object_location(&a).unwrap(), c);
 
@@ -336,7 +325,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, NOTHING, a.clone(), BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, NOTHING, a, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -354,7 +343,7 @@ mod tests {
         assert!(
             tx.get_object_contents(&a)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[b.clone(), c.clone()]))
+                .is_same(ObjSet::from_items(&[b, c]))
         );
         assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(&c).unwrap(), ObjSet::empty());
@@ -366,10 +355,10 @@ mod tests {
         assert_eq!(tx.get_object_location(&c).unwrap(), a);
         let contents = tx.get_object_contents(&a).expect("Unable to get contents");
         assert!(
-            contents.is_same(ObjSet::from_items(&[b.clone(), c.clone()])),
+            contents.is_same(ObjSet::from_items(&[b, c])),
             "Contents of a are not as expected: {:?} vs {:?}",
             contents,
-            ObjSet::from_items(&[b.clone(), c.clone()])
+            ObjSet::from_items(&[b, c])
         );
         assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
         assert_eq!(tx.get_object_contents(&c).unwrap(), ObjSet::empty());
@@ -379,12 +368,12 @@ mod tests {
         assert_eq!(tx.get_object_location(&c).unwrap(), a);
         assert_eq!(
             tx.get_object_contents(&a).unwrap(),
-            ObjSet::from_items(&[c.clone()])
+            ObjSet::from_items(&[c])
         );
         assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
         assert_eq!(
             tx.get_object_contents(&c).unwrap(),
-            ObjSet::from_items(&[b.clone()])
+            ObjSet::from_items(&[b])
         );
         assert_eq!(tx.commit(), Ok(CommitResult::Success));
 
@@ -393,12 +382,12 @@ mod tests {
         assert_eq!(tx.get_object_location(&b).unwrap(), c);
         assert_eq!(
             tx.get_object_contents(&a).unwrap(),
-            ObjSet::from_items(&[c.clone()])
+            ObjSet::from_items(&[c])
         );
         assert_eq!(tx.get_object_contents(&b).unwrap(), ObjSet::empty());
         assert_eq!(
             tx.get_object_contents(&c).unwrap(),
-            ObjSet::from_items(&[b.clone()])
+            ObjSet::from_items(&[b])
         );
     }
 
@@ -523,7 +512,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -578,7 +567,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -625,7 +614,7 @@ mod tests {
         tx.update_property_info(
             &b,
             prop.uuid(),
-            Some(b.clone()),
+            Some(b),
             Some(BitEnum::new_with(PropFlag::Read)),
             None,
         )
@@ -667,7 +656,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -718,7 +707,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -888,7 +877,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -1030,13 +1019,13 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
         let c = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, b.clone(), NOTHING, BitEnum::new(), "test3"),
+                ObjAttrs::new(NOTHING, b, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
 
@@ -1082,14 +1071,14 @@ mod tests {
         let result = tx.resolve_property(&b, Symbol::mk_case_insensitive("test"));
         assert_eq!(
             result.err().unwrap(),
-            WorldStateError::PropertyNotFound(b.clone(), "test".to_string())
+            WorldStateError::PropertyNotFound(b, "test".to_string())
         );
 
         // Or C.
         let result = tx.resolve_property(&c, Symbol::mk_case_insensitive("test"));
         assert_eq!(
             result.err().unwrap(),
-            WorldStateError::PropertyNotFound(c.clone(), "test".to_string())
+            WorldStateError::PropertyNotFound(c, "test".to_string())
         );
 
         // Now add new property on D
@@ -1162,7 +1151,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test2"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test2"),
             )
             .unwrap();
 
@@ -1186,7 +1175,7 @@ mod tests {
         let c = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test3"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test3"),
             )
             .unwrap();
         tx.define_property(
@@ -1203,14 +1192,14 @@ mod tests {
         assert!(
             tx.get_object_children(&a)
                 .unwrap()
-                .is_same(ObjSet::from_items(&[c.clone()]))
+                .is_same(ObjSet::from_items(&[c]))
         );
 
         tx.recycle_object(&c).expect("Unable to recycle object");
         let result = tx.get_object_name(&c);
         assert_eq!(
             result.err().unwrap(),
-            WorldStateError::ObjectNotFound(ObjectRef::Id(c.clone()))
+            WorldStateError::ObjectNotFound(ObjectRef::Id(c))
         );
 
         // Verify the property is still there.
@@ -1225,7 +1214,7 @@ mod tests {
         let d = tx
             .create_object(
                 None,
-                ObjAttrs::new(NOTHING, a.clone(), NOTHING, BitEnum::new(), "test4"),
+                ObjAttrs::new(NOTHING, a, NOTHING, BitEnum::new(), "test4"),
             )
             .unwrap();
         tx.define_property(
@@ -1242,7 +1231,7 @@ mod tests {
         let result = tx.get_object_name(&a);
         assert_eq!(
             result.err().unwrap(),
-            WorldStateError::ObjectNotFound(ObjectRef::Id(a.clone()))
+            WorldStateError::ObjectNotFound(ObjectRef::Id(a))
         );
 
         // Verify the child object is still there despite its parent being destroyed.
@@ -1312,7 +1301,7 @@ mod tests {
                 None,
                 ObjAttrs::new(
                     Obj::mk_id(obj4.id().0 + 1),
-                    obj.clone(),
+                    obj,
                     obj,
                     BitEnum::new_with(ObjFlag::Read),
                     "zoinks",
@@ -1376,7 +1365,7 @@ mod tests {
         let b = tx
             .create_object(
                 None,
-                ObjAttrs::new(Obj::mk_id(1), a.clone(), NOTHING, BitEnum::all(), "b"),
+                ObjAttrs::new(Obj::mk_id(1), a, NOTHING, BitEnum::all(), "b"),
             )
             .unwrap();
         tx.define_property(

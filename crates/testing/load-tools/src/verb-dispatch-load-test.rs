@@ -155,7 +155,7 @@ async fn workload(
                 HostClientToDaemonMessage::InvokeVerb(
                     client_token.clone(),
                     auth_token.clone(),
-                    ObjectRef::Id(connection_oid.clone()),
+                    ObjectRef::Id(connection_oid),
                     Symbol::mk("invoke_load_test"),
                     vec![v_int(args.num_verb_iterations as i64)],
                 ),
@@ -293,7 +293,6 @@ async fn load_test_workload(
         let zmq_ctx = zmq_ctx.clone();
         let rpc_address = args.client_args.rpc_address.clone();
         let client_token = client_token.clone();
-        let connection_oid = connection_oid.clone();
         tokio::spawn(async move {
             broadcast_handle(
                 zmq_ctx,
@@ -315,7 +314,7 @@ async fn load_test_workload(
     );
 
     initialization_session(
-        connection_oid.clone(),
+        connection_oid,
         auth_token.clone(),
         client_token.clone(),
         client_id,
@@ -365,7 +364,6 @@ async fn load_test_workload(
         let mut workload_futures = FuturesUnordered::new();
         for i in 0..num_concurrent_workload {
             let zmq_ctx = zmq_ctx.clone();
-            let connection_oid = connection_oid.clone();
             let auth_token = auth_token.clone();
             let client_token = client_token.clone();
             let rpc_address = args.client_args.rpc_address.clone();

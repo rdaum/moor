@@ -232,10 +232,7 @@ impl Ord for ObjAndUUIDHolder {
 
 impl ObjAndUUIDHolder {
     pub fn new(obj: &Obj, uuid: Uuid) -> Self {
-        Self {
-            obj: obj.clone(),
-            uuid,
-        }
+        Self { obj: *obj, uuid }
     }
 }
 

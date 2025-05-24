@@ -62,10 +62,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
     // Retrieve all the objects
     let mut db_objects = BTreeMap::new();
     for id in object_ids.iter() {
-        db_objects.insert(
-            id.clone(),
-            tx.get_object(&id).expect("Failed to get object"),
-        );
+        db_objects.insert(id, tx.get_object(&id).expect("Failed to get object"));
     }
 
     // Build a map of parent -> children
@@ -76,7 +73,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
         children_map
             .entry(parent)
             .or_insert_with(Vec::new)
-            .push(id.clone());
+            .push(*id);
     }
 
     // Same with location -> contents
@@ -85,9 +82,9 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
         let obj = db_objects.get(id).expect("Failed to get object");
         let location = obj.location().unwrap_or(NOTHING);
         contents_map
-            .entry(location.clone())
+            .entry(location)
             .or_insert_with(Vec::new)
-            .push(id.clone());
+            .push(*id);
     }
 
     // Objid -> Object
@@ -114,7 +111,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
             if position == roommates.len() - 1 {
                 NOTHING
             } else {
-                roommates[position + 1].clone()
+                roommates[position + 1]
             }
         } else {
             NOTHING
@@ -122,7 +119,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
 
         // To find 'contents' we're looking for the first object whose location is the current object
         let contents = match contents_map.get_mut(db_objid) {
-            Some(contents) => contents.first().unwrap_or(&NOTHING).clone(),
+            Some(contents) => *contents.first().unwrap_or(&NOTHING),
             None => NOTHING,
         };
 
@@ -139,12 +136,12 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
         let sibling = if position == siblings.len() - 1 {
             NOTHING
         } else {
-            siblings[position + 1].clone()
+            siblings[position + 1]
         };
 
         // To find child, we need to find the first object whose parent is the current object
         let child = match children_map.get_mut(db_objid) {
-            Some(children) => children.first().unwrap_or(&NOTHING).clone(),
+            Some(children) => *children.first().unwrap_or(&NOTHING),
             None => NOTHING,
         };
 
@@ -186,9 +183,9 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
 
             let objid = db_objid;
             verbs.insert(
-                (objid.clone(), verbnum),
+                (*objid, verbnum),
                 Verb {
-                    objid: objid.clone(),
+                    objid: *objid,
                     verbnum,
                     program: prgstr,
                 },
@@ -224,7 +221,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
         // To construct the child linkage list, we need to scan all objects, and find all objects whose parent
         // is the current object, and add them to the list.
         let obj = Object {
-            id: db_objid.clone(),
+            id: *db_objid,
             owner: db_obj.owner().unwrap(),
             location: db_obj.location().unwrap_or(NOTHING),
             contents,
@@ -239,7 +236,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
             propvals,
         };
 
-        objects.insert(db_objid.clone(), obj);
+        objects.insert(*db_objid, obj);
     }
 
     let users = tx

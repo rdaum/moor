@@ -89,7 +89,7 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
         name,
         value: None,
         location: None,
-        owner: Some(owner.clone()),
+        owner: Some(*owner),
         flags: Some(flags),
     })
 }

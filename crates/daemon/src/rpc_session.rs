@@ -79,7 +79,7 @@ impl Session for RpcSession {
     fn fork(self: Arc<Self>) -> Result<Arc<dyn Session>, SessionError> {
         Ok(Arc::new(Self::new(
             self.client_id,
-            self.player.clone(),
+            self.player,
             self.send.clone(),
         )))
     }
@@ -119,7 +119,7 @@ impl Session for RpcSession {
         self.send
             .send(SessionActions::SendSystemMessage(
                 self.client_id,
-                self.player.clone(),
+                self.player,
                 shutdown_msg,
             ))
             .map_err(|e| SessionError::CommitError(e.to_string()))
@@ -183,7 +183,7 @@ impl SessionFactory for RpcServer {
         player: &Obj,
     ) -> Result<Arc<dyn Session>, SessionError> {
         let client_id = Uuid::new_v4();
-        let session = RpcSession::new(client_id, player.clone(), self.mailbox_sender.clone());
+        let session = RpcSession::new(client_id, *player, self.mailbox_sender.clone());
         let session = Arc::new(session);
         Ok(session)
     }

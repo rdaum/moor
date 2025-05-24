@@ -136,7 +136,7 @@ impl TelnetConnection {
                 self.client_id,
                 HostClientToDaemonMessage::LoginCommand(
                     self.client_token.clone(),
-                    self.handler_object.clone(),
+                    self.handler_object,
                     vec![],
                     false,
                 ),
@@ -244,7 +244,7 @@ impl TelnetConnection {
                     match event {
                         ClientsBroadcastEvent::PingPong(_server_time) => {
                             let _ = rpc_client.make_client_rpc_call(self.client_id,
-                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(), self.connection_oid.clone(), HostType::TCP, self.peer_addr)).await?;
+                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(), self.connection_oid, HostType::TCP, self.peer_addr)).await?;
                         }
                     }
                 }
@@ -281,10 +281,10 @@ impl TelnetConnection {
                     let line = line.unwrap();
                     let words = parse_into_words(&line);
                     let response = rpc_client.make_client_rpc_call(self.client_id,
-                        HostClientToDaemonMessage::LoginCommand(self.client_token.clone(), self.handler_object.clone(), words, true)).await.expect("Unable to send login request to RPC server");
+                        HostClientToDaemonMessage::LoginCommand(self.client_token.clone(), self.handler_object, words, true)).await.expect("Unable to send login request to RPC server");
                     if let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(Some((auth_token, connect_type, player)))) = response {
                         info!(?player, client_id = ?self.client_id, "Login successful");
-                        self.connection_oid = player.clone();
+                        self.connection_oid = player;
                         return Ok((auth_token, player, connect_type))
                     }
                 }
@@ -355,9 +355,9 @@ impl TelnetConnection {
                             // If the line begins with the out of band prefix, then send it that way,
                             // instead. And really just fire and forget.
                             if line.starts_with(OUT_OF_BAND_PREFIX) {
-                                rpc_client.make_client_rpc_call(self.client_id, HostClientToDaemonMessage::OutOfBand(self.client_token.clone(), auth_token.clone(), self.handler_object.clone(), line)).await?
+                                rpc_client.make_client_rpc_call(self.client_id, HostClientToDaemonMessage::OutOfBand(self.client_token.clone(), auth_token.clone(), self.handler_object, line)).await?
                             } else {
-                                rpc_client.make_client_rpc_call(self.client_id, HostClientToDaemonMessage::Command(self.client_token.clone(), auth_token.clone(), self.handler_object.clone(), line)).await?
+                                rpc_client.make_client_rpc_call(self.client_id, HostClientToDaemonMessage::Command(self.client_token.clone(), auth_token.clone(), self.handler_object, line)).await?
                             }
                         },
                         // Are we expecting to respond to prompt input? If so, send this through to that, and switch the mode back to input
@@ -428,7 +428,7 @@ impl TelnetConnection {
                     match event {
                         ClientsBroadcastEvent::PingPong(_server_time) => {
                             let _ = rpc_client.make_client_rpc_call(self.client_id,
-                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(), self.connection_oid.clone(), HostType::TCP, self.peer_addr)).await?;
+                                HostClientToDaemonMessage::ClientPong(self.client_token.clone(), SystemTime::now(), self.connection_oid, HostType::TCP, self.peer_addr)).await?;
                         }
                     }
                 }

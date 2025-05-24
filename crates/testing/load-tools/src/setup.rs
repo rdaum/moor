@@ -85,7 +85,7 @@ pub async fn broadcast_handle(
                                 HostClientToDaemonMessage::ClientPong(
                                     client_token.clone(),
                                     SystemTime::now(),
-                                    connection_oid.clone(),
+                                    connection_oid,
                                     HostType::TCP,
                                     SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0),
                                 ),
@@ -180,7 +180,7 @@ pub async fn create_user_session(
         DaemonToClientReply::LoginResult(Some((auth_token, _connect_type, player))),
     ) = response
     {
-        (player.clone(), auth_token.clone())
+        (player, auth_token.clone())
     } else {
         panic!("Unexpected response from RPC server");
     };
@@ -211,7 +211,7 @@ pub async fn compile(
             HostClientToDaemonMessage::Verbs(
                 client_token.clone(),
                 auth_token.clone(),
-                ObjectRef::Id(oid.clone()),
+                ObjectRef::Id(oid),
             ),
         )
         .await
@@ -231,7 +231,7 @@ pub async fn compile(
             HostClientToDaemonMessage::Program(
                 client_token.clone(),
                 auth_token.clone(),
-                ObjectRef::Id(oid.clone()),
+                ObjectRef::Id(oid),
                 verb_name,
                 verb_contents,
             ),
@@ -304,7 +304,7 @@ pub async fn initialization_session(
         compile(
             &mut rpc_client,
             client_id,
-            connection_oid.clone(),
+            connection_oid,
             auth_token.clone(),
             client_token.clone(),
             *verb_name,

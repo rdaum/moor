@@ -42,7 +42,7 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
             .expect("Failed to get object attributes");
 
         let mut od = ObjectDefinition {
-            oid: o.clone(),
+            oid: o,
             name: obj_attrs.name().unwrap_or("".to_string()),
             parent: obj_attrs.parent().unwrap_or(NOTHING),
             owner: obj_attrs.owner().unwrap_or(NOTHING),
@@ -169,8 +169,8 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         for pd in sysobj.property_definitions.iter() {
             if let Some(value) = pd.value.as_ref() {
                 if let Variant::Obj(oid) = value.variant() {
-                    index_names.insert(oid.clone(), pd.name.to_string().to_ascii_uppercase());
-                    file_names.insert(oid.clone(), pd.name.to_string());
+                    index_names.insert(*oid, pd.name.to_string().to_ascii_uppercase());
+                    file_names.insert(*oid, pd.name.to_string());
                 }
             }
         }

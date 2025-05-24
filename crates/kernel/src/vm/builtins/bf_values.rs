@@ -156,7 +156,7 @@ fn bf_toobj(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 Err(_) => Ok(Ret(v_objid(0))),
             }
         }
-        Variant::Obj(o) => Ok(Ret(v_obj(o.clone()))),
+        Variant::Obj(o) => Ok(Ret(v_obj(*o))),
         _ => Err(BfErr::ErrValue(
             E_INVARG.msg("cannot convert this type to object"),
         )),

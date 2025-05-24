@@ -55,12 +55,12 @@ impl VerbDef {
 
     #[must_use]
     pub fn location(&self) -> Obj {
-        self.location.clone()
+        self.location
     }
 
     #[must_use]
     pub fn owner(&self) -> Obj {
-        self.owner.clone()
+        self.owner
     }
     #[must_use]
     pub fn flags(&self) -> BitEnum<VerbFlag> {

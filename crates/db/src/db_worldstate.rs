@@ -70,10 +70,7 @@ impl DbWorldState {
     }
     fn perms(&self, who: &Obj) -> Result<Perms, WorldStateError> {
         let flags = self.flags_of(who)?;
-        Ok(Perms {
-            who: who.clone(),
-            flags,
-        })
+        Ok(Perms { who: *who, flags })
     }
 
     fn do_update_verb(
@@ -141,8 +138,8 @@ impl DbWorldState {
         for obj_or_descendant_prop in obj_or_descendant_props {
             if new_parent_or_ancestors_property_names.contains(obj_or_descendant_prop.name()) {
                 return Err(WorldStateError::ChparentPropertyNameConflict(
-                    obj.clone(),
-                    new_parent.clone(),
+                    *obj,
+                    *new_parent,
                     obj_or_descendant_prop.name().to_string(),
                 ));
             }
@@ -233,7 +230,7 @@ impl WorldState for DbWorldState {
         //    If the intended owner of the new object has a property named `ownership_quota' and the value of that property is an integer, then `create()' treats that value
         //    as a "quota".  If the quota is less than or equal to zero, then the quota is considered to be exhausted and `create()' raises `E_QUOTA' instead of creating an
         //    object.  Otherwise, the quota is decremented and stored back into the `ownership_quota' property as a part of the creation of the new object.
-        let attrs = ObjAttrs::new(owner.clone(), parent.clone(), NOTHING, flags, "");
+        let attrs = ObjAttrs::new(*owner, *parent, NOTHING, flags, "");
         self.get_tx_mut().create_object(None, attrs)
     }
 
@@ -300,7 +297,7 @@ impl WorldState for DbWorldState {
     ) -> Result<Var, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.retrieve_property);
         if *obj == NOTHING || !self.valid(obj)? {
-            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(obj.clone())));
+            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(*obj)));
         }
 
         // Special properties like name, location, and contents get treated specially.
@@ -578,7 +575,7 @@ impl WorldState for DbWorldState {
         let properties = self.get_tx().get_properties(obj)?;
         let pdef = properties
             .find_first_named(pname)
-            .ok_or_else(|| WorldStateError::PropertyNotFound(obj.clone(), pname.to_string()))?;
+            .ok_or_else(|| WorldStateError::PropertyNotFound(*obj, pname.to_string()))?;
         let propperms = self
             .get_tx()
             .retrieve_property_permissions(obj, pdef.uuid())?;
@@ -613,7 +610,7 @@ impl WorldState for DbWorldState {
         let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
-            .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
+            .ok_or_else(|| WorldStateError::VerbNotFound(*obj, uuid.to_string()))?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Write)?;
 
@@ -656,14 +653,14 @@ impl WorldState for DbWorldState {
         let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
-            .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
+            .ok_or_else(|| WorldStateError::VerbNotFound(*obj, uuid.to_string()))?;
         self.do_update_verb(obj, perms, &vh, verb_attrs)
     }
 
     fn get_verb(&self, perms: &Obj, obj: &Obj, vname: Symbol) -> Result<VerbDef, WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.get_verb);
         if !self.get_tx().object_valid(obj)? {
-            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(obj.clone())));
+            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(*obj)));
         }
 
         let vh = self.get_tx().get_verb_by_name(obj, vname)?;
@@ -696,7 +693,7 @@ impl WorldState for DbWorldState {
         let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
-            .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
+            .ok_or_else(|| WorldStateError::VerbNotFound(*obj, uuid.to_string()))?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
         let binary = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;
@@ -791,15 +788,12 @@ impl WorldState for DbWorldState {
     ) -> Result<(), WorldStateError> {
         let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.change_parent);
         {
-            let mut curr = new_parent.clone();
+            let mut curr = *new_parent;
             while !curr.is_nothing() {
                 if &curr == obj {
-                    return Err(WorldStateError::RecursiveMove(
-                        obj.clone(),
-                        new_parent.clone(),
-                    ));
+                    return Err(WorldStateError::RecursiveMove(*obj, *new_parent));
                 }
-                curr = self.parent_of(perms, &curr)?.clone();
+                curr = self.parent_of(perms, &curr)?;
             }
         };
 

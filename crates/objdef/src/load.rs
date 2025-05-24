@@ -152,11 +152,11 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 .map_err(|e| DirDumpReaderError::ObjectFileParseError(path.to_path_buf(), e))?;
 
         for compiled_def in compiled_defs {
-            let oid = compiled_def.oid.clone();
+            let oid = compiled_def.oid;
 
             self.loader
                 .create_object(
-                    Some(oid.clone()),
+                    Some(oid),
                     &ObjAttrs::new(
                         NOTHING,
                         NOTHING,
@@ -166,7 +166,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     ),
                 )
                 .map_err(|wse| {
-                    DirDumpReaderError::CouldNotCreateObject(path.to_path_buf(), oid.clone(), wse)
+                    DirDumpReaderError::CouldNotCreateObject(path.to_path_buf(), oid, wse)
                 })?;
 
             self.object_definitions
@@ -212,7 +212,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     .map_err(|wse| {
                         DirDumpReaderError::CouldNotDefineVerb(
                             path.clone(),
-                            obj.clone(),
+                            *obj,
                             v.names.clone(),
                             wse,
                         )
@@ -236,7 +236,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     .map_err(|wse| {
                         DirDumpReaderError::CouldNotDefineProperty(
                             path.clone(),
-                            obj.clone(),
+                            *obj,
                             pd.name.as_str().to_string(),
                             wse,
                         )
@@ -262,7 +262,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     .map_err(|wse| {
                         DirDumpReaderError::CouldNotOverrideProperty(
                             path.clone(),
-                            obj.clone(),
+                            *obj,
                             pv.name.as_str().to_string(),
                             wse,
                         )

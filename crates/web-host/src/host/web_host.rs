@@ -114,7 +114,7 @@ impl WebHost {
                 Attach(
                     auth_token,
                     connect_type,
-                    self.handler_object.clone(),
+                    self.handler_object,
                     peer_addr.to_string(),
                 ),
             )
@@ -183,8 +183,8 @@ impl WebHost {
         );
 
         Ok(WebSocketConnection {
-            handler_object: handler_object.clone(),
-            player: player.clone(),
+            handler_object: *handler_object,
+            player: *player,
             peer_addr,
             broadcast_sub,
             narrative_sub,

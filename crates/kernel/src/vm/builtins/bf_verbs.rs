@@ -149,7 +149,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
 
             Ok(VerbAttrs {
                 definer: None,
-                owner: Some(owner.clone()),
+                owner: Some(*owner),
                 names: Some(name_strings),
                 flags: Some(perms),
                 args_spec: None,

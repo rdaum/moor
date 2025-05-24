@@ -30,10 +30,7 @@ pub struct Perms {
 impl Perms {
     #[must_use]
     pub fn new(obj: &Obj, flags: BitEnum<ObjFlag>) -> Self {
-        Self {
-            who: obj.clone(),
-            flags,
-        }
+        Self { who: *obj, flags }
     }
 
     pub fn check_property_allows(

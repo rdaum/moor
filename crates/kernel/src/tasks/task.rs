@@ -251,12 +251,12 @@ impl Task {
                     command,
                 } = &self.task_start
                 {
-                    let (player, command) = (player.clone(), command.clone());
+                    let (player, command) = (*player, command.clone());
                     if !result.is_true() {
                         // Intercept and rewrite us back to StartVerbCommand and do old school parse.
                         self.task_start = TaskStart::StartCommandVerb {
-                            handler_object: handler_object.clone(),
-                            player: player.clone(),
+                            handler_object: *handler_object,
+                            player,
                             command: command.clone(),
                         };
 
@@ -381,8 +381,7 @@ impl Task {
                 player,
                 command,
             } => {
-                let (handler_object, player, command) =
-                    (handler_object.clone(), player.clone(), command.clone());
+                let (handler_object, player, command) = (*handler_object, *player, command.clone());
                 if let Err(e) =
                     self.start_command(&handler_object, &player, command.as_str(), world_state)
                 {
@@ -402,7 +401,7 @@ impl Task {
                     verb_name: *verb,
                     location: vloc.clone(),
                     this: vloc.clone(),
-                    player: player.clone(),
+                    player: *player,
                     args: args.clone(),
                     argstr: argstr.clone(),
                     caller: v_obj(NOTHING),
@@ -410,8 +409,8 @@ impl Task {
                 // Find the callable verb ...
                 // Obj or flyweight?
                 let object_location = match &verb_call.this.variant() {
-                    Variant::Flyweight(f) => f.delegate().clone(),
-                    Variant::Obj(o) => o.clone(),
+                    Variant::Flyweight(f) => *f.delegate(),
+                    Variant::Obj(o) => *o,
                     _ => {
                         control_sender
                             .send((
@@ -513,12 +512,12 @@ impl Task {
                 let args = List::from_iter(arguments.iter().map(|s| v_str(s)));
                 let verb_call = VerbCall {
                     verb_name: Symbol::mk("do_command"),
-                    location: v_obj(handler_object.clone()),
-                    this: v_obj(handler_object.clone()),
-                    player: player.clone(),
+                    location: v_obj(*handler_object),
+                    this: v_obj(*handler_object),
+                    player: *player,
                     args,
                     argstr: command.to_string(),
-                    caller: v_obj(handler_object.clone()),
+                    caller: v_obj(*handler_object),
                 };
                 self.vm_host.start_call_method_verb(
                     self.task_id,
@@ -527,8 +526,8 @@ impl Task {
                     verb_call,
                 );
                 self.task_start = TaskStart::StartDoCommand {
-                    handler_object: handler_object.clone(),
-                    player: player.clone(),
+                    handler_object: *handler_object,
+                    player: *player,
                     command: command.to_string(),
                 };
             }
@@ -563,10 +562,10 @@ impl Task {
             };
 
             // Parse the command in the current environment.
-            let me = WsMatchEnv::new(world_state, player.clone());
+            let me = WsMatchEnv::new(world_state, *player);
             let matcher = DefaultObjectNameMatcher {
                 env: me,
-                player: player.clone(),
+                player: *player,
             };
             let command_parser = DefaultParseCommand::new();
             let parsed_command = match command_parser.parse_command(command, &matcher) {
@@ -605,12 +604,12 @@ impl Task {
         };
         let verb_call = VerbCall {
             verb_name: Symbol::mk_case_insensitive(parsed_command.verb.as_str()),
-            location: v_obj(target.clone()),
+            location: v_obj(target),
             this: v_obj(target),
-            player: player.clone(),
+            player: *player,
             args: List::mk_list(&parsed_command.args),
             argstr: parsed_command.argstr.clone(),
-            caller: v_obj(player.clone()),
+            caller: v_obj(*player),
         };
         self.vm_host.start_call_command_verb(
             self.task_id,
@@ -633,19 +632,19 @@ fn find_verb_for_command(
     let perfc = sched_counters();
     let _t = PerfTimerGuard::new(&perfc.find_verb_for_command);
     let targets_to_search = vec![
-        player.clone(),
-        player_location.clone(),
-        pc.dobj.clone().unwrap_or(NOTHING),
-        pc.iobj.clone().unwrap_or(NOTHING),
+        *player,
+        *player_location,
+        pc.dobj.unwrap_or(NOTHING),
+        pc.iobj.unwrap_or(NOTHING),
     ];
     for target in targets_to_search {
         let match_result = ws.find_command_verb_on(
             player,
             &target,
             Symbol::mk_case_insensitive(pc.verb.as_str()),
-            &pc.dobj.clone().unwrap_or(NOTHING),
+            &pc.dobj.unwrap_or(NOTHING),
             pc.prep,
-            &pc.iobj.clone().unwrap_or(NOTHING),
+            &pc.iobj.unwrap_or(NOTHING),
         );
         let match_result = match match_result {
             Ok(m) => m,

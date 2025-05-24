@@ -52,9 +52,9 @@ impl VMExecState {
                     vec![
                         a.this.clone(),
                         v_str(a.verbdef.names().join(" ").as_str()),
-                        v_obj(a.permissions.clone()),
+                        v_obj(a.permissions),
                         v_obj(a.verb_definer()),
-                        v_obj(a.player.clone()),
+                        v_obj(a.player),
                         line_no,
                     ]
                 }
@@ -63,9 +63,9 @@ impl VMExecState {
                     vec![
                         a.this.clone(),
                         v_str(bf_name.as_str()),
-                        v_obj(a.permissions.clone()),
+                        v_obj(a.permissions),
                         v_obj(NOTHING),
-                        v_obj(a.player.clone()),
+                        v_obj(a.player),
                         v_none(),
                     ]
                 }

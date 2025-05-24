@@ -64,7 +64,7 @@ impl PropResolutionCache {
 
     pub(crate) fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<PropDef>> {
         let inner = self.inner.lock().unwrap();
-        inner.entries.get(&(obj.clone(), *prop)).cloned()
+        inner.entries.get(&(*obj, *prop)).cloned()
     }
 
     pub(crate) fn flush(&self) {
@@ -79,15 +79,13 @@ impl PropResolutionCache {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
 
-        inner
-            .entries
-            .insert((obj.clone(), *prop), Some(propd.clone()));
+        inner.entries.insert((*obj, *prop), Some(propd.clone()));
     }
 
     pub(crate) fn fill_miss(&self, obj: &Obj, prop: &Symbol) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert((obj.clone(), *prop), None);
+        inner.entries.insert((*obj, *prop), None);
     }
 
     pub(crate) fn lookup_first_parent_with_props(&self, obj: &Obj) -> Option<Option<Obj>> {
@@ -98,8 +96,6 @@ impl PropResolutionCache {
     pub(crate) fn fill_first_parent_with_props(&self, obj: &Obj, parent: Option<Obj>) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner
-            .first_parent_with_props_cache
-            .insert(obj.clone(), parent);
+        inner.first_parent_with_props_cache.insert(*obj, parent);
     }
 }

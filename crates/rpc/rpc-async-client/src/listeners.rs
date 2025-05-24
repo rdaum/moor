@@ -47,9 +47,9 @@ impl ListenersClient {
         addr: SocketAddr,
     ) -> Result<(), ListenersError> {
         self.listeners_channel
-            .send(ListenersMessage::AddListener(handler.clone(), addr))
+            .send(ListenersMessage::AddListener(*handler, addr))
             .await
-            .map_err(|_| ListenersError::AddListenerFailed(handler.clone(), addr))?;
+            .map_err(|_| ListenersError::AddListenerFailed(*handler, addr))?;
         Ok(())
     }
 

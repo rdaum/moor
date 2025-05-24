@@ -169,7 +169,7 @@ impl TelnetMootRunner {
     }
 
     fn client(&mut self, player: &Obj) -> &mut MootClient {
-        self.clients.entry(player.clone()).or_insert_with(|| {
+        self.clients.entry(*player).or_insert_with(|| {
             let start = Instant::now();
             loop {
                 if let Ok(mut client) = MootClient::new(self.port) {

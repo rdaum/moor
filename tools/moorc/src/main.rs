@@ -121,11 +121,10 @@ fn main() {
             tracing::Level::INFO
         })
         .finish();
-    tracing::subscriber::set_global_default(main_subscriber)
-        .unwrap_or_else(|e| {
-            eprintln!("Unable to set configure logging: {}", e);
-            std::process::exit(1);
-        });
+    tracing::subscriber::set_global_default(main_subscriber).unwrap_or_else(|e| {
+        eprintln!("Unable to set configure logging: {}", e);
+        std::process::exit(1);
+    });
 
     let version = build::PKG_VERSION;
     let commit = build::SHORT_COMMIT;
@@ -157,7 +156,8 @@ fn main() {
         Err(e) => {
             error!(
                 "Unable to open temporary database at {}: {}",
-                db_dir.path().display(), e
+                db_dir.path().display(),
+                e
             );
             std::process::exit(1);
         }
@@ -306,7 +306,7 @@ fn main() {
                 for verb in verbs.iter() {
                     for name in verb.names() {
                         if name.starts_with("test_") {
-                            unit_tests.push((o.clone(), Symbol::mk(name)));
+                            unit_tests.push((o, Symbol::mk(name)));
                         }
                     }
                 }
@@ -347,7 +347,7 @@ fn main() {
             let handle = scheduler_client
                 .submit_verb_task(
                     &wizard,
-                    &ObjectRef::Id(o.clone()),
+                    &ObjectRef::Id(o),
                     verb,
                     List::mk_list(&[]),
                     "".to_string(),
@@ -395,8 +395,8 @@ fn main() {
                 .expect("Must specify programmer object"),
         );
         let moot_options = MootOptions::default()
-            .wizard_object(wizard.clone())
-            .nonprogrammer_object(player.clone())
+            .wizard_object(wizard)
+            .nonprogrammer_object(player)
             .programmer_object(programmer)
             .init_logging(false);
 

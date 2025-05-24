@@ -139,7 +139,7 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
         .wrap_err(format!("{}", path.display()))
         .unwrap();
 
-    let mut player = options.wizard_object.clone();
+    let mut player = options.wizard_object;
     for span in parser::parse(&test).context("parse").unwrap() {
         eprintln!(
             "{}{:?}{:#}",
@@ -169,9 +169,9 @@ pub fn execute_moot_test<R: MootRunner, F: Fn() -> eyre::Result<()>>(
 
 fn handle_change_player(options: &MootOptions, name: &str) -> eyre::Result<Obj> {
     Ok(match name {
-        "wizard" => options.wizard_object.clone(),
-        "programmer" => options.programmer_object.clone(),
-        "nonprogrammer" => options.nonprogrammer_object.clone(),
+        "wizard" => options.wizard_object,
+        "programmer" => options.programmer_object,
+        "nonprogrammer" => options.nonprogrammer_object,
         _ => return Err(eyre!("Unknown player: {}", name)),
     })
 }

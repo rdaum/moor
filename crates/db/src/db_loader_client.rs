@@ -110,13 +110,8 @@ impl LoaderInterface for DbWorldState {
         }
 
         // And then set the flags and owner the child had.
-        self.get_tx_mut().update_property_info(
-            objid,
-            propdef.uuid(),
-            owner.clone(),
-            flags,
-            None,
-        )?;
+        self.get_tx_mut()
+            .update_property_info(objid, propdef.uuid(), owner, flags, None)?;
         Ok(())
     }
 

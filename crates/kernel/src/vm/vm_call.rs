@@ -83,8 +83,8 @@ impl VMExecState {
         args: List,
     ) -> Result<ExecutionResult, Error> {
         let (args, this, location) = match target.variant() {
-            Variant::Obj(o) => (args, target.clone(), o.clone()),
-            Variant::Flyweight(f) => (args, target.clone(), f.delegate().clone()),
+            Variant::Obj(o) => (args, target.clone(), *o),
+            Variant::Flyweight(f) => (args, target.clone(), *f.delegate()),
             non_obj => {
                 if !exec_params.config.type_dispatch {
                     return Err(E_TYPE.msg("Invalid target for verb dispatch"));
@@ -113,7 +113,7 @@ impl VMExecState {
                         }));
                     }
                 };
-                let perms = self.top().permissions.clone();
+                let perms = self.top().permissions;
                 let prop_val =
                     match world_state.retrieve_property(&perms, &SYSTEM_OBJECT, sysprop_sym) {
                         Ok(prop_val) => prop_val,
@@ -140,7 +140,7 @@ impl VMExecState {
                         )
                     }));
                 };
-                (arguments.clone(), v_obj(prop_val.clone()), prop_val.clone())
+                (arguments.clone(), v_obj(*prop_val), *prop_val)
             }
         };
         Ok(self.prepare_call_verb(world_state, location, this, verb, args))
@@ -156,9 +156,9 @@ impl VMExecState {
     ) -> ExecutionResult {
         let call = VerbCall {
             verb_name,
-            location: v_obj(location.clone()),
+            location: v_obj(location),
             this: this.clone(),
-            player: self.top().player.clone(),
+            player: self.top().player,
             args: args.iter().collect(),
             // caller her is current-activation 'this', not activation caller() ...
             // unless we're a builtin, in which case we're #-1.
@@ -250,14 +250,14 @@ impl VMExecState {
             verb_name: verb,
             location: v_obj(parent),
             this: self.top().this.clone(),
-            player: self.top().player.clone(),
+            player: self.top().player,
             args: args.iter().collect(),
             argstr: "".to_string(),
             caller,
         };
 
         ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
-            permissions: permissions.clone(),
+            permissions: *permissions,
             resolved_verb,
             call: Box::new(call),
             command: self.top().command.clone(),
@@ -274,7 +274,7 @@ impl VMExecState {
     }
 
     pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Program) {
-        let a = Activation::for_eval(permissions.clone(), player, program);
+        let a = Activation::for_eval(*permissions, player, program);
 
         self.stack.push(a);
     }
@@ -331,7 +331,7 @@ impl VMExecState {
             verb_name: bf_override_name,
             location: v_obj(resolved_verb.location()),
             this: v_obj(SYSTEM_OBJECT),
-            player: self.top().player.clone(),
+            player: self.top().player,
             args: args.iter().collect(),
             argstr: "".to_string(),
             caller: self.caller(),
@@ -339,7 +339,7 @@ impl VMExecState {
 
         Some(ExecutionResult::DispatchVerb(Box::new(
             VerbExecutionRequest {
-                permissions: self.top().permissions.clone(),
+                permissions: self.top().permissions,
                 resolved_verb,
                 program,
                 call: Box::new(call),
@@ -377,7 +377,7 @@ impl VMExecState {
             // We copy the flags from the calling verb, that will determine error handling 'd'
             // behaviour below.
             flags,
-            self.top().player.clone(),
+            self.top().player,
         ));
         let mut bf_args = BfCallState {
             exec_state: self,

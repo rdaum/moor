@@ -374,7 +374,7 @@ impl Scheduler {
             } => {
                 let task_start = TaskStart::StartCommandVerb {
                     handler_object,
-                    player: player.clone(),
+                    player,
                     command: command.to_string(),
                 };
 
@@ -429,7 +429,7 @@ impl Scheduler {
                 };
 
                 let task_start = TaskStart::StartVerb {
-                    player: player.clone(),
+                    player,
                     vloc,
                     verb,
                     args,
@@ -499,7 +499,7 @@ impl Scheduler {
                 let args = command.into_iter().map(v_string);
                 let args = List::from_iter(args);
                 let task_start = TaskStart::StartVerb {
-                    player: player.clone(),
+                    player,
                     vloc: v_obj(handler_object),
                     verb: *DO_OUT_OF_BAND_COMMAND,
                     args,
@@ -531,10 +531,7 @@ impl Scheduler {
                 sessions,
                 reply,
             } => {
-                let task_start = TaskStart::StartEval {
-                    player: player.clone(),
-                    program,
-                };
+                let task_start = TaskStart::StartEval { player, program };
                 let task_id = self.next_task_id;
                 self.next_task_id += 1;
                 let result = task_q.start_task_thread(
@@ -945,7 +942,7 @@ impl Scheduler {
                 };
                 if let Err(send_error) = task
                     .session
-                    .send_system_msg(task.player.clone(), "Aborted.".to_string().as_str())
+                    .send_system_msg(task.player, "Aborted.".to_string().as_str())
                 {
                     warn!("Could not send abort message to player: {:?}", send_error);
                 };
@@ -981,7 +978,7 @@ impl Scheduler {
                 };
 
                 task.session
-                    .send_system_msg(task.player.clone(), &abort_reason_text)
+                    .send_system_msg(task.player, &abort_reason_text)
                     .expect("Could not send abort message to player");
 
                 let _ = task.session.commit();
@@ -999,10 +996,10 @@ impl Scheduler {
 
                 // Compose a string out of the backtrace
                 if let Err(send_error) = task.session.send_event(
-                    task.player.clone(),
+                    task.player,
                     Box::new(NarrativeEvent {
                         timestamp: SystemTime::now(),
-                        author: v_obj(task.player.clone()),
+                        author: v_obj(task.player),
                         event: Event::Traceback(exception.as_ref().clone()),
                     }),
                 ) {
@@ -1068,7 +1065,7 @@ impl Scheduler {
                         if let Err(e) = workers_sender.send(WorkerRequest::Request {
                             request_id: worker_request_id,
                             request_type: worker_type,
-                            perms: task.perms.clone(),
+                            perms: task.perms,
                             request: args,
                             timeout,
                         }) {
@@ -1222,8 +1219,8 @@ impl Scheduler {
                 };
                 let new_session = task.session.clone().fork().unwrap();
                 let task_start = TaskStart::StartCommandVerb {
-                    handler_object: SYSTEM_OBJECT.clone(),
-                    player: who.clone(),
+                    handler_object: SYSTEM_OBJECT,
+                    player: who,
                     command: line,
                 };
 
@@ -1267,7 +1264,7 @@ impl Scheduler {
             TaskControlMsg::ActiveTasks { reply } => {
                 let mut results = vec![];
                 for (task_id, tc) in self.task_q.active.iter() {
-                    results.push((*task_id, tc.player.clone(), tc.task_start.clone()));
+                    results.push((*task_id, tc.player, tc.task_start.clone()));
                 }
                 if let Err(e) = reply.send(Ok(results)) {
                     error!(?e, "Could not send active tasks to requester");
@@ -1414,9 +1411,9 @@ impl Scheduler {
         let forked_session = session.fork().unwrap();
 
         let suspended = fork_request.delay.is_some();
-        let player = fork_request.player.clone();
+        let player = fork_request.player;
         let delay = fork_request.delay;
-        let progr = fork_request.progr.clone();
+        let progr = fork_request.progr;
 
         let task_start = TaskStart::StartFork {
             fork_request,
@@ -1515,9 +1512,9 @@ impl TaskQ {
         let kill_switch = Arc::new(AtomicBool::new(false));
         let mut task = Task::new(
             task_id,
-            player.clone(),
+            *player,
             task_start.clone(),
-            perms.clone(),
+            *perms,
             server_options,
             kill_switch.clone(),
         );
@@ -1560,7 +1557,7 @@ impl TaskQ {
 
         // Otherwise, we create a task control record and fire up a thread.
         let task_control = RunningTask {
-            player: player.clone(),
+            player: *player,
             kill_switch,
             task_start,
             session: session.clone(),
@@ -1637,13 +1634,13 @@ impl TaskQ {
         };
 
         let task_id = task.task_id;
-        let player = task.perms.clone();
+        let player = task.perms;
 
         // Brand new kill switch for the resumed task. The old one may have gotten toggled.
         let kill_switch = Arc::new(AtomicBool::new(false));
         task.kill_switch = kill_switch.clone();
         let task_control = RunningTask {
-            player: player.clone(),
+            player,
             kill_switch,
             session: session.clone(),
             result_sender,
@@ -1738,7 +1735,7 @@ impl TaskQ {
 
         // Otherwise, we create a task control record and fire up a thread.
         let task_control = RunningTask {
-            player: old_tc.player.clone(),
+            player: old_tc.player,
             kill_switch,
             session: new_session.clone(),
             result_sender: old_tc.result_sender,
@@ -1786,7 +1783,7 @@ impl TaskQ {
         let (perms, is_suspended) = match self.suspended.perms_check(victim_task_id, false) {
             Some(perms) => (perms, true),
             None => match self.active.get(&victim_task_id) {
-                Some(tc) => (tc.player.clone(), false),
+                Some(tc) => (tc.player, false),
                 None => {
                     return v_err(E_INVARG);
                 }
@@ -1895,7 +1892,7 @@ impl TaskQ {
         };
         // First disconnect the player...
         warn!(?player, ?disconnect_task_id, "Disconnecting player");
-        if let Err(e) = task.session.disconnect(player.clone()) {
+        if let Err(e) = task.session.disconnect(*player) {
             warn!(?player, ?disconnect_task_id, error = ?e, "Could not disconnect player's session");
             return;
         }
@@ -1931,7 +1928,7 @@ fn match_object_ref(
             if !tx.valid(obj)? {
                 return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
             }
-            Ok(obj.clone())
+            Ok(*obj)
         }
         ObjectRef::SysObj(names) => {
             // Follow the chain of properties from #0 to the actual object.
@@ -1944,7 +1941,7 @@ fn match_object_ref(
                 let Variant::Obj(o) = value.variant() else {
                     return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
                 };
-                obj = o.clone();
+                obj = *o;
             }
             if !tx.valid(&obj)? {
                 return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
@@ -1952,10 +1949,10 @@ fn match_object_ref(
             Ok(obj)
         }
         ObjectRef::Match(object_name) => {
-            let match_env = WsMatchEnv::new(tx, perms.clone());
+            let match_env = WsMatchEnv::new(tx, *perms);
             let matcher = DefaultObjectNameMatcher {
                 env: match_env,
-                player: player.clone(),
+                player: *player,
             };
             let Ok(Some(o)) = matcher.match_object(object_name) else {
                 return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));

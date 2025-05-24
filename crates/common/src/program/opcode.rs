@@ -18,7 +18,7 @@ use bincode::{Decode, Encode};
 use moor_var::VarType;
 use moor_var::{ErrorCode, Obj};
 
-#[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
 pub enum Op {
     Add,
     And(Label),
@@ -173,7 +173,7 @@ pub struct ListComprehend {
     pub end_label: Label,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]
 pub enum ComprehensionType {
     Range,
     List,

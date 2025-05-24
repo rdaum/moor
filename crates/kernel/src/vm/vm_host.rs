@@ -170,7 +170,7 @@ impl VmHost {
         permissions: &Obj,
     ) {
         let call_request = Box::new(VerbExecutionRequest {
-            permissions: permissions.clone(),
+            permissions: *permissions,
             resolved_verb: verb.1,
             call: Box::new(verb_call),
             command: Some(Box::new(command)),
@@ -189,7 +189,7 @@ impl VmHost {
         verb_call: VerbCall,
     ) {
         let call_request = Box::new(VerbExecutionRequest {
-            permissions: perms.clone(),
+            permissions: *perms,
             resolved_verb: verb_info.1,
             call: Box::new(verb_call),
             command: None,
@@ -358,8 +358,8 @@ impl VmHost {
                     let parent_task_id = self.vm_exec_state.task_id;
                     let new_activation = a.clone();
                     let fork_request = Box::new(Fork {
-                        player: a.player.clone(),
-                        progr: a.permissions.clone(),
+                        player: a.player,
+                        progr: a.permissions,
                         parent_task_id,
                         delay,
                         activation: new_activation,
@@ -434,7 +434,7 @@ impl VmHost {
                 let result = moo_frame_execute(
                     tick_slice,
                     &mut tick_count,
-                    activation.permissions.clone(),
+                    activation.permissions,
                     fr,
                     world_state,
                     vm_exec_params.config,
@@ -498,7 +498,7 @@ impl VmHost {
     }
 
     pub fn permissions(&self) -> Obj {
-        self.vm_exec_state.top().permissions.clone()
+        self.vm_exec_state.top().permissions
     }
     pub fn verb_name(&self) -> Symbol {
         self.vm_exec_state.top().verb_name

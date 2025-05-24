@@ -355,7 +355,7 @@ impl<R: Read> TextdumpReader<R> {
                         self.line_num,
                     ));
                 };
-                location.clone()
+                *location
             }
             _ => self.read_objid()?,
         };
@@ -375,7 +375,7 @@ impl<R: Read> TextdumpReader<R> {
                 };
                 let parents = self.read_var()?;
                 let parent = match parents.variant() {
-                    Variant::Obj(parent) => parent.clone(),
+                    Variant::Obj(parent) => *parent,
                     Variant::List(parents) => {
                         if parents.is_empty() {
                             NOTHING
@@ -394,7 +394,7 @@ impl<R: Read> TextdumpReader<R> {
                                 ));
                             };
 
-                            parent.clone()
+                            *parent
                         }
                     }
                     _ => {
@@ -755,7 +755,7 @@ impl<R: Read> TextdumpReader<R> {
                 let mut objects = BTreeMap::new();
                 for _i in 0..nobjs {
                     if let Some(o) = self.read_object()? {
-                        objects.insert(o.id.clone(), o);
+                        objects.insert(o.id, o);
                     }
                 }
 
@@ -775,7 +775,7 @@ impl<R: Read> TextdumpReader<R> {
                 let mut verbs = BTreeMap::new();
                 for _p in 0..nprogs {
                     let verb = self.read_verb()?;
-                    verbs.insert((verb.objid.clone(), verb.verbnum), verb);
+                    verbs.insert((verb.objid, verb.verbnum), verb);
                 }
                 (objects, users, verbs)
             }
@@ -800,7 +800,7 @@ impl<R: Read> TextdumpReader<R> {
                 let mut objects = BTreeMap::new();
                 for _i in 0..nobjs {
                     if let Some(o) = self.read_object()? {
-                        objects.insert(o.id.clone(), o);
+                        objects.insert(o.id, o);
                     }
                 }
 
@@ -808,7 +808,7 @@ impl<R: Read> TextdumpReader<R> {
                 let mut verbs = BTreeMap::new();
                 for _p in 0..nprogs {
                     let verb = self.read_verb()?;
-                    verbs.insert((verb.objid.clone(), verb.verbnum), verb);
+                    verbs.insert((verb.objid, verb.verbnum), verb);
                 }
                 (objects, users, verbs)
             }

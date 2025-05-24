@@ -376,7 +376,7 @@ impl CodegenState {
                         self.emit(Op::ImmNone);
                     }
                     Variant::Obj(oid) => {
-                        self.emit(Op::ImmObjid(oid.clone()));
+                        self.emit(Op::ImmObjid(*oid));
                     }
                     Variant::Int(i) => match i32::try_from(*i) {
                         Ok(n) => self.emit(Op::ImmInt(n)),
@@ -1035,11 +1035,11 @@ impl CodegenState {
             match a {
                 Arg::Normal(a) => {
                     self.generate_expr(a)?;
-                    self.emit(normal_op.clone());
+                    self.emit(normal_op);
                 }
                 Arg::Splice(s) => {
                     self.generate_expr(s)?;
-                    self.emit(splice_op.clone());
+                    self.emit(splice_op);
                 }
             }
             self.pop_stack(pop);

@@ -251,7 +251,7 @@ impl SuspensionQ {
         let (task_id, perms) = self.tasks.iter().find_map(|(task_id, sr)| {
             if let WakeCondition::Input(request_id) = &sr.wake_condition {
                 if *request_id == input_request_id {
-                    Some((*task_id, sr.task.perms.clone()))
+                    Some((*task_id, sr.task.perms))
                 } else {
                     None
                 }
@@ -282,7 +282,7 @@ impl SuspensionQ {
         let (task_id, _) = self.tasks.iter().find_map(|(task_id, sr)| {
             if let WakeCondition::Worker(request_id) = &sr.wake_condition {
                 if *request_id == worker_request_id {
-                    Some((*task_id, sr.task.perms.clone()))
+                    Some((*task_id, sr.task.perms))
                 } else {
                     None
                 }
@@ -318,7 +318,7 @@ impl SuspensionQ {
             tasks.push(TaskDescription {
                 task_id: sr.task.task_id,
                 start_time,
-                permissions: sr.task.perms.clone(),
+                permissions: sr.task.perms,
                 verb_name: sr.task.vm_host.verb_name(),
                 verb_definer: sr.task.vm_host.verb_definer(),
                 line_number: sr.task.vm_host.line_number(),
@@ -337,7 +337,7 @@ impl SuspensionQ {
                 return None;
             }
         }
-        Some(sr.task.perms.clone())
+        Some(sr.task.perms)
     }
 
     /// Remove all non-background tasks for the given player.

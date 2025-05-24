@@ -60,7 +60,7 @@ impl MatchEnvironment for MockMatchEnv {
         let mut result = Vec::new();
         if let Some(player_obj) = self.objects.get(player) {
             result.push(MOCK_PLAYER);
-            result.push(player_obj.location.clone());
+            result.push(player_obj.location);
             result.extend(player_obj.contents.iter().cloned());
 
             if let Some(location_obj) = self.objects.get(&player_obj.location) {
@@ -73,8 +73,8 @@ impl MatchEnvironment for MockMatchEnv {
     fn location_of(&self, oid: &Obj) -> Result<Obj, WorldStateError> {
         self.objects
             .get(oid)
-            .map(|o| o.location.clone())
-            .ok_or_else(|| WorldStateError::ObjectNotFound(ObjectRef::Id(oid.clone())))
+            .map(|o| o.location)
+            .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(*oid)))
     }
 }
 

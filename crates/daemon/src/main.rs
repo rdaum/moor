@@ -117,11 +117,10 @@ fn main() -> Result<(), Report> {
             tracing::Level::INFO
         })
         .finish();
-    tracing::subscriber::set_global_default(main_subscriber)
-        .unwrap_or_else(|e| {
-            eprintln!("Unable to set configure logging: {}", e);
-            std::process::exit(1);
-        });
+    tracing::subscriber::set_global_default(main_subscriber).unwrap_or_else(|e| {
+        eprintln!("Unable to set configure logging: {}", e);
+        std::process::exit(1);
+    });
 
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
     // the keypair from it...
@@ -129,7 +128,10 @@ fn main() -> Result<(), Report> {
         match load_keypair(&args.public_key, &args.private_key) {
             Ok(keypair) => keypair,
             Err(e) => {
-                error!("Unable to load keypair from public and private key files: {}", e);
+                error!(
+                    "Unable to load keypair from public and private key files: {}",
+                    e
+                );
                 std::process::exit(1);
             }
         }

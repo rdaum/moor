@@ -139,7 +139,7 @@ impl ConnectionsDB for ConnectionsFjall {
             // Associate the client with the new player id.
             inner
                 .client_players
-                .insert(Uuid::from_u128(client_id), to_player.clone());
+                .insert(Uuid::from_u128(client_id), to_player);
 
             let to_oid_bytes = to_player.as_bytes().unwrap();
             inner
@@ -161,7 +161,7 @@ impl ConnectionsDB for ConnectionsFjall {
                 .append(&mut to_player_connections.connections);
         }
 
-        inner.player_clients.insert(to_player.clone(), crs.clone());
+        inner.player_clients.insert(to_player, crs.clone());
         let encoded_cr = bincode::encode_to_vec(crs, *BINCODE_CONFIG).unwrap();
         inner
             .player_clients_table
@@ -195,7 +195,7 @@ impl ConnectionsDB for ConnectionsFjall {
             Some(id) => id,
         };
 
-        inner.client_players.insert(client_id, player_id.clone());
+        inner.client_players.insert(client_id, player_id);
         let oid_bytes = player_id.as_bytes().unwrap();
         inner
             .client_player_table
@@ -212,7 +212,7 @@ impl ConnectionsDB for ConnectionsFjall {
         };
         inner
             .player_clients
-            .entry(player_id.clone())
+            .entry(player_id)
             .or_insert(ConnectionsRecords {
                 connections: vec![],
             })
@@ -222,7 +222,7 @@ impl ConnectionsDB for ConnectionsFjall {
         let connections_record = inner.player_clients.remove(&player_id).unwrap();
         inner
             .player_clients
-            .insert(player_id.clone(), connections_record.clone());
+            .insert(player_id, connections_record.clone());
         let encoded_connected =
             bincode::encode_to_vec(connections_record, *BINCODE_CONFIG).unwrap();
         inner
@@ -297,7 +297,7 @@ impl ConnectionsDB for ConnectionsFjall {
                         continue;
                     }
                     _ => {
-                        to_remove.push((player_id.clone(), cr.client_id));
+                        to_remove.push((*player_id, cr.client_id));
                     }
                 }
             }
@@ -311,7 +311,7 @@ impl ConnectionsDB for ConnectionsFjall {
                 .retain(|cr| cr.client_id != client_id);
             inner
                 .player_clients
-                .insert(player_id.clone(), connections_record.clone());
+                .insert(player_id, connections_record.clone());
             let encoded_connected =
                 bincode::encode_to_vec(&connections_record, *BINCODE_CONFIG).unwrap();
             inner
@@ -391,7 +391,7 @@ impl ConnectionsDB for ConnectionsFjall {
             .player_clients
             .iter()
             .filter(|&(_o, c)| (!c.connections.is_empty()))
-            .map(|(o, _c)| o.clone())
+            .map(|(o, _c)| *o)
             .collect()
     }
 
@@ -424,7 +424,7 @@ impl ConnectionsDB for ConnectionsFjall {
         if connections_record.connections.is_empty() {
             inner
                 .player_clients
-                .insert(player_id.clone(), connections_record.clone());
+                .insert(player_id, connections_record.clone());
             inner.player_clients_table.remove(oid_bytes).ok();
         } else {
             let encoded_connected =
@@ -467,28 +467,25 @@ mod tests {
                 let oid = db
                     .new_connection(client_id, "localhost".to_string(), None)
                     .unwrap();
-                let client_ids = db.client_ids_for(oid.clone()).unwrap();
+                let client_ids = db.client_ids_for(oid).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
-                db.record_client_activity(client_id, oid.clone()).unwrap();
-                db.notify_is_alive(client_id, oid.clone()).unwrap();
-                let last_activity = db.last_activity_for(oid.clone());
+                db.record_client_activity(client_id, oid).unwrap();
+                db.notify_is_alive(client_id, oid).unwrap();
+                let last_activity = db.last_activity_for(oid);
                 assert!(
                     last_activity.is_ok(),
                     "Unable to get last activity for {x} ({oid}) client {client_id}",
                 );
                 let last_activity = last_activity.unwrap().elapsed().unwrap().as_secs_f64();
                 assert!(last_activity < 1.0);
-                assert_eq!(
-                    db.connection_object_for_client(client_id),
-                    Some(oid.clone())
-                );
+                assert_eq!(db.connection_object_for_client(client_id), Some(oid));
                 let connection_object = Obj::mk_id(x);
-                db.update_client_connection(oid, connection_object.clone())
+                db.update_client_connection(oid, connection_object)
                     .unwrap_or_else(|e| {
                         panic!("Unable to update client connection for {:?}: {:?}", x, e)
                     });
-                let client_ids = db.client_ids_for(connection_object.clone()).unwrap();
+                let client_ids = db.client_ids_for(connection_object).unwrap();
                 assert_eq!(client_ids.len(), 1);
                 assert_eq!(client_ids[0], client_id);
                 db.remove_client_connection(client_id).unwrap();
@@ -513,12 +510,9 @@ mod tests {
         db.ping_check();
         let client_ids = db.connections();
         assert_eq!(client_ids.len(), 1);
-        assert_eq!(
-            db.connection_object_for_client(client_id1),
-            Some(ob.clone())
-        );
+        assert_eq!(db.connection_object_for_client(client_id1), Some(ob));
 
-        let client_ids = db.client_ids_for(ob.clone()).unwrap();
+        let client_ids = db.client_ids_for(ob).unwrap();
         assert_eq!(client_ids.len(), 1);
         assert_eq!(client_ids[0], client_id1);
 
@@ -540,10 +534,7 @@ mod tests {
         db.ping_check();
         let client_ids = db.connections();
         assert_eq!(client_ids.len(), 1);
-        assert_eq!(
-            db.connection_object_for_client(client_id1),
-            Some(ob.clone())
-        );
+        assert_eq!(db.connection_object_for_client(client_id1), Some(ob));
 
         let client_ids = db.client_ids_for(ob).unwrap();
         assert_eq!(client_ids.len(), 1);
@@ -561,9 +552,8 @@ mod tests {
         let ob = db
             .new_connection(client_id1, "localhost".to_string(), None)
             .unwrap();
-        assert_eq!(db.connections(), vec![ob.clone()]);
-        db.update_client_connection(ob.clone(), Obj::mk_id(1))
-            .unwrap();
+        assert_eq!(db.connections(), vec![ob]);
+        db.update_client_connection(ob, Obj::mk_id(1)).unwrap();
         let connections = db.connections();
         assert_eq!(connections, vec![Obj::mk_id(1)]);
 
@@ -583,7 +573,7 @@ mod tests {
         let ob = db
             .new_connection(client_id1, "localhost".to_string(), None)
             .unwrap();
-        assert_eq!(db.connections(), vec![ob.clone()]);
+        assert_eq!(db.connections(), vec![ob]);
         db.remove_client_connection(client_id1).unwrap();
         assert_eq!(db.connections(), vec![]);
     }

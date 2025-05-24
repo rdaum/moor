@@ -98,7 +98,7 @@ fn bf_notify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     );
     bf_args
         .task_scheduler_client
-        .notify(player.clone(), Box::new(event));
+        .notify(*player, Box::new(event));
 
     // MOO docs say this should return none, but in reality it returns 1?
     Ok(Ret(v_int(1)))
@@ -153,7 +153,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         };
         bf_args
             .task_scheduler_client
-            .notify(player.clone(), Box::new(event));
+            .notify(*player, Box::new(event));
 
         return Ok(Ret(v_int(1)));
     }
@@ -270,7 +270,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args
         .task_scheduler_client
-        .notify(player.clone(), Box::new(event));
+        .notify(*player, Box::new(event));
 
     Ok(RetNil)
 }
@@ -295,7 +295,7 @@ fn bf_connected_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         if p.id().0 < 0 && !include_all {
             return None;
         }
-        Some(v_obj(p.clone()))
+        Some(v_obj(*p))
     });
     Ok(Ret(v_list_iter(map)))
 }
@@ -371,11 +371,11 @@ fn bf_callers(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // verb name
             v_string(c.verb_name.to_string()),
             // 'programmer'
-            v_obj(c.programmer.clone()),
+            v_obj(c.programmer),
             // verb location
-            v_obj(c.definer.clone()),
+            v_obj(c.definer),
             // player
-            v_obj(c.player.clone()),
+            v_obj(c.player),
             // line number
             v_int(c.line_number as i64),
         ];
@@ -402,7 +402,7 @@ fn bf_idle_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("idle_seconds() requires an object as the first argument"),
         ));
     };
-    let Ok(idle_seconds) = bf_args.session.idle_seconds(who.clone()) else {
+    let Ok(idle_seconds) = bf_args.session.idle_seconds(*who) else {
         return Err(ErrValue(E_INVARG.msg(
             "idle_seconds() requires a valid object as the first argument",
         )));
@@ -422,7 +422,7 @@ fn bf_connected_seconds(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             "connected_seconds() requires an object as the first argument",
         )));
     };
-    let Ok(connected_seconds) = bf_args.session.connected_seconds(who.clone()) else {
+    let Ok(connected_seconds) = bf_args.session.connected_seconds(*who) else {
         return Err(ErrValue(E_INVARG.msg(
             "connected_seconds() requires a valid object as the first argument",
         )));
@@ -464,7 +464,7 @@ fn bf_connection_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         )));
     }
 
-    let Ok(connection_name) = bf_args.session.connection_name(player.clone()) else {
+    let Ok(connection_name) = bf_args.session.connection_name(*player) else {
         return Err(ErrValue(E_ARGS.msg(
             "connection_name() requires a valid object as the first argument",
         )));
@@ -756,8 +756,8 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         };
         let x = v_none();
         let y = v_none();
-        let programmer = v_obj(task.permissions.clone());
-        let verb_loc = v_obj(task.verb_definer.clone());
+        let programmer = v_obj(task.permissions);
+        let verb_loc = v_obj(task.verb_definer);
         let verb_name = v_str(task.verb_name.as_str());
         let line = v_int(task.line_number as i64);
         let this = task.this.clone();
@@ -800,7 +800,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         if is_wizard {
             true
         } else {
-            v_obj(player_id.clone()) == player
+            v_obj(*player_id) == player
         }
     });
 
@@ -815,7 +815,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut output = vec![];
     for r in results {
         let task_id = v_int(r.0 as i64);
-        let player_id = v_obj(r.1.clone());
+        let player_id = v_obj(r.1);
         let task_start = match &r.2 {
             TaskStart::StartCommandVerb {
                 handler_object,
@@ -823,8 +823,8 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 command,
             } => v_list(&[
                 sym_or_str("command"),
-                v_obj(handler_object.clone()),
-                v_obj(player.clone()),
+                v_obj(*handler_object),
+                v_obj(*player),
                 v_str(command),
             ]),
             TaskStart::StartDoCommand {
@@ -833,8 +833,8 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 command,
             } => v_list(&[
                 sym_or_str("do_command"),
-                v_obj(handler_object.clone()),
-                v_obj(player.clone()),
+                v_obj(*handler_object),
+                v_obj(*player),
                 v_str(command),
             ]),
             TaskStart::StartVerb {
@@ -845,7 +845,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 argstr,
             } => v_list(&[
                 sym_or_str("verb"),
-                v_obj(player.clone()),
+                v_obj(*player),
                 vloc.clone(),
                 sym_or_str(verb.as_str()),
                 v_list_iter(args.iter()),
@@ -855,10 +855,10 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 fork_request,
                 suspended: _,
             } => {
-                let player = v_obj(fork_request.player.clone());
+                let player = v_obj(fork_request.player);
                 let parent_task = v_int(fork_request.parent_task_id as i64);
-                let perms = v_obj(fork_request.progr.clone());
-                let verb_loc = v_obj(fork_request.activation.verbdef.location().clone());
+                let perms = v_obj(fork_request.progr);
+                let verb_loc = v_obj(fork_request.activation.verbdef.location());
                 let verb_name = v_str(fork_request.activation.verbdef.names().join(" ").as_str());
                 let args = v_list_iter(fork_request.activation.args.iter());
                 v_list(&[
@@ -872,7 +872,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 ])
             }
             TaskStart::StartEval { player, program: _ } => {
-                v_list(&[sym_or_str("eval"), v_obj(player.clone())])
+                v_list(&[sym_or_str("eval"), v_obj(*player)])
             }
         };
         let entry = v_list(&[task_id, player_id, task_start]);
@@ -920,10 +920,10 @@ fn bf_queue_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // Now we can get the list of players with queued tasks.
             let players = tasks
                 .iter()
-                .map(|task| task.permissions.clone())
+                .map(|task| task.permissions)
                 .collect::<Vec<_>>();
 
-            Ok(Ret(v_list_iter(players.iter().map(|p| v_obj(p.clone())))))
+            Ok(Ret(v_list_iter(players.iter().map(|p| v_obj(*p)))))
         }
         Some(p) => {
             // Player must be either a wizard, or the player themselves.
@@ -1070,7 +1070,7 @@ fn bf_boot_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         )));
     }
 
-    bf_args.task_scheduler_client.boot_player(player.clone());
+    bf_args.task_scheduler_client.boot_player(*player);
 
     Ok(RetNil)
 }
@@ -1316,11 +1316,7 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let listeners = bf_args.task_scheduler_client.listeners();
     let listeners = listeners.iter().map(|listener| {
         let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
-        v_list(&[
-            v_obj(listener.0.clone()),
-            v_int(listener.2 as i64),
-            print_messages,
-        ])
+        v_list(&[v_obj(listener.0), v_int(listener.2 as i64), print_messages])
     });
 
     let listeners = v_list_iter(listeners);
@@ -1410,7 +1406,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             // setup-for-eval result here.
             Ok(VmInstr(ExecutionResult::DispatchEval {
                 permissions: bf_args.task_perms_who(),
-                player: bf_args.exec_state.top().player.clone(),
+                player: bf_args.exec_state.top().player,
                 program,
             }))
         }

@@ -224,7 +224,7 @@ fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .ancestors_of(&bf_args.task_perms_who(), obj, true)
         .map_err(world_state_bf_err)?;
 
-    let isa = ancestors.contains(possible_ancestor.clone());
+    let isa = ancestors.contains(*possible_ancestor);
 
     Ok(Ret(v_bool(isa)))
 }
@@ -282,7 +282,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
-            bf_frame.bf_trampoline_arg = Some(v_obj(new_obj.clone()));
+            bf_frame.bf_trampoline_arg = Some(v_obj(new_obj));
 
             let ve = VerbExecutionRequest {
                 permissions: bf_args.task_perms_who(),
@@ -290,9 +290,9 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 program,
                 call: Box::new(VerbCall {
                     verb_name: *INITIALIZE_SYM,
-                    location: v_obj(new_obj.clone()),
+                    location: v_obj(new_obj),
                     this: v_obj(new_obj),
-                    player: bf_args.exec_state.top().player.clone(),
+                    player: bf_args.exec_state.top().player,
                     args: List::mk_list(&[]),
                     argstr: "".to_string(),
                     caller: bf_args.exec_state.top().this.clone(),
@@ -407,9 +407,9 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             program,
                             call: Box::new(VerbCall {
                                 verb_name: *RECYCLE_SYM,
-                                location: v_obj(obj.clone()),
+                                location: v_obj(obj),
                                 this: v_obj(obj),
-                                player: bf_args.exec_state.top().player.clone(),
+                                player: bf_args.exec_state.top().player,
                                 args: List::mk_list(&[]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
@@ -477,9 +477,9 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                         program,
                         call: Box::new(VerbCall {
                             verb_name: *EXITFUNC_SYM,
-                            location: v_obj(head_obj.clone()),
-                            this: v_obj(head_obj.clone()),
-                            player: bf_args.exec_state.top().player.clone(),
+                            location: v_obj(*head_obj),
+                            this: v_obj(*head_obj),
+                            player: bf_args.exec_state.top().player,
                             args: List::mk_list(&[v_obj(obj)]),
                             argstr: "".to_string(),
                             caller: bf_args.exec_state.top().this.clone(),
@@ -583,9 +583,9 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             program,
                             call: Box::new(VerbCall {
                                 verb_name: *ACCEPT_SYM,
-                                location: v_obj(whereto.clone()),
-                                this: v_obj(whereto.clone()),
-                                player: bf_args.exec_state.top().player.clone(),
+                                location: v_obj(whereto),
+                                this: v_obj(whereto),
+                                player: bf_args.exec_state.top().player,
                                 args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
@@ -659,9 +659,9 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             program,
                             call: Box::new(VerbCall {
                                 verb_name: *EXITFUNC_SYM,
-                                location: v_obj(original_location.clone()),
+                                location: v_obj(original_location),
                                 this: v_obj(original_location),
-                                player: bf_args.exec_state.top().player.clone(),
+                                player: bf_args.exec_state.top().player,
                                 args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
@@ -706,9 +706,9 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             program,
                             call: Box::new(VerbCall {
                                 verb_name: *ENTERFUNC_SYM,
-                                location: v_obj(whereto.clone()),
+                                location: v_obj(whereto),
                                 this: v_obj(whereto),
-                                player: bf_args.exec_state.top().player.clone(),
+                                player: bf_args.exec_state.top().player,
                                 args: List::mk_list(&[v_obj(what)]),
                                 argstr: "".to_string(),
                                 caller: bf_args.exec_state.top().this.clone(),
@@ -829,7 +829,7 @@ fn bf_set_player_flag(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // If the object was player, update the VM's copy of the perms.
     if obj.eq(&bf_args.task_perms().map_err(world_state_bf_err)?.who) {
-        bf_args.exec_state.set_task_perms(obj.clone());
+        bf_args.exec_state.set_task_perms(*obj);
     }
 
     Ok(RetNil)

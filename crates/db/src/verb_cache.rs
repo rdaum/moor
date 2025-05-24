@@ -70,14 +70,12 @@ impl VerbResolutionCache {
     pub(crate) fn fill_first_parent_with_verbs(&self, obj: &Obj, parent: Option<Obj>) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner
-            .first_parent_with_verbs_cache
-            .insert(obj.clone(), parent);
+        inner.first_parent_with_verbs_cache.insert(*obj, parent);
     }
 
     pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
         let inner = self.inner.lock().unwrap();
-        inner.entries.get(&(obj.clone(), *verb)).cloned()
+        inner.entries.get(&(*obj, *verb)).cloned()
     }
 
     pub(crate) fn flush(&self) {
@@ -91,15 +89,13 @@ impl VerbResolutionCache {
     pub(crate) fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner
-            .entries
-            .insert((obj.clone(), *verb), Some(verbdef.clone()));
+        inner.entries.insert((*obj, *verb), Some(verbdef.clone()));
     }
 
     pub(crate) fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert((obj.clone(), *verb), None);
+        inner.entries.insert((*obj, *verb), None);
     }
 }
 
@@ -156,7 +152,7 @@ impl AncestryCache {
     pub(crate) fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert(obj.clone(), ancestors.to_vec());
+        inner.entries.insert(*obj, ancestors.to_vec());
     }
 
     pub(crate) fn has_changed(&self) -> bool {

@@ -50,8 +50,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitCommandTask {
-                handler_object: handler_object.clone(),
-                player: player.clone(),
+                handler_object: *handler_object,
+                player: *player,
                 command: command.to_string(),
                 session,
                 reply,
@@ -81,12 +81,12 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitVerbTask {
-                player: player.clone(),
+                player: *player,
                 vloc: vloc.clone(),
                 verb: Symbol::mk_case_insensitive(verb.as_str()),
                 args,
                 argstr,
-                perms: perms.clone(),
+                perms: *perms,
                 session,
                 reply,
             })
@@ -110,7 +110,7 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitTaskInput {
-                player: player.clone(),
+                player: *player,
                 input_request_id,
                 input,
                 reply,
@@ -133,8 +133,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitOobTask {
-                handler_object: handler_object.clone(),
-                player: player.clone(),
+                handler_object: *handler_object,
+                player: *player,
                 command,
                 argstr,
                 session,
@@ -165,8 +165,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitEvalTask {
-                player: player.clone(),
-                perms: perms.clone(),
+                player: *player,
+                perms: *perms,
                 program,
                 sessions,
                 reply,
@@ -200,8 +200,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::SubmitProgramVerb {
-                player: player.clone(),
-                perms: perms.clone(),
+                player: *player,
+                perms: *perms,
                 obj: obj.clone(),
                 verb_name,
                 code,
@@ -223,7 +223,7 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestSystemProperty {
-                player: player.clone(),
+                player: *player,
                 obj: obj.clone(),
                 property,
                 reply,
@@ -255,8 +255,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestVerbs {
-                player: player.clone(),
-                perms: perms.clone(),
+                player: *player,
+                perms: *perms,
                 obj: obj.clone(),
                 reply,
             })
@@ -277,8 +277,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestVerbCode {
-                player: player.clone(),
-                perms: perms.clone(),
+                player: *player,
+                perms: *perms,
                 obj: obj.clone(),
                 verb,
                 reply,
@@ -299,8 +299,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestProperties {
-                player: player.clone(),
-                perms: perms.clone(),
+                player: *player,
+                perms: *perms,
                 obj: obj.clone(),
                 reply,
             })
@@ -321,8 +321,8 @@ impl SchedulerClient {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
             .send(SchedulerClientMsg::RequestProperty {
-                player: player.clone(),
-                perms: perms.clone(),
+                player: *player,
+                perms: *perms,
                 obj: obj.clone(),
                 property,
                 reply,

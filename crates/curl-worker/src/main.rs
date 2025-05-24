@@ -77,13 +77,17 @@ async fn main() -> Result<(), eyre::Error> {
 
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let (private_key, _public_key) = match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
-        Ok(keypair) => keypair,
-        Err(e) => {
-            error!("Unable to load keypair from public and private key files: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let (private_key, _public_key) =
+        match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
+            Ok(keypair) => keypair,
+            Err(e) => {
+                error!(
+                    "Unable to load keypair from public and private key files: {}",
+                    e
+                );
+                std::process::exit(1);
+            }
+        };
     let my_id = Uuid::new_v4();
     let worker_token = make_worker_token(&private_key, my_id);
 

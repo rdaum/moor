@@ -371,7 +371,7 @@ fn parse_obj_attr(
     let Variant::Obj(obj) = value.variant() else {
         return Err(ObjDefParseError::BadAttributeType(value.type_code()));
     };
-    Ok(obj.clone())
+    Ok(*obj)
 }
 
 fn parse_str_attr(

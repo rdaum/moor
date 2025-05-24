@@ -207,7 +207,7 @@ impl Flyweight {
 
     pub fn with_new_contents(&self, new_contents: List) -> Var {
         let fi = Inner {
-            delegate: self.0.delegate.clone(),
+            delegate: self.0.delegate,
             slots: self.0.slots.clone(),
             contents: new_contents,
             seal: self.0.seal.clone(),

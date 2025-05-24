@@ -52,9 +52,9 @@ fn resolve_prop(omap: &BTreeMap<Obj, Object>, offset: usize, o: &Object) -> Opti
         let name = o.propdefs[offset].clone();
         let pval = &o.propvals[offset];
         return Some(RProp {
-            definer: o.id.clone(),
+            definer: o.id,
             name,
-            owner: pval.owner.clone(),
+            owner: pval.owner,
             flags: pval.flags,
             value: pval.value.clone(),
         });
@@ -178,7 +178,7 @@ pub fn read_textdump<T: io::Read>(
         );
         loader
             .create_object(
-                Some(objid.clone()),
+                Some(*objid),
                 &ObjAttrs::new(NOTHING, NOTHING, NOTHING, flags, &o.name),
             )
             .unwrap();
@@ -233,7 +233,7 @@ pub fn read_textdump<T: io::Read>(
                 .set_property(
                     objid,
                     resolved.name.as_str(),
-                    Some(p.owner.clone()),
+                    Some(p.owner),
                     Some(flags),
                     value,
                 )
@@ -269,7 +269,7 @@ pub fn read_textdump<T: io::Read>(
 
             let names: Vec<&str> = v.name.split(' ').collect();
 
-            let program = match td.verbs.get(&(objid.clone(), vn)) {
+            let program = match td.verbs.get(&(*objid, vn)) {
                 Some(verb) if verb.program.is_some() => compile(
                     verb.program.clone().unwrap().as_str(),
                     compile_options.clone(),

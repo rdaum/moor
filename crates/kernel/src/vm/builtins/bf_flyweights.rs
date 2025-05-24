@@ -94,7 +94,7 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 format!("xml_parse() tag {} in map is not an object", tag)
                             })));
                         };
-                        o.clone()
+                        *o
                     }
                     None => {
                         let key = format!("tag_{}", tag);
@@ -112,7 +112,7 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             })));
                         };
 
-                        o.clone()
+                        *o
                     }
                 };
 
@@ -136,7 +136,7 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 })?;
                 // Turn this into a flyweight and push into the children of the parent
                 let children = List::mk_list(&children);
-                let fl = v_flyweight(obj.clone(), &attributes, children, None);
+                let fl = v_flyweight(obj, &attributes, children, None);
                 if let Some(parent) = current_node.last_mut() {
                     parent.2.push(fl);
                 } else {
@@ -183,7 +183,7 @@ fn flyweight_to_xml_tag(
     // seeking a `tag` property on the delegate object.
     let tag_name = match map {
         Some(m) => {
-            let key = v_obj(fl.delegate().clone());
+            let key = v_obj(*fl.delegate());
             let Ok(tag) = m.get(&key) else {
                 return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
                     format!("to_xml() tag {} not found in map", fl.delegate().id())
@@ -425,7 +425,7 @@ fn bf_remove_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map(|(k, v)| (*k, v.clone()))
         .collect();
 
-    let f = v_flyweight(f.delegate().clone(), &slots, f.contents().clone(), None);
+    let f = v_flyweight(*f.delegate(), &slots, f.contents().clone(), None);
     Ok(Ret(f))
 }
 
@@ -469,7 +469,7 @@ fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     } else {
         slots.push((key, value));
     }
-    let f = v_flyweight(f.delegate().clone(), &slots, f.contents().clone(), None);
+    let f = v_flyweight(*f.delegate(), &slots, f.contents().clone(), None);
     Ok(Ret(f))
 }
 

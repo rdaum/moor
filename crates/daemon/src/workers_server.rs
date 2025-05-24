@@ -172,7 +172,7 @@ fn process(
                     worker_id: worker.id,
                     token: worker.token.clone(),
                     id: request_id,
-                    perms: perms.clone(),
+                    perms,
                     request: request.clone(),
                     timeout,
                 };

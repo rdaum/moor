@@ -77,7 +77,7 @@ impl Hosts {
                  }| {
                     listeners
                         .iter()
-                        .map(move |(oid, addr)| (oid.clone(), *host_type, *addr))
+                        .map(move |(oid, addr)| (*oid, *host_type, *addr))
                 },
             )
             .collect()

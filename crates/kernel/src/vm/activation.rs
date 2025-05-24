@@ -232,10 +232,7 @@ impl Activation {
         let frame = Box::new(MooStackFrame::new(program));
         let mut frame = Frame::Moo(frame);
         frame.set_global_variable(GlobalName::this, verb_call_request.call.this.clone());
-        frame.set_global_variable(
-            GlobalName::player,
-            v_obj(verb_call_request.call.player.clone()),
-        );
+        frame.set_global_variable(GlobalName::player, v_obj(verb_call_request.call.player));
         frame.set_global_variable(GlobalName::caller, verb_call_request.call.caller.clone());
         frame.set_global_variable(
             GlobalName::verb,
@@ -246,10 +243,7 @@ impl Activation {
         // From the command, if any...
         if let Some(ref command) = verb_call_request.command {
             frame.set_global_variable(GlobalName::argstr, v_string(command.argstr.clone()));
-            frame.set_global_variable(
-                GlobalName::dobj,
-                v_obj(command.dobj.clone().unwrap_or(NOTHING)),
-            );
+            frame.set_global_variable(GlobalName::dobj, v_obj(command.dobj.unwrap_or(NOTHING)));
             frame.set_global_variable(
                 GlobalName::dobjstr,
                 command
@@ -264,10 +258,7 @@ impl Activation {
                     .as_ref()
                     .map_or_else(v_empty_str, |s| v_string(s.clone())),
             );
-            frame.set_global_variable(
-                GlobalName::iobj,
-                v_obj(command.iobj.clone().unwrap_or(NOTHING)),
-            );
+            frame.set_global_variable(GlobalName::iobj, v_obj(command.iobj.unwrap_or(NOTHING)));
             frame.set_global_variable(
                 GlobalName::iobjstr,
                 command
@@ -290,7 +281,7 @@ impl Activation {
         Self {
             frame,
             this: verb_call_request.call.this.clone(),
-            player: verb_call_request.call.player.clone(),
+            player: verb_call_request.call.player,
             verbdef: verb_call_request.resolved_verb,
             verb_name: verb_call_request.call.verb_name,
             command: verb_call_request.command.clone(),
@@ -313,8 +304,8 @@ impl Activation {
         let mut frame = Frame::Moo(frame);
 
         frame.set_global_variable(GlobalName::this, v_obj(NOTHING));
-        frame.set_global_variable(GlobalName::player, v_obj(player.clone()));
-        frame.set_global_variable(GlobalName::caller, v_obj(player.clone()));
+        frame.set_global_variable(GlobalName::player, v_obj(*player));
+        frame.set_global_variable(GlobalName::caller, v_obj(*player));
         frame.set_global_variable(GlobalName::verb, v_empty_str());
         frame.set_global_variable(GlobalName::args, v_empty_list());
         frame.set_global_variable(GlobalName::argstr, v_empty_str());
@@ -326,8 +317,8 @@ impl Activation {
 
         Self {
             frame,
-            this: v_obj(player.clone()),
-            player: player.clone(),
+            this: v_obj(*player),
+            player: *player,
             verbdef,
             verb_name: *EVAL_SYMBOL,
             command: None,

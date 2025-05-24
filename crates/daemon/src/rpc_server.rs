@@ -544,7 +544,7 @@ impl RpcServer {
                 let player = self.validate_auth_token(auth_token, None)?;
 
                 self.connections
-                    .new_connection(client_id, hostname, Some(player.clone()))?;
+                    .new_connection(client_id, hostname, Some(player))?;
                 let client_token = self.make_client_token(client_id);
 
                 if let Some(connect_type) = connect_type {
@@ -563,7 +563,7 @@ impl RpcServer {
                 }
                 Ok(DaemonToClientReply::AttachResult(Some((
                     client_token,
-                    player.clone(),
+                    player,
                 ))))
             }
             // Bodacious Totally Awesome Hey Dudes Have Mr Pong's Chinese Food
@@ -843,12 +843,12 @@ impl RpcServer {
         );
         let session = Arc::new(RpcSession::new(
             client_id,
-            connection.clone(),
+            *connection,
             self.mailbox_sender.clone(),
         ));
         let mut task_handle = match scheduler_client.submit_verb_task(
             connection,
-            &ObjectRef::Id(handler_object.clone()),
+            &ObjectRef::Id(*handler_object),
             Symbol::mk("do_login_command"),
             args.iter().map(|s| v_str(s)).collect(),
             args.join(" "),
@@ -875,7 +875,7 @@ impl RpcServer {
                     // with its new player objid and login result.
                     // If it's not an objid, that's considered an auth failure.
                     match v.variant() {
-                        Variant::Obj(o) => break o.clone(),
+                        Variant::Obj(o) => break *o,
                         _ => {
                             return Ok(LoginResult(None));
                         }
@@ -896,7 +896,7 @@ impl RpcServer {
 
         let Ok(_) = self
             .connections
-            .update_client_connection(connection.clone(), player.clone())
+            .update_client_connection(*connection, player)
         else {
             return Err(RpcMessageError::InternalError(
                 "Unable to update client connection".to_string(),
@@ -920,11 +920,7 @@ impl RpcServer {
 
         let auth_token = self.make_auth_token(&player);
 
-        Ok(LoginResult(Some((
-            auth_token,
-            connect_type,
-            player.clone(),
-        ))))
+        Ok(LoginResult(Some((auth_token, connect_type, player))))
     }
 
     fn submit_connected_task(
@@ -937,7 +933,7 @@ impl RpcServer {
     ) -> Result<(), Error> {
         let session = Arc::new(RpcSession::new(
             client_id,
-            player.clone(),
+            *player,
             self.mailbox_sender.clone(),
         ));
 
@@ -949,9 +945,9 @@ impl RpcServer {
         scheduler_client
             .submit_verb_task(
                 player,
-                &ObjectRef::Id(handler_object.clone()),
+                &ObjectRef::Id(*handler_object),
                 connected_verb,
-                List::mk_list(&[v_obj(player.clone())]),
+                List::mk_list(&[v_obj(*player)]),
                 "".to_string(),
                 &SYSTEM_OBJECT,
                 session,
@@ -969,16 +965,16 @@ impl RpcServer {
     ) -> Result<(), Error> {
         let session = Arc::new(RpcSession::new(
             client_id,
-            player.clone(),
+            *player,
             self.mailbox_sender.clone(),
         ));
 
         scheduler_client
             .submit_verb_task(
                 player,
-                &ObjectRef::Id(handler_object.clone()),
+                &ObjectRef::Id(*handler_object),
                 Symbol::mk("user_disconnected"),
-                List::mk_list(&[v_obj(player.clone())]),
+                List::mk_list(&[v_obj(*player)]),
                 "".to_string(),
                 &SYSTEM_OBJECT,
                 session,
@@ -997,13 +993,13 @@ impl RpcServer {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let session = Arc::new(RpcSession::new(
             client_id,
-            connection.clone(),
+            *connection,
             self.mailbox_sender.clone(),
         ));
 
         if let Err(e) = self
             .connections
-            .record_client_activity(client_id, connection.clone())
+            .record_client_activity(client_id, *connection)
         {
             warn!("Unable to update client connection activity: {}", e);
         };
@@ -1040,7 +1036,7 @@ impl RpcServer {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         if let Err(e) = self
             .connections
-            .record_client_activity(client_id, connection.clone())
+            .record_client_activity(client_id, *connection)
         {
             warn!("Unable to update client connection activity: {}", e);
         };
@@ -1067,7 +1063,7 @@ impl RpcServer {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let session = Arc::new(RpcSession::new(
             client_id,
-            connection.clone(),
+            *connection,
             self.mailbox_sender.clone(),
         ));
 
@@ -1102,7 +1098,7 @@ impl RpcServer {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let session = Arc::new(RpcSession::new(
             client_id,
-            connection.clone(),
+            *connection,
             self.mailbox_sender.clone(),
         ));
 
@@ -1147,7 +1143,7 @@ impl RpcServer {
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         let session = Arc::new(RpcSession::new(
             client_id,
-            connection.clone(),
+            *connection,
             self.mailbox_sender.clone(),
         ));
 
@@ -1383,7 +1379,7 @@ impl RpcServer {
             let auth_tokens = self.auth_token_cache.read().unwrap();
             if let Some((t, o)) = auth_tokens.get(&token) {
                 if t.elapsed().as_secs() <= 60 {
-                    return Ok(o.clone());
+                    return Ok(*o);
                 }
             }
         }
@@ -1435,7 +1431,7 @@ impl RpcServer {
         //   forwards.
 
         let mut auth_tokens = self.auth_token_cache.write().unwrap();
-        auth_tokens.insert(token.clone(), (Instant::now(), token_player.clone()));
+        auth_tokens.insert(token.clone(), (Instant::now(), token_player));
         Ok(token_player)
     }
 
@@ -1444,8 +1440,8 @@ impl RpcServer {
     fn publish_narrative_events(&self, events: &[(Obj, Box<NarrativeEvent>)]) -> Result<(), Error> {
         let publish = self.events_publish.lock().unwrap();
         for (player, event) in events {
-            let client_ids = self.connections.client_ids_for(player.clone())?;
-            let event = ClientEvent::Narrative(player.clone(), event.as_ref().clone());
+            let client_ids = self.connections.client_ids_for(*player)?;
+            let event = ClientEvent::Narrative(*player, event.as_ref().clone());
             let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
             for client_id in &client_ids {
                 let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];

@@ -73,7 +73,7 @@ impl Decompile {
         if self.position >= opcode_vector.len() {
             return Err(DecompileError::UnexpectedProgramEnd);
         }
-        let op = opcode_vector[self.position].clone();
+        let op = opcode_vector[self.position];
         self.position += 1;
         Ok(op)
     }

@@ -118,7 +118,7 @@ impl WorldStateTransaction {
             Some(hit) => hit,
             None => {
                 let mut ancestors = vec![];
-                let mut current = obj.clone();
+                let mut current = *obj;
                 loop {
                     match self.object_parent.get(&current) {
                         Ok(Some(parent)) => {
@@ -126,7 +126,7 @@ impl WorldStateTransaction {
                             if current.is_nothing() {
                                 break;
                             }
-                            ancestors.push(current.clone());
+                            ancestors.push(current);
                         }
                         Ok(None) => break,
                         Err(e) => {
@@ -142,7 +142,7 @@ impl WorldStateTransaction {
         };
         let ancestor_set = if include_self {
             // Chained iter of "obj" + the results
-            let chained = std::iter::once(obj.clone()).chain(results_sans_self);
+            let chained = std::iter::once(*obj).chain(results_sans_self);
             ObjSet::from_iter(chained)
         } else {
             ObjSet::from_items(&results_sans_self)
@@ -155,7 +155,7 @@ impl WorldStateTransaction {
         let objects = self.object_flags.scan(&|_, _| true).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting objects: {:?}", e))
         })?;
-        Ok(ObjSet::from_iter(objects.iter().map(|(k, _)| k.clone())))
+        Ok(ObjSet::from_iter(objects.iter().map(|(k, _)| *k)))
     }
 
     pub fn get_object_flags(&self, obj: &Obj) -> Result<BitEnum<ObjFlag>, WorldStateError> {
@@ -172,7 +172,7 @@ impl WorldStateTransaction {
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error getting players: {:?}", e))
             })?;
-        Ok(ObjSet::from_iter(players.iter().map(|(k, _)| k.clone())))
+        Ok(ObjSet::from_iter(players.iter().map(|(k, _)| *k)))
     }
 
     pub fn get_max_object(&self) -> Result<Obj, WorldStateError> {
@@ -201,7 +201,7 @@ impl WorldStateTransaction {
 
     pub fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
         self.object_owner
-            .upsert(obj.clone(), owner.clone(), obj.size_bytes())
+            .upsert(*obj, *owner, obj.size_bytes())
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error setting object owner: {:?}", e))
             })?;
@@ -214,7 +214,7 @@ impl WorldStateTransaction {
         obj: &Obj,
         flags: BitEnum<ObjFlag>,
     ) -> Result<(), WorldStateError> {
-        upsert(&mut self.object_flags, obj.clone(), flags).map_err(|e| {
+        upsert(&mut self.object_flags, *obj, flags).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object flags: {:?}", e))
         })?;
         self.has_mutations = true;
@@ -226,13 +226,13 @@ impl WorldStateTransaction {
             WorldStateError::DatabaseError(format!("Error getting object name: {:?}", e))
         })?;
         let Some(r) = r else {
-            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(obj.clone())));
+            return Err(WorldStateError::ObjectNotFound(ObjectRef::Id(*obj)));
         };
         Ok(r.0)
     }
 
     pub fn set_object_name(&mut self, obj: &Obj, name: String) -> Result<(), WorldStateError> {
-        upsert(&mut self.object_name, obj.clone(), StringHolder(name)).map_err(|e| {
+        upsert(&mut self.object_name, *obj, StringHolder(name)).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object name: {:?}", e))
         })?;
         self.has_mutations = true;
@@ -260,14 +260,14 @@ impl WorldStateTransaction {
             }
         };
 
-        let owner = attrs.owner().unwrap_or(id.clone());
-        upsert(&mut self.object_owner, id.clone(), owner).expect("Unable to insert initial owner");
+        let owner = attrs.owner().unwrap_or(id);
+        upsert(&mut self.object_owner, id, owner).expect("Unable to insert initial owner");
 
         self.has_mutations = true;
 
         // Set initial name
         let name = attrs.name().unwrap_or_default();
-        upsert(&mut self.object_name, id.clone(), StringHolder(name))
+        upsert(&mut self.object_name, id, StringHolder(name))
             .expect("Unable to insert initial name");
 
         // We use our own setters for these, since there's biz-logic attached here...
@@ -280,8 +280,7 @@ impl WorldStateTransaction {
                 .expect("Unable to set location");
         }
 
-        upsert(&mut self.object_flags, id.clone(), attrs.flags())
-            .expect("Unable to insert initial flags");
+        upsert(&mut self.object_flags, id, attrs.flags()).expect("Unable to insert initial flags");
 
         // Update the maximum object number if ours is higher than the current one. This is for the
         // textdump case, where our numbers are coming in arbitrarily.
@@ -319,21 +318,16 @@ impl WorldStateTransaction {
 
         // Make sure we are removed from the parent's children list.
         let parent_children = self.get_object_children(&parent)?;
-        let parent_children = parent_children.with_removed(obj.clone());
-        upsert(&mut self.object_children, parent.clone(), parent_children).map_err(|e| {
+        let parent_children = parent_children.with_removed(*obj);
+        upsert(&mut self.object_children, parent, parent_children).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error updating parent children: {:?}", e))
         })?;
 
         // Make sure we are removed from the location's contents list.
         let location = self.get_object_location(obj)?;
         let location_contents = self.get_object_contents(&location)?;
-        let location_contents = location_contents.with_removed(obj.clone());
-        upsert(
-            &mut self.object_contents,
-            location.clone(),
-            location_contents,
-        )
-        .map_err(|e| {
+        let location_contents = location_contents.with_removed(*obj);
+        upsert(&mut self.object_contents, location, location_contents).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error updating location contents: {:?}", e))
         })?;
 
@@ -407,7 +401,7 @@ impl WorldStateTransaction {
         // Now find the set of new ancestors.
         let mut new_ancestors: HashSet<_, BuildHasherDefault<AHasher>> =
             self.ancestors_set(new_parent)?;
-        new_ancestors.insert(new_parent.clone());
+        new_ancestors.insert(*new_parent);
 
         // This is slightly pessimistic because if errors happened below, the write may not actually
         // happen, but that's ok.
@@ -432,8 +426,7 @@ impl WorldStateTransaction {
                 }
             }
             let new_props = old_props.with_all_removed(&dead_properties);
-            upsert(&mut self.object_propdefs, o.clone(), new_props)
-                .expect("Unable to update propdefs");
+            upsert(&mut self.object_propdefs, *o, new_props).expect("Unable to update propdefs");
 
             // Remove their values and flags.
             for prop in dead_properties.iter() {
@@ -478,18 +471,13 @@ impl WorldStateTransaction {
             return Ok(());
         };
 
-        upsert(&mut self.object_parent, o.clone(), new_parent.clone())
-            .expect("Unable to update parent");
+        upsert(&mut self.object_parent, *o, *new_parent).expect("Unable to update parent");
 
         // Make sure the old_parent's children now have use removed.
         let old_parent_children = self.get_object_children(&old_parent)?;
-        let old_parent_children = old_parent_children.with_removed(o.clone());
-        upsert(
-            &mut self.object_children,
-            old_parent.clone(),
-            old_parent_children,
-        )
-        .expect("Unable to update children");
+        let old_parent_children = old_parent_children.with_removed(*o);
+        upsert(&mut self.object_children, old_parent, old_parent_children)
+            .expect("Unable to update children");
 
         if new_parent.is_nothing() {
             return Ok(());
@@ -497,13 +485,9 @@ impl WorldStateTransaction {
 
         // And add to the new parent's children.
         let new_parent_children = self.get_object_children(new_parent)?;
-        let new_parent_children = new_parent_children.with_appended(&[o.clone()]);
-        upsert(
-            &mut self.object_children,
-            new_parent.clone(),
-            new_parent_children,
-        )
-        .expect("Unable to update children");
+        let new_parent_children = new_parent_children.with_appended(&[*o]);
+        upsert(&mut self.object_children, *new_parent, new_parent_children)
+            .expect("Unable to update children");
 
         // Now walk all my new descendants and give them the properties that derive from any
         // ancestors they don't already share.
@@ -543,7 +527,7 @@ impl WorldStateTransaction {
         let descendants = self
             .descendants(o, false)
             .expect("Unable to get descendants");
-        for c in descendants.iter().chain(std::iter::once(o.clone())) {
+        for c in descendants.iter().chain(std::iter::once(*o)) {
             for (p, propperms) in new_props.iter() {
                 let propperms = if propperms.flags().contains(PropFlag::Chown) && c != *o {
                     let owner = self.get_object_owner(&c)?;
@@ -633,16 +617,13 @@ impl WorldStateTransaction {
         new_location: &Obj,
     ) -> Result<(), WorldStateError> {
         // Detect recursive move
-        let mut oid = new_location.clone();
+        let mut oid = *new_location;
         loop {
             if oid.is_nothing() {
                 break;
             }
             if oid.eq(what) {
-                return Err(WorldStateError::RecursiveMove(
-                    what.clone(),
-                    new_location.clone(),
-                ));
+                return Err(WorldStateError::RecursiveMove(*what, *new_location));
             }
             let location = self.object_location.get(&oid).map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error getting object location: {:?}", e))
@@ -668,12 +649,7 @@ impl WorldStateTransaction {
         }
 
         // Set new location.
-        upsert(
-            &mut self.object_location,
-            what.clone(),
-            new_location.clone(),
-        )
-        .map_err(|e| {
+        upsert(&mut self.object_location, *what, *new_location).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object location: {:?}", e))
         })?;
         self.has_mutations = true;
@@ -684,14 +660,9 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error getting object contents: {:?}", e))
             })?;
 
-            let old_contents = old_contents.unwrap_or_default().with_removed(what.clone());
+            let old_contents = old_contents.unwrap_or_default().with_removed(*what);
 
-            upsert(
-                &mut self.object_contents,
-                old_location.clone(),
-                old_contents,
-            )
-            .map_err(|e| {
+            upsert(&mut self.object_contents, old_location, old_contents).map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error setting object contents: {:?}", e))
             })?;
         }
@@ -699,15 +670,8 @@ impl WorldStateTransaction {
         let new_contents = self.object_contents.get(new_location).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object contents: {:?}", e))
         })?;
-        let new_contents = new_contents
-            .unwrap_or_default()
-            .with_appended(&[what.clone()]);
-        upsert(
-            &mut self.object_contents,
-            new_location.clone(),
-            new_contents,
-        )
-        .map_err(|e| {
+        let new_contents = new_contents.unwrap_or_default().with_appended(&[*what]);
+        upsert(&mut self.object_contents, *new_location, new_contents).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting object contents: {:?}", e))
         })?;
 
@@ -734,10 +698,7 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error getting verb binary: {:?}", e))
             })?;
         let Some(program) = r else {
-            return Err(WorldStateError::VerbNotFound(
-                obj.clone(),
-                format!("{}", uuid),
-            ));
+            return Err(WorldStateError::VerbNotFound(*obj, format!("{}", uuid)));
         };
         Ok(program)
     }
@@ -747,13 +708,13 @@ impl WorldStateTransaction {
         // otherwise, go hunting.
         match self.verb_resolution_cache.lookup(obj, &name) {
             Some(Some(verbdef)) if verbdef.location().eq(obj) => Ok(verbdef),
-            Some(None) => Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string())),
+            Some(None) => Err(WorldStateError::VerbNotFound(*obj, name.to_string())),
             _ => {
                 let verbdefs = self.get_verbs(obj)?;
                 let named = verbdefs.find_named(name);
                 let Some(verb) = named.first() else {
                     self.verb_resolution_cache.fill_miss(obj, &name);
-                    return Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()));
+                    return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
                 };
 
                 // Fill cache
@@ -766,15 +727,12 @@ impl WorldStateTransaction {
     pub fn get_verb_by_index(&self, obj: &Obj, index: usize) -> Result<VerbDef, WorldStateError> {
         let verbs = self.get_verbs(obj)?;
         if index >= verbs.len() {
-            return Err(WorldStateError::VerbNotFound(
-                obj.clone(),
-                format!("{}", index),
-            ));
+            return Err(WorldStateError::VerbNotFound(*obj, format!("{}", index)));
         }
         let verb = verbs
             .iter()
             .nth(index)
-            .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), format!("{}", index)))?;
+            .ok_or_else(|| WorldStateError::VerbNotFound(*obj, format!("{}", index)))?;
         Ok(verb.clone())
     }
 
@@ -789,7 +747,7 @@ impl WorldStateTransaction {
         if let Some(cache_result) = self.verb_resolution_cache.lookup(obj, &name) {
             // We recorded a miss here before..
             let Some(verbdef) = cache_result else {
-                return Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()));
+                return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
             };
             if verbdef.matches_spec(&argspec, &flagspec) {
                 return Ok(verbdef.clone());
@@ -810,9 +768,9 @@ impl WorldStateTransaction {
                 }
                 Some(None) => {
                     // No ancestors with verbs, verbnf
-                    return Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()));
+                    return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
                 }
-                None => obj.clone(),
+                None => *obj,
             }
         };
         let mut found = false;
@@ -823,7 +781,7 @@ impl WorldStateTransaction {
             if let Some(verbdefs) = verbdefs {
                 if !first_parent_hit {
                     self.verb_resolution_cache
-                        .fill_first_parent_with_verbs(obj, Some(search_o.clone()));
+                        .fill_first_parent_with_verbs(obj, Some(search_o));
                     first_parent_hit = true;
                 }
 
@@ -853,7 +811,7 @@ impl WorldStateTransaction {
         if !found {
             self.verb_resolution_cache.fill_miss(obj, &name);
         }
-        Err(WorldStateError::VerbNotFound(obj.clone(), name.to_string()))
+        Err(WorldStateError::VerbNotFound(*obj, name.to_string()))
     }
 
     pub fn update_verb(
@@ -872,20 +830,17 @@ impl WorldStateTransaction {
             VerbDef::new(
                 ov.uuid(),
                 ov.location(),
-                verb_attrs.owner.clone().unwrap_or(ov.owner()),
+                verb_attrs.owner.unwrap_or(ov.owner()),
                 &names,
                 verb_attrs.flags.unwrap_or(ov.flags()),
                 verb_attrs.args_spec.unwrap_or(ov.args()),
             )
         }) else {
-            return Err(WorldStateError::VerbNotFound(
-                obj.clone(),
-                format!("{}", uuid),
-            ));
+            return Err(WorldStateError::VerbNotFound(*obj, format!("{}", uuid)));
         };
 
         self.verb_resolution_cache.flush();
-        upsert(&mut self.object_verbdefs, obj.clone(), verbdefs).map_err(|e| {
+        upsert(&mut self.object_verbdefs, *obj, verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
         })?;
         self.has_mutations = true;
@@ -918,8 +873,8 @@ impl WorldStateTransaction {
         let uuid = Uuid::new_v4();
         let verbdef = VerbDef::new(
             uuid,
-            oid.clone(),
-            owner.clone(),
+            *oid,
+            *owner,
             &names.iter().map(|n| n.as_str()).collect::<Vec<&str>>(),
             flags,
             args,
@@ -928,7 +883,7 @@ impl WorldStateTransaction {
         self.verb_resolution_cache.flush();
 
         let verbdefs = verbdefs.with_added(verbdef);
-        upsert(&mut self.object_verbdefs, oid.clone(), verbdefs).map_err(|e| {
+        upsert(&mut self.object_verbdefs, *oid, verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
         })?;
         self.has_mutations = true;
@@ -949,8 +904,8 @@ impl WorldStateTransaction {
         let verbdefs = self.get_verbs(location)?;
         let verbdefs = verbdefs
             .with_removed(uuid)
-            .ok_or_else(|| WorldStateError::VerbNotFound(location.clone(), format!("{}", uuid)))?;
-        upsert(&mut self.object_verbdefs, location.clone(), verbdefs).map_err(|e| {
+            .ok_or_else(|| WorldStateError::VerbNotFound(*location, format!("{}", uuid)))?;
+        upsert(&mut self.object_verbdefs, *location, verbdefs).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting verb definition: {:?}", e))
         })?;
         self.verb_resolution_cache.flush();
@@ -1004,7 +959,7 @@ impl WorldStateTransaction {
         let props = self.get_properties(location)?;
         if props.find_first_named(name).is_some() {
             return Err(WorldStateError::DuplicatePropertyDefinition(
-                location.clone(),
+                *location,
                 name.to_string(),
             ));
         }
@@ -1025,13 +980,8 @@ impl WorldStateTransaction {
         // But the key for the actual value is always composite of oid,uuid
         let u = Uuid::new_v4();
 
-        let prop = PropDef::new(u, definer.clone(), location.clone(), name.as_str());
-        upsert(
-            &mut self.object_propdefs,
-            location.clone(),
-            props.with_added(prop),
-        )
-        .map_err(|e| {
+        let prop = PropDef::new(u, *definer, *location, name.as_str());
+        upsert(&mut self.object_propdefs, *location, props.with_added(prop)).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting property definition: {:?}", e))
         })?;
         self.has_mutations = true;
@@ -1044,14 +994,13 @@ impl WorldStateTransaction {
 
         // Put the initial object owner on ourselves and all our descendants.
         // Unless we're 'Chown' in which case, the owner should be the descendant.
-        let value_locations =
-            ObjSet::from_items(&[location.clone()]).with_concatenated(descendants);
+        let value_locations = ObjSet::from_items(&[*location]).with_concatenated(descendants);
         for proploc in value_locations.iter() {
             let actual_owner = if perms.contains(PropFlag::Chown) && proploc != *location {
                 // get the owner of proploc
                 self.get_object_owner(&proploc)?
             } else {
-                owner.clone()
+                *owner
             };
             upsert(
                 &mut self.object_propflags,
@@ -1085,13 +1034,10 @@ impl WorldStateTransaction {
             let Some(props) = props.with_updated(uuid, |p| {
                 PropDef::new(p.uuid(), p.definer(), p.location(), &new_name)
             }) else {
-                return Err(WorldStateError::PropertyNotFound(
-                    obj.clone(),
-                    format!("{}", uuid),
-                ));
+                return Err(WorldStateError::PropertyNotFound(*obj, format!("{}", uuid)));
             };
 
-            upsert(&mut self.object_propdefs, obj.clone(), props).map_err(|e| {
+            upsert(&mut self.object_propdefs, *obj, props).map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error updating property: {:?}", e))
             })?;
         }
@@ -1137,11 +1083,11 @@ impl WorldStateTransaction {
     pub fn delete_property(&mut self, obj: &Obj, uuid: Uuid) -> Result<(), WorldStateError> {
         // delete propdef from self and all descendants
         let descendants = self.descendants(obj, false)?;
-        let locations = ObjSet::from_items(&[obj.clone()]).with_concatenated(descendants);
+        let locations = ObjSet::from_items(&[*obj]).with_concatenated(descendants);
         for location in locations.iter() {
             let props: PropDefs = self.get_properties(&location)?;
             if let Some(props) = props.with_removed(uuid) {
-                upsert(&mut self.object_propdefs, location.clone(), props).map_err(|e| {
+                upsert(&mut self.object_propdefs, location, props).map_err(|e| {
                     WorldStateError::DatabaseError(format!("Error deleting property: {:?}", e))
                 })?;
             }
@@ -1207,12 +1153,12 @@ impl WorldStateTransaction {
                     return None;
                 }
                 None => {
-                    let mut search_o = obj.clone();
+                    let mut search_o = *obj;
                     let propdefs = loop {
                         let propdefs = self.get_properties(&search_o).ok()?;
                         if !propdefs.is_empty() {
                             self.prop_resolution_cache
-                                .fill_first_parent_with_props(obj, Some(search_o.clone()));
+                                .fill_first_parent_with_props(obj, Some(search_o));
 
                             break propdefs;
                         }
@@ -1258,10 +1204,7 @@ impl WorldStateTransaction {
         name: Symbol,
     ) -> Result<(PropDef, Var, PropPerms, bool), WorldStateError> {
         let Some(propdef) = self.find_property_by_name(obj, name) else {
-            return Err(WorldStateError::PropertyNotFound(
-                obj.clone(),
-                name.to_string(),
-            ));
+            return Err(WorldStateError::PropertyNotFound(*obj, name.to_string()));
         };
 
         // Now that we have the propdef, we can look for the value & owner.
@@ -1404,7 +1347,7 @@ impl WorldStateTransaction {
         let mut results_sans_self = vec![];
         let mut queue: VecDeque<_> = children.iter().collect();
         while let Some(o) = queue.pop_front() {
-            results_sans_self.push(o.clone());
+            results_sans_self.push(o);
             let children = self
                 .object_children
                 .get(&o)
@@ -1420,7 +1363,7 @@ impl WorldStateTransaction {
 
         let descendant_set = if include_self {
             // Chained iter of "obj" + the results
-            let chained = std::iter::once(obj.clone()).chain(results_sans_self);
+            let chained = std::iter::once(*obj).chain(results_sans_self);
             ObjSet::from_iter(chained)
         } else {
             ObjSet::from_items(&results_sans_self)
@@ -1471,13 +1414,13 @@ impl WorldStateTransaction {
             return Ok(HashSet::default());
         }
         let mut ancestor_set = HashSet::default();
-        let mut search_obj = obj.clone();
+        let mut search_obj = *obj;
         loop {
             let ancestor = self.get_object_parent(&search_obj)?;
             if ancestor.eq(&NOTHING) || ancestor.eq(limit) {
                 return Ok(ancestor_set);
             }
-            ancestor_set.insert(ancestor.clone());
+            ancestor_set.insert(ancestor);
             search_obj = ancestor;
         }
     }
@@ -1490,13 +1433,13 @@ impl WorldStateTransaction {
             return Ok(HashSet::default());
         }
         let mut ancestor_set = HashSet::default();
-        let mut search_obj = obj.clone();
+        let mut search_obj = *obj;
         loop {
             let ancestor = self.get_object_parent(&search_obj)?;
             if ancestor.eq(&NOTHING) {
                 return Ok(ancestor_set);
             }
-            ancestor_set.insert(ancestor.clone());
+            ancestor_set.insert(ancestor);
             search_obj = ancestor;
         }
     }

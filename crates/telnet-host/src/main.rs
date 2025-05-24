@@ -28,7 +28,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tokio::select;
 use tokio::signal::unix::{SignalKind, signal};
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 mod connection;
@@ -87,11 +87,10 @@ async fn main() -> Result<(), eyre::Error> {
             tracing::Level::INFO
         })
         .finish();
-    tracing::subscriber::set_global_default(main_subscriber)
-        .unwrap_or_else(|e| {
-            eprintln!("Unable to set configure logging: {}", e);
-            std::process::exit(1);
-        });
+    tracing::subscriber::set_global_default(main_subscriber).unwrap_or_else(|e| {
+        eprintln!("Unable to set configure logging: {}", e);
+        std::process::exit(1);
+    });
 
     let mut hup_signal = match signal(SignalKind::hangup()) {
         Ok(signal) => signal,
@@ -115,7 +114,10 @@ async fn main() -> Result<(), eyre::Error> {
     let telnet_sockaddr = match listen_addr.parse::<SocketAddr>() {
         Ok(addr) => addr,
         Err(e) => {
-            error!("Failed to parse telnet socket address {}: {}", listen_addr, e);
+            error!(
+                "Failed to parse telnet socket address {}: {}",
+                listen_addr, e
+            );
             std::process::exit(1);
         }
     };
@@ -140,13 +142,17 @@ async fn main() -> Result<(), eyre::Error> {
             std::process::exit(1);
         });
 
-    let (private_key, _public_key) = match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
-        Ok(keypair) => keypair,
-        Err(e) => {
-            error!("Unable to load keypair from public and private key files: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let (private_key, _public_key) =
+        match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
+            Ok(keypair) => keypair,
+            Err(e) => {
+                error!(
+                    "Unable to load keypair from public and private key files: {}",
+                    e
+                );
+                std::process::exit(1);
+            }
+        };
     let host_token = make_host_token(&private_key, HostType::TCP);
 
     let rpc_client = match start_host_session(
@@ -156,7 +162,8 @@ async fn main() -> Result<(), eyre::Error> {
         kill_switch.clone(),
         listeners.clone(),
     )
-    .await {
+    .await
+    {
         Ok(client) => client,
         Err(e) => {
             error!("Unable to establish initial host session: {}", e);

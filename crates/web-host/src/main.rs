@@ -48,7 +48,7 @@ use tokio::select;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::Mutex;
 use tower_http::services::ServeDir;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 #[derive(Parser, Debug, Serialize, Deserialize)]
@@ -153,7 +153,7 @@ impl Listeners {
                         self.src_dir.clone(),
                         self.rpc_address.clone(),
                         self.events_address.clone(),
-                        handler.clone(),
+                        handler,
                     );
                     let main_router = match mk_routes(ws_host, &self.dist_dir) {
                         Ok(mr) => mr,
@@ -201,7 +201,7 @@ impl Listeners {
                     let listeners = self
                         .listeners
                         .iter()
-                        .map(|(addr, listener)| (listener.handler_object.clone(), *addr))
+                        .map(|(addr, listener)| (listener.handler_object, *addr))
                         .collect();
                     tx.send(listeners).expect("Unable to send listeners list");
                 }
@@ -372,11 +372,10 @@ async fn main() -> Result<(), eyre::Error> {
             tracing::Level::INFO
         })
         .finish();
-    tracing::subscriber::set_global_default(main_subscriber)
-        .unwrap_or_else(|e| {
-            eprintln!("Unable to set configure logging: {}", e);
-            std::process::exit(1);
-        });
+    tracing::subscriber::set_global_default(main_subscriber).unwrap_or_else(|e| {
+        eprintln!("Unable to set configure logging: {}", e);
+        std::process::exit(1);
+    });
 
     let mut hup_signal = match signal(SignalKind::hangup()) {
         Ok(signal) => signal,
@@ -395,13 +394,17 @@ async fn main() -> Result<(), eyre::Error> {
 
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let (private_key, _public_key) = match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
-        Ok(keypair) => keypair,
-        Err(e) => {
-            error!("Unable to load keypair from public and private key files: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let (private_key, _public_key) =
+        match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
+            Ok(keypair) => keypair,
+            Err(e) => {
+                error!(
+                    "Unable to load keypair from public and private key files: {}",
+                    e
+                );
+                std::process::exit(1);
+            }
+        };
     let host_token = make_host_token(&private_key, HostType::TCP);
 
     let zmq_ctx = tmq::Context::new();
@@ -426,7 +429,8 @@ async fn main() -> Result<(), eyre::Error> {
         kill_switch.clone(),
         listeners.clone(),
     )
-    .await {
+    .await
+    {
         Ok(client) => client,
         Err(e) => {
             error!("Unable to establish initial host session: {}", e);
@@ -436,14 +440,17 @@ async fn main() -> Result<(), eyre::Error> {
 
     listeners
         .add_listener(
-            &SYSTEM_OBJECT, 
+            &SYSTEM_OBJECT,
             match args.listen_address.parse() {
                 Ok(addr) => addr,
                 Err(e) => {
-                    error!("Unable to parse listen address {}: {}", args.listen_address, e);
+                    error!(
+                        "Unable to parse listen address {}: {}",
+                        args.listen_address, e
+                    );
                     std::process::exit(1);
                 }
-            }
+            },
         )
         .await
         .unwrap_or_else(|e| {
@@ -467,7 +474,7 @@ async fn main() -> Result<(), eyre::Error> {
     // Delete any pre-existing content in the dist dir.
     if args.dist_directory.exists() {
         match std::fs::remove_dir_all(&args.dist_directory) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 error!("Unable to remove existing dist directory: {}", e);
                 std::process::exit(1);

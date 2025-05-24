@@ -40,14 +40,14 @@ fn do_match_object_names(
             // exact match
             if match_name == object_name {
                 if match_data.exact == NOTHING || match_data.exact == oid {
-                    match_data.exact = oid.clone();
+                    match_data.exact = oid;
                 } else {
                     return Ok(AMBIGUOUS);
                 }
             } else {
                 // partial match
                 if match_data.partial == FAILED_MATCH || match_data.partial == oid {
-                    match_data.partial = oid.clone();
+                    match_data.partial = oid;
                 } else {
                     match_data.partial = AMBIGUOUS
                 }
@@ -56,9 +56,9 @@ fn do_match_object_names(
     }
 
     if match_data.exact != NOTHING {
-        Ok(match_data.exact.clone())
+        Ok(match_data.exact)
     } else {
-        Ok(match_data.partial.clone())
+        Ok(match_data.partial)
     }
 }
 
@@ -120,7 +120,7 @@ impl<M: MatchEnvironment> ObjectNameMatcher for DefaultObjectNameMatcher<M> {
 
         // Check 'me' and 'here' first.
         if object_name == ME {
-            return Ok(Some(self.player.clone()));
+            return Ok(Some(self.player));
         }
 
         if object_name == HERE {

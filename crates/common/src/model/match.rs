@@ -107,8 +107,7 @@ impl LayoutAs<i16> for PrepSpec {
             -2 => Ok(Self::Any),
             -1 => Ok(Self::None),
             p => Ok(Self::Other(
-                Preposition::from_repr(p as u16)
-                    .ok_or(DecodingError::InvalidPrepValue(p))?,
+                Preposition::from_repr(p as u16).ok_or(DecodingError::InvalidPrepValue(p))?,
             )),
         }
     }

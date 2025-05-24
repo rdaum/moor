@@ -40,11 +40,11 @@ impl PropDef {
 
     #[must_use]
     pub fn definer(&self) -> Obj {
-        self.definer.clone()
+        self.definer
     }
     #[must_use]
     pub fn location(&self) -> Obj {
-        self.location.clone()
+        self.location
     }
 
     #[must_use]
