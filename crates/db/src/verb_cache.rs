@@ -15,16 +15,16 @@ use ahash::AHasher;
 use moor_common::model::VerbDef;
 use moor_var::{Obj, Symbol};
 use std::hash::BuildHasherDefault;
-use std::sync::RwLock;
+use std::sync::Mutex;
 
 pub(crate) struct VerbResolutionCache {
-    inner: RwLock<Inner>,
+    inner: Mutex<Inner>,
 }
 
 impl VerbResolutionCache {
     pub(crate) fn new() -> Self {
         Self {
-            inner: RwLock::new(Inner {
+            inner: Mutex::new(Inner {
                 version: 0,
                 orig_version: 0,
                 flushed: false,
@@ -48,27 +48,27 @@ struct Inner {
 
 impl VerbResolutionCache {
     pub(crate) fn fork(&self) -> Box<Self> {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.lock().unwrap();
         let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
         Box::new(Self {
-            inner: RwLock::new(forked_inner),
+            inner: Mutex::new(forked_inner),
         })
     }
 
     pub(crate) fn has_changed(&self) -> bool {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.lock().unwrap();
         inner.version > inner.orig_version
     }
 
     pub(crate) fn lookup_first_parent_with_verbs(&self, obj: &Obj) -> Option<Option<Obj>> {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.lock().unwrap();
         inner.first_parent_with_verbs_cache.get(obj).cloned()
     }
 
     pub(crate) fn fill_first_parent_with_verbs(&self, obj: &Obj, parent: Option<Obj>) {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         inner
             .first_parent_with_verbs_cache
@@ -76,12 +76,12 @@ impl VerbResolutionCache {
     }
 
     pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.lock().unwrap();
         inner.entries.get(&(obj.clone(), *verb)).cloned()
     }
 
     pub(crate) fn flush(&self) {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.lock().unwrap();
         inner.flushed = true;
         inner.version += 1;
         inner.entries.clear();
@@ -89,7 +89,7 @@ impl VerbResolutionCache {
     }
 
     pub(crate) fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         inner
             .entries
@@ -97,7 +97,7 @@ impl VerbResolutionCache {
     }
 
     pub(crate) fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         inner.entries.insert((obj.clone(), *verb), None);
     }
@@ -105,13 +105,13 @@ impl VerbResolutionCache {
 
 pub struct AncestryCache {
     #[allow(clippy::type_complexity)]
-    inner: RwLock<AncestryInner>,
+    inner: Mutex<AncestryInner>,
 }
 
 impl Default for AncestryCache {
     fn default() -> Self {
         Self {
-            inner: RwLock::new(AncestryInner {
+            inner: Mutex::new(AncestryInner {
                 orig_version: 0,
                 version: 0,
                 flushed: false,
@@ -133,34 +133,34 @@ struct AncestryInner {
 
 impl AncestryCache {
     pub(crate) fn fork(&self) -> Box<Self> {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.lock().unwrap();
         let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
         forked_inner.flushed = false;
         Box::new(Self {
-            inner: RwLock::new(forked_inner),
+            inner: Mutex::new(forked_inner),
         })
     }
     pub(crate) fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.lock().unwrap();
         inner.entries.get(obj).cloned()
     }
 
     pub(crate) fn flush(&self) {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.lock().unwrap();
         inner.flushed = true;
         inner.version += 1;
         inner.entries.clear();
     }
 
     pub(crate) fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         inner.entries.insert(obj.clone(), ancestors.to_vec());
     }
 
     pub(crate) fn has_changed(&self) -> bool {
-        let inner = self.inner.read().unwrap();
+        let inner = self.inner.lock().unwrap();
         inner.version > inner.orig_version
     }
 }
