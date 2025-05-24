@@ -61,7 +61,7 @@ fn bench<F: Fn(&Var, usize, usize)>(
     cache_misses.enable().unwrap();
 
     for c in 0..iterations / chunk_size {
-        black_box(|| f(&prepared, chunk_size, c))();
+        black_box(|| f(prepared, chunk_size, c))();
     }
 
     instructions_counter.disable().unwrap();
