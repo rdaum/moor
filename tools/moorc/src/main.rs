@@ -122,7 +122,10 @@ fn main() {
         })
         .finish();
     tracing::subscriber::set_global_default(main_subscriber)
-        .expect("Unable to set configure logging");
+        .unwrap_or_else(|e| {
+            eprintln!("Unable to set configure logging: {}", e);
+            std::process::exit(1);
+        });
 
     let version = build::PKG_VERSION;
     let commit = build::SHORT_COMMIT;
@@ -131,24 +134,33 @@ fn main() {
     // Valid argument scenarios require 1 src and 1 out, no more.
     if args.src_objdef_dir.is_some() && args.src_textdump.is_some() {
         error!("Cannot specify both src-objdef-dir and src-textdump");
-        return;
+        std::process::exit(1);
     }
     if args.src_objdef_dir.is_none() && args.src_textdump.is_none() {
         error!("Must specify either src-objdef_dir or src-textdump");
-        return;
+        std::process::exit(1);
     }
 
     // Actual binary database is in a tmpdir.
-    let db_dir = tempfile::tempdir().unwrap();
+    let db_dir = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            error!("Failed to create temporary directory: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     info!("Opening temporary database at {}", db_dir.path().display());
     let (database, _) = TxDB::open(Some(db_dir.path()), DatabaseConfig::default());
-    let Ok(mut loader_interface) = database.loader_client() else {
-        error!(
-            "Unable to open temporary database at {}",
-            db_dir.path().display()
-        );
-        return;
+    let mut loader_interface = match database.loader_client() {
+        Ok(loader) => loader,
+        Err(e) => {
+            error!(
+                "Unable to open temporary database at {}: {}",
+                db_dir.path().display(), e
+            );
+            std::process::exit(1);
+        }
     };
 
     let mut features = FeaturesConfig::default();

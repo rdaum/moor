@@ -163,9 +163,13 @@ impl Listeners {
                         }
                     };
 
-                    let listener = TcpListener::bind(addr)
-                        .await
-                        .expect("Unable to bind listener");
+                    let listener = match TcpListener::bind(addr).await {
+                        Ok(listener) => listener,
+                        Err(e) => {
+                            error!(?addr, "Unable to bind listener: {}", e);
+                            return;
+                        }
+                    };
                     let (terminate_send, terminate_receive) = tokio::sync::watch::channel(false);
                     self.listeners
                         .insert(addr, Listener::new(terminate_send, handler));
@@ -369,18 +373,35 @@ async fn main() -> Result<(), eyre::Error> {
         })
         .finish();
     tracing::subscriber::set_global_default(main_subscriber)
-        .expect("Unable to set configure logging");
+        .unwrap_or_else(|e| {
+            eprintln!("Unable to set configure logging: {}", e);
+            std::process::exit(1);
+        });
 
-    let mut hup_signal =
-        signal(SignalKind::hangup()).expect("Unable to register HUP signal handler");
-    let mut stop_signal =
-        signal(SignalKind::interrupt()).expect("Unable to register STOP signal handler");
+    let mut hup_signal = match signal(SignalKind::hangup()) {
+        Ok(signal) => signal,
+        Err(e) => {
+            error!("Unable to register HUP signal handler: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let mut stop_signal = match signal(SignalKind::interrupt()) {
+        Ok(signal) => signal,
+        Err(e) => {
+            error!("Unable to register STOP signal handler: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let kill_switch = Arc::new(AtomicBool::new(false));
 
-    let (private_key, _public_key) =
-        load_keypair(&args.client_args.public_key, &args.client_args.private_key)
-            .expect("Unable to load keypair from public and private key files");
+    let (private_key, _public_key) = match load_keypair(&args.client_args.public_key, &args.client_args.private_key) {
+        Ok(keypair) => keypair,
+        Err(e) => {
+            error!("Unable to load keypair from public and private key files: {}", e);
+            std::process::exit(1);
+        }
+    };
     let host_token = make_host_token(&private_key, HostType::TCP);
 
     let zmq_ctx = tmq::Context::new();
@@ -398,20 +419,37 @@ async fn main() -> Result<(), eyre::Error> {
     });
 
     info!("Serving out of CWD {:?}", std::env::current_dir()?);
-    let rpc_client = start_host_session(
+    let rpc_client = match start_host_session(
         &host_token,
         zmq_ctx.clone(),
         args.client_args.rpc_address.clone(),
         kill_switch.clone(),
         listeners.clone(),
     )
-    .await
-    .expect("Unable to establish initial host session");
+    .await {
+        Ok(client) => client,
+        Err(e) => {
+            error!("Unable to establish initial host session: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     listeners
-        .add_listener(&SYSTEM_OBJECT, args.listen_address.parse().unwrap())
+        .add_listener(
+            &SYSTEM_OBJECT, 
+            match args.listen_address.parse() {
+                Ok(addr) => addr,
+                Err(e) => {
+                    error!("Unable to parse listen address {}: {}", args.listen_address, e);
+                    std::process::exit(1);
+                }
+            }
+        )
         .await
-        .expect("Unable to start default listener");
+        .unwrap_or_else(|e| {
+            error!("Unable to start default listener: {}", e);
+            std::process::exit(1);
+        });
 
     let host_listen_loop = process_hosts_events(
         rpc_client,
@@ -428,17 +466,22 @@ async fn main() -> Result<(), eyre::Error> {
 
     // Delete any pre-existing content in the dist dir.
     if args.dist_directory.exists() {
-        std::fs::remove_dir_all(&args.dist_directory)
-            .expect("Unable to remove existing dist directory");
+        match std::fs::remove_dir_all(&args.dist_directory) {
+            Ok(_) => {},
+            Err(e) => {
+                error!("Unable to remove existing dist directory: {}", e);
+                std::process::exit(1);
+            }
+        }
     }
 
     // Write initial bundle
     if let Err(e) = bundler.lock().await.write().await {
-        warn!(?e, "Unable to write initial bundle");
+        error!("Unable to write initial bundle");
         for msg in e.iter() {
-            warn!("{:?}", msg);
+            error!("{:?}", msg);
         }
-        panic!("Unable to write initial bundle");
+        std::process::exit(1);
     }
     info!("Bundle written to {:?}", args.dist_directory);
 
