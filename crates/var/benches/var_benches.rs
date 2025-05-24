@@ -188,6 +188,13 @@ fn list_index_assign(v: &Var, chunk_size: usize, _chunk_num: usize) {
 // Linux only...
 #[cfg(target_os = "linux")]
 pub fn main() {
+    // Check if we can do perf events, and if not just exit early (wthout panic) so that test runners etc
+    // don't fail.
+    if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
+        eprintln!("Perf events are not supported on this system. Skipping benchmarks.");
+        return;
+    }
+
     op_bench("int_add", int_add, prepare_int());
     op_bench("int_eq", int_eq, prepare_int());
     op_bench("int_cmp", int_cmp, prepare_int());
