@@ -11,14 +11,19 @@ repository.workspace = true
 rust-version.workspace = true
 description = "The set of primitive MOO value types across the system"
 
-[dev-dependencies]
+
+# dev dependencies only for linux...
+[target.'cfg(all(target_os = "linux"))'.dev-dependencies]
 perf-event2.workspace = true
+
+[dev-dependencies]
 minstant.workspace = true
 
 [target.'cfg(all(target_os = "linux"))']
 [[bench]]
 name = "var_benches"
 harness = false
+
 
 [dependencies]
 binary-layout.workspace = true
