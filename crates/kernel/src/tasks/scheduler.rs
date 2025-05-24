@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
+use crossbeam_channel::{Receiver, Select};
 use lazy_static::lazy_static;
 use minstant::Instant;
 use std::fs::File;
@@ -63,10 +63,8 @@ use moor_var::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};
 use moor_var::{Obj, Variant};
 use moor_var::{SYSTEM_OBJECT, v_list};
 
-// How long to pause between scheduler loop iterations when there is no work to do.
-// The higher this number the lower the background CPU usage but the higher the latency for response
-// to task suspension / resumptions.
-const SCHEDULER_YIELD_TIME: Duration = Duration::from_micros(10);
+// How often to check for suspended tasks that need to be woken up based on their wake condition.
+const SCHEDULER_WAKE_TASKS_INTERVAL: Duration = Duration::from_micros(50);
 
 /// Number of times to retry a program compilation transaction in case of conflict, before giving up.
 const NUM_VERB_PROGRAM_ATTEMPTS: usize = 5;
@@ -182,43 +180,68 @@ impl Scheduler {
         self.running = true;
         info!("Starting scheduler loop");
 
+        // Set up a single select to listen for task control messages, scheduler messages, and worker requests.
+        // This way we can avoid a series of try_recv calls, and only wake up when there is work to do.
+        let mut select = Select::new();
+        let task_receiver = self.task_control_receiver.clone();
+        let scheduler_receiver = self.scheduler_receiver.clone();
+        let worker_receiver = self
+            .worker_request_recv
+            .clone()
+            .unwrap_or_else(crossbeam_channel::never);
+        select.recv(&task_receiver);
+        select.recv(&scheduler_receiver);
+        select.recv(&worker_receiver);
+
+        let wake_tick = crossbeam_channel::tick(SCHEDULER_WAKE_TASKS_INTERVAL);
+        select.recv(&wake_tick);
+
         self.reload_server_options();
         while self.running {
-            // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
-            if let Some(to_wake) = self.task_q.collect_wake_tasks() {
-                for sr in to_wake {
-                    let task_id = sr.task.task_id;
-                    if let Err(e) = self.task_q.resume_task_thread(
-                        sr.task,
-                        v_int(0),
-                        sr.session,
-                        sr.result_sender,
-                        &self.task_control_sender,
-                        self.database.as_ref(),
-                        self.builtin_registry.clone(),
-                        self.config.clone(),
-                    ) {
-                        error!(?task_id, ?e, "Error resuming task");
+            match select.select_timeout(Duration::from_millis(100)) {
+                Ok(i) => {
+                    // Task messages
+                    if i.index() == 0 {
+                        if let Ok((task_id, msg)) = i.recv(&task_receiver) {
+                            self.handle_task_msg(task_id, msg);
+                        }
+                    } else if i.index() == 1 {
+                        if let Ok(msg) = i.recv(&scheduler_receiver) {
+                            self.handle_scheduler_msg(msg);
+                        }
+                    } else if i.index() == 2 {
+                        if let Ok(worker_request) = i.recv(&worker_receiver) {
+                            self.handle_worker_response(worker_request);
+                        }
+                    } else if i.index() == 3 {
+                        if i.recv(&wake_tick).is_err() {
+                            continue;
+                        }
+                        // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
+                        if let Some(to_wake) = self.task_q.collect_wake_tasks() {
+                            for sr in to_wake {
+                                let task_id = sr.task.task_id;
+                                if let Err(e) = self.task_q.resume_task_thread(
+                                    sr.task,
+                                    v_int(0),
+                                    sr.session,
+                                    sr.result_sender,
+                                    &self.task_control_sender,
+                                    self.database.as_ref(),
+                                    self.builtin_registry.clone(),
+                                    self.config.clone(),
+                                ) {
+                                    error!(?task_id, ?e, "Error resuming task");
+                                }
+                            }
+                        }
+                    } else {
+                        warn!("Unexpected select index: {}", i.index());
                     }
                 }
-            }
-            // Handle any scheduler submissions...
-            if let Ok(msg) = self.scheduler_receiver.try_recv() {
-                self.handle_scheduler_msg(msg);
-            }
-
-            // Handle any worker responses
-            if let Some(worker_response_recv) = self.worker_request_recv.as_ref() {
-                if let Ok(worker_response) = worker_response_recv.try_recv() {
-                    self.handle_worker_response(worker_response);
+                Err(_e) => {
+                    continue;
                 }
-            }
-
-            if let Ok((task_id, msg)) = self
-                .task_control_receiver
-                .recv_timeout(SCHEDULER_YIELD_TIME)
-            {
-                self.handle_task_msg(task_id, msg);
             }
         }
 

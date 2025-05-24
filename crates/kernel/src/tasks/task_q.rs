@@ -63,6 +63,14 @@ pub(crate) struct RunningTask {
     pub(crate) result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
 }
 
+fn none_or_push(vec: &mut Option<Vec<TaskId>>, task: TaskId) {
+    if let Some(v) = vec {
+        v.push(task);
+    } else {
+        *vec = Some(vec![task]);
+    }
+}
+
 impl TaskQ {
     /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
     pub(crate) fn collect_wake_tasks(&mut self) -> Option<Vec<SuspendedTask>> {
@@ -70,27 +78,28 @@ impl TaskQ {
             return None;
         }
         let now = Instant::now();
-        let mut to_wake = vec![];
+        let mut to_wake = None;
         for task in self.suspended.tasks.values() {
             match task.wake_condition {
                 WakeCondition::Time(t) => {
                     if t <= now {
-                        to_wake.push(task.task.task_id);
+                        none_or_push(&mut to_wake, task.task.task_id);
                     }
                 }
                 WakeCondition::Task(task_id) => {
                     if !self.suspended.tasks.contains_key(&task_id)
                         && !self.active.contains_key(&task_id)
                     {
-                        to_wake.push(task.task.task_id);
+                        none_or_push(&mut to_wake, task.task.task_id);
                     }
                 }
                 WakeCondition::Immedate => {
-                    to_wake.push(task.task.task_id);
+                    none_or_push(&mut to_wake, task.task.task_id);
                 }
                 _ => {}
             }
         }
+        let to_wake = to_wake?;
         let mut tasks = vec![];
         for task_id in to_wake {
             let sr = self.suspended.tasks.remove(&task_id).unwrap();
