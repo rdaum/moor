@@ -21,14 +21,14 @@ use std::ops::{Div, Mul, Neg, Sub};
 
 macro_rules! binary_numeric_coercion_op {
     ($op:tt ) => {
-        #[inline]
+        #[inline(always)]
         pub fn $op(&self, v: &Var) -> Result<Var, Error> {
             match (self.variant(), v.variant()) {
                 (Variant::Float(l), Variant::Float(r)) => {
                     Ok(v_float(l.to_f64().unwrap().$op(r.to_f64().unwrap())))
                 }
                 (Variant::Int(l), Variant::Int(r)) => {
-                    paste! { l.[<checked_ $op>](*r).map(v_int).ok_or(E_INVARG.into()) }
+                    paste! { l.[<checked_ $op>](*r).map(v_int).ok_or_else( || E_INVARG.into()) }
                 }
                 (Variant::Float(l), Variant::Int(r)) => {
                     Ok(v_float(l.to_f64().unwrap().$op(*r as f64)))
@@ -54,7 +54,7 @@ impl Var {
     binary_numeric_coercion_op!(div);
     binary_numeric_coercion_op!(sub);
 
-    #[inline]
+    #[inline(always)]
     pub fn add(&self, v: &Self) -> Result<Self, Error> {
         match (self.variant(), v.variant()) {
             (Variant::Float(l), Variant::Float(r)) => {
@@ -63,7 +63,7 @@ impl Var {
             (Variant::Int(l), Variant::Int(r)) => l
                 .checked_add(*r)
                 .map(v_int)
-                .ok_or(E_INVARG.msg("Integer overflow")),
+                .ok_or_else(|| E_INVARG.msg("Integer overflow")),
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.to_f64().unwrap() + (*r as f64))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 + r.to_f64().unwrap())),
             (Variant::Str(s), Variant::Str(r)) => Ok(s.str_append(r)),
@@ -83,7 +83,7 @@ impl Var {
             Variant::Int(l) => l
                 .checked_neg()
                 .map(v_int)
-                .ok_or(E_INVARG.msg("Integer underflow")),
+                .ok_or_else(|| E_INVARG.msg("Integer underflow")),
             Variant::Float(f) => Ok(v_float(f.neg())),
             _ => Ok(v_error(E_TYPE.with_msg(|| {
                 format!("Cannot negate type {}", self.type_code().to_literal())
@@ -98,7 +98,7 @@ impl Var {
             (Variant::Int(l), Variant::Int(r)) => l
                 .checked_rem(*r)
                 .map(v_int)
-                .ok_or(E_INVARG.with_msg(|| "Integer division by zero".to_string())),
+                .ok_or_else(|| E_INVARG.with_msg(|| "Integer division by zero".to_string())),
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.to_f64().unwrap() % (*r as f64))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float(*l as f64 % (r.to_f64().unwrap()))),
             (_, _) => Ok(v_error(E_TYPE.with_msg(|| {
@@ -117,7 +117,7 @@ impl Var {
             (Variant::Float(l), Variant::Float(r)) => Ok(v_float(l.powf(*r))),
             (Variant::Int(l), Variant::Int(r)) => {
                 let r = u32::try_from(*r).map_err(|_| E_INVARG.msg("Invalid argument for pow"))?;
-                l.checked_pow(r).map(v_int).ok_or(E_INVARG.into())
+                l.checked_pow(r).map(v_int).ok_or_else(|| E_INVARG.into())
             }
             (Variant::Float(l), Variant::Int(r)) => Ok(v_float(l.powi(*r as i32))),
             (Variant::Int(l), Variant::Float(r)) => Ok(v_float((*l as f64).powf(*r))),

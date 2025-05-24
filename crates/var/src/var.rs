@@ -37,15 +37,18 @@ impl Debug for Var {
 }
 
 impl Var {
+    #[inline(always)]
     pub fn from_variant(variant: Variant) -> Self {
         Var(variant)
     }
 
+    #[inline(always)]
     pub fn mk_integer(i: i64) -> Self {
         let v = Variant::Int(i);
         Var(v)
     }
 
+    #[inline(always)]
     pub fn mk_none() -> Self {
         Var(Variant::None)
     }
@@ -78,6 +81,7 @@ impl Var {
         Var(Variant::Sym(s))
     }
 
+    #[inline(always)]
     pub fn type_code(&self) -> VarType {
         match self.variant() {
             Variant::Bool(_) => VarType::TYPE_BOOL,
@@ -94,6 +98,7 @@ impl Var {
         }
     }
 
+    #[inline(always)]
     pub fn mk_list(values: &[Var]) -> Self {
         List::build(values)
     }
@@ -110,6 +115,7 @@ impl Var {
         map::Map::build(pairs)
     }
 
+    #[inline(always)]
     pub fn variant(&self) -> &Variant {
         &self.0
     }
@@ -127,6 +133,7 @@ impl Var {
         }
     }
 
+    #[inline(always)]
     pub fn is_true(&self) -> bool {
         match self.variant() {
             Variant::None => false,
@@ -150,7 +157,8 @@ impl Var {
     /// Range errors are Err(E_RANGE)
     /// Otherwise returns the value
     pub fn index(&self, index: &Var, index_mode: IndexMode) -> Result<Self, Error> {
-        if self.type_class().is_scalar() {
+        let tc = self.type_class();
+        if tc.is_scalar() {
             return Err(E_TYPE.with_msg(|| {
                 format!(
                     "Cannot index into scalar value {}",
@@ -178,7 +186,7 @@ impl Var {
             }
         };
 
-        match self.type_class() {
+        match tc {
             TypeClass::Sequence(s) => {
                 let value = s.index(idx)?;
                 Ok(value)
@@ -586,77 +594,95 @@ impl Var {
     }
 }
 
+#[inline(always)]
 pub fn v_int(i: i64) -> Var {
     Var::mk_integer(i)
 }
 
 /// Produces a truthy integer, not a Variant::Bool boolean value in order to maintain
 /// backwards compatibility with LambdaMOO cores.
+#[inline(always)]
 pub fn v_bool_int(b: bool) -> Var {
     if b { v_int(1) } else { v_int(0) }
 }
 
+#[inline(always)]
 pub fn v_bool(b: bool) -> Var {
     Var::mk_bool(b)
 }
 
+#[inline(always)]
 pub fn v_none() -> Var {
     // TODO lazy_static singleton
     Var::mk_none()
 }
 
+#[inline(always)]
 pub fn v_str(s: &str) -> Var {
     Var::mk_str(s)
 }
 
+#[inline(always)]
 pub fn v_string(s: String) -> Var {
     Var::mk_str(&s)
 }
 
+#[inline(always)]
 pub fn v_list(values: &[Var]) -> Var {
     Var::mk_list(values)
 }
 
+#[inline(always)]
 pub fn v_list_iter<IT: IntoIterator<Item = Var>>(values: IT) -> Var {
     Var::mk_list_iter(values)
 }
 
+#[inline(always)]
 pub fn v_map(pairs: &[(Var, Var)]) -> Var {
     Var::mk_map(pairs)
 }
 
+#[inline(always)]
 pub fn v_map_iter<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
     Var::mk_map_iter(pairs)
 }
 
+#[inline(always)]
 pub fn v_float(f: f64) -> Var {
     Var::mk_float(f)
 }
 
+#[inline(always)]
 pub fn v_err(e: ErrorCode) -> Var {
     Var::mk_error(e.into())
 }
 
+#[inline(always)]
 pub fn v_error(e: Error) -> Var {
     Var::mk_error(e)
 }
 
+#[inline(always)]
 pub fn v_objid(o: i32) -> Var {
     Var::mk_object(Obj::mk_id(o))
 }
 
+#[inline(always)]
 pub fn v_obj(o: Obj) -> Var {
     Var::mk_object(o)
 }
 
+#[inline(always)]
 pub fn v_sym(s: Symbol) -> Var {
     Var::mk_symbol(s)
 }
 
+#[inline(always)]
 pub fn v_sym_str(s: &str) -> Var {
     Var::mk_symbol(Symbol::mk_case_insensitive(s))
 }
 
+#[inline(always)]
 pub fn v_flyweight(
     delegate: Obj,
     slots: &[(Symbol, Var)],
@@ -777,5 +803,15 @@ mod tests {
         // now in the other order.
         assert_eq!(a.cmp(&six), std::cmp::Ordering::Greater);
         assert_eq!(a.cmp(&nine), std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn test_var_size() {
+        // Ensure that Var never exceeds 128-bits
+        assert!(
+            size_of::<Var>() <= 16,
+            "Var size exceeds 128 bits: {}",
+            size_of::<Var>()
+        );
     }
 }

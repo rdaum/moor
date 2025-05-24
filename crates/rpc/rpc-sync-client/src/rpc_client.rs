@@ -41,9 +41,9 @@ impl RpcSendClient {
             .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
 
         let message = vec![client_id.as_bytes().to_vec(), rpc_msg_payload];
-        let rpc_sock = self.rcp_request_sock.take().ok_or(RpcError::CouldNotSend(
-            "RPC request socket not initialized".to_string(),
-        ))?;
+        let rpc_sock = self.rcp_request_sock.take().ok_or_else(|| {
+            RpcError::CouldNotSend("RPC request socket not initialized".to_string())
+        })?;
         if let Err(e) = rpc_sock.send_multipart(message, 0) {
             error!(
                 "Unable to send connection establish request to RPC server: {}",

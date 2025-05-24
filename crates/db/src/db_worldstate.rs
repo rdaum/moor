@@ -578,10 +578,7 @@ impl WorldState for DbWorldState {
         let properties = self.get_tx().get_properties(obj)?;
         let pdef = properties
             .find_first_named(pname)
-            .ok_or(WorldStateError::PropertyNotFound(
-                obj.clone(),
-                pname.to_string(),
-            ))?;
+            .ok_or_else(|| WorldStateError::PropertyNotFound(obj.clone(), pname.to_string()))?;
         let propperms = self
             .get_tx()
             .retrieve_property_permissions(obj, pdef.uuid())?;
@@ -616,7 +613,7 @@ impl WorldState for DbWorldState {
         let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
-            .ok_or(WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
+            .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Write)?;
 
@@ -659,7 +656,7 @@ impl WorldState for DbWorldState {
         let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
-            .ok_or(WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
+            .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
         self.do_update_verb(obj, perms, &vh, verb_attrs)
     }
 
@@ -699,7 +696,7 @@ impl WorldState for DbWorldState {
         let verbs = self.get_tx().get_verbs(obj)?;
         let vh = verbs
             .find(&uuid)
-            .ok_or(WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
+            .ok_or_else(|| WorldStateError::VerbNotFound(obj.clone(), uuid.to_string()))?;
         self.perms(perms)?
             .check_verb_allows(&vh.owner(), vh.flags(), VerbFlag::Read)?;
         let binary = self.get_tx().get_verb_program(&vh.location(), vh.uuid())?;

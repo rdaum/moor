@@ -1100,9 +1100,11 @@ fn bf_call_function(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Find the function id for the given function name.
 
-    let builtin = BUILTINS.find_builtin(func_name).ok_or(ErrValue(
-        E_INVARG.msg("call_function() requires a valid function name as the first argument"),
-    ))?;
+    let builtin = BUILTINS.find_builtin(func_name).ok_or_else(|| {
+        ErrValue(
+            E_INVARG.msg("call_function() requires a valid function name as the first argument"),
+        )
+    })?;
 
     // Then ask the scheduler to run the function as a continuation of what we're doing now.
     Ok(VmInstr(ExecutionResult::DispatchBuiltin {
@@ -1201,9 +1203,11 @@ fn bf_function_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     if bf_args.args.len() == 1 {
         let func_name = bf_args.args[0].as_symbol().map_err(ErrValue)?;
-        let bf = BUILTINS.find_builtin(func_name).ok_or(ErrValue(
-            E_ARGS.msg("function_info() requires a valid function name as the first argument"),
-        ))?;
+        let bf = BUILTINS.find_builtin(func_name).ok_or_else(|| {
+            ErrValue(
+                E_ARGS.msg("function_info() requires a valid function name as the first argument"),
+            )
+        })?;
         let Some(desc) = BUILTINS.description_for(bf) else {
             return Err(ErrValue(E_ARGS.msg(
                 "function_info() requires a valid function name as the first argument",
@@ -1464,12 +1468,12 @@ fn bf_memory_usage(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let mut statm = statm.split_whitespace();
     let vm_size = statm
         .next()
-        .ok_or(Code(E_QUOTA))?
+        .ok_or_else(|| Code(E_QUOTA))?
         .parse::<i64>()
         .map_err(|_| Code(E_QUOTA))?;
     let vm_rss = statm
         .next()
-        .ok_or(Code(E_QUOTA))?
+        .ok_or_else(|| Code(E_QUOTA))?
         .parse::<i64>()
         .map_err(|_| Code(E_QUOTA))?;
 

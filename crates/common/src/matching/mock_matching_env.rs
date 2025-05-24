@@ -74,7 +74,7 @@ impl MatchEnvironment for MockMatchEnv {
         self.objects
             .get(oid)
             .map(|o| o.location.clone())
-            .ok_or(WorldStateError::ObjectNotFound(ObjectRef::Id(oid.clone())))
+            .ok_or_else(|| WorldStateError::ObjectNotFound(ObjectRef::Id(oid.clone())))
     }
 }
 

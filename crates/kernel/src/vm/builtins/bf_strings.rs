@@ -387,7 +387,7 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
     match value.variant() {
         Variant::Int(i) => Ok(JsonValue::Number((*i).into())),
         Variant::Float(f) => {
-            let num = serde_json::Number::from_f64(*f).ok_or(BfErr::Code(E_INVARG))?;
+            let num = serde_json::Number::from_f64(*f).ok_or_else(|| BfErr::Code(E_INVARG))?;
             Ok(JsonValue::Number(num))
         }
         Variant::Str(s) => Ok(JsonValue::String(s.as_str().to_string())),

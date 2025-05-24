@@ -31,6 +31,7 @@ use std::ops::Index;
 pub struct List(Box<im::Vector<Var>>);
 
 impl List {
+    #[inline(always)]
     pub fn build(values: &[Var]) -> Var {
         let l = im::Vector::from(values.to_vec());
         Var::from_variant(Variant::List(List(Box::new(l))))
@@ -85,10 +86,12 @@ impl Debug for List {
     }
 }
 impl Sequence for List {
+    #[inline(always)]
     fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    #[inline(always)]
     fn len(&self) -> usize {
         self.0.len()
     }
@@ -119,6 +122,8 @@ impl Sequence for List {
     }
 
     fn index(&self, index: usize) -> Result<Var, Error> {
+        // For some reason this `if` is _slightly_ faster than just using .get(index).map_err(|_| E_RANGE.into())
+        // Perf counters show fewer branches.
         if index >= self.len() {
             return Err(E_RANGE.with_msg(|| {
                 format!(
@@ -141,9 +146,8 @@ impl Sequence for List {
                 )
             }));
         }
-        let mut new = self.0.clone();
-        new[index] = value.clone();
-        Ok(Var::from_variant(Variant::List(List(new))))
+        let new = self.0.update(index, value.clone());
+        Ok(Var::from_variant(Variant::List(List(Box::new(new)))))
     }
 
     fn push(&self, value: &Var) -> Result<Var, Error> {

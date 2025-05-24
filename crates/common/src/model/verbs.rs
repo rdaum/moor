@@ -35,7 +35,7 @@ impl LayoutAs<u8> for VerbFlag {
     type WriteError = EncodingError;
 
     fn try_read(v: u8) -> Result<Self, Self::ReadError> {
-        Self::from_u8(v).ok_or(DecodingError::InvalidVerbFlagValue(v))
+        Self::from_u8(v).ok_or_else(|| DecodingError::InvalidVerbFlagValue(v))
     }
 
     fn try_write(v: Self) -> Result<u8, Self::WriteError> {
@@ -146,7 +146,7 @@ impl LayoutAs<u8> for BinaryType {
     type WriteError = EncodingError;
 
     fn try_read(v: u8) -> Result<Self, Self::ReadError> {
-        Self::from_u8(v).ok_or(DecodingError::InvalidBinaryTypeValue(v))
+        Self::from_u8(v).ok_or_else(|| DecodingError::InvalidBinaryTypeValue(v))
     }
 
     fn try_write(v: Self) -> Result<u8, Self::WriteError> {

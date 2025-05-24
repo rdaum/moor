@@ -260,12 +260,12 @@ impl AsByteBuffer for ObjAndUUIDHolder {
 
     fn from_bytes(bytes: ByteView) -> Result<Self, DecodingError> {
         let bytes = bytes.as_ref();
-        let uuid_bytes = bytes.get(..16).ok_or(DecodingError::CouldNotDecode(
-            "Expected 16 bytes for UUID".to_string(),
-        ))?;
-        let obj_bytes = bytes.get(16..).ok_or(DecodingError::CouldNotDecode(
-            "Expected 16 bytes for UUID".to_string(),
-        ))?;
+        let uuid_bytes = bytes.get(..16).ok_or_else(|| {
+            DecodingError::CouldNotDecode("Expected 16 bytes for UUID".to_string())
+        })?;
+        let obj_bytes = bytes.get(16..).ok_or_else(|| {
+            DecodingError::CouldNotDecode("Expected 16 bytes for UUID".to_string())
+        })?;
         let uuid = Uuid::from_bytes(uuid_bytes.try_into().map_err(|_| {
             DecodingError::CouldNotDecode("Expected 16 bytes for UUID".to_string())
         })?);

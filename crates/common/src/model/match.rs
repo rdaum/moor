@@ -32,7 +32,7 @@ impl LayoutAs<u8> for ArgSpec {
     type WriteError = EncodingError;
 
     fn try_read(v: u8) -> Result<Self, Self::ReadError> {
-        Self::from_repr(v).ok_or(DecodingError::InvalidArgSpecValue(v))
+        Self::from_repr(v).ok_or_else(|| DecodingError::InvalidArgSpecValue(v))
     }
 
     fn try_write(v: Self) -> Result<u8, Self::WriteError> {
@@ -107,7 +107,8 @@ impl LayoutAs<i16> for PrepSpec {
             -2 => Ok(Self::Any),
             -1 => Ok(Self::None),
             p => Ok(Self::Other(
-                Preposition::from_repr(p as u16).ok_or(DecodingError::InvalidPrepValue(p))?,
+                Preposition::from_repr(p as u16)
+                    .ok_or_else(|| DecodingError::InvalidPrepValue(p))?,
             )),
         }
     }

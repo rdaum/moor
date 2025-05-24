@@ -129,9 +129,11 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 current_node.push(entry);
             }
             Ok(XmlEvent::EndElement { .. }) => {
-                let (obj, attributes, children) = current_node.pop().ok_or(BfErr::ErrValue(
-                    E_INVARG.with_msg(|| "xml_parse() end tag without start tag".to_string()),
-                ))?;
+                let (obj, attributes, children) = current_node.pop().ok_or_else(|| {
+                    BfErr::ErrValue(
+                        E_INVARG.with_msg(|| "xml_parse() end tag without start tag".to_string()),
+                    )
+                })?;
                 // Turn this into a flyweight and push into the children of the parent
                 let children = List::mk_list(&children);
                 let fl = v_flyweight(obj.clone(), &attributes, children, None);

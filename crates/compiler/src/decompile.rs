@@ -89,13 +89,13 @@ impl Decompile {
     fn find_jump(&self, label: &Label) -> Result<JumpLabel, DecompileError> {
         self.program
             .find_jump(label)
-            .ok_or(DecompileError::LabelNotFound(*label))
+            .ok_or_else(|| DecompileError::LabelNotFound(*label))
     }
 
     pub fn find_literal(&self, label: &Label) -> Result<Var, DecompileError> {
         self.program
             .find_literal(label)
-            .ok_or(DecompileError::LabelNotFound(*label))
+            .ok_or_else(|| DecompileError::LabelNotFound(*label))
     }
 
     fn decompile_statements_until_match<F: Fn(usize, &Op) -> bool>(
@@ -1071,7 +1071,7 @@ impl Decompile {
         self.names_mapping
             .get(name)
             .cloned()
-            .ok_or(DecompileError::NameNotFound(*name))
+            .ok_or_else(|| DecompileError::NameNotFound(*name))
     }
 }
 

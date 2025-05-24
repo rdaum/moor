@@ -45,9 +45,9 @@ impl WorkerRpcSendClient {
         let rpc_msg_payload = bincode::encode_to_vec(&rpc_message, bincode::config::standard())
             .map_err(|e| RpcError::CouldNotSend(e.to_string()))?;
         let message = Multipart::from(vec![worker_token_bytes, worker_id_bytes, rpc_msg_payload]);
-        let rpc_request_sock = self.rcp_request_sock.take().ok_or(RpcError::CouldNotSend(
-            "RPC request socket not initialized".to_string(),
-        ))?;
+        let rpc_request_sock = self.rcp_request_sock.take().ok_or_else(|| {
+            RpcError::CouldNotSend("RPC request socket not initialized".to_string())
+        })?;
         let rpc_reply_sock = match rpc_request_sock.send(message).await {
             Ok(rpc_reply_sock) => rpc_reply_sock,
             Err(e) => {
