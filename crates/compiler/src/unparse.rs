@@ -339,7 +339,7 @@ impl<'a> Unparse<'a> {
                         self.tree
                             .names
                             .name_of(&name)
-                            .ok_or_else(|| DecompileError::NameNotFound(name))?
+                            .ok_or(DecompileError::NameNotFound(name))?
                             .as_str(),
                     );
                     if let Some(expr) = &var.expr {
@@ -481,7 +481,7 @@ impl<'a> Unparse<'a> {
                     .tree
                     .names
                     .name_of(&v_name)
-                    .ok_or_else(|| DecompileError::NameNotFound(v_name))?;
+                    .ok_or(DecompileError::NameNotFound(v_name))?;
                 let idx_clause = match key_binding {
                     None => v_sym.to_string(),
                     Some(key_binding) => {
@@ -490,7 +490,7 @@ impl<'a> Unparse<'a> {
                             .tree
                             .names
                             .name_of(&k_name)
-                            .ok_or_else(|| DecompileError::NameNotFound(v_name))?;
+                            .ok_or(DecompileError::NameNotFound(v_name))?;
                         format!("{}, {}", v_sym, k_sym)
                     }
                 };
@@ -522,7 +522,7 @@ impl<'a> Unparse<'a> {
                     self.tree
                         .names
                         .name_of(&name)
-                        .ok_or_else(|| DecompileError::NameNotFound(name))?,
+                        .ok_or(DecompileError::NameNotFound(name))?,
                     from_frag,
                     to_frag
                 ));
@@ -549,7 +549,7 @@ impl<'a> Unparse<'a> {
                         self.tree
                             .names
                             .name_of(&id)
-                            .ok_or_else(|| DecompileError::NameNotFound(id))?
+                            .ok_or(DecompileError::NameNotFound(id))?
                             .as_str(),
                     );
                 }
@@ -572,7 +572,7 @@ impl<'a> Unparse<'a> {
                         self.tree
                             .names
                             .name_of(&id)
-                            .ok_or_else(|| DecompileError::NameNotFound(id))?
+                            .ok_or(DecompileError::NameNotFound(id))?
                             .as_str(),
                     );
                 }
@@ -602,7 +602,7 @@ impl<'a> Unparse<'a> {
                             self.tree
                                 .names
                                 .name_of(&id)
-                                .ok_or_else(|| DecompileError::NameNotFound(id))?
+                                .ok_or(DecompileError::NameNotFound(id))?
                                 .as_str(),
                         );
                         base_str.push(' ');
@@ -641,7 +641,7 @@ impl<'a> Unparse<'a> {
                         self.tree
                             .names
                             .name_of(&exit)
-                            .ok_or_else(|| DecompileError::NameNotFound(exit))?
+                            .ok_or(DecompileError::NameNotFound(exit))?
                             .as_str(),
                     );
                 }
@@ -658,7 +658,7 @@ impl<'a> Unparse<'a> {
                         self.tree
                             .names
                             .name_of(&exit)
-                            .ok_or_else(|| DecompileError::NameNotFound(exit))?
+                            .ok_or(DecompileError::NameNotFound(exit))?
                             .as_str(),
                     );
                 }
