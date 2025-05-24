@@ -12,10 +12,12 @@ rust-version.workspace = true
 description = "The set of primitive MOO value types across the system"
 
 [dev-dependencies]
-perf-event2 = "0.7.4"
+perf-event2.workspace = true
 minstant.workspace = true
 
+[target.'cfg(all(target_os = "linux"))']
 [[bench]]
+target_os = "linux" # This is a Linux-specific benchmark, so we specify the target OS.
 name = "var_benches"
 harness = false
 
@@ -31,3 +33,5 @@ serde.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 ustr.workspace = true
+
+
