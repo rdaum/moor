@@ -23,6 +23,7 @@ use arc_swap::ArcSwap;
 use crossbeam_channel::Sender;
 use crossbeam_utils::CachePadded;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
+use gdt_cpus::{ThreadPriority, set_thread_priority};
 use minstant::Instant;
 use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
 use moor_common::program::ProgramType;
@@ -461,6 +462,7 @@ impl MoorDB {
         let jh = thread_builder
             .spawn(move || {
                 let mut last_eviction_check = Instant::now();
+                set_thread_priority(ThreadPriority::Highest).ok();
                 loop {
                     let counters = db_counters();
 

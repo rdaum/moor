@@ -177,6 +177,8 @@ impl Scheduler {
         // Rehydrate suspended tasks.
         self.task_q.suspended.load_tasks(bg_session_factory);
 
+        gdt_cpus::set_thread_priority(gdt_cpus::ThreadPriority::Background).ok();
+
         self.running = true;
         info!("Starting scheduler loop");
 

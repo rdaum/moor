@@ -172,8 +172,17 @@ fn main() -> Result<(), Report> {
         std::fs::write(write_config, merged_config_json).expect("Unable to write merged config");
     }
 
+    let (phys_cores, logical_cores) = (
+        gdt_cpus::num_physical_cores()
+            .map(|n| n.to_string())
+            .unwrap_or_else(|_| "unknown".to_string()),
+        gdt_cpus::num_logical_cores()
+            .map(|n| n.to_string())
+            .unwrap_or_else(|_| "unknown".to_string()),
+    );
+
     info!(
-        "moor {} daemon starting. Using database at {:?}",
+        "moor {} daemon starting. {phys_cores} physical cores; {logical_cores} logical cores. Using database at {:?}",
         version, args.db_args.db
     );
     let (database, freshly_made) = TxDB::open(

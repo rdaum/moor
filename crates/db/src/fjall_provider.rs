@@ -15,6 +15,7 @@ use crate::tx_management::{Error, Provider, Timestamp};
 use byteview::ByteView;
 use crossbeam_channel::Sender;
 use fjall::UserValue;
+use gdt_cpus::ThreadPriority;
 use moor_var::AsByteBuffer;
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicBool;
@@ -81,6 +82,7 @@ where
         let tb = std::thread::Builder::new().name(thread_name);
         let jh = tb
             .spawn(move || {
+                gdt_cpus::set_thread_priority(ThreadPriority::Background).ok();
                 loop {
                     if ks.load(std::sync::atomic::Ordering::SeqCst) {
                         break;
