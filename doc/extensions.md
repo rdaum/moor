@@ -116,7 +116,7 @@ This makes them useful for keys in maps and other data structures where fast com
 
 The syntax for creating a symbol is the same as for strings, but with a leading apostrophe:
 
-`'hello'` is a symbol, while `"hello"` is a string.
+`'hello` is a symbol, while `"hello"` is a string.
 
 Symbols are useful for representing identifiers, keywords, and other values that are not meant to be modified, and
 they can be used in place of strings as "keys" in maps and other data structures.
