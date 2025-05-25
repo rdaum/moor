@@ -30,11 +30,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2    
-      - run: (test -x $HOME/.cargo/bin/mdbook || cargo install --vers "^0.4" mdbook)
+      - run: ./book/install-tools.sh
       - run: mdbook build book
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: book/book
+          path: book/book/html
 
   deploy:
     environment:

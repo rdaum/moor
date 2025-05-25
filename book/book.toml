@@ -8,3 +8,5 @@ title = "The mooR Book"
 [output.html]
 additional-js = ["theme/moo-syntax-highlight.js"]
 additional-css = ["theme/style.css"]
+
+[output.linkcheck]
