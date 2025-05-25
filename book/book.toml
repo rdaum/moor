@@ -1,9 +1,9 @@
 [book]
-authors = ["Zoltán Nagy"]
+authors = ["Zoltán Nagy", "Ryan Daum"]
 language = "en"
 multilingual = false
 src = "src"
-title = "The moor Book"
+title = "The mooR Book"
 
 [output.html]
 additional-js = ["theme/moo-syntax-highlight.js"]

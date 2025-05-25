@@ -58,14 +58,14 @@ def main() -> int | None:
 
             link = f"./{current_path}"
 
-            summary_line = f"{" " * 4 * (section.level - 1)}- [{section.title}]({link})\n"
+            summary_line = f"{' ' * 4 * (section.level - 1)}- [{section.title}]({link})\n"
             if section.title == "Legal":
                 summary_suffix_lines.append(summary_line)
             else:
                 summary_lines.append(summary_line)
 
         if current_file:
-            current_file.write(f"{"#" * section.level} {section.title}\n")
+            current_file.write(f"{'#' * section.level} {section.title}\n")
             current_file.writelines(section.lines)
 
     with open(SRC / "SUMMARY.md", "w") as summary:

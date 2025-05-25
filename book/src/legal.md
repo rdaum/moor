@@ -18,7 +18,7 @@ Copyright © 2017-2023 by [Brendan Butts](http://github.com/sevenecks).
 
 Copyright © 2021-2023 By [lisdude](http://github.com/lisdude)
 
-Copyright @ 2025 by [Ryan Daum](http://github.com/rdaum) and [Zoltán Nagy](https://github.com/abesto)
+Copyright © 2025 by [Ryan Daum](http://github.com/rdaum) and [Zoltán Nagy](https://github.com/abesto)
 
 Portions adapted from the [Stunt Programmers Manual](https://lisdude.com/moo/ProgrammersManual.html) by Todd Sundsted Copyright © 2011, 2012, 2013, 2014 by Todd Sundsted.
 

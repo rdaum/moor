@@ -12,7 +12,7 @@ described later).
 
 The identifying number associated with a permanent object is unique to that object. It was assigned when the object was
 created and will never be reused unless `recreate()` or `reset_max_object()` are called. Thus, if we create an object
-and it is assigned the number `#1076`, the next object to be created (using `create()` will be assigned `#1077`, even if
+and it is assigned the number `#1076`, the next object to be created using `create()` will be assigned `#1077`, even if
 `#1076` is destroyed in the meantime.
 
 Objects are made up of three kinds of pieces that together define its behavior: _attributes_,
@@ -23,7 +23,7 @@ _properties_, and _verbs_.
 There are three fundamental _attributes_ to every object:
 
 1. A flag representing the built-in properties allotted to the object.
-2. A list of object that are its parents
+2. A list of objects that are its parents
 3. A list of the objects that are its _children_; that is, those objects for which this object is their parent.
 
 The act of creating a character sets the player attribute of an object and only a wizard (using the function
