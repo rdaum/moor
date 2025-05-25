@@ -72,7 +72,7 @@ testing and suggesting. Thanks goes not just to them, but to the
 original authors and users of LambdaMOO, Stunt, ToastStunt, and to the
 adjacent projects and communities I (and others) was a part of over
 the years, in particular Stephen White's CoolMUD and Greg Hudson's
-ColdMUD -- ideas from those sytems have made their way into mooR as
+ColdMUD -- ideas from those systems have made their way into mooR as
 well.
 
 I hope you, the reader, enjoy the system we've put together. Even more
