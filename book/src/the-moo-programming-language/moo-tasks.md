@@ -36,15 +36,61 @@ Because queued tasks may exist for long periods of time before they begin execut
 ones that you own and to kill them before they execute. These functions, among others, are discussed in the following
 section.
 
-Some server functions, when given large or complicated amounts of data, may take a significant amount of time to
-complete their work. When this happens, the MOO can't process any other player input or background tasks and users will
-experience lag. To help diagnose the causes of lag, ToastStunt provides the `DEFAULT_LAG_THRESHOLD` option in
-options.h (which can be overridden in the database. See the Server Assumptions About the Database section). When a
-running task exceeds this number of seconds, the server will make a note in the server log and call the verb
-`#0:handle_lagging_task()` with the arguments: `{callers, execution time}`. Callers will be a `callers()`-style list of
-every verb call leading up to the lagging verb, and execution time will be the total time it took the verb to finish
-executing. This can help you gauge exactly what verb is causing the problem.
+### Active versus queued tasks
 
-> Note: Depending on your system configuration, FG_SECONDS and BG_SECONDS may not necessarily correspond to actual
-> seconds in real time. They often measure CPU time. This is why your verbs can lag for several seconds in real life and
-> still not raise an 'out of seconds' error."
+Unlike LambdaMOO, mooR can run multiple tasks in parallel, taking advantage of multi-core CPUs. In LambdaMOO only one
+task is running at a time, and the server switches between tasks to give the illusion of parallelism. In mooR,
+there are two kinds of tasks: _active tasks_ and _queued tasks_.
+
+Queued tasks are tasks that are in some kind of waiting or suspended state. They are not currently running, but they
+may run in the future. Examples of queued tasks include:
+
+- Forked tasks that have not yet been executed because their delay has not yet expired.
+- Suspended tasks that are waiting to be resumed.
+- Reading tasks that are waiting for input from the player.
+- Worker tasks that are waiting for a worker to perform some action.
+
+The `queued_tasks()` function returns a list of all queued tasks that you own, and the `kill_task()` function can be
+used to kill a queued task before it runs. Because queued tasks are not currently running, information on them is more
+detailed, including the verb and line number where the task is suspended at, etc. Queued tasks can be aborted / killed.
+
+Active tasks, on the other hand, are tasks that are currently running. They are executing MOO code and because of this
+it is not efficient to gather detailed information about them. The `active_tasks()` function returns a list of all
+active tasks that you own, and the `kill_task()` function can be used to kill an active task. However, killing an active
+task is more of a "best effort" operation, since the task may be in the middle of executing some code.
+
+### Transactional management
+
+Unlike LambdaMOO, mooR supports a transactional model for managing changes to the database. Each task runs in its own
+transaction, which is automatically committed when the task completes successfully. If a task is suspended, it is
+committed and a new database transaction is started when the task resumes.
+
+From the point of view of the MOO programmer, transactions should be considered an implementation detail of the server,
+but they do provide some useful features:
+
+* Each transaction is isolated from other transactions, meaning that changes made by one task are not visible to
+  other tasks until the transaction is committed. mooR offers a consistent (serializable) isolation level, which means
+  that transactions behave as if they were executed one after the other, even if they are actually running concurrently.
+  This means that progress can be made without worrying about other tasks interfering with the current task's changes,
+  and -- unlike LambdaMOO -- multiple programs run truly in parallel, taking advantage of multi-core CPUs, without
+  waiting on each other.
+* If conflicts occur at the time of committing a transaction, the whole task is re-executed from the beginning,
+  allowing the task to retry its work. The server will do this automatically, so the programmer does not need to
+  worry about it.
+
+This does however, have some implications for how tasks are written:
+
+* Long running tasks that perform a lot of work should be split into smaller tasks that can be
+  committed more frequently. This is because the server will re-execute the entire task if a conflict occurs, which
+  can lead to wasted work if the task is too long.
+* Tasks may not have predictable runtimes, since they may be re-executed multiple times if conflicts
+  occur. This means that tasks should not rely on a specific amount of time to complete, and should be written to
+  handle being re-executed multiple times.
+
+For explicit transaction management, the following functions are available at the wizard level:
+
+- The (wizard-only) `commit()` function is used to commit the mutations made by a task to the database, and it
+  suspends the task until the commit is complete. This is functionally equivalent suspending for 0 seconds, but is
+  more explicit about the intent to commit the changes, and is optimized for this purpose.
+- The (wizard-only) `rollback()` function is used to abort the current task, reverting any changes made to the database
+  since the last commit.
