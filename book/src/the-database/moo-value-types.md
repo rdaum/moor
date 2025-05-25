@@ -126,7 +126,7 @@ Examples:
 ```
 < $div_tag, [ class -> "background_div" ], { child_node_a, child_node_b } >
 < #54 >
-< $maze_node, [ description -> "You are in a maze of twisty passages, all alike", exits = { "north", "up" } >
+< $maze_node, [ description -> "You are in a maze of twisty passages, all alike", exits = { "north", "up" } ] >
 ```
 
 During verb execution, `this`, and `caller` can be flyweights. `player` cannot.
