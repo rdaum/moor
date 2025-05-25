@@ -224,8 +224,7 @@ as the result of the erroneous operation.
 > Note: The `d` bit exists only for historical reasons; it used to be the only way for MOO code to catch and handle
 > errors. With the introduction of the `try` -`except` statement and the error-catching expression, the `d` bit is no
 > longer useful. All new verbs should have the `d` bit set, using the newer facilities for error handling if desired.
-> Over
-> time, old verbs written assuming the `d` bit would not be set should be changed to use the new facilities instead.
+> Over time, old verbs written assuming the `d` bit would not be set should be changed to use the new facilities instead.
 
 In addition to an owner and some permission bits, every verb has three _argument specifiers_, one each for the
 `direct object`, the `preposition`, and the `indirect object`. The direct and indirect specifiers are each drawn from
