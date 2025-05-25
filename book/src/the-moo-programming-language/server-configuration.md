@@ -1,89 +1,184 @@
 # Server Configuration
 
-This section discusses the options for compiling and running the server that can affect the database and how the code
-within it runs.
+This section describes the options available for configuring and running the `moor-daemon` server binary.
 
-## Server Compilation Options
+## Daemon, Hosts, Workers, and RPC
 
-The following option values are specified (via #define) in the file `options.h` in the server sources. Except for those
-cases where property values on $server_options take precedence, these settings cannot be changed at runtime.
+The `moor-daemon` server binary provides the main server functionality, including hosting the database, handling verb
+executions, and scheduling tasks. However it does _not_ handle network connections directly. Instead, special helper
+processes called _hosts_ manage incoming network connections and forward them to the daemon. Likewise, outbound network
+connections (or future facilities like file access) are handled by _workers_ that communicate with the daemon to perform
+those activities.
 
-This list is not intended to be exhaustive.
-Network Options
+To run the server, you therefore need to run not just the `moor-daemon` binary, but also one or more "hosts" (and,
+optionally "workers")
+that will connect to the daemon.
 
-| Option                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| NETWORK_PROTOCOL         | This specifies the underlying protocol for the server to use for all connections and will be one of the following:<br> `NP_TCP` The server uses TCP/IP protocols. <br> `NP_LOCAL` The server uses local interprocess communication mechanisms (currently either BSD UNIX-domain sockets or SYSV named pipes).<br> `NP_SINGLE` The server accepts only a single `connection` via the standard input and output streams of the server itself. Attempts to have multiple simultaneous listening points (via listen() will likewise fail. |
-| DEFAULT_PORT             | (for NP_TCP) the TCP port number on which the server listens when no port-number argument is given on the command line.                                                                                                                                                                                                                                                                                                                                                                                                               |
-| DEFAULT_CONNECT_FILE     | (for NP_LOCAL) the local filename through which the server will listen for connections when no connect-file-name is given on the command line.                                                                                                                                                                                                                                                                                                                                                                                        |
-| OUTBOUND_NETWORK         | The server will include support for open_network_connection() if this constant is defined. If given a zero value, the function will be disabled by default and `-o` will need to be specified on the command line in order to enable it, otherwise (nonzero or blank value) the function is enabled by default and `-O` will needed to disable it. When disabled or not supported, open_network_connection() raises E_PERM whenever it is called. The NETWORK_PROTOCOL must be NP_TCP.                                                |
-| MAX_QUEUED_OUTPUT        | The maximum number of output characters the server is willing to buffer for any given network connection before discarding old output to make way for new. This can be overridden in-database by adding the property `$server_options.max_queued_output` and calling `load_server_options()`.                                                                                                                                                                                                                                         |
-| MAX_QUEUED_INPUT         | The maximum number of input characters the server is willing to buffer from any given network connection before it stops reading from the connection at all.                                                                                                                                                                                                                                                                                                                                                                          |
-| IGNORE_PROP_PROTECTED    | Disables protection of builtin properties via $server_options.protect_property when set. See section Protected Properties.                                                                                                                                                                                                                                                                                                                                                                                                            |
-| OUT_OF_BAND_PREFIX       | Specifies the out-of-band prefix. If this is defined as a non-empty string, then any lines of input from any player that begin with that prefix will not be consumed by reading tasks and will not undergo normal command parsing. See section Out-of-band Processing.                                                                                                                                                                                                                                                                |
-| OUT_OF_BAND_QUOTE_PREFIX | Specifies the out-of-band quoting prefix. If this is defined as a non-empty string, then any lines of input from any player that begin with that prefix will have that prefixed stripped and the resulting string will bypass Out-of-Band Processing.                                                                                                                                                                                                                                                                                 |
-| DEFAULT_MAX_STACK_DEPTH  | Default value for $server_options.max_stack_depth.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| DEFAULT_FG_TICKS         | The number of ticks allotted to foreground tasks. Default value for $server_options.fg_ticks.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| DEFAULT_BG_TICKS         | The number of ticks allotted to background tasks. Default value for $server_options.bg_ticks.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| DEFAULT_FG_SECONDS       | The number of seconds allotted to foreground tasks. Default value for $server_options.fg_seconds.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| DEFAULT_BG_SECONDS       | The number of seconds allotted to background tasks. Default value for $server_options.bg_seconds.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| DEFAULT_CONNECT_TIMEOUT  | Default value for $server_options.connect_timeout.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| LOG_CODE_CHANGES         | Write to the log file who changed what verb code.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| USE_ANCESTOR_CACHE       | Determine if the server should cache the ancestors of objects to improve performance of property lookups.                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| OWNERSHIP_QUOTA          | Control whether or not the server's default ownership quota management is enabled or not. It defaults to disabled to allow the database to handle quota on its own.                                                                                                                                                                                                                                                                                                                                                                   |
-| UNSAFE_FIO               | This allows you to skip the character by character line verification for a small performance boost. Make sure to read the disclaimer above it in options.h.                                                                                                                                                                                                                                                                                                                                                                           |
-| LOG_EVALS                | Allow all evals to be written to the server log.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| MEMO_STRLEN              | Improve performance of string comparisons by using the pre-computed length of strings to rule out equality before doing a character by character comparison.                                                                                                                                                                                                                                                                                                                                                                          |
-| NO_NAME_LOOKUP           | When enabled, the server won't attempt to perform a DNS name lookup on any new connections.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| INCLUDE_RT_VARS          | Allow for retrieval of runtime environment variables from a running task, unhandled exceptions or timeouts, and lagging tasks via `handle_uncaught_error`, `handle_task_timeout`, and `handle_lagging_task`, respectively. To control automatic inclusion of runtime environment variables, set the INCLUDE_RT_VARS server option. Variables will be added to the end of the stack frame as a map.                                                                                                                                    |
-| PCRE_PATTERN_CACHE_SIZE  | Specifies how many PCRE patterns are cached.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| SAFE_RECYCLE             | Change ownership of everything an object owns before recycling it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| DEFAULT_THREAD_MODE      | Set the default thread mode for threaded functions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| TOTAL_BACKGROUND_THREADS | Number of threads created at runtime.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| SAVE_FINISHED_TASKS      | Enabled the `finished_tasks` function and define how many tasks get saved by default.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| DEFAULT_LAG_THRESHOLD    | The number of seconds allowed before a task is considered laggy and triggers `#0:handle_lagging_task`.                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| MAX_LINE_BYTES           | Unceremoniously close connections that send lines exceeding this value to prevent memory allocation panics.                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ONLY_32_BITS             | Switch from 64bits back to 32bits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| CURL_TIMEOUT             | Specify the maximum amount of time a CURL request can take before failing.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+These processes communicate over ZeroMQ sockets, with the daemon listening for RPC requests and events, and the hosts
+and workers connecting to those sockets to send requests and receive responses.
 
-## Running the Server
+Hosts and workers do *not* need to be run on the same machine as the daemon, and can be distributed across multiple
+machines
+or processes. They are stateless and can be clustered for high availability and load balancing. They can also be
+restarted
+independently of the daemon, allowing for flexible deployment and scaling, including live upgrades of the daemon without
+restarting running connections.
 
-The server command line has the following general form:
+When located on the same machine, the default addresses for the daemon's RPC and events sockets are set to communicate
+using Unix domain sockets, which are fast and efficient. If you want to run the daemon on a different machine, you
+must specify the appropriate network addresses for the RPC and events sockets.
 
-`./moo [-e] [-f script-file] [-c script-line] [-l log-file] [-m] [-w waif-type] [-O|-o] [-4 ipv4-address] [-6 ipv6-address] [-r certificate-path] [-k key-path] [-i files-path] [-x executables-path] input-db-file output-db-file [-t|-p port-number]`
+Examples of running the daemon and hosts using TCP connections can be found in the `docker-compose.yml` file in the
+`moor` repository.
 
-| Option             | Description                                                                     |
-|--------------------|---------------------------------------------------------------------------------|
-| -v, --version      | current version                                                                 |
-| -h, --help         | show usage information and command-line options                                 |
-| -e, --emergency    | emergency wizard mode                                                           |
-| -l, --log          | redirect standard output to log file                                            |
-| -m, --clear-move   | clear the `last_move' builtin property on all objects                           |
-| -w, --waif-type    | convert waifs from the specified type (check with typeof(waif) in your old MOO) |
-| -f, --start-script | file to load and pass to `#0:do_start_script()'                                 |
-| -c, --start-line   | line to pass to `#0:do_start_script()'                                          |
-| -i, --file-dir     | directory to look for files for use with FileIO functions                       |
-| -x, --exec-dir     | directory to look for executables for use with the exec() function              |
-| -o, --outbound     | enable outbound network connections                                             |
-| -O, --no-outbound  | disable outbound network connections                                            |
-| -4, --ipv4         | restrict IPv4 listeners to a specific address                                   |
-| -6, --ipv6         | restrict IPv6 listeners to a specific address                                   |
-| -r, --tls-cert     | TLS certificate to use                                                          |
-| -k, --tls-key      | TLS key to use                                                                  |
-| -t, --tls-port     | port to listen for TLS connections on (can be used multiple times)              |
-| -p, --port         | port to listen for connections on (can be used multiple times)                  |
+## Encryption keys
 
-The emergency mode switch (-e) may not be used with either the file (-f) or line (-c) options.
+Because the daemon and hosts communicate over ZeroMQ sockets, they need to authenticate each other to prevent
+unauthorized
+access. This is done using public/private key pairs, which must be shared between the daemon and hosts/workers.
 
-Both the file and line options may be specified. Their order on the command line determines the order of their
-invocation.
+These keys are in the common `pem` format and can be created using the `openssl` command-line tool:
 
-Examples:
-./moo -c '$enable_debugging();' -f development.moo Minimal.db Minimal.db.new 7777
-./moo Minimal.db Minimal.db.new
+```bash
+openssl genpkey -algorithm ed25519 -out moor-signing-key.pem
+openssl pkey -in moor-signing-key.pem -pubout -out moor-verifying-key.pem
+````
 
-> Note: A full list of arguments is now available by supplying `--help`.
+These files must then exist on the filesystem at the paths specified by the `--private_key` and `--public_key`
+command-line
+arguments for both the daemon and all hosts/workers. The daemon uses the private key to sign messages, while the
+hosts/workers
+use the public key to verify those messages. This ensures that only authorized hosts/workers can communicate with the
+daemon,
+and that messages cannot be tampered with in transit.
 
-> Note: For both the -c and -f arguments, the script content is passed in the args built-in variable. The server makes
-> no assumptions about the semantics of the script; the interpretation of the script is the verb`s responsibility. Like
-> Emergency Wizard Mode, the verb is called before starting any tasks or doing the initial listen to accept connections.
+## How to set server options
+
+In general, all options can be set either by command line arguments or by configuration file. The same option cannot be
+set by both methods at the same time, and if it is set by both, the command line argument takes precedence over the
+configuration.
+
+## Configuration File Format
+
+The configuration file uses JSON format. You can specify the path to your configuration file using the `--config-file`
+command-line argument. If you want to see what configuration is actually being used (after merging command-line
+arguments with the configuration file), you can use the `--write-merged-config` option to output the merged
+configuration to a file.
+
+// TODO: TOML format for the configuration file is planned for the future.
+
+## General Server Options
+
+These options control the basic server behavior:
+
+- `--config-file <PATH>`: Path to configuration (JSON) file to use. If not specified, defaults are used.
+- `--write-merged-config <PATH>`: Write the current merged configuration to a JSON file
+- `--connections-file <PATH>` (default: `connections.db`): Path to connections database
+- `--tasks-db <PATH>` (default: `tasks.db`): Path to persistent tasks database
+- `--rpc-listen <ADDR>` (default: `ipc:///tmp/moor_rpc.sock`): RPC server address
+- `--events-listen <ADDR>` (default: `ipc:///tmp/moor_events.sock`): Events publisher listen address
+- `--workers-response-listen <ADDR>` (default: `ipc:///tmp/moor_workers_response.sock`): Workers server RPC address
+- `--workers-request-listen <ADDR>` (default: `ipc:///tmp/moor_workers_request.sock`): Workers server pub-sub address
+- `--public_key <PATH>` (default: `moor-verifying-key.pem`): File containing the PEM encoded public key
+- `--private_key <PATH>` (default: `moor-signing-key.pem`): File containing an openssh generated ed25519 format private
+  key
+- `--num-io-threads <NUM>` (default: `8`): Number of ZeroMQ IO threads
+- `--debug` (default: `false`): Enable debug logging
+
+## Database Configuration
+
+These options control the database behavior:
+
+- `<PATH>` (positional argument): Path to the database file to use or create
+- `--cache-eviction-interval-seconds <SECONDS>`: Rate to run cache eviction cycles
+- `--default-eviction-threshold <SIZE>`: Default memory threshold for cache eviction
+
+## Language Features Configuration
+
+These options enable or disable various MOO language features:
+
+| Feature             | Command Line                | Default | Description                                                                      |
+|---------------------|-----------------------------|---------|----------------------------------------------------------------------------------|
+| Rich notify         | `--rich-notify`             | `true`  | Allow notify() to send arbitrary MOO values to players                           |
+| Lexical scopes      | `--lexical-scopes`          | `true`  | Enable block-level lexical scoping with begin/end syntax and let/global keywords |
+| Map type            | `--map-type`                | `true`  | Enable Map datatype compatible with Stunt/ToastStunt                             |
+| Type dispatch       | `--type-dispatch`           | `true`  | Enable primitive-type verb dispatching (e.g., "test":reverse())                  |
+| Flyweight type      | `--flyweight-type`          | `true`  | Enable flyweight types (lightweight object delegates)                            |
+| Boolean type        | `--bool-type`               | `true`  | Enable boolean true/false literals                                               |
+| Boolean returns     | `--use-boolean-returns`     | `false` | Make builtins return boolean types instead of integers 0/1                       |
+| Symbol type         | `--symbol-type`             | `true`  | Enable symbol literals                                                           |
+| Custom errors       | `--custom-errors`           | `false` | Enable error symbols beyond standard builtin set                                 |
+| Symbols in builtins | `--use-symbols-in-builtins` | `false` | Use symbols instead of strings in builtins                                       |
+| List comprehensions | `--list-comprehensions`     | `true`  | Enable list/range comprehensions                                                 |
+| Persistent tasks    | `--persistent-tasks`        | `true`  | Enable persistent tasks between server restarts                                  |
+
+## Import/Export Configuration
+
+These options control database import and export functionality:
+
+- `--import <PATH>`: Path to a textdump or objdef directory to import
+- `--export <PATH>`: Path to a textdump or objdef directory to export into
+- `--import-format <FORMAT>` (default: `Textdump`): Format to import from (Textdump or Objdef)
+- `--export-format <FORMAT>` (default: `Objdef`): Format to export into (Textdump or Objdef)
+- `--checkpoint-interval-seconds <SECONDS>`: Interval between database checkpoints
+- `--textdump-output-encoding <ENCODING>`: Encoding for textdump files (utf8 or iso8859-1)
+- `--textdump-version-override <STRING>`: Version string override for textdump
+
+## Example Configuration
+
+Here's an example configuration file:
+
+```json
+{
+  "database_config": {
+    "cache_eviction_interval": 300,
+    "default_eviction_threshold": 100000000
+  },
+  "features_config": {
+    "persistent_tasks": true,
+    "rich_notify": true,
+    "lexical_scopes": true,
+    "map_type": true,
+    "bool_type": true,
+    "symbol_type": true,
+    "type_dispatch": true,
+    "flyweight_type": true,
+    "list_comprehensions": true,
+    "use_boolean_returns": false,
+    "use_symbols_in_builtins": false,
+    "custom_errors": false
+  },
+  "import_export_config": {
+    "output_encoding": "UTF8",
+    "checkpoint_interval": 60,
+    "export_format": "Objdef"
+  }
+}
+```
+
+## LambdaMOO Compatibility Mode
+
+If you need to maintain compatibility with LambdaMOO 1.8, you'll need to disable several features. Here's a
+configuration that maintains LambdaMOO compatibility:
+
+```json
+{
+  "features_config": {
+    "persistent_tasks": true,
+    "rich_notify": false,
+    "lexical_scopes": false,
+    "map_type": false,
+    "bool_type": false,
+    "symbol_type": false,
+    "type_dispatch": false,
+    "flyweight_type": false,
+    "list_comprehensions": false,
+    "use_boolean_returns": false,
+    "use_symbols_in_builtins": false,
+    "custom_errors": false
+  },
+  "import_export_config": {
+    "output_encoding": "ISO8859_1"
+  }
+}
+```
