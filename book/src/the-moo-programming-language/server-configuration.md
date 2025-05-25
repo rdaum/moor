@@ -1,16 +1,18 @@
 # Server Configuration
 
-This section discusses the options for compiling and running the server that can affect the database and how the code within it runs.
+This section discusses the options for compiling and running the server that can affect the database and how the code
+within it runs.
 
 ## Server Compilation Options
 
-The following option values are specified (via #define) in the file `options.h` in the server sources. Except for those cases where property values on $server_options take precedence, these settings cannot be changed at runtime.
+The following option values are specified (via #define) in the file `options.h` in the server sources. Except for those
+cases where property values on $server_options take precedence, these settings cannot be changed at runtime.
 
 This list is not intended to be exhaustive.
 Network Options
 
 | Option                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | NETWORK_PROTOCOL         | This specifies the underlying protocol for the server to use for all connections and will be one of the following:<br> `NP_TCP` The server uses TCP/IP protocols. <br> `NP_LOCAL` The server uses local interprocess communication mechanisms (currently either BSD UNIX-domain sockets or SYSV named pipes).<br> `NP_SINGLE` The server accepts only a single `connection` via the standard input and output streams of the server itself. Attempts to have multiple simultaneous listening points (via listen() will likewise fail. |
 | DEFAULT_PORT             | (for NP_TCP) the TCP port number on which the server listens when no port-number argument is given on the command line.                                                                                                                                                                                                                                                                                                                                                                                                               |
 | DEFAULT_CONNECT_FILE     | (for NP_LOCAL) the local filename through which the server will listen for connections when no connect-file-name is given on the command line.                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -51,7 +53,7 @@ The server command line has the following general form:
 `./moo [-e] [-f script-file] [-c script-line] [-l log-file] [-m] [-w waif-type] [-O|-o] [-4 ipv4-address] [-6 ipv6-address] [-r certificate-path] [-k key-path] [-i files-path] [-x executables-path] input-db-file output-db-file [-t|-p port-number]`
 
 | Option             | Description                                                                     |
-| ------------------ | ------------------------------------------------------------------------------- |
+|--------------------|---------------------------------------------------------------------------------|
 | -v, --version      | current version                                                                 |
 | -h, --help         | show usage information and command-line options                                 |
 | -e, --emergency    | emergency wizard mode                                                           |
@@ -73,7 +75,8 @@ The server command line has the following general form:
 
 The emergency mode switch (-e) may not be used with either the file (-f) or line (-c) options.
 
-Both the file and line options may be specified. Their order on the command line determines the order of their invocation.
+Both the file and line options may be specified. Their order on the command line determines the order of their
+invocation.
 
 Examples:
 ./moo -c '$enable_debugging();' -f development.moo Minimal.db Minimal.db.new 7777
@@ -81,4 +84,6 @@ Examples:
 
 > Note: A full list of arguments is now available by supplying `--help`.
 
-> Note: For both the -c and -f arguments, the script content is passed in the args built-in variable. The server makes no assumptions about the semantics of the script; the interpretation of the script is the verb`s responsibility. Like Emergency Wizard Mode, the verb is called before starting any tasks or doing the initial listen to accept connections.
+> Note: For both the -c and -f arguments, the script content is passed in the args built-in variable. The server makes
+> no assumptions about the semantics of the script; the interpretation of the script is the verb`s responsibility. Like
+> Emergency Wizard Mode, the verb is called before starting any tasks or doing the initial listen to accept connections.

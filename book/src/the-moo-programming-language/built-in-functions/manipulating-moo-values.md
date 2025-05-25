@@ -1,6 +1,9 @@
 # Manipulating MOO Values
 
-There are several functions for performing primitive operations on MOO values, and they can be cleanly split into two kinds: those that do various very general operations that apply to all types of values, and those that are specific to one particular type. There are so many operations concerned with objects that we do not list them in this section but rather give them their own section following this one.
+There are several functions for performing primitive operations on MOO values, and they can be cleanly split into two
+kinds: those that do various very general operations that apply to all types of values, and those that are specific to
+one particular type. There are so many operations concerned with objects that we do not list them in this section but
+rather give them their own section following this one.
 
 ## General Operations Applicable to All Values
 
@@ -12,7 +15,8 @@ int typeof(value)
 
 Takes any MOO value and returns an integer representing the type of value.
 
-The result is the same as the initial value of one of these built-in variables: `INT`, `FLOAT`, `STR`, `LIST`, `OBJ`, or `ERR`, `BOOL`, `MAP`, `WAIF`, `ANON`. Thus, one usually writes code like this:
+The result is the same as the initial value of one of these built-in variables: `INT`, `FLOAT`, `STR`, `LIST`, `OBJ`, or
+`ERR`, `BOOL`, `MAP`, `WAIF`, `ANON`. Thus, one usually writes code like this:
 
 ```
 if (typeof(x) == LIST) ...
@@ -45,7 +49,9 @@ tostr(E_PERM)              =>   "Permission denied"
 tostr("3 + 4 = ", 3 + 4)   =>   "3 + 4 = 7"
 ```
 
-Warning `tostr()` does not do a good job of converting lists and maps into strings; all lists, including the empty list, are converted into the string `"{list}"` and all maps are converted into the string `"[map]"`. The function `toliteral()`, below, is better for this purpose.
+Warning `tostr()` does not do a good job of converting lists and maps into strings; all lists, including the empty list,
+are converted into the string `"{list}"` and all maps are converted into the string `"[map]"`. The function
+`toliteral()`, below, is better for this purpose.
 
 ### Function: `toliteral`
 
@@ -73,7 +79,11 @@ int toint(value)
 
 Converts the given MOO value into an integer and returns that integer.
 
-Floating-point numbers are rounded toward zero, truncating their fractional parts. Object numbers are converted into the equivalent integers. Strings are parsed as the decimal encoding of a real number which is then converted to an integer. Errors are converted into integers obeying the same ordering (with respect to `<=` as the errors themselves. `toint()` raises `E_TYPE` if value is a list. If value is a string but the string does not contain a syntactically-correct number, then `toint()` returns 0.
+Floating-point numbers are rounded toward zero, truncating their fractional parts. Object numbers are converted into the
+equivalent integers. Strings are parsed as the decimal encoding of a real number which is then converted to an integer.
+Errors are converted into integers obeying the same ordering (with respect to `<=` as the errors themselves. `toint()`
+raises `E_TYPE` if value is a list. If value is a string but the string does not contain a syntactically-correct number,
+then `toint()` returns 0.
 
 ```
 toint(34.7)        =>   34
@@ -110,7 +120,11 @@ float tofloat(value)
 
 Converts the given MOO value into a floating-point number and returns that number.
 
-Integers and object numbers are converted into the corresponding integral floating-point numbers. Strings are parsed as the decimal encoding of a real number which is then represented as closely as possible as a floating-point number. Errors are first converted to integers as in `toint()` and then converted as integers are. `tofloat()` raises `E_TYPE` if value is a list. If value is a string but the string does not contain a syntactically-correct number, then `tofloat()` returns 0.
+Integers and object numbers are converted into the corresponding integral floating-point numbers. Strings are parsed as
+the decimal encoding of a real number which is then represented as closely as possible as a floating-point number.
+Errors are first converted to integers as in `toint()` and then converted as integers are. `tofloat()` raises `E_TYPE`
+if value is a list. If value is a string but the string does not contain a syntactically-correct number, then
+`tofloat()` returns 0.
 
 ```
 tofloat(34)          =>   34.0
@@ -128,7 +142,8 @@ int equal(value, value2)
 
 Returns true if value1 is completely indistinguishable from value2.
 
-This is much the same operation as `value1 == value2` except that, unlike `==`, the `equal()` function does not treat upper- and lower-case characters in strings as equal and thus, is case-sensitive.
+This is much the same operation as `value1 == value2` except that, unlike `==`, the `equal()` function does not treat
+upper- and lower-case characters in strings as equal and thus, is case-sensitive.
 
 ```
 "Foo" == "foo"         =>   1
@@ -172,11 +187,19 @@ str generate_json(value [, str mode])
 
 Returns the JSON representation of the MOO value.
 
-MOO supports a richer set of values than JSON allows. The optional mode specifies how this function handles the conversion of MOO values into their JSON representation.
+MOO supports a richer set of values than JSON allows. The optional mode specifies how this function handles the
+conversion of MOO values into their JSON representation.
 
-The common subset mode, specified by the literal mode string "common-subset", is the default conversion mode. In this mode, only the common subset of types (strings and numbers) are translated with fidelity between MOO types and JSON types. All other types are treated as alternative representations of the string type. This mode is useful for integration with non-MOO applications.
+The common subset mode, specified by the literal mode string "common-subset", is the default conversion mode. In this
+mode, only the common subset of types (strings and numbers) are translated with fidelity between MOO types and JSON
+types. All other types are treated as alternative representations of the string type. This mode is useful for
+integration with non-MOO applications.
 
-The embedded types mode, specified by the literal mode string "embedded-types", adds type information. Specifically, values other than strings and numbers, which carry implicit type information, are converted into strings with type information appended. The converted string consists of the string representation of the value (as if tostr() were applied) followed by the pipe (|) character and the type. This mode is useful for serializing/deserializing objects and collections of MOO values.
+The embedded types mode, specified by the literal mode string "embedded-types", adds type information. Specifically,
+values other than strings and numbers, which carry implicit type information, are converted into strings with type
+information appended. The converted string consists of the string representation of the value (as if tostr() were
+applied) followed by the pipe (|) character and the type. This mode is useful for serializing/deserializing objects and
+collections of MOO values.
 
 ```
 generate_json([])                                           =>  "{}"
@@ -215,7 +238,8 @@ Returns the MOO value representation of the JSON string.
 
 If the specified string is not valid JSON, E_INVARG is raised.
 
-The optional mode specifies how this function handles conversion of MOO values into their JSON representation. The options are the same as for generate_json().
+The optional mode specifies how this function handles conversion of MOO values into their JSON representation. The
+options are the same as for generate_json().
 
 ```
 parse_json("{}")                                            =>  []
@@ -233,7 +257,8 @@ parse_json("{\"foo\":\"E_PERM\"}", "common-subset")         =>  ["foo" -> "E_PER
 parse_json("{\"foo\":\"E_PERM|err\"}", "embedded-types")    =>  ["foo" -> E_PERM]
 ```
 
-In embedded types mode, key values can be converted to MOO types by appending type information. The full set of supported types are obj, str, err, float and int.
+In embedded types mode, key values can be converted to MOO types by appending type information. The full set of
+supported types are obj, str, err, float and int.
 
 ```
 parse_json("{\"1\":2}")                                     =>   ["1" -> 2]
@@ -256,7 +281,8 @@ int random([int mod, [int range]])
 
 random -- Return a random integer
 
-mod must be a positive integer; otherwise, `E_INVARG` is raised. If mod is not provided, it defaults to the largest MOO integer, which will depend on if you are running 32 or 64-bit.
+mod must be a positive integer; otherwise, `E_INVARG` is raised. If mod is not provided, it defaults to the largest MOO
+integer, which will depend on if you are running 32 or 64-bit.
 
 if range is provided then an integer in the range of mod to range (inclusive) is returned.
 
@@ -272,7 +298,8 @@ random(1, 5000)             => integer between 1 and 5000
 float frandom(FLOAT mod1 [, FLOAT mod2)
 ```
 
-If only one argument is given, a floating point number is chosen randomly from the range `[1.0..mod1]` and returned. If two arguments are given, a floating point number is randomly chosen from the range `[mod1..mod2]`.
+If only one argument is given, a floating point number is chosen randomly from the range `[1.0..mod1]` and returned. If
+two arguments are given, a floating point number is randomly chosen from the range `[mod1..mod2]`.
 
 ### Function: `random_bytes`
 
@@ -280,7 +307,8 @@ If only one argument is given, a floating point number is chosen randomly from t
 int random_bytes(int count)
 ```
 
-Returns a binary string composed of between one and 10000 random bytes. count specifies the number of bytes and must be a positive integer; otherwise, E_INVARG is raised.
+Returns a binary string composed of between one and 10000 random bytes. count specifies the number of bytes and must be
+a positive integer; otherwise, E_INVARG is raised.
 
 ### Function: `reseed_random`
 
@@ -298,7 +326,8 @@ int min(int x, ...)
 
 Return the smallest of it's arguments.
 
-All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is raised.
+All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is
+raised.
 
 ### Function: `max`
 
@@ -308,7 +337,8 @@ int max(int x, ...)
 
 Return the largest of it's arguments.
 
-All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is raised.
+All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is
+raised.
 
 ### Function: `abs`
 
@@ -318,7 +348,8 @@ int abs(int x)
 
 Returns the absolute value of x.
 
-If x is negative, then the result is `-x`; otherwise, the result is x. The number x can be either integer or floating-point; the result is of the same kind.
+If x is negative, then the result is `-x`; otherwise, the result is x. The number x can be either integer or
+floating-point; the result is of the same kind.
 
 ### Function: `exp`
 
@@ -336,7 +367,12 @@ str floatstr(float x, int precision [, scientific])
 
 Converts x into a string with more control than provided by either `tostr()` or `toliteral()`.
 
-Precision is the number of digits to appear to the right of the decimal point, capped at 4 more than the maximum available precision, a total of 19 on most machines; this makes it possible to avoid rounding errors if the resulting string is subsequently read back as a floating-point value. If scientific is false or not provided, the result is a string in the form `"MMMMMMM.DDDDDD"`, preceded by a minus sign if and only if x is negative. If scientific is provided and true, the result is a string in the form `"M.DDDDDDe+EEE"`, again preceded by a minus sign if and only if x is negative.
+Precision is the number of digits to appear to the right of the decimal point, capped at 4 more than the maximum
+available precision, a total of 19 on most machines; this makes it possible to avoid rounding errors if the resulting
+string is subsequently read back as a floating-point value. If scientific is false or not provided, the result is a
+string in the form `"MMMMMMM.DDDDDD"`, preceded by a minus sign if and only if x is negative. If scientific is provided
+and true, the result is a string in the form `"M.DDDDDDe+EEE"`, again preceded by a minus sign if and only if x is
+negative.
 
 ### Function: `sqrt`
 
@@ -505,7 +541,9 @@ str strsub(str subject, str what, str with [, int case-matters])
 
 Replaces all occurrences of what in subject with with, performing string substitution.
 
-The occurrences are found from left to right and all substitutions happen simultaneously. By default, occurrences of what are searched for while ignoring the upper/lower case distinction. If case-matters is provided and true, then case is treated as significant in all comparisons.
+The occurrences are found from left to right and all substitutions happen simultaneously. By default, occurrences of
+what are searched for while ignoring the upper/lower case distinction. If case-matters is provided and true, then case
+is treated as significant in all comparisons.
 
 ```
 strsub("%n is a fink.", "%n", "Fred")   =>   "Fred is a fink."
@@ -526,9 +564,12 @@ int rindex(str str1, str str2, [, int case-matters [, int skip])
 
 These functions will return zero if str2 does not occur in str1 at all.
 
-By default the search for an occurrence of str2 is done while ignoring the upper/lower case distinction. If case-matters is provided and true, then case is treated as significant in all comparisons.
+By default the search for an occurrence of str2 is done while ignoring the upper/lower case distinction. If case-matters
+is provided and true, then case is treated as significant in all comparisons.
 
-By default the search starts at the beginning (end) of str1. If skip is provided, the search skips the first (last) skip characters and starts at an offset from the beginning (end) of str1. The skip must be a positive integer for index() and a negative integer for rindex(). The default value of skip is 0 (skip no characters).
+By default the search starts at the beginning (end) of str1. If skip is provided, the search skips the first (last) skip
+characters and starts at an offset from the beginning (end) of str1. The skip must be a positive integer for index() and
+a negative integer for rindex(). The default value of skip is 0 (skip no characters).
 
 ```
 index("foobar", "o")            ⇒   2
@@ -548,9 +589,12 @@ index("Foobar", "foo", 1)       ⇒   0
 int strtr(str source, str str1, str str2 [, case-matters])
 ```
 
-Transforms the string source by replacing the characters specified by str1 with the corresponding characters specified by str2.
+Transforms the string source by replacing the characters specified by str1 with the corresponding characters specified
+by str2.
 
-All other characters are not transformed. If str2 has fewer characters than str1 the unmatched characters are simply removed from source. By default the transformation is done on both upper and lower case characters no matter the case. If case-matters is provided and true, then case is treated as significant.
+All other characters are not transformed. If str2 has fewer characters than str1 the unmatched characters are simply
+removed from source. By default the transformation is done on both upper and lower case characters no matter the case.
+If case-matters is provided and true, then case is treated as significant.
 
 ```
 strtr("foobar", "o", "i")           ⇒    "fiibar"
@@ -571,7 +615,9 @@ int strcmp(str str1, str str2)
 
 Performs a case-sensitive comparison of the two argument strings.
 
-If str1 is [lexicographically](https://en.wikipedia.org/wiki/Lexicographical_order) less than str2, the `strcmp()` returns a negative integer. If the two strings are identical, `strcmp()` returns zero. Otherwise, `strcmp()` returns a positive integer. The ASCII character ordering is used for the comparison.
+If str1 is [lexicographically](https://en.wikipedia.org/wiki/Lexicographical_order) less than str2, the `strcmp()`
+returns a negative integer. If the two strings are identical, `strcmp()` returns zero. Otherwise, `strcmp()` returns a
+positive integer. The ASCII character ordering is used for the comparison.
 
 ### Function: `explode`
 
@@ -588,7 +634,8 @@ explode("slither%is%wiz", "%")      => {"slither", "is", "wiz"}
 explode("slither%is%%wiz", "%%")    => {"slither", "is", "wiz"}
 ```
 
-You can use include-sequential-occurrences to get back an empty string as part of your list if `break` appears multiple times with nothing between it, or there is a leading/trailing `break` in your string:
+You can use include-sequential-occurrences to get back an empty string as part of your list if `break` appears multiple
+times with nothing between it, or there is a leading/trailing `break` in your string:
 
 ```
 explode("slither%is%%wiz", "%%", 1)  => {"slither", "is", "", "wiz"}
@@ -606,7 +653,10 @@ list decode_binary(str bin-string [, int fully])
 
 Returns a list of strings and/or integers representing the bytes in the binary string bin_string in order.
 
-If fully is false or omitted, the list contains an integer only for each non-printing, non-space byte; all other characters are grouped into the longest possible contiguous substrings. If fully is provided and true, the list contains only integers, one for each byte represented in bin_string. Raises `E_INVARG` if bin_string is not a properly-formed binary string. (See the early section on MOO value types for a full description of binary strings.)
+If fully is false or omitted, the list contains an integer only for each non-printing, non-space byte; all other
+characters are grouped into the longest possible contiguous substrings. If fully is provided and true, the list contains
+only integers, one for each byte represented in bin_string. Raises `E_INVARG` if bin_string is not a properly-formed
+binary string. (See the early section on MOO value types for a full description of binary strings.)
 
 ```
 decode_binary("foo")               =>   {"foo"}
@@ -622,9 +672,11 @@ decode_binary("foo~0D~0A", 1)      =>   {102, 111, 111, 13, 10}
 str encode_binary(arg, ...)
 ```
 
-Translates each integer and string in turn into its binary string equivalent, returning the concatenation of all these substrings into a single binary string.
+Translates each integer and string in turn into its binary string equivalent, returning the concatenation of all these
+substrings into a single binary string.
 
-Each argument must be an integer between 0 and 255, a string, or a list containing only legal arguments for this function. This function (See the early section on MOO value types for a full description of binary strings.)
+Each argument must be an integer between 0 and 255, a string, or a list containing only legal arguments for this
+function. This function (See the early section on MOO value types for a full description of binary strings.)
 
 ```
 encode_binary("~foo")                     =>   "~7Efoo"
@@ -640,7 +692,8 @@ str decode_base64(str base64 [, int safe])
 
 Returns the binary string representation of the supplied Base64 encoded string argument.
 
-Raises E_INVARG if base64 is not a properly-formed Base64 string. If safe is provide and is true, a URL-safe version of Base64 is used (see RFC4648).
+Raises E_INVARG if base64 is not a properly-formed Base64 string. If safe is provide and is true, a URL-safe version of
+Base64 is used (see RFC4648).
 
 ```
 decode_base64("AAEC")      ⇒    "~00~01~02"
@@ -655,7 +708,8 @@ str encode_base64(str binary [, int safe])
 
 Returns the Base64 encoded string representation of the supplied binary string argument.
 
-Raises E_INVARG if binary is not a properly-formed binary string. If safe is provide and is true, a URL-safe version of Base64 is used (see [RFC4648](https://datatracker.ietf.org/doc/html/rfc4648)).
+Raises E_INVARG if binary is not a properly-formed binary string. If safe is provide and is true, a URL-safe version of
+Base64 is used (see [RFC4648](https://datatracker.ietf.org/doc/html/rfc4648)).
 
 ```
 encode_base64("~00~01~02")    ⇒    "AAEC"
@@ -670,7 +724,9 @@ int | list spellcheck(STR word)
 
 This function checks the English spelling of word.
 
-If the spelling is correct, the function will return a 1. If the spelling is incorrect, a LIST of suggestions for correct spellings will be returned instead. If the spelling is incorrect and no suggestions can be found, an empty LIST is returned.
+If the spelling is correct, the function will return a 1. If the spelling is incorrect, a LIST of suggestions for
+correct spellings will be returned instead. If the spelling is incorrect and no suggestions can be found, an empty LIST
+is returned.
 
 ### Function: `chr`
 
@@ -680,7 +736,8 @@ int chr(INT arg, ...)
 
 This function translates integers into ASCII characters. Each argument must be an integer between 0 and 255.
 
-If the programmer is not a wizard, and integers less than 32 are provided, E_INVARG is raised. This prevents control characters or newlines from being written to the database file by non-trusted individuals.
+If the programmer is not a wizard, and integers less than 32 are provided, E_INVARG is raised. This prevents control
+characters or newlines from being written to the database file by non-trusted individuals.
 
 ### Function: `match`
 
@@ -690,9 +747,13 @@ list match(str subject, str pattern [, int case-matters])
 
 Searches for the first occurrence of the regular expression pattern in the string subject
 
-If pattern is syntactically malformed, then `E_INVARG` is raised. The process of matching can in some cases consume a great deal of memory in the server; should this memory consumption become excessive, then the matching process is aborted and `E_QUOTA` is raised.
+If pattern is syntactically malformed, then `E_INVARG` is raised. The process of matching can in some cases consume a
+great deal of memory in the server; should this memory consumption become excessive, then the matching process is
+aborted and `E_QUOTA` is raised.
 
-If no match is found, the empty list is returned; otherwise, these functions return a list containing information about the match (see below). By default, the search ignores upper-/lower-case distinctions. If case-matters is provided and true, then case is treated as significant in all comparisons.
+If no match is found, the empty list is returned; otherwise, these functions return a list containing information about
+the match (see below). By default, the search ignores upper-/lower-case distinctions. If case-matters is provided and
+true, then case is treated as significant in all comparisons.
 
 The list that `match()` returns contains the details about the match made. The list is in the form:
 
@@ -700,9 +761,16 @@ The list that `match()` returns contains the details about the match made. The l
 {start, end, replacements, subject}
 ```
 
-where start is the index in subject of the beginning of the match, end is the index of the end of the match, replacements is a list described below, and subject is the same string that was given as the first argument to `match()`.
+where start is the index in subject of the beginning of the match, end is the index of the end of the match,
+replacements is a list described below, and subject is the same string that was given as the first argument to
+`match()`.
 
-The replacements list is always nine items long, each item itself being a list of two integers, the start and end indices in string matched by some parenthesized sub-pattern of pattern. The first item in replacements carries the indices for the first parenthesized sub-pattern, the second item carries those for the second sub-pattern, and so on. If there are fewer than nine parenthesized sub-patterns in pattern, or if some sub-pattern was not used in the match, then the corresponding item in replacements is the list {0, -1}. See the discussion of `%)`, below, for more information on parenthesized sub-patterns.
+The replacements list is always nine items long, each item itself being a list of two integers, the start and end
+indices in string matched by some parenthesized sub-pattern of pattern. The first item in replacements carries the
+indices for the first parenthesized sub-pattern, the second item carries those for the second sub-pattern, and so on. If
+there are fewer than nine parenthesized sub-patterns in pattern, or if some sub-pattern was not used in the match, then
+the corresponding item in replacements is the list {0, -1}. See the discussion of `%)`, below, for more information on
+parenthesized sub-patterns.
 
 ```
 match("foo", "^f*o$")        =>  {}
@@ -720,9 +788,13 @@ list rmatch(str subject, str pattern [, int case-matters])
 
 Searches for the last occurrence of the regular expression pattern in the string subject
 
-If pattern is syntactically malformed, then `E_INVARG` is raised. The process of matching can in some cases consume a great deal of memory in the server; should this memory consumption become excessive, then the matching process is aborted and `E_QUOTA` is raised.
+If pattern is syntactically malformed, then `E_INVARG` is raised. The process of matching can in some cases consume a
+great deal of memory in the server; should this memory consumption become excessive, then the matching process is
+aborted and `E_QUOTA` is raised.
 
-If no match is found, the empty list is returned; otherwise, these functions return a list containing information about the match (see below). By default, the search ignores upper-/lower-case distinctions. If case-matters is provided and true, then case is treated as significant in all comparisons.
+If no match is found, the empty list is returned; otherwise, these functions return a list containing information about
+the match (see below). By default, the search ignores upper-/lower-case distinctions. If case-matters is provided and
+true, then case is treated as significant in all comparisons.
 
 The list that `match()` returns contains the details about the match made. The list is in the form:
 
@@ -730,9 +802,16 @@ The list that `match()` returns contains the details about the match made. The l
 {start, end, replacements, subject}
 ```
 
-where start is the index in subject of the beginning of the match, end is the index of the end of the match, replacements is a list described below, and subject is the same string that was given as the first argument to `match()`.
+where start is the index in subject of the beginning of the match, end is the index of the end of the match,
+replacements is a list described below, and subject is the same string that was given as the first argument to
+`match()`.
 
-The replacements list is always nine items long, each item itself being a list of two integers, the start and end indices in string matched by some parenthesized sub-pattern of pattern. The first item in replacements carries the indices for the first parenthesized sub-pattern, the second item carries those for the second sub-pattern, and so on. If there are fewer than nine parenthesized sub-patterns in pattern, or if some sub-pattern was not used in the match, then the corresponding item in replacements is the list {0, -1}. See the discussion of `%)`, below, for more information on parenthesized sub-patterns.
+The replacements list is always nine items long, each item itself being a list of two integers, the start and end
+indices in string matched by some parenthesized sub-pattern of pattern. The first item in replacements carries the
+indices for the first parenthesized sub-pattern, the second item carries those for the second sub-pattern, and so on. If
+there are fewer than nine parenthesized sub-patterns in pattern, or if some sub-pattern was not used in the match, then
+the corresponding item in replacements is the list {0, -1}. See the discussion of `%)`, below, for more information on
+parenthesized sub-patterns.
 
 ```
 rmatch("foobar", "o*b")      =>  {4, 4, {{0, -1}, ...}, "foobar"}
@@ -740,7 +819,10 @@ rmatch("foobar", "o*b")      =>  {4, 4, {{0, -1}, ...}, "foobar"}
 
 ## Perl Compatible Regular Expressions
 
-ToastStunt has two methods of operating on regular expressions. The classic style (outdated, more difficult to use, detailed in the next section) and the preferred Perl Compatible Regular Expression library. It is beyond the scope of this document to teach regular expressions, but an internet search should provide all the information you need to get started on what will surely become a lifelong journey of either love or frustration.
+ToastStunt has two methods of operating on regular expressions. The classic style (outdated, more difficult to use,
+detailed in the next section) and the preferred Perl Compatible Regular Expression library. It is beyond the scope of
+this document to teach regular expressions, but an internet search should provide all the information you need to get
+started on what will surely become a lifelong journey of either love or frustration.
 
 ToastCore offers two primary methods of interacting with regular expressions.
 
@@ -752,11 +834,18 @@ LIST pcre_match(STR subject, STR pattern [, ?case matters=0] [, ?repeat until no
 
 The function `pcre_match()` searches `subject` for `pattern` using the Perl Compatible Regular Expressions library.
 
-The return value is a list of maps containing each match. Each returned map will have a key which corresponds to either a named capture group or the number of the capture group being matched. The full match is always found in the key "0". The value of each key will be another map containing the keys 'match' and 'position'. Match corresponds to the text that was matched and position will return the indices of the substring within `subject`.
+The return value is a list of maps containing each match. Each returned map will have a key which corresponds to either
+a named capture group or the number of the capture group being matched. The full match is always found in the key "0".
+The value of each key will be another map containing the keys 'match' and 'position'. Match corresponds to the text that
+was matched and position will return the indices of the substring within `subject`.
 
-If `repeat until no matches` is 1, the expression will continue to be evaluated until no further matches can be found or it exhausts the iteration limit. This defaults to 1.
+If `repeat until no matches` is 1, the expression will continue to be evaluated until no further matches can be found or
+it exhausts the iteration limit. This defaults to 1.
 
-Additionally, wizards can control how many iterations of the loop are possible by adding a property to $server_options. $server_options.pcre_match_max_iterations is the maximum number of loops allowed before giving up and allowing other tasks to proceed. CAUTION: It's recommended to keep this value fairly low. The default value is 1000. The minimum value is 100.
+Additionally, wizards can control how many iterations of the loop are possible by adding a property
+to $server_options. $server_options.pcre_match_max_iterations is the maximum number of loops allowed before giving up
+and allowing other tasks to proceed. CAUTION: It's recommended to keep this value fairly low. The default value is 1000.
+The minimum value is 100.
 
 Examples:
 
@@ -782,9 +871,13 @@ Explode a string (albeit a contrived example):
 STR pcre_replace(STR `subject`, STR `pattern`)
 ```
 
-The function `pcre_replace()` replaces `subject` with replacements found in `pattern` using the Perl Compatible Regular Expressions library.
+The function `pcre_replace()` replaces `subject` with replacements found in `pattern` using the Perl Compatible Regular
+Expressions library.
 
-The pattern string has a specific format that must be followed, which should be familiar if you have used the likes of Vim, Perl, or sed. The string is composed of four elements, each separated by a delimiter (typically a slash (/) or an exclamation mark (!)), that tell PCRE how to parse your replacement. We'll break the string down and mention relevant options below:
+The pattern string has a specific format that must be followed, which should be familiar if you have used the likes of
+Vim, Perl, or sed. The string is composed of four elements, each separated by a delimiter (typically a slash (/) or an
+exclamation mark (!)), that tell PCRE how to parse your replacement. We'll break the string down and mention relevant
+options below:
 
 1. Type of search to perform. In MOO, only 's' is valid. This parameter is kept for the sake of consistency.
 
@@ -793,8 +886,8 @@ The pattern string has a specific format that must be followed, which should be 
 3. The regular expression you want to use for your replacement text.
 
 4. Optional modifiers:
-   - Global. This will replace all occurrences in your string rather than stopping at the first.
-   - Case-insensitive. Uppercase, lowercase, it doesn't matter. All will be replaced.
+    - Global. This will replace all occurrences in your string rather than stopping at the first.
+    - Case-insensitive. Uppercase, lowercase, it doesn't matter. All will be replaced.
 
 Examples:
 
@@ -806,7 +899,8 @@ pcre_replace("I like banana pie. Do you like banana pie?", "s/banana/apple/g")
 => "I like apple pie. Do you like apple pie?"
 ```
 
-If you find yourself wanting to replace a string that contains slashes, it can be useful to change your delimiter to an exclamation mark:
+If you find yourself wanting to replace a string that contains slashes, it can be useful to change your delimiter to an
+exclamation mark:
 
 ```
 pcre_replace("Unix, wow! /bin/bash is a thing.", "s!/bin/bash!/bin/fish!g")
@@ -816,22 +910,35 @@ pcre_replace("Unix, wow! /bin/bash is a thing.", "s!/bin/bash!/bin/fish!g")
 
 ## Legacy MOO Regular Expressions
 
-_Regular expression_ matching allows you to test whether a string fits into a specific syntactic shape. You can also search a string for a substring that fits a pattern.
+_Regular expression_ matching allows you to test whether a string fits into a specific syntactic shape. You can also
+search a string for a substring that fits a pattern.
 
-A regular expression describes a set of strings. The simplest case is one that describes a particular string; for example, the string `foo` when regarded as a regular expression matches `foo` and nothing else. Nontrivial regular expressions use certain special constructs so that they can match more than one string. For example, the regular expression `foo%|bar` matches either the string `foo` or the string `bar`; the regular expression `c[ad]*r` matches any of the strings `cr`, `car`, `cdr`, `caar`, `cadddar` and all other such strings with any number of `a`'s and `d`'s.
+A regular expression describes a set of strings. The simplest case is one that describes a particular string; for
+example, the string `foo` when regarded as a regular expression matches `foo` and nothing else. Nontrivial regular
+expressions use certain special constructs so that they can match more than one string. For example, the regular
+expression `foo%|bar` matches either the string `foo` or the string `bar`; the regular expression `c[ad]*r` matches any
+of the strings `cr`, `car`, `cdr`, `caar`, `cadddar` and all other such strings with any number of `a`'s and `d`'s.
 
-Regular expressions have a syntax in which a few characters are special constructs and the rest are _ordinary_. An ordinary character is a simple regular expression that matches that character and nothing else. The special characters are `$`, `^`, `.`, `*`, `+`, `?`, `[`, `]` and `%`. Any other character appearing in a regular expression is ordinary, unless a `%` precedes it.
+Regular expressions have a syntax in which a few characters are special constructs and the rest are _ordinary_. An
+ordinary character is a simple regular expression that matches that character and nothing else. The special characters
+are `$`, `^`, `.`, `*`, `+`, `?`, `[`, `]` and `%`. Any other character appearing in a regular expression is ordinary,
+unless a `%` precedes it.
 
-For example, `f` is not a special character, so it is ordinary, and therefore `f` is a regular expression that matches the string `f` and no other string. (It does _not_, for example, match the string `ff`.) Likewise, `o` is a regular expression that matches only `o`.
+For example, `f` is not a special character, so it is ordinary, and therefore `f` is a regular expression that matches
+the string `f` and no other string. (It does _not_, for example, match the string `ff`.) Likewise, `o` is a regular
+expression that matches only `o`.
 
-Any two regular expressions a and b can be concatenated. The result is a regular expression which matches a string if a matches some amount of the beginning of that string and b matches the rest of the string.
+Any two regular expressions a and b can be concatenated. The result is a regular expression which matches a string if a
+matches some amount of the beginning of that string and b matches the rest of the string.
 
-As a simple example, we can concatenate the regular expressions `f` and `o` to get the regular expression `fo`, which matches only the string `fo`. Still trivial.
+As a simple example, we can concatenate the regular expressions `f` and `o` to get the regular expression `fo`, which
+matches only the string `fo`. Still trivial.
 
-The following are the characters and character sequences that have special meaning within regular expressions. Any character not mentioned here is not special; it stands for exactly itself for the purposes of searching and matching.
+The following are the characters and character sequences that have special meaning within regular expressions. Any
+character not mentioned here is not special; it stands for exactly itself for the purposes of searching and matching.
 
 | Character Sequences    | Special Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |                                                                                                                                                                                                               |                                                                                     |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+|------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
 | <code>.</code>         | is a special character that matches any single character. Using concatenation, we can make regular expressions like <code>a.b</code>, which matches any three-character string that begins with <code>a</code> and ends with <code>b</code>.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |                                                                                                                                                                                                               |                                                                                     |
 | <code>*</code>         | is not a construct by itself; it is a suffix that means that the preceding regular expression is to be repeated as many times as possible. In <code>fo*</code>, the <code> _</code> applies to the <code>o</code>, so <code>fo_</code> matches <code>f</code> followed by any number of <code>o</code>&apos;s. The case of zero <code>o</code>&apos;s is allowed: <code>fo*</code> does match <code>f</code>. <code> _</code> always applies to the <em>smallest</em> possible preceding expression. Thus, <code>fo_</code> has a repeating <code>o</code>, not a repeating <code>fo</code>. The matcher processes a <code> _</code> construct by matching, immediately, as many repetitions as can be found. Then it continues with the rest of the pattern. If that fails, it backtracks, discarding some of the matches of the <code>_</code>&apos;d construct in case that makes it possible to match the rest of the pattern. For example, matching <code>c[ad]_ar</code> against the string <code>caddaar</code>, the <code>[ad]_</code> first matches <code>addaa</code>, but this does not allow the next <code>a</code> in the pattern to match. So the last of the matches of <code>[ad]</code> is undone and the following <code>a</code> is tried again. Now it succeeds.                                                                                                     |                                                                                                                                                                                                               |                                                                                     |
 | <code>+</code>         | <code>+</code> is like <code>*</code> except that at least one match for the preceding pattern is required for <code>+</code>. Thus, <code>c[ad]+r</code> does not match <code>cr</code> but does match anything else that <code>c[ad]*r</code> would match.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |                                                                                                                                                                                                               |                                                                                     |
@@ -859,11 +966,16 @@ The following are the characters and character sequences that have special meani
 str substitute(str template, list subs)
 ```
 
-Performs a standard set of substitutions on the string template, using the information contained in subs, returning the resulting, transformed template.
+Performs a standard set of substitutions on the string template, using the information contained in subs, returning the
+resulting, transformed template.
 
-Subs should be a list like those returned by `match()` or `rmatch()` when the match succeeds; otherwise, `E_INVARG` is raised.
+Subs should be a list like those returned by `match()` or `rmatch()` when the match succeeds; otherwise, `E_INVARG` is
+raised.
 
-In template, the strings `%1` through `%9` will be replaced by the text matched by the first through ninth parenthesized sub-patterns when `match()` or `rmatch()` was called. The string `%0` in template will be replaced by the text matched by the pattern as a whole when `match()` or `rmatch()` was called. The string `%%` will be replaced by a single `%` sign. If `%` appears in template followed by any other character, `E_INVARG` will be raised.
+In template, the strings `%1` through `%9` will be replaced by the text matched by the first through ninth parenthesized
+sub-patterns when `match()` or `rmatch()` was called. The string `%0` in template will be replaced by the text matched
+by the pattern as a whole when `match()` or `rmatch()` was called. The string `%%` will be replaced by a single `%`
+sign. If `%` appears in template followed by any other character, `E_INVARG` will be raised.
 
 ```
 subs = match("*** Welcome to ToastStunt!!!", "%(%w*%) to %(%w*%)");
@@ -879,7 +991,10 @@ str salt(str format, str input)
 
 Generate a crypt() compatible salt string for the specified salt format using the specified binary random input.
 
-The specific set of formats supported depends on the libraries used to build the server, but will always include the standard salt format, indicated by the format string "" (the empty string), and the BCrypt salt format, indicated by the format string "$2a$NN$" (where "NN" is the work factor). Other possible formats include MD5 ("$1$"), SHA256 ("$5$") and SHA512 ("$6$"). Both the SHA256 and SHA512 formats support optional rounds.
+The specific set of formats supported depends on the libraries used to build the server, but will always include the
+standard salt format, indicated by the format string "" (the empty string), and the BCrypt salt format, indicated by the
+format string "$2a$NN$" (where "NN" is the work factor). Other possible formats include MD5 ("$1$"), SHA256 ("$
+5$") and SHA512 ("$6$"). Both the SHA256 and SHA512 formats support optional rounds.
 
 ```
 salt("", ".M")                                           ⇒    "iB"
@@ -901,9 +1016,16 @@ str crypt(str text [, str salt])
 
 Encrypts the given text using the standard UNIX encryption method.
 
-Encrypts (hashes) the given text using the standard UNIX encryption method. If provided, salt should be a string at least two characters long, and it may dictate a specific algorithm to use. By default, crypt uses the original, now insecure, DES algorithm. ToastStunt specifically includes the BCrypt algorithm (identified by salts that start with "$2a$"), and may include MD5, SHA256, and SHA512 algorithms depending on the libraries used to build the server. The salt used is returned as the first part of the resulting encrypted string.
+Encrypts (hashes) the given text using the standard UNIX encryption method. If provided, salt should be a string at
+least two characters long, and it may dictate a specific algorithm to use. By default, crypt uses the original, now
+insecure, DES algorithm. ToastStunt specifically includes the BCrypt algorithm (identified by salts that start
+with "$2a$"), and may include MD5, SHA256, and SHA512 algorithms depending on the libraries used to build the server.
+The salt used is returned as the first part of the resulting encrypted string.
 
-Aside from the possibly-random input in the salt, the encryption algorithms are entirely deterministic. In particular, you can test whether or not a given string is the same as the one used to produce a given piece of encrypted text; simply extract the salt from the front of the encrypted text and pass the candidate string and the salt to crypt(). If the result is identical to the given encrypted text, then you`ve got a match.
+Aside from the possibly-random input in the salt, the encryption algorithms are entirely deterministic. In particular,
+you can test whether or not a given string is the same as the one used to produce a given piece of encrypted text;
+simply extract the salt from the front of the encrypted text and pass the candidate string and the salt to crypt(). If
+the result is identical to the given encrypted text, then you`ve got a match.
 
 ```
 crypt("foobar", "iB")                               ⇒    "iBhNpg2tYbVjw"
@@ -915,9 +1037,16 @@ crypt("foobar", "$6$rounds=5000$hT0gxavqSl0L")      ⇒    "$6$rounds=5000$hT0gx
 crypt("foobar", "$2a$08$dHkE1lESV9KrErGhhJTxc.")    ⇒    "$2a$08$dHkE1lESV9KrErGhhJTxc.QnrW/bHp8mmBl5vxGVUcsbjo3gcKlf6"
 ```
 
-> Note: The specific set of supported algorithms depends on the libraries used to build the server. Only the BCrypt algorithm, which is distributed with the server source code, is guaranteed to exist. BCrypt is currently mature and well tested, and is recommended for new development when the Argon2 library is unavailable. (See next section).
+> Note: The specific set of supported algorithms depends on the libraries used to build the server. Only the BCrypt
+> algorithm, which is distributed with the server source code, is guaranteed to exist. BCrypt is currently mature and
+> well
+> tested, and is recommended for new development when the Argon2 library is unavailable. (See next section).
 
-> Warning: The entire salt (of any length) is passed to the operating system`s low-level crypt function. It is unlikely, however, that all operating systems will return the same string when presented with a longer salt. Therefore, identical calls to crypt() may generate different results on different platforms, and your password verification systems will fail. Use a salt longer than two characters at your own risk.
+> Warning: The entire salt (of any length) is passed to the operating system`s low-level crypt function. It is unlikely,
+> however, that all operating systems will return the same string when presented with a longer salt. Therefore,
+> identical
+> calls to crypt() may generate different results on different platforms, and your password verification systems will
+> fail. Use a salt longer than two characters at your own risk.
 
 ### Function: `argon2`
 
@@ -925,20 +1054,27 @@ crypt("foobar", "$2a$08$dHkE1lESV9KrErGhhJTxc.")    ⇒    "$2a$08$dHkE1lESV9KrE
 str argon2(STR password, STR salt [, iterations = 3] [, memory usage in KB = 4096] [, CPU threads = 1])
 ```
 
-The function `argon2()' hashes a password using the Argon2id password hashing algorithm. It is parametrized by three optional arguments:
+The function `argon2()' hashes a password using the Argon2id password hashing algorithm. It is parametrized by three
+optional arguments:
 
-- Time: This is the number of times the hash will get run. This defines the amount of computation required and, as a result, how long the function will take to complete.
+- Time: This is the number of times the hash will get run. This defines the amount of computation required and, as a
+  result, how long the function will take to complete.
 - Memory: This is how much RAM is reserved for hashing.
 - Parallelism: This is the number of CPU threads that will run in parallel.
 
-The salt for the password should, at minimum, be 16 bytes for password hashing. It is recommended to use the random_bytes() function.
+The salt for the password should, at minimum, be 16 bytes for password hashing. It is recommended to use the
+random_bytes() function.
 
 ```
 salt = random_bytes(20);
 return argon2(password, salt, 3, 4096, 1);
 ```
 
-> Warning: The MOO is single threaded in most cases, and this function can take significant time depending on how you call it. While it is working, nothing else is going to be happening on your MOO. It is possible to build the server with the `THREAD_ARGON2` option which will mitigate lag. This has major caveats however, see the section below on `argon2_verify` for more information.
+> Warning: The MOO is single threaded in most cases, and this function can take significant time depending on how you
+> call it. While it is working, nothing else is going to be happening on your MOO. It is possible to build the server
+> with
+> the `THREAD_ARGON2` option which will mitigate lag. This has major caveats however, see the section below on
+`argon2_verify` for more information.
 
 ### Function: `argon2_verify`
 
@@ -952,26 +1088,36 @@ Returns 1 if the two match or 0 if they don't.
 
 This is a more secure way to hash passwords than the `crypt()` builtin.
 
-> Note: ToastCore defines some sane defaults for how to utilize `argon2` and `argon2_verify`. You can `@grep argon2` from within ToastCore to find these.
+> Note: ToastCore defines some sane defaults for how to utilize `argon2` and `argon2_verify`. You can `@grep argon2`
+> from within ToastCore to find these.
 
-> Warning: It is possible to build the server with the `THREAD_ARGON2` option. This will enable this built-in to run in a background thread and mitigate lag that these functions can cause. However, this comes with some major caveats. `do_login_command` (where you will typically be verifying passwords) cannot be suspended. Since threading implicitly suspends the MOO task, you won't be able to directly use Argon2 in do_login_command. Instead, you'll have to devise a new solution for logins that doesn't directly involve calling Argon2 in do_login_command.
+> Warning: It is possible to build the server with the `THREAD_ARGON2` option. This will enable this built-in to run in
+> a background thread and mitigate lag that these functions can cause. However, this comes with some major caveats.
+`do_login_command` (where you will typically be verifying passwords) cannot be suspended. Since threading implicitly
+> suspends the MOO task, you won't be able to directly use Argon2 in do_login_command. Instead, you'll have to devise a
+> new solution for logins that doesn't directly involve calling Argon2 in do_login_command.
 
 > Note: More information on Argon2 can be found in the [Argon2 Github](https://github.com/P-H-C/phc-winner-argon2).
 
 ### Functions: `string_hash`, `binary_hash`
 
-string_hash -- Returns a string encoding the result of applying the SHA256 cryptographically secure hash function to the contents of the string text or the binary string bin-string.
+string_hash -- Returns a string encoding the result of applying the SHA256 cryptographically secure hash function to the
+contents of the string text or the binary string bin-string.
 
-binary_hash -- Returns a string encoding the result of applying the SHA256 cryptographically secure hash function to the contents of the string text or the binary string bin-string.
+binary_hash -- Returns a string encoding the result of applying the SHA256 cryptographically secure hash function to the
+contents of the string text or the binary string bin-string.
 
 ```
 str `string_hash`(str string, [, algo [, binary]])
 str `binary_hash`(str bin-string, [, algo [, binary])
 ```
 
-If algo is provided, it specifies the hashing algorithm to use. "MD5", "SHA1", "SHA224", "SHA256", "SHA384", "SHA512" and "RIPEMD160" are all supported. If binary is provided and true, the result is in MOO binary string format; by default the result is a hexadecimal string.
+If algo is provided, it specifies the hashing algorithm to use. "MD5", "SHA1", "SHA224", "SHA256", "SHA384", "SHA512"
+and "RIPEMD160" are all supported. If binary is provided and true, the result is in MOO binary string format; by default
+the result is a hexadecimal string.
 
-Note that the MD5 hash algorithm is broken from a cryptographic standpoint, as is SHA1. Both are included for interoperability with existing applications (both are still popular).
+Note that the MD5 hash algorithm is broken from a cryptographic standpoint, as is SHA1. Both are included for
+interoperability with existing applications (both are still popular).
 
 All supported hash functions have the property that, if
 
@@ -981,7 +1127,10 @@ then, almost certainly,
 
 `equal(x, y)`
 
-This can be useful, for example, in certain networking applications: after sending a large piece of text across a connection, also send the result of applying string_hash() to the text; if the destination site also applies string_hash() to the text and gets the same result, you can be quite confident that the large text has arrived unchanged.
+This can be useful, for example, in certain networking applications: after sending a large piece of text across a
+connection, also send the result of applying string_hash() to the text; if the destination site also applies
+string_hash() to the text and gets the same result, you can be quite confident that the large text has arrived
+unchanged.
 
 ### Functions: `string_hmac`, `binary_hmac`
 
@@ -990,7 +1139,10 @@ str string_hmac(str text, str key [, str algo [, binary]])
 str binary_hmac(str bin-string, str key [, str algo [, binary]])
 ```
 
-Returns a string encoding the result of applying the HMAC-SHA256 cryptographically secure HMAC function to the contents of the string text or the binary string bin-string with the specified secret key. If algo is provided, it specifies the hashing algorithm to use. Currently, only "SHA1" and "SHA256" are supported. If binary is provided and true, the result is in MOO binary string format; by default the result is a hexadecimal string.
+Returns a string encoding the result of applying the HMAC-SHA256 cryptographically secure HMAC function to the contents
+of the string text or the binary string bin-string with the specified secret key. If algo is provided, it specifies the
+hashing algorithm to use. Currently, only "SHA1" and "SHA256" are supported. If binary is provided and true, the result
+is in MOO binary string format; by default the result is a hexadecimal string.
 
 All cryptographically secure HMACs have the property that, if
 
@@ -1004,7 +1156,8 @@ and furthermore,
 
 `equal(a, b)`
 
-This can be useful, for example, in applications that need to verify both the integrity of the message (the text) and the authenticity of the sender (as demonstrated by the possession of the secret key).
+This can be useful, for example, in applications that need to verify both the integrity of the message (the text) and
+the authenticity of the sender (as demonstrated by the possession of the secret key).
 
 ## Operations on Lists
 
@@ -1031,9 +1184,12 @@ int is_member(ANY value, LIST list [, INT case-sensitive])
 
 Returns true if there is an element of list that is completely indistinguishable from value.
 
-This is much the same operation as " `value in list`" except that, unlike `in`, the `is_member()` function does not treat upper- and lower-case characters in strings as equal. This treatment of strings can be controlled with the `case-sensitive` argument; setting `case-sensitive` to false will effectively disable this behavior.
+This is much the same operation as " `value in list`" except that, unlike `in`, the `is_member()` function does not
+treat upper- and lower-case characters in strings as equal. This treatment of strings can be controlled with the
+`case-sensitive` argument; setting `case-sensitive` to false will effectively disable this behavior.
 
-Raises E_ARGS if two values are given or if more than three arguments are given. Raises E_TYPE if the second argument is not a list. Otherwise returns the index of `value` in `list`, or 0 if it's not in there.
+Raises E_ARGS if two values are given or if more than three arguments are given. Raises E_TYPE if the second argument is
+not a list. Otherwise returns the index of `value` in `list`, or 0 if it's not in there.
 
 ```
 is_member(3, {3, 10, 11})                  => 1
@@ -1067,7 +1223,8 @@ list `listinsert`(list list, value [, int index])
 list `listappend` (list list, value [, int index])
 ```
 
-`listinsert()` and `listappend()` add value before and after (respectively) the existing element with the given index, if provided.
+`listinsert()` and `listappend()` add value before and after (respectively) the existing element with the given index,
+if provided.
 
 The following three expressions always have the same value:
 
@@ -1077,7 +1234,9 @@ listappend(list, element, index - 1)
 {@list[1..index - 1], element, @list[index..length(list)]}
 ```
 
-If index is not provided, then `listappend()` adds the value at the end of the list and `listinsert()` adds it at the beginning; this usage is discouraged, however, since the same intent can be more clearly expressed using the list-construction expression, as shown in the examples below.
+If index is not provided, then `listappend()` adds the value at the end of the list and `listinsert()` adds it at the
+beginning; this usage is discouraged, however, since the same intent can be more clearly expressed using the
+list-construction expression, as shown in the examples below.
 
 ```
 x = {1, 2, 3};
@@ -1119,7 +1278,8 @@ x = {"foo", "bar", "baz"};
 listset(x, "mumble", 2)   =>   {"foo", "mumble", "baz"}
 ```
 
-This function exists primarily for historical reasons; it was used heavily before the server supported indexed assignments like `x[i] = v`. New code should always use indexed assignment instead of `listset()` wherever possible.
+This function exists primarily for historical reasons; it was used heavily before the server supported indexed
+assignments like `x[i] = v`. New code should always use indexed assignment instead of `listset()` wherever possible.
 
 ### Functions: `setadd`, `setremove`
 
@@ -1132,7 +1292,9 @@ list setadd(list list, value)
 list setremove(list list, value)
 ```
 
-`setadd()` only adds value if it is not already an element of list; list is thus treated as a mathematical set. value is added at the end of the resulting list, if at all. Similarly, `setremove()` returns a list identical to list if value is not an element. If value appears more than once in list, only the first occurrence is removed in the returned copy.
+`setadd()` only adds value if it is not already an element of list; list is thus treated as a mathematical set. value is
+added at the end of the resulting list, if at all. Similarly, `setremove()` returns a list identical to list if value is
+not an element. If value appears more than once in list, only the first occurrence is removed in the returned copy.
 
 ```
 setadd({1, 2, 3}, 3)         =>   {1, 2, 3}
@@ -1163,11 +1325,14 @@ reverse("asdf") => "fdsa"
 list slice(LIST alist [, INT | LIST | STR index, ANY default map value])
 ```
 
-Return the index-th elements of alist. By default, index will be 1. If index is a list of integers, the returned list will have those elements from alist. This is the built-in equivalent of LambdaCore's $list_utils:slice verb.
+Return the index-th elements of alist. By default, index will be 1. If index is a list of integers, the returned list
+will have those elements from alist. This is the built-in equivalent of LambdaCore's $list_utils:slice verb.
 
 If alist is a list of maps, index can be a string indicating a key to return from each map in alist.
 
-If default map value is specified, any maps not containing the key index will have default map value returned in their place. This is useful in situations where you need to maintain consistency with a list index and can't have gaps in your return list.
+If default map value is specified, any maps not containing the key index will have default map value returned in their
+place. This is useful in situations where you need to maintain consistency with a list index and can't have gaps in your
+return list.
 
 Examples:
 
@@ -1188,7 +1353,10 @@ Sorts list either by keys or using the list itself.
 
 When sorting list by itself, you can use an empty list ({}) for keys to specify additional optional arguments.
 
-If natural sort order is true, strings containing multi-digit numbers will consider those numbers to be a single character. So, for instance, this means that 'x2' would come before 'x11' when sorted naturally because 2 is less than 11. This argument defaults to 0.
+If natural sort order is true, strings containing multi-digit numbers will consider those numbers to be a single
+character. So, for instance, this means that 'x2' would come before 'x11' when sorted naturally because 2 is less than
+
+11. This argument defaults to 0.
 
 If reverse is true, the sort order is reversed. This argument defaults to 0.
 
@@ -1268,4 +1436,5 @@ mapdelete(x, "bar")   ⇒   ["baz" -> 3, "foo" -> 1]
 int maphaskey(MAP map, STR key)
 ```
 
-Returns 1 if key exists in map. When not dealing with hundreds of keys, this function is faster (and easier to read) than something like: !(x in mapkeys(map))
+Returns 1 if key exists in map. When not dealing with hundreds of keys, this function is faster (and easier to read)
+than something like: !(x in mapkeys(map))

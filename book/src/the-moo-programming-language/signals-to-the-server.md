@@ -1,9 +1,14 @@
 # Signals to the Server
 
-The server is able to intercept [signals](https://en.wikipedia.org/wiki/Signal_(IPC)) from the operating system and perform certain actions, a list of which can be found below. Two signals, USR1 and USR2, can be processed from within the MOO database. When SIGUSR1 or SIGUSR2 is received, the server will call `#0:handle_signal()` with the name of the signal as the only argument. If this verb returns a true value, it is assumed that the database handled it and no further action is taken. If the verb returns a negative value, the server will proceed to execute the default action for that signal. The following is a list of signals and their default actions:
+The server is able to intercept [signals](https://en.wikipedia.org/wiki/Signal_(IPC)) from the operating system and
+perform certain actions, a list of which can be found below. Two signals, USR1 and USR2, can be processed from within
+the MOO database. When SIGUSR1 or SIGUSR2 is received, the server will call `#0:handle_signal()` with the name of the
+signal as the only argument. If this verb returns a true value, it is assumed that the database handled it and no
+further action is taken. If the verb returns a negative value, the server will proceed to execute the default action for
+that signal. The following is a list of signals and their default actions:
 
 | Signal | Action                                               |
-| ------ | ---------------------------------------------------- |
+|--------|------------------------------------------------------|
 | HUP    | Panic the server.                                    |
 | ILL    | Panic the server.                                    |
 | QUIT   | Panic the server.                                    |
@@ -14,7 +19,9 @@ The server is able to intercept [signals](https://en.wikipedia.org/wiki/Signal_(
 | USR1   | Reopen the log file.                                 |
 | USR2   | Schedule a checkpoint to happen as soon as possible. |
 
-For example, imagine you're a system administrator logged into the machine running the MOO. You want to shut down the MOO server, but you'd like to give players the opportunity to say goodbye to one another rather than immediately shutting the server down. You can do so by intercepting a signal in the database and invoking the @shutdown command.
+For example, imagine you're a system administrator logged into the machine running the MOO. You want to shut down the
+MOO server, but you'd like to give players the opportunity to say goodbye to one another rather than immediately
+shutting the server down. You can do so by intercepting a signal in the database and invoking the @shutdown command.
 
 ```
 @prog #0:handle_signal
