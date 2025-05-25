@@ -87,7 +87,7 @@
 - : A value between -1 and 1 `value`
 
 **Returns:** The arc sine in radians as a float
-**Note:** Raises E_ARGS if the value is outside the range [-1, 1].
+**Note:** Raises E_ARGS if the value is outside the range \[-1, 1\].
 
 ### `acos`
 
@@ -97,7 +97,7 @@
 - : A value between -1 and 1 `value`
 
 **Returns:** The arc cosine in radians as a float
-**Note:** Raises E_ARGS if the value is outside the range [-1, 1].
+**Note:** Raises E_ARGS if the value is outside the range \[-1, 1\].
 
 ### `atan`
 

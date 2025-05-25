@@ -16,7 +16,7 @@ because the [introduction](./introduction.md) section gets into more
 detail, but:
 
 *mooR* -- which stands for "moo-reconstructed" or "moo - rewrite" or
-"moo [in] Rust" or "moo [by] Ryan" -- is an authoring system for
+"moo \[in\] Rust" or "moo \[by\] Ryan" -- is an authoring system for
 multiuser / multiplayer online communities. It is both a fully
 compatible rewrite of LambdaMOO -- a pioneering super-flexible
 object-oriented "MUD" server from the 1990s -- and a modernized and

@@ -481,7 +481,7 @@ Note that there are no legal indices for the empty string or list, since there a
 length of the empty string or list).
 
 Fine point: The ^ and $ expressions return the first/last index/key of the expression just before the nearest
-enclosing [...] indexing or subranging brackets. For example:
+enclosing \[...\] indexing or subranging brackets. For example:
 
 ```
 "frob"[{3, 2, 4}[^]]     =>  "o"
@@ -666,7 +666,7 @@ The assignment expression itself returns the value of result-expr.
 > Note: The use of preceding a list with the @ symbol is covered in just a bit.
 
 For the following examples, assume that `l` initially contains the list `{1, 2, 3}`, that `m` initially contains the
-map [1 -> "one", 2 -> "two", 3 -> "three"] and that `s` initially contains the string "foobar":
+map \[1 -> "one", 2 -> "two", 3 -> "three"\] and that `s` initially contains the string "foobar":
 
 ```
 l[5..6] = {7, 8}       =>   E_RANGE (error)
