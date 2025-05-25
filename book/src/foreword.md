@@ -1,6 +1,6 @@
 # Foreword
 
-Welcome to the manual for mooR. 
+Welcome to the manual for mooR.
 
 First, credit where credit is due: The documentation provided here is
 a product of the hard work of many authors over multiple decades,
@@ -38,19 +38,19 @@ with a fork of the original LambdaMOO (as e.g. ToastStunt had done),
 but with a brand new implementation which fulfilled the following
 requirements:
 
-  * That it be built from day 1 to be able to meet the expectations of
-    today's users to provide "rich" content (images, styled text,
-    video) and not require a custom client. So to start with the idea
-    that the user would be connecting by a web browser, and to make
-    the platform and core database with that in mind.
-  * That it be built from day 1 with modern computers in mind -- to
-    take advantage of multiple threads, on multiple cores, potentially
-    distributed across multiple machines in a datacentre.
-  * That it be built in such a way that it would be easier to extend
-    and add behaviours -- new builtin functions, new protocols for
-    connecting, new integrations to outside services, and even new
-    languages (beyond "MOOcode") for writing verbs. And so be built in
-    a modular fashion.
+* That it be built from day 1 to be able to meet the expectations of
+  today's users to provide "rich" content (images, styled text,
+  video) and not require a custom client. So to start with the idea
+  that the user would be connecting by a web browser, and to make
+  the platform and core database with that in mind.
+* That it be built from day 1 with modern computers in mind -- to
+  take advantage of multiple threads, on multiple cores, potentially
+  distributed across multiple machines in a datacentre.
+* That it be built in such a way that it would be easier to extend
+  and add behaviours -- new builtin functions, new protocols for
+  connecting, new integrations to outside services, and even new
+  languages (beyond "MOOcode") for writing verbs. And so be built in
+  a modular fashion.
 
 But why did I start from LambdaMOO -- instead of building something
 new from scratch? Nostalgia could be one explanation, but the primary
