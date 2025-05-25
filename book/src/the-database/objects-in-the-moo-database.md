@@ -1,6 +1,6 @@
 # Objects in the MOO Database
 
-Objects encapsulate state and behavior – as they do in other object-oriented programming languages. Permanent objects
+Objects encapsulate state and behavior – as they do in other object-oriented programming languages. Objects
 are also used to represent objects in the virtual reality, like people, rooms, exits, and other concrete things. Because
 of this, MOO makes a bigger deal out of creating objects than it does for other kinds of values, like integers.
 
@@ -224,7 +224,8 @@ as the result of the erroneous operation.
 > Note: The `d` bit exists only for historical reasons; it used to be the only way for MOO code to catch and handle
 > errors. With the introduction of the `try` -`except` statement and the error-catching expression, the `d` bit is no
 > longer useful. All new verbs should have the `d` bit set, using the newer facilities for error handling if desired.
-> Over time, old verbs written assuming the `d` bit would not be set should be changed to use the new facilities instead.
+> Over time, old verbs written assuming the `d` bit would not be set should be changed to use the new facilities
+> instead.
 
 In addition to an owner and some permission bits, every verb has three _argument specifiers_, one each for the
 `direct object`, the `preposition`, and the `indirect object`. The direct and indirect specifiers are each drawn from
