@@ -154,3 +154,31 @@ any incoming line that
 will result in a call to $do_command() provided that verb exists and is executable. If this verb suspends or returns a
 true value, then processing of that line ends at this point, otherwise, whether the verb returned false or did not exist
 in the first place, the remainder of the builtin parsing process is invoked.
+
+## Outbound Network Connections via `curl_worker`
+
+Classic LambdaMOO provided a built-in function `open_network_connection()` for making outbound network connections. mooR
+does things
+differently. Instead of a built-in function, mooR uses separate companion processes called _workers_ to handle
+things like outbound network connections. In particular, mooR supports outbound HTTP connections via the `curl_worker`
+worker. This worker is a separate process that can be used to make outbound HTTP requests, and it is designed to be
+used in conjunction with the `worker_request()` function to perform tasks that require network access, such as fetching
+data from external APIs or sending notifications.
+
+The rationale for this design is that it allows the MOO server to remain responsive and not block while waiting for
+network.
+
+But even more so, for security reasons, since the worker can be run with different permissions than the MOO server
+itself and even
+live in a different container or virtual machine or even in a different physical computer or cluster of computers.
+
+`worker_request()` is used to send a request to the `curl_worker` to perform an HTTP request like so:
+
+```moo
+worker_request("curl_worker", { "GET", "https://example.com/api/data", { "Accept": "application/json" } })
+```
+
+In this example, the `curl_worker` is being asked to perform a GET request to the specified URL, with an optional header
+indicating that the response should be in JSON format. The `worker_request()` function will then suspend the current
+task
+until the worker completes the request and then wake it to return the result.

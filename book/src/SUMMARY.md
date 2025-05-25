@@ -34,12 +34,9 @@
 - [Running a mooR Server](./the-system/running-the-server.md)
     - [Server Configuration](the-system/server-configuration.md)
     - [Server Assumptions About the Database](the-system/server-assumptions-about-the-database.md)
-    - [Server Commands and Database Assumptions](the-system/server-commands-and-database-assumptions.md)
+    - [Telnet-Host Commands and Assumptions](the-system/telnet-host-commands-and-assumptions.md)
     - [Networking](./the-moo-programming-language/networking.md)
-    - [The First Tasks Run By the Server](the-system/the-first-tasks-run-by-the-server.md)
     - [Controlling the Execution of Tasks](the-system/controlling-the-execution-of-tasks.md)
-    - [Controlling the Handling of Aborted Tasks](./the-moo-programming-language/controlling-the-handling-of-aborted-tasks.md)
-    - [Restricting Access to Built-in Properties and Functions](the-system/restricting-access-to-built-in-properties-and-functions.md)
     - [mooR's extensions](./extensions.md)
 - [MOO Resources](./moo-resources.md)
 
