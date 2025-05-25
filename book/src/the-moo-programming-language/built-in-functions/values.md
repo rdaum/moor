@@ -1,64 +1,68 @@
 ## Type Information Functions
 
 ### `typeof`
+**Description**:   Returns the type code of a value.
+**Arguments**:
 
-Returns the type code of a value.
-**Description:****Arguments:**
 
 - `value`: The value to get the type of
 
 **Returns:** An integer representing the type code of the value
 
 ### `length`
+**Description**:   Returns the length of a sequence (string, list, map).
+**Arguments**:
 
-Returns the length of a sequence (string, list, map).
-**Description:****Arguments:**
 
 - `sequence`: The sequence to measure
 
-**Returns:** An integer representing the length of the sequence
+**Returns:** An integer representing the length of the sequence  
 **Note:** Will raise an error if the value is not a sequence type.
 
 ## Type Conversion Functions
 
 ### `tostr`
 
-Converts value(s) to a string representation.
-**Description:****Arguments:**
+**Description**: Converts value(s) to a string representation.  
+**Arguments**:
+
 
 - `value1, value2, ...`: One or more values to convert to string
 
-**Returns:** A string representation of the concatenated values
+**Returns:** A string representation of the concatenated values  
 **Note:** If multiple arguments are provided, they are concatenated together.
 
 ### `tosym`
 
-Converts a scalar value to a symbol.
-**Description:****Arguments:**
+**Description**: Converts a scalar value to a symbol.  
+**Arguments**:
+
 
 - `value`: The value to convert (must be a string, boolean, error, or symbol)
 
-**Returns:** A symbol representing the value
+**Returns:** A symbol representing the value  
 **Note:** Will raise E_TYPE if the value cannot be converted to a symbol.
 
 ### `toliteral`
 
-Converts a value to its literal string representation.
-**Description:****Arguments:**
+**Description**: Converts a value to its literal string representation.  
+**Arguments**:
+
 
 - `value`: The value to convert
 
-**Returns:** A string containing the literal representation of the value
+**Returns:** A string containing the literal representation of the value  
 **Note:** This produces a string that could be evaluated to recreate the original value.
 
 ### `toint`
 
-Converts a value to an integer.
-**Description:****Arguments:**
+**Description**: Converts a value to an integer.  
+**Arguments**:
+
 
 - `value`: The value to convert (must be a number, object, string, or error)
 
-**Returns:** The integer representation of the value
+**Returns:** The integer representation of the value  
 **Note:** String conversion parses the string as a number; invalid strings convert to 0.
 
 ### `tonum`
@@ -67,30 +71,33 @@ Alias for `toint`. **Description:**
 
 ### `toobj`
 
-Converts a value to an object reference.
-**Description:****Arguments:**
+**Description**: Converts a value to an object reference.  
+**Arguments**:
+
 
 - `value`: The value to convert (must be a number, string, or object)
 
-**Returns:** An object reference
+**Returns:** An object reference  
 **Note:** For strings, accepts formats like "123" or "#123". Invalid strings convert to object #0.
 
 ### `tofloat`
 
-Converts a value to a floating-point number.
-**Description:****Arguments:**
+**Description**: Converts a value to a floating-point number.  
+**Arguments**:
+
 
 - `value`: The value to convert (must be a number, string, or error)
 
-**Returns:** The floating-point representation of the value
+**Returns:** The floating-point representation of the value  
 **Note:** String conversion parses the string as a number; invalid strings convert to 0.0.
 
 ## Comparison Functions
 
 ### `equal`
 
-Performs a case-sensitive equality comparison between two values.
-**Description:****Arguments:**
+**Description**: Performs a case-sensitive equality comparison between two values.  
+**Arguments**:
+
 
 - `value1`: First value to compare
 - `value2`: Second value to compare
@@ -101,8 +108,9 @@ Performs a case-sensitive equality comparison between two values.
 
 ### `value_bytes`
 
-Returns the size of a value in bytes.
-**Description:****Arguments:**
+**Description**: Returns the size of a value in bytes.  
+**Arguments**:
+
 
 - `value`: The value to measure
 
@@ -110,18 +118,20 @@ Returns the size of a value in bytes.
 
 ### `object_bytes`
 
-Returns the size of an object in bytes.
-**Description:****Arguments:**
+**Description**: Returns the size of an object in bytes.  
+**Arguments**:
+
 
 - `object`: The object to measure
 
-**Returns:** The size of the object in bytes
+**Returns:** The size of the object in bytes  
 **Note:** This includes all properties, verbs, and other object data.
 
 ### `value_hash`
 
-Computes an MD5 hash of a value's literal representation.
-**Description:****Arguments:**
+**Description**: Computes an MD5 hash of a value's literal representation.  
+**Arguments**:
+
 
 - `value`: The value to hash
 
@@ -134,9 +144,9 @@ defaults or errors when conversion isn't possible.
 
 ### `error_message`
 
-Returns the error message associated with an error value.
+**Description**: Returns the error message associated with an error value.  
+**Arguments**:
 
-**Description:****Arguments:**
 
 - `error`: The error value to get the message from
 
@@ -144,9 +154,9 @@ Returns the error message associated with an error value.
 
 ### `error_code`
 
-Strips off the message from an error value and returns just the error without it.
+**Description**: Strips off the message from an error value and returns just the error without it.  
+**Arguments**:
 
-**Description:****Arguments:**
 
 - `error`: The error value to get the code from
 

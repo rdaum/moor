@@ -2,7 +2,7 @@
 
 ### `abs`
 
-**Description:** Returns the absolute value of a number.
+**Description:** Returns the absolute value of a number.  
 **Arguments:**
 
 - `number`: An integer or float value
@@ -11,37 +11,37 @@
 
 ### `min`
 
-**Description:** Returns the smallest value from the provided arguments.
+**Description:** Returns the smallest value from the provided arguments.  
 **Arguments:**
 
 - `value1, value2, ...`: Two or more values of the same type
 
-**Returns:** The minimum value from the provided arguments
+**Returns:** The minimum value from the provided arguments  
 **Note:** All arguments must be of the same type.
 
 ### `max`
 
-**Description:** Returns the largest value from the provided arguments.
+**Description:** Returns the largest value from the provided arguments.  
 **Arguments:**
 
 - `value1, value2, ...`: Two or more values of the same type
 
-**Returns:** The maximum value from the provided arguments
+**Returns:** The maximum value from the provided arguments  
 **Note:** All arguments must be of the same type.
 
 ### `random`
 
-**Description:** Generates a random integer.
+**Description:** Generates a random integer.  
 **Arguments:**
 
 - `limit`: Optional maximum value (inclusive)
 
-**Returns:** A random integer between 1 and the limit (or between 1 and 2,147,483,647 if no limit is provided)
+**Returns:** A random integer between 1 and the limit (or between 1 and 2,147,483,647 if no limit is provided)  
 **Note:** If a limit is provided, it must be a positive integer.
 
 ### `floatstr`
 
-**Description:** Formats a floating-point number as a string with specified precision.
+**Description:** Formats a floating-point number as a string with specified precision.  
 **Arguments:**
 
 - `number`: The float to format
@@ -54,7 +54,7 @@
 
 ### `sin`
 
-**Description:** Calculates the sine of an angle (in radians).
+**Description:** Calculates the sine of an angle (in radians).  
 **Arguments:**
 
 - `angle`: Angle in radians
@@ -63,7 +63,7 @@
 
 ### `cos`
 
-**Description:** Calculates the cosine of an angle (in radians).
+**Description:** Calculates the cosine of an angle (in radians).  
 **Arguments:**
 
 - `angle`: Angle in radians
@@ -72,7 +72,7 @@
 
 ### `tan`
 
-**Description:** Calculates the tangent of an angle (in radians).
+**Description:** Calculates the tangent of an angle (in radians).  
 **Arguments:**
 
 - `angle`: Angle in radians
@@ -81,27 +81,27 @@
 
 ### `asin`
 
-**Description:** Calculates the arc sine (inverse sine) of a value.
+**Description:** Calculates the arc sine (inverse sine) of a value.  
 **Arguments:**
 
 - : A value between -1 and 1 `value`
 
-**Returns:** The arc sine in radians as a float
+**Returns:** The arc sine in radians as a float  
 **Note:** Raises E_ARGS if the value is outside the range \[-1, 1\].
 
 ### `acos`
 
-**Description:** Calculates the arc cosine (inverse cosine) of a value.
+**Description:** Calculates the arc cosine (inverse cosine) of a value.  
 **Arguments:**
 
 - : A value between -1 and 1 `value`
 
-**Returns:** The arc cosine in radians as a float
+**Returns:** The arc cosine in radians as a float  
 **Note:** Raises E_ARGS if the value is outside the range \[-1, 1\].
 
 ### `atan`
 
-**Description:** Calculates the arc tangent of y/x.
+**Description:** Calculates the arc tangent of y/x.  
 **Arguments:**
 
 - : The x coordinate `x`
@@ -113,7 +113,7 @@
 
 ### `sinh`
 
-**Description:** Calculates the hyperbolic sine of a value.
+**Description:** Calculates the hyperbolic sine of a value.  
 **Arguments:**
 
 - : The input value `value`
@@ -122,7 +122,7 @@
 
 ### `cosh`
 
-**Description:** Calculates the hyperbolic cosine of a value.
+**Description:** Calculates the hyperbolic cosine of a value.  
 **Arguments:**
 
 - : The input value `value`
@@ -131,7 +131,7 @@
 
 ### `tanh`
 
-**Description:** Calculates the hyperbolic tangent of a value.
+**Description:** Calculates the hyperbolic tangent of a value.  
 **Arguments:**
 
 - : The input value `value`
@@ -142,7 +142,7 @@
 
 ### `exp`
 
-**Description:** Calculates e raised to the power of the input value.
+**Description:** Calculates e raised to the power of the input value.  
 **Arguments:**
 
 - : The exponent `value`
@@ -151,39 +151,39 @@
 
 ### `log`
 
-**Description:** Calculates the natural logarithm (base e) of a value.
+**Description:** Calculates the natural logarithm (base e) of a value.  
 **Arguments:**
 
 - : A positive number `value`
 
-**Returns:** The natural logarithm as a float
+**Returns:** The natural logarithm as a float  
 **Note:** Raises E_ARGS if the value is less than or equal to 0.
 
 ### `log10`
 
-**Description:** Calculates the base-10 logarithm of a value.
+**Description:** Calculates the base-10 logarithm of a value.  
 **Arguments:**
 
 - : A positive number `value`
 
-**Returns:** The base-10 logarithm as a float
+**Returns:** The base-10 logarithm as a float  
 **Note:** Raises E_ARGS if the value is less than or equal to 0.
 
 ### `sqrt`
 
-**Description:** Calculates the square root of a value.
+**Description:** Calculates the square root of a value.  
 **Arguments:**
 
 - : A non-negative number `value`
 
-**Returns:** The square root as a float
+**Returns:** The square root as a float  
 **Note:** Raises E_ARGS if the value is negative.
 
 ## Rounding Functions
 
 ### `ceil`
 
-**Description:** Rounds a value up to the nearest integer.
+**Description:** Rounds a value up to the nearest integer.  
 **Arguments:**
 
 - : The value to round up `value`
@@ -192,7 +192,7 @@
 
 ### `floor`
 
-**Description:** Rounds a value down to the nearest integer.
+**Description:** Rounds a value down to the nearest integer.  
 **Arguments:**
 
 - : The value to round down `value`
@@ -201,7 +201,7 @@
 
 ### `trunc`
 
-**Description:** Truncates a value toward zero.
+**Description:** Truncates a value toward zero.  
 **Arguments:**
 
 - : The value to truncate `value`
