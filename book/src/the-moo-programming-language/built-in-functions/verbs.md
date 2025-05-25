@@ -2,7 +2,7 @@
 
 ### `verb_info`
 
-**Description:** Retrieves basic information about a verb on an object.
+**Description:** Retrieves basic information about a verb on an object.  
 **Arguments:**
 
 - : The object that has the verb `object`
@@ -14,11 +14,11 @@
 2. A string representing the permission flags: 'r' (read), 'w' (write), 'x' (execute), 'd' (debug)
 3. A string containing the verb names (aliases) separated by spaces
 
-Requires read permission on the verb. **Note:**
+**Note:** Requires read permission on the verb. 
 
 ### `set_verb_info`
 
-**Description:** Changes the permission information for a verb.
+**Description:** Changes the permission information for a verb.  
 **Arguments:**
 
 - : The object with the verb to modify `object`
@@ -30,14 +30,14 @@ Requires read permission on the verb. **Note:**
 
 `info`
 
-**Returns:** `none`
-Requires appropriate permissions to modify the verb. **Note:**
+**Returns:** `none`  
+**Note:** Requires appropriate permissions to modify the verb.
 
 ## Verb Arguments Functions
 
 ### `verb_args`
 
-**Description:** Retrieves information about a verb's argument specification.
+**Description:** Retrieves information about a verb's argument specification.  
 **Arguments:**
 
 - : The object that has the verb `object`
@@ -49,11 +49,11 @@ Requires appropriate permissions to modify the verb. **Note:**
 2. The preposition (e.g., "with", "at", "in front of")
 3. The indirect object specification (e.g., "this", "none", "any")
 
-Requires read permission on the verb. **Note:**
+**Note:** Requires read permission on the verb.
 
 ### `set_verb_args`
 
-**Description:** Changes the argument specification for a verb.
+**Description:** Changes the argument specification for a verb.  
 **Arguments:**
 
 - : The object with the verb to modify `object`
@@ -66,13 +66,14 @@ Requires read permission on the verb. **Note:**
 `args`
 
 **Returns:** `none`
-Requires appropriate permissions to modify the verb. **Note:**
+
+**Note:** Requires appropriate permissions to modify the verb. 
 
 ## Verb Code Functions
 
 ### `verb_code`
 
-**Description:** Retrieves the source code of a verb.
+**Description:** Retrieves the source code of a verb.  
 **Arguments:**
 
 - : The object that has the verb `object`
@@ -80,62 +81,62 @@ Requires appropriate permissions to modify the verb. **Note:**
 - : Optional boolean indicating whether to fully parenthesize the code (default: false) `fully-paren`
 - `indent`: Optional integer specifying indentation amount (default: 0)
 
-**Returns:** A list of strings, each representing a line of the verb's source code
-Requires read permission on the verb and programmer bit. **Note:**
+**Returns:** A list of strings, each representing a line of the verb's source code  
+**Note:** Requires read permission on the verb and programmer bit. 
 
 ### `set_verb_code`
 
-**Description:** Changes the source code of a verb.
+**Description:** Changes the source code of a verb.  
 **Arguments:**
 
 - : The object with the verb to modify `object`
 - : Either the verb name or a positive integer representing the verb's position (1-based) `verb-desc`
 - : A list of strings, each representing a line of the verb's source code `code`
 
-**Returns:** If successful, returns `none`. If compilation fails, returns a list of error messages.
-Requires appropriate permissions to modify the verb and programmer bit. **Note:**
+**Returns:** If successful, returns `none`. If compilation fails, returns a list of error messages.  
+**Note:** Requires appropriate permissions to modify the verb and programmer bit.
 
 ## Verb Management Functions
 
 ### `add_verb`
 
-**Description:** Adds a new verb to an object.
+**Description:** Adds a new verb to an object.  
 **Arguments:**
 
 - : The object to add the verb to `object`
 - : A list containing permission information (same format as in ) `info`set_verb_info``
 - : A list containing argument specifications (same format as in ) `args`set_verb_args``
 
-**Returns:** `none`
-Requires appropriate permissions to add verbs to the object and programmer bit. **Note:**
+**Returns:** `none`  
+**Note:** Requires appropriate permissions to add verbs to the object and programmer bit. 
 
 ### `delete_verb`
 
-**Description:** Removes a verb from an object.
+**Description:** Removes a verb from an object.  
 **Arguments:**
 
 - : The object to remove the verb from `object`
 - : Either the verb name or a positive integer representing the verb's position (1-based) `verb-desc`
 
-**Returns:** `none`
-Requires ownership of the verb or the object and programmer bit. **Note:**
+**Returns:** `none`  
+**Note:** Requires ownership of the verb or the object and programmer bit. 
 
 ## Advanced Verb Functions
 
 ### `disassemble`
 
-**Description:** Provides a detailed breakdown of the compiled bytecode for a verb.
+**Description:** Provides a detailed breakdown of the compiled bytecode for a verb.  
 **Arguments:**
 
 - : The object that has the verb `object`
 - : Either the verb name or a positive integer representing the verb's position (1-based) `verb-desc`
 
-**Returns:** A list of strings showing the internal compiled representation of the verb
-Output format is not standardized and may change between versions. **Note:**
+**Returns:** A list of strings showing the internal compiled representation of the verb  
+**Note:** Output format is not standardized and may change between versions. 
 
 ### `respond_to`
 
-**Description:** Checks if an object has a verb with a specific name.
+**Description:** Checks if an object has a verb with a specific name.  
 **Arguments:**
 
 - : The object to check `object`

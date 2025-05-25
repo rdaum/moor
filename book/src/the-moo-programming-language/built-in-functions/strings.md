@@ -2,7 +2,7 @@
 
 ### `strsub`
 
-**Description:** Substitutes all occurrences of one string with another within a given string.
+**Description:** Substitutes all occurrences of one string with another within a given string.  
 **Arguments:**
 
 - : The string to perform substitutions on `subject`
@@ -11,11 +11,12 @@
 - : Optional boolean (default: false) indicating if case sensitivity should be used `case-matters`
 
 **Returns:** A new string with all substitutions made
-If is an empty string, the original string is returned unchanged. **Note:** `what`
+If is an empty string, the original string is returned unchanged.  
+**Note:** `what`
 
 ### `index`
 
-**Description:** Finds the first occurrence of a substring within a string.
+**Description:** Finds the first occurrence of a substring within a string.  
 **Arguments:**
 
 - : The string to search in `subject`
@@ -26,7 +27,7 @@ If is an empty string, the original string is returned unchanged. **Note:** `wha
 
 ### `rindex`
 
-**Description:** Finds the last occurrence of a substring within a string.
+**Description:** Finds the last occurrence of a substring within a string.  
 **Arguments:**
 
 - : The string to search in `subject`
@@ -37,7 +38,7 @@ If is an empty string, the original string is returned unchanged. **Note:** `wha
 
 ### `strcmp`
 
-**Description:** Compares two strings lexicographically.
+**Description:** Compares two strings lexicographically.  
 **Arguments:**
 
 - : First string to compare `str1`
@@ -50,13 +51,13 @@ than `str1`str2``
 
 ### `salt`
 
-**Description:** Generates a random cryptographically secure salt string.
+**Description:** Generates a random cryptographically secure salt string.  
 **Arguments:** None
 **Returns:** A random salt string suitable for use with `argon2`
 
 ### `crypt`
 
-**Description:** Encrypts text using the standard UNIX encryption method.
+**Description:** Encrypts text using the standard UNIX encryption method.  
 **Arguments:**
 
 - : The text to encrypt `text`
@@ -66,7 +67,7 @@ than `str1`str2``
 
 ### `string_hash`
 
-**Description:** Computes an MD5 hash of a string.
+**Description:** Computes an MD5 hash of a string.  
 **Arguments:**
 
 - : The string to hash `text`
@@ -75,7 +76,7 @@ than `str1`str2``
 
 ### `argon2`
 
-**Description:** Hashes a password using the Argon2id algorithm.
+**Description:** Hashes a password using the Argon2id algorithm.  
 **Arguments:**
 
 - : The password to hash `password`
@@ -85,24 +86,26 @@ than `str1`str2``
 - : Optional parallelism factor (default: 1) `parallelism`
 
 **Returns:** The hashed password string in PHC format
-Requires wizard permissions. **Note:**
+Requires wizard permissions.  
+**Note:**
 
 ### `argon2_verify`
 
-**Description:** Verifies a password against an Argon2 hash.
+**Description:** Verifies a password against an Argon2 hash.  
 **Arguments:**
 
 - : The previously generated hash `hashed_password`
 - : The password to verify `password`
 
 **Returns:** A boolean indicating if the password matches the hash
-Requires wizard permissions. **Note:**
+Requires wizard permissions.  
+**Note:**
 
 ## Encoding Functions
 
 ### `encode_base64`
 
-**Description:** Encodes a string using Base64 encoding.
+**Description:** Encodes a string using Base64 encoding.  
 **Arguments:**
 
 - : The string to encode `text`
@@ -111,37 +114,40 @@ Requires wizard permissions. **Note:**
 
 ### `decode_base64`
 
-**Description:** Decodes a Base64-encoded string.
+**Description:** Decodes a Base64-encoded string.  
 **Arguments:**
 
 - : The Base64-encoded string to decode `encoded_text`
 
 **Returns:** The decoded string
-Raises E_INVARG if the input is not valid Base64 or not valid UTF-8. **Note:**
+Raises E_INVARG if the input is not valid Base64 or not valid UTF-8.  
+**Note:**
 
 ## JSON Functions
 
 ### `generate_json`
 
-**Description:** Converts a MOO value to a JSON string.
+**Description:** Converts a MOO value to a JSON string.  
 **Arguments:**
 
 - : The MOO value to convert `value`
 
 **Returns:** A JSON string representation of the value
 Supports MOO integers, floats, strings, objects, lists, and maps. Objects are converted to strings in the format "
-#object-number". **Note:**
+#object-number".  
+**Note:**
 
 ### `parse_json`
 
-**Description:** Parses a JSON string into a MOO value.
+**Description:** Parses a JSON string into a MOO value.  
 **Arguments:**
 
 - : The JSON string to parse `json_str`
 
 **Returns:** The MOO value represented by the JSON
 JSON null becomes MOO none, true/false become 1/0, numbers become integers or floats, strings become strings, arrays
-become lists, and objects become maps with string keys. **Note:**
+become lists, and objects become maps with string keys.  
+**Note:**
 
 ## Type Conversion Notes
 
