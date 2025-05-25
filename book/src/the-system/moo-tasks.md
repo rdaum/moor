@@ -1,8 +1,10 @@
 # MOO Tasks
 
-A _task_ is an execution of a MOO program. There are five kinds of tasks in ToastStunt:
+A _task_ is an execution of a MOO program. There are several kinds of tasks in mooR:
 
 - Every time a player types a command, a task is created to execute that command; we call these _command tasks_.
+- External processes can directly call verbs in the database via RPC, which creates a task to execute that verb;
+  these are also _verb tasks_.
 - Whenever a player connects or disconnects from the MOO, the server starts a task to do whatever processing is
   necessary, such as printing out `Munchkin has connected` to all of the players in the same room; these are called
   _server tasks_.
@@ -14,6 +16,8 @@ A _task_ is an execution of a MOO program. There are five kinds of tasks in Toas
 - The `read()` function also suspends the execution of the current task, in this case waiting for the player to type a
   line of input. When the line is received, the task resumes with the `read()` function returning the input line as
   result. These are called _reading tasks_.
+- `worker_request()` creates a _worker task_, which is a task that waits for a worker to perform some action. The
+  worker task is queued until a worker (an external helper process) completes the action and returns the result.
 
 The last three kinds of tasks above are collectively known as _queued tasks_ or _background tasks_, since they may not
 run immediately.
