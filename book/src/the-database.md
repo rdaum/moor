@@ -1,6 +1,6 @@
 # The mooR Object Database ("WorldState")
 
-In this chapter, we describe in detail the various kinds of data that can appear in a ToastStunt database and that MOO
+In this chapter, we describe in detail the various kinds of data that can appear in a mooR database and that MOO
 programs can manipulate.
 
 The database ("WorldState") is where all of the data in a MOO is stored. Everything that players see and interact with
