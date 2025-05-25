@@ -1,3 +1,5 @@
+// TODO: these notes are not fully accurate for mooR, and mostly only relevant to the `telnet-host` connection
+
 # Server Commands and Database Assumptions
 
 This chapter describes all of the commands that are built into the server and every property and verb in the database

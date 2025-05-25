@@ -6,6 +6,9 @@ no arguments. The call is simply skipped if no such verb is defined on the objec
 Symmetrically, just before the `recycle()` function actually destroys an object, the object's `recycle` verb, if any, is
 called with no arguments. Again, the call is simply skipped if no such verb is defined on the object.
 
+// TODO: Quote support as described below is not yet implemented in the mooR server, but may be in the future. Most
+// modern cores instead implement this functionality in-core, however.
+
 Both `create()` and `recycle()` check for the existence of an `ownership_quota` property on the owner of the
 newly-created or -destroyed object. If such a property exists and its value is an integer, then it is treated as a
 _quota_ on object ownership. Otherwise, the following two paragraphs do not apply.
