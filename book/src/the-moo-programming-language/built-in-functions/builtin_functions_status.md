@@ -1,15 +1,22 @@
 ## Status of builtin function implementation
 
-The following is a table of the status of various builtin-functions. The table is broken down by category, and each
-function is marked with a checkmark if it is implemented. If there are any notes about the implementation, they will be
-included in the notes column.
+The following is a table of the status of the implementation of various builtin-functions as defined in the LambdaMOO
+1.8
+specification, as well as some extensions that were added in ToastStunt and then ported over to mooR. (And some novel
+extensions added in mooR itself.)
+
+The table is broken down by category, and each function is marked with a checkmark if it is implemented.
+
+If there are any notes about the implementation, they will be included in the notes column. If you notice anything
+missing, or if you have any questions about the implementation, please feel free to open an issue on the [mooR GitHub
+repository issue tracker](http://www.github.com/rdaum/moor/issues).
 
 ## LambdaMOO 1.8 builtin function list and status
 
 ### Lists
 
 | Name         | Complete | Notes |
-| ------------ | -------- | ----- |
+|--------------|----------|-------|
 | `length`     | &check;  |       |
 | `setadd`     | &check;  |       |
 | `setremove`  | &check;  |       |
@@ -26,7 +33,7 @@ included in the notes column.
 ### Strings
 
 | Name        | Complete | Notes                                                                                                |
-| ----------- | -------- | ---------------------------------------------------------------------------------------------------- |
+|-------------|----------|------------------------------------------------------------------------------------------------------|
 | `tostr`     | &check;  |                                                                                                      |
 | `toliteral` | &check;  |                                                                                                      |
 | `crypt`     | &check;  | Pretty damned insecure, only here to support existing core password functions.                       |
@@ -39,7 +46,7 @@ included in the notes column.
 ### Numbers
 
 | Name       | Complete | Notes |
-| ---------- | -------- | ----- |
+|------------|----------|-------|
 | `toint`    | &check;  |       |
 | `tonum`    | &check;  |       |
 | `tofloat`  | &check;  |       |
@@ -70,7 +77,7 @@ included in the notes column.
 ### Objects
 
 | Name              | Complete | Notes                              |
-| ----------------- | -------- | ---------------------------------- |
+|-------------------|----------|------------------------------------|
 | `toobj`           | &check;  |                                    |
 | `typeof`          | &check;  |                                    |
 | `create`          | &check;  | Quota support not implemented yet. |
@@ -88,7 +95,7 @@ included in the notes column.
 ### Properties
 
 | Name                | Complete | Notes |
-| ------------------- | -------- | ----- |
+|---------------------|----------|-------|
 | `properties`        | &check;  |       |
 | `property_info`     | &check;  |       |
 | `set_property_info` | &check;  |       |
@@ -100,7 +107,7 @@ included in the notes column.
 ### Verbs
 
 | Name            | Complete | Notes                                 |
-| --------------- | -------- | ------------------------------------- |
+|-----------------|----------|---------------------------------------|
 | `verbs`         | &check;  |                                       |
 | `verb_info`     | &check;  |                                       |
 | `set_verb_info` | &check;  |                                       |
@@ -116,7 +123,7 @@ included in the notes column.
 ### Values / encoding
 
 | Name            | Complete | Notes                                                                              |
-| --------------- | -------- | ---------------------------------------------------------------------------------- |
+|-----------------|----------|------------------------------------------------------------------------------------|
 | `value_bytes`   | &check;  |                                                                                    |
 | `value_hash`    |          |                                                                                    |
 | `string_hash`   | &check;  |                                                                                    |
@@ -128,7 +135,7 @@ included in the notes column.
 ### Server
 
 | Name                  | Complete | Notes                                                                    |
-| --------------------- | -------- | ------------------------------------------------------------------------ |
+|-----------------------|----------|--------------------------------------------------------------------------|
 | `server_version`      | &check;  | Crate version + short commit hash, for now                               |
 | `renumber`            |          |                                                                          |
 | `reset_max_object`    |          |                                                                          |
@@ -150,7 +157,7 @@ included in the notes column.
 ### Tasks
 
 | Name           | Complete | Notes                                                                                 |
-| -------------- | -------- | ------------------------------------------------------------------------------------- |
+|----------------|----------|---------------------------------------------------------------------------------------|
 | `task_id`      | &check;  |                                                                                       |
 | `queued_tasks` | &check;  |                                                                                       |
 | `kill_task`    | &check;  |                                                                                       |
@@ -162,7 +169,7 @@ included in the notes column.
 ### Execution
 
 | Name             | Complete | Notes        |
-| ---------------- | -------- | ------------ |
+|------------------|----------|--------------|
 | `call_function`  | &check;  |              |
 | `raise`          | &check;  |              |
 | `suspend`        | &check;  |              |
@@ -177,7 +184,7 @@ included in the notes column.
 ### Network connections
 
 | Name                      | Complete | Notes                                                                                                |
-| ------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+|---------------------------|----------|------------------------------------------------------------------------------------------------------|
 | `set_connection_option`   |          |                                                                                                      |
 | `connection_option`       |          |                                                                                                      |
 | `connection_options`      |          |                                                                                                      |
@@ -193,7 +200,7 @@ included in the notes column.
 Functions not in the original LambdaMOO, but were in Toast, and ported over
 
 | Name                   | Complete | Notes                                                               |
-| ---------------------- | -------- | ------------------------------------------------------------------- |
+|------------------------|----------|---------------------------------------------------------------------|
 | `age_generate_keypair` | &check;  | Generates a new X25519 keypair for use with age encryption.         |
 | `age_encrypt`          | &check;  | Encrypts a message using age encryption for one or more recipients. |
 | `age_decrypt`          | &check;  | Decrypts an age-encrypted message using one or more private keys.   |
@@ -219,14 +226,14 @@ Functions not part of the original LambdaMOO, but added in moor
 ### XML / HTML content management
 
 | Name        | Description                                                      | Notes                                                 |
-| ----------- | ---------------------------------------------------------------- | ----------------------------------------------------- |
+|-------------|------------------------------------------------------------------|-------------------------------------------------------|
 | `xml_parse` | Parse a string c ntaining XML into a tree of flyweight objects   | Available only if the flyweights feature is turned on |
 | `to_xml`    | Convert a tree of flyweight objects into a string containing XML | Available only if the flyweights feature is turned on |
 
 ### Flyweights & Symbols (new types)
 
 | Name          | Description                                                             | Notes                                                 |
-| ------------- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
+|---------------|-------------------------------------------------------------------------|-------------------------------------------------------|
 | `slots`       | Returns the slots on a given flyweight                                  | Available only if the flyweights feature is turned on |
 | `remove_slot` | Returns a copy of the flyweight with the given slot removed, if present | Available only if the flyweights feature is turned on |
 | `add_slot`    | Returns a copy of the flyweight with a new slot added                   | Available only if the flyweights feature is turned on |
@@ -235,14 +242,14 @@ Functions not part of the original LambdaMOO, but added in moor
 ### Expanded error handling
 
 | Name            | Description                                                                    | Notes |
-| --------------- | ------------------------------------------------------------------------------ | ----- |
+|-----------------|--------------------------------------------------------------------------------|-------|
 | `error_code`    | Strip off any message or value from an error and return only the code portion  |       |
 | `error_message` | Return the message portion of the error, or the default message if none exists |       |
 
 ### Admin
 
 | Name             | Description                                                     | Notes |
-| ---------------- | --------------------------------------------------------------- | ----- |
+|------------------|-----------------------------------------------------------------|-------|
 | `bf_counters`    | Performance counters for profiling builtin function performance |       |
 | `db_counters`    | Performance counters for profiling DB performance               |       |
 | `sched_counters` | Performance counters for profiling scheduling performance       |       |
@@ -250,7 +257,7 @@ Functions not part of the original LambdaMOO, but added in moor
 ### Tasks
 
 | Name           | Description                                                                                                                                                                       | Notes                           |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+|----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------|
 | `active_tasks` | Return information about running non-suspended/non-queued tasks which are actively running                                                                                        |                                 |
 | `wait_task`    | Causes the current task to wait for a given task id to not be in the background queue                                                                                             |                                 |
 | `commit`       | Causes the current task to immediately commit its data, suspend, and then come out of suspension                                                                                  | Semantically same as suspend(0) |

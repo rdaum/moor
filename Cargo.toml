@@ -78,7 +78,6 @@ lto = "fat"
 # the binary.
 debug = "full"
 
-
 [workspace.dependencies]
 ## Command line arguments parsing.
 clap = "4.5"
@@ -92,7 +91,6 @@ serde_json = "1.0"
 ## HTTP/websockets front-end
 axum = { version = "0.8", features = ["ws"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
-
 
 ## Asynchronous transaction processing & networking, used in web-host and telnet-host.
 ## the daemon itself uses its own threading

@@ -1,0 +1,10 @@
+[book]
+authors = ["Zoltán Nagy", "Ryan Daum"]
+language = "en"
+multilingual = false
+src = "src"
+title = "The mooR Book"
+
+[output.html]
+additional-js = ["theme/moo-syntax-highlight.js"]
+additional-css = ["theme/style.css"]

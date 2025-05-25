@@ -19,7 +19,11 @@ license-file = ["../../LICENSE", "0"]
 priority = "optional"
 assets = [
     ["target/release/moor-telnet-host", "/usr/bin/moor-telnet-host", "755"],
-    ["debian/moor-telnet-host.service", "/lib/systemd/system/moor-telnet-host.service", "644"],
+    [
+        "debian/moor-telnet-host.service",
+        "/lib/systemd/system/moor-telnet-host.service",
+        "644",
+    ],
     ["debian/telnet-host.yaml", "/etc/moor/telnet-host.yaml", "644"],
 ]
 maintainer-scripts = "debian/scripts"

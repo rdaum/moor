@@ -1,0 +1,9 @@
+/**
+ * Normal `inline code` gets style by hljs; but `inline code` in headers is
+ * turned into a simple <code> tag. Let's format those code tags to look nice.
+ */
+a.header code {
+    background-color: #f6f7f6;
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+}

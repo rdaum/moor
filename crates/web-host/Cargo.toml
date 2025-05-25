@@ -19,7 +19,11 @@ license-file = ["../../LICENSE", "0"]
 priority = "optional"
 assets = [
     ["target/release/moor-web-host", "/usr/bin/moor-web-host", "755"],
-    ["debian/moor-web-host.service", "/lib/systemd/system/moor-web-host.service", "644"],
+    [
+        "debian/moor-web-host.service",
+        "/lib/systemd/system/moor-web-host.service",
+        "644",
+    ],
     ["debian/web-host.yaml", "/etc/moor/web-host.yaml", "644"],
     ["src/client/*", "/var/lib/moor-web-host/", "644"],
 ]

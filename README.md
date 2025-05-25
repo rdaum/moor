@@ -131,13 +131,15 @@ So to connect, point your browser to `http://localhost:8080` or if you're feelin
 
 Studying the `docker-compose.yml` file should give some insight to how things are glued together.
 
-For documentation of the MOO programming language as implemented in `mooR`, see the [doc/language.md](./doc/language.md)
+For documentation of the MOO programming language as implemented in `mooR`, see
+the [doc/language.md](book/src/the-moo-programming-language/language.md)
 document.
 
 For a high level architecture description plus a more detailed breakdown on how the server is put together, see the
-[ARCHITECTURE.md](./doc/ARCHITECTURE.md) document.
+[ARCHITECTURE.md](book/src/ARCHITECTURE.md) document.
 
-For a list of built-in functions and their descriptions, see the [doc/builtins](./doc/builtins) directory.
+For a list of built-in functions and their descriptions, see
+the [doc/builtins](book/src/the-moo-programming-language/builtins) directory.
 
 ### Who made this?
 
@@ -210,9 +212,10 @@ Everything should work. If it doesn't, that's a bug. Which you should report.
   possible to add in the future, others do not fit the design philosophy of the system going forward.
 
 For a list of the status of the implementation of standard LambdaMOO builtin functions, see
-[builtin_functions_status.md](doc/builtins/builtin_functions_status.md). Early documentation for the builtin functions
+[builtin_functions_status.md](book/src/the-moo-programming-language/built-in-functions/builtin_functions_status.md).
+Early documentation for the builtin functions
 is
-available in the [doc/builtins](doc/builtins) directory.
+available in the [doc/builtins](book/src/the-moo-programming-language/builtins) directory.
 
 ### What's next?
 
