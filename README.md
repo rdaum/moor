@@ -71,22 +71,22 @@ implementations like ToastStunt.
 Enhancements over base the LambdaMOO 1.8.x system include (but are not limited to):
 
 - Runtime features:
-  - A fully multithreaded architecture, taking advantage of the wizardly powers of modern multicore computing
-    machines.
-  - A native web front end, with rich content presentation.
-  - A directory basecd import / export format for objects that can be read by a human and edited by a standard text
-    editor and managed with standard version control tools.
-  - An architecture that is easier to extend and add to.
+    - A fully multithreaded architecture, taking advantage of the wizardly powers of modern multicore computing
+      machines.
+    - A native web front end, with rich content presentation.
+    - A directory basecd import / export format for objects that can be read by a human and edited by a standard text
+      editor and managed with standard version control tools.
+    - An architecture that is easier to extend and add to.
 
 - Language features:
-  - Lexically scoped variables / `begin` / `end` blocks
-  - Maps: an associative container type (`[ "key" -> "value", ... ]`)
-  - List / Range comprehensions, similar to Python, Julia, etc. (`{ x * 2 for x in [1..5]}`)
-  - UTF-8 strings
-  - 64-bit integers and floats
-  - Symbol (interned string) type (`'symbol`)
-  - Booleans (`true` / `false`)
-  - "flyweights" - a lightweight anonymous immutable object / container type.
+    - Lexically scoped variables / `begin` / `end` blocks
+    - Maps: an associative container type (`[ "key" -> "value", ... ]`)
+    - List / Range comprehensions, similar to Python, Julia, etc. (`{ x * 2 for x in [1..5]}`)
+    - UTF-8 strings
+    - 64-bit integers and floats
+    - Symbol (interned string) type (`'symbol`)
+    - Booleans (`true` / `false`)
+    - "flyweights" - a lightweight anonymous immutable object / container type.
 
 A "core" database foundation designed expecially for mooR is under development and lives
 at http://github.com/rdaum/cowbell
@@ -131,13 +131,15 @@ So to connect, point your browser to `http://localhost:8080` or if you're feelin
 
 Studying the `docker-compose.yml` file should give some insight to how things are glued together.
 
-For documentation of the MOO programming language as implemented in `mooR`, see the [doc/language.md](./doc/language.md)
+For documentation of the MOO programming language as implemented in `mooR`, see
+the [doc/language.md](book/src/the-moo-programming-language/language.md)
 document.
 
 For a high level architecture description plus a more detailed breakdown on how the server is put together, see the
-[ARCHITECTURE.md](./doc/ARCHITECTURE.md) document.
+[ARCHITECTURE.md](book/src/ARCHITECTURE.md) document.
 
-For a list of built-in functions and their descriptions, see the [doc/builtins](./doc/builtins) directory.
+For a list of built-in functions and their descriptions, see
+the [doc/builtins](book/src/the-moo-programming-language/builtins) directory.
 
 ### Who made this?
 
@@ -169,9 +171,9 @@ Stephen White. Successive versions and forks have been maintained by a number of
 To contribute:
 
 1. Check our [GitHub issues](https://github.com/rdaum/moor/issues) for current needs or file a new issue
-   - If you have a feature request, please file an issue and describe it in detail
-   - If you find a bug, please file an issue and include steps to reproduce it, and feel free to join our
-     Discord to discuss it
+    - If you have a feature request, please file an issue and describe it in detail
+    - If you find a bug, please file an issue and include steps to reproduce it, and feel free to join our
+      Discord to discuss it
 2. Join our [Discord](https://discord.gg/Ec94y5983z) to discuss ideas or keep up with development
 3. Fork the repository and submit pull requests
 
@@ -210,9 +212,10 @@ Everything should work. If it doesn't, that's a bug. Which you should report.
   possible to add in the future, others do not fit the design philosophy of the system going forward.
 
 For a list of the status of the implementation of standard LambdaMOO builtin functions, see
-[builtin_functions_status.md](doc/builtins/builtin_functions_status.md). Early documentation for the builtin functions
+[builtin_functions_status.md](book/src/the-moo-programming-language/built-in-functions/builtin_functions_status.md).
+Early documentation for the builtin functions
 is
-available in the [doc/builtins](doc/builtins) directory.
+available in the [doc/builtins](book/src/the-moo-programming-language/builtins) directory.
 
 ### What's next?
 

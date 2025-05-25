@@ -71,9 +71,8 @@ dynamic scripting languages like Python or JavaScript. Here are some of the most
   This is different from languages like Java or C# that use class-based inheritance.
 
 * Persistent objects: MOO objects are persistent, meaning that they exist in the database and can be accessed by
-  multiple
-  tasks. This is different from many other languages where objects are created and destroyed in memory during program
-  execution. MOO has no concept of transient ephemeral objects, so all objects are persistent. ToastStunt has
+  multiple asks. This is different from many other languages where objects are created and destroyed in memory during
+  program execution. MOO has no concept of transient ephemeral objects, so all objects are persistent. ToastStunt has
   "anonymous" objects that are not persistent, but these are not part of `mooR`.  `mooR` does have a special object-like
   value called a "flyweight" that is used to represent small lightweight immutable values which have object-like
   properties, but these are not full objects, cannot be inherited from, and persist only inside properties, not as

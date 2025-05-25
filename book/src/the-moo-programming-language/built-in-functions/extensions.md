@@ -1,39 +1,3 @@
-# mooR Built-in Functions Documentation
-
-## Summary
-
-This documentation describes the built-in functions available in the MOO programming language as implemented in mooR.
-
-Builtin functions are called using standard function syntax, with the function name followed by parentheses containing
-the arguments. The functions are categorized into several sections based on their functionality.
-
-These functions provide core functionality for manipulating data structures, working with objects and properties,
-handling strings, mathematical
-operations, and interacting with the server.
-
-## Caution
-
-⚠️ **Please Note:** This documentation was compiled with the assistance of an AI language model. While efforts have been
-made to ensure accuracy, there may be inaccuracies, omissions, or outdated information. Referring to
-the LambdaMOO/Stunt manual (https://stunt.io/ProgrammersManual.html) can help clarify any discrepancies or provide
-additional context. When you run into inaccurate or missing information, please file a GitHub issue at
-http://github.com/rdaum/moor/issues.
-
-## Table of Contents
-
-- [List and Set Operations](list_sets.md)
-- [Map Functions](maps.md)
-- [Numeric Functions](num.md)
-- [Object Functions](objects.md)
-- [Property Functions](properties.md)
-- [Server Functions](server.md)
-- [String Functions](strings.md)
-- [Value Manipulation](values.md)
-- [Verb Functions](verbs.md)
-
-Each section contains detailed information about specific built-in functions, including their arguments, return values,
-and usage examples. Click on a link to navigate to the corresponding documentation page.
-
 ### Extensions
 
 The following functions are unique to mooR and not found in original LambdaMOO:

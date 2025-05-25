@@ -1,6 +1,6 @@
 # Networking
 
-## Accepting and Initiating Network Connections
+## Handling Network Connections
 
 When the server first accepts a new, incoming network connection, it is given the low-level network address of computer
 on the other end. It immediately attempts to convert this address into the human-readable host name that will be entered
@@ -13,17 +13,6 @@ By default, the server will wait no more than 5 seconds for such a name lookup t
 the conversion had failed, using instead a printable representation of the low-level address. If the property
 `name_lookup_timeout` exists on `$server_options` and has an integer as its value, that integer is used instead as the
 timeout interval.
-
-When the `open_network_connection()` function is used, the server must again do a conversion, this time from the host
-name given as an argument into the low-level address necessary for actually opening the connection. This conversion is
-subject to the same timeout as in the in-bound case; if the conversion does not succeed before the timeout expires, the
-connection attempt is aborted and `open_network_connection()` raises `E_QUOTA`.
-
-After a successful conversion, though, the server must still wait for the actual connection to be accepted by the remote
-computer. As before, this can take a long time during which the server is again doing nothing else. Also as before, the
-server will by default wait no more than 5 seconds for the connection attempt to succeed; if the timeout expires,
-`open_network_connection()` again raises `E_QUOTA`. This default timeout interval can also be overridden from within the
-database, by defining the property `outbound_connect_timeout` on `$server_options` with an integer as its value.
 
 ## Associating Network Connections with Players
 
