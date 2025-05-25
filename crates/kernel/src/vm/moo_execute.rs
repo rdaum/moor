@@ -73,7 +73,7 @@ pub fn moo_frame_execute(
     features_config: &FeaturesConfig,
 ) -> ExecutionResult {
     // Special case for empty opcodes set, just return v_none() immediately.
-    if f.program.main_vector().is_empty() {
+    if f.opcodes().is_empty() {
         return ExecutionResult::Complete(v_none());
     }
 
@@ -95,10 +95,7 @@ pub fn moo_frame_execute(
         // Otherwise, start poppin' opcodes.
         // We panic here if we run out of opcodes, as that means there's a bug in either the
         // compiler or in opcode execution.
-        let op = match f.pc_type {
-            PcType::Main => f.program.main_vector()[f.pc],
-            PcType::ForkVector(o) => f.program.fork_vector(o)[f.pc],
-        };
+        let op = f.opcodes()[f.pc];
         f.pc += 1;
 
         match op {
@@ -815,7 +812,6 @@ pub fn moo_frame_execute(
                 let ScopeType::TryCatch(..) = handler.scope_type else {
                     panic!("Handler is not a catch handler",);
                 };
-                f.push(v_int(0));
                 f.jump(&label);
             }
             Op::EndCatch(label) => {

@@ -112,6 +112,13 @@ impl MooStackFrame {
         }
     }
 
+    pub(crate) fn opcodes(&self) -> &[Op] {
+        match self.pc_type {
+            PcType::Main => self.program.main_vector(),
+            PcType::ForkVector(fork_vector) => self.program.fork_vector(fork_vector),
+        }
+    }
+
     pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
         Some(self.program.line_num_for_position(pc))
     }
