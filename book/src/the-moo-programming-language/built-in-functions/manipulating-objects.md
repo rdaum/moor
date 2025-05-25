@@ -5,7 +5,7 @@ functions for manipulating them.
 
 ## Fundamental Operations on Objects
 
-### Function: `create`
+### `create`
 
 ```
 obj create(obj parent [, obj owner] [, list init-args])
@@ -60,7 +60,7 @@ decremented and stored back into the `ownership_quota` property as a part of the
 
 > Note: In ToastStunt, this is disabled by default with the "OWNERSHIP_QUOTA" option in options.h
 
-### Function: `owned_objects`
+### `owned_objects`
 
 ```
 list owned_objects(OBJ owner)
@@ -69,7 +69,7 @@ list owned_objects(OBJ owner)
 Returns a list of all objects in the database owned by `owner`. Ownership is defined by the value of .owner on the
 object.
 
-### Function: `chparent`
+### `chparent`
 
 chparent -- Changes the parent of object to be new-parent.
 
@@ -97,7 +97,7 @@ removed or added in the reparenting process are completely unchanged.
 If new-parent is equal to `#-1`, then object is given no parent at all; it becomes a new root of the parent/child
 hierarchy. In this case, all formerly inherited properties on object are simply removed.
 
-### Function: `valid`
+### `valid`
 
 ```
 int valid(obj object)
@@ -121,7 +121,7 @@ parent -- return the parent of object
 obj parent(obj object)
 ```
 
-### Function: `children`
+### `children`
 
 ```
 list children(obj object)
@@ -129,7 +129,7 @@ list children(obj object)
 
 return a list of the children of object.
 
-### Function: `isa`
+### `isa`
 
 ```
 int isa(OBJ object, OBJ parent)
@@ -148,7 +148,7 @@ isa(#2, {$thing, $wiz, $container}, 1)  => #57 (generic wizard)
 isa(#2, {$thing, $room, $container}, 1) => #-1
 ```
 
-### Function: `locate_by_name`
+### `locate_by_name`
 
 ```
 list locate_by_name(STR object name)
@@ -159,7 +159,7 @@ This function searches every object in the database for those containing `object
 > Warning: Take care when using this when thread mode is active, as this is a threaded function and that means it
 > implicitly suspends. `set_thread_mode(0)` if you want to use this without suspending.
 
-### Function: `locations`
+### `locations`
 
 ```
 list locations(OBJ object [, OBJ stop [, INT is-parent]])
@@ -180,7 +180,7 @@ If `stop` is in the locations found, it will stop before there and return the li
 If the third argument is true, `stop` is assumed to be a PARENT. And if any of your locations are children of that
 parent, it stops there.
 
-### Function: `occupants`
+### `occupants`
 
 ```
 list occupants(LIST objects [, OBJ | LIST parent, INT player flag set?])
@@ -196,7 +196,7 @@ Iterates through the list of objects and returns those matching a specific set o
 3. If both parent and player flag set are specified, occupants will check both that an object is descended from parent
    and also has the player flag set.
 
-### Function: `recycle`
+### `recycle`
 
 ```
 none recycle(obj object)
@@ -213,7 +213,7 @@ After object is recycled, if the owner of the former object has a property named
 property is a integer, then `recycle()` treats that value as a _quota_ and increments it by one, storing the result back
 into the `ownership_quota` property.
 
-### Function: `recreate`
+### `recreate`
 
 ```
 obj recreate(OBJ old, OBJ parent [, OBJ owner])
@@ -227,7 +227,7 @@ maximum object.
 The normal rules apply to parent and owner. You either have to own parent, parent must be fertile, or you have to be a
 wizard. Similarly, to change owner, you should be a wizard. Otherwise it's superfluous.
 
-### Function: `ancestors`
+### `ancestors`
 
 ```
 list ancestorsOBJ object [, INT full])
@@ -236,7 +236,7 @@ list ancestorsOBJ object [, INT full])
 Return a list of all ancestors of `object` in order ascending up the inheritance hiearchy. If `full` is true, `object`
 will be included in the list.
 
-### Function: `clear_ancestor_cache`
+### `clear_ancestor_cache`
 
 ```
 void clear_ancestor_cache()
@@ -246,7 +246,7 @@ The ancestor cache contains a quick lookup of all of an object's ancestors which
 This is an experimental feature and, as such, you may find that something has gone wrong. If that's that case, this
 function will completely clear the cache and it will be rebuilt as-needed.
 
-### Function: `descendants`
+### `descendants`
 
 ```
 list descendants(OBJ object [, INT full])
@@ -254,7 +254,7 @@ list descendants(OBJ object [, INT full])
 
 Return a list of all nested children of object. If full is true, object will be included in the list.
 
-### Function: `object_bytes`
+### `object_bytes`
 
 ```
 int object_bytes(obj object)
@@ -267,7 +267,7 @@ and properties defined directly on the object.
 
 Raises `E_INVARG` if object is not a valid object and `E_PERM` if the programmer is not a wizard.
 
-### Function: `respond_to`
+### `respond_to`
 
 ```
 int | list respond_to(OBJ object, STR verb)
@@ -278,7 +278,7 @@ returns false. If the caller is permitted to read the object (because the object
 `r' flag is true, or the caller is the owner or a wizard) the true value is a list containing the object number of the object that defines the verb and the full verb name(s).  Otherwise, the numeric value`
 1' is returned.
 
-### Function: `max_object`
+### `max_object`
 
 ```
 obj max_object()
@@ -294,7 +294,7 @@ using the `$recycler` to create objects.
 
 ## Object Movement
 
-### Function: `move`
+### `move`
 
 ```
 none move(obj what, obj where [, INT position])
@@ -343,7 +343,7 @@ Passing `position` into move will effectively listinsert() the object into that 
 
 ## Operations on Properties
 
-### Function: `properties`
+### `properties`
 
 ```
 list properties(obj object)
@@ -354,7 +354,7 @@ Returns a list of the names of the properties defined directly on the given obje
 If object is not valid, then `E_INVARG` is raised. If the programmer does not have read permission on object, then
 `E_PERM` is raised.
 
-### Function: `property_info`
+### `property_info`
 
 ```
 list property_info(obj object, str prop-name)
@@ -366,7 +366,7 @@ If object is not valid, then `E_INVARG` is raised. If object has no non-built-in
 `E_PROPNF` is raised. If the programmer does not have read (write) permission on the property in question, then
 `property_info()` raises `E_PERM`.
 
-### Function: `set_property_info`
+### `set_property_info`
 
 ```
 none set_property_info(obj object, str prop-name, list info)
@@ -389,7 +389,7 @@ third argument to `set_property_info()`; the latter function raises `E_INVARG` i
 any illegal characters, or, when new-name is given, if prop-name is not defined directly on object or new-name names an
 existing property defined on object or any of its ancestors or descendants.
 
-### Function: `add_property`
+### `add_property`
 
 ```
 none add_property(obj object, str prop-name, value, list info)
@@ -406,7 +406,7 @@ or descendants already defines a property named prop-name, then `E_INVARG` is ra
 write permission on object or if the owner specified by info is not the programmer and the programmer is not a wizard,
 then `E_PERM` is raised.
 
-### Function: `delete_property`
+### `delete_property`
 
 ```
 none delete_property(obj object, str prop-name)
@@ -418,10 +418,10 @@ If object is not valid, then `E_INVARG` is raised. If the programmer does not ha
 `E_PERM` is raised. If object does not directly define a property named prop-name (as opposed to inheriting one from its
 parent), then `E_PROPNF` is raised.
 
-### Function: `is_clear_property`
+### `is_clear_property`
 
 ```
-int is_clear_property(obj object, str prop-name) ##### Function: `clear_property`
+int is_clear_property(obj object, str prop-name) ##### `clear_property`
 ```
 
 Test the specified property for clear
@@ -442,7 +442,7 @@ is the definer of the property prop-name, as opposed to an inheritor of the prop
 
 ## Operations on Verbs
 
-### Function: `verbs`
+### `verbs`
 
 ```
 list verbs(obj object)
@@ -485,7 +485,7 @@ a name, either in the normal sense or as a numeric index.
 Clearly, this older mechanism is more difficult and risky to use; new code should only be written to use the current
 mechanism, and old code using numeric strings should be modified not to do so.
 
-### Function: `verb_info`
+### `verb_info`
 
 ```
 list verb_info(obj object, str|int verb-desc)
@@ -493,7 +493,7 @@ list verb_info(obj object, str|int verb-desc)
 
 Get the owner, permission bits, and name(s) for the verb as specified by verb-desc on the given object
 
-### Function: `set_verb_info`
+### `set_verb_info`
 
 set_verb_info -- Set the owner, permissions bits, and names(s) for the verb as verb-desc on the given object
 
@@ -515,7 +515,7 @@ a string. This is the kind of value returned by `verb_info()` and expected as th
 empty string or consists entirely of spaces; it raises `E_PERM` if owner is not the programmer and the programmer is not
 a wizard.
 
-### Function: `verb_args`
+### `verb_args`
 
 ```
 list verb_args(obj object, str|int verb-desc)
@@ -524,7 +524,7 @@ list verb_args(obj object, str|int verb-desc)
 Get the direct-object, preposition, and indirect-object specifications for the verb as specified by verb-desc on the
 given object.
 
-### Function: `set_verb_args`
+### `set_verb_args`
 
 verb_args -- set the direct-object, preposition, and indirect-object specifications for the verb as specified by
 verb-desc on the given object.
@@ -554,7 +554,7 @@ verb_args($container, "take")
 set_verb_args($container, "take", {"any", "from", "this"})
 ```
 
-### Function: `add_verb`
+### `add_verb`
 
 ```
 none add_verb(obj object, list info, list args)
@@ -572,7 +572,7 @@ is not a legitimate syntax specification, then `E_INVARG` is raised. If the prog
 object or if the owner specified by info is not the programmer and the programmer is not a wizard, then `E_PERM` is
 raised.
 
-### Function: `delete_verb`
+### `delete_verb`
 
 ```
 none delete_verb(obj object, str|int verb-desc)
@@ -583,7 +583,7 @@ Removes the verb as specified by verb-desc from the given object
 If object is not valid, then `E_INVARG` is raised. If the programmer does not have write permission on object, then
 `E_PERM` is raised. If object does not define a verb as specified by verb-desc, then `E_VERBNF` is raised.
 
-### Function: `verb_code`
+### `verb_code`
 
 ```
 list verb_code(obj object, str|int verb-desc [, fully-paren [, indent]])
@@ -591,7 +591,7 @@ list verb_code(obj object, str|int verb-desc [, fully-paren [, indent]])
 
 Get the MOO-code program associated with the verb as specified by verb-desc on object
 
-### Function: `set_verb_code`
+### `set_verb_code`
 
 ```
 list set_verb_code(obj object, str|int verb-desc, list code)
@@ -616,7 +616,7 @@ For `set_verb_code()`, the result is a list of strings, the error messages gener
 processing of code. If the list is non-empty, then `set_verb_code()` did not install code; the program associated with
 the verb in question is unchanged.
 
-### Function: `disassemble`
+### `disassemble`
 
 ```
 list disassemble(obj object, str|int verb-desc)
@@ -692,7 +692,7 @@ object's name prefixed with `$tag_`, e.g. `$tag_div` for a flyweight representin
 
 ## Operations on Player Objects
 
-### Function: `players`
+### `players`
 
 ```
 list players()
@@ -700,7 +700,7 @@ list players()
 
 Returns a list of the object numbers of all player objects in the database
 
-### Function: `is_player`
+### `is_player`
 
 ```
 int is_player(obj object)
@@ -710,7 +710,7 @@ Returns a true value if the given object is a player object and a false value ot
 
 If object is not valid, `E_INVARG` is raised.
 
-### Function: `set_player_flag`
+### `set_player_flag`
 
 ```
 none set_player_flag(obj object, value)

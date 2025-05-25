@@ -7,7 +7,7 @@ rather give them their own section following this one.
 
 ## General Operations Applicable to All Values
 
-### Function: `typeof`
+### `typeof`
 
 ```
 int typeof(value)
@@ -30,7 +30,7 @@ if (typeof(x) == 3) ...
 
 because the former is much more readable than the latter.
 
-### Function: `tostr`
+### `tostr`
 
 ```
 str tostr(value, ...)
@@ -53,7 +53,7 @@ Warning `tostr()` does not do a good job of converting lists and maps into strin
 are converted into the string `"{list}"` and all maps are converted into the string `"[map]"`. The function
 `toliteral()`, below, is better for this purpose.
 
-### Function: `toliteral`
+### `toliteral`
 
 ```
 str toliteral(value)
@@ -71,7 +71,7 @@ toliteral([1 -> 2]    =>   "[1 -> 2]"
 toliteral(E_PERM)     =>   "E_PERM"
 ```
 
-### Function: `toint`
+### `toint`
 
 ```
 int toint(value)
@@ -95,7 +95,7 @@ toint(" - 34  ")   =>   -34
 toint(E_TYPE)      =>   1
 ```
 
-### Function: `toobj`
+### `toobj`
 
 ```
 obj toobj(value)
@@ -112,7 +112,7 @@ toobj("foo")      =>   #0
 toobj({1, 2})     =>   E_TYPE (error)
 ```
 
-### Function: `tofloat`
+### `tofloat`
 
 ```
 float tofloat(value)
@@ -134,7 +134,7 @@ tofloat("34.7")      =>   34.7
 tofloat(E_TYPE)      =>   1.0
 ```
 
-### Function: `equal`
+### `equal`
 
 ```
 int equal(value, value2)
@@ -151,7 +151,7 @@ equal("Foo", "foo")    =>   0
 equal("Foo", "Foo")    =>   1
 ```
 
-### Function: `value_bytes`
+### `value_bytes`
 
 ```
 int value_bytes(value)
@@ -159,7 +159,7 @@ int value_bytes(value)
 
 Returns the number of bytes of the server's memory required to store the given value.
 
-### Function: `value_hash`
+### `value_hash`
 
 ```
 str value_hash(value, [, str algo] [, binary])
@@ -169,7 +169,7 @@ Returns the same string as `string_hash(toliteral(value))`.
 
 See the description of `string_hash()` for details.
 
-### Function: `value_hmac`
+### `value_hmac`
 
 ```
 str value_hmac(value, STR key [, STR algo [, binary]])
@@ -179,7 +179,7 @@ Returns the same string as string_hmac(toliteral(value), key)
 
 See the description of string_hmac() for details.
 
-### Function: `generate_json`
+### `generate_json`
 
 ```
 str generate_json(value [, str mode])
@@ -228,7 +228,7 @@ generate_json([#1 -> 2], "embedded-types")                  =>  "{\"#1|obj\":2}"
 
 > Warning: generate_json does not support WAIF or ANON types.
 
-### Function: `parse_json`
+### `parse_json`
 
 ```
 value parse_json(str json [, str mode])
@@ -273,7 +273,7 @@ parse_json("{\"#1|obj\":2}", "embedded-types")              =>   [#1 -> 2]
 
 ## Operations on Numbers
 
-### Function: `random`
+### `random`
 
 ```
 int random([int mod, [int range]])
@@ -292,7 +292,7 @@ random()                    => integer between 1 and maximum integer supported
 random(1, 5000)             => integer between 1 and 5000
 ```
 
-### Function: `frandom`
+### `frandom`
 
 ```
 float frandom(FLOAT mod1 [, FLOAT mod2)
@@ -301,7 +301,7 @@ float frandom(FLOAT mod1 [, FLOAT mod2)
 If only one argument is given, a floating point number is chosen randomly from the range `[1.0..mod1]` and returned. If
 two arguments are given, a floating point number is randomly chosen from the range `[mod1..mod2]`.
 
-### Function: `random_bytes`
+### `random_bytes`
 
 ```
 int random_bytes(int count)
@@ -310,7 +310,7 @@ int random_bytes(int count)
 Returns a binary string composed of between one and 10000 random bytes. count specifies the number of bytes and must be
 a positive integer; otherwise, E_INVARG is raised.
 
-### Function: `reseed_random`
+### `reseed_random`
 
 ```
 void reseed_random()
@@ -318,7 +318,7 @@ void reseed_random()
 
 Provide a new seed to the pseudo random number generator.
 
-### Function: `min`
+### `min`
 
 ```
 int min(int x, ...)
@@ -329,7 +329,7 @@ Return the smallest of it's arguments.
 All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is
 raised.
 
-### Function: `max`
+### `max`
 
 ```
 int max(int x, ...)
@@ -340,7 +340,7 @@ Return the largest of it's arguments.
 All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is
 raised.
 
-### Function: `abs`
+### `abs`
 
 ```
 int abs(int x)
@@ -351,7 +351,7 @@ Returns the absolute value of x.
 If x is negative, then the result is `-x`; otherwise, the result is x. The number x can be either integer or
 floating-point; the result is of the same kind.
 
-### Function: `exp`
+### `exp`
 
 ```
 float exp(FLOAT x)
@@ -359,7 +359,7 @@ float exp(FLOAT x)
 
 Returns E (Eulers number) raised to the power of x.
 
-### Function: `floatstr`
+### `floatstr`
 
 ```
 str floatstr(float x, int precision [, scientific])
@@ -374,7 +374,7 @@ string in the form `"MMMMMMM.DDDDDD"`, preceded by a minus sign if and only if x
 and true, the result is a string in the form `"M.DDDDDDe+EEE"`, again preceded by a minus sign if and only if x is
 negative.
 
-### Function: `sqrt`
+### `sqrt`
 
 ```
 float sqrt(float x)
@@ -384,7 +384,7 @@ Returns the square root of x.
 
 Raises `E_INVARG` if x is negative.
 
-### Function: `sin`
+### `sin`
 
 ```
 float sin(float x)
@@ -392,7 +392,7 @@ float sin(float x)
 
 Returns the sine of x.
 
-### Function: `cos`
+### `cos`
 
 ```
 float cos(float x)
@@ -400,7 +400,7 @@ float cos(float x)
 
 Returns the cosine of x.
 
-### Function: `tangent`
+### `tangent`
 
 ```
 float tan(float x)
@@ -408,7 +408,7 @@ float tan(float x)
 
 Returns the tangent of x.
 
-### Function: `asin`
+### `asin`
 
 ```
 float asin(float x)
@@ -418,7 +418,7 @@ Returns the arc-sine (inverse sine) of x, in the range `[-pi/2..pi/2]`
 
 Raises `E_INVARG` if x is outside the range `[-1.0..1.0]`.
 
-### Function: `acos`
+### `acos`
 
 ```
 float acos(float x)
@@ -428,7 +428,7 @@ Returns the arc-cosine (inverse cosine) of x, in the range `[0..pi]`
 
 Raises `E_INVARG` if x is outside the range `[-1.0..1.0]`.
 
-### Function: `atan`
+### `atan`
 
 ```
 float atan(float y [, float x])
@@ -438,7 +438,7 @@ Returns the arc-tangent (inverse tangent) of y in the range `[-pi/2..pi/2]`.
 
 if x is not provided, or of `y/x` in the range `[-pi..pi]` if x is provided.
 
-### Function: `sinh`
+### `sinh`
 
 ```
 float sinh(float x)
@@ -446,7 +446,7 @@ float sinh(float x)
 
 Returns the hyperbolic sine of x.
 
-### Function: `cosh`
+### `cosh`
 
 ```
 float cosh(float x)
@@ -454,7 +454,7 @@ float cosh(float x)
 
 Returns the hyperbolic cosine of x.
 
-### Function: `tanh`
+### `tanh`
 
 ```
 float tanh(float x)
@@ -462,7 +462,7 @@ float tanh(float x)
 
 Returns the hyperbolic tangent of x.
 
-### Function: `exp`
+### `exp`
 
 ```
 float exp(float x)
@@ -470,7 +470,7 @@ float exp(float x)
 
 Returns e raised to the power of x.
 
-### Function: `log`
+### `log`
 
 ```
 float log(float x)
@@ -480,7 +480,7 @@ Returns the natural logarithm of x.
 
 Raises `E_INVARG` if x is not positive.
 
-### Function: `log10`
+### `log10`
 
 ```
 float log10(float x)
@@ -490,7 +490,7 @@ Returns the base 10 logarithm of x.
 
 Raises `E_INVARG` if x is not positive.
 
-### Function: `ceil`
+### `ceil`
 
 ```
 float ceil(float x)
@@ -498,7 +498,7 @@ float ceil(float x)
 
 Returns the smallest integer not less than x, as a floating-point number.
 
-### Function: `floor`
+### `floor`
 
 ```
 float floor(float x)
@@ -506,7 +506,7 @@ float floor(float x)
 
 Returns the largest integer not greater than x, as a floating-point number.
 
-### Function: `trunc`
+### `trunc`
 
 ```
 float trunc(float x)
@@ -518,7 +518,7 @@ For negative x, this is equivalent to `ceil()`; otherwise it is equivalent to `f
 
 ## Operations on Strings
 
-### Function: `length`
+### `length`
 
 ```
 int length(str string)
@@ -533,7 +533,7 @@ length("foo")   =>   3
 length("")      =>   0
 ```
 
-### Function: `strsub`
+### `strsub`
 
 ```
 str strsub(str subject, str what, str with [, int case-matters])
@@ -583,7 +583,7 @@ index("foobar", "oba")          ⇒   3
 index("Foobar", "foo", 1)       ⇒   0
 ```
 
-### Function: `strtr`
+### `strtr`
 
 ```
 int strtr(str source, str str1, str str2 [, case-matters])
@@ -607,7 +607,7 @@ strtr("xXxX", "xXxX", "1234", 0)    ⇒    "4444"
 strtr("xXxX", "xXxX", "1234", 1)    ⇒    "3434"
 ```
 
-### Function: `strcmp`
+### `strcmp`
 
 ```
 int strcmp(str str1, str str2)
@@ -619,7 +619,7 @@ If str1 is [lexicographically](https://en.wikipedia.org/wiki/Lexicographical_ord
 returns a negative integer. If the two strings are identical, `strcmp()` returns zero. Otherwise, `strcmp()` returns a
 positive integer. The ASCII character ordering is used for the comparison.
 
-### Function: `explode`
+### `explode`
 
 ```
 list explodeSTR subject [, STR break [, INT include-sequential-occurrences])
@@ -645,7 +645,7 @@ explode("%slither%is%%wiz%", "%", 1) => {"", "slither", "is", "", "wiz", ""}
 
 > Note: This can be used as a replacement for `$string_utils:explode`.
 
-### Function: `decode_binary`
+### `decode_binary`
 
 ```
 list decode_binary(str bin-string [, int fully])
@@ -666,7 +666,7 @@ decode_binary("foo~0Abar~0Abaz")   =>   {"foo", 10, "bar", 10, "baz"}
 decode_binary("foo~0D~0A", 1)      =>   {102, 111, 111, 13, 10}
 ```
 
-### Function: `encode_binary`
+### `encode_binary`
 
 ```
 str encode_binary(arg, ...)
@@ -684,7 +684,7 @@ encode_binary({"foo", 10}, {"bar", 13})   =>   "foo~0Abar~0D"
 encode_binary("foo", 10, "bar", 13)       =>   "foo~0Abar~0D"
 ```
 
-### Function: `decode_base64`
+### `decode_base64`
 
 ```
 str decode_base64(str base64 [, int safe])
@@ -700,7 +700,7 @@ decode_base64("AAEC")      ⇒    "~00~01~02"
 decode_base64("AAE", 1)    ⇒    "~00~01"
 ```
 
-### Function: `encode_base64`
+### `encode_base64`
 
 ```
 str encode_base64(str binary [, int safe])
@@ -716,7 +716,7 @@ encode_base64("~00~01~02")    ⇒    "AAEC"
 encode_base64("~00~01", 1)    ⇒    "AAE"
 ```
 
-### Function: `spellcheck`
+### `spellcheck`
 
 ```
 int | list spellcheck(STR word)
@@ -728,7 +728,7 @@ If the spelling is correct, the function will return a 1. If the spelling is inc
 correct spellings will be returned instead. If the spelling is incorrect and no suggestions can be found, an empty LIST
 is returned.
 
-### Function: `chr`
+### `chr`
 
 ```
 int chr(INT arg, ...)
@@ -739,7 +739,7 @@ This function translates integers into ASCII characters. Each argument must be a
 If the programmer is not a wizard, and integers less than 32 are provided, E_INVARG is raised. This prevents control
 characters or newlines from being written to the database file by non-trusted individuals.
 
-### Function: `match`
+### `match`
 
 ```
 list match(str subject, str pattern [, int case-matters])
@@ -780,7 +780,7 @@ match("foobar", "f%(o*%)b")
         =>  {1, 4, {{2, 3}, {0, -1}, ...}, "foobar"}
 ```
 
-### Function: `rmatch`
+### `rmatch`
 
 ```
 list rmatch(str subject, str pattern [, int case-matters])
@@ -826,7 +826,7 @@ started on what will surely become a lifelong journey of either love or frustrat
 
 ToastCore offers two primary methods of interacting with regular expressions.
 
-### Function: `pcre_match`
+### `pcre_match`
 
 ```
 LIST pcre_match(STR subject, STR pattern [, ?case matters=0] [, ?repeat until no matches=1])
@@ -865,7 +865,7 @@ Explode a string (albeit a contrived example):
 => {"This", "is", "a", "string", "of", "words", "with", "punctuation", "that", "should", "be", "exploded", "By", "space", "zippy"}
 ```
 
-### Function: `pcre_replace`
+### `pcre_replace`
 
 ```
 STR pcre_replace(STR `subject`, STR `pattern`)
@@ -960,7 +960,7 @@ character not mentioned here is not special; it stands for exactly itself for th
 | `%w`        | matches any word-constituent character (i.e., any letter or digit).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |                                                                                                                                                                                                               |                                                                                     |
 | `%W`        | matches any character that is not a word constituent.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |                                                                                                                                                                                                               |                                                                                     |
 
-### Function: `substitute`
+### `substitute`
 
 ```
 str substitute(str template, list subs)
@@ -983,7 +983,7 @@ substitute("I thank you for your %1 here in %2.", subs)
         =>   "I thank you for your Welcome here in ToastStunt."
 ```
 
-### Function: `salt`
+### `salt`
 
 ```
 str salt(str format, str input)
@@ -1008,7 +1008,7 @@ salt("$2a$08$", "|~99~86~DEq~94_~F3-~1A~D2#~8C~B5sx")    ⇒    "$2a$08$dHkE1lES
 
 > Note: To ensure proper security, the random input must be from a sufficiently random source.
 
-### Function: `crypt`
+### `crypt`
 
 ```
 str crypt(str text [, str salt])
@@ -1048,7 +1048,7 @@ crypt("foobar", "$2a$08$dHkE1lESV9KrErGhhJTxc.")    ⇒    "$2a$08$dHkE1lESV9KrE
 > calls to crypt() may generate different results on different platforms, and your password verification systems will
 > fail. Use a salt longer than two characters at your own risk.
 
-### Function: `argon2`
+### `argon2`
 
 ```
 str argon2(STR password, STR salt [, iterations = 3] [, memory usage in KB = 4096] [, CPU threads = 1])
@@ -1076,7 +1076,7 @@ return argon2(password, salt, 3, 4096, 1);
 > the `THREAD_ARGON2` option which will mitigate lag. This has major caveats however, see the section below on
 `argon2_verify` for more information.
 
-### Function: `argon2_verify`
+### `argon2_verify`
 
 ```
 int argon2_verify(STR hash, STR password)
@@ -1161,7 +1161,7 @@ the authenticity of the sender (as demonstrated by the possession of the secret 
 
 ## Operations on Lists
 
-### Function: `length`
+### `length`
 
 ```
 int length(list list)
@@ -1176,7 +1176,7 @@ length({1, 2, 3})   =>   3
 length({})          =>   0
 ```
 
-### Function: `is_member`
+### `is_member`
 
 ```
 int is_member(ANY value, LIST list [, INT case-sensitive])
@@ -1198,7 +1198,7 @@ is_member("XyZ", {"XYZ", "xyz", "XyZ"})    => 3
 is_member("def", {"ABC", "DEF", "GHI"}, 0) => 2
 ```
 
-### Function: `all_members`
+### `all_members`
 
 ```
 LIST all_members(ANY `value`, LIST `alist`)
@@ -1248,7 +1248,7 @@ listinsert(x, 4)      =>   {4, 1, 2, 3}
 {4, @x}               =>   {4, 1, 2, 3}
 ```
 
-### Function: `listdelete`
+### `listdelete`
 
 ```
 list listdelete(list list, int index)
@@ -1263,7 +1263,7 @@ x = {"foo", "bar", "baz"};
 listdelete(x, 2)   =>   {"foo", "baz"}
 ```
 
-### Function: `listset`
+### `listset`
 
 ```
 list listset(list list, value, int index)
@@ -1304,7 +1304,7 @@ setremove({1, 2, 3}, 4)      =>   {1, 2, 3}
 setremove({1, 2, 3, 2}, 2)   =>   {1, 3, 2}
 ```
 
-### Function: `reverse`
+### `reverse`
 
 ```
 str | list reverse(LIST alist)
@@ -1319,7 +1319,7 @@ reverse({1,2,3,4}) => {4,3,2,1}
 reverse("asdf") => "fdsa"
 ```
 
-### Function: `slice`
+### `slice`
 
 ```
 list slice(LIST alist [, INT | LIST | STR index, ANY default map value])
@@ -1343,7 +1343,7 @@ slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6]}, "a")                => {1, 5
 slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6], ["b" -> 8]}, "a", 0) => {1, 5, 0}
 ```
 
-### Function: `sort`
+### `sort`
 
 ```
 list sort(LIST list [, LIST keys, INT natural sort order?, INT reverse])
@@ -1386,7 +1386,7 @@ sort({"foo", "bar", "baz"}, {123, 5, 8000}) => {"bar", "foo", "baz"}
 
 When using the functions below, it's helpful to remember that maps are ordered.
 
-### Function: `mapkeys`
+### `mapkeys`
 
 ```
 list mapkeys(map map)
@@ -1399,7 +1399,7 @@ x = ["foo" -> 1, "bar" -> 2, "baz" -> 3];
 mapkeys(x)   =>  {"bar", "baz", "foo"}
 ```
 
-### Function: `mapvalues`
+### `mapvalues`
 
 ```
 list mapvalues(MAP `map` [, ... STR `key`])
@@ -1417,7 +1417,7 @@ mapvalues(x)               =>  {2, 3, 1}
 mapvalues(x, "foo", "baz") => {1, 3}
 ```
 
-### Function: `mapdelete`
+### `mapdelete`
 
 ```
 map mapdelete(map map, key)
@@ -1430,7 +1430,7 @@ x = ["foo" -> 1, "bar" -> 2, "baz" -> 3];
 mapdelete(x, "bar")   ⇒   ["baz" -> 3, "foo" -> 1]
 ```
 
-### Function: `maphaskey`
+### `maphaskey`
 
 ```
 int maphaskey(MAP map, STR key)
