@@ -12,7 +12,7 @@
 //
 
 use crate::config::FeaturesConfig;
-use crate::vm::moo_frame::{CatchType, MooStackFrame, PcType, ScopeType};
+use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
 use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
