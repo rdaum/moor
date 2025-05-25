@@ -3,6 +3,11 @@
 The following is an attempt to provide a high-level overview of the architecture of the mooR system. This is considered
 a "living document" and will be updated as the system evolves, and in response to feedback from readers.
 
+This chapter is potentially more technical than the rest of the book, and is intended for readers who are interested in
+a holistic view of the system, its architecture, and how it works under the hood. Feel free to skip or skim this
+chapter if you are not interested in the technical details, and do not be discouraged if you do not understand
+everything.
+
 ### The Atmospheric view
 
 mooR is a multi-player authoring system for shared social spaces.
@@ -185,10 +190,10 @@ processes:
   that have happened in the world. This ultimately ties back to the MOO `notify` built-in function. For now this
   merely dispatches text strings, but in the future it will dispatch more structured events which clients can use
   to update their user interface or local model of the world. Other events that occur on this channel include:
-  - `SystemMessage` for notifications of system-level events
-  - `RequestInput` for prompting the user for input
-  - `Disconnect` for notifying the user that they have been disconnected and requesting that the host close or
-    invalidate the client connection
+    - `SystemMessage` for notifications of system-level events
+    - `RequestInput` for prompting the user for input
+    - `Disconnect` for notifying the user that they have been disconnected and requesting that the host close or
+      invalidate the client connection
 - The `broadcast` channel will be used to send system events, such as shutdown, restart, and other system-level events.
   (For now only "ping-pong" client live-ness check events are sent on this channel.)
 

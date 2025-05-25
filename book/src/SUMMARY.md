@@ -2,6 +2,7 @@
 
 - [Foreword](./foreword.md)
 - [Introduction](./introduction.md)
+- [The architecture of mooR](moor-architecture.md)
 - [The Database](./the-database.md)
     - [MOO Value Types](./the-database/moo-value-types.md)
     - [Objects in the MOO Database](./the-database/objects-in-the-moo-database.md)
@@ -34,7 +35,6 @@
     - [Server Configuration](the-system/server-configuration.md)
     - [Server Assumptions About the Database](the-system/server-assumptions-about-the-database.md)
     - [Server Commands and Database Assumptions](the-system/server-commands-and-database-assumptions.md)
-    - [The architecture of mooR](the-system/moor-architecture.md)
     - [Networking](./the-moo-programming-language/networking.md)
     - [The First Tasks Run By the Server](the-system/the-first-tasks-run-by-the-server.md)
     - [Controlling the Execution of Tasks](the-system/controlling-the-execution-of-tasks.md)
