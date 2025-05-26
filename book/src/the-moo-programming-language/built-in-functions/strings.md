@@ -2,166 +2,151 @@
 
 ### `strsub`
 
-**Description:** Substitutes all occurrences of one string with another within a given string.  
-**Arguments:**
+Replaces all occurrences of `what` in `subject` with `with`, performing string substitution.
 
-- : The string to perform substitutions on `subject`
-- : The substring to find and replace `what`
-- : The replacement string `with`
-- : Optional boolean (default: false) indicating if case sensitivity should be used `case-matters`
+The occurrences are found from left to right and all substitutions happen simultaneously. By default, occurrences of
+`what` are searched for while ignoring the upper/lower case distinction. If `case-matters` is provided and true, then case
+is treated as significant in all comparisons.
 
-**Returns:** A new string with all substitutions made
-If is an empty string, the original string is returned unchanged.  
-**Note:** `what`
+```
+strsub("%n is a fink.", "%n", "Fred")   =>   "Fred is a fink."
+strsub("foobar", "OB", "b")             =>   "fobar"
+strsub("foobar", "OB", "b", 1)          =>   "foobar"
+```
 
 ### `index`
 
-**Description:** Finds the first occurrence of a substring within a string.  
-**Arguments:**
+Returns the index of the first character of the first occurrence of `str2` in `str1`.
 
-- : The string to search in `subject`
-- : The substring to find `what`
-- : Optional boolean (default: false) indicating if case sensitivity should be used `case-matters`
+```
+int index(str str1, str str2 [, int case-matters [, int skip]])
+```
 
-**Returns:** The 1-based position of the first occurrence, or 0 if not found
+These functions will return zero if `str2` does not occur in `str1` at all.
+
+By default the search for an occurrence of `str2` is done while ignoring the upper/lower case distinction. If `case-matters`
+is provided and true, then case is treated as significant in all comparisons.
+
+By default the search starts at the beginning of `str1`. If `skip` is provided, the search skips the first `skip`
+characters and starts at an offset from the beginning of `str1`. The skip must be a positive integer for `index()`. The default value of skip is 0 (skip no characters).
+
+```
+index("foobar", "o")            ⇒   2
+index("foobar", "o", 0, 0)      ⇒   2
+index("foobar", "o", 0, 2)      ⇒   1
+index("foobar", "x")            ⇒   0
+index("foobar", "oba")          ⇒   3
+index("Foobar", "foo", 1)       ⇒   0
+```
 
 ### `rindex`
 
-**Description:** Finds the last occurrence of a substring within a string.  
-**Arguments:**
+Returns the index of the first character of the last occurrence of `str2` in `str1`.
 
-- : The string to search in `subject`
-- : The substring to find `what`
-- : Optional boolean (default: false) indicating if case sensitivity should be used `case-matters`
+```
+int rindex(str str1, str str2 [, int case-matters [, int skip]])
+```
 
-**Returns:** The 1-based position of the last occurrence, or 0 if not found
+By default the search starts at the end of `str1`. If `skip` is provided, the search skips the last `skip`
+characters and starts at an offset from the end of `str1`. The skip must be a negative integer for `rindex()`. The default value of skip is 0 (skip no characters).
+
+```
+rindex("foobar", "o")           ⇒   3
+rindex("foobar", "o", 0, 0)     ⇒   3
+rindex("foobar", "o", 0, -4)    ⇒   2
+```
 
 ### `strcmp`
 
-**Description:** Compares two strings lexicographically.  
-**Arguments:**
+Performs a case-sensitive comparison of the two argument strings.
 
-- : First string to compare `str1`
-- : Second string to compare `str2`
+If `str1` is lexicographically less than `str2`, the `strcmp()` returns a negative integer. If the two strings are identical, `strcmp()` returns zero. Otherwise, `strcmp()` returns a positive integer. The ASCII character ordering is used for the comparison.
 
-**Returns:** An integer less than, equal to, or greater than 0 if is lexicographically less than, equal to, or greater
-than `str1`str2``
+### `explode`
 
-## Encryption and Hashing Functions
+Returns a list of substrings of `subject` that are separated by `break`. `break` defaults to a space.
 
-### `salt`
+Only the first character of `break` is considered:
 
-**Description:** Generates a random cryptographically secure salt string.  
-**Arguments:** None
-**Returns:** A random salt string suitable for use with `argon2`
+```
+explode("slither%is%wiz", "%")      => {"slither", "is", "wiz"}
+explode("slither%is%%wiz", "%%")    => {"slither", "is", "wiz"}
+```
 
-### `crypt`
+You can use `include-sequential-occurrences` to get back an empty string as part of your list if `break` appears multiple
+times with nothing between it, or there is a leading/trailing `break` in your string:
 
-**Description:** Encrypts text using the standard UNIX encryption method.  
-**Arguments:**
+```
+explode("slither%is%%wiz", "%%", 1)  => {"slither", "is", "", "wiz"}
+explode("slither%is%%wiz%", "%", 1)  => {"slither", "is", "", "wiz", ""}
+explode("%slither%is%%wiz%", "%", 1) => {"", "slither", "is", "", "wiz", ""}
+```
 
-- : The text to encrypt `text`
-- : Optional salt string (default: random 2-character alphanumeric string) `salt`
+> Note: This can be used as a replacement for `$string_utils:explode`.
 
-**Returns:** The encrypted string, which includes the salt as its first characters
+### `strtr`
 
-### `string_hash`
+Transforms the string `source` by replacing the characters specified by `str1` with the corresponding characters specified
+by `str2`.
 
-**Description:** Computes an MD5 hash of a string.  
-**Arguments:**
+All other characters are not transformed. If `str2` has fewer characters than `str1` the unmatched characters are simply
+removed from `source`. By default the transformation is done on both upper and lower case characters no matter the case.
+If `case-matters` is provided and true, then case is treated as significant.
 
-- : The string to hash `text`
+```
+strtr("foobar", "o", "i")           ⇒    "fiibar"
+strtr("foobar", "ob", "bo")         ⇒    "fbboar"
+strtr("foobar", "", "")             ⇒    "foobar"
+strtr("foobar", "foba", "")         ⇒    "r"
+strtr("5xX", "135x", "0aBB", 0)     ⇒    "BbB"
+strtr("5xX", "135x", "0aBB", 1)     ⇒    "BBX"
+strtr("xXxX", "xXxX", "1234", 0)    ⇒    "4444"
+strtr("xXxX", "xXxX", "1234", 1)    ⇒    "3434"
+```
 
-**Returns:** The MD5 hash as an uppercase hexadecimal string
+### `decode_binary`
 
-### `argon2`
+Returns a list of strings and/or integers representing the bytes in the binary string `bin_string` in order.
 
-**Description:** Hashes a password using the Argon2id algorithm.  
-**Arguments:**
+If `fully` is false or omitted, the list contains an integer only for each non-printing, non-space byte; all other
+characters are grouped into the longest possible contiguous substrings. If `fully` is provided and true, the list contains
+only integers, one for each byte represented in `bin_string`. Raises `E_INVARG` if `bin_string` is not a properly-formed
+binary string.
 
-- : The password to hash `password`
-- : The salt string to use `salt`
-- : Optional number of iterations (default: 3) `iterations`
-- : Optional memory cost in KB (default: 4096) `memory`
-- : Optional parallelism factor (default: 1) `parallelism`
+```
+decode_binary("foo")               =>   {"foo"}
+decode_binary("~~foo")             =>   {"~foo"}
+decode_binary("foo~0D~0A")         =>   {"foo", 13, 10}
+decode_binary("foo~0Abar~0Abaz")   =>   {"foo", 10, "bar", 10, "baz"}
+decode_binary("foo~0D~0A", 1)      =>   {102, 111, 111, 13, 10}
+```
 
-**Returns:** The hashed password string in PHC format
-Requires wizard permissions.  
-**Note:**
+### `encode_binary`
 
-### `argon2_verify`
+Translates each integer and string in turn into its binary string equivalent, returning the concatenation of all these
+substrings into a single binary string.
 
-**Description:** Verifies a password against an Argon2 hash.  
-**Arguments:**
+Each argument must be an integer between 0 and 255, a string, or a list containing only legal arguments for this
+function.
 
-- : The previously generated hash `hashed_password`
-- : The password to verify `password`
-
-**Returns:** A boolean indicating if the password matches the hash
-Requires wizard permissions.  
-**Note:**
-
-## Encoding Functions
-
-### `encode_base64`
-
-**Description:** Encodes a string using Base64 encoding.  
-**Arguments:**
-
-- : The string to encode `text`
-
-**Returns:** The Base64-encoded string
+```
+encode_binary("~foo")                     =>   "~7Efoo"
+encode_binary({"foo", 10}, {"bar", 13})   =>   "foo~0Abar~0D"
+encode_binary("foo", 10, "bar", 13)       =>   "foo~0Abar~0D"
+```
 
 ### `decode_base64`
 
-**Description:** Decodes a Base64-encoded string.  
-**Arguments:**
+Returns the binary string representation of the supplied Base64 encoded string argument.
 
-- : The Base64-encoded string to decode `encoded_text`
+Raises E_INVARG if base64 is not a properly-formed Base64 string. If `safe` is provided and is true, a URL-safe version of
+Base64 is used (see RFC4648).
 
-**Returns:** The decoded string
-Raises E_INVARG if the input is not valid Base64 or not valid UTF-8.  
-**Note:**
+```
+decode_base64("AAEC")      ⇒    "~00~01~02"
+decode_base64("AAE", 1)    ⇒    "~00~01"
+```
 
-## JSON Functions
+## Encryption and Hashing Functions
 
-### `generate_json`
 
-**Description:** Converts a MOO value to a JSON string.  
-**Arguments:**
-
-- : The MOO value to convert `value`
-
-**Returns:** A JSON string representation of the value
-Supports MOO integers, floats, strings, objects, lists, and maps. Objects are converted to strings in the format "
-#object-number".  
-**Note:**
-
-### `parse_json`
-
-**Description:** Parses a JSON string into a MOO value.  
-**Arguments:**
-
-- : The JSON string to parse `json_str`
-
-**Returns:** The MOO value represented by the JSON
-JSON null becomes MOO none, true/false become 1/0, numbers become integers or floats, strings become strings, arrays
-become lists, and objects become maps with string keys.  
-**Note:**
-
-## Type Conversion Notes
-
-When converting between MOO and JSON:
-
-- MOO objects are represented as strings like "#123" in JSON
-- MOO lists correspond to JSON arrays
-- MOO maps correspond to JSON objects (with string keys)
-- JSON null converts to MOO none
-- JSON booleans convert to MOO integers (1 for true, 0 for false)
-
-## Security Notes
-
-- The and functions require wizard permissions since they involve sensitive cryptographic operations
-  `argon2`argon2_verify``
-- The function generates cryptographically secure random values suitable for password hashing `salt`
-- When storing passwords, use rather than the older function for better security `argon2`crypt``

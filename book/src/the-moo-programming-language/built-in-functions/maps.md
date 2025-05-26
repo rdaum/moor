@@ -1,58 +1,56 @@
 ## Map Manipulation Functions
 
-### `mapdelete`
-
-**Description:** Returns a copy of a map with the specified key-value pair removed.  
-**Arguments:**
-
-- : The map to modify `map`
-- : The key to remove from the map `key`
-
-**Returns:** A new map with the specified key removed  
-**Note:**
-
-- Raises E_TYPE if the first argument is not a map or if the key is a map/list
-- Raises E_RANGE if the key does not exist in the map
+When using the functions below, it's helpful to remember that maps are ordered.
 
 ### `mapkeys`
 
-**Description:** Returns a list containing all keys in a map.  
-**Arguments:**
+```
+list mapkeys(map map)
+```
 
-- : The map from which to extract keys `map`
+returns the keys of the elements of a map.
 
-**Returns:** A list containing all keys in the map  
-**Note:**
-
-- Raises E_TYPE if the argument is not a map
-- The order of keys in the returned list is not guaranteed to be stable
+```
+x = ["foo" -> 1, "bar" -> 2, "baz" -> 3];
+mapkeys(x)   =>  {"bar", "baz", "foo"}
+```
 
 ### `mapvalues`
 
-**Description:** Returns a list containing all values in a map.  
-**Arguments:**
+```
+list mapvalues(MAP `map` [, ... STR `key`])
+```
 
-- : The map from which to extract values `map`
+returns the values of the elements of a map.
 
-**Returns:** A list containing all values in the map  
-**Note:**
+If you only want the values of specific keys in the map, you can specify them as optional arguments. See examples below.
 
-- Raises E_TYPE if the argument is not a map
-- The order of values in the returned list corresponds to the order of keys returned by `mapkeys`
+Examples:
+
+```
+x = ["foo" -> 1, "bar" -> 2, "baz" -> 3];
+mapvalues(x)               =>  {2, 3, 1}
+mapvalues(x, "foo", "baz") => {1, 3}
+```
+
+### `mapdelete`
+
+```
+map mapdelete(map map, key)
+```
+
+Returns a copy of map with the value corresponding to key removed. If key is not a valid key, then E_RANGE is raised.
+
+```
+x = ["foo" -> 1, "bar" -> 2, "baz" -> 3];
+mapdelete(x, "bar")   ⇒   ["baz" -> 3, "foo" -> 1]
+```
 
 ### `maphaskey`
 
-**Description:** Checks if a key exists in a map.  
-**Arguments:**
+```
+int maphaskey(MAP map, STR key)
+```
 
-- : The map to check `map`
-- : The key to look for `key`
-
-**Returns:** A boolean value (true if the key exists, false otherwise)  
-**Note:**
-
-- Raises E_TYPE if the first argument is not a map or if the key is a map/list
-- Performs a case-sensitive key comparison
-
-Note: Map functions in this system work with immutable data structures. Operations like return new maps rather than
-modifying the original. Map keys cannot be complex structures like lists or other maps. `mapdelete`
+Returns 1 if key exists in map. When not dealing with hundreds of keys, this function is faster (and easier to read)
+than something like: !(x in mapkeys(map))
