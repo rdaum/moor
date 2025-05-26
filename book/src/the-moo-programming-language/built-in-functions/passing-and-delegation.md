@@ -1,6 +1,7 @@
 # Parent Delegation and Inheritance
 
-One of the most important facilities in an object-oriented programming language is ability for a child object to make
+One of the most important facilities in an object-oriented programming language is the ability for a child object to
+make
 use of a parent's implementation of some operation, even when the child provides its own definition for that operation.
 The `pass()` function provides this facility in MOO.
 
