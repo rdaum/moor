@@ -359,6 +359,13 @@ Error values can also have an optional message associated with them, which can b
 about the error. This message can be set when the error is raised, and it can be retrieved later using the
 `error_message` builtin function.
 
+An example of an error value with an attached message might look like this:
+
+```moo
+let my_error = E_TYPE("Expected a number, but got a string.");
+error_message(my_error); // Returns "Expected a number, but got a string."
+```
+
 ## List Type
 
 Another important value in MOO programs is _lists_. A list is a sequence of arbitrary MOO values, possibly including
@@ -367,8 +374,10 @@ separated by commas, the whole enclosed in curly braces (`{` and `}`). For examp
 the week is written like this:
 
 ```
+
 {"Sunday", "Monday", "Tuesday", "Wednesday",
- "Thursday", "Friday", "Saturday"}
+"Thursday", "Friday", "Saturday"}
+
 ```
 
 > Note: It doesn't matter that we put a line-break in the middle of the list. This is true in general in MOO: anywhere
