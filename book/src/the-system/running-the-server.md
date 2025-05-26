@@ -34,6 +34,74 @@ daemon
 and can be used to perform tasks that require network access, such as fetching data from external APIs or sending
 notifications.
 
+### Using Docker Compose: Step-by-Step Guide
+
+Docker Compose is a tool that helps you define and run multi-container Docker applications. It uses a file called `docker-compose.yml` (found in the root of the mooR repository) to describe how each part of the system should run, what environment variables or files it needs, and how the parts connect to each other.
+
+### What is Docker Compose?
+
+Docker Compose lets you manage all the different components of mooR (like the daemon, telnet host, web host, and curl worker) as a single unit. Instead of running each binary manually, you can start everything with one command.
+
+### Getting Started with Docker Compose
+
+To use Docker Compose, make sure you have Docker and Docker Compose installed. Most modern Docker installations include Compose by default.
+
+#### Starting the Services
+
+To start all the services defined in the `docker-compose.yml` file, open a terminal in the root of the repository and run:
+
+```bash
+docker compose up
+```
+
+This will build the images (if needed) and start the containers in the foreground, showing you the logs from all services.
+
+##### Running in the Background (Detached Mode)
+
+If you want to run the services in the background, add the `-d` flag:
+
+```bash
+docker compose up -d
+```
+
+This will start the containers and return you to the command prompt.
+
+#### Viewing Logs
+
+To view the logs from all services, use:
+
+```bash
+docker compose logs -f
+```
+
+This will "follow" the logs, showing new output as it appears. You can also view logs for a specific service:
+
+```bash
+docker compose logs -f <service-name>
+```
+
+#### Stopping the Services
+
+To stop the running containers, press `Ctrl+C` if running in the foreground, or run:
+
+```bash
+docker compose down
+```
+
+This will stop and remove the containers, but not the images or volumes.
+
+### About the Provided `docker-compose.yml`
+
+The `docker-compose.yml` file included in this repository is set up to build the project from source. This means that when you run `docker compose up`, Docker will build the images using the latest code in the repository.
+
+**Note:** In the future, the `docker-compose.yml` file may be updated to use tagged release versions of the images, making it easier to run stable releases without building from source.
+
+### Learning More from the Compose File
+
+You can open the `docker-compose.yml` file in a text editor to see exactly how each service is configured. This can help you understand how to run each of the project's binaries manually, what environment variables are needed, and how the services interact.
+
+For more information, see the [Docker Compose documentation](https://docs.docker.com/compose/).
+
 ## Debian packages
 
 Another method is to use the `debian` packages built by the `debian` directory in various mooR repositories, and
