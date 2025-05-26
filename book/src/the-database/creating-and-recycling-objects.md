@@ -21,7 +21,7 @@ constraints described in the [Objects in the MOO database](objects-in-the-moo-da
 the `create()` function will raise `E_PERM` if the caller does not have permission to create a child of the parent
 object, and the `recycle()` function will raise `E_PERM` if the caller does not have permission to recycle the object
 being destroyed. Documentation on `create()` and `recycle()` in
-the [Manipulating OBjects](../the-moo-programming-language/built-in-functions/manipulating-objects.md) chapter describes
+the [Manipulating Objects](../the-moo-programming-language/built-in-functions/objects.md) chapter describes
 the exact permissions required for each function.
 // TODO: Quota support as described below is not yet implemented in the mooR server, but may be in the future. Most
 // modern cores instead implement this functionality in-core, however.

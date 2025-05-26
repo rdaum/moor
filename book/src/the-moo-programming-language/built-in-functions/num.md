@@ -2,211 +2,217 @@
 
 ### `abs`
 
-**Description:** Returns the absolute value of a number.  
-**Arguments:**
+```
+int abs(int x)
+```
 
-- `number`: An integer or float value
+Returns the absolute value of x.
 
-**Returns:** The absolute value of the input number, in the same type as the input
+If x is negative, then the result is `-x`; otherwise, the result is x. The number x can be either integer or
+floating-point; the result is of the same kind.
 
 ### `min`
 
-**Description:** Returns the smallest value from the provided arguments.  
-**Arguments:**
+```
+int min(int x, ...)
+```
 
-- `value1, value2, ...`: Two or more values of the same type
+Return the smallest of it's arguments.
 
-**Returns:** The minimum value from the provided arguments  
-**Note:** All arguments must be of the same type.
+All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is
+raised.
 
 ### `max`
 
-**Description:** Returns the largest value from the provided arguments.  
-**Arguments:**
+```
+int max(int x, ...)
+```
 
-- `value1, value2, ...`: Two or more values of the same type
+Return the largest of it's arguments.
 
-**Returns:** The maximum value from the provided arguments  
-**Note:** All arguments must be of the same type.
+All of the arguments must be numbers of the same kind (i.e., either integer or floating-point); otherwise `E_TYPE` is
+raised.
 
 ### `random`
 
-**Description:** Generates a random integer.  
-**Arguments:**
+```
+int random([int mod, [int range]])
+```
 
-- `limit`: Optional maximum value (inclusive)
+random -- Return a random integer
 
-**Returns:** A random integer between 1 and the limit (or between 1 and 2,147,483,647 if no limit is provided)  
-**Note:** If a limit is provided, it must be a positive integer.
+mod must be a positive integer; otherwise, `E_INVARG` is raised. If mod is not provided, it defaults to the largest MOO
+integer, which will depend on if you are running 32 or 64-bit.
+
+if range is provided then an integer in the range of mod to range (inclusive) is returned.
+
+```
+random(10)                  => integer between 1-10
+random()                    => integer between 1 and maximum integer supported
+random(1, 5000)             => integer between 1 and 5000
+```
 
 ### `floatstr`
 
-**Description:** Formats a floating-point number as a string with specified precision.  
-**Arguments:**
+```
+str floatstr(float x, int precision [, scientific])
+```
 
-- `number`: The float to format
-- : The number of decimal places to include `precision`
-- : Optional boolean to use scientific notation (default: false) `scientific`
+Converts x into a string with more control than provided by either `tostr()` or `toliteral()`.
 
-**Returns:** A string representation of the number
+Precision is the number of digits to appear to the right of the decimal point, capped at 4 more than the maximum
+available precision, a total of 19 on most machines; this makes it possible to avoid rounding errors if the resulting
+string is subsequently read back as a floating-point value. If scientific is false or not provided, the result is a
+string in the form `"MMMMMMM.DDDDDD"`, preceded by a minus sign if and only if x is negative. If scientific is provided
+and true, the result is a string in the form `"M.DDDDDDe+EEE"`, again preceded by a minus sign if and only if x is
+negative.
 
 ## Trigonometric Functions
 
 ### `sin`
 
-**Description:** Calculates the sine of an angle (in radians).  
-**Arguments:**
+```
+float sin(float x)
+```
 
-- `angle`: Angle in radians
-
-**Returns:** The sine of the angle as a float
+Returns the sine of x.
 
 ### `cos`
 
-**Description:** Calculates the cosine of an angle (in radians).  
-**Arguments:**
+```
+float cos(float x)
+```
 
-- `angle`: Angle in radians
-
-**Returns:** The cosine of the angle as a float
+Returns the cosine of x.
 
 ### `tan`
 
-**Description:** Calculates the tangent of an angle (in radians).  
-**Arguments:**
+```
+float tan(float x)
+```
 
-- `angle`: Angle in radians
-
-**Returns:** The tangent of the angle as a float
+Returns the tangent of x.
 
 ### `asin`
 
-**Description:** Calculates the arc sine (inverse sine) of a value.  
-**Arguments:**
+```
+float asin(float x)
+```
 
-- : A value between -1 and 1 `value`
+Returns the arc-sine (inverse sine) of x, in the range `[-pi/2..pi/2]`
 
-**Returns:** The arc sine in radians as a float  
-**Note:** Raises E_ARGS if the value is outside the range \[-1, 1\].
+Raises `E_INVARG` if x is outside the range `[-1.0..1.0]`.
 
 ### `acos`
 
-**Description:** Calculates the arc cosine (inverse cosine) of a value.  
-**Arguments:**
+```
+float acos(float x)
+```
 
-- : A value between -1 and 1 `value`
+Returns the arc-cosine (inverse cosine) of x, in the range `[0..pi]`
 
-**Returns:** The arc cosine in radians as a float  
-**Note:** Raises E_ARGS if the value is outside the range \[-1, 1\].
+Raises `E_INVARG` if x is outside the range `[-1.0..1.0]`.
 
 ### `atan`
 
-**Description:** Calculates the arc tangent of y/x.  
-**Arguments:**
+```
+float atan(float y [, float x])
+```
 
-- : The x coordinate `x`
-- : The y coordinate `y`
+Returns the arc-tangent (inverse tangent) of y in the range `[-pi/2..pi/2]`.
 
-**Returns:** The arc tangent of y/x in radians as a float
+if x is not provided, or of `y/x` in the range `[-pi..pi]` if x is provided.
 
 ## Hyperbolic Functions
 
 ### `sinh`
 
-**Description:** Calculates the hyperbolic sine of a value.  
-**Arguments:**
+```
+float sinh(float x)
+```
 
-- : The input value `value`
-
-**Returns:** The hyperbolic sine as a float
+Returns the hyperbolic sine of x.
 
 ### `cosh`
 
-**Description:** Calculates the hyperbolic cosine of a value.  
-**Arguments:**
+```
+float cosh(float x)
+```
 
-- : The input value `value`
-
-**Returns:** The hyperbolic cosine as a float
+Returns the hyperbolic cosine of x.
 
 ### `tanh`
 
-**Description:** Calculates the hyperbolic tangent of a value.  
-**Arguments:**
+```
+float tanh(float x)
+```
 
-- : The input value `value`
-
-**Returns:** The hyperbolic tangent as a float
+Returns the hyperbolic tangent of x.
 
 ## Exponential and Logarithmic Functions
 
 ### `exp`
 
-**Description:** Calculates e raised to the power of the input value.  
-**Arguments:**
+```
+float exp(float x)
+```
 
-- : The exponent `value`
-
-**Returns:** e^value as a float
+Returns e raised to the power of x.
 
 ### `log`
 
-**Description:** Calculates the natural logarithm (base e) of a value.  
-**Arguments:**
+```
+float log(float x)
+```
 
-- : A positive number `value`
+Returns the natural logarithm of x.
 
-**Returns:** The natural logarithm as a float  
-**Note:** Raises E_ARGS if the value is less than or equal to 0.
+Raises `E_INVARG` if x is not positive.
 
 ### `log10`
 
-**Description:** Calculates the base-10 logarithm of a value.  
-**Arguments:**
+```
+float log10(float x)
+```
 
-- : A positive number `value`
+Returns the base 10 logarithm of x.
 
-**Returns:** The base-10 logarithm as a float  
-**Note:** Raises E_ARGS if the value is less than or equal to 0.
+Raises `E_INVARG` if x is not positive.
 
 ### `sqrt`
 
-**Description:** Calculates the square root of a value.  
-**Arguments:**
+```
+float sqrt(float x)
+```
 
-- : A non-negative number `value`
+Returns the square root of x.
 
-**Returns:** The square root as a float  
-**Note:** Raises E_ARGS if the value is negative.
+Raises `E_INVARG` if x is negative.
 
 ## Rounding Functions
 
 ### `ceil`
 
-**Description:** Rounds a value up to the nearest integer.  
-**Arguments:**
+```
+float ceil(float x)
+```
 
-- : The value to round up `value`
-
-**Returns:** The ceiling value as a float
+Returns the smallest integer not less than x, as a floating-point number.
 
 ### `floor`
 
-**Description:** Rounds a value down to the nearest integer.  
-**Arguments:**
+```
+float floor(float x)
+```
 
-- : The value to round down `value`
-
-**Returns:** The floor value as a float
+Returns the largest integer not greater than x, as a floating-point number.
 
 ### `trunc`
 
-**Description:** Truncates a value toward zero.  
-**Arguments:**
+```
+float trunc(float x)
+```
 
-- : The value to truncate `value`
+Returns the integer obtained by truncating x at the decimal point, as a floating-point number.
 
-**Returns:** The truncated value as a float
-Note: All numeric functions accept both integer and float arguments and typically return results as floating-point
-numbers. Functions that require specific ranges or positive values will raise appropriate errors if these conditions are
-not met.
+For negative x, this is equivalent to `ceil()`; otherwise it is equivalent to `floor()`.

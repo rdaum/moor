@@ -2,289 +2,244 @@
 
 ### `is_member`
 
-**Description:** Checks if a value is an element of a list.  
-**Arguments:**
-
-- : The value to search for `value`
-- : The list to search in `list`
-
-**Returns:** A boolean value (1 if the value is in the list, 0 otherwise)  
-**Example:**
+Returns true if there is an element of list that is completely indistinguishable from value.
 
 ```
-is_member("apple", {"apple", "banana", "orange"}) => 1
-is_member(5, {1, 2, 3}) => 0
+int is_member(ANY value, LIST list [, INT case-sensitive])
+```
+
+This is much the same operation as "`value in list`" except that, unlike `in`, the `is_member()` function does not
+treat upper- and lower-case characters in strings as equal. This treatment of strings can be controlled with the
+`case-sensitive` argument; setting `case-sensitive` to false will effectively disable this behavior.
+
+Raises E_ARGS if two values are given or if more than three arguments are given. Raises E_TYPE if the second argument is
+not a list. Otherwise returns the index of `value` in `list`, or 0 if it's not in there.
+
+```
+is_member(3, {3, 10, 11})                  => 1
+is_member("a", {"A", "B", "C"})            => 0
+is_member("XyZ", {"XYZ", "xyz", "XyZ"})    => 3
+is_member("def", {"ABC", "DEF", "GHI"}, 0) => 2
+```
+
+### `all_members`
+
+Returns the indices of every instance of `value` in `alist`.
+
+```
+LIST all_members(ANY value, LIST alist)
+```
+
+Example:
+
+```
+all_members("a", {"a", "b", "a", "c", "a", "d"}) => {1, 3, 5}
 ```
 
 ## List Modification Functions
 
 ### `listinsert`
 
-**Description:** Inserts a value at a specific position in a list.  
-**Arguments:**
-
-- : The list to modify `list`
-- : The value to insert `value`
-- : The position where the value should be inserted (1-based index) `position`
-
-**Returns:** The modified list  
-**Notes:**
-
-- If is less than or equal to 1, the value is inserted at the beginning `position`
-- If is greater than the length of the list, the value is appended to the end `position`
-
-**Example:**
+Returns a copy of list with value added as a new element.
 
 ```
-listinsert({1, 2, 3}, 99, 2) => {1, 99, 2, 3}
+list listinsert(list list, value [, int index])
+```
+
+`listinsert()` adds value before the existing element with the given index, if provided.
+
+If index is not provided, then `listinsert()` adds it at the beginning; this usage is discouraged, however, since the same intent can be more clearly expressed using the list-construction expression, as shown in the examples below.
+
+```
+x = {1, 2, 3};
+listinsert(x, 4, 2)   =>   {1, 4, 2, 3}
+listinsert(x, 4)      =>   {4, 1, 2, 3}
+{4, @x}               =>   {4, 1, 2, 3}
 ```
 
 ### `listappend`
 
-**Description:** Appends a value to the end of a list.  
-**Arguments:**
-
-- : The list to modify `list`
-- : The value to append `value`
-
-**Returns:** The modified list  
-**Example:**
+Returns a copy of list with value added as a new element.
 
 ```
-listappend({1, 2, 3}, 4) => {1, 2, 3, 4}
+list listappend(list list, value [, int index])
+```
+
+`listappend()` adds value after the existing element with the given index, if provided.
+
+The following three expressions always have the same value:
+
+```
+listinsert(list, element, index)
+listappend(list, element, index - 1)
+{@list[1..index - 1], element, @list[index..length(list)]}
+```
+
+If index is not provided, then `listappend()` adds the value at the end of the list.
+
+```
+x = {1, 2, 3};
+listappend(x, 4, 2)   =>   {1, 2, 4, 3}
+listappend(x, 4)      =>   {1, 2, 3, 4}
+{@x, 4}               =>   {1, 2, 3, 4}
 ```
 
 ### `listdelete`
 
-**Description:** Removes an element at a specific position from a list.  
-**Arguments:**
-
-- : The list to modify `list`
-- : The position of the element to remove (1-based index) `position`
-
-**Returns:** The modified list  
-**Notes:**
-
-- If is outside the valid range (1 to length of list), E_RANGE is raised `position`
-
-**Example:**
+Returns a copy of list with the indexth element removed.
 
 ```
-listdelete({1, 2, 3, 4}, 3) => {1, 2, 4}
+list listdelete(list list, int index)
+```
+
+If index is not in the range `[1..length(list)]`, then `E_RANGE` is raised.
+
+```
+x = {"foo", "bar", "baz"};
+listdelete(x, 2)   =>   {"foo", "baz"}
 ```
 
 ### `listset`
 
-**Description:** Replaces the value at a specific position in a list.  
-**Arguments:**
-
-- : The list to modify `list`
-- : The new value `value`
-- : The position to replace (1-based index) `position`
-
-**Returns:** The modified list  
-**Notes:**
-
-- If is outside the valid range (1 to length of list), E_RANGE is raised `position`
-
-**Example:**
+Returns a copy of list with the indexth element replaced by value.
 
 ```
-listset({1, 2, 3}, 99, 2) => {1, 99, 3}
+list listset(list list, value, int index)
 ```
+
+If index is not in the range `[1..length(list)]`, then `E_RANGE` is raised.
+
+```
+x = {"foo", "bar", "baz"};
+listset(x, "mumble", 2)   =>   {"foo", "mumble", "baz"}
+```
+
+This function exists primarily for historical reasons; it was used heavily before the server supported indexed
+assignments like `x[i] = v`. New code should always use indexed assignment instead of `listset()` wherever possible.
 
 ## Set Operations
 
 ### `setadd`
 
-**Description:** Adds a value to a list if it's not already present, treating the list as a set.  
-**Arguments:**
-
-- : The list to modify `list`
-- : The value to add `value`
-
-**Returns:** The modified list  
-**Example:**
+Returns a copy of list with the given value added.
 
 ```
-setadd({1, 2, 3}, 4) => {1, 2, 3, 4}
-setadd({1, 2, 3}, 2) => {1, 2, 3}  // No change as 2 is already in the list
+list setadd(list list, value)
+```
+
+`setadd()` only adds value if it is not already an element of list; list is thus treated as a mathematical set. value is
+added at the end of the resulting list, if at all.
+
+```
+setadd({1, 2, 3}, 3)         =>   {1, 2, 3}
+setadd({1, 2, 3}, 4)         =>   {1, 2, 3, 4}
 ```
 
 ### `setremove`
 
-**Description:** Removes all occurrences of a value from a list.  
-**Arguments:**
-
-- : The list to modify `list`
-- : The value to remove `value`
-
-**Returns:** The modified list  
-**Example:**
+Returns a copy of list with the given value removed.
 
 ```
-setremove({1, 2, 3, 2}, 2) => {1, 3}
+list setremove(list list, value)
 ```
 
-## Regular Expression Functions
-
-### `match`
-
-**Description:** Searches for a pattern in a string using MOO-style regular expressions.  
-**Arguments:**
-
-- : The regular expression pattern `pattern`
-- : The string to search in `subject`
-- : Optional boolean (default: 0) indicating if case sensitivity should be used `case-matters`
-
-**Returns:** If a match is found, a list containing:
-
-1. The starting position of the match (1-based)
-2. The length of the match
-3. For each capturing group: a list containing its starting position and length
-
-If no match is found, returns 0.  
-
-**Example:**
+`setremove()` returns a list identical to list if value is not an element. If value appears more than once in list, only the first occurrence is removed in the returned copy.
 
 ```
-match("a(.*)c", "abcdef") => {1, 3, {2, 1}}  // Matches "abc", with group capturing "b"
+setremove({1, 2, 3}, 3)      =>   {1, 2}
+setremove({1, 2, 3}, 4)      =>   {1, 2, 3}
+setremove({1, 2, 3, 2}, 2)   =>   {1, 3, 2}
 ```
 
-### `rmatch`
+### `reverse`
 
-**Description:** Similar to `match`, but searches from the end of the string.  
-**Arguments:**
-
-- : The regular expression pattern `pattern`
-- : The string to search in `subject`
-- : Optional boolean (default: 0) indicating if case sensitivity should be used `case-matters`
-
-**Returns:** Same as `match`, but finds the rightmost occurrence of the pattern.
-
-### `pcre_match`
-
-**Description:** Searches for a pattern in a string using PCRE-compatible regular expressions.  
-**Arguments:**
-
-- : The regular expression pattern `pattern`
-- : The string to search in `subject`
-- : Optional boolean (default: 0) indicating if case sensitivity should be used `case-matters`
-- : Optional boolean (default: 0) indicating if all matches should be found `repeat`
-
-**Returns:**
-
-- If is 0: returns a list with the first match and all capture groups `repeat`
-- If is 1: returns a list of all matches, with each match as a sublist containing the match and its capture groups
-  `repeat`
-
-**Example:**
+Return a reversed list or string.
 
 ```
-pcre_match("a(.)c", "abc adc") => {"abc", "b"}
-pcre_match("a(.)c", "abc adc", 0, 1) => {{"abc", "b"}, {"adc", "d"}}
+str | list reverse(LIST alist)
 ```
 
-### `pcre_replace`
-
-**Description:** Replaces text in a string using PCRE regular expressions.  
-**Arguments:**
-
-- : The regular expression pattern `pattern`
-- : The replacement string `replacement`
-- : The string to modify `subject`
-- : Optional boolean (default: 0) indicating if case sensitivity should be used `case-matters`
-
-**Returns:** The modified string with replacements applied
-**Example:**
+Examples:
 
 ```
-pcre_replace("a(.)c", "A$1C", "abc adc") => "AbC AdC"
+reverse({1,2,3,4}) => {4,3,2,1}
+reverse("asdf") => "fdsa"
 ```
-
-### `substitute`
-
-**Description:** Substitutes captures from a regular expression match into a template string.  
-**Arguments:**
-
-- : The template string with placeholders like %1, %2, etc. `template`
-- : The match result from a previous call to `match` or `matches`rmatch``
-- : The original string that was matched against `subject`
-
-**Returns:** The template with placeholders replaced by the captured text 
-**Example:**
-
-```
-substitute("The %2 is %1.", match("(\\w+) (\\w+)", "red apple"), "red apple") => "The apple is red."
-```
-
-## List Manipulation Functions
 
 ### `slice`
 
-**Description:** Extracts a portion of a list.  
-**Arguments:**
-
-- : The list to extract from `list`
-- : The starting position (1-based index) `from`
-- `to`: The ending position (1-based index)
-
-**Returns:** A new list containing the elements from position to position `to` (inclusive) `from`  
-**Notes:**
-
-- If is negative, it counts from the end of the list `from`
-- If `to` is negative, it counts from the end of the list
-- If `to` is greater than the length of the list, it is treated as the list length
-
-**Example:**
+Return the index-th elements of alist. By default, index will be 1. If index is a list of integers, the returned list
+will have those elements from alist. This is the built-in equivalent of LambdaCore's $list_utils:slice verb.
 
 ```
-slice({1, 2, 3, 4, 5}, 2, 4) => {2, 3, 4}
-slice({1, 2, 3, 4, 5}, 2, -2) => {2, 3, 4}
+list slice(LIST alist [, INT | LIST | STR index, ANY default map value])
 ```
 
-## Regular Expression Syntax
+If alist is a list of maps, index can be a string indicating a key to return from each map in alist.
 
-### MOO-Style Regular Expressions
+If default map value is specified, any maps not containing the key index will have default map value returned in their
+place. This is useful in situations where you need to maintain consistency with a list index and can't have gaps in your
+return list.
 
-The `match` and functions use a simplified regular expression syntax: `rmatch`
+Examples:
 
-- `.` - Matches any single character
-- `*` - Matches zero or more of the preceding character or group
-- `+` - Matches one or more of the preceding character or group
-- `?` - Matches zero or one of the preceding character or group
-- `[abc]` - Matches any character in the brackets
-- `[^abc]` - Matches any character not in the brackets
-- `()` - Creates a capturing group
-- `|` - Alternation (OR)
-- `^` - Matches the start of a string
-- `$` - Matches the end of a string
+```
+slice({{"z", 1}, {"y", 2}, {"x",5}}, 2)                                 => {1, 2, 5}
+slice({{"z", 1, 3}, {"y", 2, 4}}, {2, 1})                               => {{1, "z"}, {2, "y"}}
+slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6]}, "a")                => {1, 5}
+slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6], ["b" -> 8]}, "a", 0) => {1, 5, 0}
+```
 
-### PCRE Regular Expressions
+### `sort`
 
-The and functions use the more powerful PCRE syntax, which includes: `pcre_match`pcre_replace``
+Sorts list either by keys or using the list itself.
 
-- All MOO-style features
-- `\d` - Matches any digit
--
-  - Matches any word character (letter, digit, underscore) `\w`
-- `\s` - Matches any whitespace character
-- `{n}` - Matches exactly n of the preceding character or group
-- `{n,m}` - Matches between n and m of the preceding character or group
-- `(?:...)` - Non-capturing group
-- Look-ahead and look-behind assertions
-- And many more advanced features
+```
+list sort(LIST list [, LIST keys, INT natural sort order?, INT reverse])
+```
 
-## Replacement String Syntax
+When sorting list by itself, you can use an empty list ({}) for keys to specify additional optional arguments.
 
-In , the replacement string can include: `pcre_replace`
+If natural sort order is true, strings containing multi-digit numbers will consider those numbers to be a single
+character. So, for instance, this means that 'x2' would come before 'x11' when sorted naturally because 2 is less than 11. This argument defaults to 0.
 
-- `$n` or - Refers to the nth capture group `\n`
-- `$0` - Refers to the entire match
-- `\\` - Represents a literal backslash
-- `\$` - Represents a literal dollar sign
+If reverse is true, the sort order is reversed. This argument defaults to 0.
 
-In , the template string can include: `substitute`
+Examples:
 
-- `%n` - Refers to the nth capture group
-- `%%` - Represents a literal percent sign
+Sort a list by itself:
+
+```
+sort({"a57", "a5", "a7", "a1", "a2", "a11"}) => {"a1", "a11", "a2", "a5", "a57", "a7"}
+```
+
+Sort a list by itself with natural sort order:
+
+```
+sort({"a57", "a5", "a7", "a1", "a2", "a11"}, {}, 1) => {"a1", "a2", "a5", "a7", "a11", "a57"}
+```
+
+Sort a list of strings by a list of numeric keys:
+
+```
+sort({"foo", "bar", "baz"}, {123, 5, 8000}) => {"bar", "foo", "baz"}
+```
+
+> Note: This is a threaded function.
+
+## Additional List Functions
+
+### `length`
+
+Returns the number of elements in list.
+
+```
+int length(list list)
+```
+
+It is also permissible to pass a string to `length()`; see the description in the string functions section.
+
+```
+length({1, 2, 3})   =>   3
+length({})          =>   0
+```
