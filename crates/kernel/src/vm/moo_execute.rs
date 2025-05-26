@@ -768,10 +768,8 @@ pub fn moo_frame_execute(
                             };
                             e.clone()
                         });
-                        f.catch_stack.push((
-                            CatchType::Errors(error_codes.into_iter().map(|x| x.clone()).collect()),
-                            label,
-                        ));
+                        f.catch_stack
+                            .push((CatchType::Errors(error_codes.into_iter().collect()), label));
                     }
                     Variant::Int(0) => {
                         f.catch_stack.push((CatchType::Any, label));

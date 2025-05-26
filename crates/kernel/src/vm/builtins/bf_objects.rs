@@ -361,13 +361,13 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_ARGS.msg("create() takes 1 or 2 arguments"),
         ));
     }
-    let Some(parent) = bf_args.args[0].as_object().clone() else {
+    let Some(parent) = bf_args.args[0].as_object() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("create() first argument must be an object"),
         ));
     };
     let owner = if bf_args.args.len() == 2 {
-        let Some(owner) = bf_args.args[1].as_object().clone() else {
+        let Some(owner) = bf_args.args[1].as_object() else {
             return Err(BfErr::ErrValue(
                 E_TYPE.msg("create() second argument must be an object"),
             ));
@@ -448,7 +448,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 1 {
         return Err(BfErr::ErrValue(E_ARGS.msg("recycle() takes 1 argument")));
     }
-    let Some(obj) = bf_args.args[0].as_object().clone() else {
+    let Some(obj) = bf_args.args[0].as_object() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("recycle() first argument must be an object"),
         ));
@@ -646,12 +646,12 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("move() takes 2 arguments")));
     }
-    let Some(what) = bf_args.args[0].as_object().clone() else {
+    let Some(what) = bf_args.args[0].as_object() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("move() first argument must be an object"),
         ));
     };
-    let Some(whereto) = bf_args.args[1].as_object().clone() else {
+    let Some(whereto) = bf_args.args[1].as_object() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("move() second argument must be an object"),
         ));
