@@ -228,6 +228,97 @@ fn bf_isa(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     Ok(Ret(v_bool(isa)))
 }
+
+/*
+Function: list locations (obj object [, obj stop [, int is-parent]])
+Recursively builds a list of an object's location, its location's location, and so forth until
+hitting #nothing. If stop is provided, it stops before that object. If is-parent is true, stop
+is treated as a parent and stops when any location is a child of that parent.
+*/
+fn bf_locations(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.is_empty() || bf_args.args.len() > 3 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("locations() takes 1 to 3 arguments"),
+        ));
+    }
+
+    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("locations() first argument must be an object"),
+        ));
+    };
+
+    let stop_obj = if bf_args.args.len() >= 2 {
+        let Variant::Obj(stop) = bf_args.args[1].variant() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("locations() second argument must be an object"),
+            ));
+        };
+        Some(*stop)
+    } else {
+        None
+    };
+
+    let is_parent = if bf_args.args.len() == 3 {
+        bf_args.args[2].is_true()
+    } else {
+        false
+    };
+
+    if !bf_args.world_state.valid(obj).map_err(world_state_bf_err)? {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("locations() argument must be a valid object"),
+        ));
+    }
+
+    let mut locations = Vec::new();
+    let mut current = *obj;
+
+    loop {
+        // Get the location of the current object
+        let location = bf_args
+            .world_state
+            .location_of(&bf_args.task_perms_who(), &current)
+            .map_err(world_state_bf_err)?;
+
+        // Stop if we've hit #nothing
+        if location.is_nothing() {
+            break;
+        }
+
+        // Handle stop conditions before adding to the list
+        if let Some(stop) = stop_obj {
+            if !is_parent {
+                // Simple equality check - stop before adding this location
+                if location == stop {
+                    break;
+                }
+            }
+        }
+
+        // Add this location to our list
+        locations.push(v_obj(location));
+
+        // Handle is_parent stop condition after adding to the list
+        if let Some(stop) = stop_obj {
+            if is_parent {
+                // If is_parent is true, check if location is a child of stop
+                let ancestors = bf_args
+                    .world_state
+                    .ancestors_of(&bf_args.task_perms_who(), &location, false)
+                    .map_err(world_state_bf_err)?;
+                if ancestors.contains(stop) {
+                    break;
+                }
+            }
+        }
+
+        current = location;
+    }
+
+    Ok(Ret(v_list(&locations)))
+}
+
 /*
 Syntax:  create (obj <parent> [, obj <owner>])   => obj
  */
@@ -860,4 +951,5 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("recycle")] = Box::new(bf_recycle);
     builtins[offset_for_builtin("max_object")] = Box::new(bf_max_object);
     builtins[offset_for_builtin("players")] = Box::new(bf_players);
+    builtins[offset_for_builtin("locations")] = Box::new(bf_locations);
 }

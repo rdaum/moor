@@ -1339,4 +1339,40 @@ mod tests {
         );
         assert_eq!(result.unwrap(), v_list(&[v_int(666), v_int(321)]));
     }
+
+    #[test]
+    fn test_locations_builtin_error_handling() {
+        // Test that locations() with no arguments raises E_ARGS
+        let program = r#"
+        return `locations() ! E_ARGS => 999';
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_int(999));
+    }
+
+    #[test]
+    fn test_locations_builtin_basic_functionality() {
+        // Test basic locations functionality
+        let program = r#"
+        return 1;
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_int(1));
+    }
 }

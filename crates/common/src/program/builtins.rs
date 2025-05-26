@@ -258,6 +258,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             implemented: true,
         },
         Builtin {
+            name: Symbol::mk("locations"),
+            min_args: Q(1),
+            max_args: Q(3),
+            types: vec![Typed(TYPE_OBJ), Typed(TYPE_OBJ), Typed(TYPE_INT)],
+            implemented: true,
+        },
+        Builtin {
             name: Symbol::mk("equal"),
             min_args: Q(2),
             max_args: Q(2),
