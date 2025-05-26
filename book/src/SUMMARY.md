@@ -2,7 +2,6 @@
 
 - [Foreword](./foreword.md)
 - [Introduction](./introduction.md)
-- [The architecture of mooR](moor-architecture.md)
 - [The World And Database](./the-database.md)
     - [MOO Value Types](./the-database/moo-value-types.md)
     - [Objects in the MOO Database](./the-database/objects-in-the-moo-database.md)
@@ -40,6 +39,7 @@
     - [Telnet-Host Commands and Assumptions](the-system/telnet-host-commands-and-assumptions.md)
     - [Networking](./the-moo-programming-language/networking.md)
     - [Controlling the Execution of Tasks](the-system/controlling-the-execution-of-tasks.md)
+- [The architecture of mooR](moor-architecture.md)
 - [MOO Resources](./moo-resources.md)
 
 ---

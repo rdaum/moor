@@ -97,8 +97,9 @@ games.
 
 In the next chapter, I describe the structure and contents of a mooR database. The following chapter gives a complete
 description of how the server performs its primary duty: parsing the commands typed by players. Next, I describe the
-complete syntax and semantics of the MOO programming language. Finally, I describe all of the database conventions
-assumed by the server.
+complete syntax and semantics of the MOO programming language. Finally, I describe aspects of server configuration and 
+administration, including how to run a mooR server and how to control the execution of tasks. 
+
 
 
 > Note: For the most part, this manual describes only those aspects of mooR that are entirely independent of the

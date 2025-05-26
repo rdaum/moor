@@ -1,6 +1,7 @@
-# MOO Value Types
+# Kinds of values
 
-There are only a few kinds of values that MOO programs can manipulate:
+There are only a few kinds of values that MOO programs can manipulate, and that can be stored inside objects in the
+mooR database.
 
 - Integers (in a specific, large range)
 - Floats / Real numbers  (represented with floating-point numbers)
