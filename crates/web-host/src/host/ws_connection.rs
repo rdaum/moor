@@ -19,7 +19,7 @@ use moor_common::tasks::{
     AbortLimitReason, CommandError, Event, Exception, Presentation, SchedulerError,
     VerbProgramError,
 };
-use moor_var::{Obj, Var, Variant, v_obj};
+use moor_var::{Obj, Var, v_obj};
 use rpc_async_client::pubsub_client::broadcast_recv;
 use rpc_async_client::pubsub_client::events_recv;
 use rpc_async_client::rpc_client::RpcSendClient;
@@ -609,7 +609,7 @@ impl WebSocketConnection {
     ) {
         let mut traceback = vec![];
         for frame in &exception.backtrace {
-            let Variant::Str(s) = frame.variant() else {
+            let Some(s) = frame.as_string() else {
                 continue;
             };
             traceback.push(s.to_string());

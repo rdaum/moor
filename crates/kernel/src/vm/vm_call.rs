@@ -121,7 +121,7 @@ impl VMExecState {
                             return Err(e.to_error());
                         }
                     };
-                let Variant::Obj(prop_val) = prop_val.variant() else {
+                let Some(prop_val) = prop_val.as_object() else {
                     return Err(E_TYPE.with_msg(|| {
                         format!(
                             "Invalid target for verb dispatch: {}",
@@ -132,7 +132,7 @@ impl VMExecState {
                 let arguments = args
                     .insert(0, &target)
                     .expect("Failed to insert object for dispatch");
-                let Variant::List(arguments) = arguments.variant() else {
+                let Some(arguments) = arguments.as_list() else {
                     return Err(E_TYPE.with_msg(|| {
                         format!(
                             "Invalid arguments for verb dispatch: {}",
@@ -140,7 +140,7 @@ impl VMExecState {
                         )
                     }));
                 };
-                (arguments.clone(), v_obj(*prop_val), *prop_val)
+                (arguments.clone(), v_obj(prop_val), prop_val)
             }
         };
         Ok(self.prepare_call_verb(world_state, location, this, verb, args))

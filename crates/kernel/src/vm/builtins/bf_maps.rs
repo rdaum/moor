@@ -21,7 +21,7 @@ fn bf_mapdelete(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::ErrValue(E_ARGS.msg("mapdelete() takes 2 arguments")));
     }
 
-    let Variant::Map(m) = &bf_args.args[0].variant() else {
+    let Some(m) = bf_args.args[0].as_map() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("mapdelete first argument must be a map"),
         ));
@@ -48,7 +48,7 @@ fn bf_mapkeys(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::ErrValue(E_ARGS.msg("mapkeys() takes 1 argument")));
     }
 
-    let Variant::Map(m) = &bf_args.args[0].variant() else {
+    let Some(m) = bf_args.args[0].as_map() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("mapkeys first argument must be a map"),
         ));
@@ -64,7 +64,7 @@ fn bf_mapvalues(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::ErrValue(E_ARGS.msg("mapvalues() takes 1 argument")));
     }
 
-    let Variant::Map(m) = &bf_args.args[0].variant() else {
+    let Some(m) = bf_args.args[0].as_map() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("mapvalues first argument must be a map"),
         ));
@@ -80,7 +80,7 @@ fn bf_maphaskey(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::ErrValue(E_ARGS.msg("maphaskey() takes 2 arguments")));
     }
 
-    let Variant::Map(m) = &bf_args.args[0].variant() else {
+    let Some(m) = bf_args.args[0].as_map() else {
         return Err(BfErr::ErrValue(
             E_TYPE.msg("maphaskey first argument must be a map"),
         ));

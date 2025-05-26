@@ -24,7 +24,7 @@ use moor_var::{
     v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_sym,
 };
 use moor_var::{Symbol, VarType};
-use std::ops::{Add, Deref};
+use std::ops::Add;
 use std::time::Duration;
 
 lazy_static! {
@@ -150,7 +150,7 @@ pub fn moo_frame_execute(
                 // Pop the count and list off the stack. We push back later when we re-enter.
 
                 let (count, seq) = f.peek2();
-                let Variant::Int(count_i) = count.variant() else {
+                let Some(count_i) = count.as_integer() else {
                     f.pop();
                     f.pop();
 
@@ -162,8 +162,7 @@ pub fn moo_frame_execute(
                         E_TYPE.msg("invalid count value in for loop"),
                     );
                 };
-                let count_i = *count_i as usize;
-
+                let count_i = count_i as usize;
                 if (!seq.is_sequence() && !seq.is_associative())
                     || seq.type_code() == VarType::TYPE_STR
                 {
@@ -379,12 +378,11 @@ pub fn moo_frame_execute(
 
                 // Expect an argument on stack (otherwise we would have used ImmErr)
                 let err_msg = f.pop();
-                let Variant::Str(err_msg) = err_msg.variant() else {
+                let Some(err_msg) = err_msg.as_string() else {
                     return ExecutionResult::PushError(
                         E_TYPE.msg("invalid value for error message"),
                     );
                 };
-                let err_msg = err_msg.as_str();
                 f.push(v_error(code.msg(err_msg)));
             }
             Op::MakeSingletonList => {
@@ -421,7 +419,7 @@ pub fn moo_frame_execute(
                 // Stack should be: contents, slots, delegate
                 let contents = f.pop();
                 // Contents must be a list
-                let Variant::List(contents) = contents.variant() else {
+                let Some(contents) = contents.as_list() else {
                     return ExecutionResult::PushError(
                         E_TYPE.msg("invalid value for flyweight contents, must be list"),
                     );
@@ -437,14 +435,14 @@ pub fn moo_frame_execute(
                     slots.push((sym, v));
                 }
                 let delegate = f.pop();
-                let Variant::Obj(delegate) = delegate.variant() else {
+                let Some(delegate) = delegate.as_object() else {
                     return ExecutionResult::PushError(
                         E_TYPE.msg("invalid value for flyweight delegate, must be object"),
                     );
                 };
                 // Slots should be v_str -> value, num_slots times
 
-                let flyweight = v_flyweight(*delegate, &slots, contents.clone(), None);
+                let flyweight = v_flyweight(delegate, &slots, contents.clone(), None);
                 f.push(flyweight);
             }
             Op::PutTemp => {
@@ -659,7 +657,7 @@ pub fn moo_frame_execute(
             Op::PutProp => {
                 let (rhs, propname, obj) = (f.pop(), f.pop(), f.peek_top());
 
-                let Variant::Obj(obj) = obj.variant() else {
+                let Some(obj) = obj.as_object() else {
                     return ExecutionResult::PushError(E_TYPE.with_msg(|| {
                         format!("Invalid value for property access: {}", to_literal(obj))
                     }));
@@ -672,7 +670,7 @@ pub fn moo_frame_execute(
                     );
                 };
                 let update_result =
-                    world_state.update_property(&permissions, obj, propname, &rhs.clone());
+                    world_state.update_property(&permissions, &obj, propname, &rhs.clone());
 
                 match update_result {
                     Ok(()) => {
@@ -708,7 +706,7 @@ pub fn moo_frame_execute(
             }
             Op::Pass => {
                 let args = f.pop();
-                let Variant::List(args) = args.variant() else {
+                let Some(args) = args.as_list() else {
                     return ExecutionResult::PushError(E_TYPE.with_msg(|| {
                         format!("Invalid target for verb dispatch: {}", to_literal(&args))
                     }));
@@ -717,7 +715,7 @@ pub fn moo_frame_execute(
             }
             Op::CallVerb => {
                 let (args, verb, obj) = (f.pop(), f.pop(), f.pop());
-                let Variant::List(l) = args.variant() else {
+                let Some(l) = args.as_list() else {
                     return ExecutionResult::PushError(E_TYPE.with_msg(|| {
                         format!("Invalid target for verb dispatch: {}", to_literal(&args))
                     }));
@@ -746,7 +744,7 @@ pub fn moo_frame_execute(
             Op::FuncCall { id } => {
                 // Pop arguments, should be a list.
                 let args = f.pop();
-                let Variant::List(args) = args.variant() else {
+                let Some(args) = args.as_list() else {
                     return ExecutionResult::PushError(
                         E_ARGS.msg("invalid value for function call"),
                     );
@@ -765,15 +763,13 @@ pub fn moo_frame_execute(
                 match error_codes.variant() {
                     Variant::List(error_codes) => {
                         let error_codes = error_codes.iter().map(|v| {
-                            let Variant::Err(e) = v.variant() else {
+                            let Some(e) = v.as_error() else {
                                 panic!("Error codes list contains non-error code");
                             };
                             e.clone()
                         });
                         f.catch_stack.push((
-                            CatchType::Errors(
-                                error_codes.into_iter().map(|x| x.deref().clone()).collect(),
-                            ),
+                            CatchType::Errors(error_codes.into_iter().map(|x| x.clone()).collect()),
                             label,
                         ));
                     }
@@ -889,7 +885,7 @@ pub fn moo_frame_execute(
                 let have_rest = rest <= nargs;
                 let rhs_values = {
                     let rhs = f.peek_top();
-                    let Variant::List(rhs_values) = rhs.variant() else {
+                    let Some(rhs_values) = rhs.as_list() else {
                         let scatter_err = E_TYPE
                             .with_msg(|| format!("Invalid value for scatter: {}", to_literal(rhs)));
                         f.pop();
@@ -1016,12 +1012,11 @@ pub fn moo_frame_execute(
                     .get_env(&list_comprehension.position_register)
                     .unwrap()
                     .clone();
-                let Variant::Int(position) = position.variant() else {
+                let Some(position) = position.as_integer() else {
                     return ExecutionResult::PushError(
                         E_TYPE.msg("invalid value in list comprehension"),
                     );
                 };
-                let position = *position;
                 if position > list.len().unwrap() as i64 {
                     f.jump(&list_comprehension.end_label);
                 } else {

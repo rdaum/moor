@@ -30,7 +30,7 @@ use moor_kernel::tasks::{NoopTasksDb, TaskResult};
 use moor_moot::MootOptions;
 use moor_objdef::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
 use moor_textdump::{EncodingMode, TextdumpWriter, make_textdump, textdump_load};
-use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol, Variant};
+use moor_var::{List, Obj, SYSTEM_OBJECT, Symbol};
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -365,7 +365,7 @@ fn main() {
                     SchedulerError::TaskAbortedException(e) => {
                         error!("Test {}:{} aborted: {}", o, verb, e.error);
                         for l in e.backtrace {
-                            let Variant::Str(s) = l.variant() else {
+                            let Some(s) = l.as_string() else {
                                 continue;
                             };
                             error!("{s}");
@@ -381,7 +381,7 @@ fn main() {
                 panic!("Test failed to return a result");
             };
             // Result must be non-Error
-            if let Variant::Err(e) = result_value.variant() {
+            if let Some(e) = result_value.as_error() {
                 panic!("Test {}:{} failed: {:?}", o, verb, e);
             }
         }

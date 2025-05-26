@@ -24,8 +24,8 @@ use moor_common::model::{
 use moor_common::program::ProgramType;
 use moor_common::util::BitEnum;
 use moor_var::{
-    ErrorCode, List, NOTHING, Obj, Symbol, Var, VarType, Variant, v_bool, v_err, v_float,
-    v_flyweight, v_int, v_list, v_map, v_obj, v_str,
+    ErrorCode, List, NOTHING, Obj, Symbol, Var, VarType, v_bool, v_err, v_float, v_flyweight,
+    v_int, v_list, v_map, v_obj, v_str,
 };
 use pest::Parser;
 use pest::error::LineColLocation;
@@ -163,7 +163,7 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
             let mut parts = pair.into_inner();
             let delegate =
                 parse_literal(context, parts.next().unwrap().into_inner().next().unwrap())?;
-            let Variant::Obj(delegate) = delegate.variant().clone() else {
+            let Some(delegate) = delegate.as_object() else {
                 panic!("Expected object literal, got {:?}", delegate);
             };
             let mut slots = vec![];
@@ -368,10 +368,10 @@ fn parse_obj_attr(
     inner: Pair<Rule>,
 ) -> Result<Obj, ObjDefParseError> {
     let value = parse_literal_atom(context, inner)?;
-    let Variant::Obj(obj) = value.variant() else {
+    let Some(obj) = value.as_object() else {
         return Err(ObjDefParseError::BadAttributeType(value.type_code()));
     };
-    Ok(*obj)
+    Ok(obj)
 }
 
 fn parse_str_attr(
@@ -379,7 +379,7 @@ fn parse_str_attr(
     inner: Pair<Rule>,
 ) -> Result<String, ObjDefParseError> {
     let value = parse_literal_atom(context, inner)?;
-    let Variant::Str(name) = value.variant() else {
+    let Some(name) = value.as_string() else {
         return Err(ObjDefParseError::BadAttributeType(value.type_code()));
     };
     Ok(name.to_string())
@@ -730,7 +730,7 @@ fn parse_verb_decl(
 mod tests {
     use super::*;
     use moor_common::matching::Preposition;
-    use moor_var::{E_INVIND, Variant, v_err};
+    use moor_var::{E_INVIND, v_err};
 
     /// Just a simple objdef no verbs or props
     #[test]
@@ -840,15 +840,15 @@ mod tests {
         assert_eq!(odef.property_definitions[0].name, Symbol::mk("description"));
         assert_eq!(odef.property_definitions[0].perms.owner(), Obj::mk_id(2));
         assert_eq!(odef.property_definitions[0].perms.flags(), PropFlag::rc());
-        let Variant::Str(s) = odef.property_definitions[0]
+        let Some(s) = odef.property_definitions[0]
             .value
             .as_ref()
             .unwrap()
-            .variant()
+            .as_string()
         else {
             panic!("Expected string value");
         };
-        assert_eq!(s.as_str(), "This is a test object");
+        assert_eq!(s, "This is a test object");
 
         assert_eq!(odef.property_definitions[1].name, Symbol::mk("other"));
         assert_eq!(odef.property_definitions[1].perms.owner(), Obj::mk_id(2));
@@ -879,16 +879,26 @@ mod tests {
 
         assert_eq!(odef.property_overrides.len(), 2);
         assert_eq!(odef.property_overrides[0].name, Symbol::mk("description"));
-        let Variant::Str(s) = odef.property_overrides[0].value.as_ref().unwrap().variant() else {
+        let Some(s) = odef.property_overrides[0]
+            .value
+            .as_ref()
+            .unwrap()
+            .as_string()
+        else {
             panic!("Expected string value");
         };
-        assert_eq!(s.as_str(), "This is a test object");
+        assert_eq!(s, "This is a test object");
 
         assert_eq!(odef.property_overrides[1].name, Symbol::mk("other"));
-        let Variant::Str(s) = odef.property_overrides[1].value.as_ref().unwrap().variant() else {
+        let Some(s) = odef.property_overrides[1]
+            .value
+            .as_ref()
+            .unwrap()
+            .as_string()
+        else {
             panic!("Expected string value");
         };
-        assert_eq!(s.as_str(), "test");
+        assert_eq!(s, "test");
     }
 
     #[test]

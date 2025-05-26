@@ -119,9 +119,7 @@ impl<'a> Unparse<'a> {
             return to_literal(var);
         }
 
-        if let Variant::Str(s) = var.variant() {
-            let s = s.as_str();
-
+        if let Some(s) = var.as_string() {
             // If the string contains anything that isn't alphanumeric and _, it's
             // not a valid ident and needs to be quoted. Likewise if it begins with a non-alpha/underscore
             let needs_quotes = s.chars().any(|c| !c.is_alphanumeric() && c != '_')

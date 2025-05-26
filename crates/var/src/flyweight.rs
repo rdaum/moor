@@ -241,7 +241,7 @@ impl Sequence for Flyweight {
 
     fn index_set(&self, index: usize, value: &Var) -> Result<Var, Error> {
         let new_contents = self.0.contents.index_set(index, value)?;
-        let Variant::List(new_contents_as_list) = new_contents.variant() else {
+        let Some(new_contents_as_list) = new_contents.as_list() else {
             return Err(E_TYPE.msg("invalid contents type in flyweight"));
         };
         Ok(self.with_new_contents(new_contents_as_list.clone()))
@@ -249,7 +249,7 @@ impl Sequence for Flyweight {
 
     fn push(&self, value: &Var) -> Result<Var, Error> {
         let new_contents = self.0.contents.push(value)?;
-        let Variant::List(new_contents_as_list) = new_contents.variant() else {
+        let Some(new_contents_as_list) = new_contents.as_list() else {
             return Err(E_TYPE.msg("invalid contents type in flyweight"));
         };
         Ok(self.with_new_contents(new_contents_as_list.clone()))
@@ -257,7 +257,7 @@ impl Sequence for Flyweight {
 
     fn insert(&self, index: usize, value: &Var) -> Result<Var, Error> {
         let new_contents = self.0.contents.insert(index, value)?;
-        let Variant::List(new_contents_as_list) = new_contents.variant() else {
+        let Some(new_contents_as_list) = new_contents.as_list() else {
             return Err(E_TYPE.msg("invalid contents type in flyweight"));
         };
         Ok(self.with_new_contents(new_contents_as_list.clone()))
@@ -269,7 +269,7 @@ impl Sequence for Flyweight {
 
     fn range_set(&self, from: isize, to: isize, with: &Var) -> Result<Var, Error> {
         let new_contents = self.0.contents.range_set(from, to, with)?;
-        let Variant::List(new_contents_as_list) = new_contents.variant() else {
+        let Some(new_contents_as_list) = new_contents.as_list() else {
             return Err(E_TYPE.msg("invalid contents type in flyweight"));
         };
         Ok(self.with_new_contents(new_contents_as_list.clone()))
@@ -277,7 +277,7 @@ impl Sequence for Flyweight {
 
     fn append(&self, other: &Var) -> Result<Var, Error> {
         let new_contents = self.0.contents.append(other)?;
-        let Variant::List(new_contents_as_list) = new_contents.variant() else {
+        let Some(new_contents_as_list) = new_contents.as_list() else {
             return Err(E_TYPE.msg("invalid contents type in flyweight"));
         };
         Ok(self.with_new_contents(new_contents_as_list.clone()))
@@ -285,7 +285,7 @@ impl Sequence for Flyweight {
 
     fn remove_at(&self, index: usize) -> Result<Var, Error> {
         let new_contents = self.0.contents.remove_at(index)?;
-        let Variant::List(new_contents_as_list) = new_contents.variant() else {
+        let Some(new_contents_as_list) = new_contents.as_list() else {
             return Err(E_TYPE.msg("invalid contents type in flyweight"));
         };
         Ok(self.with_new_contents(new_contents_as_list.clone()))

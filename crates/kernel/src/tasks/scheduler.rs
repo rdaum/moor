@@ -269,26 +269,26 @@ impl Scheduler {
             tx.rollback().unwrap();
             return;
         };
-        let Variant::Obj(server_options_obj) = server_options_obj.variant() else {
+        let Some(server_options_obj) = server_options_obj.as_object() else {
             info!("Server options property is not an object; using defaults");
             tx.rollback().unwrap();
             return;
         };
 
-        if let Some(bg_seconds) = load_int_sysprop(server_options_obj, *BG_SECONDS, tx.as_ref()) {
+        if let Some(bg_seconds) = load_int_sysprop(&server_options_obj, *BG_SECONDS, tx.as_ref()) {
             so.bg_seconds = bg_seconds;
         }
-        if let Some(bg_ticks) = load_int_sysprop(server_options_obj, *BG_TICKS, tx.as_ref()) {
+        if let Some(bg_ticks) = load_int_sysprop(&server_options_obj, *BG_TICKS, tx.as_ref()) {
             so.bg_ticks = bg_ticks as usize;
         }
-        if let Some(fg_seconds) = load_int_sysprop(server_options_obj, *FG_SECONDS, tx.as_ref()) {
+        if let Some(fg_seconds) = load_int_sysprop(&server_options_obj, *FG_SECONDS, tx.as_ref()) {
             so.fg_seconds = fg_seconds;
         }
-        if let Some(fg_ticks) = load_int_sysprop(server_options_obj, *FG_TICKS, tx.as_ref()) {
+        if let Some(fg_ticks) = load_int_sysprop(&server_options_obj, *FG_TICKS, tx.as_ref()) {
             so.fg_ticks = fg_ticks as usize;
         }
         if let Some(max_stack_depth) =
-            load_int_sysprop(server_options_obj, *MAX_STACK_DEPTH, tx.as_ref())
+            load_int_sysprop(&server_options_obj, *MAX_STACK_DEPTH, tx.as_ref())
         {
             so.max_stack_depth = max_stack_depth as usize;
         }
@@ -1940,10 +1940,10 @@ fn match_object_ref(
                 let Ok(value) = tx.retrieve_property(perms, &obj, *name) else {
                     return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
                 };
-                let Variant::Obj(o) = value.variant() else {
+                let Some(o) = value.as_object() else {
                     return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
                 };
-                obj = *o;
+                obj = o;
             }
             if !tx.valid(&obj)? {
                 return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));

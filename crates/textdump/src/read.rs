@@ -349,13 +349,13 @@ impl<R: Read> TextdumpReader<R> {
         let location = match self.version {
             ToastStunt(_) => {
                 let location = self.read_var()?;
-                let Variant::Obj(location) = location.variant() else {
+                let Some(location) = location.as_object() else {
                     return Err(TextdumpReaderError::ParseError(
                         format!("invalid location: {:?}", location),
                         self.line_num,
                     ));
                 };
-                *location
+                location
             }
             _ => self.read_objid()?,
         };
@@ -367,7 +367,7 @@ impl<R: Read> TextdumpReader<R> {
         let (contents, next, parent, child, sibling) = match self.version {
             ToastStunt(_) => {
                 let _contents = self.read_var()?;
-                let Variant::List(_contents) = _contents.variant() else {
+                let Some(_contents) = _contents.as_list() else {
                     return Err(TextdumpReaderError::ParseError(
                         format!("invalid contents list: {:?}", _contents),
                         self.line_num,
@@ -387,14 +387,14 @@ impl<R: Read> TextdumpReader<R> {
                                 ));
                             };
 
-                            let Variant::Obj(parent) = first.variant() else {
+                            let Some(parent) = first.as_object() else {
                                 return Err(TextdumpReaderError::ParseError(
                                     format!("invalid parent: {:?}", parents),
                                     self.line_num,
                                 ));
                             };
 
-                            *parent
+                            parent
                         }
                     }
                     _ => {
@@ -405,7 +405,7 @@ impl<R: Read> TextdumpReader<R> {
                     }
                 };
                 let _children = self.read_var()?;
-                let Variant::List(_children) = _children.variant() else {
+                let Some(_children) = _children.as_list() else {
                     return Err(TextdumpReaderError::ParseError(
                         format!("invalid children list: {:?}", _children),
                         self.line_num,

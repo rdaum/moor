@@ -57,10 +57,10 @@ fn bf_strsub(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 3 {
         false
     } else if bf_args.args.len() == 4 {
-        let Variant::Int(case_matters) = bf_args.args[3].variant() else {
+        let Some(case_matters) = bf_args.args[3].as_integer() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *case_matters == 1
+        case_matters == 1
     } else {
         return Err(BfErr::Code(E_ARGS));
     };
@@ -105,10 +105,10 @@ fn bf_index(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
-        let Variant::Int(case_matters) = bf_args.args[2].variant() else {
+        let Some(case_matters) = bf_args.args[2].as_integer() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *case_matters == 1
+        case_matters == 1
     } else {
         return Err(BfErr::Code(E_ARGS));
     };
@@ -128,10 +128,10 @@ fn bf_rindex(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let case_matters = if bf_args.args.len() == 2 {
         false
     } else if bf_args.args.len() == 3 {
-        let Variant::Int(case_matters) = bf_args.args[2].variant() else {
+        let Some(case_matters) = bf_args.args[2].as_integer() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *case_matters == 1
+        case_matters == 1
     } else {
         return Err(BfErr::Code(E_ARGS));
     };
@@ -197,13 +197,13 @@ fn bf_crypt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         salt.push(char::from(rng.sample(Alphanumeric)));
         salt
     } else {
-        let Variant::Str(salt) = bf_args.args[1].variant() else {
+        let Some(salt) = bf_args.args[1].as_string() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        String::from(salt.as_str())
+        String::from(salt)
     };
-    if let Variant::Str(text) = bf_args.args[0].variant() {
-        let crypted = pwhash::unix::crypt(text.as_str(), salt.as_str()).unwrap();
+    if let Some(text) = bf_args.args[0].as_string() {
+        let crypted = pwhash::unix::crypt(text, salt.as_str()).unwrap();
         Ok(Ret(v_string(crypted)))
     } else {
         Err(BfErr::Code(E_TYPE))
@@ -241,35 +241,35 @@ fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 5 || bf_args.args.len() < 2 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let Variant::Str(password) = bf_args.args[0].variant() else {
+    let Some(password) = bf_args.args[0].as_string() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let Variant::Str(salt) = bf_args.args[1].variant() else {
+    let Some(salt) = bf_args.args[1].as_string() else {
         return Err(BfErr::Code(E_TYPE));
     };
 
     let iterations = if bf_args.args.len() > 2 {
-        let Variant::Int(iterations) = bf_args.args[2].variant() else {
+        let Some(iterations) = bf_args.args[2].as_integer() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *iterations as u32
+        iterations as u32
     } else {
         3
     };
     let memory = if bf_args.args.len() > 3 {
-        let Variant::Int(memory) = bf_args.args[3].variant() else {
+        let Some(memory) = bf_args.args[3].as_integer() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *memory as u32
+        memory as u32
     } else {
         4096
     };
 
     let parallelism = if bf_args.args.len() > 4 {
-        let Variant::Int(parallelism) = bf_args.args[4].variant() else {
+        let Some(parallelism) = bf_args.args[4].as_integer() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *parallelism as u32
+        parallelism as u32
     } else {
         1
     };
@@ -281,13 +281,13 @@ fn bf_argon2(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-    let salt_string = SaltString::encode_b64(salt.as_str().as_bytes()).map_err(|e| {
+    let salt_string = SaltString::encode_b64(salt.as_bytes()).map_err(|e| {
         warn!("Failed to encode salt: {}", e);
         BfErr::Code(E_INVARG)
     })?;
 
     let hash = argon2
-        .hash_password(password.as_str().as_bytes(), &salt_string)
+        .hash_password(password.as_bytes(), &salt_string)
         .map_err(|e| {
             warn!("Failed to hash password: {}", e);
             BfErr::Code(E_INVARG)
@@ -308,20 +308,20 @@ fn bf_argon2_verify(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(BfErr::Code(E_ARGS));
     }
-    let Variant::Str(hashed_password) = bf_args.args[0].variant() else {
+    let Some(hashed_password) = bf_args.args[0].as_string() else {
         return Err(BfErr::Code(E_TYPE));
     };
-    let Variant::Str(password) = bf_args.args[1].variant() else {
+    let Some(password) = bf_args.args[1].as_string() else {
         return Err(BfErr::Code(E_TYPE));
     };
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, Params::default());
-    let Ok(hashed_password) = argon2::PasswordHash::new(hashed_password.as_str()) else {
+    let Ok(hashed_password) = argon2::PasswordHash::new(hashed_password) else {
         return Err(BfErr::Code(E_INVARG));
     };
 
     let validated = argon2
-        .verify_password(password.as_str().as_bytes(), &hashed_password)
+        .verify_password(password.as_bytes(), &hashed_password)
         .is_ok();
     Ok(Ret(bf_args.v_bool(validated)))
 }
@@ -335,11 +335,11 @@ fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let Variant::Str(text) = bf_args.args[0].variant() else {
+    let Some(text) = bf_args.args[0].as_string() else {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    let encoded = general_purpose::STANDARD.encode(text.as_str().as_bytes());
+    let encoded = general_purpose::STANDARD.encode(text.as_bytes());
     Ok(Ret(v_string(encoded)))
 }
 
@@ -352,11 +352,11 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let Variant::Str(encoded_text) = bf_args.args[0].variant() else {
+    let Some(encoded_text) = bf_args.args[0].as_string() else {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    let decoded = match general_purpose::STANDARD.decode(encoded_text.as_str().as_bytes()) {
+    let decoded = match general_purpose::STANDARD.decode(encoded_text.as_bytes()) {
         Ok(bytes) => match String::from_utf8(bytes) {
             Ok(s) => s,
             Err(_) => return Err(BfErr::Code(E_INVARG)),
@@ -455,11 +455,11 @@ fn bf_parse_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let Variant::Str(json_str) = bf_args.args[0].variant() else {
+    let Some(json_str) = bf_args.args[0].as_string() else {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    match serde_json::from_str::<JsonValue>(json_str.as_str()) {
+    match serde_json::from_str::<JsonValue>(json_str) {
         Ok(json_value) => {
             let moo_value = json_value_to_moo(&json_value)?;
             Ok(Ret(moo_value))
