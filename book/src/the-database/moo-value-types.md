@@ -5,6 +5,7 @@ There are only a few kinds of values that MOO programs can manipulate:
 - Integers (in a specific, large range)
 - Floats / Real numbers  (represented with floating-point numbers)
 - Strings (of characters)
+- Symbols (special labels for naming things in code)
 - Object numbers (references to the permanent objects in the database)
 - "Flyweights" - anonymous lightweight object _values_
 - Errors (arising during program execution)
@@ -85,6 +86,91 @@ There is syntactic sugar that allows you to do:
 
 as a shortcut for the index() built-in function.
 
+## Symbol Type
+
+_Symbols_ are a special kind of text value that mooR adds to the original MOO language. Think of symbols as "smart labels" that are perfect for naming things and organizing your code.
+
+### What makes symbols different from strings?
+
+While strings (like `"hello"`) are great for text that users will see, symbols are designed for text that your program uses internally - like labels, categories, or identifiers.
+
+To create a symbol, you put a single quote (apostrophe) before the text, like this:
+
+```
+'hello
+'player_name
+'room_description
+```
+
+### Key differences between symbols and strings:
+
+**Symbols express intent as identifiers**
+- Using `'name` clearly shows you mean it as an identifier or property name
+- Using `"name"` suggests it's text content that might be displayed to users
+- This makes your code's purpose clearer to other programmers
+
+**Symbols have restricted characters**
+- Symbols can only contain letters, numbers, and underscores
+- No spaces, punctuation, or special characters (except `_`)
+- Examples: `'player_name` ✓, `'hello world` ✗, `'item-count` ✗
+
+**Symbols don't support string operations**
+- You can't slice symbols like `'hello`[1..3]
+- You can't index into them like `'test`[2]
+- They're meant to be used whole, not manipulated like text
+
+**Symbols with the same text are identical**
+- Every time you write `'hello` in your code, it's the exact same symbol
+- This makes comparing symbols very fast
+
+### Simple examples:
+
+```moo
+// Symbols express clear intent:
+player_stats = ['name -> "Alice", 'score -> 100, 'level -> 5];
+
+// Symbols can't contain spaces or special characters:
+'player_name    // ✓ Valid symbol
+'hello_world    // ✓ Valid symbol  
+'item2_count    // ✓ Valid symbol
+'hello world    // ✗ Invalid - contains space
+'item-count     // ✗ Invalid - contains hyphen
+
+// Using symbols for states:
+if (game_state == 'running)
+    // Game is active
+endif
+```
+
+### When should you use symbols?
+
+**Good uses for symbols:**
+- Property names: `'description`, `'location`, `'owner`
+- Game states: `'running`, `'paused`, `'finished`
+- Categories: `'weapon`, `'armor`, `'tool`
+- Commands: `'look`, `'take`, `'drop`
+
+**Better to use strings for:**
+- Messages shown to players: `"Hello, welcome to the game!"`
+- Descriptions: `"A rusty old sword"`
+- User input that might change
+
+### Converting between symbols and strings:
+
+You can easily switch between symbols and strings:
+
+```moo
+// String to symbol:
+my_symbol = tosym("hello");    // Creates 'hello
+
+// Symbol to string:
+my_string = tostr('world);     // Creates "world"
+```
+
+### Technical note:
+
+The symbol feature is turned on by default in mooR. Server administrators can turn it off with the `--symbol-type=false` option, but most servers keep it enabled because symbols make code faster and cleaner.
+
 ## Object Type
 
 _Objects_ are the backbone of the MOO database and, as such, deserve a great deal of discussion; the entire next section
@@ -108,39 +194,111 @@ the ToastCore database as `$nothing`, `$ambiguous_match`, and `$failed_match`, r
 
 ## Flyweights - lightweight objects
 
-mooR adds a new type called flyweights which are lightweight, garbage collected bundles of a delegate object,
-attributes ("slots") and arbitrary contents, and so combine features of objects, lists, and maps. Verb calls against
-flyweights dispatch against the delegate, and property lookups work gainst both the delegate and the flyweight's own set
-of slots.
+_Flyweights_ are a special type that mooR adds to help you create lots of small, temporary objects without using too much memory or slowing down your MUD. Think of them as "mini-objects" that can hold data and respond to verbs, but are much lighter than real database objects.
 
-Their syntax looks like:
+### Why use flyweights instead of regular objects?
 
+**Regular objects are "heavy":**
+- Each object takes up database space permanently
+- Creating many objects can slow down your MOO
+- Objects need to be cleaned up manually or they stick around forever
+
+**Flyweights are "light":**
+- You can create thousands of them quickly without performance problems
+- They automatically disappear when no longer needed
+- They can't be changed once created (immutable)
+- They exist only as _values_ in other things (properties, variables, arguments)
+
+### What can flyweights do?
+
+Flyweights combine the best parts of objects, lists, and maps:
+- **Like objects**: They can have verbs called on them
+- **Like maps**: They can store named properties ("slots")
+- **Like lists**: They can contain other values
+
+### Flyweight syntax:
+
+The basic pattern is: `< delegate_object, [slots], {contents} >`
+
+- **Delegate object** (required): The object that handles verb calls
+- **Slots** (optional): Named properties, like a map
+- **Contents** (optional): A list of other values
+
+### Simple examples:
+
+```moo
+// Just a delegate - simplest flyweight:
+< #123 >
+
+// With some data slots:
+< $generic_item, ['name -> "magic sword", 'power -> 15] >
+
+// With contents (like inventory):
+< $container, ['name -> "treasure chest"], {"gold coins", "ruby", "scroll"} >
+
+// Complex example - a room in a maze:
+< $maze_room, 
+  ['description -> "A twisty passage", 'exits -> {"north", "south"}],
+  {player1, player2} >
 ```
-< <delegate>, [ slot -> value, ... ], { contents, ... } >
+
+### When should you use flyweights?
+
+**Great for flyweights:**
+- Inventory items that aren't permanent
+- Temporary game pieces (chess pieces, cards, etc.)
+- Menu items and UI elements
+- Parts of a large structure (maze rooms, building floors)
+- Anything you need lots of that's similar but not identical
+
+**Better to use regular objects for:**
+- Players and important NPCs
+- Rooms that should persist between server restarts
+- Valuable items that players own long-term
+- Anything that needs to be saved in the database
+
+### How verb calls work:
+
+When you call a verb on a flyweight, it looks for the verb on the delegate object:
+
+```moo
+// Create a flyweight sword:
+sword = < $weapon, ['damage -> 10, 'name -> "iron sword"] >;
+
+// Call a verb - this will look for "wield" on $weapon:
+sword:wield(player);
 ```
 
-But the only mandatory element is the delegate.
+### Accessing flyweight data:
 
-Examples:
+You can read the slots (properties) of a flyweight:
 
+```moo
+sword = < $weapon, ['damage -> 10, 'name -> "iron sword"] >;
+damage_value = sword.damage;    // Gets 10
+weapon_name = sword.name;       // Gets "iron sword"
 ```
-< $div_tag, [ class -> "background_div" ], { child_node_a, child_node_b } >
-< #54 >
-< $maze_node, [ description -> "You are in a maze of twisty passages, all alike", exits -> { "north", "up" } ] >
+
+### Working with XML and web interfaces:
+
+Flyweights are especially useful for building web pages because they can be easily converted to and from XML:
+
+```moo
+// A flyweight representing HTML structure:
+div_element = < $html_div, 
+               ['class -> "player-info"], 
+               {"Player: Alice", "Score: 1500"} >;
+
+// Convert to XML string:
+html_string = to_xml(div_element);
 ```
 
-During verb execution, `this`, and `caller` can be flyweights. `player` cannot.
+### Important notes:
 
-Flyweights are useful for representing large quantities of small, lightweight things (like a maze or a large quantity of
-small items).
-
-The syntax for flyweights is specifically designed to easily express tree-structured data (like an HTML or XML
-document).
-
-There are builtins (`to_xml` and `xml_parse`) for converting properly structured flyweights to/from XML documents, which
-are in place to aid in the construction of web user interfaces, or integrations with this party services.
-
-We will go into more detail on Anonymous Objects in the [Working with Flyweights](#working-with-flyweights) section.
+- Flyweights cannot be changed once created - they're immutable
+- They only exist while your program is running
+- They're perfect for temporary data structures
+- The `player` variable can never be a flyweight (but `this` and `caller` can be)
 
 ## Error Type
 
