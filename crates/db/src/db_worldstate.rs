@@ -418,27 +418,27 @@ impl WorldState for DbWorldState {
             self.perms(perms)?
                 .check_object_allows(&objowner, flags, ObjFlag::Write.into())?;
             if pname == *NAME_SYM {
-                let Variant::Str(name) = value.variant() else {
+                let Some(name) = value.as_string() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
                 self.get_tx_mut()
-                    .set_object_name(obj, name.as_str().to_string())?;
+                    .set_object_name(obj, name.to_string())?;
                 return Ok(());
             }
 
             if pname == *OWNER_SYM {
-                let Variant::Obj(owner) = value.variant() else {
+                let Some(owner) = value.as_object() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                self.get_tx_mut().set_object_owner(obj, owner)?;
+                self.get_tx_mut().set_object_owner(obj, &owner)?;
                 return Ok(());
             }
 
             if pname == *R_SYM {
-                let Variant::Int(v) = value.variant() else {
+                let Some(v) = value.as_integer() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                if *v == 1 {
+                if v == 1 {
                     flags.set(ObjFlag::Read);
                 } else {
                     flags.clear(ObjFlag::Read);
@@ -448,10 +448,10 @@ impl WorldState for DbWorldState {
             }
 
             if pname == *W_SYM {
-                let Variant::Int(v) = value.variant() else {
+                let Some(v) = value.as_integer() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                if *v == 1 {
+                if v == 1 {
                     flags.set(ObjFlag::Write);
                 } else {
                     flags.clear(ObjFlag::Write);
@@ -461,10 +461,10 @@ impl WorldState for DbWorldState {
             }
 
             if pname == *F_SYM {
-                let Variant::Int(v) = value.variant() else {
+                let Some(v) = value.as_integer() else {
                     return Err(WorldStateError::PropertyTypeMismatch);
                 };
-                if *v == 1 {
+                if v == 1 {
                     flags.set(ObjFlag::Fertile);
                 } else {
                     flags.clear(ObjFlag::Fertile);

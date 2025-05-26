@@ -30,7 +30,7 @@ use edn_format::{Keyword, Value};
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use moor_common::model::ObjectRef;
-use moor_var::{List, Obj, Sequence, Symbol, Var, Variant, v_int, v_list};
+use moor_var::{List, Obj, Sequence, Symbol, Var, v_int, v_list};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{make_host_token, start_host_session};
 use rpc_common::DaemonToClientReply::TaskSubmitted;
@@ -170,18 +170,18 @@ enum WorkItem {
 fn process_reads(read_log: &List) -> Vec<(usize, Vec<i64>)> {
     let mut reads = vec![];
     for prop_entry in read_log.iter() {
-        let Variant::List(l) = prop_entry.variant() else {
+        let Some(l) = prop_entry.as_list() else {
             panic!("Unexpected read log entry: {:?}", prop_entry);
         };
         let prop_entry: Vec<_> = l.iter().collect();
 
         // first item should be the prop num, second should be the readvalues
         let (prop, values) = {
-            let Variant::Int(prop_num) = prop_entry[0].variant() else {
+            let Some(prop_num) = prop_entry[0].as_integer() else {
                 panic!("Unexpected prop num value: {:?}", prop_entry[0]);
             };
 
-            let Variant::List(values) = prop_entry[1].variant() else {
+            let Some(values) = prop_entry[1].as_list() else {
                 panic!(
                     "Unexpected prop common for prop_num {}: {:?}",
                     prop_num, prop_entry[1]
@@ -189,13 +189,13 @@ fn process_reads(read_log: &List) -> Vec<(usize, Vec<i64>)> {
             };
 
             let values = values.iter().map(|v| {
-                if let Variant::Int(i) = v.variant() {
-                    *i
+                if let Some(i) = v.as_integer() {
+                    i
                 } else {
                     panic!("Unexpected prop value: {:?}", v);
                 }
             });
-            (*prop_num, values.collect::<Vec<_>>())
+            (prop_num, values.collect::<Vec<_>>())
         };
         reads.push((prop as usize, values));
     }
@@ -205,17 +205,17 @@ fn process_reads(read_log: &List) -> Vec<(usize, Vec<i64>)> {
 fn process_writes(write_log: &List) -> Vec<(usize, Vec<i64>)> {
     let mut appends = vec![];
     for prop_entry in write_log.iter() {
-        let Variant::List(l) = prop_entry.variant() else {
+        let Some(l) = prop_entry.as_list() else {
             panic!("Unexpected write log entry: {:?}", prop_entry);
         };
         let prop_entry: Vec<_> = l.iter().collect();
         // first item should be the prop num, second should be the written common
         let (prop, values) = {
-            let Variant::Int(prop_num) = prop_entry[0].variant() else {
+            let Some(prop_num) = prop_entry[0].as_integer() else {
                 panic!("Unexpected prop num value: {:?}", prop_entry[0]);
             };
 
-            let Variant::List(values) = prop_entry[1].variant() else {
+            let Some(values) = prop_entry[1].as_list() else {
                 panic!(
                     "Unexpected prop common for prop_num {}: {:?}",
                     prop_num, prop_entry[1]
@@ -223,13 +223,13 @@ fn process_writes(write_log: &List) -> Vec<(usize, Vec<i64>)> {
             };
 
             let values = values.iter().map(|v| {
-                if let Variant::Int(i) = v.variant() {
-                    *i
+                if let Some(i) = v.as_integer() {
+                    i
                 } else {
                     panic!("Unexpected prop value: {:?}", v);
                 }
             });
-            (*prop_num, values.collect::<Vec<_>>())
+            (prop_num, values.collect::<Vec<_>>())
         };
         appends.push((prop as usize, values));
     }
@@ -322,13 +322,13 @@ async fn workload(
         .expect("Task results not found");
 
         // For our workload this should be a list, and if it isn't there's something messed up!
-        let Variant::List(result) = result.variant() else {
+        let Some(result) = result.as_list() else {
             panic!("Unexpected result: {:?}", result);
         };
 
         if is_read {
             let read_log = result.index(0).unwrap();
-            let Variant::List(read_log) = read_log.variant() else {
+            let Some(read_log) = read_log.as_list() else {
                 panic!("Unexpected read log type: {:?}", read_log);
             };
 
@@ -340,7 +340,7 @@ async fn workload(
             workload.push((Instant::now(), WorkItem::ReadEnd(process_id, reads)));
         } else {
             let write_log = result.index(1).unwrap();
-            let Variant::List(write_log) = write_log.variant() else {
+            let Some(write_log) = write_log.as_list() else {
                 panic!("Unexpected write log type: {:?}", write_log);
             };
             // let reads = process_reads(process_id, read_log);

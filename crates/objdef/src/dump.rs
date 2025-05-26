@@ -20,7 +20,7 @@ use moor_compiler::{
     ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, program_to_tree, to_literal,
     to_literal_objsub, unparse,
 };
-use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, Variant, v_str, v_string};
+use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_str, v_string};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
@@ -168,9 +168,9 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
     if let Some(sysobj) = object_defs.iter().find(|od| od.oid == SYSTEM_OBJECT) {
         for pd in sysobj.property_definitions.iter() {
             if let Some(value) = pd.value.as_ref() {
-                if let Variant::Obj(oid) = value.variant() {
-                    index_names.insert(*oid, pd.name.to_string().to_ascii_uppercase());
-                    file_names.insert(*oid, pd.name.to_string());
+                if let Some(oid) = value.as_object() {
+                    index_names.insert(oid, pd.name.to_string().to_ascii_uppercase());
+                    file_names.insert(oid, pd.name.to_string());
                 }
             }
         }

@@ -26,7 +26,7 @@ use clap_derive::Parser;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use moor_common::model::ObjectRef;
-use moor_var::{Obj, Symbol, Var, Variant, v_int};
+use moor_var::{Obj, Symbol, Var, v_int};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{make_host_token, start_host_session};
 use rpc_common::DaemonToClientReply::TaskSubmitted;
@@ -192,10 +192,10 @@ async fn workload(
         }
         .expect("Task results not found");
 
-        let Variant::Int(result) = results.variant() else {
+        let Some(result) = results.as_integer() else {
             panic!("Unexpected task result: {:?}", results);
         };
-        if *result != 1 {
+        if result != 1 {
             panic!("Load test failed");
         }
     }

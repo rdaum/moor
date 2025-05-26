@@ -120,6 +120,102 @@ impl Var {
         &self.0
     }
 
+    /// Extract the integer value if this is an integer variant, otherwise None.
+    #[inline(always)]
+    pub fn as_integer(&self) -> Option<i64> {
+        match self.variant() {
+            Variant::Int(i) => Some(*i),
+            _ => None,
+        }
+    }
+
+    /// Extract the string value if this is a string variant, otherwise None.
+    #[inline(always)]
+    pub fn as_string(&self) -> Option<&str> {
+        match self.variant() {
+            Variant::Str(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Extract the boolean value if this is a boolean variant, otherwise None.
+    #[inline(always)]
+    pub fn as_bool(&self) -> Option<bool> {
+        match self.variant() {
+            Variant::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    /// Extract the object value if this is an object variant, otherwise None.
+    #[inline(always)]
+    pub fn as_object(&self) -> Option<Obj> {
+        match self.variant() {
+            Variant::Obj(o) => Some(*o),
+            _ => None,
+        }
+    }
+
+    /// Extract the float value if this is a float variant, otherwise None.
+    #[inline(always)]
+    pub fn as_float(&self) -> Option<f64> {
+        match self.variant() {
+            Variant::Float(f) => Some(*f),
+            _ => None,
+        }
+    }
+
+    /// Extract the list value if this is a list variant, otherwise None.
+    #[inline(always)]
+    pub fn as_list(&self) -> Option<&List> {
+        match self.variant() {
+            Variant::List(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    /// Extract the map value if this is a map variant, otherwise None.
+    #[inline(always)]
+    pub fn as_map(&self) -> Option<&map::Map> {
+        match self.variant() {
+            Variant::Map(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    /// Extract the error value if this is an error variant, otherwise None.
+    #[inline(always)]
+    pub fn as_error(&self) -> Option<&Error> {
+        match self.variant() {
+            Variant::Err(e) => Some(e.as_ref()),
+            _ => None,
+        }
+    }
+
+    /// Extract the flyweight value if this is a flyweight variant, otherwise None.
+    #[inline(always)]
+    pub fn as_flyweight(&self) -> Option<&Flyweight> {
+        match self.variant() {
+            Variant::Flyweight(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    /// Extract the symbol value if this is a symbol variant, otherwise None.
+    #[inline(always)]
+    pub fn as_sym(&self) -> Option<Symbol> {
+        match self.variant() {
+            Variant::Sym(s) => Some(*s),
+            _ => None,
+        }
+    }
+
+    /// Returns true if this is a None variant.
+    #[inline(always)]
+    pub fn is_none(&self) -> bool {
+        matches!(self.variant(), Variant::None)
+    }
+
     /// If a string, turn into symbol, or if already a symbol, return that.
     /// Otherwise, E_TYPE
     pub fn as_symbol(&self) -> Result<Symbol, Error> {

@@ -157,19 +157,19 @@ async fn perform_http_request(
         WorkerError::RequestError("First argument must be a symbol or string".to_string())
     })?;
 
-    let Variant::Str(url) = arguments[1].variant() else {
+    let Some(url) = arguments[1].as_string() else {
         return Err(WorkerError::RequestError(
             "Second argument must be a string".to_string(),
         ));
     };
 
-    let Ok(url) = Url::parse(url.as_str()) else {
+    let Ok(url) = Url::parse(url) else {
         return Err(WorkerError::RequestError("Invalid URL".to_string()));
     };
 
     let headers = if arguments.len() > 3 {
         // List of String, String
-        let Variant::List(headers) = arguments[3].variant() else {
+        let Some(headers) = arguments[3].as_list() else {
             return Err(WorkerError::RequestError(
                 "Headers must be a list".to_string(),
             ));
@@ -177,7 +177,7 @@ async fn perform_http_request(
 
         let mut headers_map = reqwest::header::HeaderMap::new();
         for header_pair in headers.iter() {
-            let Variant::List(pair) = header_pair.variant() else {
+            let Some(pair) = header_pair.as_list() else {
                 return Err(WorkerError::RequestError(
                     "Header pair must be a list".to_string(),
                 ));
@@ -189,21 +189,21 @@ async fn perform_http_request(
                 ));
             }
 
-            let Variant::Str(key) = pair[0].variant() else {
+            let Some(key) = pair[0].as_string() else {
                 return Err(WorkerError::RequestError(
                     "Header key must be a string".to_string(),
                 ));
             };
 
-            let Variant::Str(value) = pair[1].variant() else {
+            let Some(value) = pair[1].as_string() else {
                 return Err(WorkerError::RequestError(
                     "Header value must be a string".to_string(),
                 ));
             };
 
-            let key = reqwest::header::HeaderName::from_str(key.as_str())
+            let key = reqwest::header::HeaderName::from_str(key)
                 .map_err(|e| WorkerError::RequestError(format!("Invalid header key: {}", e)))?;
-            let value = reqwest::header::HeaderValue::from_str(value.as_str())
+            let value = reqwest::header::HeaderValue::from_str(value)
                 .map_err(|e| WorkerError::RequestError(format!("Invalid header value: {}", e)))?;
             headers_map.insert(key, value);
         }

@@ -45,7 +45,7 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         })));
     }
 
-    let Variant::Str(xml) = bf_args.args[0].variant() else {
+    let Some(xml) = bf_args.args[0].as_string() else {
         return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
             format!(
                 "xml_parse() expects a string argument, got {}",
@@ -55,7 +55,7 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let map = if bf_args.args.len() == 2 {
-        let Variant::Map(m) = bf_args.args[1].variant() else {
+        let Some(m) = bf_args.args[1].as_map() else {
             return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
                 format!(
                     "xml_parse() expects a map as the second argument, got {}",
@@ -68,7 +68,7 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         None
     };
 
-    let reader = BufReader::new(xml.as_str().as_bytes());
+    let reader = BufReader::new(xml.as_bytes());
     let parser = xml::EventReader::new(reader);
     let mut output_tree = Vec::new();
 
@@ -89,12 +89,12 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                                 format!("xml_parse() tag {} not found in map", tag)
                             })));
                         };
-                        let Variant::Obj(o) = obj.variant() else {
+                        let Some(o) = obj.as_object() else {
                             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                                 format!("xml_parse() tag {} in map is not an object", tag)
                             })));
                         };
-                        *o
+                        o
                     }
                     None => {
                         let key = format!("tag_{}", tag);
@@ -106,13 +106,13 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                             .retrieve_property(&bf_args.caller_perms(), &SYSTEM_OBJECT, key)
                             .map_err(world_state_bf_err)?;
 
-                        let Variant::Obj(o) = prop_value.variant() else {
+                        let Some(o) = prop_value.as_object() else {
                             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                                 format!("xml_parse() tag {} not found in system object", tag)
                             })));
                         };
 
-                        *o
+                        o
                     }
                 };
 
@@ -189,12 +189,12 @@ fn flyweight_to_xml_tag(
                     format!("to_xml() tag {} not found in map", fl.delegate().id())
                 })));
             };
-            let Variant::Str(s) = tag.variant() else {
+            let Some(s) = tag.as_string() else {
                 return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
                     format!("to_xml() tag {} in map is not a string", fl.delegate().id())
                 })));
             };
-            s.as_str().to_string()
+            s.to_string()
         }
         None => {
             let key = Symbol::mk("tag");
@@ -202,13 +202,13 @@ fn flyweight_to_xml_tag(
                 .retrieve_property(perms, fl.delegate(), key)
                 .map_err(world_state_bf_err)?;
 
-            let Variant::Str(s) = tag.variant() else {
+            let Some(s) = tag.as_string() else {
                 return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
                     format!("to_xml() tag {} is not a string", fl.delegate().id())
                 })));
             };
 
-            s.as_str().to_string()
+            s.to_string()
         }
     };
 
@@ -279,7 +279,7 @@ fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let root = &bf_args.args[0];
     let map = if bf_args.args.len() == 2 {
-        let Variant::Map(m) = bf_args.args[1].variant() else {
+        let Some(m) = bf_args.args[1].as_map() else {
             return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
                 format!(
                     "to_xml() expects a map as the second argument, got {}",
@@ -300,7 +300,7 @@ fn bf_to_xml(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             .create_writer(&mut output_buf);
 
         // Element needs to be a flyweight
-        let Variant::Flyweight(fl) = root.variant() else {
+        let Some(fl) = root.as_flyweight() else {
             return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
                 format!(
                     "to_xml() expects a flyweight as the first argument, got {}",
@@ -365,7 +365,7 @@ fn bf_slots(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         })));
     }
 
-    let Variant::Flyweight(f) = bf_args.args[0].variant() else {
+    let Some(f) = bf_args.args[0].as_flyweight() else {
         return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
             format!(
                 "slots() expects a flyweight as the first argument, got {}",
@@ -400,7 +400,7 @@ fn bf_remove_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         })));
     }
 
-    let Variant::Flyweight(f) = bf_args.args[0].variant() else {
+    let Some(f) = bf_args.args[0].as_flyweight() else {
         return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
             format!(
                 "remove_slot() expects a flyweight as the first argument, got {}",
@@ -441,7 +441,7 @@ fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         })));
     }
 
-    let Variant::Flyweight(f) = bf_args.args[0].variant() else {
+    let Some(f) = bf_args.args[0].as_flyweight() else {
         return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
             format!(
                 "add_slot() expects a flyweight as the first argument, got {}",

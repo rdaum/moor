@@ -190,11 +190,11 @@ impl TelnetConnection {
                 }
                 Variant::List(lines) => {
                     for line in lines.iter() {
-                        let Variant::Str(line) = line.variant() else {
+                        let Some(line) = line.as_string() else {
                             trace!("Non-string in list output");
                             continue;
                         };
-                        let formatted = output_format(line.as_str(), content_type);
+                        let formatted = output_format(line, content_type);
                         self.write
                             .send(formatted)
                             .await
@@ -210,7 +210,7 @@ impl TelnetConnection {
             },
             Event::Traceback(e) => {
                 for frame in e.backtrace {
-                    let Variant::Str(s) = frame.variant() else {
+                    let Some(s) = frame.as_string() else {
                         continue;
                     };
                     self.write

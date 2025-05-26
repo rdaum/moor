@@ -248,17 +248,17 @@ fn bf_object_bytes(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_ARGS.msg("object_bytes() requires exactly 1 argument"),
         ));
     }
-    let Variant::Obj(o) = bf_args.args[0].variant() else {
+    let Some(o) = bf_args.args[0].as_object() else {
         return Err(BfErr::ErrValue(
             E_INVARG.msg("object_bytes() requires an object argument"),
         ));
     };
-    if !bf_args.world_state.valid(o).map_err(world_state_bf_err)? {
+    if !bf_args.world_state.valid(&o).map_err(world_state_bf_err)? {
         return Err(BfErr::ErrValue(E_INVARG.msg("object is not valid")));
     };
     let size = bf_args
         .world_state
-        .object_bytes(&bf_args.caller_perms(), o)
+        .object_bytes(&bf_args.caller_perms(), &o)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_int(size as i64)))
 }
@@ -270,7 +270,7 @@ fn bf_error_code(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_ARGS.msg("error_code() takes one argument"),
         ));
     }
-    let Variant::Err(e) = bf_args.args[0].variant() else {
+    let Some(e) = bf_args.args[0].as_error() else {
         return Err(BfErr::ErrValue(
             E_INVARG.msg("error_code() takes an error object"),
         ));
@@ -286,7 +286,7 @@ fn bf_error_message(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_ARGS.msg("error_message() takes one argument"),
         ));
     }
-    let Variant::Err(e) = bf_args.args[0].variant() else {
+    let Some(e) = bf_args.args[0].as_error() else {
         return Err(BfErr::ErrValue(
             E_INVARG.msg("error_message() takes an error object"),
         ));

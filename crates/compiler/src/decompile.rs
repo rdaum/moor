@@ -263,7 +263,7 @@ impl Decompile {
                         "expected literal '0' in for loop".to_string(),
                     ));
                 };
-                let Variant::Int(0) = v.variant() else {
+                let Some(0) = v.as_integer() else {
                     return Err(MalformedProgram(
                         "expected literal '0' in for loop".to_string(),
                     ));

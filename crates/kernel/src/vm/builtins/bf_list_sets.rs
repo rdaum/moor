@@ -123,7 +123,7 @@ fn bf_setadd(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
     let value = bf_args.args[1].clone();
     let list = bf_args.args[0].clone();
-    let Variant::List(list) = list.variant() else {
+    let Some(list) = list.as_list() else {
         return Err(BfErr::Code(E_TYPE));
     };
     Ok(Ret(list.set_add(&value).map_err(BfErr::ErrValue)?))
@@ -134,8 +134,7 @@ fn bf_setremove(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
     let value = bf_args.args[1].clone();
-    let list = bf_args.args[0].variant();
-    let Variant::List(list) = list else {
+    let Some(list) = bf_args.args[0].as_list() else {
         return Err(BfErr::Code(E_TYPE));
     };
     Ok(Ret(list.set_remove(&value).map_err(BfErr::ErrValue)?))
@@ -277,10 +276,10 @@ fn do_re_match(bf_args: &mut BfCallState<'_>, reverse: bool) -> Result<BfRet, Bf
     };
 
     let case_matters = if bf_args.args.len() == 3 {
-        let Variant::Int(case_matters) = bf_args.args[2].variant() else {
+        let Some(case_matters) = bf_args.args[2].as_integer() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *case_matters == 1
+        case_matters == 1
     } else {
         false
     };
@@ -571,19 +570,19 @@ fn bf_pcre_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let case_matters = if bf_args.args.len() >= 3 {
-        let Variant::Int(case_matters) = bf_args.args[2].variant() else {
+        let Some(case_matters) = bf_args.args[2].as_integer() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *case_matters == 1
+        case_matters == 1
     } else {
         false
     };
 
     let repeat = if bf_args.args.len() == 4 {
-        let Variant::Int(repeat) = bf_args.args[3].variant() else {
+        let Some(repeat) = bf_args.args[3].as_integer() else {
             return Err(BfErr::Code(E_TYPE));
         };
-        *repeat == 1
+        repeat == 1
     } else {
         true
     };
@@ -697,7 +696,7 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Turn psubs into a Vec<(isize, isize)>. Raising errors on the way if they're not
     let mut mysubs = Vec::new();
     for sub in subs.iter() {
-        let Variant::List(sub) = sub.variant() else {
+        let Some(sub) = sub.as_list() else {
             return Err(BfErr::Code(E_INVARG));
         };
         if sub.len() != 2 {
@@ -706,10 +705,10 @@ fn bf_substitute(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let (Ok(start), Ok(end)) = (sub.index(0), sub.index(1)) else {
             return Err(BfErr::Code(E_INVARG));
         };
-        let (Variant::Int(start), Variant::Int(end)) = (start.variant(), end.variant()) else {
+        let (Some(start), Some(end)) = (start.as_integer(), end.as_integer()) else {
             return Err(BfErr::Code(E_INVARG));
         };
-        mysubs.push((*start as isize, *end as isize));
+        mysubs.push((start as isize, end as isize));
     }
 
     match substitute(template.as_str(), &mysubs, source.as_str()) {
@@ -782,7 +781,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     let mut result = Vec::with_capacity(list.len());
 
                     for item in list.iter() {
-                        let Variant::List(sublist) = item.variant() else {
+                        let Some(sublist) = item.as_list() else {
                             return Err(BfErr::Code(E_TYPE));
                         };
 
@@ -803,23 +802,23 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
                     // Check if this is a list of lists
                     let first_item = list.index(0).map_err(BfErr::ErrValue)?;
-                    if let Variant::List(_) = first_item.variant() {
+                    if first_item.as_list().is_some() {
                         // This is a list of lists, extract elements from each sublist based on indices
                         // For each sublist in the input list, create a new list containing
                         // the elements at the positions specified in 'indices'
                         for item in list.iter() {
-                            let Variant::List(sublist) = item.variant() else {
+                            let Some(sublist) = item.as_list() else {
                                 return Err(BfErr::Code(E_TYPE));
                             };
 
                             let mut subresult = Vec::with_capacity(indices.len());
 
                             for idx_var in indices.iter() {
-                                let Variant::Int(idx) = idx_var.variant() else {
+                                let Some(idx) = idx_var.as_integer() else {
                                     return Err(BfErr::Code(E_TYPE));
                                 };
 
-                                let idx = *idx as usize;
+                                let idx = idx as usize;
                                 if idx < 1 || idx > sublist.len() {
                                     return Err(BfErr::Code(E_RANGE));
                                 }
@@ -842,7 +841,7 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     let mut result = Vec::with_capacity(list.len());
 
                     for item in list.iter() {
-                        let Variant::Map(map) = item.variant() else {
+                        let Some(map) = item.as_map() else {
                             return Err(BfErr::Code(E_TYPE));
                         };
 

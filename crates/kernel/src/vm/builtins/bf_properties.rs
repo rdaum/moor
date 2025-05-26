@@ -30,13 +30,13 @@ fn bf_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
     }
-    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+    let Some(obj) = bf_args.args[0].as_object() else {
         return Err(Code(E_TYPE));
     };
     let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
     let (_, perms) = bf_args
         .world_state
-        .get_property_info(&bf_args.task_perms_who(), obj, prop_name)
+        .get_property_info(&bf_args.task_perms_who(), &obj, prop_name)
         .map_err(world_state_bf_err)?;
     let owner = perms.owner();
     let flags = perms.flags();
@@ -58,25 +58,25 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
     }
 
     let owner = info.index(0).unwrap();
-    let Variant::Obj(owner) = owner.variant() else {
+    let Some(owner) = owner.as_object() else {
         return InfoParseResult::Fail(E_TYPE.msg("Invalid property info owner"));
     };
     let perms = info.index(1).unwrap();
-    let Variant::Str(perms) = perms.variant() else {
+    let Some(perms) = perms.as_string() else {
         return InfoParseResult::Fail(E_TYPE.msg("Invalid property info perms"));
     };
     let name = if info.len() == 3 {
         let name = info.index(2).unwrap();
-        let Variant::Str(name) = name.variant() else {
+        let Some(name) = name.as_string() else {
             return InfoParseResult::Fail(E_TYPE.msg("Invalid property info name"));
         };
-        Some(name.as_str().to_string())
+        Some(name.to_string())
     } else {
         None
     };
 
     let mut flags = BitEnum::new();
-    for c in perms.as_str().chars() {
+    for c in perms.chars() {
         match c {
             'r' => flags |= PropFlag::Read,
             'w' => flags |= PropFlag::Write,
@@ -89,7 +89,7 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
         name,
         value: None,
         location: None,
-        owner: Some(*owner),
+        owner: Some(owner),
         flags: Some(flags),
     })
 }
@@ -100,11 +100,11 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_ARGS.msg("set_property_info requires 3 arguments"),
         ));
     }
-    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+    let Some(obj) = bf_args.args[0].as_object() else {
         return Err(ErrValue(E_TYPE.msg("set_property_info requires an object")));
     };
     let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
-    let Variant::List(info) = bf_args.args[2].variant() else {
+    let Some(info) = bf_args.args[2].as_list() else {
         return Err(ErrValue(E_TYPE.msg("set_property_info requires a list")));
     };
 
@@ -117,7 +117,7 @@ fn bf_set_property_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     bf_args
         .world_state
-        .set_property_info(&bf_args.task_perms_who(), obj, prop_name, attrs)
+        .set_property_info(&bf_args.task_perms_who(), &obj, prop_name, attrs)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
@@ -126,13 +126,13 @@ fn bf_is_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
     }
-    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+    let Some(obj) = bf_args.args[0].as_object() else {
         return Err(Code(E_TYPE));
     };
     let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
     let is_clear = bf_args
         .world_state
-        .is_property_clear(&bf_args.task_perms_who(), obj, prop_name)
+        .is_property_clear(&bf_args.task_perms_who(), &obj, prop_name)
         .map_err(world_state_bf_err)?;
     Ok(Ret(bf_args.v_bool(is_clear)))
 }
@@ -141,13 +141,13 @@ fn bf_clear_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
     }
-    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+    let Some(obj) = bf_args.args[0].as_object() else {
         return Err(Code(E_TYPE));
     };
     let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
     bf_args
         .world_state
-        .clear_property(&bf_args.task_perms_who(), obj, prop_name)
+        .clear_property(&bf_args.task_perms_who(), &obj, prop_name)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
@@ -195,13 +195,13 @@ fn bf_delete_property(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() != 2 {
         return Err(Code(E_ARGS));
     }
-    let Variant::Obj(obj) = bf_args.args[0].variant() else {
+    let Some(obj) = bf_args.args[0].as_object() else {
         return Err(Code(E_TYPE));
     };
     let prop_name = bf_args.args[1].as_symbol().map_err(ErrValue)?;
     bf_args
         .world_state
-        .delete_property(&bf_args.task_perms_who(), obj, prop_name)
+        .delete_property(&bf_args.task_perms_who(), &obj, prop_name)
         .map_err(world_state_bf_err)?;
     Ok(Ret(v_empty_list()))
 }
