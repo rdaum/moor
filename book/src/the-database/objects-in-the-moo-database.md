@@ -31,7 +31,8 @@ The act of creating a character sets the player attribute of an object and only 
 be players.
 
 The parent/child hierarchy is used for classifying objects into general classes and then sharing behavior among all
-members of that class. For example, the ToastCore database contains an object representing a sort of "generic" room. All
+members of that class. For example, the LambdaCore database contains an object representing a sort of "generic" room.
+All
 other rooms are _descendants_ (i.e., children or children's children, or ...) of that one. The generic room defines
 those pieces of behavior that are common to all rooms; other rooms specialize that behavior for their own purposes. The
 notion of classes and specialization is the very essence of what is meant by _object-oriented_ programming.
@@ -138,7 +139,7 @@ perhaps some more. Ordinarily, when a child object inherits a property from its 
 the owner of that property. This is because the `c` permission bit is "on" by default. If the `c` bit is not on, then
 the inherited property has the same owner in the child as it does in the parent.
 
-As an example of where this can be useful, the ToastCore database ensures that every player has a `password` property
+As an example of where this can be useful, the LambdaCore database ensures that every player has a `password` property
 containing the encrypted version of the player's connection password. For security reasons, we don't want other players
 to be able to see even the encrypted version of the password, so we turn off the `r` permission bit. To ensure that the
 password is only set in a consistent way (i.e., to the encrypted version of a player's password), we don't want to let
@@ -170,7 +171,8 @@ of it; Ford remained the owner. Now the radio worked properly, because Ford's ve
 ## Verbs on Objects
 
 The final kind of piece making up an object is _verbs_. A verb is a named MOO program that is associated with a
-particular object. Most verbs implement commands that a player might type; for example, in the ToastCore database, there
+particular object. Most verbs implement commands that a player might type; for example, in the LambdaCore database,
+there
 is a verb on all objects representing containers that implements commands of the form `put object in container`.
 
 It is also possible for MOO programs to invoke the verbs defined on objects. Some verbs, in fact, are designed to be

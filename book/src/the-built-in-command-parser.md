@@ -15,7 +15,7 @@ apart commands that follow one of the following forms:
 - verb direct-object
 - verb direct-object preposition indirect-object
 
-Real examples of these forms, meaningful in the ToastCore database, are as follows:
+Real examples of these forms, meaningful in the LambdaCore database, are as follows:
 
 ```
 look
@@ -124,7 +124,7 @@ object is the empty string.
 The next step is to try to find MOO objects that are named by the direct and indirect object strings.
 
 First, if an object string is empty, then the corresponding object is the special object `#-1` (aka `$nothing` in
-ToastCore). If an object string has the form of an object number (i.e., a hash mark (`#`) followed by digits), and the
+LambdaCore). If an object string has the form of an object number (i.e., a hash mark (`#`) followed by digits), and the
 object with that number exists, then that is the named object. If the object string is either `"me"` or `"here"`, then
 the player object itself or its location is used, respectively.
 
@@ -148,7 +148,7 @@ to the list for the purposes of matching.
 The server checks to see if the object string in the command is either exactly equal to or a prefix of any alias; if
 there are any exact matches, the prefix matches are ignored. If exactly one of the objects being considered has a
 matching alias, that object is used. If more than one has a match, then the special object `#-2` (aka `$ambiguous_match`
-in ToastCore) is used. If there are no matches, then the special object `#-3` (aka `$failed_match` in ToastCore) is
+in LambdaCore) is used. If there are no matches, then the special object `#-3` (aka `$failed_match` in LambdaCore) is
 used.
 
 So, now the server has identified a verb string, a preposition string, and direct- and indirect-object strings and
@@ -181,7 +181,7 @@ the verb-name `foo*` matches any of the strings `foo`, `foobar`, `food`, or `foo
 case, if the verb-name is `*` (i.e., a single star all by itself), then it matches anything at all.
 
 Recall that the argument specifiers for the direct and indirect objects are drawn from the set `none`, `any`, and
-`this`. If the specifier is `none`, then the corresponding object value must be `#-1` (aka `$nothing` in ToastCore);
+`this`. If the specifier is `none`, then the corresponding object value must be `#-1` (aka `$nothing` in LambdaCore);
 that is, it must not have been specified. If the specifier is `any`, then the corresponding object value may be anything
 at all. Finally, if the specifier is `this`, then the corresponding object value must be the same as the object on which
 we found this verb; for example, if we are considering verbs on the player, then the object value must be the player

@@ -888,7 +888,7 @@ foo.Bar
 foo.("bAr")
 ```
 
-The ToastCore database uses several properties on `#0`, the _system object_, for various special purposes. For example,
+The LambdaCore database uses several properties on `#0`, the _system object_, for various special purposes. For example,
 the value of `#0.room` is the "generic room" object, `#0.exit` is the "generic exit" object, etc. This allows MOO
 programs to refer to these useful objects more easily (and more readably) than using their object numbers directly. To
 make this usage even easier and more readable, the expression
@@ -999,8 +999,7 @@ convenient utilities for dealing with negative connections in-MOO).
 
 > Fine Point: Utilizing verbs on primitives is a matter of style. Some people like it, some people don't. The author
 > suggests you keep a utility object (like $string_utils) and simply forward verb calls from your primitive to this
-> utility, which keeps backwards compatibility with how ToastCore and LambdaCore are generally built. By default in
-> ToastCore, the primitives just wrap around their `type`_utils counterparts.
+> utility, which keeps backwards compatibility with how LambdaCore is generally built.
 
 ## Catching Errors in Expressions
 

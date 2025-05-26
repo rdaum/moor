@@ -88,11 +88,13 @@ as a shortcut for the index() built-in function.
 
 ## Symbol Type
 
-_Symbols_ are a special kind of text value that mooR adds to the original MOO language. Think of symbols as "smart labels" that are perfect for naming things and organizing your code.
+_Symbols_ are a special kind of text value that mooR adds to the original MOO language. Think of symbols as "smart
+labels" that are perfect for naming things and organizing your code.
 
 ### What makes symbols different from strings?
 
-While strings (like `"hello"`) are great for text that users will see, symbols are designed for text that your program uses internally - like labels, categories, or identifiers.
+While strings (like `"hello"`) are great for text that users will see, symbols are designed for text that your program
+uses internally - like labels, categories, or identifiers.
 
 To create a symbol, you put a single quote (apostrophe) before the text, like this:
 
@@ -105,21 +107,25 @@ To create a symbol, you put a single quote (apostrophe) before the text, like th
 ### Key differences between symbols and strings:
 
 **Symbols express intent as identifiers**
+
 - Using `'name` clearly shows you mean it as an identifier or property name
 - Using `"name"` suggests it's text content that might be displayed to users
 - This makes your code's purpose clearer to other programmers
 
 **Symbols have restricted characters**
+
 - Symbols can only contain letters, numbers, and underscores
 - No spaces, punctuation, or special characters (except `_`)
 - Examples: `'player_name` ✓, `'hello world` ✗, `'item-count` ✗
 
 **Symbols don't support string operations**
+
 - You can't slice symbols like `'hello`[1..3]
 - You can't index into them like `'test`[2]
 - They're meant to be used whole, not manipulated like text
 
 **Symbols with the same text are identical**
+
 - Every time you write `'hello` in your code, it's the exact same symbol
 - This makes comparing symbols very fast
 
@@ -145,12 +151,14 @@ endif
 ### When should you use symbols?
 
 **Good uses for symbols:**
+
 - Property names: `'description`, `'location`, `'owner`
 - Game states: `'running`, `'paused`, `'finished`
 - Categories: `'weapon`, `'armor`, `'tool`
 - Commands: `'look`, `'take`, `'drop`
 
 **Better to use strings for:**
+
 - Messages shown to players: `"Hello, welcome to the game!"`
 - Descriptions: `"A rusty old sword"`
 - User input that might change
@@ -169,7 +177,8 @@ my_string = tostr('world);     // Creates "world"
 
 ### Technical note:
 
-The symbol feature is turned on by default in mooR. Server administrators can turn it off with the `--symbol-type=false` option, but most servers keep it enabled because symbols make code faster and cleaner.
+The symbol feature is turned on by default in mooR. Server administrators can turn it off with the `--symbol-type=false`
+option, but most servers keep it enabled because symbols make code faster and cleaner.
 
 ## Object Type
 
@@ -190,20 +199,24 @@ In programs, we write a reference to a particular object by putting a hash mark 
 Object numbers are always integers.
 
 There are three special object numbers used for a variety of purposes: `#-1`, `#-2`, and `#-3`, usually referred to in
-the ToastCore database as `$nothing`, `$ambiguous_match`, and `$failed_match`, respectively.
+the LambdaCore database as `$nothing`, `$ambiguous_match`, and `$failed_match`, respectively.
 
 ## Flyweights - lightweight objects
 
-_Flyweights_ are a special type that mooR adds to help you create lots of small, temporary objects without using too much memory or slowing down your MUD. Think of them as "mini-objects" that can hold data and respond to verbs, but are much lighter than real database objects.
+_Flyweights_ are a special type that mooR adds to help you create lots of small, temporary objects without using too
+much memory or slowing down your MUD. Think of them as "mini-objects" that can hold data and respond to verbs, but are
+much lighter than real database objects.
 
 ### Why use flyweights instead of regular objects?
 
 **Regular objects are "heavy":**
+
 - Each object takes up database space permanently
 - Creating many objects can slow down your MOO
 - Objects need to be cleaned up manually or they stick around forever
 
 **Flyweights are "light":**
+
 - You can create thousands of them quickly without performance problems
 - They automatically disappear when no longer needed
 - They can't be changed once created (immutable)
@@ -212,6 +225,7 @@ _Flyweights_ are a special type that mooR adds to help you create lots of small,
 ### What can flyweights do?
 
 Flyweights combine the best parts of objects, lists, and maps:
+
 - **Like objects**: They can have verbs called on them
 - **Like maps**: They can store named properties ("slots")
 - **Like lists**: They can contain other values
@@ -245,6 +259,7 @@ The basic pattern is: `< delegate_object, [slots], {contents} >`
 ### When should you use flyweights?
 
 **Great for flyweights:**
+
 - Inventory items that aren't permanent
 - Temporary game pieces (chess pieces, cards, etc.)
 - Menu items and UI elements
@@ -252,6 +267,7 @@ The basic pattern is: `< delegate_object, [slots], {contents} >`
 - Anything you need lots of that's similar but not identical
 
 **Better to use regular objects for:**
+
 - Players and important NPCs
 - Rooms that should persist between server restarts
 - Valuable items that players own long-term

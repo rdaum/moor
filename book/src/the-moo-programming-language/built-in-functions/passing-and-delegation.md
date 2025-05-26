@@ -15,7 +15,7 @@ calls the verb with the same name as the current verb but as defined on the pare
 current verb.
 
 Often, it is useful for a child object to define a verb that _augments_ the behavior of a verb on its parent object. For
-example, in the ToastCore database, the root object (which is an ancestor of every other object) defines a verb called
+example, in the LambdaCore database, the root object (which is an ancestor of every other object) defines a verb called
 `description` that simply returns the value of `this.description`; this verb is used by the implementation of the `look`
 command. In many cases, a programmer would like the
 description of some object to include some non-constant part; for example, a sentence about whether or not the object

@@ -15,6 +15,7 @@
     - [MOO Language Expressions](./the-moo-programming-language/moo-language-expressions.md)
     - [MOO Language Statements](./the-moo-programming-language/moo-language-statements.md)
     - [MOO Tasks](the-system/moo-tasks.md)
+    - [mooR's extensions](the-moo-programming-language/extensions.md)
     - [Built-in Functions](./the-moo-programming-language/built-in-functions.md)
         - [Manipulating MOO Values](./the-moo-programming-language/built-in-functions/manipulating-moo-values.md)
         - [Manipulating Objects](./the-moo-programming-language/built-in-functions/manipulating-objects.md)
@@ -38,7 +39,6 @@
     - [Telnet-Host Commands and Assumptions](the-system/telnet-host-commands-and-assumptions.md)
     - [Networking](./the-moo-programming-language/networking.md)
     - [Controlling the Execution of Tasks](the-system/controlling-the-execution-of-tasks.md)
-    - [mooR's extensions](./extensions.md)
 - [MOO Resources](./moo-resources.md)
 
 ---

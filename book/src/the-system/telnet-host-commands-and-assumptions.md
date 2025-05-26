@@ -132,7 +132,7 @@ PREFIX
 SUFFIX
 ```
 
-The effect of which, in a ToastCore-derived database, is to print out the code for the named verb preceded by a line
+The effect of which, in a LambdaCore-derived database, is to print out the code for the named verb preceded by a line
 containing only `>>MOO-Prefix<<` and followed by a line containing only `>>MOO-Suffix<<`. This enables the editor to
 reliably extract the program text from the MOO output and show it to the user in a separate editor window. There are
 many other possible uses.
