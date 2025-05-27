@@ -846,14 +846,6 @@ property.
 !true == false          => 1
 ```
 
-The true and false variables are set at task runtime (or your code) and can be overridden within verbs if needed. This
-will not carryover after the verb is finished executing.
-
-> Fine Point: As mentioned earlier, there are constants like STR which resolved to the integer code 2. OBJ resolves to
-> the integer code of 1. Thus if you were to execute code such as `typeof(#15840) == TRUE` you would get a truthy
-> response, as typeof() would return `1` to denote the object's integer code. This is a side effect of `true` always
-> equaling 1, for compatibility reasons.
-
 ## Getting and Setting the Values of Properties
 
 Usually, one can read the value of a property on an object with a simple expression:
