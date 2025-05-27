@@ -58,8 +58,6 @@ integer, then create() treats that value as a quota. If the quota is less than o
 considered to be exhausted and create() raises E_QUOTA instead of creating an object. Otherwise, the quota is
 decremented and stored back into the `ownership_quota` property as a part of the creation of the new object.
 
-> Note: In ToastStunt, this is disabled by default with the "OWNERSHIP_QUOTA" option in options.h
-
 ### `owned_objects`
 
 ```
@@ -154,11 +152,17 @@ isa(#2, {$thing, $room, $container}, 1) => #-1
 obj locate_by_name([obj object,] str name [, INT with_key])
 ```
 
-`object.name` is a string and may optionally contain a key field. The key field is separated from the name by "  [", and its value is delimited by the first space or end of string.
+`object.name` is a string and may optionally contain a key field. The key field is separated from the name by "  [", and
+its value is delimited by the first space or end of string.
 
-This function is primarily designed to return the best match to `name` of the children of `object`. This function is used by the MOO to look for objects referenced via the input functions. This mimics the behavior of the lambda MOO. If `name` is a valid object number, then the object representing that number is returned. If not, the name is tested against the objects in `object.contents`.
+This function is primarily designed to return the best match to `name` of the children of `object`. This function is
+used by the MOO to look for objects referenced via the input functions. This mimics the behavior of the lambda MOO. If
+`name` is a valid object number, then the object representing that number is returned. If not, the name is tested
+against the objects in `object.contents`.
 
-If `with_key` is specified and true, and a key is supplied in the name, the key is tested against the object key specified in the objects name. If the object has a key and the key in the name doesn't match, the object is rejected from the search.
+If `with_key` is specified and true, and a key is supplied in the name, the key is tested against the object key
+specified in the objects name. If the object has a key and the key in the name doesn't match, the object is rejected
+from the search.
 
 ```
 obj:locate_by_name("bar")        =>   #0 (first match)

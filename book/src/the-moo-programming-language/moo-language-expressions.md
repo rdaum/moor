@@ -826,7 +826,7 @@ this none this'), since it shows so clearly just what kinds of arguments the ver
 
 ## Operations on BOOLs
 
-ToastStunt offers a `bool` type. This type can be either `true` which is considered `1` or `false` which is considered
+mooR offers a `bool` type. This type can be either `true` which is considered `1` or `false` which is considered
 `0`. Boolean values can be set in your code/props much the same way any other value can be assigned to a variable or
 property.
 

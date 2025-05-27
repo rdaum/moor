@@ -405,7 +405,7 @@ And another example:
 (End of traceback)
 ```
 
-As you can see in the above examples, ToastStunt will tell you the line number of the error, as well as some additional
+As you can see in the above examples, mooR will tell you the line number of the error, as well as some additional
 information about the error, including the expected number of arguments and the type. This will also work when you are
 catching errors in a try/except statement (detailed below).
 
@@ -553,21 +553,6 @@ then that variable is assigned the _task ID_ of the newly-created task. The valu
 the task executing the fork statement and to the statements in the newly-created task. This ID can be passed to the
 `kill_task()` function to keep the task from running and will be the value of `task_id()` once the task begins
 execution.
-
-> Note: This feature has other uses as well. The MOO is single threaded (though ToastStunt supports some built-ins
-> executing on other threads), which means that complex logic (verbs that call verbs that call verbs ...) can cause the
-> MOO to _lag_. For instance, let's say when your user tosses their ball up, you want to calculate a complex trajectory
-> involve the ball and other objects in the room. These calculations are costly and done in another verb, they take time
-> to be performed. However, you want some actions to happen both before the calculations (everyone in the room seeing
-> the
-> ball is thrown into the air) and after the ball has left the players hands (the player reaches into their pocket and
-> pulls out a new ball). If there is no `fork()` then the calculations need to complete before the verb can continue
-> execution, which means the player won't pull out a fresh ball until after the calculations are complete. A `fork()`
-> allows the player to throw the ball, the MOO to `fork()` the task, which allows execution of the verb to continue
-> right
-> away and the user to pull out a new ball, without experiencing the delay that the calculations being returned (without
-> a
-`fork()`) would have incurred.
 
 An example of this:
 
