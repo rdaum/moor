@@ -71,15 +71,6 @@ The server comes pre-loaded with JaysHouseCore, providing a ready-to-explore vir
 
 For more detailed setup instructions, see the [Docker Compose Setup](https://rdaum.github.io/moor/the-system/docker-compose-setup.html) section in the mooR Book.
 
-## For New Users
-
-If you're new to MOOs, you'll find yourself in a virtual world where you can:
-- Explore rooms and interact with objects using commands like `look`, `go north`, `take lamp`
-- Communicate with others using `say hello` or `emote waves`  
-- Learn the system with `help` and `@tutorial`
-- Experience both traditional command-line and modern web-based interfaces
-- Eventually learn to program new objects and behaviors in the MOO language
-
 ## For Developers & Contributors
 
 mooR offers several opportunities for contribution:
