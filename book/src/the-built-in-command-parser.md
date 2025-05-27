@@ -144,8 +144,5 @@ When a verb is executed, these variables are set:
 
 > **Note:** mooR's command parser is implemented in Rust and can be extended by Rust programmers. This allows for custom parsing logic or new features beyond the standard MOO command syntax.
 
----
+--
 
-## See Also
-- For more on how object matching and aliases work, see the section on [Matching in Command Parsing](the-moo-programming-language/matching-in-command-parsing.md).
-- For details on special commands and server assumptions, see [Server Commands and Database Assumptions](the-system/telnet-host-commands-and-assumptions.md).
