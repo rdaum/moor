@@ -181,6 +181,66 @@ my_string = tostr('world);     // Creates "world"
 The symbol feature is turned on by default in mooR. Server administrators can turn it off with the `--symbol-type=false`
 option, but most servers keep it enabled because symbols make code faster and cleaner.
 
+## Binary Type
+
+_Binary_ values are sequences of bytes that can represent arbitrary binary data - like images, compressed files,
+encrypted data, or any other non-text information.
+
+### Writing binary literals
+
+In MOO programs, binary values are written using a special prefix syntax with `b"` followed by a base64-encoded
+string and ending with `"`, like this:
+
+```moo
+b"SGVsbG8gV29ybGQ="    // This represents the text "Hello World" as binary data
+b""                   // An empty binary value
+b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="  // A 1x1 pixel PNG image
+```
+
+The content inside the quotes must be valid base64 encoding. If you provide invalid base64 data, you'll get a
+parsing error.
+
+### What can you do with binary values?
+
+Binary values work like other sequence types in MOO - you can:
+
+- **Index into them**: `my_binary[1]` returns the first byte as an integer (0-255)
+- **Get their length**: `length(my_binary)` tells you how many bytes it contains
+- **Search in them**: `65 in my_binary` checks if byte value 65 exists in the binary
+- **Take slices**: `my_binary[1..10]` gets the first 10 bytes
+- **Append to them**: `my_binary + other_binary` or `my_binary + 255` (to add a single byte)
+- **Convert to/from strings**: Using built-in functions when the binary represents text data
+
+### Working with binary data
+
+mooR provides built-in functions for working with binary data:
+
+- `decode_base64(string, [url-safe])` - Converts a base64 string to binary data
+- `encode_base64(binary)` - Converts binary data to a base64 string
+
+### When should you use binary values?
+
+**Good uses for binary:**
+
+- Storing image, audio, or video data
+- Handling compressed or encrypted information
+- Working with network protocols that use binary formats
+- Interfacing with external systems that expect raw bytes
+- Storing any non-text data efficiently
+
+**Better to use strings for:**
+
+- Regular text that users will read
+- Configuration data and settings
+- Most game content and descriptions
+
+### Important notes:
+
+- Binary values are immutable, just like strings and lists in MOO
+- When you "modify" a binary value, you actually create a new one
+- Binary data is stored efficiently and doesn't waste space on encoding overhead
+- You can safely store any byte values (0-255) without worrying about text encoding issues
+
 ## Object Type
 
 _Objects_ are the backbone of the MOO database and, as such, deserve a great deal of discussion; the entire next section
