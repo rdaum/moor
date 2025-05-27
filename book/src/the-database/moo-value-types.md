@@ -43,15 +43,23 @@ or 'e' followed by an optional sign and one or more digits). Here are some examp
 All of these examples mean the same number. The third of these, as an example of scientific notation, should be read "
 3.25 times 10 to the power of 2".
 
-Fine point: The MOO represents floating-point numbers using the local meaning of the Rust `f64` type. Maximum and
-minimum values generally follow the constraints placed by the Rust compiler and library on those types.
+**Float errors to watch out for:**
 
-To maintain backwards compatibility with LambdaMOO, in mooR:
+Some mathematical operations on floats can cause errors instead of giving you a result:
+- **Division by zero** gives you an `E_DIV` error: `5.0 / 0.0` → `E_DIV`
+- **Operations that would be infinite** give you an `E_FLOAT` error: `1.0e308 * 1.0e308` → `E_FLOAT`
+- **Invalid operations** give you an `E_INVARG` error: `sqrt(-1.0)` → `E_INVARG`
 
-- IEEE infinities and NaN values are not allowed in MOO.
-- The error `E_FLOAT` is raised whenever an infinity would otherwise be computed.
-- The error `E_INVARG` is raised whenever a NaN would otherwise arise.
-- The value `0.0` is always returned on underflow.
+> **Technical Notes**
+> 
+> The MOO represents floating-point numbers using the local meaning of the Rust `f64` type. Maximum and minimum values generally follow the constraints placed by the Rust compiler and library on those types.
+> 
+> To maintain backwards compatibility with LambdaMOO, in mooR:
+> 
+> - IEEE infinities and NaN values are not allowed in MOO.
+> - The error `E_FLOAT` is raised whenever an infinity would otherwise be computed.
+> - The error `E_INVARG` is raised whenever a NaN would otherwise arise.
+> - The value `0.0` is always returned on underflow.
 
 ## String Type
 
@@ -192,6 +200,104 @@ And here is an example of a fully custom error:
 return E_TOOFAST("The car is going way too fast");
 ```
 
+## Object Type
+
+_Object numbers_ (also called object references) are how you refer to the permanent objects stored in the MOO database. The value itself is not the object—it's more like an address or pointer that tells MOO which object you're talking about.
+
+Every object in the database has a unique number. When you store an object number in a variable or property, you're storing a reference that points to that specific object.
+
+In programs, we write a reference to a particular object by putting a hash mark (`#`) followed by the number, like this:
+
+```
+#495
+```
+
+### Important notes about object references:
+
+- The value `#495` is just a number that refers to object 495
+- If object 495 gets recycled (deleted), the reference `#495` becomes invalid
+- You can pass object references around, store them in lists, use them as map keys, etc.
+- When you call verbs or access properties, you use the object reference: `#495:tell("Hello!")`
+- Object numbers are always integers.
+- Object numbers can be negative, but a negative number object number is never a real "thing" in the world, but instead more of a "concept" (see below).
+
+### Special & negative object numbers:
+
+There are three special object numbers used for specific purposes: `#-1`, `#-2`, and `#-3`, usually referred to in
+the LambdaCore database as `$nothing`, `$ambiguous_match`, and `$failed_match`, respectively.
+
+Negative object numbers never refer to an actual physical object in the world, but always to some concept (e.g. #-1 for nothing) or something external (player connections are given special negative numbers).
+
+### Best practices:
+
+Instead of hard-coding object numbers like `#495` in your code, it's better to use corified references like `$my_special_object` (See below). This makes your code more readable and less fragile if object numbers change.
+
+> **Note:** Referencing object numbers directly in your code should be discouraged. An object only exists until it is recycled, and it's technically possible for an object number to change under some circumstances. Thus, you should use a corified reference to an object (`$my_special_object`) instead. More on corified references later.
+
+## System References ($names)
+
+In MOO, you'll often see identifiers that start with a dollar sign, like `$room`, `$thing`, or `$player`. These are called _system references_ (sometimes called "corified" references), and they're a convenient way to refer to important objects and values without having to remember their object numbers.
+
+### How system references work:
+
+A system reference like `$thing` is actually shorthand for `#0.thing` - it's a property stored on object `#0`, which is called the "system object."
+
+```moo
+$room     // This is the same as #0.room
+$player   // This is the same as #0.player  
+$thing    // This is the same as #0.thing
+```
+
+### Why use system references?
+
+**They make code readable and maintainable:**
+- `$room` is much clearer than `#17` in your code
+- If the room object gets a new number, you only need to update `#0.room`
+- Other programmers can understand what `$player` means immediately
+
+**They can store any value, not just object numbers:**
+- `$maxint` might store the integer `9223372036854775807`
+- `$default_timeout` might store `30` (seconds)
+- `$server_name` might store the string `"My MOO Server"`
+
+### The system object (#0):
+
+Object `#0` is special in MOO - it's called the "system object" and serves as the central place to store important system-wide values and references. Think of it as the "control panel" for your MOO:
+
+- It holds properties that define important objects like `$room`, `$thing`, `$player`
+- It stores system configuration values like `$maxint`, `$minint`
+- It's where you put values that all verbs need to access
+- It's always object number `0` and can't be recycled
+
+### Common system references:
+
+You'll encounter these frequently in MOO code:
+
+- `$room` - The generic room object that other rooms inherit from
+- `$thing` - The generic thing object for items and objects
+- `$player` - The generic player object
+- `$nothing` - Represents "no object" (usually `#-1`)
+- `$ambiguous_match` - Used when parsing finds multiple matches (usually `#-2`)
+- `$failed_match` - Used when parsing finds no matches (usually `#-3`)
+
+### Creating your own system references:
+
+You can create your own system references by adding properties to `#0`, but this requires wizard permissions and using the proper commands:
+
+```moo
+// First, add the property (requires wizard permissions):
+add_property(#0, "my_special_room", #1234, {player, "r"});
+
+// Or using a core command like @property:
+@property #0.my_special_room #1234
+
+// Now you can use $my_special_room instead of #1234
+```
+
+> **Note:** Only wizards can add properties to the system object (`#0`). Most MOO cores provide utility commands like `@property` to make this easier than using the `add_property()` builtin directly.
+
+This is much better than hard-coding object numbers throughout your code!
+
 ## Symbol Type
 
 _Symbols_ are a special kind of text value that mooR adds to the original MOO language. Think of symbols as "smart
@@ -294,7 +400,7 @@ encrypted data, or any other non-text information.
 ### Writing binary literals
 
 In MOO programs, binary values are written using a special prefix syntax with `b"` followed by a base64-encoded
-string and ending with `"`, like this:
+string (a way of writing binary data using letters and numbers) and ending with `"`, like this:
 
 ```moo
 b"SGVsbG8gV29ybGQ="    // This represents the text "Hello World" as binary data
@@ -346,26 +452,11 @@ mooR provides built-in functions for working with binary data:
 - Binary data is stored efficiently and doesn't waste space on encoding overhead
 - You can safely store any byte values (0-255) without worrying about text encoding issues
 
-## Object Type
-
-_Objects_ are the backbone of the MOO database and, as such, deserve a great deal of discussion; the entire next section
-is devoted to them. For now, let it suffice to say that every object has a number, unique to that object.
-
-In programs, we write a reference to a particular object by putting a hash mark (`#`) followed by the number, like this:
-
-```
-#495
-```
-
-> Note: Referencing object numbers in your code should be discouraged. An object only exists until it is recycled. It is
-> technically possible for an object number to change under some circumstances. Thus, you should use a corified
-> reference
-> to an object ($my_special_object) instead. More on corified references later.
-
-Object numbers are always integers.
-
-There are three special object numbers used for a variety of purposes: `#-1`, `#-2`, and `#-3`, usually referred to in
-the LambdaCore database as `$nothing`, `$ambiguous_match`, and `$failed_match`, respectively.
+> **Technical Notes:**
+> 
+> mooR uses URL-safe base64 encoding by default for binary literals. This means the encoding uses `-` and `_` instead of `+` and `/`, making binary values safe to use in URLs and web applications.
+> 
+> **LambdaMOO Compatibility:** LambdaMOO had its own custom way of encoding binary strings that mooR does not currently support. If you're migrating code from LambdaMOO that uses binary data, you may need to convert the encoding format.
 
 ## Flyweights - lightweight objects
 
