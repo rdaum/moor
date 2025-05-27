@@ -24,7 +24,7 @@ A typical MOO core includes:
 - **Command verbs**: The code that handles commands like `look`, `say`, `get`, `drop`, etc.
 - **System verbs**: Login/logout handling, communication systems, building commands
 - **Utility objects**: Libraries for common programming tasks
-- **Administrative tools**: Commands for managing the MOO (`@create`, `@destroy`, `@chmod`, etc.)
+- **Administrative tools**: Commands for managing the MOO (`@create`, `@recycle`, `@chmod`, etc.)
 - **Social systems**: Who lists, mail systems, communication channels
 
 Without these, your mooR server would just be an empty database with no way for players to interact meaningfully.
