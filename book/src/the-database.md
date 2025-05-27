@@ -1,26 +1,42 @@
 # The mooR Object Database ("WorldState")
 
-In this chapter, we describe in detail the various kinds of data that can appear in a mooR world / database and that MOO
-programs can manipulate.
+## What makes MOO unique
 
-The database ("WorldState") is where all of the data in a MOO is stored. Everything that players see and interact with
+MOO (MUD Object Oriented) is fundamentally different from most programming environments. Instead of writing programs that manipulate external data, **MOO programs live inside a persistent object database that represents a virtual world**. Every room, character, item, and even the programs themselves are objects stored in this database.
+
+What makes this special:
+
+- **Everything is persistent** - When you create a sword object or write a verb, it stays in the world permanently until explicitly removed
+- **Everything is programmable** - Every object can have custom behaviors through verbs (programs attached to objects)
+- **Everything is interconnected** - Objects can contain other objects, inherit from parents, and interact through a shared spatial environment
+- **Everything is live** - Changes take effect immediately while players are connected and interacting
+
+This creates a unique programming environment where you're not just writing code—you're building and inhabiting a living, persistent virtual world.
+
+## What you'll learn in this chapter
+
+This chapter covers the four fundamental building blocks that let you create MOO worlds:
+
+- **Objects** - The entities that make up your world (rooms, players, items, etc.)
+- **Properties** - How objects store information and state
+- **Verbs** - The programs that give objects their behaviors and responses  
+- **Values** - The different types of data MOO can work with
+
+The database ("WorldState") is where all of this lives. Everything that players see and interact with
 in a MOO is represented in the database, including characters, objects, rooms, and the MOO programs (verbs) that give
-them
-their specific behaviours. If the server is restarted, it will start right back up with the same data that was present
+them their specific behaviours. If the server is restarted, it will start right back up with the same data that was present
 when it was last running, allowing players to continue their interactions seamlessly.
 
-Effectively. The database *is* the MOO.
+**The database *is* the MOO.**
 
-The database is a collection of objects, each of which has a set of properties and a set of verbs.
+## How the database is organized
 
-The properties are values that can be read and written by MOO programs, while the verbs are procedures that can be
-called by MOO programs.
+The database is a collection of **objects**, each of which has:
 
-The database is organized into a hierarchy of objects, with each object having a parent object. The parent object can be
-thought of as a template for the child object, providing default values for properties and default implementations for
-verbs. This hierarchy allows for inheritance, where a child object can override the properties and verbs of its parent
-object.
+- **Properties** - values that store information about the object (like a name, description, or hit points)
+- **Verbs** - programs that define what the object can do and how it responds to commands
 
-Each section of this chapter will break down the various kinds of data that can appear in a MOO database, and the kinds
-of things that can be done with them. 
+Objects are organized into a **hierarchy** with parent-child relationships. A parent object acts as a template for its children, providing default properties and verbs that children can inherit and customize. This inheritance system allows you to create families of similar objects efficiently—for example, all weapons might inherit from a basic "weapon" parent, but each specific sword or axe can have its own unique properties and behaviors.
+
+This chapter breaks down each of these building blocks in detail, showing you how to use objects, properties, verbs, and values to create rich, interactive MOO worlds. 
 

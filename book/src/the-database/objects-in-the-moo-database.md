@@ -57,24 +57,25 @@ notion of classes and specialization is the very essence of what is meant by _ob
 Only the functions `create()`, `recycle()`, `chparent()`, `chparents()`, `renumber()` and `recreate()` can change the
 parent and children attributes.
 
-Below is the table representing the `flag` for the built-in properties allotted to the object. This is simply a
-representation of bits, and for example, the player flag is a singular bit (0x01). So the flag is actually an integer
-that, when in binary, represents all of the flags on the object.
-
-```
-Player:         0x01    set_player_flag()
-Programmer:     0x02    .programmer
-Wizard:         0x04    .wizard
-Read:           0x10    .r
-Write:          0x20    .w
-Fertile:        0x80    .f
-```
-
 ## Properties on Objects
 
-A _property_ is a named "slot" in an object that can hold an arbitrary MOO value. Every object has eleven built-in
-properties whose values are constrained to be of particular types. In addition, an object can have any number of other
-properties, none of which have type constraints. The built-in properties are as follows:
+A _property_ is a named "slot" in an object that can hold any MOO value. Think of properties as the variables that belong to an object—they store information about what the object is and what state it's in.
+
+**How properties work:**
+- You access properties using dot notation: `object.property_name`
+- You can read values: `player.score` might return `1500`
+- You can set values: `sword.damage = 25`
+- Properties can hold any type of data: strings, numbers, lists, other objects, etc.
+
+**Creating and managing properties:**
+- Object owners and wizards can add new properties to objects
+- Properties are inherited—if a parent object has a `weight` property, all its children automatically have one too
+- Children can override inherited properties with their own values
+- Properties have permissions that control who can read or modify them
+
+### Built-in properties
+
+Every object automatically comes with several built-in properties that MOO uses for core functionality. You can't delete these, but you can read and (usually) modify them just like regular properties:
 
 | Property   | Description                                                |
 |------------|------------------------------------------------------------|
@@ -123,16 +124,22 @@ All of the built-in properties on any object can, by default, be read by any pla
 override this behavior from within the database, making any of these properties readable only by wizards. See the
 chapter on server assumptions about the database for details.
 
-As mentioned above, it is possible, and very useful, for objects to have other properties aside from the built-in ones.
-These can come from two sources.
+### Custom properties: Building your world
 
-First, an object has a property corresponding to every property in its parent object. To use the jargon of
-object-oriented programming, this is a kind of _inheritance_. If some object has a property named `foo`, then so will
-all of its children and thus its children's children, and so on.
+The real power of MOO comes from adding your own properties to objects. This is how you create the unique characteristics that make your world interesting and interactive.
 
-Second, an object may have a new property defined only on itself and its descendants. For example, an object
-representing a rock might have properties indicating its weight, chemical composition, and/or pointiness, depending upon
-the uses to which the rock was to be put in the virtual reality.
+**Where custom properties come from:**
+
+**Inheritance** - An object automatically has all the properties that its parent object has. If you create a "generic weapon" object with properties like `damage`, `weight`, and `material`, then every sword, axe, and bow that inherits from it will also have those properties.
+
+**Direct definition** - You can add completely new properties to specific objects. For example, a magical sword might have a `magic_power` property that no other weapon has.
+
+**Examples of custom properties:**
+- A player might have: `score`, `level`, `inventory_limit`, `last_login`
+- A room might have: `temperature`, `lighting`, `exits_hidden`, `background_music`
+- A weapon might have: `damage`, `durability`, `enchantment`, `required_strength`
+
+### Property ownership and permissions
 
 Every defined property (as opposed to those that are built-in) has an owner and a set of permissions for non-owners. The
 owner of the property can get and set the property's value and can change the non-owner permissions. Only a wizard can
