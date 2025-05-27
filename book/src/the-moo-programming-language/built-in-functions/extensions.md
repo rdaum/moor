@@ -14,6 +14,11 @@ The following functions are unique to mooR and not found in original LambdaMOO:
 - `add_slot` - Returns a copy of the flyweight with a new slot added
 - `tosym` - Turns the given value into a Symbol
 
+**Cryptography:**
+- `age_generate_keypair` - Generates a new X25519 keypair for use with age encryption
+- `age_encrypt` - Encrypts a message using age encryption for one or more recipients, outputs as base64
+- `age_decrypt` - Decrypts a base64-encoded age-encrypted message using one or more private keys
+
 **Administration:**
 
 - `vm_counters` - Performance counters for profiling VM internals
@@ -31,11 +36,8 @@ The following functions are unique to mooR and not found in original LambdaMOO:
 
 The following functions were originally extensions in ToastStunt that have been incorporated into mooR:
 
-- `age_generate_keypair` - Generates a new X25519 keypair for use with age encryption
-- `age_encrypt` - Encrypts a message using age encryption for one or more recipients
-- `age_decrypt` - Decrypts an age-encrypted message using one or more private keys
 - `argon2` - Hashing function for secure password storage
-- `arong2_verify` - Verifies a password against an Argon2 hash
+- `argon2_verify` - Verifies a password against an Argon2 hash
 - `ftime` - Enhanced time formatting (slight differences from ToastStunt implementation)
 - `encode_base64` - Encodes a string using Base64 encoding
 - `decode_base64` - Decodes a Base64-encoded string
