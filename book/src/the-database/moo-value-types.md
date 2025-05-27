@@ -1,21 +1,23 @@
 # Kinds of values
 
-There are only a few kinds of values that MOO programs can manipulate, and that can be stored inside objects in the
-mooR database.
+There are only a few kinds of values that MOO programs can manipulate, and that can be stored inside objects in the mooR database.
 
 - Integers (in a specific, large range)
 - Floats / Real numbers  (represented with floating-point numbers)
 - Strings (of characters)
+- Lists (ordered sequences of values)
+- Maps (associative key-value collections)
+- Errors (arising during program execution)
 - Symbols (special labels for naming things in code)
+- Binary values (arbitrary byte sequences)
 - Object numbers (references to the permanent objects in the database)
 - "Flyweights" - anonymous lightweight object _values_
-- Errors (arising during program execution)
-- Lists (of all of the above, including lists)
-- Maps (of all of the above, including lists and maps)
 
 ## Integer Type
 
-mooR integers are signed, 64-bit integers.
+Integers are numbers without decimal places.
+
+Technically they are signed, 64-bit integers.
 
 In MOO programs, integers are written just as you see them here, an optional minus sign followed by a non-empty sequence
 of decimal digits. In particular, you may not put commas, periods, or spaces in the middle of large integers, as we
@@ -86,6 +88,109 @@ There is syntactic sugar that allows you to do:
 ```
 
 as a shortcut for the index() built-in function.
+
+## List Type
+
+Lists are one of the most important value types in MOO. A list is an ordered sequence of values, which can include any kind of MOO value—even other lists! Lists are great for keeping track of collections of things, like player inventories, search results, or a series of numbers.
+
+In MOO, lists are written using curly braces `{}` with each element separated by a comma:
+
+```
+{"apple", "banana", "cherry"}
+{1, 2, 3, 4, 5}
+{"player1", #123, 42, {"nested", "list"}}
+```
+
+You can get the length of a list with `length(my_list)`, access elements by index (starting at 1), and use many built-in functions to work with lists (like `setadd`, `setremove`, `index`, etc.).
+
+```
+fruits = {"apple", "banana", "cherry"};
+first_fruit = fruits[1]; // "apple"
+fruits = setadd(fruits, "date"); // {"apple", "banana", "cherry", "date"}
+```
+
+Lists are immutable: when you "change" a list, you actually create a new one.
+
+## Map Type
+
+Maps let you associate keys with values, like a dictionary in other languages. They are perfect for storing things like player stats, configuration options, or any data where you want to look up a value by a key.
+
+Maps are written using square brackets `[]` with key -> value pairs, separated by commas:
+
+```
+["name" -> "Alice", "score" -> 100, 1 -> {"a", "b"}]
+['level -> 5, #123 -> "object ref"]
+```
+
+You can use any MOO value as a key, but it's most common to use strings, symbols, or numbers. To get a value from a map, use the key in square brackets:
+
+```
+player = ["name" -> "Alice", "score" -> 100];
+score = player["score"]; // 100
+```
+
+Maps are also immutable—modifying them creates a new map.
+
+> **Syntax Note:**
+> 
+> In MOO, lists use curly braces `{}` and maps use square brackets `[]`. This is the *opposite* of Python and JavaScript, where lists/arrays use `[]` and dictionaries/objects use `{}`. MOO's syntax came first, and this historical quirk can be confusing if you're used to other languages!
+
+## Error Type
+
+_Errors_ represent failures or error conditions while running verbs or builtins.
+
+In the normal case, when a program attempts an operation that is erroneous for some reason (for example, trying to add
+a number to a character string), the server stops running
+the program and prints out an error message. However, it is possible for a program to stipulate that such errors should
+not stop execution; instead, the server should just let the value of the operation be an error value. The program can
+then test for such a result and take some appropriate kind of recovery action.
+
+In programs, error values are written as words beginning with `E_`. mooR has a series of built-in error values that
+represent common error conditions that can arise during program execution. In addition, it is possible to define
+your own error values, which can be used to represent application-specific error conditions, which is done by prefixing
+any identifier with `E_` (e.g. `E_MY_ERROR`).
+
+The complete list of error values, along with their associated messages, is as follows:
+
+| Error     | Description                     |
+|-----------|---------------------------------|
+| E_NONE    | No error                        |
+| E_TYPE    | Type mismatch                   |
+| E_DIV     | Division by zero                |
+| E_PERM    | Permission denied               |
+| E_PROPNF  | Property not found              |
+| E_VERBNF  | Verb not found                  |
+| E_VARNF   | Variable not found              |
+| E_INVIND  | Invalid indirection             |
+| E_RECMOVE | Recursive move                  |
+| E_MAXREC  | Too many verb calls             |
+| E_RANGE   | Range error                     |
+| E_ARGS    | Incorrect number of arguments   |
+| E_NACC    | Move refused by destination     |
+| E_INVARG  | Invalid argument                |
+| E_QUOTA   | Resource limit exceeded         |
+| E_FLOAT   | Floating-point arithmetic error |
+| E_FILE    | File system error               |
+| E_EXEC    | Exec error                      |
+| E_INTRPT  | Interrupted                     |
+
+Error values can also have an optional message associated with them, which can be used to provide additional context
+about the error. This message can be set when the error is raised, and it can be retrieved later using the
+`error_message` builtin function.
+
+An example of an error value with an attached message might look like this:
+
+```moo
+let my_error = E_TYPE("Expected a number, but got a string.");
+error_message(my_error); // Returns "Expected a number, but got a string."
+return my_error; // We can return errors from verbs to let callers know something went wrong.
+```
+
+And here is an example of a fully custom error:
+
+```moo
+return E_TOOFAST("The car is going way too fast");
+```
 
 ## Symbol Type
 
@@ -376,89 +481,4 @@ html_string = to_xml(div_element);
 - They only exist while your program is running
 - They're perfect for temporary data structures
 - The `player` variable can never be a flyweight (but `this` and `caller` can be)
-
-## Error Type
-
-_Errors_ represent failures or error conditions while running verbs or builtins.
-
-In the normal case, when a program attempts an operation that is erroneous for some reason (for example, trying to add
-a number to a character string), the server stops running
-the program and prints out an error message. However, it is possible for a program to stipulate that such errors should
-not stop execution; instead, the server should just let the value of the operation be an error value. The program can
-then test for such a result and take some appropriate kind of recovery action.
-
-In programs, error values are written as words beginning with `E_`. mooR has a series of built-in error values that
-represent common error conditions that can arise during program execution. In addition, it is possible to define
-your own error values, which can be used to represent application-specific error conditions, which is done by prefixing
-any identifier with `E_` (e.g. `E_MY_ERROR`).
-
-The complete list of error values, along with their associated messages, is as follows:
-
-| Error     | Description                     |
-|-----------|---------------------------------|
-| E_NONE    | No error                        |
-| E_TYPE    | Type mismatch                   |
-| E_DIV     | Division by zero                |
-| E_PERM    | Permission denied               |
-| E_PROPNF  | Property not found              |
-| E_VERBNF  | Verb not found                  |
-| E_VARNF   | Variable not found              |
-| E_INVIND  | Invalid indirection             |
-| E_RECMOVE | Recursive move                  |
-| E_MAXREC  | Too many verb calls             |
-| E_RANGE   | Range error                     |
-| E_ARGS    | Incorrect number of arguments   |
-| E_NACC    | Move refused by destination     |
-| E_INVARG  | Invalid argument                |
-| E_QUOTA   | Resource limit exceeded         |
-| E_FLOAT   | Floating-point arithmetic error |
-| E_FILE    | File system error               |
-| E_EXEC    | Exec error                      |
-| E_INTRPT  | Interrupted                     |
-
-Error values can also have an optional message associated with them, which can be used to provide additional context
-about the error. This message can be set when the error is raised, and it can be retrieved later using the
-`error_message` builtin function.
-
-An example of an error value with an attached message might look like this:
-
-```moo
-let my_error = E_TYPE("Expected a number, but got a string.");
-error_message(my_error); // Returns "Expected a number, but got a string."
-```
-
-## List Type
-
-Another important value in MOO programs is _lists_. A list is a sequence of arbitrary MOO values, possibly including
-other lists. In programs, lists are written in mathematical set notation with each of the elements written out in order,
-separated by commas, the whole enclosed in curly braces (`{` and `}`). For example, a list of the names of the days of
-the week is written like this:
-
-```
-
-{"Sunday", "Monday", "Tuesday", "Wednesday",
-"Thursday", "Friday", "Saturday"}
-
-```
-
-> Note: It doesn't matter that we put a line-break in the middle of the list. This is true in general in MOO: anywhere
-> that a space can go, a line-break can go, with the same meaning. The only exception is inside character strings, where
-> line-breaks are not allowed.
-
-## Map Type
-
-mooR adds a Map type to the pantheon of types that LambdaMOO originally offered. In general mooR's Map attempts to copy
-the syntax and semantics of the same in ToastStunt.
-
-A map is an associative structure, mapping keys to values. It is often called a dictionary in other languages.
-
-It is written as a set of key -> value pairs, for example: `["key" -> "value", 0 -> {}, #15840 -> []]`. Keys must be
-unique.
-
-The key of a map can be of any valid mooR value type. However it is not generally recommended to use maps, lists, or
-flyweights as keys as the cost to compare and index them starts to become prohibitive and the map itself difficult to
-understand.
-
-> Note: mooR maps are built internally on a sorted vector, and searching within them is a BigO(Log(N)) operation. As
-> they are immutable, and a copy must be made for modification, insertions and deletions are an BigO(n) operation. 
 
