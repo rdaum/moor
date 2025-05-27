@@ -1,5 +1,22 @@
 # Objects in the MOO Database
 
+## What are objects?
+
+Everything in a MOO world is made out of objects. Objects are the building blocks that create the virtual reality that players experience. When you log into a MOO, you become a player object. The room you start in is a room object. The items you can pick up, the doors you can open, the NPCs you can talk to—they're all objects.
+
+Think of objects as smart containers that can:
+- **Hold information** about what they are (through properties)
+- **Do things** and respond to commands (through verbs)
+- **Contain other objects** (like a backpack holding items)
+
+**Properties** are how objects store information about themselves. A sword object might have properties for its name ("rusty blade"), its damage (15), and its weight (3 pounds). A player object has properties for their name, score, location, and inventory.
+
+**Verbs** are what make objects interactive—they're the actions objects can perform or respond to. When you type "look at sword," you're calling the "look" verb on the sword object. When you "take" something, you're calling the "take" verb. Verbs are like mini-programs that make objects come alive.
+
+**Object relationships** let objects be organized in hierarchies. A "generic weapon" object might be the parent of all sword, axe, and bow objects, sharing common weapon behaviors while each type adds its own special features.
+
+## Technical details
+
 Objects encapsulate state and behavior – as they do in other object-oriented programming languages. Objects
 are also used to represent objects in the virtual reality, like people, rooms, exits, and other concrete things. Because
 of this, MOO makes a bigger deal out of creating objects than it does for other kinds of values, like integers.
