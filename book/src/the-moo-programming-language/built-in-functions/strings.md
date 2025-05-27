@@ -5,7 +5,8 @@
 Replaces all occurrences of `what` in `subject` with `with`, performing string substitution.
 
 The occurrences are found from left to right and all substitutions happen simultaneously. By default, occurrences of
-`what` are searched for while ignoring the upper/lower case distinction. If `case-matters` is provided and true, then case
+`what` are searched for while ignoring the upper/lower case distinction. If `case-matters` is provided and true, then
+case
 is treated as significant in all comparisons.
 
 ```
@@ -24,11 +25,13 @@ int index(str str1, str str2 [, int case-matters [, int skip]])
 
 These functions will return zero if `str2` does not occur in `str1` at all.
 
-By default the search for an occurrence of `str2` is done while ignoring the upper/lower case distinction. If `case-matters`
+By default the search for an occurrence of `str2` is done while ignoring the upper/lower case distinction. If
+`case-matters`
 is provided and true, then case is treated as significant in all comparisons.
 
 By default the search starts at the beginning of `str1`. If `skip` is provided, the search skips the first `skip`
-characters and starts at an offset from the beginning of `str1`. The skip must be a positive integer for `index()`. The default value of skip is 0 (skip no characters).
+characters and starts at an offset from the beginning of `str1`. The skip must be a positive integer for `index()`. The
+default value of skip is 0 (skip no characters).
 
 ```
 index("foobar", "o")            ⇒   2
@@ -48,7 +51,8 @@ int rindex(str str1, str str2 [, int case-matters [, int skip]])
 ```
 
 By default the search starts at the end of `str1`. If `skip` is provided, the search skips the last `skip`
-characters and starts at an offset from the end of `str1`. The skip must be a negative integer for `rindex()`. The default value of skip is 0 (skip no characters).
+characters and starts at an offset from the end of `str1`. The skip must be a negative integer for `rindex()`. The
+default value of skip is 0 (skip no characters).
 
 ```
 rindex("foobar", "o")           ⇒   3
@@ -60,7 +64,9 @@ rindex("foobar", "o", 0, -4)    ⇒   2
 
 Performs a case-sensitive comparison of the two argument strings.
 
-If `str1` is lexicographically less than `str2`, the `strcmp()` returns a negative integer. If the two strings are identical, `strcmp()` returns zero. Otherwise, `strcmp()` returns a positive integer. The ASCII character ordering is used for the comparison.
+If `str1` is lexicographically less than `str2`, the `strcmp()` returns a negative integer. If the two strings are
+identical, `strcmp()` returns zero. Otherwise, `strcmp()` returns a positive integer. The ASCII character ordering is
+used for the comparison.
 
 ### `explode`
 
@@ -73,7 +79,8 @@ explode("slither%is%wiz", "%")      => {"slither", "is", "wiz"}
 explode("slither%is%%wiz", "%%")    => {"slither", "is", "wiz"}
 ```
 
-You can use `include-sequential-occurrences` to get back an empty string as part of your list if `break` appears multiple
+You can use `include-sequential-occurrences` to get back an empty string as part of your list if `break` appears
+multiple
 times with nothing between it, or there is a leading/trailing `break` in your string:
 
 ```
@@ -86,7 +93,8 @@ explode("%slither%is%%wiz%", "%", 1) => {"", "slither", "is", "", "wiz", ""}
 
 ### `strtr`
 
-Transforms the string `source` by replacing the characters specified by `str1` with the corresponding characters specified
+Transforms the string `source` by replacing the characters specified by `str1` with the corresponding characters
+specified
 by `str2`.
 
 All other characters are not transformed. If `str2` has fewer characters than `str1` the unmatched characters are simply
@@ -109,7 +117,8 @@ strtr("xXxX", "xXxX", "1234", 1)    ⇒    "3434"
 Returns a list of strings and/or integers representing the bytes in the binary string `bin_string` in order.
 
 If `fully` is false or omitted, the list contains an integer only for each non-printing, non-space byte; all other
-characters are grouped into the longest possible contiguous substrings. If `fully` is provided and true, the list contains
+characters are grouped into the longest possible contiguous substrings. If `fully` is provided and true, the list
+contains
 only integers, one for each byte represented in `bin_string`. Raises `E_INVARG` if `bin_string` is not a properly-formed
 binary string.
 
@@ -137,16 +146,28 @@ encode_binary("foo", 10, "bar", 13)       =>   "foo~0Abar~0D"
 
 ### `decode_base64`
 
+`decode_base64(base64 [, safe])`
+
 Returns the binary string representation of the supplied Base64 encoded string argument.
 
-Raises E_INVARG if base64 is not a properly-formed Base64 string. If `safe` is provided and is true, a URL-safe version of
-Base64 is used (see RFC4648).
+Raises E_INVARG if base64 is not a properly-formed Base64 string. If `safe` is provided and is true, a URL-safe version
+of
+Base64 is used (see RFC4648). The default is to use the URL-safe version.
 
 ```
-decode_base64("AAEC")      ⇒    "~00~01~02"
-decode_base64("AAE", 1)    ⇒    "~00~01"
+decode_base64("AAEC")      ⇒    b"AAEC"
 ```
 
-## Encryption and Hashing Functions
+### `encode_base64`
 
+`encode_base64(binary [, safe])`
+
+Returns the Base64 encoded string representation of the supplied binary string argument.
+
+If `safe` is provided and is true, a URL-safe version of Base64 is used (see RFC4648). The default is to use the
+URL-safe version.
+
+```
+encode_base64(b"AAEC")      ⇒    "AAEC"
+```
 
