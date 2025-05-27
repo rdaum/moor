@@ -36,7 +36,6 @@
         - [Server functions](./the-moo-programming-language/built-in-functions/server.md)
         - [Functions which are mooR extensions](./the-moo-programming-language/built-in-functions/extensions.md)
     - [Summary of mooR Syntax and Semantics](./the-moo-programming-language/syntax-summary.md)
-    - [Matching in Command Parsing](./the-moo-programming-language/matching-in-command-parsing.md)
 - [Running a mooR Server](./the-system/running-the-server.md)
     - [Server Configuration](the-system/server-configuration.md)
     - [Server Assumptions About the Database](the-system/server-assumptions-about-the-database.md)

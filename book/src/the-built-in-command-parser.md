@@ -1,219 +1,151 @@
 # The Built-in Command Parser
 
-MOO users typically interact with the MOO server by typing commands at a prompt. These commands are processed by the
-server, which then executes the appropriate MOO programs (verbs) to carry out the requested actions. The built-in
-command parser is responsible for interpreting these commands and determining which verb to execute based on the command
-structure and the objects involved.
+MOO users usually nteract with the MOO server by typing commands at a prompt. The built-in command parser interprets these commands and determines which verb to execute, based on the command structure and the objects involved.
 
-## How Commands Are Parsed
+## What Are MOO Commands?
 
-When a player types a command, the server receives it as a line of text. The command can be anything from a simple
-The MOO server is able to do a small amount of parsing on the commands that a player enters. In particular, it can break
-apart commands that follow one of the following forms:
+In a MOO environment, commands are how players interact with the virtual world. They range from simple social actions to complex object manipulation and system administration. The command parser's job is to break these natural-language-like commands into structured calls to MOO programs (verbs).
 
-- verb
-- verb direct-object
-- verb direct-object preposition indirect-object
+### Types of Commands
 
-Real examples of these forms, meaningful in the LambdaCore database, are as follows:
-
+**Social and Communication Commands:**
 ```
-look
-take yellow bird
-put yellow bird in cuckoo clock
+say Hello, everyone!
+"Hello, everyone!          (shorthand for 'say')
+emote waves cheerfully.
+:waves cheerfully.         (shorthand for 'emote')
 ```
 
-Note that English articles (i.e., `the`, `a`, and `an`) are not generally used in MOO commands; the parser does not know
-that they are not important parts of objects' names.
-
-To have any of this make real sense, it is important to understand precisely how the server decides what to do when a
-player types a command.
-
-But first, we mention the three situations in which a line typed by a player is not treated as an ordinary command:
-
-1. The line may exactly match the connection's defined flush command, if any (`.flush` by default), in which case all
-   pending lines of input are cleared and nothing further is done with the flush command itself. Likewise, any line may
-   be flushed by a subsequent flush command before the server otherwise gets a chance to process it. For more on this,
-   see Flushing Unprocessed Input.
-2. The line may begin with a prefix that qualifies it for out-of-band processing and thence, perhaps, as an out-of-band
-   command. For more on this, see Out-of-band Processing.
-3. The connection may be subject to a read() call (see section Operations on Network Connections) or there may be a
-   .program command in progress (see section The .program Command), either of which will consume the line accordingly.
-   Also note that if connection option "hold-input" has been set, all in-band lines typed by the player are held at this
-   point for future reading, even if no reading task is currently active.
-
-Otherwise, we (finally) have an actual command line that can undergo normal command parsing as follows:
-
-The server checks whether or not the first non-blank character in the command is one of the following:
-
-- `"`
-- `:`
-- `;`
-
-If so, that character is replaced by the corresponding command below, followed by a space:
-
-- `say`
-- `emote`
-- `eval`
-
-For example this command:
-
+**Object Interaction Commands:**
 ```
-"Hi, there.
+look                       (examine surroundings)
+look at lamp               (examine specific object)
+get lamp                   (pick up object - dobj only)
+put lamp on table          (place object - dobj + prep + iobj)
+give coin to merchant      (transfer object - dobj + prep + iobj)
+unlock door with key       (use tool - dobj + prep + iobj)
 ```
 
-will be treated exactly as if it were as follows:
-
+**MOO System Commands:**
 ```
-say Hi, there.
-```
-
-The server next breaks up the command into words. In the simplest case, the command is broken into words at every run of
-space characters; for example, the command `foo bar baz` would be broken into the words `foo`, `bar`, and `baz`. To
-force the server to include spaces in a "word", all or part of a word can be enclosed in double-quotes. For example, the
-command:
-
-```
-foo "bar mumble" baz" "fr"otz" bl"o"rt
+@create $thing named "lamp"     (create new object)
+@describe me as "A helpful player"
+@quit                           (disconnect)
+@who                           (list connected users)
+@eval 2 + 2                    (evaluate MOO expression)
+;2 + 2                         (shorthand for '@eval')
 ```
 
-is broken into the words `foo`, `bar mumble`, `baz frotz`, and `blort`.
+> **Note on the `@` Symbol**: The `@` prefix for administrative and utility commands is a long-standing MUD convention that dates back to TinyMUD in the 1980s. It helps distinguish system commands from in-character actions. However, mooR itself treats `@` as just another character—the special meaning is purely a convention established by the programmers who write the database core and its verbs. You could just as easily have system commands named `admin_quit` or `sys_create`.
 
-Finally, to include a double-quote or a backslash in a word, they can be preceded by a backslash, just like in MOO
-strings.
+Each of these commands gets parsed into components:
+- **Verb**: The action word (`say`, `get`, `put`, `@create`)
+- **Direct Object**: The primary target (`lamp`, `coin`, `me`)
+- **Preposition**: Relationship word (`on`, `to`, `with`, `at`)
+- **Indirect Object**: Secondary target (`table`, `merchant`, `key`)
 
-Having thus broken the string into words, the server next checks to see if the first word names any of the six "
-built-in" commands:
+The parser then looks for a verb program that can handle this specific combination of verb name and argument pattern, turning your natural command into a structured program call.
 
-- `.program`
-- `PREFIX`
-- `OUTPUTPREFIX`
-- `SUFFIX`
-- `OUTPUTSUFFIX`
-- or the connection's defined _flush_ command, if any (`.flush` by default).
+---
 
-The first one of these is only available to programmers, the next four are intended for use by client programs, and the
-last can vary from database to database or even connection to connection; all six are described in the final chapter of
-this document, "Server Commands and Database Assumptions". If the first word isn't one of the above, then we get to the
-usual case: a normal MOO command.
+## Overview: How Commands Are Parsed
 
-The server next gives code in the database a chance to handle the command. If the verb `$do_command()` exists, it is
-called with the words of the command passed as its arguments and `argstr` set to the raw command typed by the user. If
-`$do_command()` does not exist, or if that verb-call completes normally (i.e., without suspending or aborting) and
-returns a false value, then the built-in command parser is invoked to handle the command as described below. Otherwise,
-it is assumed that the database code handled the command completely and no further action is taken by the server for
-that command.
+When a player types a command, the server receives it as a line of text. The command can be as simple as a single word or more complex, involving objects and prepositions. The parser's job is to break down the command and match it to a verb that can be executed.
 
-> Note: `$do_command` is a corified reference. It refers to the verb `do_command` on #0. More details on corifying
-> properties and verbs are presented later.
+### 1. Special Cases (Handled Before Parsing)
+- **Out-of-band commands**: Lines starting with a special prefix (e.g., `#$#`) are routed to `$do_out_of_band_command` instead of normal parsing.
+- **.program and input holding**: If a `.program` command is in progress or input is being held for a read(), the line is handled accordingly.
+- **Flush command**: If the line matches the connection's flush command (e.g., `.flush`), all pending input is cleared. No further processing occurs.
 
-If the built-in command parser is invoked, the server tries to parse the command into a verb, direct object, preposition
-and indirect object. The first word is taken to be the verb. The server then tries to find one of the prepositional
-phrases listed at the end of the previous section, using the match that occurs earliest in the command. For example, in
-the very odd command `foo as bar to baz`, the server would take `as` as the preposition, not `to`.
+### 2. Initial Punctuation Aliases
+If the first non-blank character is one of these:
+- `"` → replaced with `say `
+- `:` → replaced with `emote `
+- `;` → replaced with `eval `
 
-If the server succeeds in finding a preposition, it considers the words between the verb and the preposition to be the
-direct object and those after the preposition to be the indirect object. In both cases, the sequence of words is turned
-into a string by putting one space between each pair of words. Thus, in the odd command from the previous paragraph,
-there are no words in the direct object (i.e., it is considered to be the empty string, `""`) and the indirect object is
-`"bar to baz"`.
+For example, `"Hello!` is treated as `say Hello!`.
 
-If there was no preposition, then the direct object is taken to be all of the words after the verb and the indirect
-object is the empty string.
+### 3. Breaking Apart Words
+The command is split into words:
+- Words are separated by spaces.
+- Double quotes can be used to include spaces in a word: `foo "bar baz"` → `foo`, `bar baz`
+- Backslashes escape quotes or spaces within words.
 
-The next step is to try to find MOO objects that are named by the direct and indirect object strings.
+### 4. Built-in Commands
+If the first word is a built-in command (e.g., `.program`, `PREFIX`, `SUFFIX`, or the flush command), it is handled specially. Otherwise, normal command parsing continues.
 
-First, if an object string is empty, then the corresponding object is the special object `#-1` (aka `$nothing` in
-LambdaCore). If an object string has the form of an object number (i.e., a hash mark (`#`) followed by digits), and the
-object with that number exists, then that is the named object. If the object string is either `"me"` or `"here"`, then
-the player object itself or its location is used, respectively.
+### 5. Database Override: $do_command
+Before the built-in parser runs, the server checks for a `$do_command` verb. If it exists, it is called with the command's words and the raw input. If `$do_command` returns a true value, no further parsing occurs. Otherwise, the built-in parser proceeds.
 
-> Note: $nothing is considered a `corified` object. This means that a _property_ has been created on `#0` named
-`nothing` with the value of `#-1`. For example (after creating the property):
-`;#0.nothing = #-1` This allows you to reference the `#-1` object via its corified reference of
-`$nothing`. In practice this can be very useful as you can use corified references in your code (and should!) instead of object numbers. Among other benefits this allows you to write your code (which references other objects) once and then swap out the corified reference, pointing to a different object. For instance if you have a new error logging system and you want to replace the old $
-> error_logger reference with your new one, you wont have to find all the references to the old error logger object
-> number
-> in your code. You can just change the property on `#0` to reference the new object.
+---
 
-Otherwise, the server considers all of the objects whose location is either the player (i.e., the objects the player
-is "holding", so to speak) or the room the player is in (i.e., the objects in the same room as the player); it will try
-to match the object string against the various names for these objects.
+## The Command Parsing Steps
 
-The matching done by the server uses the `aliases` property of each of the objects it considers. The value of this
-property should be a list of strings, the various alternatives for naming the object. If it is not a list, or the object
-does not have an `aliases` property, then the empty list is used. In any case, the value of the `name` property is added
-to the list for the purposes of matching.
+1. **Identify the verb**: The first word is the verb.
+2. **Preposition matching**: The parser looks for a preposition (e.g., `in`, `on`, `to`) at the earliest possible place in the command. If found, words before it are the direct object, and words after are the indirect object. If not, all words after the verb are the direct object.
+3. **Direct and indirect object matching**:
+   - If the object string is empty, it is `$nothing` (`#-1`).
+   - If it is an object number (e.g., `#123`), that object is used.
+   - If it is `me` or `here`, the player or their location is used.
+   - Otherwise, the parser tries to match the string to objects in the player's inventory and location.
+   - **Aliases**: Each object may have an `aliases` property (a list of alternative names). The parser matches the object string against all aliases and the object's `name`. Exact matches are preferred over prefix matches. If multiple objects match, `$ambiguous_match` (`#-2`) is used. If none match, `$failed_match` (`#-3`) is used.
 
-The server checks to see if the object string in the command is either exactly equal to or a prefix of any alias; if
-there are any exact matches, the prefix matches are ignored. If exactly one of the objects being considered has a
-matching alias, that object is used. If more than one has a match, then the special object `#-2` (aka `$ambiguous_match`
-in LambdaCore) is used. If there are no matches, then the special object `#-3` (aka `$failed_match` in LambdaCore) is
-used.
+---
 
-So, now the server has identified a verb string, a preposition string, and direct- and indirect-object strings and
-objects. It then looks at each of the verbs defined on each of the following four objects, in order:
+## How Verbs Are Matched
 
-1. the player who typed the command
-2. the room the player is in
-3. the direct object, if any
-4. the indirect object, if any.
+The parser now has:
+- A verb string
+- Direct and indirect object strings and their resolved objects
+- A preposition string (if any)
 
-For each of these verbs in turn, it tests if all of the the following are true:
+It checks, in order, the verbs on:
+1. The player
+2. The room
+3. The direct object (if any)
+4. The indirect object (if any)
 
-- the verb string in the command matches one of the names for the verb
-- the direct- and indirect-object values found by matching are allowed by the corresponding _argument specifiers_ for
-  the verb
-- the preposition string in the command is matched by the _preposition specifier_ for the verb.
+For each verb, it checks:
+- **Verb name**: Does the command's verb match any of the verb's names? (Names can use `*` as a wildcard.)
+- **Argument specifiers**:
+  - `none`: The object must be `$nothing`.
+  - `any`: Any object is allowed.
+  - `this`: The object must be the object the verb is on.
+- **Preposition specifier**:
+  - `none`: Only matches if no preposition was found.
+  - `any`: Matches any preposition.
+  - Specific: Only matches if the found preposition is in the allowed set.
 
-I'll explain each of these criteria in turn.
+The first verb that matches all criteria is executed. If none match, the server tries to run a `huh` verb on the room. If that fails, it prints an error message.
 
-Every verb has one or more names; all of the names are kept in a single string, separated by spaces. In the simplest
-case, a verb-name is just a word made up of any characters other than spaces and stars (i.e., ' ' and `*`). In this
-case, the verb-name matches only itself; that is, the name must be matched exactly.
+---
 
-If the name contains a single star, however, then the name matches any prefix of itself that is at least as long as the
-part before the star. For example, the verb-name `foo*bar` matches any of the strings `foo`, `foob`, `fooba`, or
-`foobar`; note that the star itself is not considered part of the name.
+## Variables Available to the Verb
 
-If the verb name _ends_ in a star, then it matches any string that begins with the part before the star. For example,
-the verb-name `foo*` matches any of the strings `foo`, `foobar`, `food`, or `foogleman`, among many others. As a special
-case, if the verb-name is `*` (i.e., a single star all by itself), then it matches anything at all.
+When a verb is executed, these variables are set:
 
-Recall that the argument specifiers for the direct and indirect objects are drawn from the set `none`, `any`, and
-`this`. If the specifier is `none`, then the corresponding object value must be `#-1` (aka `$nothing` in LambdaCore);
-that is, it must not have been specified. If the specifier is `any`, then the corresponding object value may be anything
-at all. Finally, if the specifier is `this`, then the corresponding object value must be the same as the object on which
-we found this verb; for example, if we are considering verbs on the player, then the object value must be the player
-object.
-
-Finally, recall that the argument specifier for the preposition is either `none`, `any`, or one of several sets of
-prepositional phrases, given above. A specifier of `none` matches only if there was no preposition found in the command.
-A specifier of `any` always matches, regardless of what preposition was found, if any. If the specifier is a set of
-prepositional phrases, then the one found must be in that set for the specifier to match.
-
-So, the server considers several objects in turn, checking each of their verbs in turn, looking for the first one that
-meets all of the criteria just explained. If it finds one, then that is the verb whose program will be executed for this
-command. If not, then it looks for a verb named `huh` on the room that the player is in; if one is found, then that verb
-will be called. This feature is useful for implementing room-specific command parsing or error recovery. If the server
-can't even find a `huh` verb to run, it prints an error message like `I couldn't understand that.` and the command is
-considered complete.
-
-At long last, we have a program to run in response to the command typed by the player. When the code for the program
-begins execution, the following built-in variables will have the indicated values:
-
-| Variable | Value                                                    |
+| Variable | Value |
 |----------|----------------------------------------------------------|
-| player   | an object, the player who typed the command              |
-| this     | an object, the object on which this verb was found       |
-| caller   | an object, the same as <code>player</code>               |
-| verb     | a string, the first word of the command                  |
-| argstr   | a string, everything after the first word of the command |
-| args     | a list of strings, the words in <code>argstr</code>      |
-| dobjstr  | a string, the direct object string found during parsing  |
-| dobj     | an object, the direct object value found during matching |
-| prepstr  | a string, the prepositional phrase found during parsing  |
-| iobjstr  | a string, the indirect object string                     |
-| iobj     | an object, the indirect object value                     |
+| player   | the player who typed the command |
+| this     | the object on which this verb was found |
+| caller   | same as `player` |
+| verb     | the first word of the command |
+| argstr   | everything after the first word |
+| args     | list of words in `argstr` |
+| dobjstr  | direct object string |
+| dobj     | direct object value |
+| prepstr  | prepositional phrase found |
+| iobjstr  | indirect object string |
+| iobj     | indirect object value |
 
-The value returned by the program, if any, is ignored by the server.
+---
+
+## Technical Note: Extending the Parser
+
+> **Note:** mooR's command parser is implemented in Rust and can be extended by Rust programmers. This allows for custom parsing logic or new features beyond the standard MOO command syntax.
+
+---
+
+## See Also
+- For more on how object matching and aliases work, see the section on [Matching in Command Parsing](the-moo-programming-language/matching-in-command-parsing.md).
+- For details on special commands and server assumptions, see [Server Commands and Database Assumptions](the-system/telnet-host-commands-and-assumptions.md).
