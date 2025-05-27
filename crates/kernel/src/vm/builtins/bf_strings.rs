@@ -468,6 +468,71 @@ fn bf_parse_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+// str string_hmac(str text, str key [, str algo [, binary]])
+fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    let arg_count = bf_args.args.len();
+    if !(2..=4).contains(&arg_count) {
+        return Err(BfErr::Code(E_ARGS));
+    }
+
+    let Variant::Str(text) = bf_args.args[0].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+    let Variant::Str(key) = bf_args.args[1].variant() else {
+        return Err(BfErr::Code(E_TYPE));
+    };
+
+    let algo_str = if arg_count > 2 {
+        let Variant::Str(s) = bf_args.args[2].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        s.as_str().to_uppercase()
+    } else {
+        "SHA256".to_string()
+    };
+
+    let binary_output = if arg_count > 3 {
+        let Variant::Int(b) = bf_args.args[3].variant() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        *b != 0
+    } else {
+        false
+    };
+
+    let result_bytes = match algo_str.as_str() {
+        "SHA1" => {
+            use hmac::{Hmac, Mac};
+            use sha1::Sha1;
+            let mut mac = Hmac::<Sha1>::new_from_slice(key.as_str().as_bytes())
+                .map_err(|_| BfErr::Code(E_INVARG))?;
+            mac.update(text.as_str().as_bytes());
+            mac.finalize().into_bytes().to_vec()
+        }
+        "SHA256" => {
+            use hmac::{Hmac, Mac};
+            use sha2::Sha256;
+            let mut mac = Hmac::<Sha256>::new_from_slice(key.as_str().as_bytes())
+                .map_err(|_| BfErr::Code(E_INVARG))?;
+            mac.update(text.as_str().as_bytes());
+            mac.finalize().into_bytes().to_vec()
+        }
+        _ => return Err(BfErr::Code(E_INVARG)), // Unsupported algorithm
+    };
+
+    if binary_output {
+        Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
+            "Binary support not implemented yet.".to_string()
+        })))
+    } else {
+        let hex_string = result_bytes
+            .iter()
+            .map(|byte| format!("{:02x}", byte))
+            .collect::<String>();
+        Ok(Ret(v_str(&hex_string)))
+    }
+}
+
 pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("strsub")] = Box::new(bf_strsub);
     builtins[offset_for_builtin("index")] = Box::new(bf_index);
@@ -478,6 +543,7 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("argon2_verify")] = Box::new(bf_argon2_verify);
     builtins[offset_for_builtin("string_hash")] = Box::new(bf_string_hash);
     builtins[offset_for_builtin("binary_hash")] = Box::new(bf_binary_hash);
+    builtins[offset_for_builtin("string_hmac")] = Box::new(bf_string_hmac);
     builtins[offset_for_builtin("salt")] = Box::new(bf_salt);
     builtins[offset_for_builtin("encode_base64")] = Box::new(bf_encode_base64);
     builtins[offset_for_builtin("decode_base64")] = Box::new(bf_decode_base64);

@@ -1250,6 +1250,18 @@ fn mk_builtin_table() -> Vec<Builtin> {
             types: vec![Typed(TYPE_ERR)],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("string_hmac"),
+            min_args: Q(2),
+            max_args: Q(4),
+            types: vec![
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Typed(TYPE_STR),
+                Typed(TYPE_BOOL),
+            ],
+            implemented: true,
+        },
     ]
 }
 
