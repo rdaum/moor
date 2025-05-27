@@ -2852,6 +2852,7 @@ dependencies = [
 name = "moor-compiler"
 version = "0.9.0-alpha"
 dependencies = [
+ "base64 0.22.1",
  "bincode",
  "byteview",
  "itertools 0.14.0",
@@ -3092,6 +3093,7 @@ dependencies = [
 name = "moor-textdump"
 version = "0.9.0-alpha"
 dependencies = [
+ "base64 0.22.1",
  "encoding_rs",
  "moor-common",
  "moor-compiler",
@@ -3129,6 +3131,7 @@ name = "moor-web-host"
 version = "0.9.0-alpha"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "clap",
  "clap_derive",
  "color-eyre",

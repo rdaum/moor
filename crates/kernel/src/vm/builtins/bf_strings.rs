@@ -335,20 +335,23 @@ fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_ARGS));
     }
 
-    let Some(text) = bf_args.args[0].as_string() else {
-        return Err(BfErr::Code(E_TYPE));
+    let bytes = match bf_args.args[0].variant() {
+        Variant::Str(s) => s.as_str().as_bytes().to_vec(),
+        Variant::Binary(b) => b.as_bytes().to_vec(),
+        _ => return Err(BfErr::Code(E_TYPE)),
     };
 
-    let encoded = general_purpose::STANDARD.encode(text.as_bytes());
+    let encoded = general_purpose::STANDARD.encode(&bytes);
     Ok(Ret(v_string(encoded)))
 }
 
-/// Function: str decode_base64(str encoded_text)
+/// Function: binary decode_base64(str encoded_text [, int url_safe])
 ///
 /// Decodes the given Base64-encoded string.
-/// Returns the decoded string. If the input is not valid Base64, E_INVARG is raised.
+/// Returns the decoded binary data. If the input is not valid Base64, E_INVARG is raised.
+/// If url_safe is true (non-zero), uses URL-safe Base64 decoding.
 fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
+    if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
     }
 
@@ -356,15 +359,30 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         return Err(BfErr::Code(E_TYPE));
     };
 
-    let decoded = match general_purpose::STANDARD.decode(encoded_text.as_bytes()) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(s) => s,
-            Err(_) => return Err(BfErr::Code(E_INVARG)),
-        },
-        Err(_) => return Err(BfErr::Code(E_INVARG)),
+    // Check if second argument specifies URL-safe decoding
+    let url_safe = if bf_args.args.len() == 2 {
+        let Some(url_safe_flag) = bf_args.args[1].as_integer() else {
+            return Err(BfErr::Code(E_TYPE));
+        };
+        url_safe_flag != 0
+    } else {
+        false
     };
 
-    Ok(Ret(v_string(decoded)))
+    let decoded_bytes = if url_safe {
+        match general_purpose::URL_SAFE.decode(encoded_text.as_bytes()) {
+            Ok(bytes) => bytes,
+            Err(_) => return Err(BfErr::Code(E_INVARG)),
+        }
+    } else {
+        match general_purpose::STANDARD.decode(encoded_text.as_bytes()) {
+            Ok(bytes) => bytes,
+            Err(_) => return Err(BfErr::Code(E_INVARG)),
+        }
+    };
+
+    use moor_var::v_binary;
+    Ok(Ret(v_binary(decoded_bytes)))
 }
 
 /// Convert a MOO value to a JSON string

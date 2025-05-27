@@ -27,7 +27,7 @@ use pest::iterators::{Pair, Pairs};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 
 use moor_var::Obj;
-use moor_var::{v_float, v_int, v_obj, v_str, v_string};
+use moor_var::{v_binary, v_float, v_int, v_obj, v_str, v_string};
 
 use crate::ast::Arg::{Normal, Splice};
 use crate::ast::StmtNode::Scope;
@@ -176,6 +176,33 @@ impl TreeTransformer {
                     }
                 };
                 Ok(Expr::Value(v_str(&parsed)))
+            }
+            Rule::literal_binary => {
+                let binary_literal = pair.as_str();
+                // Remove b" and " from the literal to get just the base64 content
+                let base64_content = binary_literal
+                    .strip_prefix("b\"")
+                    .and_then(|s| s.strip_suffix("\""))
+                    .ok_or_else(|| {
+                        CompileError::StringLexError(
+                            self.compile_context(&pair),
+                            format!("invalid binary literal '{}': missing b\" prefix or \" suffix", binary_literal),
+                        )
+                    })?;
+                
+                // Decode the base64 content
+                use base64::{Engine, engine::general_purpose};
+                let decoded = match general_purpose::STANDARD.decode(base64_content) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        return Err(CompileError::StringLexError(
+                            self.compile_context(&pair),
+                            format!("invalid binary literal '{}': invalid base64: {e}", binary_literal),
+                        ));
+                    }
+                };
+                
+                Ok(Expr::Value(v_binary(decoded)))
             }
             Rule::err => {
                 let mut inner = pair.into_inner();
@@ -1484,7 +1511,7 @@ pub fn unquote_str(s: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use moor_var::{E_INVARG, E_PROPNF, E_VARNF, ErrCustom, Symbol, v_none};
-    use moor_var::{Var, v_float, v_int, v_objid, v_str};
+    use moor_var::{Var, v_binary, v_float, v_int, v_objid, v_str};
 
     use crate::CompileOptions;
     use crate::ast::Arg::{Normal, Splice};
@@ -2323,6 +2350,7 @@ mod tests {
                         }],
                     },
                 ],
+
                 otherwise: Some(ElseArm {
                     statements: vec![Stmt {
                         node: StmtNode::mk_return(Value(v_int(3))),
@@ -2584,7 +2612,7 @@ mod tests {
 
     #[test]
     fn try_catch_any_expr() {
-        let program = "`raise(E_INVARG) ! ANY';";
+        let program = r#"`raise(E_INVARG) ! ANY';"#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
         let invarg = Normal(Error(E_INVARG, None));
 
@@ -3130,5 +3158,89 @@ mod tests {
 
         let options = CompileOptions::default();
         parse_program(program, options).unwrap();
+    }
+
+    #[test]
+    fn test_binary_literal() {
+        // Test basic binary literal parsing
+        let program = r#"return b"SGVsbG8gV29ybGQ=";"#;
+        let parsed = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(parsed.stmts.len(), 1);
+        
+        // Extract the binary value and verify it decoded correctly
+        if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node {
+            if let Expr::Value(val) = expr.as_ref() {
+                if let Some(binary) = val.as_binary() {
+                    // "SGVsbG8gV29ybGQ=" is base64 for "Hello World"
+                    assert_eq!(binary.as_bytes(), b"Hello World");
+                } else {
+                    panic!("Expected binary value, got: {:?}", val.variant());
+                }
+            } else {
+                panic!("Expected Value expression, got: {:?}", expr);
+            }
+        } else {
+            panic!("Expected return statement with value, got: {:?}", parsed.stmts[0].node);
+        }
+    }
+
+    #[test]
+    fn test_binary_literal_empty() {
+        // Test empty binary literal
+        let program = r#"return b"";"#;
+        let parsed = parse_program(program, CompileOptions::default()).unwrap();
+        assert_eq!(parsed.stmts.len(), 1);
+        
+        if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node {
+            if let Expr::Value(val) = expr.as_ref() {
+                if let Some(binary) = val.as_binary() {
+                    assert_eq!(binary.as_bytes(), b"");
+                } else {
+                    panic!("Expected binary value, got: {:?}", val.variant());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_binary_literal_invalid_base64() {
+        // Test that invalid base64 content produces an error  
+        // Using invalid base64 that would pass the grammar but fail decoding
+        let program = r#"return b"SGVsbG8gV29ybGQ";"#; // Missing padding
+        let result = parse_program(program, CompileOptions::default());
+        assert!(result.is_err());
+        
+        if let Err(err) = result {
+            // The error should mention invalid base64 or binary literal
+            let error_str = err.to_string();
+            assert!(error_str.contains("invalid base64") || error_str.contains("binary literal"));
+        }
+    }
+
+    #[test]
+    fn test_binary_literal_roundtrip() {
+        use crate::unparse::to_literal;
+        
+        // Create a binary value
+        let original_data = b"Hello, World! This is binary data.";
+        let binary_var = v_binary(original_data.to_vec());
+        
+        // Convert to literal representation
+        let literal_str = to_literal(&binary_var);
+        
+        // Parse it back
+        let program = format!("return {};", literal_str);
+        let parsed = parse_program(&program, CompileOptions::default()).unwrap();
+        
+        // Extract the parsed value
+        if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node {
+            if let Expr::Value(val) = expr.as_ref() {
+                if let Some(binary) = val.as_binary() {
+                    assert_eq!(binary.as_bytes(), original_data);
+                } else {
+                    panic!("Expected binary value, got: {:?}", val.variant());
+                }
+            }
+        }
     }
 }

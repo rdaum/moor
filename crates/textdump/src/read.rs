@@ -14,6 +14,7 @@
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read};
 
+use base64::{Engine, engine::general_purpose};
 use tracing::{info, warn};
 
 use crate::LambdaMOODBVersion::DbvFloat;
@@ -30,7 +31,8 @@ use moor_common::model::WorldStateError;
 use moor_compiler::Label;
 use moor_var::{Error, ErrorCode, NOTHING, Sequence, Variant, v_error, v_list, v_map};
 use moor_var::{
-    List, Symbol, Var, VarType, v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str, v_sym,
+    List, Symbol, Var, VarType, v_binary, v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str,
+    v_sym,
 };
 use moor_var::{Obj, v_flyweight};
 
@@ -184,6 +186,18 @@ impl<R: Read> TextdumpReader<R> {
             }
             VarType::TYPE_OBJ => v_obj(self.read_objid()?),
             VarType::TYPE_STR => v_str(&self.read_string()?),
+            VarType::TYPE_BINARY => {
+                let base64_string = self.read_string()?;
+                match general_purpose::STANDARD.decode(base64_string.as_bytes()) {
+                    Ok(bytes) => v_binary(bytes),
+                    Err(_) => {
+                        return Err(TextdumpReaderError::ParseError(
+                            "invalid base64 data for binary type".into(),
+                            self.line_num,
+                        ));
+                    }
+                }
+            }
             VarType::TYPE_ERR => {
                 let s = self.read_string()?;
                 // If it's a number, parse as classic LambdaMOO errir

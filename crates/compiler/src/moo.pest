@@ -166,7 +166,7 @@ builtin_call = { (ident ~ !(keyword)) ~ arglist }
 sysprop      = { "$" ~ ident }
 sysprop_call = { sysprop ~ arglist }
 
-atom     = { integer | float | string | object | err | boolean | symbol | type_constant | ident  }
+atom     = { integer | float | string | object | err | boolean | symbol | type_constant | literal_binary | ident  }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
 
@@ -236,6 +236,9 @@ ident = @{
 string    = @{ "\"" ~ str_inner ~ "\"" }
 str_inner = @{ (!("\"" | "\\" | "\u{0000}" | "\u{001F}") ~ ANY)* ~ (escape ~ str_inner)? }
 
+literal_binary = @{ "b\"" ~ binary_inner ~ "\"" }
+binary_inner = @{ (ASCII_ALPHANUMERIC | "+" | "/" | "=" | "_" | "-")* }
+
 integer = @{ ("+" | "-")? ~ number ~ !("." ~ digits) ~ !("e" | "E") }
 
 float          = ${ exponent_float | point_float }
@@ -302,7 +305,7 @@ flags_attr = {"flags" ~ ":" ~ "\"" ~ flagchars ~ "\"" }
 
 literal = { literal_atom | literal_map | literal_list | literal_flyweight | variable }
 variable = { ident }
-literal_atom = { integer | float | string | object | err | boolean | symbol | ident  }
+literal_atom = { integer | float | string | object | err | boolean | symbol | literal_binary | ident  }
 literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | ( "[" ~ "]") }
 literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}") | "{}" }
 literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slots)? ~ ("," ~ literal_flyweight_contents)? ~ ">" }

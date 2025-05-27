@@ -67,6 +67,13 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
         Variant::None => serde_json::Value::Null,
         Variant::Bool(b) => serde_json::Value::Bool(*b),
         Variant::Str(s) => serde_json::Value::String(s.to_string()),
+        Variant::Binary(b) => {
+            use base64::{Engine, engine::general_purpose};
+            let encoded = general_purpose::STANDARD.encode(b.as_bytes());
+            json!({
+                "binary": encoded
+            })
+        }
         Variant::Obj(o) => json!(Oid {
             oid: o.id().0 as i64
         }),
