@@ -5,6 +5,8 @@
 - [The World And Database](./the-database.md)
     - [MOO Value Types](./the-database/moo-value-types.md)
     - [Objects in the MOO Database](./the-database/objects-in-the-moo-database.md)
+    - [Object Properties](./the-database/object-properties.md)
+    - [Object Verbs](./the-database/object-verbs.md)
     - [Creating and Recycling Objects](the-database/creating-and-recycling-objects.md)
     - [Object Movement](the-database/object-movement.md)
     - [Object Parents and Inheritance](the-database/object-parents-and-children.md)
