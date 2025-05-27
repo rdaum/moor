@@ -11,8 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub mod encode;
 mod binary;
+pub mod encode;
 mod error;
 mod flyweight;
 mod list;
@@ -25,8 +25,8 @@ mod symbol;
 mod var;
 mod variant;
 
-use bincode::{Decode, Encode};
 pub use binary::Binary;
+use bincode::{Decode, Encode};
 pub use error::{Error, ErrorCode, ErrorCode::*};
 pub use flyweight::Flyweight;
 pub use list::List;
@@ -37,9 +37,9 @@ pub use string::Str;
 use strum::FromRepr;
 pub use symbol::Symbol;
 pub use var::{
-    Var, v_binary, v_bool, v_bool_int, v_empty_list, v_empty_map, v_empty_str, v_err, v_error, v_float,
-    v_flyweight, v_int, v_list, v_list_iter, v_map, v_map_iter, v_none, v_obj, v_objid, v_str,
-    v_string, v_sym, v_sym_str,
+    Var, v_binary, v_bool, v_bool_int, v_empty_list, v_empty_map, v_empty_str, v_err, v_error,
+    v_float, v_flyweight, v_int, v_list, v_list_iter, v_map, v_map_iter, v_none, v_obj, v_objid,
+    v_str, v_string, v_sym, v_sym_str,
 };
 pub use variant::Variant;
 

@@ -349,7 +349,7 @@ fn bf_encode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 ///
 /// Decodes the given Base64-encoded string.
 /// Returns the decoded binary data. If the input is not valid Base64, E_INVARG is raised.
-/// If url_safe is true (non-zero), uses URL-safe Base64 decoding.
+/// If url_safe is true (non-zero), uses URL-safe Base64 decoding. Defaults to true.
 fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() < 1 || bf_args.args.len() > 2 {
         return Err(BfErr::Code(E_ARGS));
@@ -361,12 +361,9 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     // Check if second argument specifies URL-safe decoding
     let url_safe = if bf_args.args.len() == 2 {
-        let Some(url_safe_flag) = bf_args.args[1].as_integer() else {
-            return Err(BfErr::Code(E_TYPE));
-        };
-        url_safe_flag != 0
+        bf_args.args[1].is_true()
     } else {
-        false
+        true
     };
 
     let decoded_bytes = if url_safe {

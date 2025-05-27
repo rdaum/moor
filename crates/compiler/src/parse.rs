@@ -38,6 +38,7 @@ use crate::ast::{
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
 use crate::var_scope::VarScope;
+use base64::{Engine, engine::general_purpose};
 use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
 use moor_common::model::{CompileContext, CompileError};
 use moor_common::program::DeclType;
@@ -186,22 +187,27 @@ impl TreeTransformer {
                     .ok_or_else(|| {
                         CompileError::StringLexError(
                             self.compile_context(&pair),
-                            format!("invalid binary literal '{}': missing b\" prefix or \" suffix", binary_literal),
+                            format!(
+                                "invalid binary literal '{}': missing b\" prefix or \" suffix",
+                                binary_literal
+                            ),
                         )
                     })?;
-                
+
                 // Decode the base64 content
-                use base64::{Engine, engine::general_purpose};
-                let decoded = match general_purpose::STANDARD.decode(base64_content) {
+                let decoded = match general_purpose::URL_SAFE.decode(base64_content) {
                     Ok(bytes) => bytes,
                     Err(e) => {
                         return Err(CompileError::StringLexError(
                             self.compile_context(&pair),
-                            format!("invalid binary literal '{}': invalid base64: {e}", binary_literal),
+                            format!(
+                                "invalid binary literal '{}': invalid base64: {e}",
+                                binary_literal
+                            ),
                         ));
                     }
                 };
-                
+
                 Ok(Expr::Value(v_binary(decoded)))
             }
             Rule::err => {
@@ -3166,7 +3172,7 @@ mod tests {
         let program = r#"return b"SGVsbG8gV29ybGQ=";"#;
         let parsed = parse_program(program, CompileOptions::default()).unwrap();
         assert_eq!(parsed.stmts.len(), 1);
-        
+
         // Extract the binary value and verify it decoded correctly
         if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node {
             if let Expr::Value(val) = expr.as_ref() {
@@ -3180,7 +3186,10 @@ mod tests {
                 panic!("Expected Value expression, got: {:?}", expr);
             }
         } else {
-            panic!("Expected return statement with value, got: {:?}", parsed.stmts[0].node);
+            panic!(
+                "Expected return statement with value, got: {:?}",
+                parsed.stmts[0].node
+            );
         }
     }
 
@@ -3190,7 +3199,7 @@ mod tests {
         let program = r#"return b"";"#;
         let parsed = parse_program(program, CompileOptions::default()).unwrap();
         assert_eq!(parsed.stmts.len(), 1);
-        
+
         if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node {
             if let Expr::Value(val) = expr.as_ref() {
                 if let Some(binary) = val.as_binary() {
@@ -3204,12 +3213,12 @@ mod tests {
 
     #[test]
     fn test_binary_literal_invalid_base64() {
-        // Test that invalid base64 content produces an error  
+        // Test that invalid base64 content produces an error
         // Using invalid base64 that would pass the grammar but fail decoding
         let program = r#"return b"SGVsbG8gV29ybGQ";"#; // Missing padding
         let result = parse_program(program, CompileOptions::default());
         assert!(result.is_err());
-        
+
         if let Err(err) = result {
             // The error should mention invalid base64 or binary literal
             let error_str = err.to_string();
@@ -3220,18 +3229,18 @@ mod tests {
     #[test]
     fn test_binary_literal_roundtrip() {
         use crate::unparse::to_literal;
-        
+
         // Create a binary value
         let original_data = b"Hello, World! This is binary data.";
         let binary_var = v_binary(original_data.to_vec());
-        
+
         // Convert to literal representation
         let literal_str = to_literal(&binary_var);
-        
+
         // Parse it back
         let program = format!("return {};", literal_str);
         let parsed = parse_program(&program, CompileOptions::default()).unwrap();
-        
+
         // Extract the parsed value
         if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node {
             if let Expr::Value(val) = expr.as_ref() {

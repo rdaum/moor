@@ -15,12 +15,12 @@ use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
+use base64::{Engine, engine::general_purpose};
 use moor_common::program::DeclType;
 use moor_common::program::names::{Name, Variable};
 use moor_common::util::quote_str;
 use moor_var::{Obj, Sequence, Var, Variant};
 use std::collections::HashMap;
-use base64::{Engine, engine::general_purpose};
 
 /// This could probably be combined with the structure for Parse.
 #[derive(Debug)]
@@ -903,7 +903,7 @@ pub fn to_literal(v: &Var) -> String {
             format!("'{}", s.as_str())
         }
         Variant::Binary(b) => {
-            let encoded = general_purpose::STANDARD.encode(b.as_bytes());
+            let encoded = general_purpose::URL_SAFE.encode(b.as_bytes());
             format!("b\"{}\"", encoded)
         }
     }
