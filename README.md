@@ -2,239 +2,119 @@
 
 # mooR
 
-### ... What is this?
+**mooR** is a network-accessible, multi-user, programmable system for building online social environments, games, and collaborative spaces. Think of it as a virtual world where participants can not only interact with each other, but also program and modify the environment itself.
 
-"**_mooR_**" is:
+mooR is a modern, from-scratch rewrite of [LambdaMOO](https://en.wikipedia.org/wiki/MOO), maintaining full compatibility with existing LambdaMOO 1.8.x databases while adding significant enhancements.
 
-- A system for building shared, programmable, Internet-accessible virtual _social spaces_
-- A programming and authoring _tool_ for shared environments.
-- Compatible with [LambdaMOO](https://en.wikipedia.org/wiki/MOO) 1.8.x (with many extensions)
+📖 **For comprehensive documentation, see our [mooR Book](https://rdaum.github.io/moor/).**
 
-_mooR_ provides (from the bottom layer up...)
+## What Makes MOOs Special
 
-- A fast, durable, transactional networked database with object and relational characteristics
-- A runtime for securely live-authoring and hosting programs and content that run persistently on that database
-- An authentication and authorization system for controlling access to said programs ("verbs") and content.
-- A programming language for building objects and verbs, along with the ability to plug in other languages / runtimes.
-- Tools and user environments for interacting with the system and writing verbs and editing content.
-- Compatibility with the classic LambdaMOO programming language and runtime.
+MOOs offer a unique digital experience through:
 
-And it is designed to be used for:
+- **Collaborative storytelling** where participants build a shared narrative
+- **Live programming** - modify the world while you're in it
+- **Community-driven development** through persistent interactions and relationships  
+- **Rich interaction** that engages users through both traditional command-line and modern web interfaces
+- **Complete customizability** - everything from objects to commands can be programmed
 
-- Collaborative virtual environments
-- Socializing
-- Multiuser games
-- Persistent agents
-- Interactive fiction
-- Your entertainment and delight
+mooR builds on the foundation of MUDs (Multi-User Dungeons) and similar multiplayer online environments that have fostered creative communities for decades. Like modern sandbox games, MMORPGs, and social platforms, MOOs provide persistent worlds where players can build, create, and collaborate. What sets MOOs apart is their emphasis on live programming and community-driven content creation - imagine if Minecraft's creative mode, Discord's community features, and a code editor all lived in the same space.
 
-### Status
+In a world of throwaway apps and walled gardens, mooR is cheerfully dragging the future into the past - taking the best ideas from decades of online community building and rebuilding them with modern technology.
 
-_mooR_ is in active development, heading towards a stable 1.0 release. It is currently in a pre-release "alpha"
-state and is arguably not yet ready for production use. Database formats and APIs may change, and there are
-still some rough edges. However, it is already capable of running a full LambdaMOO database, under concurrent
-load, and a development server instant has been running for several months without incident or downtime.
+## Status
 
-### Background
+mooR is approaching its 1.0 release and is currently in late alpha, with a focus on documentation, testing and performance tuning. It successfully runs databases imported from LambdaMOO, with real world workloads, and lives through our cruel stress and performance testing regimen. 
 
-Launching in the early 1990s [LambdaMOO](https://en.wikipedia.org/wiki/LambdaMOO) is an online social environment, as
-well as an open source software package for building such environments for yourself.
+Database formats and APIs may still change before the stable release, and we reserve the right to keep adding features right up until the last minute.
 
-LambdaMOO -- the place -- still exists today, with an unbroken 30+ year history, and a small but dedicated community of
-users and developers continue to use it -- both [LambdaMOO the place](https://lambda.moo.mud.org/), and
-[MOO the server software](https://github.com/wrog/lambdamoo) for other communities.
+## Key Features & Enhancements
 
-MOO predates "social media", predates Facebook, Twitter, MySpace, Friendster, Tumblr, GeoCities, and... everything else.
+**Runtime improvements:**
+- Fully multithreaded architecture for modern multicore systems
+- Native web front end with rich content presentation
+- Directory-based import/export format for version control integration
+- Modular architecture for easier extension
 
-In fact, it predates the world-wide web itself, and offers a very different kind of interaction with the Internet, one
-that is synchronous and live, text-based, not graphical, and is based around an evolving narrative that the users
-themselves create.
+**Language enhancements:**
+- All classic MOO features plus many extensions from ToastStunt
+- Maps: associative containers (`["key" -> "value"]`)
+- Lexically scoped variables with `begin`/`end` blocks
+- List/range comprehensions (`{x * 2 for x in [1..5]}`)
+- UTF-8 strings, 64-bit integers, booleans, symbols. 
+- Binary values.
+- Lightweight immutable objects ("flyweights")
 
-It is a multiuser virtual world, a MUD, a narrative "game", a chat room, a virtual environment, a social network, a
-programming environment, and a platform for collaborative fiction -- all in one.
+**Modern infrastructure:**
+- Fast, durable, transactional database
+- Support for multiple client protocols (web, telnet)
+- Easy deployment via Docker
 
-It is a place where people can meet, talk, and build things together. And it's kind of awesome.
+## Quick Start
 
-(for a longer description, see [doc/lambda-background.md](./doc/lambda-background.md))
+The easiest way to get started is with Docker Compose:
 
-### mooR
-
-Is not a fork of LambdaMOO, but is a new implementation of the MOO server and programming language. It was
-written from the ground up.
-
-However, it is designed to be compatible with LambdaMOO 1.8.x, existing MOO cores should -- on the whole --
-import and run without modification.
-
-But mooR also includes a number of enhancements and new features, including some functionality also present in other MOO
-implementations like ToastStunt.
-
-Enhancements over base the LambdaMOO 1.8.x system include (but are not limited to):
-
-- Runtime features:
-  - A fully multithreaded architecture, taking advantage of the wizardly powers of modern multicore computing
-    machines.
-  - A native web front end, with rich content presentation.
-  - A directory basecd import / export format for objects that can be read by a human and edited by a standard text
-    editor and managed with standard version control tools.
-  - An architecture that is easier to extend and add to.
-
-- Language features:
-  - Lexically scoped variables / `begin` / `end` blocks
-  - Maps: an associative container type (`[ "key" -> "value", ... ]`)
-  - List / Range comprehensions, similar to Python, Julia, etc. (`{ x * 2 for x in [1..5]}`)
-  - UTF-8 strings
-  - 64-bit integers and floats
-  - Symbol (interned string) type (`'symbol`)
-  - Booleans (`true` / `false`)
-  - "flyweights" - a lightweight anonymous immutable object / container type.
-
-A "core" database foundation designed expecially for mooR is under development and lives
-at http://github.com/rdaum/cowbell
-
-### Why?
-
-Socializing, authoring, and creating on the Internet is in many ways broken. We want to make it better, by giving people
-tools to create their _own_ spaces, and to create their own _things_ and _tools_ within those spaces.
-
-It should be fun, it should be easy, it should be accessible, it should be open, it should be collaborative, it should
-be programmable, it should be extensible, it should be secure, it should be private, it should be free.
-
-This kind of environment is our take on how we can make that happen:
-
-- Shared, self-authored, spaces
-- Where you make things together
-- Easy to learn tools
-- Easy to share what you make
-- Secure, and as private as you want it to be
-- Driven around a shared narrative
-
-In short: Build your own village.
-
-### How do I use it?
-
-The easiest way to get started is to run the `docker compose` setup. This will bring up a complete server with `telnet`
-and `web` interfaces. The server will be setup with an initial `JaysHouseCore` core import.
-
-To run, take a look at the local `docker-compose.yml` file, instructions are there, but it really just amounts to:
-
-```
+```bash
 docker compose up
 ```
 
-This will bring up 3 containers:
+This starts three services:
+- **moor-daemon**: The backend MOO service
+- **moor-telnet-host**: Traditional telnet interface on port 8888  
+- **moor-web-host**: Modern web interface on port 8080
 
-- `moor-daemon` - the backend service that runs the actual MOO, but is not exposed to users
-- `moor-telnet-host` - exposes a traditional MUD-style "telnet" (line-oriented-TCP) connection. On port 8888.
-- `moor-web-host` - exposes a web client front end listen on port 8080.
+Connect via:
+- **Web**: [http://localhost:8080](http://localhost:8080) (recommended for new users)
+- **Telnet**: `telnet localhost 8888` (classic experience)
 
-So to connect, point your browser to `http://localhost:8080` or if you're feeling old-school: `telnet localhost 8888`
+The server comes pre-loaded with JaysHouseCore, providing a ready-to-explore virtual world.
 
-Studying the `docker-compose.yml` file should give some insight to how things are glued together.
+For more detailed setup instructions, see the [Docker Compose Setup](https://rdaum.github.io/moor/the-system/docker-compose-setup.html) section in the mooR Book.
 
-For documentation of the MOO programming language as implemented in `mooR`, see
-the [doc/language.md](book/src/the-moo-programming-language/language.md)
-document.
+## For New Users
 
-For a high level architecture description plus a more detailed breakdown on how the server is put together, see the
-[ARCHITECTURE.md](book/src/ARCHITECTURE.md) document.
+If you're new to MOOs, you'll find yourself in a virtual world where you can:
+- Explore rooms and interact with objects using commands like `look`, `go north`, `take lamp`
+- Communicate with others using `say hello` or `emote waves`  
+- Learn the system with `help` and `@tutorial`
+- Experience both traditional command-line and modern web-based interfaces
+- Eventually learn to program new objects and behaviors in the MOO language
 
-For a list of built-in functions and their descriptions, see
-the [doc/builtins](book/src/the-moo-programming-language/builtins) directory.
+## For Developers & Contributors
 
-### Who made this?
+mooR offers several opportunities for contribution:
 
-The bulk of development has been by [myself](https://github.com/rdaum).
+**Core Development** (Rust):
+- Server architecture improvements
+- New builtin functions
+- Performance optimizations  
+- Protocol extensions
 
-Extensive work on the decompiler/unparser, along with general testing, code sanitization, and cleanup has been done by
-[Norman Nunley](https://github.com/nnunley).
+**World Building** (MOO language):
+- Creating new cores and experiences
+- Porting existing MOO content
+- Building modern web-enabled interfaces
 
-Implementation of a robust integration testing framework, along with porting a pile of tests from ToastStunt, and
-generally finding bugs and helping with the fixing of them has been done by [Zoltán Nagy](https://github.com/abesto).
+**Documentation & Testing**:
+- Expanding the mooR Book
+- Creating tutorials and examples
+- Stress testing and bug reports
 
-Extensive testing has been done by many others.
+### Getting Involved
 
-There's been plenty of inspiration and help from a community of fellow old-school MOO
-(and [ColdMUD](https://muds.fandom.com/wiki/ColdMUD)!) folks that I've known since the 90s.
+- **Issues**: Check our [GitHub Issues](https://github.com/rdaum/moor/issues) for current needs
+- **Discussion**: Join our [Discord](https://discord.gg/Ec94y5983z) community  
+- **Development**: See the [mooR Book](https://rdaum.github.io/moor/) for architecture details
 
-Finally, LambdaMOO _itself_ was primarily authored by Pavel Curtis, with the original LambdaMOO server being written by
-Stephen White. Successive versions and forks have been maintained by a number of people.
+## Resources
 
-## Contributing
+- 📖 **[Complete Documentation](https://rdaum.github.io/moor/)** - The comprehensive mooR Book
+- 🏗️ **[Server Architecture](https://rdaum.github.io/moor/moor-architecture.html)** - Technical overview
+- 💻 **[MOO Programming Language](https://rdaum.github.io/moor/the-moo-programming-language.html)** - Language reference
+- 🚀 **[Running a Server](https://rdaum.github.io/moor/the-system/running-the-server.html)** - Deployment guide
 
-**We welcome contributions!** mooR is actively seeking contributors in several areas:
+## License
 
-- **Development**: Help improve the core system, add features, or fix bugs
-- **Documentation**: Expand and improve our docs for users, developers, and administrators
-- **Testing**: Help identify issues and ensure reliability
-- **Building**: Create interesting worlds and applications using mooR
+mooR is licensed under the GNU General Public License v3.0. See [LICENSE](./LICENSE) for details.
 
-To contribute:
-
-1. Check our [GitHub issues](https://github.com/rdaum/moor/issues) for current needs or file a new issue
-   - If you have a feature request, please file an issue and describe it in detail
-   - If you find a bug, please file an issue and include steps to reproduce it, and feel free to join our
-     Discord to discuss it
-2. Join our [Discord](https://discord.gg/Ec94y5983z) to discuss ideas or keep up with development
-3. Fork the repository and submit pull requests
-
-We're particularly interested in:
-
-- Documentation improvements
-- Development of the `cowbell` core database (see http://github.com/rdaum/cowbell)
-- Stress testing and performance testing
-- Performance optimizations
-- UI development work on the web client
-
-### License
-
-_mooR_ is licensed under the GNU General Public License, version 3.0. See the [LICENSE](./LICENSE) file for details.
-
-You can make modifications as you like, but if you distribute those modifications, you must also distribute the source
-code for those modifications under the same license.
-
-The choice to use the GPL was made to ensure that the software remains open and free, and that any modifications to it
-are also open and free. This is in keeping with the spirit of the original LambdaMOO server, which was also under the
-GPL license.
-
-Further, since portions of the code inside `mooR` are based on readings of the LambdaMOO server code, staying with
-the GPL is the right thing to do.
-
-### What's done?
-
-At this point `mooR` is capable of importing and running a full LambdaCore, JaysHouseCore, etc. database.
-
-Everything should work. If it doesn't, that's a bug. Which you should report.
-
-.... With _some_ caveats:
-
-- Outbound network connections (`open_network_connection`) are not supported and likely won't be.
-- Many/Most extensions present in ToastStunt, Stunt, etc. WAIFs, etc. are not supported. Some of these are
-  possible to add in the future, others do not fit the design philosophy of the system going forward.
-
-For a list of the status of the implementation of standard LambdaMOO builtin functions, see
-[builtin_functions_status.md](book/src/the-moo-programming-language/built-in-functions/builtin_functions_status.md).
-Early documentation for the builtin functions
-is
-available in the [doc/builtins](book/src/the-moo-programming-language/builtins) directory.
-
-### What's next?
-
-There's a lot of work to do. We're looking for contributors, testers, and users. We're also looking for feedback, ideas,
-and use cases.
-
-We're also looking for funding, and for partners who want to build things on top of mooR.
-
-The immediate horizon is to get the initial release out, which will be a drop-in replacement for LambdaMOO, with
-some additional features. This will include a web-based client. To get there the following is still required
-
-- Robustness and stability work.
-- Documentation, including a user manual, a developer manual, and a system administrator manual.
-- Performance testing to ensure that the system can handle a large number of users and objects.
-- Continued development on a new core that can take advantage of mooR's rich-content/web presentation abilities.
-
-### Join us!
-
-If you're interested in helping out, or just want to chat, please join us on
-our [Discord server](https://discord.gg/Ec94y5983z).
-
-Note: When the time is right the Discord will be replaced by a running instance of `mooR` itself.
+This ensures the software remains open and free, in keeping with the the original LambdaMOO project.
