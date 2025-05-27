@@ -82,6 +82,12 @@ impl Var {
     }
 
     #[inline(always)]
+    pub fn mk_binary(bytes: Vec<u8>) -> Self {
+        use crate::binary::Binary;
+        Var(Variant::Binary(Box::new(Binary::from_bytes(bytes))))
+    }
+
+    #[inline(always)]
     pub fn type_code(&self) -> VarType {
         match self.variant() {
             Variant::Bool(_) => VarType::TYPE_BOOL,
@@ -95,6 +101,7 @@ impl Var {
             Variant::Map(_) => VarType::TYPE_MAP,
             Variant::Flyweight(_) => VarType::TYPE_FLYWEIGHT,
             Variant::Sym(_) => VarType::TYPE_SYMBOL,
+            Variant::Binary(_) => VarType::TYPE_BINARY,
         }
     }
 
@@ -210,6 +217,15 @@ impl Var {
         }
     }
 
+    /// Extract the binary value if this is a binary variant, otherwise None.
+    #[inline(always)]
+    pub fn as_binary(&self) -> Option<&crate::Binary> {
+        match self.variant() {
+            Variant::Binary(b) => Some(b.as_ref()),
+            _ => None,
+        }
+    }
+
     /// Returns true if this is a None variant.
     #[inline(always)]
     pub fn is_none(&self) -> bool {
@@ -243,6 +259,7 @@ impl Var {
             Variant::Err(_) => false,
             Variant::Flyweight(f) => !f.is_empty(),
             Variant::Sym(_) => true,
+            Variant::Binary(b) => !b.is_empty(),
         }
     }
 
@@ -684,6 +701,7 @@ impl Var {
             Variant::List(s) => TypeClass::Sequence(s),
             Variant::Flyweight(f) => TypeClass::Sequence(f),
             Variant::Str(s) => TypeClass::Sequence(s),
+            Variant::Binary(b) => TypeClass::Sequence(b.as_ref()),
             Variant::Map(m) => TypeClass::Associative(m),
             _ => TypeClass::Scalar,
         }
@@ -774,6 +792,11 @@ pub fn v_sym(s: Symbol) -> Var {
 }
 
 #[inline(always)]
+pub fn v_binary(bytes: Vec<u8>) -> Var {
+    Var::mk_binary(bytes)
+}
+
+#[inline(always)]
 pub fn v_sym_str(s: &str) -> Var {
     Var::mk_symbol(Symbol::mk_case_insensitive(s))
 }
@@ -831,6 +854,12 @@ impl From<Obj> for Var {
 impl From<Error> for Var {
     fn from(e: Error) -> Self {
         Var::mk_error(e)
+    }
+}
+
+impl From<Vec<u8>> for Var {
+    fn from(bytes: Vec<u8>) -> Self {
+        Var::mk_binary(bytes)
     }
 }
 

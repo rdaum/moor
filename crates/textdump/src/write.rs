@@ -107,6 +107,12 @@ impl<W: io::Write> TextdumpWriter<W> {
                     self.write_var(&v, false)?;
                 }
             }
+            Variant::Binary(b) => {
+                // Write binary data as base64-encoded string for portability
+                use base64::Engine;
+                let encoded = base64::engine::general_purpose::STANDARD.encode(b.as_bytes());
+                writeln!(self.writer, "{}\n{}", VarType::TYPE_BINARY as i64, encoded)?;
+            }
             Variant::None => {
                 writeln!(self.writer, "{}", VarType::TYPE_NONE as i64)?;
             }

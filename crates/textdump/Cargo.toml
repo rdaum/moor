@@ -23,6 +23,7 @@ moor-compiler = { path = "../compiler" }
 moor-var = { path = "../var" }
 
 ## General usefulness
+base64.workspace = true
 encoding_rs.workspace = true
 semver.workspace = true
 serde.workspace = true

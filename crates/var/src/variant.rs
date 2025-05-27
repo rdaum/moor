@@ -13,6 +13,7 @@
 
 use crate::Associative;
 use crate::Symbol;
+use crate::binary::Binary;
 use crate::flyweight::Flyweight;
 use crate::list::List;
 use crate::{Error, Obj};
@@ -37,6 +38,7 @@ pub enum Variant {
     Err(Arc<Error>),
     Flyweight(Flyweight),
     Sym(Symbol),
+    Binary(Box<Binary>),
 }
 
 impl Hash for Variant {
@@ -53,6 +55,7 @@ impl Hash for Variant {
             Variant::Err(e) => e.hash(state),
             Variant::Flyweight(f) => f.hash(state),
             Variant::Sym(s) => s.hash(state),
+            Variant::Binary(b) => b.hash(state),
         }
     }
 }
@@ -71,6 +74,7 @@ impl Ord for Variant {
             (Variant::Err(l), Variant::Err(r)) => l.cmp(r),
             (Variant::Flyweight(l), Variant::Flyweight(r)) => l.cmp(r),
             (Variant::Sym(l), Variant::Sym(r)) => l.cmp(r),
+            (Variant::Binary(l), Variant::Binary(r)) => l.cmp(r),
 
             (Variant::None, _) => Ordering::Less,
             (_, Variant::None) => Ordering::Greater,
@@ -88,9 +92,10 @@ impl Ord for Variant {
             (_, Variant::Str(_)) => Ordering::Greater,
             (Variant::Map(_), _) => Ordering::Less,
             (_, Variant::Map(_)) => Ordering::Greater,
-
             (Variant::Flyweight(_), _) => Ordering::Less,
             (_, Variant::Flyweight(_)) => Ordering::Greater,
+            (_, Variant::Binary(_)) => Ordering::Greater,
+            (Variant::Binary(_), _) => Ordering::Less,
 
             (Variant::Sym(_), _) => Ordering::Less,
             (_, Variant::Sym(_)) => Ordering::Greater,
@@ -128,6 +133,7 @@ impl Debug for Variant {
             Variant::Err(e) => write!(f, "Error({:?})", e),
             Variant::Flyweight(fl) => write!(f, "Flyweight({:?})", fl),
             Variant::Sym(s) => write!(f, "Symbol({})", s),
+            Variant::Binary(b) => write!(f, "Binary({} bytes)", b.len()),
         }
     }
 }
@@ -146,6 +152,7 @@ impl PartialEq<Self> for Variant {
             (Variant::Map(s), Variant::Map(o)) => s == o,
             (Variant::Err(s), Variant::Err(o)) => s == o,
             (Variant::Flyweight(s), Variant::Flyweight(o)) => s == o,
+            (Variant::Binary(s), Variant::Binary(o)) => s == o,
             (Variant::None, Variant::None) => true,
             _ => false,
         }

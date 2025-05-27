@@ -34,6 +34,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::Int(i) => result.push_str(&i.to_string()),
             Variant::Float(f) => result.push_str(format!("{:?}", f).as_str()),
             Variant::Str(s) => result.push_str(s.as_str()),
+            Variant::Binary(b) => result.push_str(&format!("<binary {} bytes>", b.len())),
             Variant::Obj(o) => result.push_str(&o.to_string()),
             Variant::List(_) => result.push_str("{list}"),
             Variant::Map(_) => result.push_str("[map]"),
