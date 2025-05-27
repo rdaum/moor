@@ -1,6 +1,8 @@
 # MOO Tasks
 
-A _task_ is an execution of a MOO program. There are several kinds of tasks in mooR:
+A _task_ is an execution of a MOO program. **Every running task operates within its own database transaction** (see [Transactions](../the-database/transactions.md) for details about how database changes work). This means that while a task is actively running, all its database changes are held in a private transaction that other tasks cannot see until the task completes or suspends.
+
+There are several kinds of tasks in mooR:
 
 - Every time a player types a command, a task is created to execute that command; we call these _command tasks_.
 - External processes can directly call verbs in the database via RPC, which creates a task to execute that verb;
@@ -12,10 +14,10 @@ A _task_ is an execution of a MOO program. There are several kinds of tasks in m
   number of seconds; these are _forked tasks_. Sub-second forking is possible (eg. 0.1)
 - The `suspend()` function suspends the execution of the current task. A snapshot is taken of whole state of the
   execution, and the execution will be resumed later. These are called _suspended tasks_. Sub-second suspending is
-  possible.
+  possible. **When a task suspends, its transaction is committed** (meaning all database changes become permanent and visible to other tasks), **and when it resumes, it starts with a completely new transaction**.
 - The `read()` function also suspends the execution of the current task, in this case waiting for the player to type a
   line of input. When the line is received, the task resumes with the `read()` function returning the input line as
-  result. These are called _reading tasks_.
+  result. These are called _reading tasks_. Like `suspend()`, the transaction commits when waiting for input and a new transaction begins when input is received.
 - `worker_request()` creates a _worker task_, which is a task that waits for a worker to perform some action. The
   worker task is queued until a worker (an external helper process) completes the action and returns the result.
 
@@ -40,6 +42,16 @@ Because queued tasks may exist for long periods of time before they begin execut
 ones that you own and to kill them before they execute. These functions, among others, are discussed in the following
 section.
 
+### Tasks and transactions: How they work together
+
+**Every active task runs within its own database transaction.** This is a fundamental concept that affects how your MOO programs behave:
+
+- **While running:** Your task's database changes (setting properties, moving objects, etc.) are private to your task. Other tasks cannot see these changes until your transaction finishes.
+- **When completing:** If your task finishes successfully, its transaction automatically commits—all changes become permanent and visible to everyone.
+- **When suspending:** If your task calls `suspend()`, `read()`, or `fork`, the current transaction commits immediately. When the task resumes later, it starts with a brand new transaction.
+
+This transactional system is what allows mooR to run multiple tasks truly in parallel without them interfering with each other. For complete details about how transactions work, see the [Transactions](../the-database/transactions.md) section.
+
 ### Active versus queued tasks
 
 Unlike LambdaMOO, mooR can run multiple tasks in parallel, taking advantage of multi-core CPUs. In LambdaMOO only one
@@ -63,14 +75,11 @@ it is not efficient to gather detailed information about them. The `active_tasks
 active tasks that you own, and the `kill_task()` function can be used to kill an active task. However, killing an active
 task is more of a "best effort" operation, since the task may be in the middle of executing some code.
 
-### Transactional management
+### Advanced transaction management
 
-Unlike LambdaMOO, mooR supports a transactional model for managing changes to the database. Each task runs in its own
-transaction, which is automatically committed when the task completes successfully. If a task is suspended, it is
-committed and a new database transaction is started when the task resumes.
+Unlike LambdaMOO, mooR supports a transactional model for managing changes to the database, as described above. The automatic transaction management should handle most use cases, but mooR also supports explicit transaction control for advanced scenarios.
 
-From the point of view of the MOO programmer, transactions should be considered an implementation detail of the server,
-but they do provide some useful features:
+From the point of view of most MOO programmers, transactions should be considered an implementation detail of the server that "just works." However, understanding transactions provides some useful insights:
 
 * Each transaction is isolated from other transactions, meaning that changes made by one task are not visible to
   other tasks until the transaction is committed. mooR offers a consistent (serializable) isolation level, which means
