@@ -1,5 +1,48 @@
 # Cryptography and Security Functions
 
+## Encryption / decryption functions
+### `age_generate_keypair`
+
+```
+{STR public_key, STR private_key} = age_generate_keypair()
+```
+Generates a new x25519 keypair for encrypting and decrypting data with [Age](https://age-encryption.org).
+
+**Example:**
+```
+;age_generate_keypair()
+=> {"age1ac64qtuxuu0acqgsuxdf9kwjgwpxrys4uxtnjclahj8g2y5yv3qswfyfff", "AGE-SECRET-KEY-1TFKKCGX2549ZR7NP2598805NR48Y6GLSA7AZS6X25FSA8U5V5ZES8TU5QM"}
+```
+
+### `age_encrypt`
+
+```
+STR base-64 encoded message = age_encrypt(STR message, {pubkey...})
+```
+Encrypts the given message to the public ssh or age keys specified. Raises an error if the arguments don't match the spec above, the list is empty or one of the provided pubkeys is invalid.
+Returns the message base-64 encoded.
+
+**Example:**
+```
+;age_encrypt("secret data", {"age1ac64qtuxuu0acqgsuxdf9kwjgwpxrys4uxtnjclahj8g2y5yv3qswfyfff"})
+=> "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpSnpKdWV2ZmY2STlla1JVSkVzemtSQUowbmZCeElJb0ZWbmV1ZVNSUm1FClNPYzkxRnFIMWN4UGdOV0N1c1E2WWEwd0g1NEQ4em9EYnRkOElkeGFlMzQKLT4gVi1ncmVhc2UgRHcgVigoICh9YSBnPm0
+KWkVIaGNvaDhOb1ZVSGNPY29NMVAvQnM2MFEKLS0tIC9YaU9tUG45TlJKV1pZeG9JTi8xL0IwYUJlOFRnTDE2VXhBbG44OEJsVzAKy+j0sHiugXI/N8hk9FTg9Gt+JtWgP/LwUbFR6CROjndmhN+Z2TyWsy6/eQ=="
+```
+
+### `age_decrypt`
+
+```
+STR data = age_decrypt(STR base-64 encoded encrypted data, {private-key...})
+```
+Given an encrypted message base-64 encoded (such as from age_encrypt) and one or more private keys, attempt decryption of the data.
+
+**Example:**
+```
+;age_decrypt("YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpSnpKdWV2ZmY2STlla1JVSkVzemtSQUowbmZCeElJb0ZWbmV1ZVNSUm1FClNPYzkxRnFIMWN4UGdOV0N1c1E2WWEwd0g1NEQ4em9EYnRkOElkeGFlMzQKLT4gVi1ncmVhc2UgRHcgVigoICh9YSBnPm0KWkVIaGNvaDhOb1ZVSGNPY29NMVAvQnM2MFEKLS0tIC9YaU9tUG45TlJKV1pZeG9JTi8xL0IwYUJlOFRnTDE2VXhBbG44OEJsVzAKy+j0sHiugXI/N8hk9FTg9Gt+JtWgP/LwUbFR6CROjndmhN+Z2TyWsy6/eQ==", {"AGE-SECRET-KEY-1TFKKCGX
+2549ZR7NP2598805NR48Y6GLSA7AZS6X25FSA8U5V5ZES8TU5QM"})
+=> "secret data"
+```
+
 ## Password Hashing Functions
 
 ### `salt`
@@ -75,8 +118,6 @@ salt = random_bytes(20);
 return argon2(password, salt, 3, 4096, 1);
 ```
 
-> Warning: The MOO is single threaded in most cases, and this function can take significant time depending on how you call it. While it is working, nothing else is going to be happening on your MOO. It is possible to build the server with the `THREAD_ARGON2` option which will mitigate lag. This has major caveats however, see the section below on `argon2_verify` for more information.
-
 ### `argon2_verify`
 
 ```
@@ -88,8 +129,6 @@ Compares password to the previously hashed hash.
 Returns 1 if the two match or 0 if they don't.
 
 This is a more secure way to hash passwords than the `crypt()` builtin.
-
-> Warning: It is possible to build the server with the `THREAD_ARGON2` option. This will enable this built-in to run in a background thread and mitigate lag that these functions can cause. However, this comes with some major caveats. `do_login_command` (where you will typically be verifying passwords) cannot be suspended. Since threading implicitly suspends the MOO task, you won't be able to directly use Argon2 in do_login_command. Instead, you'll have to devise a new solution for logins that doesn't directly involve calling Argon2 in do_login_command.
 
 > Note: More information on Argon2 can be found in the [Argon2 Github](https://github.com/P-H-C/phc-winner-argon2).
 
