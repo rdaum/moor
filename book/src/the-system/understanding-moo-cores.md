@@ -31,7 +31,7 @@ Without these, your mooR server would just be an empty database with no way for 
 
 ## Historical Context: LambdaCore
 
-**LambdaCore** is the most famous and historically important MOO core. Created in the early 1990s at Xerox PARC, it established many of the conventions that MOO programmers still use today:
+[**LambdaCore**](https://lambda.moo.mud.org/pub/MOO/) is the most famous and historically important MOO core. Created in the early 1990s at Xerox PARC, it established many of the conventions that MOO programmers still use today:
 
 - The `@` prefix for administrative commands
 - Standard object hierarchies (like `$thing`, `$room`, `$player`)
@@ -39,6 +39,17 @@ Without these, your mooR server would just be an empty database with no way for 
 - Basic building and social systems
 
 LambdaCore became the foundation for probably hundreds of MOOs and influenced the design of many other virtual world systems. Most MOO programmers, even today, learned their craft on LambdaCore-derived systems.
+
+## JaysHouseCore: A Technical Alternative
+
+[**JaysHouseCore**](https://jhcore.sourceforge.net/) emerged from development at JaysHouse, a popular MOO in the 1990s that attracted a more technically-minded community. Unlike LambdaCore, which was designed for general use, JaysHouseCore was built with programmers and technical users in mind.
+
+Key characteristics of JaysHouseCore include:
+- **Enhanced programming tools**: More sophisticated development utilities
+- **Technical focus**: Features designed for power users and MOO programmers
+- **Proven stability**: [Waterpoint MOO](https://www.waterpoint.org/) is built overtop of JHCore
+
+A copy of JHCore is included -- for testing purposes -- in the `mooR` github repository, and is the default core used by the included `docker compose` configuration.
 
 ## Toast Cores and Compatibility
 
@@ -52,7 +63,7 @@ While mooR implements many Toast-compatible features, it's not a drop-in replace
 
 ## mooR's Future: The Cowbell Core
 
-The mooR project is developing its own core called **"cowbell"** (named with a nod to the famous "more cowbell" meme). Cowbell aims to:
+The mooR project is developing its own core called ["cowbell"](https://github.com/rdaum/cowbell/) (named with a nod to the famous "more cowbell" meme). Cowbell aims to:
 
 - **Showcase mooR features**: Take advantage of mooR's unique capabilities and extensions
 - **Web native UI**: Cowbell will be built with the web client in mind, and offer a rich media interface.
@@ -60,7 +71,7 @@ The mooR project is developing its own core called **"cowbell"** (named with a n
 - **Clean foundation**: Start fresh rather than carrying forward historical baggage
 - **Documentation**: Be well-documented and easy to understand for new programmers
 
-**Current Status**: Cowbell is still in early development. The basics exist, but it needs significant work to be a fully-featured core suitable for production MOOs.
+**Current Status**: Cowbell is still in early development. The basics exist, but it needs significant work to be a fully-featured core suitable for production MOOs. See
 
 **Contributions Welcome**: If you're interested in MOO development, contributing to cowbell is a great way to get involved. The project needs:
 - Core object implementations
@@ -68,6 +79,8 @@ The mooR project is developing its own core called **"cowbell"** (named with a n
 - Documentation and examples
 - Testing and feedback
 - User interface improvements
+
+See: https://github.com/rdaum/cowbell/
 
 ## Choosing Your Path
 
