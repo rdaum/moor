@@ -12,6 +12,37 @@ MOO code will appear familiar -- and in some places a bit odd. In large part thi
 those languages were popular or even invented. (See below for a brief discussion of what kinds of differences you
 might expect to see.)
 
+## Where Code Lives: Verbs
+
+Before diving into the syntax of MOO code, it's important to understand where MOO code actually lives and how it's organized.
+
+Unlike most programming languages that have functions, procedures, or methods as their primary units of code organization, MOO has **verbs**. All MOO code lives inside verbs, which are attached to objects in the database.
+
+In traditional programming languages, you might write:
+
+```python
+def greet_player(name):
+    print(f"Hello, {name}!")
+```
+
+In MOO, there are no standalone functions. Instead, you would create a verb on an object:
+
+```moo
+// This code lives in a verb, perhaps called "greet" on some object
+player:tell("Hello, ", dobj.name, "!");
+```
+
+### Key Concepts About Verbs:
+
+- **All code is in verbs**: There are no global functions, procedures, or scripts in MOO. Every piece of executable code must be a verb on some object.
+- **Verbs belong to objects**: Each verb is owned by a specific object and can access that object's properties and other verbs.
+- **Verbs are called, not functions**: When you want to execute code, you call a verb on an object, not a function. See [Calling Verbs](the-moo-programming-language/calling-verbs.md) for details.
+- **Verbs contain statements**: Inside each verb, you write [statements](the-moo-programming-language/moo-language-statements.md) that describe the behavior you want.
+
+This design reflects MOO's object-oriented nature—everything is an object, and all behavior is defined as verbs on those objects. While this might seem limiting at first, it actually provides a very clear and consistent way to organize code in a persistent, multi-user environment.
+
+## What MOO programs are like
+
 Having given you enough context to allow you to understand exactly what MOO code is doing, I now explain what MOO code
 looks like and what it means. I begin with the syntax and semantics of expressions, those pieces of code that have
 values. After that, I cover statements, the next level of structure up from expressions. Next, I discuss the concept of
