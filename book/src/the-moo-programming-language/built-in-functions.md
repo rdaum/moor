@@ -1,5 +1,37 @@
 # Built-in Functions
 
+## What are built-in functions?
+
+Built-in functions (also called "builtins") are functions that are built directly into the MOO server itself, written in the server's implementation language (Rust for mooR). They provide essential functionality that would be impossible or impractical to implement in MOO code.
+
+### How are they different from verb calls?
+
+**Built-in functions:**
+- Are called using simple function syntax: `length(my_list)`, `tostr(42)`
+- Are implemented in the server's native code (Rust)
+- Execute very quickly since they don't involve MOO code interpretation
+- Provide core functionality like math, string manipulation, list operations, etc.
+- Cannot be modified or overridden by MOO programmers
+
+**Verb calls:**
+- Are called using colon syntax: `player:tell("Hello")`, `#123:move(here)`
+- Are implemented in MOO code by programmers
+- May execute more slowly since they involve interpreting MOO code
+- Provide game-specific functionality and can be customized
+- Can be modified, added, or removed by programmers with appropriate permissions
+
+**Examples:**
+```moo
+// Built-in functions:
+len = length({"a", "b", "c"});        // Returns 3
+str = tostr(42);                      // Returns "42"
+result = sqrt(16.0);                  // Returns 4.0
+
+// Verb calls:
+player:tell("Welcome!");              // Calls the 'tell' verb on player object
+sword:wield(player);                  // Calls the 'wield' verb on sword object
+```
+
 There are a large number of built-in functions available for use by MOO programmers. Each one is discussed in detail in
 this section. The presentation is broken up into subsections by grouping together functions with similar or related
 uses.
