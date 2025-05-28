@@ -14,6 +14,7 @@
 mod binary;
 pub mod encode;
 mod error;
+pub mod flex;
 mod flyweight;
 mod list;
 mod map;
