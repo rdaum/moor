@@ -18,14 +18,13 @@ use crate::flyweight::Flyweight;
 use crate::list::List;
 use crate::{Error, Obj};
 use crate::{Sequence, map, string};
-use bincode::{Decode, Encode};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// Our series of types
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone)]
 pub enum Variant {
     None,
     Bool(bool),
