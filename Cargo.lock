@@ -3127,6 +3127,7 @@ dependencies = [
  "binary-layout",
  "bincode",
  "byteview",
+ "criterion",
  "flexbuffers",
  "im",
  "lazy_static",

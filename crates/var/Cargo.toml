@@ -17,10 +17,16 @@ perf-event2.workspace = true
 
 [dev-dependencies]
 minstant.workspace = true
+criterion.workspace = true
+byteview.workspace = true
 
 [target.'cfg(all(target_os = "linux"))']
 [[bench]]
 name = "var_benches"
+harness = false
+
+[[bench]]
+name = "varser_benches"
 harness = false
 
 [dependencies]
