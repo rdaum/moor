@@ -486,7 +486,8 @@ async fn main() -> Result<(), eyre::Error> {
     if let Err(e) = bundler.lock().await.write().await {
         error!("Unable to write initial bundle");
         for msg in e.iter() {
-            error!("{:?}", msg);
+            let diag = msg.to_diagnostic();
+            eprintln!("{}", diag.convert_to_string(true));
         }
         std::process::exit(1);
     }
