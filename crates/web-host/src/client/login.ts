@@ -11,129 +11,254 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-// Handle the connect phase in response to a user clicking the "Connect" button.
-import { Context, Player } from "./model";
+/**
+ * Login Module
+ * 
+ * This module handles the user authentication flow, including:
+ * - Displaying the login form UI
+ * - Processing login/create account requests
+ * - Establishing WebSocket connections
+ * - Managing authentication state
+ * 
+ * The module provides both the UI components and the authentication logic
+ * needed to establish a connection to the Moor server.
+ */
 
 import van, { State } from "vanjs-core";
+import { Context, Player } from "./model";
 import { displayDjot, handleEvent } from "./narrative";
 
+// Extract commonly used VanJS elements
 const { button, div, input, select, option, br, label } = van.tags;
 
-async function connect(context: Context, player: State<Player>, mode, username, password) {
-    let url = "/auth/" + mode;
-    let data = new URLSearchParams();
-    data.set("player", username.value);
-    data.set("password", password.value);
-    let result = await fetch(url, {
-        method: "POST",
-        body: data,
-    });
-    if (result.ok) {
-        console.log("Connected!");
-    } else {
-        console.log("Failed to connect!");
-        context.systemMessage.show("Failed to connect!", 3);
-        return;
-    }
-    let login_result = await result.text();
-    let login_components = login_result.split(" ");
-    let player_oid = login_components[0];
-    let auth_token = result.headers.get("X-Moor-Auth-Token");
-    if (!auth_token) {
-        console.log("No token; authorization denied");
-        alert("Could not authenticate!");
-        return;
-    }
-
-    // Authorized but not connected.
-    player.val = new Player(player_oid, auth_token, false);
-
-    // Now initiate the websocket connection.
-    const baseUrl = window.location.host;
-    // Choose ws or wss depending on whether we're using HTTPS.
-    let isSecure = window.location.protocol === "https:";
-    const wsUrl = (isSecure ? "wss://" : "ws://") + baseUrl + "/ws/attach/" + mode + "/" + auth_token;
-    let ws = new WebSocket(wsUrl);
-    ws.onopen = () => {
-        player.val = new Player(player_oid, auth_token, true);
-
-        // Move focus to input area.
-        // This is done in a timer because it can't actually work until after the dom style is updated.
-        setTimeout(() => document.getElementById("input_area").focus(), 0.5);
-    };
-    ws.onmessage = (e) => {
-        if (e.data) {
-            handleEvent(context, e.data);
+/**
+ * Initiates authentication and connection to the Moor server
+ * 
+ * This function handles the entire authentication flow including:
+ * 1. Sending credentials to the server
+ * 2. Processing the authentication response
+ * 3. Establishing a WebSocket connection
+ * 4. Setting up event handlers for the connection
+ * 
+ * @param context - Application context to update with connection info
+ * @param player - State object to update with player information
+ * @param mode - Connection mode ('connect' for login or 'create' for new account)
+ * @param username - Input element containing the username
+ * @param password - Input element containing the password
+ */
+async function connect(context: Context, player: State<Player>, mode: string, username: HTMLInputElement, password: HTMLInputElement) {
+    try {
+        // Validate inputs
+        if (!username.value || !username.value.trim()) {
+            context.systemMessage.show("Please enter a username", 3);
+            username.focus();
+            return;
         }
-    };
-    ws.onclose = () => {
-        console.log("Connection closed!");
-        player.val = new Player(player_oid, auth_token, false);
-    };
 
-    context.ws = ws;
-    context.authToken = auth_token;
+        if (!password.value) {
+            context.systemMessage.show("Please enter a password", 3);
+            password.focus();
+            return;
+        }
+
+        // Build authentication request
+        const url = `/auth/${mode}`;
+        const data = new URLSearchParams();
+        data.set("player", username.value.trim());
+        data.set("password", password.value);
+
+        // Show connecting status
+        context.systemMessage.show(`Connecting to server...`, 2);
+
+        // Send authentication request
+        const result = await fetch(url, {
+            method: "POST",
+            body: data,
+        });
+
+        // Handle HTTP errors
+        if (!result.ok) {
+            const errorMessage = result.status === 401 
+                ? "Invalid username or password" 
+                : `Failed to connect (${result.status}: ${result.statusText})`;
+
+            console.error(`Authentication failed: ${result.status}`, result);
+            context.systemMessage.show(errorMessage, 5);
+            return;
+        }
+
+        // Parse authentication response
+        const loginResult = await result.text();
+        const loginComponents = loginResult.split(" ");
+        const playerOid = loginComponents[0];
+        const authToken = result.headers.get("X-Moor-Auth-Token");
+
+        // Validate authentication token
+        if (!authToken) {
+            console.error("Authentication failed: No token received");
+            context.systemMessage.show("Authentication failed: No token received", 5);
+            return;
+        }
+
+        // Update player state (authorized but not yet connected)
+        player.val = new Player(playerOid, authToken, false);
+        context.systemMessage.show("Authenticated! Establishing connection...", 2);
+
+        // Establish WebSocket connection
+        const baseUrl = window.location.host;
+        const isSecure = window.location.protocol === "https:";
+        const wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}/${authToken}`;
+
+        const ws = new WebSocket(wsUrl);
+
+        // Set up WebSocket event handlers
+        ws.onopen = () => {
+            // Update player state to connected
+            player.val = new Player(playerOid, authToken, true);
+            context.systemMessage.show("Connected!", 2);
+
+            // Move focus to input area after UI updates
+            setTimeout(() => {
+                const inputArea = document.getElementById("input_area");
+                if (inputArea) inputArea.focus();
+            }, 100); // Use slightly longer timeout for reliability
+        };
+
+        ws.onmessage = (e) => {
+            if (e.data) {
+                handleEvent(context, e.data);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error("WebSocket error:", error);
+            context.systemMessage.show("Connection error", 5);
+        };
+
+        ws.onclose = (event) => {
+            console.log(`Connection closed (${event.code}: ${event.reason})`);
+            player.val = new Player(playerOid, authToken, false);
+
+            if (event.code !== 1000) { // 1000 is normal closure
+                context.systemMessage.show(
+                    `Connection closed: ${event.reason || "Server disconnected"}`
+                , 5);
+            }
+        };
+
+        // Update application context
+        context.ws = ws;
+        context.authToken = authToken;
+
+    } catch (error) {
+        // Handle any unexpected errors
+        console.error("Connection error:", error);
+        context.systemMessage.show(
+            `Connection error: ${error instanceof Error ? error.message : "Unknown error"}`
+        , 5);
+    }
 }
 
-// A login box that prompts the user for their player name and password, and then initiates login through
-// /auth/connect (if connecting) or /auth/create (if creating).
-export const Login = (context: Context, player: State<Player>, login_message: State<string>) => {
-    const mode_select = select(
+/**
+ * Login Component
+ * 
+ * Renders a login form that allows users to either connect to an existing
+ * account or create a new one. The component automatically hides when
+ * the user is connected and shows when disconnected.
+ * 
+ * Features:
+ * - Toggle between connect/create modes
+ * - Welcome message display using Djot format
+ * - Input validation
+ * - Enter key support for submission
+ * - Automatic visibility management based on connection state
+ * 
+ * @param context - Application context
+ * @param player - Player state information
+ * @param loginMessage - Welcome message to display (in Djot format)
+ * @returns Login form component
+ */
+export const Login = (context: Context, player: State<Player>, loginMessage: State<string>) => {
+    // Create form elements
+    const modeSelect = select(
         { id: "mode_select" },
         option({ value: "connect" }, "Connect"),
         option({ value: "create" }, "Create"),
     );
 
-    let connect_callback = () => connect(context, player, mode_select.value, username, password);
-    const welcome = van.derive(() => div({ class: "welcome_box" }, displayDjot({ djot_text: login_message })));
-
     const username = input({
         id: "login_username",
         type: "text",
-        onkeyup: (e) => {
-            if (e.key === "Enter") {
-                connect_callback();
-            }
-        },
+        placeholder: "Username",
+        autocomplete: "username",
+        spellcheck: "false",
     });
+
     const password = input({
         id: "login_password",
         type: "password",
-        onkeyup: (e) => {
-            if (e.key === "Enter") {
-                connect_callback();
-            }
-        },
+        placeholder: "Password",
+        autocomplete: "current-password",
     });
-    const go_button = button({ onclick: connect_callback }, "Go");
-    let hidden_style = van.derive(() => !player.val.connected ? "display: block;" : "display: none;");
 
+    // Initialize connect function that will be called on submit
+    const handleConnect = () => connect(context, player, modeSelect.value, username, password);
+
+    // Add Enter key handler to both input fields
+    username.onkeyup = password.onkeyup = (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            handleConnect();
+        }
+    };
+
+    // Create submit button
+    const goButton = button({ 
+        onclick: handleConnect,
+        class: "login_button"
+    }, "Go");
+
+    // Create welcome message component using Djot rendering
+    const welcome = van.derive(() => 
+        div({ class: "welcome_box" }, displayDjot({ djot_text: loginMessage }))
+    );
+
+    // Show login form only when not connected
+    const visibilityStyle = van.derive(() => 
+        !player.val.connected ? "display: block;" : "display: none;"
+    );
+
+    // Assemble the login form
     return div(
         {
             class: "login_window",
-            style: hidden_style,
+            style: visibilityStyle,
         },
+        // Welcome message display
         welcome,
         br,
+        // Login form
         div(
-            {
-                class: "login_prompt",
-            },
-            mode_select,
+            { class: "login_prompt" },
+            // Connect/Create selector
+            modeSelect,
             " ",
+            // Username field with label
             label(
-                { for: "login_username" },
+                { for: "login_username", class: "login_label" },
                 "Player: ",
                 username,
             ),
             " ",
+            // Password field with label
             label(
-                { for: "login_password" },
+                { for: "login_password", class: "login_label" },
                 "Password: ",
                 password,
             ),
             " ",
-            go_button,
+            // Submit button
+            goButton,
         ),
     );
 };

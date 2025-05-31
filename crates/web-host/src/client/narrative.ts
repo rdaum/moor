@@ -11,56 +11,135 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+/* Narrative Module
+ *
+ * This module handles the core UI for the MOO client, including:
+ * - Processing and rendering narrative content from the server
+ * - Managing the input area and command history
+ * - Handling different content types (text/plain, text/html, text/djot)
+ * - Supporting MCP-like editing protocols
+ * - Managing presentations (windows, panels) in the UI
+ */
+
+import DOMPurify from "dompurify";
+import { FloatingWindow } from "van-ui";
 import van, { State } from "vanjs-core";
 
-import { FloatingWindow } from "van-ui";
-import { curieORef, MoorRemoteObject } from "./rpc";
-
 import {
+    BaseEvent,
     Context,
     NarrativeEvent,
     Player,
     Presentation,
+    PresentationData,
+    PresentationManager,
     PresentationModel,
     Spool,
     SpoolType,
     SystemEvent,
     Traceback,
 } from "./model";
+import { curieORef, MoorRemoteObject } from "./rpc";
 import { matchRef } from "./var";
 import { launchVerbEditor, showVerbEditor } from "./verb_edit";
 
-// import sanitize html
-import DOMPurify from "dompurify";
-
+// Extract common VanJS elements for better readability
 const { div, span, textarea } = van.tags;
 
-// Utility function to build DOM elements from HTML.
-function generateElements(html) {
+/**
+ * Content type constants
+ */
+const CONTENT_TYPES = {
+    PLAIN: "text/plain",
+    HTML: "text/html",
+    DJOT: "text/djot",
+};
+
+/**
+ * Presentation target types
+ */
+const TARGET_TYPES = {
+    WINDOW: "window",
+    RIGHT_DOCK: "right-dock",
+    VERB_EDITOR: "verb-editor",
+};
+
+/**
+ * MCP command constants
+ */
+const MCP_PREFIX = "#$# ";
+const MCP_COMMAND = {
+    EDIT: "edit",
+};
+
+/**
+ * Default presentation parameters
+ */
+const DEFAULT_PRESENTATION = {
+    WIDTH: 500,
+    HEIGHT: 300,
+};
+
+/**
+ * Creates DOM elements from an HTML string
+ *
+ * @param html - HTML string to convert to DOM elements
+ * @returns Collection of DOM elements created from the HTML
+ */
+function generateElements(html: string): HTMLCollection {
     const template = document.createElement("template");
     template.innerHTML = html.trim();
     return template.content.children;
 }
 
-export const displayDjot = ({ djot_text }) => {
-    let ast = djot.parse(djot_text.val);
-    let html = djot.renderHTML(ast);
-    let elements = generateElements(html);
-    let d = div();
-    for (let element of elements) {
-        d.appendChild(element);
+/**
+ * Renders a Djot document as HTML and returns a DOM element
+ *
+ * @param options - Options object containing djot_text state
+ * @returns A div element containing the rendered Djot content
+ */
+export const displayDjot = ({ djot_text }: { djot_text: State<string> }): HTMLElement => {
+    // Parse the Djot text into an AST
+    const ast = djot.parse(djot_text.val);
+
+    // Convert the AST to HTML
+    const html = djot.renderHTML(ast);
+
+    // Create DOM elements from the HTML
+    const elements = generateElements(html);
+
+    // Create a container and append all elements
+    const container = div();
+    for (let i = 0; i < elements.length; i++) {
+        container.appendChild(elements[i]);
     }
-    return d;
+
+    return container;
 };
 
-export function htmlPurifySetup() {
-    // Add a hook to make all links open a new window
-    DOMPurify.addHook("afterSanitizeAttributes", function(node) {
-        // set all elements owning target to target=_blank
+/**
+ * Sets up DOMPurify security configuration for HTML sanitization
+ *
+ * Configures two important security features:
+ * 1. Forces all links to open in a new window
+ * 2. Restricts URLs to an allowlist of protocols
+ */
+export function htmlPurifySetup(): void {
+    // Allowed URL protocols
+    const ALLOWED_PROTOCOLS = ["http", "https"];
+    const protocolRegex = new RegExp(
+        `^(${ALLOWED_PROTOCOLS.join("|")}):`,
+        "gim",
+    );
+
+    // Add a hook to make all links open in a new window
+    DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
+        // For elements that can have a target attribute
         if ("target" in node) {
             node.setAttribute("target", "_blank");
         }
-        // set non-HTML/MathML links to xlink:show=new
+
+        // For SVG links and other non-HTML links
         if (
             !node.hasAttribute("target")
             && (node.hasAttribute("xlink:href") || node.hasAttribute("href"))
@@ -69,196 +148,331 @@ export function htmlPurifySetup() {
         }
     });
 
-    // Add a hook to enforce URI scheme allow-list
-    const allowlist = ["http", "https"];
-    const regex = RegExp("^(" + allowlist.join("|") + "):", "gim");
-    DOMPurify.addHook("afterSanitizeAttributes", function(node) {
-        // build an anchor to map URLs to
+    // Add a hook to enforce protocol allowlist
+    DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
+        // Use an anchor element to parse URLs
         const anchor = document.createElement("a");
 
-        // check all href attributes for validity
+        // Validate href attributes
         if (node.hasAttribute("href")) {
-            anchor.href = node.getAttribute("href");
-            if (anchor.protocol && !anchor.protocol.match(regex)) {
+            anchor.href = node.getAttribute("href") || "";
+            if (anchor.protocol && !protocolRegex.test(anchor.protocol)) {
                 node.removeAttribute("href");
             }
         }
-        // check all action attributes for validity
+
+        // Validate form action attributes
         if (node.hasAttribute("action")) {
-            anchor.href = node.getAttribute("action");
-            if (anchor.protocol && !anchor.protocol.match(regex)) {
+            anchor.href = node.getAttribute("action") || "";
+            if (anchor.protocol && !protocolRegex.test(anchor.protocol)) {
                 node.removeAttribute("action");
             }
         }
-        // check all xlink:href attributes for validity
+
+        // Validate SVG xlink:href attributes
         if (node.hasAttribute("xlink:href")) {
-            anchor.href = node.getAttribute("xlink:href");
-            if (anchor.protocol && !anchor.protocol.match(regex)) {
+            anchor.href = node.getAttribute("xlink:href") || "";
+            if (anchor.protocol && !protocolRegex.test(anchor.protocol)) {
                 node.removeAttribute("xlink:href");
             }
         }
     });
 }
 
-function htmlSanitize(author, html) {
-    // TODO: there should be some signing on this to prevent non-wizards from doing bad things.
-    //   basically only wizard-perm'd things should be able to send HTML, and it should be signed
-    //   by the server as such.
+/**
+ * Sanitizes HTML content for safe display
+ *
+ * @param author - The source/author of the HTML content
+ * @param html - The raw HTML to sanitize
+ * @returns Sanitized HTML string
+ *
+ * @todo Implement signing to verify content from privileged users
+ */
+function htmlSanitize(author: string, html: string): string {
+    // TODO: Implement a signing mechanism so that only content from
+    // authorized sources (wizards) can include HTML. The content should
+    // be signed by the server and verified here.
     return DOMPurify.sanitize(html);
 }
 
-export function action_invoke(author, verb, argument) {
-    console.log("Invoking " + verb + " on " + author);
-    let mrpc_object = new MoorRemoteObject(author, module.context.authToken);
-    let verb_arguments = [];
-    if (argument) {
-        verb_arguments.push(argument);
-    }
-    mrpc_object.callVerb(verb, verb_arguments).then((result) => {
-        console.log("Result: " + result);
-    });
+/**
+ * Invokes a verb on a remote object
+ *
+ * Called from dynamically generated links in the narrative content
+ *
+ * @param author - The object ID on which to invoke the verb
+ * @param verb - The verb name to invoke
+ * @param argument - Optional argument to pass to the verb
+ */
+export function actionInvoke(author: string, verb: string, argument?: any): void {
+    console.log(`Invoking ${verb} on ${author}`);
+
+    const mrpcObject = new MoorRemoteObject(author, module.context.authToken);
+    const verbArguments = argument !== undefined ? [argument] : [];
+
+    mrpcObject.callVerb(verb, verbArguments)
+        .then(result => {
+            console.log(`Result from ${verb}:`, result);
+        })
+        .catch(error => {
+            console.error(`Error invoking ${verb} on ${author}:`, error);
+        });
 }
 
-// Override link behaviour for djot to only permit inline links that refer to object verbs.
-// These get turned into requests to invoke the verb with the player's permissions.
-export function djotRender(author, ast) {
+// Keep the legacy function name for backward compatibility
+// This allows existing javascript: URLs to continue working
+export const action_invoke = actionInvoke;
+
+/**
+ * Special renderer for Djot content that handles object verb links
+ *
+ * This overrides the standard Djot renderer to support special link formats
+ * for invoking verbs on MOO objects.
+ *
+ * Link format: invoke/verb_name/optional_argument
+ *
+ * @param author - The object ID that authored the content
+ * @param ast - Djot AST to render
+ * @returns HTML string with special links processed
+ *
+ * @todo Implement signed tokens for secure verb invocation
+ */
+export function djotRender(author: string, ast: any): string {
     return djot.renderHTML(ast, {
         overrides: {
-            link: (node, renderer) => {
-                console.log("Link node: ", node);
-                let destination = node.destination;
+            link: (node: any, renderer: any) => {
+                const destination = node.destination;
 
-                // Destination structures:
-                //   invoke an action verb on the author of the message with an optional argument
-                //      invoke/<verb>[/arg]
-                let spec = destination.split("/");
+                // Parse the destination format
+                const spec = destination.split("/");
+
+                // Validate the format
                 if (spec.length > 3) {
-                    console.log("Invalid destination: " + destination);
+                    console.warn(`Invalid destination format: ${destination}`);
                     return "";
                 }
-                // Handle invoke:
-                // TODO: these should all be constructed with a PASETO token that is produced by the server, signed etc.
-                //   and then validated here on the client side.
-                var function_invoke;
-                if (spec[0] === "invoke") {
-                    let verb = spec[1];
-                    // If there's an argument, it's the second element.
-                    let arg = JSON.stringify(spec[2]) || "null";
 
-                    // Turns into a javascript: link that will invoke the verb on the object.
-                    function_invoke = "module.action_invoke(\"" + author + "\", \"" + verb + "\", " + arg + ")";
+                // Process invoke links
+                if (spec[0] === "invoke") {
+                    const verb = spec[1];
+                    // Handle optional argument (third component)
+                    const arg = spec.length > 2 ? JSON.stringify(spec[2]) : "null";
+
+                    // TODO: Replace with a secure token mechanism (PASETO)
+                    // Create a javascript: URL that will call our action_invoke function
+                    const jsHandler = `module.action_invoke("${author}", "${verb}", ${arg})`;
+                    const linkText = renderer.render(node.children[0]);
+
+                    return `<a href='javascript:${jsHandler}'>${linkText}</a>`;
                 }
-                return "<a href='javascript:" + function_invoke + "'>" + renderer.render(node.children[0]) + "</a>";
+
+                // Default link behavior for non-invoke links
+                return "";
             },
-            url: (node, renderer) => {
-                // Autolinks have to open in another tab.
-                // Hover should say something about external link
-                let destination = node.text;
-                return "link: <a href='" + destination + "' target='_blank'>" + destination + "</a>";
+
+            url: (node: any, renderer: any) => {
+                // Format automatic links to open in a new tab
+                const destination = node.text;
+                return `link: <a href='${destination}' target='_blank' rel='noopener noreferrer'>${destination}</a>`;
             },
         },
     });
 }
 
-function narrativeAppend(content_node: HTMLElement) {
-    let output = document.getElementById("output_window");
-    output.appendChild(content_node);
-    let narrative = document.getElementById("narrative");
-    // scroll to bottom
-    narrative.scrollTop = narrative.scrollHeight;
-    document.body.scrollTop = document.body.scrollHeight;
+/**
+ * Appends content to the narrative window and scrolls to the bottom
+ *
+ * @param contentNode - The HTML element to append to the narrative
+ * @throws Error if output_window or narrative elements don't exist
+ */
+function narrativeAppend(contentNode: HTMLElement): void {
+    const output = document.getElementById("output_window");
+    if (!output) {
+        console.error("Cannot find output window element");
+        return;
+    }
+
+    // Add the content to the output window
+    output.appendChild(contentNode);
+
+    // Find the narrative container
+    const narrative = document.getElementById("narrative");
+    if (!narrative) {
+        console.error("Cannot find narrative element");
+        return;
+    }
+
+    // Scroll both the narrative container and body to the bottom
+    // Using setTimeout to ensure this happens after rendering
+    setTimeout(() => {
+        narrative.scrollTop = narrative.scrollHeight;
+        document.body.scrollTop = document.body.scrollHeight;
+    }, 0);
 }
 
-function processNarrativeMessage(context: Context, msg: NarrativeEvent) {
-    // Msg may have content_type attr, and if so, check it, or default to text/plain
-    let content_type = msg.content_type || "text/plain";
+/**
+ * Processes a narrative message from the server
+ *
+ * @param context - Application context
+ * @param msg - The narrative event to process
+ */
+function processNarrativeMessage(context: Context, msg: NarrativeEvent): void {
+    // Determine content type, defaulting to plain text
+    const contentType = msg.content_type || CONTENT_TYPES.PLAIN;
 
-    // If msg is text/plain and prefixed with #$#, it's an MCP-ish thing.
-    // We don't implement full MCP by any means, but we support local editing of this type:
-    // #$# edit name: Wizard:edittest upload: @program #2:edittest this none this
-    if (content_type === "text/plain" && msg.message.startsWith("#$# ")) {
-        let mcp_command = msg.message.substring(4);
-        console.log("MCP command: " + mcp_command);
-        let parts = mcp_command.split(" ");
-        if (parts.length < 2) {
-            console.log("Invalid MCP command: " + mcp_command);
-            return;
+    // Handle MCP-style edit commands
+    // Format: #$# edit name: Object:verb upload: @program #object:verb permissions
+    if (
+        contentType === CONTENT_TYPES.PLAIN && typeof msg.message === "string"
+        && msg.message.startsWith(MCP_PREFIX)
+    ) {
+        if (handleMcpCommand(context, msg.message)) {
+            return; // MCP command was handled
         }
-        if (parts[0] !== "edit") {
-            console.log("Unknown MCP command: " + parts[0]);
-            return;
-        }
-
-        // parts[1] is "name: ",
-        // parts[2] is object:verb.
-        if (parts[1] != "name:") {
-            console.log("Invalid MCP command: " + mcp_command);
-            return;
-        }
-
-        let name = parts[2];
-        let name_parts = name.split(":");
-        if (name_parts.length != 2) {
-            console.log("Invalid object:verb: " + name);
-            return;
-        }
-
-        let object = matchRef(name_parts[0]);
-        let verb = name_parts[1];
-
-        let uploadCommand = mcp_command.split("upload: ")[1];
-
-        context.spool = new Spool(SpoolType.Verb, name, object, verb, uploadCommand);
-
-        return;
     }
 
-    if (context.spool != null && content_type == "text/plain") {
-        if (msg.message == ".") {
-            let spool = context.spool;
-            let name = spool.name;
-            let code = spool.take();
+    // Continue processing with spool or regular content handling
+    processMessageContent(context, msg, contentType);
+}
+
+/**
+ * Handles MCP-style commands in the message stream
+ *
+ * @param context - Application context
+ * @param message - The message containing an MCP command
+ * @returns true if the command was handled, false otherwise
+ */
+function handleMcpCommand(context: Context, message: string): boolean {
+    // Extract the command part after the MCP prefix
+    const mcpCommand = message.substring(MCP_PREFIX.length);
+    console.log(`MCP command: ${mcpCommand}`);
+
+    // Parse the command parts
+    const parts = mcpCommand.split(" ");
+    if (parts.length < 2) {
+        console.warn(`Invalid MCP command (too few parts): ${mcpCommand}`);
+        return false;
+    }
+
+    const commandType = parts[0];
+
+    // Currently we only support the 'edit' command
+    if (commandType !== MCP_COMMAND.EDIT) {
+        console.warn(`Unknown MCP command type: ${commandType}`);
+        return false;
+    }
+
+    // Validate the name parameter
+    if (parts[1] !== "name:") {
+        console.warn(`Expected 'name:' parameter in MCP command: ${mcpCommand}`);
+        return false;
+    }
+
+    // Parse the object:verb format
+    const name = parts[2];
+    const nameParts = name.split(":");
+    if (nameParts.length !== 2) {
+        console.warn(`Invalid object:verb format in MCP command: ${name}`);
+        return false;
+    }
+
+    // Extract object reference and verb
+    const objectName = nameParts[0];
+    const verbName = nameParts[1];
+    const object = matchRef(objectName);
+
+    // Extract the upload command
+    const uploadParts = mcpCommand.split("upload: ");
+    if (uploadParts.length < 2) {
+        console.warn(`Missing 'upload:' parameter in MCP command: ${mcpCommand}`);
+        return false;
+    }
+    const uploadCommand = uploadParts[1];
+
+    // Create a new spool for collecting the code
+    context.spool = new Spool(
+        SpoolType.Verb,
+        name,
+        object,
+        verbName,
+        uploadCommand,
+    );
+
+    return true; // Command was handled successfully
+}
+
+/**
+ * Processes the content portion of a message after MCP handling
+ *
+ * @param context - Application context
+ * @param msg - The narrative event to process
+ * @param contentType - The content type of the message
+ */
+function processMessageContent(context: Context, msg: NarrativeEvent, contentType: string): void {
+    // Handle active spool collection for text content
+    if (context.spool !== null && contentType === CONTENT_TYPES.PLAIN) {
+        // A single period on a line marks the end of spool data collection
+        if (msg.message === ".") {
+            const spool = context.spool;
+            const name = spool.name;
+            const code = spool.take();
+
+            // Launch the verb editor with the collected code
             showVerbEditor(context, name, spool.object, spool.entity, code);
+
+            // Clear the spool after launching editor
+            context.spool = null;
         } else {
-            context.spool.append(msg.message);
+            // Add the line to the spool
+            context.spool.append(msg.message as string);
         }
         return;
     }
 
-    let output = document.getElementById("output_window");
-
+    // Normalize content to string format
     let content = msg.message;
-    // If the content is a list, join together into one string with linefeeds.
+
+    // Handle array content by joining with newlines
     if (Array.isArray(content)) {
         content = content.join("\n");
     }
 
-    // If it's not text at all, we can't currently do anything with it.
+    // We can only process string content
     if (typeof content !== "string") {
-        console.log("Unknown content type: " + content_type);
+        console.warn(`Cannot process non-string content of type: ${contentType}`);
         return;
     }
 
-    // We can handle text/djot by turning into HTML. Otherwise you're gonna get raw text.
-    let content_node = span();
-    if (content_type === "text/djot") {
-        let ast = djot.parse(content);
-        let html = djotRender(msg.author, ast);
-        let elements = generateElements(html);
+    // Create a container for the content
+    const contentNode = span();
 
-        for (let element of elements) {
-            content_node.append(div({ class: "text_djot" }, element));
+    // Render content based on its type
+    if (contentType === CONTENT_TYPES.DJOT) {
+        // Parse and render Djot content
+        const ast = djot.parse(content);
+        const html = djotRender(msg.author, ast);
+        const elements = generateElements(html);
+
+        // Add all elements to the content node with appropriate styling
+        for (let i = 0; i < elements.length; i++) {
+            contentNode.append(div({ class: "text_djot" }, elements[i]));
         }
-    } else if (content_type == "text/html") {
-        let html = htmlSanitize(msg.author, content);
-        let elements = generateElements(html);
-        for (let element of elements) {
-            content_node.append(div({ class: "text_html" }, element));
+    } else if (contentType === CONTENT_TYPES.HTML) {
+        // Sanitize and render HTML content
+        const html = htmlSanitize(msg.author, content);
+        const elements = generateElements(html);
+
+        // Add all elements to the content node with appropriate styling
+        for (let i = 0; i < elements.length; i++) {
+            contentNode.append(div({ class: "text_html" }, elements[i]));
         }
     } else {
-        content_node.append(div({ class: "text_narrative" }, content));
+        // Default case: plain text
+        contentNode.append(div({ class: "text_narrative" }, content));
     }
-    narrativeAppend(content_node);
+
+    // Add the content to the narrative display
+    narrativeAppend(contentNode);
 }
 
 function handleSystemMessage(context: Context, msg: SystemEvent) {
@@ -271,102 +485,197 @@ function handleSystemMessage(context: Context, msg: SystemEvent) {
     narrativeAppend(content_node);
 }
 
-function handlePresent(context: Context, msg: Presentation) {
-    // Turn the attributes into a dictionary.
-    let attrs = {};
-    for (let attr of msg.attributes) {
-        attrs[attr[0]] = attr[1];
+/**
+ * Creates a content element based on content type
+ *
+ * @param contentType - MIME type of the content
+ * @param content - The raw content string
+ * @param sourceId - ID of the content source (for attribution)
+ * @returns HTML element containing the rendered content
+ */
+function createContentElement(
+    contentType: string,
+    content: string,
+    sourceId: string,
+): HTMLElement {
+    if (contentType === CONTENT_TYPES.HTML) {
+        // Sanitize and render HTML content
+        const html = htmlSanitize(sourceId, content);
+        const container = div();
+        const elements = generateElements(html);
+
+        for (let i = 0; i < elements.length; i++) {
+            container.appendChild(elements[i]);
+        }
+        return container;
+    } else if (contentType === CONTENT_TYPES.PLAIN) {
+        // Simple plain text rendering
+        return div(content);
+    } else if (contentType === CONTENT_TYPES.DJOT) {
+        // Parse and render Djot content
+        const ast = djot.parse(content);
+        const html = djotRender(sourceId, ast);
+        const elements = generateElements(html);
+        const container = div();
+
+        for (let i = 0; i < elements.length; i++) {
+            container.appendChild(elements[i]);
+        }
+        return container;
+    } else {
+        // Fallback for unknown content types
+        console.warn(`Unknown content type: ${contentType}, treating as plain text`);
+        return div(`[Content with unsupported type: ${contentType}]\n${content}`);
+    }
+}
+
+/**
+ * Handles presentation messages from the server
+ *
+ * Presentations are UI elements that can appear in various targets (windows, panels)
+ * based on their specified target type.
+ *
+ * @param context - Application context
+ * @param msg - The presentation data
+ */
+function handlePresent(context: Context, msg: Presentation): void {
+    // Convert attributes array to a key-value object
+    const attrs: Record<string, string> = {};
+    for (const [key, value] of msg.attributes) {
+        attrs[key] = value;
     }
 
-    // Transform the content, based on content-type.
-    // We support three types: text/html, text/plain, and text/djot.
-    var content;
-    if (msg.content_type == "text/html") {
-        let html = htmlSanitize(msg.id, msg.content);
-        let tag = div();
-        let elements = generateElements(html);
-        for (let element of elements) {
-            tag.appendChild(element);
-        }
-        content = tag;
-    } else if (msg.content_type == "text/plain") {
-        content = div(msg.content);
-    } else if (msg.content_type = "text/djot") {
-        let ast = djot.parse(msg.content);
-        let html = djotRender(msg.id, ast);
-        let elements = generateElements(html);
-        let tag = div();
-        for (let element of elements) {
-            tag.appendChild(element);
-        }
-        content = tag;
-    } else {
-        console.log("Unknown content type in presentation: " + msg.content_type);
+    // Create the appropriate content element based on content type
+    let content: HTMLElement;
+    try {
+        content = createContentElement(msg.content_type, msg.content, msg.id);
+    } catch (error) {
+        console.error(`Error creating content for presentation ${msg.id}:`, error);
         return;
     }
 
-    let model: State<PresentationModel> = van.state({
+    // Create the presentation model
+    const model: State<PresentationModel> = van.state({
         id: msg.id,
         closed: van.state(false),
         target: msg.target,
         content: content,
         attrs: attrs,
     });
+
+    // Add to the presentation manager
     context.presentations.val = context.presentations.val.withAdded(msg.id, model);
 
-    // types of targets:
-    //      window: build a FloatingWindow
-    //      etc
-    if (msg.target == "window") {
-        let title = attrs["title"] || msg.id;
-        let width = attrs["width"] || 500;
-        let height = attrs["height"] || 300;
+    // Handle specific presentation targets
+    switch (msg.target) {
+        case TARGET_TYPES.WINDOW:
+            createFloatingWindow(model, attrs, content);
+            break;
 
-        let present = div(
-            FloatingWindow(
-                {
-                    parentDom: document.body,
-                    title: title,
-                    closed: model.closed,
-                    id: "window-present-" + msg.id,
-                    width: width,
-                    height: height,
-                    windowClass: "presentation_window",
-                },
-                div(
-                    {
-                        class: "presentation_window_content",
-                    },
-                    content,
-                ),
-            ),
-        );
-        van.add(document.body, present);
-    }
+        case TARGET_TYPES.VERB_EDITOR:
+            launchVerbEditorFromPresentation(context, attrs);
+            break;
 
-    if (msg.target == "right-dock") {
-        // TODO: anything special beyond just adding to the state?
-    }
+        case TARGET_TYPES.RIGHT_DOCK:
+            // Right dock presentations are handled by the RightDock component
+            // They're automatically displayed when added to the presentation manager
+            break;
 
-    if (msg.target == "verb-editor") {
-        // attributes: object (curie), verb
-        let object = attrs["object"];
-        let verb = attrs["verb"];
-
-        let oref = curieORef(object);
-        launchVerbEditor(context, "Edit: " + object + ":" + verb, oref, verb);
+        default:
+            console.warn(`Unknown presentation target: ${msg.target}`);
     }
 }
 
-function handleUnpresent(context: Context, id: string) {
-    let model = context.presentations.get(id);
-    if (!model) {
-        console.log("No such presentation: " + id);
+/**
+ * Creates a floating window for a window-target presentation
+ *
+ * @param model - The presentation model
+ * @param attrs - Presentation attributes
+ * @param content - The content element to display
+ */
+function createFloatingWindow(
+    model: State<PresentationModel>,
+    attrs: Record<string, string>,
+    content: HTMLElement,
+): void {
+    // Get window parameters with defaults
+    const title = attrs["title"] || model.val.id;
+    const width = parseInt(attrs["width"] || `${DEFAULT_PRESENTATION.WIDTH}`, 10);
+    const height = parseInt(attrs["height"] || `${DEFAULT_PRESENTATION.HEIGHT}`, 10);
+
+    // Create the floating window
+    const windowElement = div(
+        FloatingWindow(
+            {
+                parentDom: document.body,
+                title: title,
+                closed: model.val.closed,
+                id: `window-present-${model.val.id}`,
+                width,
+                height,
+                windowClass: "presentation_window",
+            },
+            div(
+                {
+                    class: "presentation_window_content",
+                },
+                content,
+            ),
+        ),
+    );
+
+    // Add to the document body
+    van.add(document.body, windowElement);
+}
+
+/**
+ * Launches a verb editor from a verb-editor presentation
+ *
+ * @param context - Application context
+ * @param attrs - Presentation attributes containing object and verb info
+ */
+function launchVerbEditorFromPresentation(
+    context: Context,
+    attrs: Record<string, string>,
+): void {
+    // Extract object and verb information
+    const objectCurie = attrs["object"];
+    const verbName = attrs["verb"];
+
+    if (!objectCurie || !verbName) {
+        console.error("Missing object or verb in verb-editor presentation", attrs);
         return;
     }
-    console.log("Closing presentation: " + id);
-    context.presentations.val.getPresentation(id).closed.val = true;
-    context.presentations.val = context.presentations.val.withRemoved(id);
+
+    // Convert CURIE to object reference
+    const objectRef = curieORef(objectCurie);
+    const editorTitle = `Edit: ${objectCurie}:${verbName}`;
+
+    // Launch the verb editor
+    launchVerbEditor(context, editorTitle, objectRef, verbName);
+}
+
+/**
+ * Handles unpresent messages that remove a presentation
+ *
+ * @param context - Application context
+ * @param id - ID of the presentation to remove
+ */
+function handleUnpresent(context: Context, id: string): void {
+    // Check if the presentation exists
+    const presentationManager = context.presentations.val;
+    if (!presentationManager.hasPresentation(id)) {
+        console.warn(`Cannot unpresent non-existent presentation: ${id}`);
+        return;
+    }
+
+    // Mark as closed and remove from manager
+    const presentation = presentationManager.getPresentation(id);
+    if (presentation) {
+        presentation.val.closed.val = true;
+        context.presentations.val = presentationManager.withRemoved(id);
+        console.log(`Closed presentation: ${id}`);
+    }
 }
 
 function handleTraceback(context: Context, traceback: Traceback) {
@@ -375,155 +684,275 @@ function handleTraceback(context: Context, traceback: Traceback) {
     narrativeAppend(content_node);
 }
 
-// Process an inbound (JSON) event from the websocket connection to the server.
-export function handleEvent(context: Context, msg) {
-    let event = JSON.parse(msg);
-    if (!event) {
+/**
+ * Processes an event message from the server
+ *
+ * This is the main entry point for handling all types of server messages.
+ * It parses the JSON message and dispatches to the appropriate handler.
+ *
+ * @param context - Application context
+ * @param msg - The raw message string from the WebSocket
+ */
+export function handleEvent(context: Context, msg: string): void {
+    // Parse the JSON message
+    let event: any;
+    try {
+        event = JSON.parse(msg);
+    } catch (error) {
+        console.error("Failed to parse server message:", error, msg);
         return;
     }
-    if (event["message"]) {
-        processNarrativeMessage(context, event);
-    } else if (event["system_message"]) {
-        handleSystemMessage(context, event);
-    } else if (event["present"]) {
-        handlePresent(context, event["present"]);
-    } else if (event["unpresent"]) {
-        handleUnpresent(context, event["unpresent"]);
-    } else if (event["traceback"]) {
-        handleTraceback(context, event["traceback"]);
-    } else {
-        console.log("Unknown event type: " + event);
+
+    if (!event) {
+        console.warn("Received empty event");
+        return;
+    }
+
+    // Dispatch to the appropriate handler based on event type
+    try {
+        // Check for message property that could be empty string or null
+        if ("message" in event) {
+            processNarrativeMessage(context, event as NarrativeEvent);
+        } else if (event["system_message"]) {
+            handleSystemMessage(context, event as SystemEvent);
+        } else if (event["present"]) {
+            handlePresent(context, event["present"] as Presentation);
+        } else if (event["unpresent"]) {
+            handleUnpresent(context, event["unpresent"] as string);
+        } else if (event["traceback"]) {
+            handleTraceback(context, event["traceback"] as Traceback);
+        } else {
+            console.warn("Unknown event type:", event);
+        }
+    } catch (error) {
+        console.error("Error handling event:", error, event);
     }
 }
 
-// Text area where output will go
-const OutputWindow = (player: State<Player>) => {
+/**
+ * Component that displays the narrative output content
+ *
+ * @param player - Reactive player state
+ * @returns A VanJS component
+ */
+const OutputWindow = (player: State<Player>): HTMLElement => {
     return div({
         id: "output_window",
         class: "output_window",
         role: "log",
         "aria-live": "polite",
         "aria-atomic": "false",
+        // Add ARIA attributes for accessibility
+        "aria-label": "Game narrative content",
+        "aria-relevant": "additions",
     });
 };
 
-const InputArea = (context: Context, player: State<Player>) => {
-    let hidden_style = van.derive(() => player.val.connected ? "display: block;" : "display: none;");
-    const i = textarea({
+/**
+ * Handles navigation through command history
+ *
+ * @param context - Application context
+ * @param inputElement - The input textarea element
+ * @param direction - Direction to navigate ('up' or 'down')
+ */
+function navigateHistory(
+    context: Context,
+    inputElement: HTMLTextAreaElement,
+    direction: "up" | "down",
+): void {
+    // Skip history navigation if in multiline mode with cursor in middle
+    const isMultiline = inputElement.value.includes("\n");
+    const cursorAtEdge = inputElement.selectionStart === 0
+        || (inputElement.selectionStart === inputElement.selectionEnd
+            && inputElement.selectionStart === inputElement.value.length);
+
+    if (isMultiline && !cursorAtEdge) {
+        return; // Let default behavior handle cursor movement
+    }
+
+    // Adjust history offset based on direction
+    if (direction === "up" && context.historyOffset < context.history.length) {
+        context.historyOffset += 1;
+    } else if (direction === "down" && context.historyOffset > 0) {
+        context.historyOffset -= 1;
+    } else {
+        return; // Cannot navigate further
+    }
+
+    // Calculate the history index
+    const historyIndex = context.history.length - context.historyOffset;
+
+    // Set input value from history or clear if nothing available
+    if (historyIndex >= 0 && historyIndex < context.history.length) {
+        const historyValue = context.history[historyIndex];
+        inputElement.value = historyValue ? historyValue.trimEnd() : "";
+    } else {
+        inputElement.value = "";
+    }
+}
+
+/**
+ * Sends input to the server and updates UI
+ *
+ * @param context - Application context
+ * @param inputElement - The input textarea element
+ */
+function sendInput(context: Context, inputElement: HTMLTextAreaElement): void {
+    // Store the input value before clearing
+    const input = inputElement.value.trim();
+    if (!input) return; // Don't send empty input
+
+    // Find the output window
+    const output = document.getElementById("output_window");
+    if (!output) {
+        console.error("Cannot find output window element");
+        return;
+    }
+
+    // For actual sent content we split linefeeds to avoid sending multiline content
+    const lines = inputElement.value.split("\n");
+
+    for (const line of lines) {
+        if (line.trim()) { // Skip empty lines
+            // Echo input to the narrative window
+            const echo = div(
+                { class: "input_echo" },
+                `> ${line}`,
+            );
+            output.appendChild(echo);
+
+            // Send the command to the server
+            if (context.ws && context.ws.readyState === WebSocket.OPEN) {
+                context.ws.send(line);
+            } else {
+                console.error("WebSocket not connected");
+                // Display an error in the narrative
+                output.appendChild(div(
+                    { class: "system_message_narrative" },
+                    "Error: Not connected to server",
+                ));
+            }
+        }
+    }
+
+    // Clear the input area
+    inputElement.value = "";
+
+    // Add to command history and reset offset
+    if (input) {
+        context.history.push(input);
+        context.historyOffset = 0;
+    }
+
+    // Scroll the narrative to the bottom
+    const narrative = document.getElementById("narrative");
+    if (narrative) {
+        narrative.scrollTop = narrative.scrollHeight;
+    }
+}
+
+/**
+ * Component that provides the command input area
+ *
+ * @param context - Application context
+ * @param player - Reactive player state
+ * @returns A VanJS component
+ */
+const InputArea = (context: Context, player: State<Player>): HTMLElement => {
+    // Hide the input area when disconnected
+    const hiddenStyle = van.derive(() => player.val.connected ? "display: block;" : "display: none;");
+
+    // Create the textarea element
+    const inputElement = textarea({
         id: "input_area",
-        style: hidden_style,
+        style: hiddenStyle,
         disabled: van.derive(() => !player.val.connected),
         class: "input_area",
+        placeholder: "Type a command...",
+        autocomplete: "off",
+        spellcheck: false,
+        "aria-label": "Command input",
     });
-    i.addEventListener("paste", e => {
-        // Directly process the pasted content as-is and put it in the input box as-is
+
+    // Handle paste events
+    inputElement.addEventListener("paste", (e) => {
+        // Directly process the pasted content at cursor position
         e.stopPropagation();
         e.preventDefault();
+
         const pastedData = e.clipboardData?.getData("text") || "";
-        if (pastedData) {
-            // Insert the pasted data at the current cursor position.
-            i.value = i.value.substring(0, i.selectionStart) + pastedData + i.value.substring(i.selectionEnd);
+        if (!pastedData) return;
 
-            // Jump the selection to the end of the pasted part
-            i.selectionStart = i.selectionEnd = i.selectionStart + pastedData.length;
-        }
+        // Insert the pasted data at the current cursor position
+        const selStart = inputElement.selectionStart || 0;
+        const selEnd = inputElement.selectionEnd || 0;
+
+        inputElement.value = inputElement.value.substring(0, selStart)
+            + pastedData
+            + inputElement.value.substring(selEnd);
+
+        // Place cursor after the pasted content
+        const newPosition = selStart + pastedData.length;
+        inputElement.selectionStart = newPosition;
+        inputElement.selectionEnd = newPosition;
     });
-    i.addEventListener("keydown", e => {
-        // Arrow up means go back in history and fill the input area with that, if there is any.
+
+    // Handle keyboard events
+    inputElement.addEventListener("keydown", (e) => {
+        // Handle history navigation with arrow keys
         if (e.key === "ArrowUp") {
-            // If the field is multiple lines and the cursor is not at the beginning of the line or end of line,
-            // then just do regular arrow-key stuff (don't go back in history).
-            if (
-                i.value.includes("\n")
-                && (i.selectionStart != 0 && (i.selectionStart != i.selectionEnd || i.selectionStart != i.value.length))
-            ) {
-                return;
-            }
-
             e.preventDefault();
-
-            if (context.historyOffset < context.history.length) {
-                context.historyOffset += 1;
-                if (context.history.length - context.historyOffset >= 0) {
-                    let value = context.history[context.history.length - context.historyOffset];
-                    if (value) {
-                        i.value = value.trimEnd();
-                    } else {
-                        i.value = "";
-                    }
-                }
-            }
+            navigateHistory(context, inputElement, "up");
         } else if (e.key === "ArrowDown") {
-            if (
-                i.value.includes("\n")
-                && (i.selectionStart != 0 && (i.selectionStart != i.selectionEnd || i.selectionStart != i.value.length))
-            ) {
-                return;
-            }
-
+            e.preventDefault();
+            navigateHistory(context, inputElement, "down");
+        } // Handle Shift+Enter for newlines
+        else if (e.key === "Enter" && e.shiftKey) {
             e.preventDefault();
 
-            if (context.historyOffset > 0) {
-                context.historyOffset -= 1;
-                if (context.history.length - context.historyOffset >= 0) {
-                    let value = context.history[context.history.length - context.historyOffset];
-                    if (value) {
-                        i.value = value.trimEnd();
-                    } else {
-                        i.value = "";
-                    }
-                }
-            }
-        } else if (e.keyCode == 13 && e.shiftKey) {
-            // Shift-Enter means force a newline, like in other chat systems.
+            // Insert a newline at the cursor position
+            const cursor = inputElement.selectionStart || 0;
+            inputElement.value = inputElement.value.substring(0, cursor)
+                + "\n"
+                + inputElement.value.substring(inputElement.selectionEnd || cursor);
+
+            // Move cursor after the inserted newline
+            inputElement.selectionStart = cursor + 1;
+            inputElement.selectionEnd = cursor + 1;
+        } // Handle Enter to send input
+        else if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-
-            // Put a newline in the input area at the current cursor position.
-            let cursor = i.selectionStart;
-            let text = i.value;
-            i.value = text.substring(0, cursor) + "\n" + text.substring(cursor);
-            i.selectionStart = cursor + 1;
-            i.selectionEnd = cursor + 1;
-        } else if (e.key === "Enter") {
-            e.preventDefault();
-
-            // Put a copy into the narrative window, send it over websocket, and clear
-            let input = i.value;
-            let output = document.getElementById("output_window");
-
-            // For actual sent-content we split linefeeds out to avoid sending multiline content, at
-            // least for now.
-            const lines = i.value.split("\n");
-            for (let line of lines) {
-                let echo = div(
-                    {
-                        class: "input_echo",
-                    },
-                    "> " + line,
-                );
-                output.appendChild(echo);
-                context.ws.send(line);
-            }
-            i.value = "";
-
-            // Append (unmolested) to history
-            context.history.push(input);
-            context.historyOffset = 0;
+            sendInput(context, inputElement);
         }
     });
-    return div(i);
+
+    return div(inputElement);
 };
 
-export const Narrative = (context: Context, player: State<Player>) => {
-    let hidden_style = van.derive(() => player.val.connected ? "display: block;" : "display: none;");
+/**
+ * Main narrative component that displays the game interface
+ *
+ * This component combines the output window and input area to create
+ * the primary interaction interface for the MOO client.
+ *
+ * @param context - Application context
+ * @param player - Reactive player state
+ * @returns A VanJS component
+ */
+export const Narrative = (context: Context, player: State<Player>): HTMLElement => {
+    // Hide the narrative when not connected
+    const visibilityStyle = van.derive(() => player.val.connected ? "display: block;" : "display: none;");
 
     return div(
         {
             class: "narrative",
             id: "narrative",
-            style: hidden_style,
+            style: visibilityStyle,
+            "aria-label": "Game interface",
         },
+        // Output display area
         OutputWindow(player),
+        // Command input area
         InputArea(context, player),
     );
 };

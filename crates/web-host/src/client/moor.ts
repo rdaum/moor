@@ -12,67 +12,58 @@
 //
 
 import van, { State } from "vanjs-core";
+import { MessageBoard } from "./components/ui-components";
 import { Login } from "./login";
-import { Context, PresentationModel, Presentations } from "./model";
+import { Context, Notice, PresentationManager, PresentationModel } from "./model";
 import { htmlPurifySetup, Narrative } from "./narrative";
 import { retrieveWelcome } from "./rpc";
 
 const { button, div, span, input, select, option, br, pre, form, a, p } = van.tags;
 
-export class Notice {
-    message: State<string | null>;
-    visible: State<boolean>;
-
-    constructor() {
-        this.message = van.state("");
-        this.visible = van.state(false);
-    }
-
-    show(message, duration) {
-        this.message.val = message;
-        this.visible.val = true;
-        setTimeout(() => {
-            this.visible.val = false;
-        }, duration * 1000);
-    }
-}
-
-// Displays notices from the system, such as "Connection lost" or "Connection established".
-// Fade out after a few seconds.
-const MessageBoard = (notice: State<Notice>) => {
-    let hidden_style = van.derive(() => notice.val.visible.val ? "display: block;" : "display: none;");
-    return div(
-        {
-            class: "message_board",
-            style: hidden_style,
-        },
-        notice.val.message,
-    );
-};
-
-const RightDock = (presentations: State<Presentations>) => {
-    // Whether this is hidden or not depends on the presence of right-dock presentations in the context
-    let hidden_style = van.derive(() => {
-        let length = presentations.val.rightDockPresentations().length;
+/**
+ * RightDock Component
+ * 
+ * Renders a collection of panels in the right dock area of the UI.
+ * Each panel represents a presentation from the server that has been
+ * targeted to display in the right dock area.
+ * 
+ * Features:
+ * - Dynamically shows/hides based on available presentations
+ * - Reactively updates when presentations change
+ * - Provides close buttons for each panel
+ * - Uses presentation titles from attributes when available
+ * 
+ * @param presentations - Reactive state containing the presentation manager
+ * @returns DOM element containing the right dock and its panels
+ */
+const RightDock = (presentations: State<PresentationManager>) => {
+    // Show dock only when presentations exist
+    const hidden_style = van.derive(() => {
+        const length = presentations.val.rightDockPresentations().length;
         return length > 0 ? "display: block;" : "display: none;";
     });
 
-    let panels = div({
+    const panels = div({
         class: "right_dock",
         style: hidden_style,
     });
+
+    // Reactively update panels when presentations change
     van.derive(() => {
-        // clear existing children
+        // Clear existing content
         panels.innerHTML = "";
-        for (const presentation_id of presentations.val.rightDockPresentations()) {
-            let presentation: State<PresentationModel> = presentations.val.presentations[presentation_id];
-            if (presentation.val.closed.val) {
+
+        // Create panels for each active presentation
+        for (const presentationId of presentations.val.rightDockPresentations()) {
+            const presentation = presentations.val.getPresentation(presentationId);
+            if (!presentation || presentation.val.closed.val) {
                 continue;
             }
-            console.log("Presentation: ", presentation.val, " @ ", presentation_id);
+
+            // Create panel with title bar and content
             panels.appendChild(div(
                 {
-                    id: presentation_id,
+                    id: presentationId,
                     class: "right_dock_panel",
                 },
                 span(
@@ -83,51 +74,87 @@ const RightDock = (presentations: State<Presentations>) => {
                         {
                             class: "right_dock_panel_close",
                             onclick: () => {
-                                console.log("Closing presentation: ", presentation_id);
+                                console.log("Closing presentation:", presentationId);
                                 presentation.val.closed.val = true;
                             },
                         },
                         "X",
                     ),
-                    van.derive(() => presentation.val.attrs["title"]),
+                    van.derive(() => presentation.val.attrs["title"] || presentationId),
                 ),
                 presentation.val.content,
             ));
         }
     });
+
     return panels;
 };
 
+/**
+ * App Component
+ * 
+ * Main application component that orchestrates the entire UI layout.
+ * This is the top-level component that coordinates all other components
+ * and manages application-wide state.
+ * 
+ * Layout structure:
+ * - System notification area (MessageBoard)
+ * - Login interface (shown when disconnected)
+ * - Main content grid with:
+ *   - Narrative display (game output and input area)
+ *   - Right dock panel (for auxiliary UI elements)
+ * 
+ * @param context - Global application context with shared state
+ * @returns The complete application UI structure
+ */
 const App = (context: Context) => {
+    // Create reactive state for player information
     const player = van.state(context.player);
-    const welcome_message = van.state("");
 
+    // State for welcome message (loaded asynchronously)
+    const welcomeMessage = van.state("");
+
+    // Load welcome message on startup
     van.derive(() => {
-        retrieveWelcome().then((msg) => {
-            welcome_message.val = msg;
-        });
+        retrieveWelcome()
+            .then(msg => { welcomeMessage.val = msg; })
+            .catch(error => {
+                console.error("Failed to load welcome message:", error);
+                welcomeMessage.val = "Welcome to Moor";
+            });
     });
 
-    const dom = div({
-        class: "main",
-    });
-
+    // Main application structure
     return div(
-        dom,
+        // Main container (primarily for styling)
+        div({ class: "main" }),
+
+        // System message notifications area (toast-style)
         MessageBoard(van.state(context.systemMessage)),
-        Login(context, player, welcome_message),
+
+        // Login component (shows/hides based on connection state)
+        Login(context, player, welcomeMessage),
+
+        // Main content grid (narrative and panels)
         div(
-            {
-                class: "columns_grid",
-            },
+            { class: "columns_grid" },
+            // Main narrative display with command input
             Narrative(context, player),
+            // Right dock for auxiliary UI panels
             RightDock(context.presentations),
         ),
     );
 };
 
+// ============================================================================
+// Application Initialization
+// ============================================================================
+
+// Configure HTML sanitization for security
 htmlPurifySetup();
 
+// Create the global application context
 export const context = new Context();
 
+// Render the application to the document body
 van.add(document.body, App(context));
