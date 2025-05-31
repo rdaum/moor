@@ -1,0 +1,89 @@
+namespace moor_rpc;
+
+table Var {
+  data:[ubyte] (flexbuffer);  // flexbuffer encoded data
+}
+
+table Obj {
+  id:int64;
+}
+
+table Symbol {
+  name:string;
+}
+
+// ObjectRef representation
+union ObjectRefType  {
+  Id,
+  SysObj,
+  Match
+}
+
+table Id {
+  value:Obj;
+}
+
+table SysObj {
+  symbols:[Symbol];
+}
+
+table Match {
+  pattern:string;
+}
+
+table ObjectRef {
+  type:ObjectRefType;
+}
+
+struct UUID {
+  high:uint64;
+  low:uint64;
+}
+
+table AuthToken {
+  token:string;
+}
+
+table ClientToken {
+  token:string;
+}
+
+table HostToken {
+  token:string;
+}
+
+table WorkerToken {
+  token:string;
+}
+
+struct Duration {
+  seconds:int64;
+  nanoseconds:uint32;
+}
+
+struct SystemTime {
+  seconds:int64;
+  nanoseconds:uint32;
+}
+
+table SocketAddr {
+  address:string;
+  port:uint16;
+}
+
+// Common enums
+enum ConnectType:ubyte {
+  Connected = 0,
+  Reconnected = 1,
+  Created = 2
+}
+
+enum EntityType:ubyte {
+  Property = 0,
+  Verb = 1
+}
+
+enum HostType:ubyte {
+  TCP = 0,
+  WebSocket = 1
+}

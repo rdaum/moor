@@ -1,0 +1,101 @@
+include "basic_types.fbs";
+
+// host.fbs
+namespace moor_rpc;
+
+
+// Host types
+union HostToDaemonMessageType {
+  RegisterHost,
+  DetachHost,
+  RequestPerformanceCounters,
+  HostPong
+}
+
+table RegisterHost {
+  time:SystemTime;
+  host_type:HostType;
+  listeners:[HostListener];
+}
+
+table DetachHost {}
+
+table RequestPerformanceCounters {}
+
+table HostPong {
+  time:SystemTime;
+  host_type:HostType;
+  listeners:[HostListener];
+}
+
+table HostListener {
+  obj:Obj;
+  socket_addr:SocketAddr;
+}
+
+table HostToDaemonMessage {
+  token:HostToken;
+  message_type:HostToDaemonMessageType;
+}
+
+// Performance counters
+table CounterEntry {
+  name:Symbol;
+  count:int64;
+  total_ns:int64;
+}
+
+table CategoryCounters {
+  category:Symbol;
+  counters:[CounterEntry];
+}
+
+// Host broadcast events
+union HostBroadcastEventType {
+  ListenEvent,
+  UnlistenEvent,
+  HostPingPongEvent
+}
+
+table ListenEvent {
+  handler_object:Obj;
+  host_type:HostType;
+  port:uint16;
+  print_messages:bool;
+}
+
+table UnlistenEvent {
+  host_type:HostType;
+  port:uint16;
+}
+
+table HostBroadcastEvent {
+  event_type:HostBroadcastEventType;
+}
+
+// Daemon to host replies
+union DaemonToHostReplyType {
+  Ack,
+  Reject,
+  PerfCounters
+}
+
+table Ack {}
+
+table Reject {
+  reason:string;
+}
+
+table PerfCounters {
+  time:SystemTime;
+  counters:[CategoryCounters];
+}
+
+table DaemonToHostReply {
+  reply_type:DaemonToHostReplyType;
+}
+
+
+table HostPingPongEvent {
+  time:SystemTime;
+}

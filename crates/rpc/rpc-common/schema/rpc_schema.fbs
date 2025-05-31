@@ -1,0 +1,56 @@
+
+include "basic_types.fbs";
+include "client.fbs";
+include "host.fbs";
+include "worker.fbs";
+
+namespace moor_rpc;
+
+table RpcMessageError {
+  code:int32;
+  message:string;
+}
+
+union MessageType {
+  HostToDaemonWrapper,
+  HostClientToDaemonWrapper
+}
+
+table HostToDaemonWrapper {
+  token:HostToken;
+  message:HostToDaemonMessage;
+}
+
+table HostClientToDaemonWrapper {
+  data:[ubyte];
+}
+
+table Message {
+  type:MessageType;
+}
+
+// Reply from RPC layer
+union ReplyResultType {
+  HostSuccess,
+  ClientSuccess,
+  Failure
+}
+
+table HostSuccess {
+  reply:DaemonToHostReply;
+}
+
+table ClientSuccess {
+  reply:DaemonToClientReply;
+}
+
+table Failure {
+  error:RpcMessageError;
+}
+
+table ReplyResult {
+  result:ReplyResultType;
+}
+
+// Root type declaration
+root_type Message;

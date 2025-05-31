@@ -1660,6 +1660,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "flatbuffers"
+version = "23.5.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dac53e22462d78c16d64a1cd22371b54cc3fe94aa15e7886a2fa6e5d1ab8640"
+dependencies = [
+ "bitflags 1.3.2",
+ "rustc_version",
+]
+
+[[package]]
+name = "flatbuffers-build"
+version = "0.1.2+flatc-23.5.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaabcd69ac661bb5f355634d93f6643620e84da30091c5a41548d691fc0c0c45"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "flexbuffers"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5051,6 +5070,8 @@ dependencies = [
  "clap",
  "clap_derive",
  "ed25519-dalek",
+ "flatbuffers",
+ "flatbuffers-build",
  "moor-common",
  "moor-var",
  "rusty_paseto",

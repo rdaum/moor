@@ -1,0 +1,127 @@
+include "basic_types.fbs";
+
+namespace moor_rpc;
+
+union WorkerErrorType {
+  PermissionDenied,
+  InvalidRequest,
+  InternalError,
+  RequestTimedOut,
+  RequestError,
+  WorkerDetached,
+  NoWorkerAvailable
+}
+
+table PermissionDenied {
+  message:string;
+}
+
+table InvalidRequest {
+  message:string;
+}
+
+table InternalError {
+  message:string;
+}
+
+table RequestTimedOut {
+  message:string;
+}
+
+table RequestError {
+  message:string;
+}
+
+table WorkerDetached {
+  message:string;
+}
+
+table NoWorkerAvailable {
+  worker_type:Symbol;
+}
+
+table WorkerError {
+  type:WorkerErrorType;
+}
+union WorkerToDaemonMessageType {
+  AttachWorker,
+  WorkerPong,
+  DetachWorker,
+  RequestResult,
+  RequestErrorMessage
+}
+
+table AttachWorker {
+  token:WorkerToken;
+  worker_type:Symbol;
+}
+
+table WorkerPong {
+  token:WorkerToken;
+  worker_type:Symbol;
+}
+
+table DetachWorker {
+  token:WorkerToken;
+}
+
+table RequestResult {
+  token:WorkerToken;
+  request_id:UUID;
+  results:[Var];
+}
+
+table RequestErrorMessage {
+  token:WorkerToken;
+  request_id:UUID;
+  error:WorkerError;
+}
+
+table WorkerToDaemonMessage {
+  message_type:WorkerToDaemonMessageType;
+}
+
+union DaemonToWorkerMessageType {
+  PingWorkers,
+  WorkerRequest,
+  PleaseDie
+}
+
+table PingWorkers {}
+
+table WorkerRequest {
+  worker_id:UUID;
+  token:WorkerToken;
+  id:UUID;
+  perms:Obj;
+  request:[Var];
+  timeout:Duration;
+}
+
+table PleaseDie {
+  token:WorkerToken;
+  worker_id:UUID;
+}
+
+table DaemonToWorkerMessage {
+  message_type:DaemonToWorkerMessageType;
+}
+
+union DaemonToWorkerReplyType {
+  WorkerAck,
+  Rejected,
+  Attached
+}
+
+table WorkerAck {}
+
+table Rejected {}
+
+table Attached {
+  token:WorkerToken;
+  worker_id:UUID;
+}
+
+table DaemonToWorkerReply {
+  reply_type:DaemonToWorkerReplyType;
+}

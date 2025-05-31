@@ -32,6 +32,13 @@ mod host;
 mod tokens;
 mod worker;
 
+#[allow(warnings)]
+#[rustfmt::skip]
+pub mod gen_flatbuffers {
+    // for a cleaner code, you could do this in a separate module
+    include!(concat!(env!("OUT_DIR"), "/flatbuffers/mod.rs"));
+}
+
 /// A ZMQ topic for broadcasting to all clients of all hosts.
 pub const CLIENT_BROADCAST_TOPIC: &[u8; 9] = b"broadcast";
 

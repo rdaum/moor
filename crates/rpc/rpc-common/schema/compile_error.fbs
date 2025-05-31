@@ -1,0 +1,96 @@
+include "basic_types.fbs";
+
+namespace moor_rpc;
+
+table CompileContext {
+  line_col:[uint32]; // Pair of [line, column]
+}
+
+union CompileErrorType {
+  StringLexError,
+  ParseError,
+  UnknownBuiltinFunction,
+  UnknownTypeConstant,
+  UnknownLoopLabel,
+  DuplicateVariable,
+  AssignToConst,
+  DisabledFeature,
+  BadSlotName,
+  InvalidAssignment
+}
+
+table StringLexError {
+  context:CompileContext;
+  message:string;
+}
+
+table ParseError {
+  error_position:CompileContext;
+  context:string;
+  end_line_col:[uint32];
+  message:string;
+}
+
+table UnknownBuiltinFunction {
+  context:CompileContext;
+  function_name:string;
+}
+
+table UnknownTypeConstant {
+  context:CompileContext;
+  type_name:string;
+}
+
+table UnknownLoopLabel {
+  context:CompileContext;
+  label:string;
+}
+
+table DuplicateVariable {
+  context:CompileContext;
+  symbol:Symbol;
+}
+
+table AssignToConst {
+  context:CompileContext;
+  symbol:Symbol;
+}
+
+table DisabledFeature {
+  context:CompileContext;
+  feature:string;
+}
+
+table CompileLocation {
+  line:int32;
+  column:int32;
+  length:int32;
+}
+
+table BadSlotName {
+  context:CompileContext;
+  slot_name:string;
+}
+
+table InvalidAssignment {
+  context:CompileContext;
+}
+
+table CompileError {
+  type:CompileErrorType;
+}
+
+union VerbProgramErrorType {
+  NoVerbToProgram,
+  CompilationError,
+  DatabaseError
+}
+
+table NoVerbToProgram {}
+
+table CompilationError {
+  error:CompileError;
+}
+
+table DatabaseError {}
+

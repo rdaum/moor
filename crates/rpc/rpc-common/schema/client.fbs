@@ -1,0 +1,312 @@
+include "basic_types.fbs";
+include "scheduler_error.fbs";
+
+namespace moor_rpc;
+
+// Client types
+table VerbInfo {
+  location:Obj;
+  owner:Obj;
+  names:[Symbol];
+  r:bool;
+  w:bool;
+  x:bool;
+  d:bool;
+  arg_spec:[Symbol];
+}
+
+table PropInfo {
+  definer:Obj;
+  location:Obj;
+  name:Symbol;
+  owner:Obj;
+  r:bool;
+  w:bool;
+  chown:bool;
+}
+
+table VerbProgramResponse {
+  success:bool;
+  obj:Obj;
+  message:string;
+  error:VerbProgramError;
+}
+
+table NarrativeEvent {
+  message:string;  // Placeholder
+}
+
+// Client messages
+union HostClientToDaemonMessageType {
+  ConnectionEstablish,
+  RequestSysProp,
+  LoginCommand,
+  Attach,
+  Command,
+  VerbsRequest,
+  InvokeVerb,
+  PropertiesRequest,
+  Retrieve,
+  Program,
+  RequestedInput,
+  OutOfBand,
+  Eval,
+  Resolve,
+  ClientPong,
+  Detach
+}
+
+table ConnectionEstablish {
+  connection_string:string;
+}
+
+table RequestSysProp {
+  client_token:ClientToken;
+  object:ObjectRef;
+  symbol:Symbol;
+}
+
+table LoginCommand {
+  client_token:ClientToken;
+  obj:Obj;
+  words:[string];
+  attach:bool;
+}
+
+table Attach {
+  auth_token:AuthToken;
+  connect_type:ConnectType;
+  obj:Obj;
+  connection_string:string;
+}
+
+table Command {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  obj:Obj;
+  command:string;
+}
+
+table VerbsRequest {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  object:ObjectRef;
+}
+
+table InvokeVerb {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  object:ObjectRef;
+  symbol:Symbol;
+  args:[Var];
+}
+
+table PropertiesRequest {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  object:ObjectRef;
+}
+
+table Retrieve {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  object:ObjectRef;
+  entity_type:EntityType;
+  symbol:Symbol;
+}
+
+table Program {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  object:ObjectRef;
+  symbol:Symbol;
+  code:[string];
+}
+
+table RequestedInput {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  request_id:UUID;
+  input:string;
+}
+
+table OutOfBand {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  obj:Obj;
+  command:string;
+}
+
+table Eval {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  expression:string;
+}
+
+table Resolve {
+  client_token:ClientToken;
+  auth_token:AuthToken;
+  object_ref:ObjectRef;
+}
+
+table ClientPong {
+  client_token:ClientToken;
+  time:SystemTime;
+  obj:Obj;
+  host_type:HostType;
+  socket_addr:SocketAddr;
+}
+
+table Detach {
+  client_token:ClientToken;
+}
+
+table HostClientToDaemonMessage {
+  message_type:HostClientToDaemonMessageType;
+}
+
+// Daemon to client replies
+union DaemonToClientReplyType {
+  NewConnection,
+  LoginResult,
+  AttachResult,
+  SysPropValue,
+  TaskSubmitted,
+  InputThanks,
+  EvalResult,
+  ThanksPong,
+  VerbsResult,
+  PropertiesResult,
+  VerbProgramResponse,
+  PropertyValueResult,
+  VerbValueResult,
+  ResolveResult,
+  Disconnected
+}
+
+table NewConnection {
+  client_token:ClientToken;
+  connection_obj:Obj;
+}
+
+table LoginResultData {
+  auth_token:AuthToken;
+  connect_type:ConnectType;
+  player:Obj;
+}
+
+table LoginResult {
+  result:LoginResultData;
+}
+
+table AttachResultData {
+  client_token:ClientToken;
+  player:Obj;
+}
+
+table AttachResult {
+  result:AttachResultData;
+}
+
+table SysPropValue {
+  value:Var;
+}
+
+table TaskSubmitted {
+  task_id:uint64;
+}
+
+table InputThanks {}
+
+table EvalResult {
+  result:Var;
+}
+
+table ThanksPong {
+  time:SystemTime;
+}
+
+table VerbsResult {
+  verbs:[VerbInfo];
+}
+
+table PropertiesResult {
+  properties:[PropInfo];
+}
+
+table ProgramResponseMessage {
+  response:VerbProgramResponse;
+}
+
+table PropertyValueResult {
+  info:PropInfo;
+  value:Var;
+}
+
+table VerbValueResult {
+  info:VerbInfo;
+  code:[string];
+}
+
+table ResolveResult {
+  result:Var;
+}
+
+table Disconnected {}
+
+table DaemonToClientReply {
+  reply_type:DaemonToClientReplyType;
+}
+
+// Client events
+union ClientEventType {
+  NarrativeMessage,
+  RequestInput,
+  SystemMessage,
+  Disconnect,
+  TaskErrorMessage,
+  TaskSuccess
+}
+
+table NarrativeMessage {
+  obj:Obj;
+  event:NarrativeEvent;
+}
+
+table RequestInput {
+  request_id:UUID;
+}
+
+table SystemMessage {
+  obj:Obj;
+  message:string;
+}
+
+table Disconnect {}
+
+table TaskErrorMessage {
+  task_id:uint64;
+  error:SchedulerError;
+}
+
+table TaskSuccess {
+  task_id:uint64;
+  result:Var;
+}
+
+table ClientEvent {
+  event_type:ClientEventType;
+}
+
+// Broadcast events
+union ClientsBroadcastEventType {
+  PingPongEvent
+}
+
+table PingPongEvent {
+  time:SystemTime;
+}
+
+table ClientsBroadcastEvent {
+  event_type:ClientsBroadcastEventType;
+}

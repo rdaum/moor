@@ -11,6 +11,9 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Common entities used for 0MQ based RPC communication with the daemon."
 
+[build-dependencies]
+flatbuffers-build = "0.1.2+flatc-23.5.26"
+
 [dependencies]
 # Own
 moor-common = { path = "../../common" }
@@ -20,6 +23,7 @@ bincode.workspace = true
 clap.workspace = true
 clap_derive.workspace = true
 serde.workspace = true
+flatbuffers.workspace = true
 thiserror.workspace = true
 
 # Auth/Auth

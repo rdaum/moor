@@ -1,0 +1,97 @@
+include "basic_types.fbs";
+include "compile_error.fbs";
+include "error.fbs";
+
+namespace moor_rpc;
+
+union AbortLimitReasonType {
+  Ticks,
+  Time
+}
+
+table Ticks {
+  value:uint64;
+}
+
+table Time {
+  duration:Duration;
+}
+
+table AbortLimitReason {
+  type:AbortLimitReasonType;
+}
+
+// Placeholders for referenced errors
+table CommandError {
+  message:string;
+}
+
+table Exception {
+  message:string;
+}
+
+union SchedulerErrorType {
+  SchedulerNotResponding,
+  TaskNotFound,
+  InputRequestNotFound,
+  CouldNotStartTask,
+  CompilationError,
+  TaskAbortedLimit,
+  CommandExecutionError,
+  TaskAbortedError,
+  TaskAbortedException,
+  TaskAbortedCancelled,
+  VerbProgramFailed,
+  PropertyRetrievalFailed,
+  VerbRetrievalFailed,
+  ObjectResolutionFailed
+}
+
+table SchedulerNotResponding {}
+
+table TaskNotFound {
+  task_id:uint64;
+}
+
+table InputRequestNotFound {
+  request_id:uint64;
+  request_id_high:uint64;
+}
+
+table CouldNotStartTask {}
+
+table CommandExecutionError {
+  error:CommandError;
+}
+
+table TaskAbortedLimit {
+  reason:AbortLimitReason;
+}
+
+table TaskAbortedError {}
+
+table TaskAbortedException {
+  exception:Exception;
+}
+
+table TaskAbortedCancelled {}
+
+table VerbProgramFailed {
+  error:VerbProgramError;
+}
+
+table PropertyRetrievalFailed {
+  error:Error;
+}
+
+table VerbRetrievalFailed {
+  error:Error;
+}
+
+table ObjectResolutionFailed {
+  error:Error;
+}
+
+table SchedulerError {
+  type:SchedulerErrorType;
+}
