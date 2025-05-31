@@ -406,7 +406,6 @@ async fn main() -> Result<(), eyre::Error> {
             }
         };
     let host_token = make_host_token(&private_key, HostType::TCP);
-
     let zmq_ctx = tmq::Context::new();
 
     let (mut listeners_server, listeners_channel, listeners) = Listeners::new(

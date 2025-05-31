@@ -17,6 +17,7 @@ members = [
     "crates/textdump",
     "crates/var",
     "crates/web-host",
+    "crates/moor-leptos",
     "tools/moorc",
 ]
 default-members = [
