@@ -231,13 +231,13 @@ impl Listener {
             let events_sub = subscribe(&zmq_ctx)
                 .connect(events_address.as_str())
                 .expect("Unable to connect narrative subscriber ");
-            let mut events_sub = events_sub
+            let events_sub = events_sub
                 .subscribe(&client_id.as_bytes()[..])
                 .expect("Unable to subscribe to narrative messages for client connection");
             let broadcast_sub = subscribe(&zmq_ctx)
                 .connect(events_address.as_str())
                 .expect("Unable to connect broadcast subscriber ");
-            let mut broadcast_sub = broadcast_sub
+            let broadcast_sub = broadcast_sub
                 .subscribe(CLIENT_BROADCAST_TOPIC)
                 .expect("Unable to subscribe to broadcast messages for client connection");
 
@@ -259,11 +259,14 @@ impl Listener {
                 write,
                 read,
                 kill_switch: connection_kill_switch,
+                broadcast_sub,
+                narrative_sub: events_sub,
+                auth_token: None,
+                rpc_client,
+                pending_task: None,
             };
 
-            tcp_connection
-                .run(&mut events_sub, &mut broadcast_sub, &mut rpc_client)
-                .await?;
+            tcp_connection.run().await?;
             Ok(())
         });
         Ok(())
