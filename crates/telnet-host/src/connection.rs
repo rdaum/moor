@@ -19,9 +19,8 @@ use std::time::{Duration, Instant, SystemTime};
 
 use eyre::Context;
 use eyre::bail;
-use futures_util::SinkExt;
-use futures_util::StreamExt;
 use futures_util::stream::{SplitSink, SplitStream};
+use futures_util::{SinkExt, StreamExt};
 use moor_common::model::{CompileError, ObjectRef};
 use moor_common::tasks::{AbortLimitReason, CommandError, Event, SchedulerError, VerbProgramError};
 use moor_common::util::parse_into_words;
@@ -43,6 +42,9 @@ use uuid::Uuid;
 
 /// Out of band messages are prefixed with this string, e.g. for MCP clients.
 const OUT_OF_BAND_PREFIX: &str = "#$#";
+
+/// Default flush command
+pub(crate) const DEFAULT_FLUSH_COMMAND: &str = ".flush";
 
 // TODO: switch to djot
 const CONTENT_TYPE_MARKDOWN: &str = "text/markdown";
@@ -66,6 +68,13 @@ pub(crate) struct TelnetConnection {
     pub(crate) auth_token: Option<AuthToken>,
     pub(crate) rpc_client: RpcSendClient,
     pub(crate) pending_task: Option<PendingTask>,
+
+    /// Output prefix for command-output delimiters
+    pub(crate) output_prefix: Option<String>,
+    /// Output suffix for command-output delimiters
+    pub(crate) output_suffix: Option<String>,
+    /// Flush command for this connection
+    pub(crate) flush_command: String,
 }
 
 /// The input modes the telnet session can be in.
@@ -322,6 +331,12 @@ impl TelnetConnection {
 
                     match line {
                         ReadEvent::Command(line) => {
+                            // Handle flush command first - it should be processed immediately.
+                            if line.trim() == self.flush_command {
+                                // We don't support flush, but just move on.
+                                continue;
+                            }
+
                             if let LineMode::SpoolingProgram(target, verb) = line_mode.clone() {
                                 // If the line is "." that means we're done, and we can send the program off and switch modes back.
                                 if line == "." {
@@ -376,6 +391,11 @@ impl TelnetConnection {
                                     // Otherwise, we're still spooling up the program, so just keep spooling.
                                     program_input.push(line);
                                 }
+                                continue;
+                            }
+
+                            // Handle special built-in commands before regular command processing
+                            if self.handle_builtin_command(&line).await? {
                                 continue;
                             }
 
@@ -457,6 +477,52 @@ impl TelnetConnection {
         }
     }
 
+    /// Handle built-in commands that are processed by the telnet host itself.
+    /// Returns true if the command was handled, false if it should be passed through to normal processing.
+    async fn handle_builtin_command(&mut self, line: &str) -> Result<bool, eyre::Error> {
+        let words = parse_into_words(line);
+        if words.is_empty() {
+            return Ok(false);
+        }
+
+        let command = words[0].to_uppercase();
+        match command.as_str() {
+            "PREFIX" | "OUTPUTPREFIX" => {
+                // Set output prefix
+                if words.len() == 1 {
+                    // Clear prefix
+                    self.output_prefix = None;
+                } else {
+                    // Set prefix to everything after the command
+                    let prefix = line[words[0].len()..].trim_start();
+                    self.output_prefix = if prefix.is_empty() {
+                        None
+                    } else {
+                        Some(prefix.to_string())
+                    };
+                }
+                Ok(true)
+            }
+            "SUFFIX" | "OUTPUTSUFFIX" => {
+                // Set output suffix
+                if words.len() == 1 {
+                    // Clear suffix
+                    self.output_suffix = None;
+                } else {
+                    // Set suffix to everything after the command
+                    let suffix = line[words[0].len()..].trim_start();
+                    self.output_suffix = if suffix.is_empty() {
+                        None
+                    } else {
+                        Some(suffix.to_string())
+                    };
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     async fn handle_narrative_event(
         &mut self,
         event: ClientEvent,
@@ -524,6 +590,10 @@ impl TelnetConnection {
                 self.handle_task_error(te)
                     .await
                     .expect("Unable to handle task error");
+                // Send suffix after task error
+                self.send_output_suffix()
+                    .await
+                    .expect("Unable to send output suffix");
             }
             ClientEvent::TaskSuccess(ti, _s) => {
                 if let Some(pending_event) = self.pending_task.take() {
@@ -533,6 +603,10 @@ impl TelnetConnection {
                         );
                     }
                 }
+                // Send suffix after task success
+                self.send_output_suffix()
+                    .await
+                    .expect("Unable to send output suffix");
             }
         }
 
@@ -543,6 +617,9 @@ impl TelnetConnection {
         let Some(auth_token) = self.auth_token.clone() else {
             bail!("Received command before auth token was set");
         };
+
+        // Send output prefix before executing command
+        self.send_output_prefix().await?;
 
         let result = if line.starts_with(OUT_OF_BAND_PREFIX) {
             self.rpc_client
@@ -584,6 +661,8 @@ impl TelnetConnection {
                 self.handle_task_error(e)
                     .await
                     .with_context(|| "Unable to handle task error")?;
+                // Send suffix after task error
+                self.send_output_suffix().await?;
             }
             ReplyResult::Failure(e) => {
                 bail!("Unhandled RPC error: {:?}", e);
@@ -706,6 +785,22 @@ impl TelnetConnection {
             _ => {
                 warn!(?task_error, "Unhandled unexpected task error");
             }
+        }
+        Ok(())
+    }
+
+    /// Send output prefix if defined
+    async fn send_output_prefix(&mut self) -> Result<(), eyre::Error> {
+        if let Some(ref prefix) = self.output_prefix {
+            self.write.send(prefix.clone()).await?;
+        }
+        Ok(())
+    }
+
+    /// Send output suffix if defined  
+    async fn send_output_suffix(&mut self) -> Result<(), eyre::Error> {
+        if let Some(ref suffix) = self.output_suffix {
+            self.write.send(suffix.clone()).await?;
         }
         Ok(())
     }

@@ -264,6 +264,9 @@ impl Listener {
                 auth_token: None,
                 rpc_client,
                 pending_task: None,
+                output_prefix: None,
+                output_suffix: None,
+                flush_command: crate::connection::DEFAULT_FLUSH_COMMAND.to_string(),
             };
 
             tcp_connection.run().await?;

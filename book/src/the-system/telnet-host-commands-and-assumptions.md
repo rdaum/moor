@@ -1,5 +1,3 @@
-// TODO: these notes are not fully accurate for mooR, and mostly only relevant to the `telnet-host` connection
-
 # Server Commands and Database Assumptions
 
 This chapter describes all of the commands that are built into the server and every property and verb in the database
@@ -9,32 +7,12 @@ the contents of the database.
 ## Command Lines That Receive Special Treatment
 
 As was mentioned in the chapter on command parsing, there are a number of commands and special prefixes whose
-interpretation is fixed by the server. Examples include the flush command and the five intrinsic commands (PREFIX,
-OUTPUTPREFIX, SUFFIX, OUTPUTSUFFIX, and .program).
+interpretation is fixed by the server. Examples the five intrinsic telnet-specific commands: PREFIX, OUTPUTPREFIX,
+SUFFIX,
+OUTPUTSUFFIX and .program.
 
 This section discusses all of these built-in pieces of the command-interpretation process in the order in which they
 occur.
-
-### Flushing Unprocessed Input
-
-It sometimes happens that a user changes their mind about having typed one or more lines of input and would like to
-`untype` them before the server actually gets around to processing them. If they react quickly enough, they can type
-their connection`s defined flush command; when the server first reads that command from the network, it immediately and
-completely flushes any as-yet unprocessed input from that user, printing a message to the user describing just which
-lines of input were discarded, if any.
-
-> Fine point: The flush command is handled very early in the server`s processing of a line of input, before the line is
-> entered into the task queue for the connection and well before it is parsed into words like other commands. For this
-> reason, it must be typed exactly as it was defined, alone on the line, without quotation marks, and without any spaces
-> before or after it.
-
-When a connection is first accepted by the server, it is given an initial flush command setting taken from the current
-default. This initial setting can be changed later using the set_connection_option() command.
-
-By default, each connection is initially given `.flush` as its flush command. If the
-property $server_options.default_flush_command exists, then its value overrides this default. If $
-server_options.default_flush_command is a non-empty string, then that string is the flush command for all new
-connections; otherwise, new connections are initially given no flush command at all.
 
 ### Out-of-Band Processing
 
@@ -137,13 +115,12 @@ containing only `>>MOO-Prefix<<` and followed by a line containing only `>>MOO-S
 reliably extract the program text from the MOO output and show it to the user in a separate editor window. There are
 many other possible uses.
 
-> Warning: If the command thus bracketed calls suspend(), its output will be deemed “finished” then and there; the
-> suffix thus appears at that point and not, as one might expect, later when the resulting background task has finally
-> returned from its top-level verb call. Thus, use of this feature (which was designed before suspend() existed) is no
-> longer recommended.
-
-The built-in function `output_delimiters()` can be used by MOO code to find out the output prefix and suffix currently
-in effect on a particular network connection.
+> Note: The built-in function `output_delimiters()` exists on LambdaMOO to return the current values of the output
+> prefix and suffix for the current connection. This function is not part of `mooR` since those values are not stored
+> in the daemon, but are purely part of the `telnet-host` process itself.
+> In addition, if the user is running multiple connections to the same MOO, the output prefix and suffix values are
+> connection-specific. That is, each connection has its own output prefix and suffix values, which are not shared
+> between connections
 
 ## The .program Command
 
