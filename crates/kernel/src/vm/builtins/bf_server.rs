@@ -37,9 +37,11 @@ use moor_compiler::compile;
 use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
 use moor_db::db_counters;
 use moor_var::VarType::TYPE_STR;
-use moor_var::{E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Symbol, v_list_iter};
+use moor_var::{
+    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Symbol, v_bool_int, v_list_iter,
+};
 use moor_var::{Sequence, v_map};
-use moor_var::{Var, v_float, v_int, v_list, v_none, v_obj, v_str, v_string};
+use moor_var::{Var, v_float, v_int, v_list, v_obj, v_str, v_string};
 use moor_var::{Variant, v_sym};
 
 pub(crate) fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
@@ -744,14 +746,14 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let tasks = tasks.iter().map(|task| {
         let task_id = v_int(task.task_id as i64);
         let start_time = match task.start_time {
-            None => v_none(),
+            None => v_bool_int(false),
             Some(start_time) => {
                 let time = start_time.duration_since(SystemTime::UNIX_EPOCH).unwrap();
                 v_int(time.as_secs() as i64)
             }
         };
-        let x = v_none();
-        let y = v_none();
+        let x = v_bool_int(false);
+        let y = v_bool_int(false);
         let programmer = v_obj(task.permissions);
         let verb_loc = v_obj(task.verb_definer);
         let verb_name = v_str(task.verb_name.as_str());
@@ -986,7 +988,7 @@ fn bf_resume(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let return_value = if bf_args.args.len() == 2 {
         bf_args.args[1].clone()
     } else {
-        v_none()
+        v_bool_int(false)
     };
 
     let task_id = resume_task_id as TaskId;

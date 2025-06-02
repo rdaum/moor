@@ -58,8 +58,8 @@ use moor_common::tasks::{Session, SessionFactory, SystemControl};
 use moor_common::util::PerfTimerGuard;
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
-use moor_var::{E_INVARG, E_INVIND, E_PERM, E_TYPE};
-use moor_var::{List, Symbol, Var, v_err, v_int, v_none, v_obj, v_string};
+use moor_var::{E_INVARG, E_INVIND, E_PERM, E_TYPE, v_bool_int};
+use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
 use moor_var::{Obj, Variant};
 use moor_var::{SYSTEM_OBJECT, v_list};
 
@@ -1815,7 +1815,7 @@ impl TaskQ {
                     "Task not found in suspended list for kill request"
                 );
             }
-            return v_none();
+            return v_bool_int(false);
         }
 
         // Otherwise we have to check if the task is running, remove its control record, and flip
@@ -1827,7 +1827,7 @@ impl TaskQ {
             }
         };
         victim_task.kill_switch.store(true, Ordering::SeqCst);
-        v_none()
+        v_bool_int(false)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1884,7 +1884,7 @@ impl TaskQ {
             error!(task = queued_task_id, "Could not resume task");
             return v_err(E_INVARG);
         }
-        v_none()
+        v_bool_int(false)
     }
 
     fn disconnect_task(&mut self, disconnect_task_id: TaskId, player: &Obj) {
