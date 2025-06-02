@@ -29,7 +29,7 @@ use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
 use moor_common::program::ProgramType;
 use moor_common::tasks::Session;
-use moor_compiler::{BUILTINS, BuiltinId, Program};
+use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
 use moor_var::VarType::TYPE_NONE;
 use moor_var::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
@@ -186,9 +186,13 @@ impl VMExecState {
                     return self.push_error(E_PERM.into());
                 }
                 Err(WorldStateError::VerbNotFound(_, _)) => {
-                    return self.push_error(
-                        E_VERBNF.with_msg(|| format!("Verb \"{}\" not found", verb_name)),
-                    );
+                    return self.push_error(E_VERBNF.with_msg(|| {
+                        format!(
+                            "Verb {}:{} not found",
+                            to_literal(&v_obj(location)),
+                            verb_name,
+                        )
+                    }));
                 }
                 Err(e) => {
                     panic!("Unexpected error from find_method_verb_on: {:?}", e)
@@ -294,13 +298,12 @@ impl VMExecState {
         };
 
         frame.switch_to_fork_vector(fork_request.fork_vector_offset);
-        frame.pc = 0;
         if let Some(task_id_name) = fork_request.task_id {
             frame.set_variable(&task_id_name, v_int(self.task_id as i64));
         }
 
         // TODO how to set the task_id in the parent activation, as we no longer have a reference
-        // to it?
+        //  to it?
         self.stack = vec![a];
     }
 
