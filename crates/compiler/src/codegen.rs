@@ -64,7 +64,7 @@ pub struct CodegenState {
     pub(crate) error_operands: Vec<ErrorCode>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
-    pub(crate) fork_vectors: Vec<Vec<Op>>,
+    pub(crate) fork_vectors: Vec<(usize, Vec<Op>)>,
     pub(crate) line_number_spans: Vec<(usize, usize)>,
     pub(crate) current_line_col: (usize, usize),
     pub(crate) compile_options: CompileOptions,
@@ -205,9 +205,10 @@ impl CodegenState {
         self.saved_stack = old
     }
 
-    fn add_fork_vector(&mut self, opcodes: Vec<Op>) -> Offset {
+    fn add_fork_vector(&mut self, offset: usize, opcodes: Vec<Op>) -> Offset {
         let fv = self.fork_vectors.len();
-        self.fork_vectors.push(opcodes);
+        // The offset is the current length of the main vector (ops) at the time of forking.
+        self.fork_vectors.push((offset, opcodes));
         Offset(fv as u16)
     }
 
@@ -887,13 +888,14 @@ impl CodegenState {
                 self.generate_expr(time)?;
                 // Stash all of main vector in a temporary buffer, then begin compilation of the forked code.
                 // Once compiled, we can create a fork vector from the new buffer, and then restore the main vector.
+                let offset = self.ops.len();
                 let stashed_ops = std::mem::take(&mut self.ops);
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Op::Done);
                 let forked_ops = std::mem::take(&mut self.ops);
-                let fv_id = self.add_fork_vector(forked_ops);
+                let fv_id = self.add_fork_vector(offset, forked_ops);
                 self.ops = stashed_ops;
                 self.emit(Op::Fork {
                     id: id.as_ref().map(|id| self.binding_mappings[id]),

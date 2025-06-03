@@ -120,7 +120,13 @@ impl MooStackFrame {
     }
 
     pub(crate) fn find_line_no(&self, pc: usize) -> Option<usize> {
-        Some(self.program.line_num_for_position(pc))
+        match self.pc_type {
+            PcType::Main => Some(self.program.line_num_for_position(pc, 0)),
+            PcType::ForkVector(fv) => {
+                let offset = self.program.fork_vector_offset(fv);
+                Some(self.program.line_num_for_position(pc, offset))
+            }
+        }
     }
 
     #[inline]

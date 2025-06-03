@@ -53,7 +53,7 @@ pub struct PrgInner {
     /// The actual program code.
     pub main_vector: Vec<Op>,
     /// The program code for each fork.
-    pub fork_vectors: Vec<Vec<Op>>,
+    pub fork_vectors: Vec<(usize, Vec<Op>)>,
     /// As each statement is pushed, the line number is recorded, along with its offset in the main
     /// vector.
     /// TODO: fork vector offsets... Have to think about that one.
@@ -138,7 +138,11 @@ impl Program {
     }
 
     pub fn fork_vector(&self, offset: Offset) -> &Vec<Op> {
-        &self.0.fork_vectors[offset.0 as usize]
+        &self.0.fork_vectors[offset.0 as usize].1
+    }
+
+    pub fn fork_vector_offset(&self, offset: Offset) -> usize {
+        self.0.fork_vectors[offset.0 as usize].0
     }
 
     pub fn main_vector(&self) -> &Vec<Op> {
@@ -149,10 +153,11 @@ impl Program {
         self.0.jump_labels.iter().find(|j| &j.id == label).cloned()
     }
 
-    pub fn line_num_for_position(&self, position: usize) -> usize {
+    pub fn line_num_for_position(&self, position: usize, offset: usize) -> usize {
+        let position = position + offset;
         let mut last_line_num = 1;
-        for (offset, line_no) in &self.0.line_number_spans {
-            if *offset >= position {
+        for (off, line_no) in &self.0.line_number_spans {
+            if *off >= position {
                 return last_line_num;
             }
             last_line_num = *line_no

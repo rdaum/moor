@@ -175,7 +175,7 @@ impl Decompile {
     fn decompile(&mut self) -> Result<(), DecompileError> {
         let opcode = self.next()?;
 
-        let line_num = (self.program.line_num_for_position(self.position), 0);
+        let line_num = (self.program.line_num_for_position(self.position, 0), 0);
         match opcode {
             Op::If(otherwise_label, environment_width) => {
                 let cond = self.pop_expr()?;
