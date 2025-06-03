@@ -1683,8 +1683,8 @@ impl TaskQ {
             return;
         };
         let result = result.map(|v| TaskResult::Result(v.clone()));
-        if result_sender.send((task_id, result)).is_err() {
-            error!("Notify to task {} failed", task_id);
+        if let Err(e) = result_sender.send((task_id, result)) {
+            error!(?e, task_id, "Could not send task result to requester");
         }
     }
 

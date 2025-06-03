@@ -11,19 +11,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub mod datalog;
-extern crate core;
+mod datalog;
+mod variable;
 
-use shadow_rs::shadow;
-
-pub mod matching;
-pub mod model;
-pub mod program;
-pub mod tasks;
-pub mod util;
-
-/// When encoding or decoding types to/from data or network, this is a version tag put into headers
-/// for validity / version checking.
-pub const DATA_LAYOUT_VERSION: u8 = 1;
-
-shadow!(build);
+pub use datalog::Datalog;
+pub use variable::Variable;
