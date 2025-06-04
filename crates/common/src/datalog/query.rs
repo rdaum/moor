@@ -248,7 +248,7 @@ impl<'a> QueryContext<'a> {
                     {
                         groups
                             .entry(group_key)
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(aggregate_value);
                     }
                 }

@@ -165,13 +165,13 @@ impl KnowledgeBase {
                             "Predicate not found in negative dependencies map",
                         )
                     })?;
-                    let neg_deps_ok = neg_deps
-                        .iter()
-                        .all(|dep| strata_map.get(dep).map_or(false, |&s| s < current_stratum));
+                    
 
                     // Positive dependencies can form cycles within the same stratum
                     // We only care that negative dependencies are resolved
-                    neg_deps_ok
+                    neg_deps
+                        .iter()
+                        .all(|dep| strata_map.get(dep).is_some_and(|&s| s < current_stratum))
                 };
 
                 if can_place {
