@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_var::Symbol;
-use std::fmt::{Display, Formatter};
-
 use super::Substitution;
 use super::term::Term;
+use moor_var::Symbol;
+use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 /// An Atom is a predicate with terms
 #[derive(Clone, Debug)]
@@ -23,7 +23,7 @@ pub struct Atom {
     /// The predicate name
     pub(crate) predicate: Symbol,
     /// The terms of the atom
-    pub(crate) terms: Vec<Term>,
+    pub(crate) terms: Arc<Vec<Term>>,
 }
 
 impl Atom {
@@ -31,7 +31,7 @@ impl Atom {
     pub fn new(predicate: impl Into<Symbol>, terms: Vec<Term>) -> Self {
         Self {
             predicate: predicate.into(),
-            terms,
+            terms: Arc::new(terms),
         }
     }
 
@@ -47,14 +47,14 @@ impl Atom {
 
     /// Apply a substitution to the atom, replacing variables with their values
     pub(crate) fn apply_substitution(&self, substitution: &Substitution) -> Self {
-        let terms = self
+        let terms: Vec<_> = self
             .terms
             .iter()
             .map(|term| term.apply_substitution(substitution))
             .collect();
         Self {
             predicate: self.predicate,
-            terms,
+            terms: Arc::new(terms),
         }
     }
 }

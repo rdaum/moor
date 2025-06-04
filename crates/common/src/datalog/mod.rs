@@ -14,6 +14,7 @@
 mod atom;
 mod fact;
 mod knowledge_base;
+mod relation;
 mod rule;
 mod term;
 mod variable;
@@ -22,6 +23,7 @@ pub use atom::Atom;
 pub use fact::Fact;
 pub use knowledge_base::KnowledgeBase;
 use moor_var::Var;
+pub use relation::Relation;
 pub use rule::Literal;
 pub use rule::Rule;
 use std::collections::HashMap;

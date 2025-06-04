@@ -12,28 +12,17 @@
 //
 
 use crate::datalog::{Atom, Fact, Literal, Rule, Variable};
-use crate::datalog::{Substitution, Term};
-use hi_sparse_bitset::{BitSet, config, ops::*, reduce};
+use crate::datalog::{Relation, Substitution, Term};
 use moor_var::{Symbol, Var, v_list};
-use std::collections::{HashMap, HashSet};
-
-/// Our bitset type for fact operations
-type FactSet = BitSet<config::_128bit>;
+use std::collections::HashMap;
 
 /// A Datalog database / knowledge-base with rules and facts.
 #[derive(Debug)]
 pub struct KnowledgeBase {
     /// The rules of the program
     rules: Vec<Rule>,
-    /// The facts of the program, indexed by predicate
-    // Primary index by predicate
-    facts: HashMap<Symbol, HashSet<Fact>>,
-    /// Secondary indexes for fact lookup by predicate and position
-    /// Maps predicate -> position -> value -> set of fact IDs
-    fact_indexes: HashMap<Symbol, Vec<HashMap<Var, HashSet<u64>>>>,
-    /// Bitset indexes for fast joins
-    /// Maps predicate -> position -> value -> bitset of fact IDs
-    bitset_indexes: HashMap<Symbol, Vec<HashMap<Var, FactSet>>>,
+    /// The relations in the knowledge base, indexed by predicate name
+    relations: HashMap<Symbol, Relation>,
     /// The next variable id to use
     next_var_id: usize,
     /// The next fact id to use
@@ -62,9 +51,7 @@ impl KnowledgeBase {
     pub fn new() -> Self {
         Self {
             rules: Vec::new(),
-            facts: Default::default(),
-            fact_indexes: Default::default(),
-            bitset_indexes: Default::default(),
+            relations: Default::default(),
             next_var_id: 0,
             next_fact_id: 0,
             evaluation_state: None,
@@ -87,49 +74,19 @@ impl KnowledgeBase {
     pub fn add_fact(&mut self, predicate: impl Into<Symbol>, values: Vec<Var>) {
         let predicate = predicate.into();
         let fact_id = self.next_fact_id;
-        self.next_fact_id += 1;
-        let fact = Fact::new(fact_id, predicate, values.clone());
 
-        // Add to primary index
-        let facts_set = self.facts.entry(predicate).or_default();
-        let is_new_fact = facts_set.insert(fact);
+        // Get or create the relation for this predicate
+        let relation = self
+            .relations
+            .entry(predicate)
+            .or_insert_with(|| Relation::new(predicate));
 
-        // If the fact was actually added (wasn't a duplicate), update secondary indexes
+        // Add the fact to the relation
+        let is_new_fact = relation.add_fact(fact_id, values);
+
+        // If the fact was actually added (wasn't a duplicate), increment the fact ID
         if is_new_fact {
-            // Get or create the secondary index for this predicate
-            let predicate_indexes = self
-                .fact_indexes
-                .entry(predicate)
-                .or_insert_with(|| Vec::with_capacity(values.len()));
-
-            // Also get or create the bitset index for this predicate
-            let predicate_bitsets = self
-                .bitset_indexes
-                .entry(predicate)
-                .or_insert_with(|| Vec::with_capacity(values.len()));
-
-            // Ensure we have enough indexes for each position
-            if predicate_indexes.len() < values.len() {
-                predicate_indexes.resize_with(values.len(), HashMap::new);
-            }
-
-            // Ensure we have enough bitset indexes for each position
-            if predicate_bitsets.len() < values.len() {
-                predicate_bitsets.resize_with(values.len(), HashMap::new);
-            }
-
-            // Update each position's index
-            for (pos, value) in values.iter().enumerate() {
-                // Update regular index
-                let position_index = &mut predicate_indexes[pos];
-                let fact_ids = position_index.entry(value.clone()).or_default();
-                fact_ids.insert(fact_id);
-
-                // Update bitset index
-                let position_bitset = &mut predicate_bitsets[pos];
-                let fact_bitset = position_bitset.entry(value.clone()).or_default();
-                fact_bitset.insert(fact_id as usize);
-            }
+            self.next_fact_id += 1;
         }
     }
 
@@ -387,17 +344,7 @@ impl KnowledgeBase {
         // Process one substitution
         if state.substitution_idx < state.substitutions.len() {
             let substitution = &state.substitutions[state.substitution_idx];
-            // Need to clone rule here or handle borrowing differently if rule is used later
-            // Cloning rule for simplicity, though it might be inefficient.
-            // A better way would be to clone rule.head only or pass its components.
-            // For now, let's assume self.rules[rule_idx] can be cloned or head processed without holding state borrow.
-            // The issue is `rule` is borrowed from `self.rules` which is immutable part of `self`
-            // while `self.facts` and `self.next_fact_id` need mutable access.
-            // Let's re-fetch the rule head's predicate and apply substitution to avoid complex borrow.
-
-            let current_rule_predicate = self.rules[rule_idx].head.predicate;
-            let current_rule_terms = self.rules[rule_idx].head.terms.clone();
-            let temp_atom_head = Atom::new(current_rule_predicate, current_rule_terms);
+            let temp_atom_head = self.rules[rule_idx].head.clone();
             let head = temp_atom_head.apply_substitution(substitution);
 
             // If the head has any variables, we can't add it as a fact
@@ -409,17 +356,16 @@ impl KnowledgeBase {
                     .filter_map(|term| term.as_constant().cloned())
                     .collect();
 
-                let fact_id = self.next_fact_id; // Tentative ID
-                let fact = Fact::new(fact_id, head.predicate, values);
+                // Get or create the relation for this predicate
+                let relation = self
+                    .relations
+                    .entry(head.predicate)
+                    .or_insert_with(|| Relation::new(head.predicate));
 
-                // Add the fact if it's new
-                let facts_entry = self
-                    .facts
-                    .entry(*fact.predicate()) // Use getter
-                    .or_default();
-                if facts_entry.insert(fact) {
-                    // If semantically new
-                    self.next_fact_id += 1; // Commit/consume the ID
+                // Add the fact to the relation
+                if relation.add_fact(self.next_fact_id, values) {
+                    // If it's a new fact, increment the fact ID
+                    self.next_fact_id += 1;
                     state.new_facts = true;
                 }
             }
@@ -454,98 +400,17 @@ impl KnowledgeBase {
     }
 
     /// Find facts that match an atom using indexes when possible
-    /// Uses bitset indexes for faster lookups when available
     fn find_matching_facts(&self, atom: &Atom) -> Vec<&Fact> {
         let predicate = atom.predicate();
 
         // If we don't have any facts for this predicate, return empty
-        let facts_set = match self.facts.get(predicate) {
-            Some(facts) => facts,
+        let relation = match self.relations.get(predicate) {
+            Some(relation) => relation,
             None => return Vec::new(),
         };
 
-        // Check if we can use the bitset indexes for even faster lookups
-        if let Some(predicate_bitsets) = self.bitset_indexes.get(predicate) {
-            let mut intersection_set = vec![];
-
-            // First try to build a bitset that represents matching facts
-            for (pos, term) in atom.terms().iter().enumerate() {
-                let Term::Constant(value) = term else {
-                    continue;
-                };
-                // This position has a constant, check if we have a bitset index
-                if pos >= predicate_bitsets.len() {
-                    continue;
-                }
-                let Some(position_bitset) = predicate_bitsets.get(pos) else {
-                    continue;
-                };
-                let Some(fact_bitset) = position_bitset.get(value) else {
-                    continue;
-                };
-                intersection_set.push(fact_bitset.clone());
-            }
-
-            let matching_set = reduce(And, intersection_set.iter());
-            // If we built a matching bitset, use it to find facts
-            if let Some(bitset) = matching_set {
-                // If the bitset is empty, return empty
-                if bitset.is_empty() {
-                    return Vec::new();
-                }
-
-                // Return facts matching the bitset
-                return facts_set
-                    .iter()
-                    .filter(|fact| bitset.contains(fact.id as usize))
-                    .collect();
-            }
-        }
-
-        // Fall back to the regular index-based lookup if bitset indexes didn't help
-        if let Some(predicate_indexes) = self.fact_indexes.get(predicate) {
-            // Look for constant terms in the query that can be used for indexing
-            let mut best_position: Option<usize> = None;
-            let mut best_selectivity: usize = facts_set.len();
-
-            for (pos, term) in atom.terms().iter().enumerate() {
-                let Term::Constant(value) = term else {
-                    continue;
-                };
-                // This position has a constant, check if we have an index
-                if pos >= predicate_indexes.len() {
-                    continue;
-                }
-                let Some(position_index) = predicate_indexes.get(pos) else {
-                    continue;
-                };
-                let Some(fact_ids) = position_index.get(value) else {
-                    continue;
-                };
-                // If this index is more selective, use it
-                if fact_ids.len() < best_selectivity {
-                    best_position = Some(pos);
-                    best_selectivity = fact_ids.len();
-                }
-            }
-
-            // If we found a good index, use it for filtering
-            if let Some(pos) = best_position {
-                if let Term::Constant(value) = &atom.terms()[pos] {
-                    let position_index = &predicate_indexes[pos];
-                    if let Some(fact_ids) = position_index.get(value) {
-                        // Get the facts with these IDs
-                        return facts_set
-                            .iter()
-                            .filter(|fact| fact_ids.contains(&fact.id))
-                            .collect();
-                    }
-                }
-            }
-        }
-
-        // Fall back to scanning all facts with this predicate
-        facts_set.iter().collect()
+        // Delegate to the relation's find_matching_facts method
+        relation.find_matching_facts(atom)
     }
 }
 
