@@ -22,17 +22,17 @@ const { button, div, span, input, select, option, br, pre, form, a, p } = van.ta
 
 /**
  * RightDock Component
- * 
+ *
  * Renders a collection of panels in the right dock area of the UI.
  * Each panel represents a presentation from the server that has been
  * targeted to display in the right dock area.
- * 
+ *
  * Features:
  * - Dynamically shows/hides based on available presentations
  * - Reactively updates when presentations change
  * - Provides close buttons for each panel
  * - Uses presentation titles from attributes when available
- * 
+ *
  * @param presentations - Reactive state containing the presentation manager
  * @returns DOM element containing the right dock and its panels
  */
@@ -92,18 +92,18 @@ const RightDock = (presentations: State<PresentationManager>) => {
 
 /**
  * App Component
- * 
+ *
  * Main application component that orchestrates the entire UI layout.
  * This is the top-level component that coordinates all other components
  * and manages application-wide state.
- * 
+ *
  * Layout structure:
  * - System notification area (MessageBoard)
  * - Login interface (shown when disconnected)
  * - Main content grid with:
  *   - Narrative display (game output and input area)
  *   - Right dock panel (for auxiliary UI elements)
- * 
+ *
  * @param context - Global application context with shared state
  * @returns The complete application UI structure
  */
@@ -117,7 +117,9 @@ const App = (context: Context) => {
     // Load welcome message on startup
     van.derive(() => {
         retrieveWelcome()
-            .then(msg => { welcomeMessage.val = msg; })
+            .then(msg => {
+                welcomeMessage.val = msg;
+            })
             .catch(error => {
                 console.error("Failed to load welcome message:", error);
                 welcomeMessage.val = "Welcome to Moor";
@@ -128,13 +130,10 @@ const App = (context: Context) => {
     return div(
         // Main container (primarily for styling)
         div({ class: "main" }),
-
         // System message notifications area (toast-style)
         MessageBoard(van.state(context.systemMessage)),
-
         // Login component (shows/hides based on connection state)
         Login(context, player, welcomeMessage),
-
         // Main content grid (narrative and panels)
         div(
             { class: "columns_grid" },

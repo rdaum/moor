@@ -11,6 +11,13 @@ repository.workspace = true
 rust-version.workspace = true
 description = "The set of values, and model/entities used across the system"
 
+[[bench]]
+name = "datalog_benches"
+harness = false
+
+[dev-dependencies]
+criterion.workspace = true
+
 [build-dependencies]
 shadow-rs.workspace = true
 
@@ -23,6 +30,7 @@ byteview.workspace = true
 crossbeam-utils.workspace = true
 enum-primitive-derive.workspace = true
 fast-counter.workspace = true
+hi_sparse_bitset.workspace = true
 itertools.workspace = true
 lazy_static.workspace = true
 minstant.workspace = true

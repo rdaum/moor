@@ -11,8 +11,21 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+mod atom;
 mod datalog;
+mod fact;
+mod rule;
+mod term;
 mod variable;
 
+pub use atom::Atom;
 pub use datalog::Datalog;
+pub use fact::Fact;
+use moor_var::Var;
+pub use rule::Rule;
+use std::collections::HashMap;
+pub use term::Term;
 pub use variable::Variable;
+
+/// A Substitution is a mapping from variables to values
+pub type Substitution = HashMap<Variable, Var>;

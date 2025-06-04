@@ -11,212 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::datalog::Variable;
+use crate::datalog::{Atom, Fact, Rule, Variable};
+use crate::datalog::{Substitution, Term};
+use hi_sparse_bitset::{BitSet, config, ops::*, reduce};
 use moor_var::{Symbol, Var, v_list};
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Formatter};
 
-/// A Rule is a Horn clause in the form: head :- body
-/// where head is a single atom and body is a conjunction of atoms
-#[derive(Clone, Debug)]
-pub struct Rule {
-    /// The head atom of the rule
-    head: Atom,
-    /// The body atoms of the rule
-    body: Vec<Atom>,
-}
-
-impl Rule {
-    /// Create a new rule with the given head and body
-    pub fn new(head: Atom, body: Vec<Atom>) -> Self {
-        Self { head, body }
-    }
-}
-
-impl Display for Rule {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} :- ", self.head)?;
-        for (i, atom) in self.body.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", atom)?;
-        }
-        Ok(())
-    }
-}
-
-/// An Atom is a predicate with terms
-#[derive(Clone, Debug)]
-pub struct Atom {
-    /// The predicate name
-    predicate: Symbol,
-    /// The terms of the atom
-    terms: Vec<Term>,
-}
-
-impl Atom {
-    /// Create a new atom with the given predicate and terms
-    pub fn new(predicate: impl Into<Symbol>, terms: Vec<Term>) -> Self {
-        Self {
-            predicate: predicate.into(),
-            terms,
-        }
-    }
-
-    /// Get the predicate of the atom
-    pub fn predicate(&self) -> &Symbol {
-        &self.predicate
-    }
-
-    /// Get the terms of the atom
-    pub fn terms(&self) -> &[Term] {
-        &self.terms
-    }
-
-    /// Apply a substitution to the atom, replacing variables with their values
-    fn apply_substitution(&self, substitution: &Substitution) -> Self {
-        let terms = self
-            .terms
-            .iter()
-            .map(|term| term.apply_substitution(substitution))
-            .collect();
-        Self {
-            predicate: self.predicate.clone(),
-            terms,
-        }
-    }
-}
-
-impl Display for Atom {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}(", self.predicate.as_str())?;
-        for (i, term) in self.terms.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", term)?;
-        }
-        write!(f, ")")
-    }
-}
-
-/// A Term is either a constant value or a variable
-#[derive(Clone, Debug)]
-pub enum Term {
-    /// A constant value
-    Constant(Var),
-    /// A variable
-    Variable(Variable),
-}
-
-impl Term {
-    /// Create a new constant term
-    pub fn constant(value: Var) -> Self {
-        Self::Constant(value)
-    }
-
-    /// Create a new variable term
-    pub fn variable(var: Variable) -> Self {
-        Self::Variable(var)
-    }
-
-    /// Check if the term is a variable
-    pub fn is_variable(&self) -> bool {
-        matches!(self, Self::Variable(_))
-    }
-
-    /// Get the variable if the term is a variable
-    pub fn as_variable(&self) -> Option<&Variable> {
-        match self {
-            Self::Variable(var) => Some(var),
-            _ => None,
-        }
-    }
-
-    /// Get the constant if the term is a constant
-    pub fn as_constant(&self) -> Option<&Var> {
-        match self {
-            Self::Constant(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// Apply a substitution to the term, replacing variables with their values
-    fn apply_substitution(&self, substitution: &Substitution) -> Self {
-        match self {
-            Self::Constant(_) => self.clone(),
-            Self::Variable(var) => {
-                if let Some(value) = substitution.get(var) {
-                    Self::Constant(value.clone())
-                } else {
-                    self.clone()
-                }
-            }
-        }
-    }
-}
-
-impl Display for Term {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Constant(value) => write!(f, "{:?}", value),
-            Self::Variable(var) => write!(f, "{}", var),
-        }
-    }
-}
-
-/// A Fact is a ground atom (an atom with no variables)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Fact {
-    /// The predicate name
-    predicate: Symbol,
-    /// The constant values of the fact
-    values: Vec<Var>,
-}
-
-impl Fact {
-    /// Create a new fact with the given predicate and values
-    pub fn new(predicate: Symbol, values: Vec<Var>) -> Self {
-        Self { predicate, values }
-    }
-
-    /// Get the predicate of the fact
-    pub fn predicate(&self) -> &Symbol {
-        &self.predicate
-    }
-
-    /// Get the values of the fact
-    pub fn values(&self) -> &[Var] {
-        &self.values
-    }
-
-    /// Convert the fact to an atom
-    fn to_atom(&self) -> Atom {
-        let terms = self
-            .values
-            .iter()
-            .map(|value| Term::Constant(value.clone()))
-            .collect();
-        Atom::new(self.predicate, terms)
-    }
-}
-
-impl Display for Fact {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}(", self.predicate.as_str())?;
-        for (i, value) in self.values.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{:?}", value)?;
-        }
-        write!(f, ")")
-    }
-}
-
-/// A Substitution is a mapping from variables to values
-type Substitution = HashMap<Variable, Var>;
+/// Our bitset type for fact operations
+type FactSet = BitSet<config::_128bit>;
 
 /// A Datalog program with rules and facts
 #[derive(Debug)]
@@ -226,8 +28,33 @@ pub struct Datalog {
     /// The facts of the program, indexed by predicate
     // Primary index by predicate
     facts: HashMap<Symbol, HashSet<Fact>>,
+    /// Secondary indexes for fact lookup by predicate and position
+    // Maps predicate -> position -> value -> set of fact IDs
+    fact_indexes: HashMap<Symbol, Vec<HashMap<Var, HashSet<u64>>>>,
+    /// Bitset indexes for fast joins
+    // Maps predicate -> position -> value -> bitset of fact IDs
+    bitset_indexes: HashMap<Symbol, Vec<HashMap<Var, FactSet>>>,
     /// The next variable id to use
     next_var_id: usize,
+    /// The next fact id to use
+    next_fact_id: u64,
+    /// Evaluation state for incremental evaluation
+    evaluation_state: Option<EvaluationState>,
+}
+
+/// State for incremental evaluation
+#[derive(Debug)]
+struct EvaluationState {
+    /// Current rule index being processed
+    rule_idx: usize,
+    /// Current substitution index for the current rule
+    substitution_idx: usize,
+    /// Substitutions for the current rule
+    substitutions: Vec<Substitution>,
+    /// Whether new facts were added in the current iteration
+    new_facts: bool,
+    /// Whether the evaluation is complete
+    is_complete: bool,
 }
 
 impl Datalog {
@@ -236,7 +63,11 @@ impl Datalog {
         Self {
             rules: Vec::new(),
             facts: HashMap::new(),
+            fact_indexes: HashMap::new(),
+            bitset_indexes: HashMap::new(),
             next_var_id: 0,
+            next_fact_id: 0,
+            evaluation_state: None,
         }
     }
 
@@ -253,33 +84,119 @@ impl Datalog {
     }
 
     /// Add a fact to the program
-    pub fn add_fact(&mut self, fact: Fact) {
+    pub fn add_fact(&mut self, predicate: Symbol, values: Vec<Var>) {
+        let fact_id = self.next_fact_id;
+        self.next_fact_id += 1;
+        let fact = Fact::new(fact_id, predicate.clone(), values.clone());
+
         // Add to primary index
         let facts_set = self
             .facts
-            .entry(fact.predicate.clone())
+            .entry(predicate.clone())
             .or_insert_with(HashSet::new);
+        let is_new_fact = facts_set.insert(fact);
 
-        facts_set.insert(fact);
+        // If the fact was actually added (wasn't a duplicate), update secondary indexes
+        if is_new_fact {
+            // Get or create the secondary index for this predicate
+            let predicate_indexes = self
+                .fact_indexes
+                .entry(predicate.clone())
+                .or_insert_with(|| Vec::with_capacity(values.len()));
+
+            // Also get or create the bitset index for this predicate
+            let predicate_bitsets = self
+                .bitset_indexes
+                .entry(predicate.clone())
+                .or_insert_with(|| Vec::with_capacity(values.len()));
+
+            // Ensure we have enough indexes for each position
+            if predicate_indexes.len() < values.len() {
+                predicate_indexes.resize_with(values.len(), HashMap::new);
+            }
+
+            // Ensure we have enough bitset indexes for each position
+            if predicate_bitsets.len() < values.len() {
+                predicate_bitsets.resize_with(values.len(), HashMap::new);
+            }
+
+            // Update each position's index
+            for (pos, value) in values.iter().enumerate() {
+                // Update regular index
+                let position_index = &mut predicate_indexes[pos];
+                let fact_ids = position_index
+                    .entry(value.clone())
+                    .or_insert_with(HashSet::new);
+                fact_ids.insert(fact_id);
+
+                // Update bitset index
+                let position_bitset = &mut predicate_bitsets[pos];
+                let fact_bitset = position_bitset
+                    .entry(value.clone())
+                    .or_insert_with(FactSet::new);
+                fact_bitset.insert(fact_id as usize);
+            }
+        }
     }
 
     /// Query the program for facts matching the given atom
     pub fn query(&mut self, query: &Atom) -> Vec<Substitution> {
-        // First, evaluate the program to fixpoint
-        self.evaluate();
+        // Initialize the query and run evaluation to completion
+        if self.init_query() {
+            self.complete_evaluation();
+        }
 
         // Then, find all facts that match the query
-        let facts = self
-            .facts
-            .get(query.predicate())
-            .map(|facts| facts.iter().collect::<Vec<_>>())
-            .unwrap_or_default();
+        let facts = self.find_matching_facts(query);
 
         let mut results = Vec::new();
         for fact in facts {
             if let Some(substitution) = self.unify(query, &fact.to_atom()) {
                 results.push(substitution);
             }
+        }
+
+        results
+    }
+
+    /// Query the program incrementally, allowing the caller to control the evaluation process.
+    /// This method initializes the query engine and prepares for incremental evaluation.
+    /// Returns a boolean indicating whether evaluation is needed.
+    pub fn query_incremental_init(&mut self) -> bool {
+        self.init_query()
+    }
+
+    /// Get the current results for an incremental query.
+    /// This doesn't advance the evaluation; it just returns the current results.
+    pub fn query_incremental_results(&self, query: &Atom) -> Vec<Substitution> {
+        // Find all facts that match the query
+        let facts = self.find_matching_facts(query);
+
+        let mut results = Vec::new();
+        for fact in facts {
+            if let Some(substitution) = self.unify(query, &fact.to_atom()) {
+                results.push(substitution);
+            }
+        }
+
+        results
+    }
+
+    /// Get the current results for an incremental query as lists.
+    pub fn query_incremental_results_as_lists(&self, query: &Atom) -> Vec<Vec<Var>> {
+        let substitutions = self.query_incremental_results(query);
+        let mut results = Vec::new();
+
+        for substitution in substitutions {
+            let mut row = Vec::new();
+            for term in query.terms() {
+                if let Some(var) = term.as_variable() {
+                    if let Some(value) = substitution.get(var) {
+                        row.push(value.clone());
+                    }
+                }
+            }
+            results.push(row);
         }
 
         results
@@ -312,48 +229,6 @@ impl Datalog {
         lists.into_iter().map(|list| v_list(&list)).collect()
     }
 
-    /// Evaluate the program to fixpoint using bottom-up evaluation
-    fn evaluate(&mut self) {
-        let mut new_facts = true;
-
-        while new_facts {
-            new_facts = false;
-
-            // For each rule
-            for rule in &self.rules {
-                // Get all possible substitutions for the rule body
-                let substitutions = self.evaluate_rule(rule);
-
-                // Apply each substitution to the rule head
-                for substitution in substitutions {
-                    let head = rule.head.apply_substitution(&substitution);
-
-                    // If the head has any variables, we can't add it as a fact
-                    if head.terms.iter().any(|term| term.is_variable()) {
-                        continue;
-                    }
-
-                    // Convert the head to a fact
-                    let values = head
-                        .terms
-                        .iter()
-                        .filter_map(|term| term.as_constant().cloned())
-                        .collect();
-                    let fact = Fact::new(head.predicate.clone(), values);
-
-                    // Add the fact if it's new
-                    let facts = self
-                        .facts
-                        .entry(fact.predicate.clone())
-                        .or_insert_with(HashSet::new);
-                    if facts.insert(fact) {
-                        new_facts = true;
-                    }
-                }
-            }
-        }
-    }
-
     /// Evaluate a rule and return all possible substitutions
     fn evaluate_rule(&self, rule: &Rule) -> Vec<Substitution> {
         // Start with an empty substitution
@@ -373,11 +248,7 @@ impl Datalog {
                 let subst = &substitutions[i];
 
                 // Find facts that match the atom
-                let facts = self
-                    .facts
-                    .get(&Symbol::from(atom.predicate.as_str()))
-                    .map(|facts| facts.iter().collect::<Vec<_>>())
-                    .unwrap_or_default();
+                let facts = self.find_matching_facts(atom);
 
                 for fact in facts {
                     if let Some(mut new_subst) = self.unify(&atom, &fact.to_atom()) {
@@ -438,6 +309,257 @@ impl Datalog {
 
         Some(substitution)
     }
+
+    /// Initialize a query evaluation. This starts the incremental evaluation process.
+    /// Returns `true` if initialization succeeded, `false` if the query can be immediately answered.
+    pub fn init_query(&mut self) -> bool {
+        // If we already have an evaluation in progress, reset it
+        self.evaluation_state = None;
+
+        // Check if we need to evaluate rules at all
+        // If there are no rules, we can just return matching facts
+        if self.rules.is_empty() {
+            return false;
+        }
+
+        // Initialize the evaluation state
+        self.evaluation_state = Some(EvaluationState {
+            rule_idx: 0,
+            substitution_idx: 0,
+            substitutions: Vec::new(),
+            new_facts: false,
+            is_complete: false,
+        });
+
+        true
+    }
+
+    /// Step the evaluation process forward one step.
+    /// Returns `true` if the evaluation is still in progress, `false` if it's complete.
+    pub fn step_evaluation(&mut self) -> bool {
+        // Check if we have an evaluation state
+        if self.evaluation_state.is_none() {
+            return false; // No evaluation in progress
+        }
+
+        // First check if evaluation is already complete
+        if let Some(state) = &self.evaluation_state {
+            if state.is_complete {
+                return false;
+            }
+        }
+
+        // Extract state information to avoid borrow conflicts
+        let mut rule_idx = 0;
+        let mut need_evaluate_rule = false;
+
+        // Extract state details to work with
+        if let Some(state) = &mut self.evaluation_state {
+            rule_idx = state.rule_idx;
+            let substitution_idx = state.substitution_idx;
+            let new_facts = state.new_facts;
+
+            // If we've processed all rules, check if we need another iteration
+            if rule_idx >= self.rules.len() {
+                // If no new facts were added in this iteration, we're done
+                if !new_facts {
+                    state.is_complete = true;
+                    return false;
+                }
+
+                // Otherwise, start a new iteration
+                state.rule_idx = 0;
+                state.substitution_idx = 0;
+                state.new_facts = false;
+                return true;
+            }
+
+            // Check if we need to evaluate the rule
+            need_evaluate_rule = substitution_idx == 0;
+        }
+
+        // Get the current rule
+        let rule = &self.rules[rule_idx];
+
+        // If we haven't evaluated this rule yet or need to start over
+        if need_evaluate_rule {
+            // Get all possible substitutions for the rule body
+            let substitutions = self.evaluate_rule(rule);
+
+            // Update the state with the new substitutions
+            if let Some(state) = &mut self.evaluation_state {
+                state.substitutions = substitutions;
+            }
+        }
+
+        // Get the current substitutions and continue processing
+        if let Some(state) = &mut self.evaluation_state {
+            // Process one substitution
+            if state.substitution_idx < state.substitutions.len() {
+                let substitution = &state.substitutions[state.substitution_idx];
+                // Need to clone rule here or handle borrowing differently if rule is used later
+                // Cloning rule for simplicity, though it might be inefficient.
+                // A better way would be to clone rule.head only or pass its components.
+                // For now, let's assume self.rules[rule_idx] can be cloned or head processed without holding state borrow.
+                // The issue is `rule` is borrowed from `self.rules` which is immutable part of `self`
+                // while `self.facts` and `self.next_fact_id` need mutable access.
+                // Let's re-fetch the rule head's predicate and apply substitution to avoid complex borrow.
+
+                let current_rule_predicate = self.rules[rule_idx].head.predicate.clone();
+                let current_rule_terms = self.rules[rule_idx].head.terms.clone();
+                let temp_atom_head = Atom::new(current_rule_predicate, current_rule_terms);
+                let head = temp_atom_head.apply_substitution(substitution);
+
+                // If the head has any variables, we can't add it as a fact
+                if !head.terms.iter().any(|term| term.is_variable()) {
+                    // Convert the head to a fact
+                    let values: Vec<Var> = head // Ensure values is Vec<Var>
+                        .terms
+                        .iter()
+                        .filter_map(|term| term.as_constant().cloned())
+                        .collect();
+
+                    let fact_id = self.next_fact_id; // Tentative ID
+                    let fact = Fact::new(fact_id, head.predicate.clone(), values);
+
+                    // Add the fact if it's new
+                    let facts_entry = self
+                        .facts
+                        .entry(fact.predicate().clone()) // Use getter
+                        .or_insert_with(HashSet::new);
+                    if facts_entry.insert(fact) {
+                        // If semantically new
+                        self.next_fact_id += 1; // Commit/consume the ID
+                        state.new_facts = true;
+                    }
+                }
+
+                // Move to the next substitution
+                state.substitution_idx += 1;
+            } else {
+                // Move to the next rule
+                state.rule_idx += 1;
+                state.substitution_idx = 0;
+            }
+
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Complete the evaluation process, running until fixpoint.
+    /// Returns the number of steps taken.
+    pub fn complete_evaluation(&mut self) -> usize {
+        let mut steps = 0;
+        while self.step_evaluation() {
+            steps += 1;
+        }
+        steps
+    }
+
+    /// Check if the evaluation is complete.
+    pub fn is_evaluation_complete(&self) -> bool {
+        match &self.evaluation_state {
+            Some(state) => state.is_complete,
+            None => true, // No evaluation means we're done
+        }
+    }
+
+    /// Find facts that match an atom using indexes when possible
+    /// Uses bitset indexes for faster lookups when available
+    fn find_matching_facts(&self, atom: &Atom) -> Vec<&Fact> {
+        let predicate = atom.predicate();
+
+        // If we don't have any facts for this predicate, return empty
+        let facts_set = match self.facts.get(predicate) {
+            Some(facts) => facts,
+            None => return Vec::new(),
+        };
+
+        // Check if we can use the bitset indexes for even faster lookups
+        if let Some(predicate_bitsets) = self.bitset_indexes.get(predicate) {
+            let mut intersection_set = vec![];
+
+            // First try to build a bitset that represents matching facts
+            for (pos, term) in atom.terms().iter().enumerate() {
+                let Term::Constant(value) = term else {
+                    continue;
+                };
+                // This position has a constant, check if we have a bitset index
+                if pos >= predicate_bitsets.len() {
+                    continue;
+                }
+                let Some(position_bitset) = predicate_bitsets.get(pos) else {
+                    continue;
+                };
+                let Some(fact_bitset) = position_bitset.get(value) else {
+                    continue;
+                };
+                intersection_set.push(fact_bitset.clone());
+            }
+
+            let matching_set = reduce(And, intersection_set.iter());
+            // If we built a matching bitset, use it to find facts
+            if let Some(bitset) = matching_set {
+                // If the bitset is empty, return empty
+                if bitset.is_empty() {
+                    return Vec::new();
+                }
+
+                // Return facts matching the bitset
+                return facts_set
+                    .iter()
+                    .filter(|fact| bitset.contains(fact.id as usize))
+                    .collect();
+            }
+        }
+
+        // Fall back to the regular index-based lookup if bitset indexes didn't help
+        if let Some(predicate_indexes) = self.fact_indexes.get(predicate) {
+            // Look for constant terms in the query that can be used for indexing
+            let mut best_position: Option<usize> = None;
+            let mut best_selectivity: usize = facts_set.len();
+
+            for (pos, term) in atom.terms().iter().enumerate() {
+                let Term::Constant(value) = term else {
+                    continue;
+                };
+                // This position has a constant, check if we have an index
+                if pos >= predicate_indexes.len() {
+                    continue;
+                }
+                let Some(position_index) = predicate_indexes.get(pos) else {
+                    continue;
+                };
+                let Some(fact_ids) = position_index.get(value) else {
+                    continue;
+                };
+                // If this index is more selective, use it
+                if fact_ids.len() < best_selectivity {
+                    best_position = Some(pos);
+                    best_selectivity = fact_ids.len();
+                }
+            }
+
+            // If we found a good index, use it for filtering
+            if let Some(pos) = best_position {
+                if let Term::Constant(value) = &atom.terms()[pos] {
+                    let position_index = &predicate_indexes[pos];
+                    if let Some(fact_ids) = position_index.get(value) {
+                        // Get the facts with these IDs
+                        return facts_set
+                            .iter()
+                            .filter(|fact| fact_ids.contains(&fact.id))
+                            .collect();
+                    }
+                }
+            }
+        }
+
+        // Fall back to scanning all facts with this predicate
+        facts_set.iter().collect()
+    }
 }
 
 impl Default for Datalog {
@@ -457,10 +579,11 @@ mod tests {
 
         // Add many facts with the same predicate but different values
         for i in 0..100 {
-            dl.add_fact(Fact::new(
+            dl.add_fact(
+                // Changed
                 Symbol::from("index_test"),
                 vec![v_int(i), v_string(format!("value_{}", i))],
-            ));
+            );
         }
 
         // This query should use the index for position 0
@@ -482,22 +605,25 @@ mod tests {
         let mut dl = Datalog::new();
 
         // Add facts: parent(john, mary)
-        dl.add_fact(Fact::new(
+        dl.add_fact(
+            // Changed
             Symbol::from("parent"),
             vec![v_string("john".to_string()), v_string("mary".to_string())],
-        ));
+        );
 
         // Add facts: parent(mary, bob)
-        dl.add_fact(Fact::new(
+        dl.add_fact(
+            // Changed
             Symbol::from("parent"),
             vec![v_string("mary".to_string()), v_string("bob".to_string())],
-        ));
+        );
 
         // Add facts: parent(bob, alice)
-        dl.add_fact(Fact::new(
+        dl.add_fact(
+            // Changed
             Symbol::from("parent"),
             vec![v_string("bob".to_string()), v_string("alice".to_string())],
-        ));
+        );
 
         // Rule: ancestor(X, Y) :- parent(X, Y)
         let x = dl.new_variable("X");
@@ -570,17 +696,18 @@ mod tests {
         let mut dl = Datalog::new();
 
         // Add base facts: fib(0, 0) and fib(1, 1)
-        dl.add_fact(Fact::new(Symbol::from("fib"), vec![v_int(0), v_int(0)]));
-        dl.add_fact(Fact::new(Symbol::from("fib"), vec![v_int(1), v_int(1)]));
+        dl.add_fact(Symbol::from("fib"), vec![v_int(0), v_int(0)]); // Changed
+        dl.add_fact(Symbol::from("fib"), vec![v_int(1), v_int(1)]); // Changed
 
         // Add rules for calculating Fibonacci numbers up to a limit
         for n in 2..35 {
             // Increased range to handle fib(9) = 34
             // For each n, add a fact: next(n-2, n-1, n)
-            dl.add_fact(Fact::new(
+            dl.add_fact(
+                // Changed
                 Symbol::from("next"),
                 vec![v_int(n - 2), v_int(n - 1), v_int(n)],
-            ));
+            );
         }
 
         // Rule: fib(N, F) :- next(A, B, N), fib(A, FA), fib(B, FB), sum(FA, FB, F)
@@ -618,10 +745,11 @@ mod tests {
             // Increased range to handle larger Fibonacci numbers
             for j in 0..35 {
                 // Increased range to handle larger Fibonacci numbers
-                dl.add_fact(Fact::new(
+                dl.add_fact(
+                    // Changed
                     Symbol::from("sum"),
                     vec![v_int(i), v_int(j), v_int(i + j)],
-                ));
+                );
             }
         }
 
@@ -681,41 +809,46 @@ mod tests {
 
         // Define room connections
         // direct_path(from_room, to_room)
-        dl.add_fact(Fact::new(
+        dl.add_fact(
+            // Changed
             Symbol::from("direct_path"),
             vec![
                 v_string("entrance".to_string()),
                 v_string("hall".to_string()),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("direct_path"),
             vec![
                 v_string("hall".to_string()),
                 v_string("kitchen".to_string()),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("direct_path"),
             vec![
                 v_string("hall".to_string()),
                 v_string("library".to_string()),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("direct_path"),
             vec![
                 v_string("kitchen".to_string()),
                 v_string("garden".to_string()),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("direct_path"),
             vec![
                 v_string("library".to_string()),
                 v_string("secret_room".to_string()),
             ],
-        ));
+        );
 
         // Add rule for path transitivity - if there's a path from X to Y and from Y to Z, then there's a path from X to Z
         // path(X, Y) :- direct_path(X, Y)
@@ -799,57 +932,66 @@ mod tests {
 
         // Define locations of objects
         // location(object, place)
-        dl.add_fact(Fact::new(
+        dl.add_fact(
+            // Changed
             Symbol::from("location"),
             vec![v_string("key".to_string()), v_string("kitchen".to_string())],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("location"),
             vec![
                 v_string("book".to_string()),
                 v_string("library".to_string()),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("location"),
             vec![
                 v_string("sword".to_string()),
                 v_string("secret_room".to_string()),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("location"),
             vec![
                 v_string("flower".to_string()),
                 v_string("garden".to_string()),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("location"),
             vec![v_string("hat".to_string()), v_string("hall".to_string())],
-        ));
+        );
 
         // Define containers
         // container(container_object, contained_object)
-        dl.add_fact(Fact::new(
+        dl.add_fact(
+            // Changed
             Symbol::from("container"),
             vec![v_string("chest".to_string()), v_string("gold".to_string())],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("container"),
             vec![v_string("box".to_string()), v_string("silver".to_string())],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("location"),
             vec![
                 v_string("chest".to_string()),
                 v_string("library".to_string()),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
+            // Changed
             Symbol::from("location"),
             vec![v_string("box".to_string()), v_string("kitchen".to_string())],
-        ));
+        );
 
         // Define rules for transitive containment
         // contained_in(Object, Container) :- container(Container, Object)
@@ -939,82 +1081,76 @@ mod tests {
 
         // Define room connections
         // direct_path(from_room, to_room, is_locked)
-        dl.add_fact(Fact::new(
+        dl.add_fact(
             Symbol::from("direct_path"),
             vec![
                 v_string("entrance".to_string()),
                 v_string("hall".to_string()),
                 v_int(0),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
             Symbol::from("direct_path"),
             vec![
                 v_string("hall".to_string()),
                 v_string("kitchen".to_string()),
                 v_int(0),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
             Symbol::from("direct_path"),
             vec![
                 v_string("hall".to_string()),
                 v_string("library".to_string()),
                 v_int(0),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
             Symbol::from("direct_path"),
             vec![
                 v_string("kitchen".to_string()),
                 v_string("garden".to_string()),
                 v_int(0),
             ],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
             Symbol::from("direct_path"),
             vec![
                 v_string("library".to_string()),
                 v_string("vault".to_string()),
                 v_int(1),
             ],
-        ));
+        );
 
         // Define locations of items
-        dl.add_fact(Fact::new(
+        dl.add_fact(
             Symbol::from("location"),
             vec![v_string("key".to_string()), v_string("kitchen".to_string())],
-        ));
-        dl.add_fact(Fact::new(
+        );
+        dl.add_fact(
             Symbol::from("location"),
             vec![
                 v_string("treasure".to_string()),
                 v_string("vault".to_string()),
             ],
-        ));
+        );
 
         // Define locked door requirements
-        dl.add_fact(Fact::new(
+        dl.add_fact(
             Symbol::from("unlocks"),
             vec![
                 v_string("key".to_string()),
                 v_string("library".to_string()),
                 v_string("vault".to_string()),
             ],
-        ));
+        );
 
         // Define rule for accessible paths (unlocked or player has the key)
         // For unlocked paths, we need to ensure the Player variable is properly unified
         // We'll create a rule that works for any specific player by adding a fact about players
         // First, let's add facts about which players exist
-        dl.add_fact(Fact::new(
-            Symbol::from("player"),
-            vec![v_string("alice".to_string())],
-        ));
-        dl.add_fact(Fact::new(
-            Symbol::from("player"),
-            vec![v_string("bob".to_string())],
-        ));
+        dl.add_fact(Symbol::from("player"), vec![v_string("alice".to_string())]);
+        dl.add_fact(Symbol::from("player"), vec![v_string("bob".to_string())]);
 
         // can_access(Player, From, To) :- player(Player), direct_path(From, To, 0)
         let player1 = dl.new_variable("Player");
@@ -1166,10 +1302,10 @@ mod tests {
 
         // Test scenario 2: Player with key can access the vault
         // Bob has the key
-        dl.add_fact(Fact::new(
+        dl.add_fact(
             Symbol::from("has_item"),
             vec![v_string("bob".to_string()), v_string("key".to_string())],
-        ));
+        );
 
         // Verify the has_item fact is properly added
         let bob_has_key = Atom::new(
@@ -1289,6 +1425,228 @@ mod tests {
             results.len(),
             0,
             "Alice shouldn't be able to get the treasure"
+        );
+    }
+
+    #[test]
+    fn test_incremental_evaluation() {
+        let mut dl = Datalog::new();
+
+        // Add facts: parent(john, mary)
+        dl.add_fact(
+            Symbol::from("parent"),
+            vec![v_string("john".to_string()), v_string("mary".to_string())],
+        );
+
+        // Add facts: parent(mary, bob)
+        dl.add_fact(
+            Symbol::from("parent"),
+            vec![v_string("mary".to_string()), v_string("bob".to_string())],
+        );
+
+        // Rule: ancestor(X, Y) :- parent(X, Y)
+        let x = dl.new_variable("X");
+        let y = dl.new_variable("Y");
+        let parent_atom = Atom::new(
+            Symbol::from("parent"),
+            vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
+        );
+        let ancestor_atom = Atom::new(
+            Symbol::from("ancestor"),
+            vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
+        );
+        dl.add_rule(Rule::new(ancestor_atom.clone(), vec![parent_atom]));
+
+        // Rule: ancestor(X, Z) :- parent(X, Y), ancestor(Y, Z)
+        let x = dl.new_variable("X");
+        let y = dl.new_variable("Y");
+        let z = dl.new_variable("Z");
+        let parent_atom = Atom::new(
+            Symbol::from("parent"),
+            vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
+        );
+        let ancestor_atom_body = Atom::new(
+            Symbol::from("ancestor"),
+            vec![Term::Variable(y.clone()), Term::Variable(z.clone())],
+        );
+        let ancestor_atom_head = Atom::new(
+            Symbol::from("ancestor"),
+            vec![Term::Variable(x.clone()), Term::Variable(z.clone())],
+        );
+        dl.add_rule(Rule::new(
+            ancestor_atom_head,
+            vec![parent_atom, ancestor_atom_body],
+        ));
+
+        // Query: ancestor(john, X)
+        let john_x = Atom::new(
+            Symbol::from("ancestor"),
+            vec![
+                Term::Constant(v_string("john".to_string())),
+                Term::Variable(dl.new_variable("X")),
+            ],
+        );
+
+        // Test incremental evaluation
+        assert!(dl.query_incremental_init(), "Should need evaluation");
+
+        // Initially, no ancestors should be derived yet
+        let initial_results = dl.query_incremental_results_as_lists(&john_x);
+        assert_eq!(
+            initial_results.len(),
+            0,
+            "Initially no results should be available"
+        );
+
+        // Step until the first rule creates ancestor(john, mary)
+        let mut steps_taken = 0;
+        while steps_taken < 10 && dl.step_evaluation() {
+            steps_taken += 1;
+            let results = dl.query_incremental_results_as_lists(&john_x);
+            if results.len() > 0 {
+                // Found the first result, should be mary
+                assert_eq!(results.len(), 1);
+                assert_eq!(results[0][0].as_string().unwrap(), "mary");
+                break;
+            }
+        }
+        assert!(
+            steps_taken < 10,
+            "First result should be found within a few steps"
+        );
+
+        // Continue stepping until we get the final result (both mary and bob)
+        while dl.step_evaluation() {
+            steps_taken += 1;
+        }
+
+        assert!(dl.is_evaluation_complete(), "Evaluation should be complete");
+
+        // Check final results
+        let final_results = dl.query_incremental_results_as_lists(&john_x);
+        assert_eq!(final_results.len(), 2); // john is ancestor of mary and bob
+
+        // Verify specific results
+        let ancestors: Vec<String> = final_results
+            .iter()
+            .map(|row| row[0].as_string().unwrap().to_string())
+            .collect();
+
+        assert!(
+            ancestors.contains(&"mary".to_string()),
+            "Mary should be an ancestor"
+        );
+        assert!(
+            ancestors.contains(&"bob".to_string()),
+            "Bob should be an ancestor"
+        );
+    }
+
+    #[test]
+    fn test_game_query_with_step_limit() {
+        let mut dl = Datalog::new();
+
+        // Set up a simple game world with many connected locations
+        for i in 0..100 {
+            dl.add_fact(Symbol::from("connection"), vec![v_int(i), v_int(i + 1)]);
+        }
+
+        // Add a direct connection between 0 and 50 to ensure we can find it more easily
+        // This ensures we have a short path to test with
+        dl.add_fact(Symbol::from("connection"), vec![v_int(0), v_int(50)]);
+
+        // Add rule for path transitivity - if there's a path from X to Y and from Y to Z, then there's a path from X to Z
+        // path(X, Y) :- connection(X, Y)
+        let x1 = dl.new_variable("X");
+        let y1 = dl.new_variable("Y");
+        let connection_atom = Atom::new(
+            Symbol::from("connection"),
+            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
+        );
+        let path_atom = Atom::new(
+            Symbol::from("path"),
+            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
+        );
+        dl.add_rule(Rule::new(path_atom, vec![connection_atom]));
+
+        // path(X, Z) :- connection(X, Y), path(Y, Z)
+        let x2 = dl.new_variable("X");
+        let y2 = dl.new_variable("Y");
+        let z2 = dl.new_variable("Z");
+        let connection_atom = Atom::new(
+            Symbol::from("connection"),
+            vec![Term::Variable(x2.clone()), Term::Variable(y2.clone())],
+        );
+        let path_atom_body = Atom::new(
+            Symbol::from("path"),
+            vec![Term::Variable(y2.clone()), Term::Variable(z2.clone())],
+        );
+        let path_atom_head = Atom::new(
+            Symbol::from("path"),
+            vec![Term::Variable(x2.clone()), Term::Variable(z2.clone())],
+        );
+        dl.add_rule(Rule::new(
+            path_atom_head,
+            vec![connection_atom, path_atom_body],
+        ));
+
+        // Query: path(0, 50) - reachable in a complex graph
+        let query = Atom::new(
+            Symbol::from("path"),
+            vec![Term::Constant(v_int(0)), Term::Constant(v_int(50))],
+        );
+
+        // Initialize incremental evaluation
+        assert!(dl.query_incremental_init());
+
+        // Simulate a game loop with a maximum step limit per frame
+        let max_steps_per_frame = 400; // Increased from 200
+        let mut total_steps = 0;
+        let mut frames = 0;
+        let max_frames = 20; // Increased from 10
+
+        // For debugging
+        let mut found_result = false;
+
+        while !dl.is_evaluation_complete() && frames < max_frames {
+            let mut frame_steps = 0;
+            while frame_steps < max_steps_per_frame && dl.step_evaluation() {
+                frame_steps += 1;
+                total_steps += 1;
+
+                // Check every 100 steps if we have results to avoid unnecessary work
+                if total_steps % 100 == 0 {
+                    let current_results = dl.query_incremental_results(&query);
+                    if !current_results.is_empty() {
+                        found_result = true;
+                        break;
+                    }
+                }
+            }
+
+            frames += 1;
+
+            // Check if we have an answer yet
+            let current_results = dl.query_incremental_results(&query);
+            if !current_results.is_empty() {
+                found_result = true;
+                break;
+            }
+        }
+
+        // Whether we completed the evaluation or aborted, we should have a result by now
+        let results = dl.query_incremental_results(&query);
+
+        assert!(
+            !results.is_empty(),
+            "Should have found a path result within the step limit. Steps: {}, Frames: {}",
+            total_steps,
+            frames
+        );
+
+        println!(
+            "Evaluation completed in {} steps across {} frames. Found result: {}",
+            total_steps, frames, found_result
         );
     }
 }
