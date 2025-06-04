@@ -14,7 +14,7 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use moor_common::datalog::Term::{Constant, Variable};
 use moor_common::datalog::{Atom, KnowledgeBase, Rule}; // Removed Fact import
-use moor_var::{Symbol, v_int, v_str, v_string};
+use moor_var::{Symbol, v_int, v_sym};
 use std::hint::black_box;
 
 // Lazy init a bunch of symbols we'll use ("parent", "X", *Y, etc.), just so we're not really
@@ -159,8 +159,8 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
                     // Changed
                     *CONNECTION,
                     vec![
-                        v_string(room_name.clone()),
-                        v_string(format!("room_{}", room_id + 1)),
+                        v_sym(&room_name),
+                        v_sym(format!("room_{}", room_id + 1)),
                         v_int(0),
                     ],
                 );
@@ -172,8 +172,8 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
                     // Changed
                     *CONNECTION,
                     vec![
-                        v_string(room_name.clone()),
-                        v_string(format!("room_{}", room_id + grid_size)),
+                        v_sym(&room_name),
+                        v_sym(format!("room_{}", room_id + grid_size)),
                         v_int(0),
                     ],
                 );
@@ -185,8 +185,8 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
                     // Changed
                     *CONNECTION,
                     vec![
-                        v_string(room_name.clone()),
-                        v_string(format!("room_{}", room_id + grid_size + 1)),
+                        v_sym(&room_name),
+                        v_sym(format!("room_{}", room_id + grid_size + 1)),
                         v_int(1),
                     ],
                 );
@@ -197,10 +197,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
                 dl.add_fact(
                     // Changed
                     *CONTAINS,
-                    vec![
-                        v_string(room_name.clone()),
-                        v_string(format!("item_{}", room_id / 5)),
-                    ],
+                    vec![v_sym(&room_name), v_sym(format!("item_{}", room_id / 5))],
                 );
             }
 
@@ -209,17 +206,14 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
                 dl.add_fact(
                     // Changed
                     *CONTAINS,
-                    vec![
-                        v_string(room_name),
-                        v_string(format!("key_{}", room_id / 13)),
-                    ],
+                    vec![v_sym(&room_name), v_sym(format!("key_{}", room_id / 13))],
                 );
             }
         }
     }
 
     // Add player facts
-    dl.add_fact(*PLAYER, vec![v_str("player_1")]);
+    dl.add_fact(*PLAYER, vec![v_sym("player_1")]);
 
     // Add key unlocking facts
     for i in 0..size / 13 {
@@ -230,11 +224,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
                 dl.add_fact(
                     // Changed
                     *UNLOCKS,
-                    vec![
-                        v_string(format!("key_{}", i)),
-                        v_string(room1),
-                        v_string(room2),
-                    ],
+                    vec![v_sym(format!("key_{}", i)), v_sym(&room1), v_sym(&room2)],
                 );
             }
         }
@@ -245,7 +235,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
         dl.add_fact(
             // Changed
             *HAS_ITEM,
-            vec![v_str("player_1"), v_string(format!("key_{}", i))],
+            vec![v_sym("player_1"), v_sym(format!("key_{}", i))],
         );
     }
 
@@ -396,7 +386,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     let target_item = format!("item_{}", size / 10);
     let query = Atom::new(
         *CAN_FIND,
-        vec![Constant(v_str("player_1")), Constant(v_string(target_item))],
+        vec![Constant(v_sym("player_1")), Constant(v_sym(&target_item))],
     );
 
     (dl, query)

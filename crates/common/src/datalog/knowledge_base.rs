@@ -178,7 +178,7 @@ impl KnowledgeBase {
 
     fn subs_to_lists(substitutions: &[Substitution], query: &Atom) -> Vec<Vec<Var>> {
         substitutions
-            .into_iter()
+            .iter()
             .map(|subst| {
                 query
                     .terms()
@@ -559,7 +559,7 @@ impl Default for KnowledgeBase {
 mod tests {
     use super::*;
     use crate::datalog::Term::{Constant, Variable};
-    use moor_var::{v_int, v_string};
+    use moor_var::{v_int, v_string, v_sym};
 
     #[test]
     fn test_indexed_lookup() {
@@ -1779,77 +1779,29 @@ mod tests {
 
         // Set up facts about people, their skills and job requirements
         // person(Name)
-        dl.add_fact("person", vec![v_string("alice".to_string())]);
-        dl.add_fact("person", vec![v_string("bob".to_string())]);
-        dl.add_fact("person", vec![v_string("charlie".to_string())]);
-        dl.add_fact("person", vec![v_string("dave".to_string())]);
+        dl.add_fact("person", vec![v_sym("alice")]);
+        dl.add_fact("person", vec![v_sym("bob")]);
+        dl.add_fact("person", vec![v_sym("charlie")]);
+        dl.add_fact("person", vec![v_sym("dave")]);
 
         // has_skill(Person, Skill)
-        dl.add_fact(
-            "has_skill",
-            vec![
-                v_string("alice".to_string()),
-                v_string("programming".to_string()),
-            ],
-        );
-        dl.add_fact(
-            "has_skill",
-            vec![
-                v_string("alice".to_string()),
-                v_string("design".to_string()),
-            ],
-        );
-        dl.add_fact(
-            "has_skill",
-            vec![
-                v_string("bob".to_string()),
-                v_string("programming".to_string()),
-            ],
-        );
-        dl.add_fact(
-            "has_skill",
-            vec![
-                v_string("charlie".to_string()),
-                v_string("design".to_string()),
-            ],
-        );
-        dl.add_fact(
-            "has_skill",
-            vec![
-                v_string("dave".to_string()),
-                v_string("management".to_string()),
-            ],
-        );
+        dl.add_fact("has_skill", vec![v_sym("alice"), v_sym("programming")]);
+        dl.add_fact("has_skill", vec![v_sym("alice"), v_sym("design")]);
+        dl.add_fact("has_skill", vec![v_sym("bob"), v_sym("programming")]);
+        dl.add_fact("has_skill", vec![v_sym("charlie"), v_sym("design")]);
+        dl.add_fact("has_skill", vec![v_sym("dave"), v_sym("management")]);
 
         // job_requires(Job, Skill)
         dl.add_fact(
             "job_requires",
-            vec![
-                v_string("developer".to_string()),
-                v_string("programming".to_string()),
-            ],
+            vec![v_sym("developer"), v_sym("programming")],
         );
+        dl.add_fact("job_requires", vec![v_sym("designer"), v_sym("design")]);
         dl.add_fact(
             "job_requires",
-            vec![
-                v_string("designer".to_string()),
-                v_string("design".to_string()),
-            ],
+            vec![v_sym("lead_dev"), v_sym("programming")],
         );
-        dl.add_fact(
-            "job_requires",
-            vec![
-                v_string("lead_dev".to_string()),
-                v_string("programming".to_string()),
-            ],
-        );
-        dl.add_fact(
-            "job_requires",
-            vec![
-                v_string("lead_dev".to_string()),
-                v_string("management".to_string()),
-            ],
-        );
+        dl.add_fact("job_requires", vec![v_sym("lead_dev"), v_sym("management")]);
 
         // Rule: missing_skill(Person, Job, Skill) :- person(Person), job_requires(Job, Skill), not has_skill(Person, Skill)
         let person_var = dl.new_variable("Person");
@@ -1921,8 +1873,8 @@ mod tests {
             "missing_skill",
             vec![
                 Variable(dl.new_variable("Person")),
-                Constant(v_string("lead_dev".to_string())),
-                Constant(v_string("management".to_string())),
+                Constant(v_sym("lead_dev")),
+                Constant(v_sym("management")),
             ],
         );
 
@@ -1935,7 +1887,7 @@ mod tests {
 
         let missing_management_people: Vec<String> = results
             .iter()
-            .map(|row| row[0].as_string().unwrap().to_string())
+            .map(|row| row[0].as_symbol().unwrap().to_string())
             .collect();
 
         assert!(missing_management_people.contains(&"alice".to_string()));
@@ -1948,7 +1900,7 @@ mod tests {
             "qualified_for",
             vec![
                 Variable(dl.new_variable("Person")),
-                Constant(v_string("developer".to_string())),
+                Constant(v_sym("developer")),
             ],
         );
 
@@ -1961,7 +1913,7 @@ mod tests {
 
         let qualified_devs: Vec<String> = results
             .iter()
-            .map(|row| row[0].as_string().unwrap().to_string())
+            .map(|row| row[0].as_symbol().unwrap().to_string())
             .collect();
 
         assert!(qualified_devs.contains(&"alice".to_string()));
@@ -1972,7 +1924,7 @@ mod tests {
             "qualified_for",
             vec![
                 Variable(dl.new_variable("Person")),
-                Constant(v_string("lead_dev".to_string())),
+                Constant(v_sym("lead_dev")),
             ],
         );
 
