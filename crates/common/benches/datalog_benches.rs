@@ -12,8 +12,11 @@
 //
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use moor_common::datalog::QueryContext;
 use moor_common::datalog::Term::{Constant, Variable};
-use moor_common::datalog::{AggregateLiteral, AggregateOp, Atom, KnowledgeBase, Literal, Rule};
+use moor_common::datalog::{
+    AggregateLiteral, AggregateOp, Atom, KnowledgeBase, Literal, Rule, new_variable,
+};
 use moor_var::{Symbol, v_int, v_string, v_sym};
 use std::hint::black_box;
 
@@ -64,16 +67,16 @@ fn create_ancestor_datalog() -> (KnowledgeBase, Atom) {
     }
 
     // Rule: ancestor(X, Y) :- parent(X, Y)
-    let x = dl.new_variable(*X);
-    let y = dl.new_variable(*Y);
+    let x = new_variable(*X);
+    let y = new_variable(*Y);
     let parent_atom = Atom::new(*PARENT, vec![Variable(x.clone()), Variable(y.clone())]);
     let ancestor_atom = Atom::new(*ANCESTOR, vec![Variable(x.clone()), Variable(y.clone())]);
     dl.add_rule(Rule::new(ancestor_atom, vec![parent_atom]));
 
     // Rule: ancestor(X, Z) :- parent(X, Y), ancestor(Y, Z)
-    let x = dl.new_variable(*X);
-    let y = dl.new_variable(*Y);
-    let z = dl.new_variable(*Z);
+    let x = new_variable(*X);
+    let y = new_variable(*Y);
+    let z = new_variable(*Z);
     let parent_atom = Atom::new(*PARENT, vec![Variable(x.clone()), Variable(y.clone())]);
     let ancestor_atom_body = Atom::new(*ANCESTOR, vec![Variable(y.clone()), Variable(z.clone())]);
     let ancestor_atom_head = Atom::new(*ANCESTOR, vec![Variable(x.clone()), Variable(z.clone())]);
@@ -85,7 +88,7 @@ fn create_ancestor_datalog() -> (KnowledgeBase, Atom) {
     // Query: ancestor(0, X)
     let query = Atom::new(
         *ANCESTOR,
-        vec![Constant(v_int(0)), Variable(dl.new_variable(*X))],
+        vec![Constant(v_int(0)), Variable(new_variable(*X))],
     );
 
     (dl, query)
@@ -122,16 +125,16 @@ fn create_path_datalog(size: usize) -> (KnowledgeBase, Atom) {
     }
 
     // Rule: path(X, Y) :- edge(X, Y)
-    let x = dl.new_variable(*X);
-    let y = dl.new_variable(*Y);
+    let x = new_variable(*X);
+    let y = new_variable(*Y);
     let edge_atom = Atom::new(*EDGE, vec![Variable(x.clone()), Variable(y.clone())]);
     let path_atom = Atom::new(*PATH, vec![Variable(x.clone()), Variable(y.clone())]);
     dl.add_rule(Rule::new(path_atom, vec![edge_atom]));
 
     // Rule: path(X, Z) :- edge(X, Y), path(Y, Z)
-    let x = dl.new_variable(*X);
-    let y = dl.new_variable(*Y);
-    let z = dl.new_variable(*Z);
+    let x = new_variable(*X);
+    let y = new_variable(*Y);
+    let z = new_variable(*Z);
     let edge_atom = Atom::new(*EDGE, vec![Variable(x.clone()), Variable(y.clone())]);
     let path_atom_body = Atom::new(*PATH, vec![Variable(y.clone()), Variable(z.clone())]);
     let path_atom_head = Atom::new(*PATH, vec![Variable(x.clone()), Variable(z.clone())]);
@@ -250,9 +253,9 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
 
     // Rules for room access
     // can_access(Player, From, To) :- connection(From, To, 0)
-    let player1 = dl.new_variable(*PLAYER);
-    let from1 = dl.new_variable(*FROM);
-    let to1 = dl.new_variable(*TO);
+    let player1 = new_variable(*PLAYER);
+    let from1 = new_variable(*FROM);
+    let to1 = new_variable(*TO);
     let unlocked_path_atom = Atom::new(
         *CONNECTION,
         vec![
@@ -272,10 +275,10 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     dl.add_rule(Rule::new(can_access_atom, vec![unlocked_path_atom]));
 
     // can_access(Player, From, To) :- connection(From, To, 1), has_item(Player, Key), unlocks(Key, From, To)
-    let player2 = dl.new_variable(*PLAYER);
-    let from2 = dl.new_variable(*FROM);
-    let to2 = dl.new_variable(*TO);
-    let key2 = dl.new_variable(*KEY);
+    let player2 = new_variable(*PLAYER);
+    let from2 = new_variable(*FROM);
+    let to2 = new_variable(*TO);
+    let key2 = new_variable(*KEY);
 
     let locked_path_atom = Atom::new(
         *CONNECTION,
@@ -311,9 +314,9 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     ));
 
     // path(Player, X, Y) :- can_access(Player, X, Y)
-    let player3 = dl.new_variable(*PLAYER);
-    let x3 = dl.new_variable(*X);
-    let y3 = dl.new_variable(*Y);
+    let player3 = new_variable(*PLAYER);
+    let x3 = new_variable(*X);
+    let y3 = new_variable(*Y);
     let can_access_atom = Atom::new(
         *CAN_ACCESS,
         vec![
@@ -333,10 +336,10 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     dl.add_rule(Rule::new(path_atom, vec![can_access_atom]));
 
     // path(Player, X, Z) :- can_access(Player, X, Y), path(Player, Y, Z)
-    let player4 = dl.new_variable(*PLAYER);
-    let x4 = dl.new_variable(*X);
-    let y4 = dl.new_variable(*Y);
-    let z4 = dl.new_variable(*Z);
+    let player4 = new_variable(*PLAYER);
+    let x4 = new_variable(*X);
+    let y4 = new_variable(*Y);
+    let z4 = new_variable(*Z);
 
     let can_access_atom = Atom::new(
         *CAN_ACCESS,
@@ -368,10 +371,10 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     ));
 
     // can_find(Player, Item) :- path(Player, Start, Room), contains(Room, Item)
-    let player5 = dl.new_variable(*PLAYER);
-    let room5 = dl.new_variable(*ROOM);
-    let item5 = dl.new_variable(*ITEM);
-    let start5 = dl.new_variable(*START);
+    let player5 = new_variable(*PLAYER);
+    let room5 = new_variable(*ROOM);
+    let item5 = new_variable(*ITEM);
+    let start5 = new_variable(*START);
 
     let path_atom = Atom::new(
         *PATH,
@@ -423,10 +426,10 @@ fn create_aggregation_datalog(
     }
 
     // Rule: course_count(Student, Count) :- Count = count(Subject) group by [Student] in grade(Student, Subject, _)
-    let student_var = dl.new_variable(*STUDENT);
-    let subject_var = dl.new_variable(*SUBJECT);
-    let score_var = dl.new_variable(*GRADE);
-    let count_var = dl.new_variable(*COUNT);
+    let student_var = new_variable(*STUDENT);
+    let subject_var = new_variable(*SUBJECT);
+    let score_var = new_variable(*GRADE);
+    let count_var = new_variable(*COUNT);
 
     let grade_atom = Atom::new(
         *GRADE,
@@ -456,7 +459,7 @@ fn create_aggregation_datalog(
     ));
 
     // Rule: min_grade(Student, MinGrade) :- MinGrade = min(Score) group by [Student] in grade(Student, _, Score)
-    let min_var = dl.new_variable(*MIN_VAL);
+    let min_var = new_variable(*MIN_VAL);
     let min_agg_literal = AggregateLiteral::new(
         AggregateOp::Min,
         min_var.clone(),
@@ -476,7 +479,7 @@ fn create_aggregation_datalog(
     ));
 
     // Rule: max_grade(Student, MaxGrade) :- MaxGrade = max(Score) group by [Student] in grade(Student, _, Score)
-    let max_var = dl.new_variable(*MAX_VAL);
+    let max_var = new_variable(*MAX_VAL);
     let max_agg_literal = AggregateLiteral::new(
         AggregateOp::Max,
         max_var.clone(),
@@ -517,8 +520,10 @@ fn benchmark_aggregation(c: &mut Criterion) {
             &(*num_students, *num_subjects),
             |b, &(students, subjects)| {
                 let (mut dl, queries) = create_aggregation_datalog(students, subjects);
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
                 let count_query = &queries[0]; // course_count query
-                b.iter(|| dl.query(black_box(count_query)));
+                b.iter(|| qc.query(black_box(count_query)));
             },
         );
 
@@ -528,8 +533,10 @@ fn benchmark_aggregation(c: &mut Criterion) {
             &(*num_students, *num_subjects),
             |b, &(students, subjects)| {
                 let (mut dl, queries) = create_aggregation_datalog(students, subjects);
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
                 let min_query = &queries[1]; // min_grade query
-                b.iter(|| dl.query(black_box(min_query)));
+                b.iter(|| qc.query(black_box(min_query)));
             },
         );
 
@@ -539,8 +546,10 @@ fn benchmark_aggregation(c: &mut Criterion) {
             &(*num_students, *num_subjects),
             |b, &(students, subjects)| {
                 let (mut dl, queries) = create_aggregation_datalog(students, subjects);
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
                 let max_query = &queries[2]; // max_grade query
-                b.iter(|| dl.query(black_box(max_query)));
+                b.iter(|| qc.query(black_box(max_query)));
             },
         );
 
@@ -550,9 +559,11 @@ fn benchmark_aggregation(c: &mut Criterion) {
             &(*num_students, *num_subjects),
             |b, &(students, subjects)| {
                 let (mut dl, queries) = create_aggregation_datalog(students, subjects);
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
                 b.iter(|| {
                     for query in &queries {
-                        dl.query(black_box(query));
+                        qc.query(black_box(query));
                     }
                 });
             },
@@ -572,7 +583,9 @@ fn benchmark_full_query(c: &mut Criterion) {
             size,
             |b, &_size| {
                 let (mut dl, query) = create_ancestor_datalog();
-                b.iter(|| dl.query(black_box(&query)));
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
+                b.iter(|| qc.query(black_box(&query)));
             },
         );
     }
@@ -581,7 +594,9 @@ fn benchmark_full_query(c: &mut Criterion) {
     for size in [20, 50, 100].iter() {
         group.bench_with_input(BenchmarkId::new(PATH.as_str(), size), size, |b, &size| {
             let (mut dl, query) = create_path_datalog(size as usize);
-            b.iter(|| dl.query(black_box(&query)));
+            dl.compute_stratification().unwrap();
+            let mut qc = QueryContext::new(&dl).unwrap();
+            b.iter(|| qc.query(black_box(&query)));
         });
     }
 
@@ -592,7 +607,9 @@ fn benchmark_full_query(c: &mut Criterion) {
             size,
             |b, &size| {
                 let (mut dl, query) = create_adventure_game_datalog(size as usize);
-                b.iter(|| dl.query(black_box(&query)));
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
+                b.iter(|| qc.query(black_box(&query)));
             },
         );
     }
@@ -611,8 +628,10 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &_size| {
                 let (mut dl, _query) = create_ancestor_datalog();
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
                 b.iter(|| {
-                    black_box(dl.query_incremental_init().unwrap_or(false));
+                    black_box(qc.query_incremental_init().unwrap_or(false));
                 });
             },
         );
@@ -622,10 +641,12 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &_size| {
                 let (mut dl, _query) = create_ancestor_datalog();
-                let _ = dl.query_incremental_init();
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
+                let _ = qc.query_incremental_init();
                 // Measure the time for each step
                 b.iter(|| {
-                    black_box(dl.step_evaluation());
+                    black_box(qc.step_evaluation());
                 });
             },
         );
@@ -635,9 +656,11 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &_size| {
                 let (mut dl, _query) = create_ancestor_datalog();
-                let _ = dl.query_incremental_init();
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
+                let _ = qc.query_incremental_init();
                 b.iter(|| {
-                    black_box(dl.complete_evaluation());
+                    black_box(qc.complete_evaluation());
                 });
             },
         );
@@ -647,24 +670,30 @@ fn benchmark_incremental_query(c: &mut Criterion) {
     for size in [20, 50, 100].iter() {
         group.bench_with_input(BenchmarkId::new("path_init", size), size, |b, &size| {
             let (mut dl, _query) = create_path_datalog(size as usize);
+            dl.compute_stratification().unwrap();
+            let mut qc = QueryContext::new(&dl).unwrap();
             b.iter(|| {
-                black_box(dl.query_incremental_init().unwrap_or(false));
+                black_box(qc.query_incremental_init().unwrap_or(false));
             });
         });
 
         group.bench_with_input(BenchmarkId::new("path_step", size), size, |b, &size| {
             let (mut dl, _query) = create_path_datalog(size as usize);
-            let _ = dl.query_incremental_init();
+            dl.compute_stratification().unwrap();
+            let mut qc = QueryContext::new(&dl).unwrap();
+            let _ = qc.query_incremental_init();
             b.iter(|| {
-                black_box(dl.step_evaluation());
+                black_box(qc.step_evaluation());
             });
         });
 
         group.bench_with_input(BenchmarkId::new("path_complete", size), size, |b, &size| {
             let (mut dl, _query) = create_path_datalog(size as usize);
-            let _ = dl.query_incremental_init();
+            dl.compute_stratification().unwrap();
+            let mut qc = QueryContext::new(&dl).unwrap();
+            let _ = qc.query_incremental_init();
             b.iter(|| {
-                black_box(dl.complete_evaluation());
+                black_box(qc.complete_evaluation());
             });
         });
     }
@@ -676,8 +705,10 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &size| {
                 let (mut dl, _query) = create_adventure_game_datalog(size as usize);
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
                 b.iter(|| {
-                    black_box(dl.query_incremental_init().unwrap_or(false));
+                    black_box(qc.query_incremental_init().unwrap_or(false));
                 });
             },
         );
@@ -687,9 +718,11 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &size| {
                 let (mut dl, _query) = create_adventure_game_datalog(size as usize);
-                let _ = dl.query_incremental_init();
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
+                let _ = qc.query_incremental_init();
                 b.iter(|| {
-                    black_box(dl.step_evaluation());
+                    black_box(qc.step_evaluation());
                 });
             },
         );
@@ -699,9 +732,11 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &size| {
                 let (mut dl, _query) = create_adventure_game_datalog(size as usize);
-                let _ = dl.query_incremental_init();
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
+                let _ = qc.query_incremental_init();
                 b.iter(|| {
-                    black_box(dl.complete_evaluation());
+                    black_box(qc.complete_evaluation());
                 });
             },
         );
@@ -722,16 +757,18 @@ fn benchmark_incremental_vs_complete(c: &mut Criterion) {
             |b, &size| {
                 b.iter(|| {
                     let (mut dl, query) = create_path_datalog(size as usize);
-                    let _ = dl.query_incremental_init();
+                    dl.compute_stratification().unwrap();
+                    let mut qc = QueryContext::new(&dl).unwrap();
+                    let _ = qc.query_incremental_init();
                     let mut found = false;
                     let mut steps = 0;
 
                     while !found && steps < 1000 {
-                        dl.step_evaluation();
+                        qc.step_evaluation();
                         steps += 1;
 
                         // Check if we have results
-                        if !dl.query_incremental_results(&query).is_empty() {
+                        if !qc.query_incremental_results(&query).is_empty() {
                             found = true;
                         }
                     }
@@ -746,7 +783,9 @@ fn benchmark_incremental_vs_complete(c: &mut Criterion) {
             |b, &size| {
                 b.iter(|| {
                     let (mut dl, query) = create_path_datalog(size as usize);
-                    black_box(!dl.query(&query).is_empty())
+                    dl.compute_stratification().unwrap();
+                    let mut qc = QueryContext::new(&dl).unwrap();
+                    black_box(!qc.query(&query).is_empty())
                 });
             },
         );
@@ -767,14 +806,15 @@ fn benchmark_step_overhead(c: &mut Criterion) {
             size,
             |b, &size| {
                 let (mut dl, _query) = create_path_datalog(size as usize);
-                let _ = dl.query_incremental_init();
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
+                let _ = qc.query_incremental_init();
 
                 b.iter(|| {
-                    let (mut dl, _query) = create_path_datalog(size as usize);
-                    let _ = dl.query_incremental_init();
+                    let _ = qc.query_incremental_init();
                     let mut steps = 0;
 
-                    while dl.step_evaluation() {
+                    while qc.step_evaluation() {
                         steps += 1;
                     }
                     black_box(steps)
@@ -785,7 +825,9 @@ fn benchmark_step_overhead(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("path_complete", size), size, |b, &size| {
             b.iter(|| {
                 let (mut dl, query) = create_path_datalog(size as usize);
-                black_box(dl.query(&query))
+                dl.compute_stratification().unwrap();
+                let mut qc = QueryContext::new(&dl).unwrap();
+                black_box(qc.query(&query))
             });
         });
     }

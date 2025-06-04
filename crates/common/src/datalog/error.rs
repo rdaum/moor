@@ -20,6 +20,9 @@ pub enum DatalogError {
     #[error("Program is not stratifiable: cycle detected involving predicates {predicates:?}")]
     Unstratifiable { predicates: Vec<Symbol> },
 
+    #[error("Stratification has not been performed yet, invalid knowledge base state")]
+    NotStratified,
+
     /// Predicate arity mismatch between facts or between rule head and body
     #[error("Arity mismatch for predicate '{predicate}': expected {expected}, got {actual}")]
     ArityMismatch {
@@ -73,7 +76,7 @@ impl DatalogError {
             // These errors indicate fundamental problems that make continued operation unsafe
             Self::IndexInconsistency { .. } | Self::Internal { .. } => false,
             // Validation errors are recoverable - just need better input
-            Self::Unstratifiable { .. } | Self::ArityMismatch { .. } => true,
+            Self::NotStratified | Self::Unstratifiable { .. } | Self::ArityMismatch { .. } => true,
         }
     }
 

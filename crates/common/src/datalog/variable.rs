@@ -15,6 +15,7 @@ use bincode::{Decode, Encode};
 use moor_var::Symbol;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
+use uuid::Uuid;
 
 /// A Variable represents a logic variable in Datalog
 #[derive(Clone, Debug, Encode, Decode)]
@@ -22,15 +23,19 @@ pub struct Variable {
     /// The name of the variable, used for debugging and pretty printing
     name: Symbol,
     /// A unique identifier for the variable
-    id: usize,
+    id: u128,
+}
+
+pub fn new_variable(name: impl Into<Symbol>) -> Variable {
+    Variable::new(name)
 }
 
 impl Variable {
     /// Create a new variable with the given name and id
-    pub fn new(name: impl Into<Symbol>, id: usize) -> Self {
+    pub fn new(name: impl Into<Symbol>) -> Self {
         Self {
             name: name.into(),
-            id,
+            id: Uuid::new_v4().as_u128(),
         }
     }
 
@@ -40,8 +45,8 @@ impl Variable {
     }
 
     /// Get the id of the variable
-    pub fn id(&self) -> usize {
-        self.id
+    pub fn id(&self) -> Uuid {
+        Uuid::from_u128(self.id)
     }
 }
 

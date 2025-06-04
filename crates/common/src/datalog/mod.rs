@@ -15,6 +15,7 @@ mod atom;
 mod error;
 mod fact;
 mod knowledge_base;
+mod query;
 mod relation;
 mod rule;
 mod term;
@@ -25,11 +26,12 @@ pub use error::{DatalogError, DatalogResult};
 pub use fact::Fact;
 pub use knowledge_base::KnowledgeBase;
 use moor_var::Var;
+pub use query::QueryContext;
 pub use relation::{HashSetRelation, RelationBackend};
 pub use rule::{AggregateLiteral, AggregateOp, Literal, Rule};
 use std::collections::HashMap;
 pub use term::Term;
-pub use variable::Variable;
+pub use variable::{Variable, new_variable};
 
 /// A Substitution is a mapping from variables to values
 pub type Substitution = HashMap<Variable, Var>;
