@@ -1642,4 +1642,111 @@ mod tests {
             total_steps, frames, found_result
         );
     }
+
+    #[test]
+    fn test_graph_reachability() {
+        let mut dl = KnowledgeBase::new();
+
+        // Set up a directed graph with edge(from, to) facts
+        dl.add_fact(Symbol::from("edge"), vec![v_int(1), v_int(2)]);
+        dl.add_fact(Symbol::from("edge"), vec![v_int(2), v_int(3)]);
+        dl.add_fact(Symbol::from("edge"), vec![v_int(3), v_int(4)]);
+        dl.add_fact(Symbol::from("edge"), vec![v_int(4), v_int(5)]);
+        dl.add_fact(Symbol::from("edge"), vec![v_int(1), v_int(6)]);
+        dl.add_fact(Symbol::from("edge"), vec![v_int(6), v_int(7)]);
+        dl.add_fact(Symbol::from("edge"), vec![v_int(7), v_int(8)]);
+        dl.add_fact(Symbol::from("edge"), vec![v_int(8), v_int(9)]);
+        // Create a disconnected component
+        dl.add_fact(Symbol::from("edge"), vec![v_int(10), v_int(11)]);
+        dl.add_fact(Symbol::from("edge"), vec![v_int(11), v_int(12)]);
+
+        // Define reachability rules
+        // Base case: If there's an edge from X to Y, then Y is reachable from X
+        let x1 = dl.new_variable("X");
+        let y1 = dl.new_variable("Y");
+        let edge_atom = Atom::new(
+            Symbol::from("edge"),
+            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
+        );
+        let reachable_atom = Atom::new(
+            Symbol::from("reachable"),
+            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
+        );
+        dl.add_rule(Rule::new(reachable_atom, vec![edge_atom]));
+
+        // Recursive case: If Y is reachable from X and there's an edge from Y to Z, then Z is reachable from X
+        let x2 = dl.new_variable("X");
+        let y2 = dl.new_variable("Y");
+        let z2 = dl.new_variable("Z");
+        let reachable_atom_body = Atom::new(
+            Symbol::from("reachable"),
+            vec![Term::Variable(x2.clone()), Term::Variable(y2.clone())],
+        );
+        let edge_atom = Atom::new(
+            Symbol::from("edge"),
+            vec![Term::Variable(y2.clone()), Term::Variable(z2.clone())],
+        );
+        let reachable_atom_head = Atom::new(
+            Symbol::from("reachable"),
+            vec![Term::Variable(x2.clone()), Term::Variable(z2.clone())],
+        );
+        dl.add_rule(Rule::new(
+            reachable_atom_head,
+            vec![reachable_atom_body, edge_atom],
+        ));
+
+        // Query: What nodes are reachable from node 1?
+        let reachable_from_1 = Atom::new(
+            Symbol::from("reachable"),
+            vec![
+                Term::Constant(v_int(1)),
+                Term::Variable(dl.new_variable("Node")),
+            ],
+        );
+        let results = dl.query_as_lists(&reachable_from_1);
+
+        // Should be able to reach nodes 2-9 from node 1
+        assert_eq!(results.len(), 8);
+
+        // Check that each reachable node is found
+        let reachable_nodes: Vec<i64> = results
+            .iter()
+            .map(|row| row[0].as_integer().unwrap())
+            .collect();
+
+        for i in 2..=9 {
+            assert!(
+                reachable_nodes.contains(&i),
+                "Node {} should be reachable from node 1",
+                i
+            );
+        }
+
+        // Verify node 10 is not reachable from node 1
+        assert!(
+            !reachable_nodes.contains(&10),
+            "Node 10 should not be reachable from node 1"
+        );
+
+        // Query: What nodes are reachable from node 10?
+        let reachable_from_10 = Atom::new(
+            Symbol::from("reachable"),
+            vec![
+                Term::Constant(v_int(10)),
+                Term::Variable(dl.new_variable("Node")),
+            ],
+        );
+        let results = dl.query_as_lists(&reachable_from_10);
+
+        // Should be able to reach nodes 11-12 from node 10
+        assert_eq!(results.len(), 2);
+
+        let reachable_nodes: Vec<i64> = results
+            .iter()
+            .map(|row| row[0].as_integer().unwrap())
+            .collect();
+
+        assert!(reachable_nodes.contains(&11));
+        assert!(reachable_nodes.contains(&12));
+    }
 }
