@@ -53,7 +53,7 @@ impl Atom {
             .map(|term| term.apply_substitution(substitution))
             .collect();
         Self {
-            predicate: self.predicate.clone(),
+            predicate: self.predicate,
             terms,
         }
     }

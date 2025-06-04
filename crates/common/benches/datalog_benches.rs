@@ -12,12 +12,12 @@
 //
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use moor_common::datalog::{Atom, Datalog, Rule, Term}; // Removed Fact import
+use moor_common::datalog::{Atom, KnowledgeBase, Rule, Term}; // Removed Fact import
 use moor_var::{Symbol, v_int, v_str, v_string};
 use std::hint::black_box;
 
-fn create_ancestor_datalog() -> (Datalog, Atom) {
-    let mut dl = Datalog::new();
+fn create_ancestor_datalog() -> (KnowledgeBase, Atom) {
+    let mut dl = KnowledgeBase::new();
 
     // Add parent facts
     for i in 0..100 {
@@ -74,8 +74,8 @@ fn create_ancestor_datalog() -> (Datalog, Atom) {
     (dl, query)
 }
 
-fn create_path_datalog(size: usize) -> (Datalog, Atom) {
-    let mut dl = Datalog::new();
+fn create_path_datalog(size: usize) -> (KnowledgeBase, Atom) {
+    let mut dl = KnowledgeBase::new();
 
     // Create a graph with 'size' nodes
     let size_i64 = size as i64; // Use a different variable name to avoid conflict
@@ -147,8 +147,8 @@ fn create_path_datalog(size: usize) -> (Datalog, Atom) {
     (dl, query)
 }
 
-fn create_adventure_game_datalog(size: usize) -> (Datalog, Atom) {
-    let mut dl = Datalog::new();
+fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
+    let mut dl = KnowledgeBase::new();
 
     // Create a grid-like world with 'size' total rooms
     let grid_size = (size as f64).sqrt().ceil() as usize;
@@ -601,7 +601,7 @@ fn benchmark_incremental_vs_complete(c: &mut Criterion) {
             |b, &size| {
                 b.iter(|| {
                     let (mut dl, query) = create_path_datalog(size as usize);
-                    black_box(dl.query(&query).len() > 0)
+                    black_box(!dl.query(&query).is_empty())
                 });
             },
         );

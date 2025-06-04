@@ -12,15 +12,15 @@
 //
 
 mod atom;
-mod datalog;
 mod fact;
+mod knowledge_base;
 mod rule;
 mod term;
 mod variable;
 
 pub use atom::Atom;
-pub use datalog::Datalog;
 pub use fact::Fact;
+pub use knowledge_base::KnowledgeBase;
 use moor_var::Var;
 pub use rule::Rule;
 use std::collections::HashMap;

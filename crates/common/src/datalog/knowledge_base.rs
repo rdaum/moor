@@ -20,19 +20,19 @@ use std::collections::{HashMap, HashSet};
 /// Our bitset type for fact operations
 type FactSet = BitSet<config::_128bit>;
 
-/// A Datalog program with rules and facts
+/// A Datalog database / knowledge-base with rules and facts.
 #[derive(Debug)]
-pub struct Datalog {
+pub struct KnowledgeBase {
     /// The rules of the program
     rules: Vec<Rule>,
     /// The facts of the program, indexed by predicate
     // Primary index by predicate
     facts: HashMap<Symbol, HashSet<Fact>>,
     /// Secondary indexes for fact lookup by predicate and position
-    // Maps predicate -> position -> value -> set of fact IDs
+    /// Maps predicate -> position -> value -> set of fact IDs
     fact_indexes: HashMap<Symbol, Vec<HashMap<Var, HashSet<u64>>>>,
     /// Bitset indexes for fast joins
-    // Maps predicate -> position -> value -> bitset of fact IDs
+    /// Maps predicate -> position -> value -> bitset of fact IDs
     bitset_indexes: HashMap<Symbol, Vec<HashMap<Var, FactSet>>>,
     /// The next variable id to use
     next_var_id: usize,
@@ -57,14 +57,14 @@ struct EvaluationState {
     is_complete: bool,
 }
 
-impl Datalog {
+impl KnowledgeBase {
     /// Create a new empty Datalog program
     pub fn new() -> Self {
         Self {
             rules: Vec::new(),
-            facts: HashMap::new(),
-            fact_indexes: HashMap::new(),
-            bitset_indexes: HashMap::new(),
+            facts: Default::default(),
+            fact_indexes: Default::default(),
+            bitset_indexes: Default::default(),
             next_var_id: 0,
             next_fact_id: 0,
             evaluation_state: None,
@@ -87,13 +87,10 @@ impl Datalog {
     pub fn add_fact(&mut self, predicate: Symbol, values: Vec<Var>) {
         let fact_id = self.next_fact_id;
         self.next_fact_id += 1;
-        let fact = Fact::new(fact_id, predicate.clone(), values.clone());
+        let fact = Fact::new(fact_id, predicate, values.clone());
 
         // Add to primary index
-        let facts_set = self
-            .facts
-            .entry(predicate.clone())
-            .or_insert_with(HashSet::new);
+        let facts_set = self.facts.entry(predicate).or_default();
         let is_new_fact = facts_set.insert(fact);
 
         // If the fact was actually added (wasn't a duplicate), update secondary indexes
@@ -101,13 +98,13 @@ impl Datalog {
             // Get or create the secondary index for this predicate
             let predicate_indexes = self
                 .fact_indexes
-                .entry(predicate.clone())
+                .entry(predicate)
                 .or_insert_with(|| Vec::with_capacity(values.len()));
 
             // Also get or create the bitset index for this predicate
             let predicate_bitsets = self
                 .bitset_indexes
-                .entry(predicate.clone())
+                .entry(predicate)
                 .or_insert_with(|| Vec::with_capacity(values.len()));
 
             // Ensure we have enough indexes for each position
@@ -124,16 +121,12 @@ impl Datalog {
             for (pos, value) in values.iter().enumerate() {
                 // Update regular index
                 let position_index = &mut predicate_indexes[pos];
-                let fact_ids = position_index
-                    .entry(value.clone())
-                    .or_insert_with(HashSet::new);
+                let fact_ids = position_index.entry(value.clone()).or_default();
                 fact_ids.insert(fact_id);
 
                 // Update bitset index
                 let position_bitset = &mut predicate_bitsets[pos];
-                let fact_bitset = position_bitset
-                    .entry(value.clone())
-                    .or_insert_with(FactSet::new);
+                let fact_bitset = position_bitset.entry(value.clone()).or_default();
                 fact_bitset.insert(fact_id as usize);
             }
         }
@@ -251,7 +244,7 @@ impl Datalog {
                 let facts = self.find_matching_facts(atom);
 
                 for fact in facts {
-                    if let Some(mut new_subst) = self.unify(&atom, &fact.to_atom()) {
+                    if let Some(mut new_subst) = self.unify(atom, &fact.to_atom()) {
                         // Combine with the existing substitution
                         for (var, value) in subst {
                             new_subst.insert(var.clone(), value.clone());
@@ -405,7 +398,7 @@ impl Datalog {
                 // while `self.facts` and `self.next_fact_id` need mutable access.
                 // Let's re-fetch the rule head's predicate and apply substitution to avoid complex borrow.
 
-                let current_rule_predicate = self.rules[rule_idx].head.predicate.clone();
+                let current_rule_predicate = self.rules[rule_idx].head.predicate;
                 let current_rule_terms = self.rules[rule_idx].head.terms.clone();
                 let temp_atom_head = Atom::new(current_rule_predicate, current_rule_terms);
                 let head = temp_atom_head.apply_substitution(substitution);
@@ -420,13 +413,13 @@ impl Datalog {
                         .collect();
 
                     let fact_id = self.next_fact_id; // Tentative ID
-                    let fact = Fact::new(fact_id, head.predicate.clone(), values);
+                    let fact = Fact::new(fact_id, head.predicate, values);
 
                     // Add the fact if it's new
                     let facts_entry = self
                         .facts
-                        .entry(fact.predicate().clone()) // Use getter
-                        .or_insert_with(HashSet::new);
+                        .entry(*fact.predicate()) // Use getter
+                        .or_default();
                     if facts_entry.insert(fact) {
                         // If semantically new
                         self.next_fact_id += 1; // Commit/consume the ID
@@ -562,7 +555,7 @@ impl Datalog {
     }
 }
 
-impl Default for Datalog {
+impl Default for KnowledgeBase {
     fn default() -> Self {
         Self::new()
     }
@@ -575,7 +568,7 @@ mod tests {
 
     #[test]
     fn test_indexed_lookup() {
-        let mut dl = Datalog::new();
+        let mut dl = KnowledgeBase::new();
 
         // Add many facts with the same predicate but different values
         for i in 0..100 {
@@ -602,7 +595,7 @@ mod tests {
 
     #[test]
     fn test_ancestor_query() {
-        let mut dl = Datalog::new();
+        let mut dl = KnowledgeBase::new();
 
         // Add facts: parent(john, mary)
         dl.add_fact(
@@ -693,7 +686,7 @@ mod tests {
 
     #[test]
     fn test_fibonacci() {
-        let mut dl = Datalog::new();
+        let mut dl = KnowledgeBase::new();
 
         // Add base facts: fib(0, 0) and fib(1, 1)
         dl.add_fact(Symbol::from("fib"), vec![v_int(0), v_int(0)]); // Changed
@@ -805,7 +798,7 @@ mod tests {
 
     #[test]
     fn test_adventure_game_locations() {
-        let mut dl = Datalog::new();
+        let mut dl = KnowledgeBase::new();
 
         // Define room connections
         // direct_path(from_room, to_room)
@@ -928,7 +921,7 @@ mod tests {
 
     #[test]
     fn test_adventure_game_objects() {
-        let mut dl = Datalog::new();
+        let mut dl = KnowledgeBase::new();
 
         // Define locations of objects
         // location(object, place)
@@ -1077,7 +1070,7 @@ mod tests {
 
     #[test]
     fn test_adventure_game_puzzle() {
-        let mut dl = Datalog::new();
+        let mut dl = KnowledgeBase::new();
 
         // Define room connections
         // direct_path(from_room, to_room, is_locked)
@@ -1430,7 +1423,7 @@ mod tests {
 
     #[test]
     fn test_incremental_evaluation() {
-        let mut dl = Datalog::new();
+        let mut dl = KnowledgeBase::new();
 
         // Add facts: parent(john, mary)
         dl.add_fact(
@@ -1503,7 +1496,7 @@ mod tests {
         while steps_taken < 10 && dl.step_evaluation() {
             steps_taken += 1;
             let results = dl.query_incremental_results_as_lists(&john_x);
-            if results.len() > 0 {
+            if !results.is_empty() {
                 // Found the first result, should be mary
                 assert_eq!(results.len(), 1);
                 assert_eq!(results[0][0].as_string().unwrap(), "mary");
@@ -1544,7 +1537,7 @@ mod tests {
 
     #[test]
     fn test_game_query_with_step_limit() {
-        let mut dl = Datalog::new();
+        let mut dl = KnowledgeBase::new();
 
         // Set up a simple game world with many connected locations
         for i in 0..100 {
