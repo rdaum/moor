@@ -787,18 +787,13 @@ pub fn v_obj(o: Obj) -> Var {
 }
 
 #[inline(always)]
-pub fn v_sym(s: Symbol) -> Var {
-    Var::mk_symbol(s)
+pub fn v_sym(s: impl Into<Symbol>) -> Var {
+    Var::mk_symbol(s.into())
 }
 
 #[inline(always)]
 pub fn v_binary(bytes: Vec<u8>) -> Var {
     Var::mk_binary(bytes)
-}
-
-#[inline(always)]
-pub fn v_sym_str(s: &str) -> Var {
-    Var::mk_symbol(Symbol::mk_case_insensitive(s))
 }
 
 #[inline(always)]

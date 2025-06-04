@@ -18,7 +18,7 @@ use moor_compiler::{offset_for_builtin, to_literal};
 use moor_var::{AsByteBuffer, Sequence};
 use moor_var::{E_ARGS, E_INVARG, E_RANGE, E_TYPE};
 use moor_var::{Variant, v_err};
-use moor_var::{v_float, v_int, v_obj, v_objid, v_str, v_sym, v_sym_str};
+use moor_var::{v_float, v_int, v_obj, v_objid, v_str, v_sym};
 
 fn bf_typeof(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg = &bf_args.args[0];
@@ -63,9 +63,9 @@ fn bf_tosym(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     match bf_args.args[0].variant() {
         Variant::Bool(b) => {
             let s = format!("{b}");
-            Ok(Ret(v_sym_str(&s)))
+            Ok(Ret(v_sym(s.as_str())))
         }
-        Variant::Str(s) => Ok(Ret(v_sym_str(s.as_str()))),
+        Variant::Str(s) => Ok(Ret(v_sym(s.as_str()))),
         Variant::Err(e) => Ok(Ret(v_sym(e.name()))),
         Variant::Sym(s) => Ok(Ret(v_sym(*s))),
         _ => Err(BfErr::ErrValue(E_TYPE.msg(

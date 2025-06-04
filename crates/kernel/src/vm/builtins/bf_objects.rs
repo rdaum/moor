@@ -19,11 +19,11 @@ use moor_common::model::WorldStateError;
 use moor_common::model::{ObjFlag, ValSet};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE};
+use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_sym};
 use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Sequence, Symbol, v_list};
-use moor_var::{v_int, v_obj, v_str, v_sym_str};
+use moor_var::{v_int, v_obj, v_str};
 
 use crate::vm::builtins::BfRet::{Ret, RetNil, VmInstr};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};
@@ -900,7 +900,7 @@ fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .properties(&bf_args.task_perms_who(), &obj)
         .map_err(world_state_bf_err)?;
     let props: Vec<_> = if bf_args.config.use_symbols_in_builtins {
-        props.iter().map(|p| v_sym_str(p.name())).collect()
+        props.iter().map(|p| v_sym(p.name())).collect()
     } else {
         props.iter().map(|p| v_str(p.name())).collect()
     };
