@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::datalog::{Atom, Fact, Rule, Variable};
+use crate::datalog::{Atom, Fact, Literal, Rule, Variable};
 use crate::datalog::{Substitution, Term};
 use hi_sparse_bitset::{BitSet, config, ops::*, reduce};
 use moor_var::{Symbol, Var, v_list};
@@ -227,36 +227,40 @@ impl KnowledgeBase {
         // Start with an empty substitution
         let mut substitutions = vec![HashMap::new()];
 
-        // For each atom in the rule body
-        for atom in &rule.body {
-            // Apply the current substitutions to the atom
-            let atoms = substitutions
-                .iter()
-                .map(|subst| atom.apply_substitution(subst))
-                .collect::<Vec<_>>();
-
-            // Find matching facts for each atom
+        // Process each literal in the rule body
+        for lit in &rule.body {
             let mut new_substitutions = Vec::new();
-            for (i, atom) in atoms.iter().enumerate() {
-                let subst = &substitutions[i];
-
-                // Find facts that match the atom
-                let facts = self.find_matching_facts(atom);
-
-                for fact in facts {
-                    if let Some(mut new_subst) = self.unify(atom, &fact.to_atom()) {
-                        // Combine with the existing substitution
-                        for (var, value) in subst {
-                            new_subst.insert(var.clone(), value.clone());
+            for subst in &substitutions {
+                // Apply substitution to the atom in the literal
+                let atom_inst = match lit {
+                    Literal::Pos(a) | Literal::Neg(a) => a.apply_substitution(subst),
+                };
+                let facts = self.find_matching_facts(&atom_inst);
+                match lit {
+                    Literal::Pos(_) => {
+                        // Positive literal: join with matching facts
+                        for fact in facts {
+                            if let Some(mut new_subst) = self.unify(&atom_inst, &fact.to_atom()) {
+                                // Merge existing substitution
+                                for (v, val) in subst {
+                                    new_subst.insert(v.clone(), val.clone());
+                                }
+                                new_substitutions.push(new_subst);
+                            }
                         }
-                        new_substitutions.push(new_subst);
+                    }
+                    Literal::Neg(_) => {
+                        // Negated literal: keep substitution only if no fact actually unifies
+                        let conflict = facts
+                            .iter()
+                            .any(|fact| self.unify(&atom_inst, &fact.to_atom()).is_some());
+                        if !conflict {
+                            new_substitutions.push(subst.clone());
+                        }
                     }
                 }
             }
-
             substitutions = new_substitutions;
-
-            // If there are no substitutions, we can stop early
             if substitutions.is_empty() {
                 break;
             }
@@ -1748,5 +1752,357 @@ mod tests {
 
         assert!(reachable_nodes.contains(&11));
         assert!(reachable_nodes.contains(&12));
+    }
+
+    #[test]
+    fn test_negation_simple() {
+        let mut dl = KnowledgeBase::new();
+        dl.add_fact(Symbol::from("foo"), vec![v_int(1)]);
+        dl.add_fact(Symbol::from("foo"), vec![v_int(2)]);
+        dl.add_fact(Symbol::from("bar"), vec![v_int(2)]);
+
+        // baz(X) :- foo(X), not bar(X)
+        let x = dl.new_variable("X");
+        let foo_atom = Atom::new(Symbol::from("foo"), vec![Term::Variable(x.clone())]);
+        let bar_atom = Atom::new(Symbol::from("bar"), vec![Term::Variable(x.clone())]);
+        let baz_atom = Atom::new(Symbol::from("baz"), vec![Term::Variable(x.clone())]);
+        dl.add_rule(Rule::with_negation(
+            baz_atom.clone(),
+            vec![Literal::Pos(foo_atom), Literal::Neg(bar_atom)],
+        ));
+
+        let results = dl.query_as_lists(&baz_atom);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0][0], v_int(1));
+    }
+
+    #[test]
+    fn test_negation_double() {
+        let mut dl = KnowledgeBase::new();
+        // foo: {1,2,3}, bar: {2}, baz: {3}
+        for i in 1..=3 {
+            dl.add_fact(Symbol::from("foo"), vec![v_int(i)]);
+        }
+        dl.add_fact(Symbol::from("bar"), vec![v_int(2)]);
+        dl.add_fact(Symbol::from("baz"), vec![v_int(3)]);
+        // qux(X) :- foo(X), not bar(X), not baz(X)
+        let x = dl.new_variable("X");
+        let foo_atom = Atom::new(Symbol::from("foo"), vec![Term::Variable(x.clone())]);
+        let bar_atom = Atom::new(Symbol::from("bar"), vec![Term::Variable(x.clone())]);
+        let baz_atom = Atom::new(Symbol::from("baz"), vec![Term::Variable(x.clone())]);
+        let qux_atom = Atom::new(Symbol::from("qux"), vec![Term::Variable(x.clone())]);
+        dl.add_rule(Rule::with_negation(
+            qux_atom.clone(),
+            vec![
+                Literal::Pos(foo_atom),
+                Literal::Neg(bar_atom),
+                Literal::Neg(baz_atom),
+            ],
+        ));
+        let results = dl.query_as_lists(&qux_atom);
+        // Only 1 is neither in bar nor baz
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0][0], v_int(1));
+    }
+
+    #[test]
+    fn test_negation_with_constants() {
+        let mut dl = KnowledgeBase::new();
+
+        // Add facts about people and their ages
+        dl.add_fact(
+            Symbol::from("person"),
+            vec![v_string("alice".to_string()), v_int(25)],
+        );
+        dl.add_fact(
+            Symbol::from("person"),
+            vec![v_string("bob".to_string()), v_int(17)],
+        );
+        dl.add_fact(
+            Symbol::from("person"),
+            vec![v_string("charlie".to_string()), v_int(32)],
+        );
+        dl.add_fact(
+            Symbol::from("person"),
+            vec![v_string("dave".to_string()), v_int(15)],
+        );
+
+        // Rule: minor(X) :- person(X, Age), not Age >= 18
+        // In Datalog, we implement this as:
+        // minor(X) :- person(X, Age), not adult_age(Age)
+        // adult_age(Age) :- Age >= 18
+
+        // Define adult_age predicate
+        for i in 18..=100 {
+            dl.add_fact(Symbol::from("adult_age"), vec![v_int(i)]);
+        }
+
+        // Define the minor rule
+        let x = dl.new_variable("X");
+        let age = dl.new_variable("Age");
+        let person_atom = Atom::new(
+            Symbol::from("person"),
+            vec![Term::Variable(x.clone()), Term::Variable(age.clone())],
+        );
+        let adult_age_atom =
+            Atom::new(Symbol::from("adult_age"), vec![Term::Variable(age.clone())]);
+        let minor_atom = Atom::new(Symbol::from("minor"), vec![Term::Variable(x.clone())]);
+
+        dl.add_rule(Rule::with_negation(
+            minor_atom.clone(),
+            vec![Literal::Pos(person_atom), Literal::Neg(adult_age_atom)],
+        ));
+
+        // Query: Who is a minor?
+        let results = dl.query_as_lists(&minor_atom);
+        assert_eq!(results.len(), 2, "There should be 2 minors");
+
+        // Create a set of minors for easier verification
+        let minors: Vec<String> = results
+            .iter()
+            .map(|row| row[0].as_string().unwrap().to_string())
+            .collect();
+
+        assert!(minors.contains(&"bob".to_string()), "Bob should be a minor");
+        assert!(
+            minors.contains(&"dave".to_string()),
+            "Dave should be a minor"
+        );
+        assert!(
+            !minors.contains(&"alice".to_string()),
+            "Alice should not be a minor"
+        );
+        assert!(
+            !minors.contains(&"charlie".to_string()),
+            "Charlie should not be a minor"
+        );
+    }
+
+    #[test]
+    fn test_negation_complex_rules() {
+        let mut dl = KnowledgeBase::new();
+
+        // Set up facts about people, their skills and job requirements
+        // person(Name)
+        dl.add_fact(Symbol::from("person"), vec![v_string("alice".to_string())]);
+        dl.add_fact(Symbol::from("person"), vec![v_string("bob".to_string())]);
+        dl.add_fact(
+            Symbol::from("person"),
+            vec![v_string("charlie".to_string())],
+        );
+        dl.add_fact(Symbol::from("person"), vec![v_string("dave".to_string())]);
+
+        // has_skill(Person, Skill)
+        dl.add_fact(
+            Symbol::from("has_skill"),
+            vec![
+                v_string("alice".to_string()),
+                v_string("programming".to_string()),
+            ],
+        );
+        dl.add_fact(
+            Symbol::from("has_skill"),
+            vec![
+                v_string("alice".to_string()),
+                v_string("design".to_string()),
+            ],
+        );
+        dl.add_fact(
+            Symbol::from("has_skill"),
+            vec![
+                v_string("bob".to_string()),
+                v_string("programming".to_string()),
+            ],
+        );
+        dl.add_fact(
+            Symbol::from("has_skill"),
+            vec![
+                v_string("charlie".to_string()),
+                v_string("design".to_string()),
+            ],
+        );
+        dl.add_fact(
+            Symbol::from("has_skill"),
+            vec![
+                v_string("dave".to_string()),
+                v_string("management".to_string()),
+            ],
+        );
+
+        // job_requires(Job, Skill)
+        dl.add_fact(
+            Symbol::from("job_requires"),
+            vec![
+                v_string("developer".to_string()),
+                v_string("programming".to_string()),
+            ],
+        );
+        dl.add_fact(
+            Symbol::from("job_requires"),
+            vec![
+                v_string("designer".to_string()),
+                v_string("design".to_string()),
+            ],
+        );
+        dl.add_fact(
+            Symbol::from("job_requires"),
+            vec![
+                v_string("lead_dev".to_string()),
+                v_string("programming".to_string()),
+            ],
+        );
+        dl.add_fact(
+            Symbol::from("job_requires"),
+            vec![
+                v_string("lead_dev".to_string()),
+                v_string("management".to_string()),
+            ],
+        );
+
+        // Rule: missing_skill(Person, Job, Skill) :- person(Person), job_requires(Job, Skill), not has_skill(Person, Skill)
+        let person_var = dl.new_variable("Person");
+        let job_var = dl.new_variable("Job");
+        let skill_var = dl.new_variable("Skill");
+
+        let person_atom = Atom::new(
+            Symbol::from("person"),
+            vec![Term::Variable(person_var.clone())],
+        );
+        let job_requires_atom = Atom::new(
+            Symbol::from("job_requires"),
+            vec![
+                Term::Variable(job_var.clone()),
+                Term::Variable(skill_var.clone()),
+            ],
+        );
+        let has_skill_atom = Atom::new(
+            Symbol::from("has_skill"),
+            vec![
+                Term::Variable(person_var.clone()),
+                Term::Variable(skill_var.clone()),
+            ],
+        );
+        let missing_skill_atom = Atom::new(
+            Symbol::from("missing_skill"),
+            vec![
+                Term::Variable(person_var.clone()),
+                Term::Variable(job_var.clone()),
+                Term::Variable(skill_var.clone()),
+            ],
+        );
+
+        dl.add_rule(Rule::with_negation(
+            missing_skill_atom.clone(),
+            vec![
+                Literal::Pos(person_atom),
+                Literal::Pos(job_requires_atom),
+                Literal::Neg(has_skill_atom),
+            ],
+        ));
+
+        // Rule: qualified_for(Person, Job) :- person(Person), job_requires(Job, _), not missing_skill(Person, Job, _)
+        // This is a stratified negation rule - using the previous rule in a negation
+        let person_var2 = dl.new_variable("Person");
+        let job_var2 = dl.new_variable("Job");
+        let skill_var2 = dl.new_variable("Skill");
+
+        let person_atom2 = Atom::new(
+            Symbol::from("person"),
+            vec![Term::Variable(person_var2.clone())],
+        );
+        let job_requires_atom2 = Atom::new(
+            Symbol::from("job_requires"),
+            vec![
+                Term::Variable(job_var2.clone()),
+                Term::Variable(skill_var2.clone()),
+            ],
+        );
+        let missing_skill_atom2 = Atom::new(
+            Symbol::from("missing_skill"),
+            vec![
+                Term::Variable(person_var2.clone()),
+                Term::Variable(job_var2.clone()),
+                Term::Variable(dl.new_variable("AnySkill")), // We don't care which skill specifically
+            ],
+        );
+        let qualified_for_atom = Atom::new(
+            Symbol::from("qualified_for"),
+            vec![
+                Term::Variable(person_var2.clone()),
+                Term::Variable(job_var2.clone()),
+            ],
+        );
+
+        dl.add_rule(Rule::with_negation(
+            qualified_for_atom.clone(),
+            vec![
+                Literal::Pos(person_atom2),
+                Literal::Pos(job_requires_atom2),
+                Literal::Neg(missing_skill_atom2),
+            ],
+        ));
+
+        // Query 1: Who is missing the management skill for the lead_dev job?
+        let missing_management = Atom::new(
+            Symbol::from("missing_skill"),
+            vec![
+                Term::Variable(dl.new_variable("Person")),
+                Term::Constant(v_string("lead_dev".to_string())),
+                Term::Constant(v_string("management".to_string())),
+            ],
+        );
+
+        let results = dl.query_as_lists(&missing_management);
+        assert_eq!(
+            results.len(),
+            3,
+            "Three people should be missing management skills"
+        );
+
+        let missing_management_people: Vec<String> = results
+            .iter()
+            .map(|row| row[0].as_string().unwrap().to_string())
+            .collect();
+
+        assert!(missing_management_people.contains(&"alice".to_string()));
+        assert!(missing_management_people.contains(&"bob".to_string()));
+        assert!(missing_management_people.contains(&"charlie".to_string()));
+        assert!(!missing_management_people.contains(&"dave".to_string()));
+
+        // Query 2: Who is qualified for the developer job?
+        let qualified_for_dev = Atom::new(
+            Symbol::from("qualified_for"),
+            vec![
+                Term::Variable(dl.new_variable("Person")),
+                Term::Constant(v_string("developer".to_string())),
+            ],
+        );
+
+        let results = dl.query_as_lists(&qualified_for_dev);
+        assert_eq!(
+            results.len(),
+            2,
+            "Two people should be qualified for developer"
+        );
+
+        let qualified_devs: Vec<String> = results
+            .iter()
+            .map(|row| row[0].as_string().unwrap().to_string())
+            .collect();
+
+        assert!(qualified_devs.contains(&"alice".to_string()));
+        assert!(qualified_devs.contains(&"bob".to_string()));
+
+        // Query 3: Who is qualified for the lead_dev job?
+        let qualified_for_lead = Atom::new(
+            Symbol::from("qualified_for"),
+            vec![
+                Term::Variable(dl.new_variable("Person")),
+                Term::Constant(v_string("lead_dev".to_string())),
+            ],
+        );
+
+        let results = dl.query_as_lists(&qualified_for_lead);
+        assert_eq!(results.len(), 0, "No one should be qualified for lead_dev");
     }
 }

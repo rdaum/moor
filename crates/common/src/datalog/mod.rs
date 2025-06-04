@@ -22,6 +22,7 @@ pub use atom::Atom;
 pub use fact::Fact;
 pub use knowledge_base::KnowledgeBase;
 use moor_var::Var;
+pub use rule::Literal;
 pub use rule::Rule;
 use std::collections::HashMap;
 pub use term::Term;
