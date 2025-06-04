@@ -13,8 +13,8 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use moor_common::datalog::Term::{Constant, Variable};
-use moor_common::datalog::{Atom, KnowledgeBase, Rule}; // Removed Fact import
-use moor_var::{Symbol, v_int, v_sym};
+use moor_common::datalog::{AggregateLiteral, AggregateOp, Atom, KnowledgeBase, Literal, Rule};
+use moor_var::{Symbol, v_int, v_string, v_sym};
 use std::hint::black_box;
 
 // Lazy init a bunch of symbols we'll use ("parent", "X", *Y, etc.), just so we're not really
@@ -40,6 +40,15 @@ lazy_static::lazy_static! {
     static ref ROOM: Symbol = Symbol::from("Room");
     static ref ITEM: Symbol = Symbol::from("Item");
     static ref START: Symbol = Symbol::from("Start");
+    static ref STUDENT: Symbol = Symbol::from("Student");
+    static ref SUBJECT: Symbol = Symbol::from("Subject");
+    static ref GRADE: Symbol = Symbol::from("Grade");
+    static ref COURSE_COUNT: Symbol = Symbol::from("course_count");
+    static ref MIN_GRADE: Symbol = Symbol::from("min_grade");
+    static ref MAX_GRADE: Symbol = Symbol::from("max_grade");
+    static ref COUNT: Symbol = Symbol::from("Count");
+    static ref MIN_VAL: Symbol = Symbol::from("MinVal");
+    static ref MAX_VAL: Symbol = Symbol::from("MaxVal");
 }
 
 fn create_ancestor_datalog() -> (KnowledgeBase, Atom) {
@@ -392,6 +401,167 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     (dl, query)
 }
 
+fn create_aggregation_datalog(
+    num_students: usize,
+    num_subjects: usize,
+) -> (KnowledgeBase, Vec<Atom>) {
+    let mut dl = KnowledgeBase::new();
+
+    // Add student grade facts
+    for student_id in 0..num_students {
+        for subject_id in 0..num_subjects {
+            let student = format!("student_{}", student_id);
+            let subject = format!("subject_{}", subject_id);
+            // Generate grades between 60-100
+            let grade = 60 + (student_id * 7 + subject_id * 13) % 40;
+
+            dl.add_fact(
+                *GRADE,
+                vec![v_string(student), v_string(subject), v_int(grade as i64)],
+            );
+        }
+    }
+
+    // Rule: course_count(Student, Count) :- Count = count(Subject) group by [Student] in grade(Student, Subject, _)
+    let student_var = dl.new_variable(*STUDENT);
+    let subject_var = dl.new_variable(*SUBJECT);
+    let score_var = dl.new_variable(*GRADE);
+    let count_var = dl.new_variable(*COUNT);
+
+    let grade_atom = Atom::new(
+        *GRADE,
+        vec![
+            Variable(student_var.clone()),
+            Variable(subject_var.clone()),
+            Variable(score_var.clone()),
+        ],
+    );
+
+    let count_agg_literal = AggregateLiteral::new(
+        AggregateOp::Count,
+        count_var.clone(),
+        subject_var.clone(),
+        vec![student_var.clone()],
+        grade_atom.clone(),
+    );
+
+    let course_count_atom = Atom::new(
+        *COURSE_COUNT,
+        vec![Variable(student_var.clone()), Variable(count_var.clone())],
+    );
+
+    dl.add_rule(Rule::with_literals(
+        course_count_atom.clone(),
+        vec![Literal::Aggregate(count_agg_literal)],
+    ));
+
+    // Rule: min_grade(Student, MinGrade) :- MinGrade = min(Score) group by [Student] in grade(Student, _, Score)
+    let min_var = dl.new_variable(*MIN_VAL);
+    let min_agg_literal = AggregateLiteral::new(
+        AggregateOp::Min,
+        min_var.clone(),
+        score_var.clone(),
+        vec![student_var.clone()],
+        grade_atom.clone(),
+    );
+
+    let min_grade_atom = Atom::new(
+        *MIN_GRADE,
+        vec![Variable(student_var.clone()), Variable(min_var.clone())],
+    );
+
+    dl.add_rule(Rule::with_literals(
+        min_grade_atom.clone(),
+        vec![Literal::Aggregate(min_agg_literal)],
+    ));
+
+    // Rule: max_grade(Student, MaxGrade) :- MaxGrade = max(Score) group by [Student] in grade(Student, _, Score)
+    let max_var = dl.new_variable(*MAX_VAL);
+    let max_agg_literal = AggregateLiteral::new(
+        AggregateOp::Max,
+        max_var.clone(),
+        score_var.clone(),
+        vec![student_var.clone()],
+        grade_atom,
+    );
+
+    let max_grade_atom = Atom::new(
+        *MAX_GRADE,
+        vec![Variable(student_var.clone()), Variable(max_var.clone())],
+    );
+
+    dl.add_rule(Rule::with_literals(
+        max_grade_atom.clone(),
+        vec![Literal::Aggregate(max_agg_literal)],
+    ));
+
+    // Return queries for count, min, and max
+    let queries = vec![course_count_atom, min_grade_atom, max_grade_atom];
+
+    (dl, queries)
+}
+
+fn benchmark_aggregation(c: &mut Criterion) {
+    let mut group = c.benchmark_group("aggregation");
+    group.sample_size(10);
+
+    // Test different data sizes
+    let test_sizes = [(10, 5), (50, 10), (100, 15), (200, 20)]; // (num_students, num_subjects)
+
+    for (num_students, num_subjects) in test_sizes.iter() {
+        let total_facts = num_students * num_subjects;
+
+        // Count aggregation benchmark
+        group.bench_with_input(
+            BenchmarkId::new("count", total_facts),
+            &(*num_students, *num_subjects),
+            |b, &(students, subjects)| {
+                let (mut dl, queries) = create_aggregation_datalog(students, subjects);
+                let count_query = &queries[0]; // course_count query
+                b.iter(|| dl.query(black_box(count_query)));
+            },
+        );
+
+        // Min aggregation benchmark
+        group.bench_with_input(
+            BenchmarkId::new("min", total_facts),
+            &(*num_students, *num_subjects),
+            |b, &(students, subjects)| {
+                let (mut dl, queries) = create_aggregation_datalog(students, subjects);
+                let min_query = &queries[1]; // min_grade query
+                b.iter(|| dl.query(black_box(min_query)));
+            },
+        );
+
+        // Max aggregation benchmark
+        group.bench_with_input(
+            BenchmarkId::new("max", total_facts),
+            &(*num_students, *num_subjects),
+            |b, &(students, subjects)| {
+                let (mut dl, queries) = create_aggregation_datalog(students, subjects);
+                let max_query = &queries[2]; // max_grade query
+                b.iter(|| dl.query(black_box(max_query)));
+            },
+        );
+
+        // All aggregations together benchmark
+        group.bench_with_input(
+            BenchmarkId::new("all_aggregations", total_facts),
+            &(*num_students, *num_subjects),
+            |b, &(students, subjects)| {
+                let (mut dl, queries) = create_aggregation_datalog(students, subjects);
+                b.iter(|| {
+                    for query in &queries {
+                        dl.query(black_box(query));
+                    }
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 fn benchmark_full_query(c: &mut Criterion) {
     let mut group = c.benchmark_group("full_query");
     group.sample_size(10);
@@ -628,6 +798,7 @@ criterion_group!(
     benchmark_full_query,
     benchmark_incremental_query,
     benchmark_incremental_vs_complete,
-    benchmark_step_overhead
+    benchmark_step_overhead,
+    benchmark_aggregation
 );
 criterion_main!(benches);

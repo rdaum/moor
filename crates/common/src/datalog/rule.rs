@@ -14,12 +14,37 @@
 use std::fmt::{Display, Formatter};
 
 use super::atom::Atom;
+use super::variable::Variable;
 
-/// A literal in a rule body: positive or negated atom
+/// Aggregation operations
+#[derive(Clone, Debug)]
+pub enum AggregateOp {
+    Count,
+    Min,
+    Max,
+}
+
+/// An aggregation literal in a rule body
+#[derive(Clone, Debug)]
+pub struct AggregateLiteral {
+    /// The aggregation operation
+    pub op: AggregateOp,
+    /// The variable to store the result
+    pub result_var: Variable,
+    /// The variable to aggregate over
+    pub aggregate_var: Variable,
+    /// The grouping variables (variables that define the grouping)
+    pub group_vars: Vec<Variable>,
+    /// The atom pattern that generates the values to aggregate
+    pub atom: Atom,
+}
+
+/// A literal in a rule body: positive atom, negated atom, or aggregation
 #[derive(Clone, Debug)]
 pub enum Literal {
     Pos(Atom),
     Neg(Atom),
+    Aggregate(AggregateLiteral),
 }
 
 /// A Rule is a Horn clause in the form: head :- body
@@ -43,6 +68,29 @@ impl Rule {
     pub fn with_negation(head: Atom, body: Vec<Literal>) -> Self {
         Self { head, body }
     }
+    /// Create a new rule with literals (including aggregation)
+    pub fn with_literals(head: Atom, body: Vec<Literal>) -> Self {
+        Self { head, body }
+    }
+}
+
+impl AggregateLiteral {
+    /// Create a new aggregation literal
+    pub fn new(
+        op: AggregateOp,
+        result_var: Variable,
+        aggregate_var: Variable,
+        group_vars: Vec<Variable>,
+        atom: Atom,
+    ) -> Self {
+        Self {
+            op,
+            result_var,
+            aggregate_var,
+            group_vars,
+            atom,
+        }
+    }
 }
 
 impl Display for Rule {
@@ -55,8 +103,36 @@ impl Display for Rule {
             match lit {
                 Literal::Pos(a) => write!(f, "{}", a)?,
                 Literal::Neg(a) => write!(f, "not {}", a)?,
+                Literal::Aggregate(agg) => write!(f, "{}", agg)?,
             }
         }
         Ok(())
+    }
+}
+
+impl Display for AggregateOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AggregateOp::Count => write!(f, "count"),
+            AggregateOp::Min => write!(f, "min"),
+            AggregateOp::Max => write!(f, "max"),
+        }
+    }
+}
+
+impl Display for AggregateLiteral {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} = {}({})", self.result_var, self.op, self.aggregate_var)?;
+        if !self.group_vars.is_empty() {
+            write!(f, " group by [")?;
+            for (i, var) in self.group_vars.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}", var)?;
+            }
+            write!(f, "]")?;
+        }
+        write!(f, " in {}", self.atom)
     }
 }

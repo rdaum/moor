@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::datalog::{Atom, Fact, Literal, Rule, Variable};
+use crate::datalog::{AggregateLiteral, AggregateOp, Atom, Fact, Literal, Rule, Variable};
 use crate::datalog::{Relation, Substitution, Term};
 use moor_var::{Symbol, Var, v_list};
 use std::collections::{HashMap, HashSet};
@@ -194,6 +194,7 @@ impl KnowledgeBase {
                 let predicate = match literal {
                     Literal::Pos(atom) => atom.predicate,
                     Literal::Neg(atom) => atom.predicate,
+                    Literal::Aggregate(agg) => agg.atom.predicate,
                 };
                 all_predicates.insert(predicate);
             }
@@ -215,6 +216,10 @@ impl KnowledgeBase {
                     }
                     Literal::Neg(atom) => {
                         negative_dependencies.get_mut(&head_pred).unwrap().insert(atom.predicate);
+                    }
+                    Literal::Aggregate(agg) => {
+                        // Aggregation creates a positive dependency on the aggregated predicate
+                        dependencies.get_mut(&head_pred).unwrap().insert(agg.atom.predicate);
                     }
                 }
             }
@@ -277,34 +282,41 @@ impl KnowledgeBase {
         // Process each literal in the rule body
         for lit in &rule.body {
             let mut new_substitutions = Vec::new();
-            for subst in &substitutions {
-                // Apply substitution to the atom in the literal
-                let atom_inst = match lit {
-                    Literal::Pos(a) | Literal::Neg(a) => a.apply_substitution(subst),
-                };
-                let facts = self.find_matching_facts(&atom_inst);
-                match lit {
-                    Literal::Pos(_) => {
-                        // Positive literal: join with matching facts
-                        for fact in facts {
-                            if let Some(mut new_subst) = self.unify(&atom_inst, &fact.to_atom()) {
-                                // Merge existing substitution
-                                for (v, val) in subst {
-                                    new_subst.insert(v.clone(), val.clone());
+            match lit {
+                Literal::Pos(atom) | Literal::Neg(atom) => {
+                    for subst in &substitutions {
+                        // Apply substitution to the atom in the literal
+                        let atom_inst = atom.apply_substitution(subst);
+                        let facts = self.find_matching_facts(&atom_inst);
+                        match lit {
+                            Literal::Pos(_) => {
+                                // Positive literal: join with matching facts
+                                for fact in facts {
+                                    if let Some(mut new_subst) = self.unify(&atom_inst, &fact.to_atom()) {
+                                        // Merge existing substitution
+                                        for (v, val) in subst {
+                                            new_subst.insert(v.clone(), val.clone());
+                                        }
+                                        new_substitutions.push(new_subst);
+                                    }
                                 }
-                                new_substitutions.push(new_subst);
                             }
+                            Literal::Neg(_) => {
+                                // Negated literal: keep substitution only if no fact actually unifies
+                                let conflict = facts
+                                    .iter()
+                                    .any(|fact| self.unify(&atom_inst, &fact.to_atom()).is_some());
+                                if !conflict {
+                                    new_substitutions.push(subst.clone());
+                                }
+                            }
+                            _ => unreachable!(),
                         }
                     }
-                    Literal::Neg(_) => {
-                        // Negated literal: keep substitution only if no fact actually unifies
-                        let conflict = facts
-                            .iter()
-                            .any(|fact| self.unify(&atom_inst, &fact.to_atom()).is_some());
-                        if !conflict {
-                            new_substitutions.push(subst.clone());
-                        }
-                    }
+                }
+                Literal::Aggregate(agg) => {
+                    // Handle aggregation
+                    new_substitutions = self.evaluate_aggregation(&substitutions, agg);
                 }
             }
             substitutions = new_substitutions;
@@ -314,6 +326,85 @@ impl KnowledgeBase {
         }
 
         substitutions
+    }
+
+    /// Evaluate an aggregation literal
+    fn evaluate_aggregation(
+        &self,
+        input_substitutions: &[Substitution],
+        agg: &AggregateLiteral,
+    ) -> Vec<Substitution> {
+        let mut result_substitutions = Vec::new();
+
+        for input_subst in input_substitutions {
+            // Apply current substitution to the aggregation atom
+            let atom_inst = agg.atom.apply_substitution(input_subst);
+            let facts = self.find_matching_facts(&atom_inst);
+
+            // Group facts by the group variables
+            let mut groups: HashMap<Vec<Var>, Vec<Var>> = HashMap::new();
+
+            for fact in facts {
+                if let Some(fact_subst) = self.unify(&atom_inst, &fact.to_atom()) {
+                    // Extract group key values
+                    let group_key: Vec<Var> = agg
+                        .group_vars
+                        .iter()
+                        .filter_map(|gv| {
+                            input_subst.get(gv).cloned().or_else(|| fact_subst.get(gv).cloned())
+                        })
+                        .collect();
+
+                    // Extract aggregate value
+                    if let Some(aggregate_value) = fact_subst.get(&agg.aggregate_var).cloned()
+                        .or_else(|| input_subst.get(&agg.aggregate_var).cloned())
+                    {
+                        groups.entry(group_key).or_insert_with(Vec::new).push(aggregate_value);
+                    }
+                }
+            }
+
+            // Compute aggregates for each group
+            for (group_key, values) in groups {
+                if let Some(aggregate_result) = self.compute_aggregate(&agg.op, &values) {
+                    let mut new_subst = input_subst.clone();
+                    
+                    // Bind group variables
+                    for (i, group_var) in agg.group_vars.iter().enumerate() {
+                        if i < group_key.len() {
+                            new_subst.insert(group_var.clone(), group_key[i].clone());
+                        }
+                    }
+                    
+                    // Bind result variable
+                    new_subst.insert(agg.result_var.clone(), aggregate_result);
+                    
+                    result_substitutions.push(new_subst);
+                }
+            }
+        }
+
+        result_substitutions
+    }
+
+    /// Compute an aggregate value from a list of values
+    fn compute_aggregate(&self, op: &AggregateOp, values: &[Var]) -> Option<Var> {
+        if values.is_empty() {
+            return match op {
+                AggregateOp::Count => Some(Var::mk_integer(0)),
+                _ => None,
+            };
+        }
+
+        match op {
+            AggregateOp::Count => Some(Var::mk_integer(values.len() as i64)),
+            AggregateOp::Min => {
+                values.iter().min().cloned()
+            }
+            AggregateOp::Max => {
+                values.iter().max().cloned()
+            }
+        }
     }
 
     /// Unify two atoms and return a substitution if successful
@@ -2024,5 +2115,454 @@ mod tests {
         });
         
         assert!(result.is_err(), "Expected panic due to unstratifiable program");
+    }
+
+    #[test]
+    fn test_aggregation_count() {
+        let mut dl = KnowledgeBase::new();
+        
+        // Add base facts: student grades
+        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("math".to_string()), v_int(85)]);
+        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("english".to_string()), v_int(92)]);
+        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("science".to_string()), v_int(78)]);
+        dl.add_fact("grade", vec![v_string("bob".to_string()), v_string("math".to_string()), v_int(76)]);
+        dl.add_fact("grade", vec![v_string("bob".to_string()), v_string("english".to_string()), v_int(84)]);
+        
+        // Rule: course_count(Student, Count) :- Count = count(Subject) group by [Student] in grade(Student, Subject, _)
+        let student_var = dl.new_variable("Student");
+        let subject_var = dl.new_variable("Subject");
+        let score_var = dl.new_variable("Score");
+        let count_var = dl.new_variable("Count");
+        
+        let grade_atom = Atom::new(
+            "grade",
+            vec![
+                Term::Variable(student_var.clone()),
+                Term::Variable(subject_var.clone()),
+                Term::Variable(score_var.clone()),
+            ],
+        );
+        
+        let agg_literal = AggregateLiteral::new(
+            AggregateOp::Count,
+            count_var.clone(),
+            subject_var.clone(),
+            vec![student_var.clone()],
+            grade_atom,
+        );
+        
+        let course_count_atom = Atom::new(
+            "course_count",
+            vec![
+                Term::Variable(student_var.clone()),
+                Term::Variable(count_var.clone()),
+            ],
+        );
+        
+        dl.add_rule(Rule::with_literals(
+            course_count_atom.clone(),
+            vec![Literal::Aggregate(agg_literal)],
+        ));
+        
+        // Query: course_count(X, Y)
+        let results = dl.query_as_lists(&course_count_atom);
+        assert_eq!(results.len(), 2); // Alice and Bob
+        
+        // Check results
+        let mut found_alice = false;
+        let mut found_bob = false;
+        for result in &results {
+            let student = result[0].as_string().unwrap();
+            let count = result[1].as_integer().unwrap();
+            
+            if student == "alice" {
+                assert_eq!(count, 3);
+                found_alice = true;
+            } else if student == "bob" {
+                assert_eq!(count, 2);
+                found_bob = true;
+            }
+        }
+        assert!(found_alice && found_bob);
+    }
+
+    #[test]
+    fn test_aggregation_min_max() {
+        let mut dl = KnowledgeBase::new();
+        
+        // Add base facts: student grades
+        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("math".to_string()), v_int(85)]);
+        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("english".to_string()), v_int(92)]);
+        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("science".to_string()), v_int(78)]);
+        dl.add_fact("grade", vec![v_string("bob".to_string()), v_string("math".to_string()), v_int(76)]);
+        dl.add_fact("grade", vec![v_string("bob".to_string()), v_string("english".to_string()), v_int(84)]);
+        
+        // Rule: min_grade(Student, MinGrade) :- MinGrade = min(Score) group by [Student] in grade(Student, _, Score)
+        let student_var = dl.new_variable("Student");
+        let subject_var = dl.new_variable("Subject");
+        let score_var = dl.new_variable("Score");
+        let min_var = dl.new_variable("MinGrade");
+        
+        let grade_atom = Atom::new(
+            "grade",
+            vec![
+                Term::Variable(student_var.clone()),
+                Term::Variable(subject_var.clone()),
+                Term::Variable(score_var.clone()),
+            ],
+        );
+        
+        let min_agg_literal = AggregateLiteral::new(
+            AggregateOp::Min,
+            min_var.clone(),
+            score_var.clone(),
+            vec![student_var.clone()],
+            grade_atom.clone(),
+        );
+        
+        let min_grade_atom = Atom::new(
+            "min_grade",
+            vec![
+                Term::Variable(student_var.clone()),
+                Term::Variable(min_var.clone()),
+            ],
+        );
+        
+        dl.add_rule(Rule::with_literals(
+            min_grade_atom.clone(),
+            vec![Literal::Aggregate(min_agg_literal)],
+        ));
+        
+        // Rule: max_grade(Student, MaxGrade) :- MaxGrade = max(Score) group by [Student] in grade(Student, _, Score)
+        let max_var = dl.new_variable("MaxGrade");
+        let max_agg_literal = AggregateLiteral::new(
+            AggregateOp::Max,
+            max_var.clone(),
+            score_var.clone(),
+            vec![student_var.clone()],
+            grade_atom,
+        );
+        
+        let max_grade_atom = Atom::new(
+            "max_grade",
+            vec![
+                Term::Variable(student_var.clone()),
+                Term::Variable(max_var.clone()),
+            ],
+        );
+        
+        dl.add_rule(Rule::with_literals(
+            max_grade_atom.clone(),
+            vec![Literal::Aggregate(max_agg_literal)],
+        ));
+        
+        // Query min grades
+        let min_results = dl.query_as_lists(&min_grade_atom);
+        assert_eq!(min_results.len(), 2);
+        
+        for result in &min_results {
+            let student = result[0].as_string().unwrap();
+            let min_grade = result[1].as_integer().unwrap();
+            
+            if student == "alice" {
+                assert_eq!(min_grade, 78); // Alice's minimum grade
+            } else if student == "bob" {
+                assert_eq!(min_grade, 76); // Bob's minimum grade
+            }
+        }
+        
+        // Query max grades
+        let max_results = dl.query_as_lists(&max_grade_atom);
+        assert_eq!(max_results.len(), 2);
+        
+        for result in &max_results {
+            let student = result[0].as_string().unwrap();
+            let max_grade = result[1].as_integer().unwrap();
+            
+            if student == "alice" {
+                assert_eq!(max_grade, 92); // Alice's maximum grade
+            } else if student == "bob" {
+                assert_eq!(max_grade, 84); // Bob's maximum grade
+            }
+        }
+    }
+
+    #[test]
+    fn test_aggregation_no_grouping() {
+        let mut dl = KnowledgeBase::new();
+        
+        // Add some numbers
+        for i in 1..=5 {
+            dl.add_fact("number", vec![v_int(i)]);
+        }
+        
+        // Rule: total_count(Count) :- Count = count(X) group by [] in number(X)
+        let x_var = dl.new_variable("X");
+        let count_var = dl.new_variable("Count");
+        
+        let number_atom = Atom::new("number", vec![Term::Variable(x_var.clone())]);
+        
+        let count_agg_literal = AggregateLiteral::new(
+            AggregateOp::Count,
+            count_var.clone(),
+            x_var.clone(),
+            vec![], // No grouping variables
+            number_atom,
+        );
+        
+        let total_count_atom = Atom::new("total_count", vec![Term::Variable(count_var.clone())]);
+        
+        dl.add_rule(Rule::with_literals(
+            total_count_atom.clone(),
+            vec![Literal::Aggregate(count_agg_literal)],
+        ));
+        
+        // Query: total_count(X)
+        let results = dl.query_as_lists(&total_count_atom);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0][0].as_integer().unwrap(), 5); // Count of all numbers
+    }
+
+    #[test]
+    fn test_aggregation_with_conditions() {
+        let mut dl = KnowledgeBase::new();
+        
+        // Add base facts: sales data
+        dl.add_fact("sale", vec![v_string("alice".to_string()), v_string("q1".to_string()), v_int(100)]);
+        dl.add_fact("sale", vec![v_string("alice".to_string()), v_string("q2".to_string()), v_int(150)]);
+        dl.add_fact("sale", vec![v_string("alice".to_string()), v_string("q3".to_string()), v_int(200)]);
+        dl.add_fact("sale", vec![v_string("bob".to_string()), v_string("q1".to_string()), v_int(80)]);
+        dl.add_fact("sale", vec![v_string("bob".to_string()), v_string("q2".to_string()), v_int(90)]);
+        
+        // Add threshold fact
+        dl.add_fact("high_performer_threshold", vec![v_int(400)]);
+        
+        // Rule: total_sales(Person, Total) :- Total = sum(Amount) group by [Person] in sale(Person, _, Amount)
+        // Note: We'll use count for now since sum isn't implemented, but multiply by average
+        let person_var = dl.new_variable("Person");
+        let quarter_var = dl.new_variable("Quarter");
+        let amount_var = dl.new_variable("Amount");
+        let total_var = dl.new_variable("Total");
+        
+        let sale_atom = Atom::new(
+            "sale",
+            vec![
+                Term::Variable(person_var.clone()),
+                Term::Variable(quarter_var.clone()),
+                Term::Variable(amount_var.clone()),
+            ],
+        );
+        
+        // For simplicity, let's count sales per person
+        let count_agg_literal = AggregateLiteral::new(
+            AggregateOp::Count,
+            total_var.clone(),
+            quarter_var.clone(),
+            vec![person_var.clone()],
+            sale_atom,
+        );
+        
+        let total_sales_atom = Atom::new(
+            "sales_count",
+            vec![
+                Term::Variable(person_var.clone()),
+                Term::Variable(total_var.clone()),
+            ],
+        );
+        
+        dl.add_rule(Rule::with_literals(
+            total_sales_atom.clone(),
+            vec![Literal::Aggregate(count_agg_literal)],
+        ));
+        
+        // Rule: high_performer(Person) :- sales_count(Person, Count), Count >= 3
+        // Since we don't have comparison operators, we'll check who has exactly 3 sales
+        let high_performer_atom = Atom::new("high_performer", vec![Term::Variable(person_var.clone())]);
+        
+        let sales_count_check = Atom::new(
+            "sales_count",
+            vec![
+                Term::Variable(person_var.clone()),
+                Term::Constant(Var::mk_integer(3)),
+            ],
+        );
+        
+        dl.add_rule(Rule::new(
+            high_performer_atom.clone(),
+            vec![sales_count_check],
+        ));
+        
+        // Query: who are the high performers?
+        let high_performer_results = dl.query_as_lists(&high_performer_atom);
+        assert_eq!(high_performer_results.len(), 1);
+        assert_eq!(high_performer_results[0][0].as_string().unwrap(), "alice");
+        
+        // Query: what are the sales counts?
+        let sales_count_results = dl.query_as_lists(&total_sales_atom);
+        assert_eq!(sales_count_results.len(), 2);
+        
+        for result in &sales_count_results {
+            let person = result[0].as_string().unwrap();
+            let count = result[1].as_integer().unwrap();
+            
+            if person == "alice" {
+                assert_eq!(count, 3); // Alice has 3 sales
+            } else if person == "bob" {
+                assert_eq!(count, 2); // Bob has 2 sales
+            }
+        }
+    }
+
+    #[test]
+    fn test_fibonacci_with_aggregation() {
+        let mut dl = KnowledgeBase::new();
+
+        // Add base facts: fib(0, 0) and fib(1, 1)
+        dl.add_fact("fib", vec![v_int(0), v_int(0)]);
+        dl.add_fact("fib", vec![v_int(1), v_int(1)]);
+
+        // Add some known Fibonacci values manually for testing
+        dl.add_fact("fib", vec![v_int(2), v_int(1)]);
+        dl.add_fact("fib", vec![v_int(3), v_int(2)]);
+        dl.add_fact("fib", vec![v_int(4), v_int(3)]);
+
+        // Add student-course like data to demonstrate aggregation with Fibonacci sequence positions
+        // Let's say each position in Fibonacci sequence has "contributions" from its predecessors
+        dl.add_fact("fib_contribution", vec![v_int(2), v_int(0), v_int(0)]); // fib(2) gets 0 from position 0
+        dl.add_fact("fib_contribution", vec![v_int(2), v_int(1), v_int(1)]); // fib(2) gets 1 from position 1
+        
+        dl.add_fact("fib_contribution", vec![v_int(3), v_int(1), v_int(1)]); // fib(3) gets 1 from position 1  
+        dl.add_fact("fib_contribution", vec![v_int(3), v_int(2), v_int(1)]); // fib(3) gets 1 from position 2
+        
+        dl.add_fact("fib_contribution", vec![v_int(4), v_int(2), v_int(1)]); // fib(4) gets 1 from position 2
+        dl.add_fact("fib_contribution", vec![v_int(4), v_int(3), v_int(2)]); // fib(4) gets 2 from position 3
+
+        // Rule: fib_sum(N, Sum) :- Sum = count(Contribution) group by [N] in fib_contribution(N, _, Contribution)
+        // This will count the contributions to each Fibonacci position
+        let n_var = dl.new_variable("N");
+        let from_var = dl.new_variable("From");
+        let contribution_var = dl.new_variable("Contribution");
+        let sum_var = dl.new_variable("Sum");
+
+        let contribution_atom = Atom::new(
+            "fib_contribution",
+            vec![
+                Term::Variable(n_var.clone()),
+                Term::Variable(from_var.clone()),
+                Term::Variable(contribution_var.clone()),
+            ],
+        );
+
+        let sum_agg_literal = AggregateLiteral::new(
+            AggregateOp::Count,
+            sum_var.clone(),
+            contribution_var.clone(),
+            vec![n_var.clone()],
+            contribution_atom,
+        );
+
+        let fib_sum_atom = Atom::new(
+            "fib_sum",
+            vec![
+                Term::Variable(n_var.clone()),
+                Term::Variable(sum_var.clone()),
+            ],
+        );
+
+        dl.add_rule(Rule::with_literals(
+            fib_sum_atom.clone(),
+            vec![Literal::Aggregate(sum_agg_literal)],
+        ));
+
+        // Query: fib_sum(2, X) - should count 2 contributions (0 + 1)
+        let fib_sum_2 = Atom::new(
+            "fib_sum",
+            vec![Term::Constant(v_int(2)), Term::Variable(dl.new_variable("X"))],
+        );
+
+        let results = dl.query_as_lists(&fib_sum_2);
+        assert!(!results.is_empty(), "Should find a result for fib_sum(2)");
+        let count_2 = results[0][0].as_integer().unwrap();
+        assert_eq!(count_2, 2, "fib(2) should have 2 contributions"); // 0 + 1 = 1, counted as 2 items
+
+        // Query: fib_sum(3, X) - should count 2 contributions (1 + 1) 
+        let fib_sum_3 = Atom::new(
+            "fib_sum",
+            vec![Term::Constant(v_int(3)), Term::Variable(dl.new_variable("X"))],
+        );
+
+        let results = dl.query_as_lists(&fib_sum_3);
+        assert!(!results.is_empty(), "Should find a result for fib_sum(3)");
+        let count_3 = results[0][0].as_integer().unwrap();
+        assert_eq!(count_3, 2, "fib(3) should have 2 contributions"); // 1 + 1 = 2, counted as 2 items
+
+        // Query: fib_sum(4, X) - should count 2 contributions (1 + 2)
+        let fib_sum_4 = Atom::new(
+            "fib_sum",
+            vec![Term::Constant(v_int(4)), Term::Variable(dl.new_variable("X"))],
+        );
+
+        let results = dl.query_as_lists(&fib_sum_4);
+        assert!(!results.is_empty(), "Should find a result for fib_sum(4)");
+        let count_4 = results[0][0].as_integer().unwrap();
+        assert_eq!(count_4, 2, "fib(4) should have 2 contributions"); // 1 + 2 = 3, counted as 2 items
+
+        // Now let's test min/max on the Fibonacci sequence values
+        // Rule: min_fib_value(MinVal) :- MinVal = min(Value) group by [] in fib(_, Value)
+        let value_var = dl.new_variable("Value");
+        let pos_var = dl.new_variable("Pos");
+        let min_var = dl.new_variable("MinVal");
+
+        let fib_atom = Atom::new(
+            "fib",
+            vec![
+                Term::Variable(pos_var.clone()),
+                Term::Variable(value_var.clone()),
+            ],
+        );
+
+        let min_agg_literal = AggregateLiteral::new(
+            AggregateOp::Min,
+            min_var.clone(),
+            value_var.clone(),
+            vec![], // No grouping - global min
+            fib_atom.clone(),
+        );
+
+        let min_fib_atom = Atom::new("min_fib_value", vec![Term::Variable(min_var.clone())]);
+
+        dl.add_rule(Rule::with_literals(
+            min_fib_atom.clone(),
+            vec![Literal::Aggregate(min_agg_literal)],
+        ));
+
+        // Rule: max_fib_value(MaxVal) :- MaxVal = max(Value) group by [] in fib(_, Value)
+        let max_var = dl.new_variable("MaxVal");
+        let max_agg_literal = AggregateLiteral::new(
+            AggregateOp::Max,
+            max_var.clone(),
+            value_var.clone(),
+            vec![], // No grouping - global max
+            fib_atom.clone(),
+        );
+
+        let max_fib_atom = Atom::new("max_fib_value", vec![Term::Variable(max_var.clone())]);
+
+        dl.add_rule(Rule::with_literals(
+            max_fib_atom.clone(),
+            vec![Literal::Aggregate(max_agg_literal)],
+        ));
+
+        // Query min value
+        let min_results = dl.query_as_lists(&min_fib_atom);
+        assert!(!min_results.is_empty(), "Should find min value");
+        let min_value = min_results[0][0].as_integer().unwrap();
+        assert_eq!(min_value, 0, "Minimum Fibonacci value should be 0");
+
+        // Query max value  
+        let max_results = dl.query_as_lists(&max_fib_atom);
+        assert!(!max_results.is_empty(), "Should find max value");
+        let max_value = max_results[0][0].as_integer().unwrap();
+        assert_eq!(max_value, 3, "Maximum Fibonacci value should be 3 (from fib(4))");
     }
 }
