@@ -59,6 +59,24 @@ impl From<&str> for Symbol {
     }
 }
 
+impl From<String> for Symbol {
+    fn from(s: String) -> Self {
+        Symbol(Ustr::from(&s))
+    }
+}
+
+impl From<&String> for Symbol {
+    fn from(s: &String) -> Self {
+        Symbol(Ustr::from(s.as_str()))
+    }
+}
+
+impl From<Ustr> for Symbol {
+    fn from(s: Ustr) -> Self {
+        Symbol(s)
+    }
+}
+
 impl Display for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.0.as_str())

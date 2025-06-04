@@ -21,8 +21,8 @@ mod tests {
     use moor_common::model::{WorldState, WorldStateSource};
     use moor_common::util::BitEnum;
     use moor_var::{
-        List, Obj, Var, v_bool_int, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_none,
-        v_obj, v_objid, v_str, v_sym_str,
+        List, Obj, Var, v_empty_list, v_err, v_flyweight, v_int, v_list, v_map, v_none, v_obj,
+        v_objid, v_str,
     };
 
     use moor_var::NOTHING;
@@ -1146,7 +1146,7 @@ mod tests {
                     List::mk_list(&[v_int(1), v_int(2), v_int(3)]),
                     None,
                 ),
-                v_map(&[(v_sym_str("bananas"), v_str("456"))])
+                v_map(&[(v_sym("bananas"), v_str("456"))])
             ])
         );
     }
