@@ -11,18 +11,20 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::datalog::{AggregateLiteral, AggregateOp, Atom, Fact, Literal, Rule, Variable};
-use crate::datalog::{Relation, Substitution, Term};
+use crate::datalog::{
+    AggregateLiteral, AggregateOp, Atom, DatalogError, DatalogResult, Fact, HashSetRelation,
+    Literal, Rule, Variable,
+};
+use crate::datalog::{RelationBackend, Substitution, Term};
 use moor_var::{Symbol, Var, v_list};
 use std::collections::{HashMap, HashSet};
 
 /// A Datalog database / knowledge-base with rules and facts.
-#[derive(Debug)]
 pub struct KnowledgeBase {
     /// The rules of the program
     rules: Vec<Rule>,
     /// The relations in the knowledge base, indexed by predicate name
-    relations: HashMap<Symbol, Relation>,
+    relations: HashMap<Symbol, Box<dyn RelationBackend>>,
     /// The next variable id to use
     next_var_id: usize,
     /// The next fact id to use
@@ -86,7 +88,7 @@ impl KnowledgeBase {
         let relation = self
             .relations
             .entry(predicate)
-            .or_insert_with(|| Relation::new(predicate));
+            .or_insert_with(|| Box::new(HashSetRelation::new(predicate)));
 
         // Add the fact to the relation
         let is_new_fact = relation.add_fact(fact_id, values);
@@ -100,8 +102,17 @@ impl KnowledgeBase {
     /// Query the program for facts matching the given atom
     pub fn query(&mut self, query: &Atom) -> Vec<Substitution> {
         // Initialize the query and run evaluation to completion
-        if self.init_query() {
-            self.complete_evaluation();
+        match self.init_query() {
+            Ok(true) => {
+                self.complete_evaluation();
+            }
+            Ok(false) => {
+                // No rules to evaluate, just return facts
+            }
+            Err(_) => {
+                // Stratification failed, return empty result
+                return Vec::new();
+            }
         }
 
         // Then, find all facts that match the query
@@ -119,8 +130,9 @@ impl KnowledgeBase {
 
     /// Query the program incrementally, allowing the caller to control the evaluation process.
     /// This method initializes the query engine and prepares for incremental evaluation.
-    /// Returns a boolean indicating whether evaluation is needed.
-    pub fn query_incremental_init(&mut self) -> bool {
+    /// Returns `Ok(true)` if evaluation is needed, `Ok(false)` if no evaluation needed,
+    /// or `Err(msg)` if stratification failed.
+    pub fn query_incremental_init(&mut self) -> DatalogResult<bool> {
         self.init_query()
     }
 
@@ -177,15 +189,16 @@ impl KnowledgeBase {
     }
 
     /// Compute stratification of rules based on dependencies
-    fn compute_stratification(&mut self) {
+    /// Returns an error if the program contains cycles through negation
+    fn compute_stratification(&mut self) -> DatalogResult<()> {
         if !self.strata.is_empty() {
-            return; // Already computed
+            return Ok(()); // Already computed
         }
 
         // Build dependency graph between predicates
         let mut dependencies = HashMap::<Symbol, HashSet<Symbol>>::new();
         let mut negative_dependencies = HashMap::<Symbol, HashSet<Symbol>>::new();
-        
+
         // Collect all predicates used in rules
         let mut all_predicates = HashSet::new();
         for rule in &self.rules {
@@ -212,14 +225,23 @@ impl KnowledgeBase {
             for literal in &rule.body {
                 match literal {
                     Literal::Pos(atom) => {
-                        dependencies.get_mut(&head_pred).unwrap().insert(atom.predicate);
+                        dependencies
+                            .get_mut(&head_pred)
+                            .ok_or_else(|| DatalogError::index_inconsistency(head_pred, "Predicate not found in dependencies map"))?
+                            .insert(atom.predicate);
                     }
                     Literal::Neg(atom) => {
-                        negative_dependencies.get_mut(&head_pred).unwrap().insert(atom.predicate);
+                        negative_dependencies
+                            .get_mut(&head_pred)
+                            .ok_or_else(|| DatalogError::index_inconsistency(head_pred, "Predicate not found in negative dependencies map"))?
+                            .insert(atom.predicate);
                     }
                     Literal::Aggregate(agg) => {
                         // Aggregation creates a positive dependency on the aggregated predicate
-                        dependencies.get_mut(&head_pred).unwrap().insert(agg.atom.predicate);
+                        dependencies
+                            .get_mut(&head_pred)
+                            .ok_or_else(|| DatalogError::index_inconsistency(head_pred, "Predicate not found in dependencies map for aggregation"))?
+                            .insert(agg.atom.predicate);
                     }
                 }
             }
@@ -232,27 +254,32 @@ impl KnowledgeBase {
 
         while !remaining_predicates.is_empty() {
             let mut stratum_predicates = HashSet::new();
-            
+
             // Find predicates that can be placed in current stratum
             for &predicate in &remaining_predicates {
                 let can_place = {
                     // Check negative dependencies - all must be in strictly lower strata
-                    let neg_deps_ok = negative_dependencies.get(&predicate).unwrap()
+                    let neg_deps = negative_dependencies
+                        .get(&predicate)
+                        .ok_or_else(|| DatalogError::index_inconsistency(predicate, "Predicate not found in negative dependencies map"))?;
+                    let neg_deps_ok = neg_deps
                         .iter()
                         .all(|dep| strata_map.get(dep).map_or(false, |&s| s < current_stratum));
-                    
+
                     // Positive dependencies can form cycles within the same stratum
                     // We only care that negative dependencies are resolved
                     neg_deps_ok
                 };
-                
+
                 if can_place {
                     stratum_predicates.insert(predicate);
                 }
             }
 
             if stratum_predicates.is_empty() {
-                panic!("Unstratifiable program - contains cycles through negation");
+                // Collect predicates that are still unprocessed (involved in cycles)
+                let cycle_predicates: Vec<Symbol> = remaining_predicates.into_iter().collect();
+                return Err(DatalogError::unstratifiable(cycle_predicates));
             }
 
             // Assign stratum to predicates
@@ -260,18 +287,20 @@ impl KnowledgeBase {
                 strata_map.insert(predicate, current_stratum);
                 remaining_predicates.remove(&predicate);
             }
-            
+
             current_stratum += 1;
         }
 
         // Group rules by stratum
         let max_stratum = strata_map.values().max().copied().unwrap_or(0);
         self.strata = vec![Vec::new(); max_stratum + 1];
-        
+
         for (rule_idx, rule) in self.rules.iter().enumerate() {
             let head_stratum = strata_map[&rule.head.predicate];
             self.strata[head_stratum].push(rule_idx);
         }
+
+        Ok(())
     }
 
     /// Evaluate a rule and return all possible substitutions
@@ -292,7 +321,9 @@ impl KnowledgeBase {
                             Literal::Pos(_) => {
                                 // Positive literal: join with matching facts
                                 for fact in facts {
-                                    if let Some(mut new_subst) = self.unify(&atom_inst, &fact.to_atom()) {
+                                    if let Some(mut new_subst) =
+                                        self.unify(&atom_inst, &fact.to_atom())
+                                    {
                                         // Merge existing substitution
                                         for (v, val) in subst {
                                             new_subst.insert(v.clone(), val.clone());
@@ -351,15 +382,23 @@ impl KnowledgeBase {
                         .group_vars
                         .iter()
                         .filter_map(|gv| {
-                            input_subst.get(gv).cloned().or_else(|| fact_subst.get(gv).cloned())
+                            input_subst
+                                .get(gv)
+                                .cloned()
+                                .or_else(|| fact_subst.get(gv).cloned())
                         })
                         .collect();
 
                     // Extract aggregate value
-                    if let Some(aggregate_value) = fact_subst.get(&agg.aggregate_var).cloned()
+                    if let Some(aggregate_value) = fact_subst
+                        .get(&agg.aggregate_var)
+                        .cloned()
                         .or_else(|| input_subst.get(&agg.aggregate_var).cloned())
                     {
-                        groups.entry(group_key).or_insert_with(Vec::new).push(aggregate_value);
+                        groups
+                            .entry(group_key)
+                            .or_insert_with(Vec::new)
+                            .push(aggregate_value);
                     }
                 }
             }
@@ -368,17 +407,17 @@ impl KnowledgeBase {
             for (group_key, values) in groups {
                 if let Some(aggregate_result) = self.compute_aggregate(&agg.op, &values) {
                     let mut new_subst = input_subst.clone();
-                    
+
                     // Bind group variables
                     for (i, group_var) in agg.group_vars.iter().enumerate() {
                         if i < group_key.len() {
                             new_subst.insert(group_var.clone(), group_key[i].clone());
                         }
                     }
-                    
+
                     // Bind result variable
                     new_subst.insert(agg.result_var.clone(), aggregate_result);
-                    
+
                     result_substitutions.push(new_subst);
                 }
             }
@@ -398,12 +437,8 @@ impl KnowledgeBase {
 
         match op {
             AggregateOp::Count => Some(Var::mk_integer(values.len() as i64)),
-            AggregateOp::Min => {
-                values.iter().min().cloned()
-            }
-            AggregateOp::Max => {
-                values.iter().max().cloned()
-            }
+            AggregateOp::Min => values.iter().min().cloned(),
+            AggregateOp::Max => values.iter().max().cloned(),
         }
     }
 
@@ -446,19 +481,21 @@ impl KnowledgeBase {
     }
 
     /// Initialize a query evaluation. This starts the incremental evaluation process.
-    /// Returns `true` if initialization succeeded, `false` if the query can be immediately answered.
-    pub fn init_query(&mut self) -> bool {
+    /// Returns `Ok(true)` if initialization succeeded and evaluation is needed,
+    /// `Ok(false)` if the query can be immediately answered,
+    /// `Err(msg)` if stratification failed due to cycles through negation.
+    pub fn init_query(&mut self) -> DatalogResult<bool> {
         // If we already have an evaluation in progress, reset it
         self.evaluation_state = None;
 
         // Check if we need to evaluate rules at all
         // If there are no rules, we can just return matching facts
         if self.rules.is_empty() {
-            return false;
+            return Ok(false);
         }
 
         // Compute stratification if not already done
-        self.compute_stratification();
+        self.compute_stratification()?;
 
         // Initialize the evaluation state
         self.evaluation_state = Some(EvaluationState {
@@ -470,7 +507,7 @@ impl KnowledgeBase {
             is_complete: false,
         });
 
-        true
+        Ok(true)
     }
 
     /// Step the evaluation process forward one step.
@@ -507,7 +544,7 @@ impl KnowledgeBase {
             }
 
             let current_stratum = &self.strata[stratum_idx];
-            
+
             // If we've processed all rules in current stratum
             if rule_idx >= current_stratum.len() {
                 // If no new facts were added in this stratum iteration, move to next stratum
@@ -570,7 +607,7 @@ impl KnowledgeBase {
                 let relation = self
                     .relations
                     .entry(head.predicate)
-                    .or_insert_with(|| Relation::new(head.predicate));
+                    .or_insert_with(|| Box::new(HashSetRelation::new(head.predicate)));
 
                 // Add the fact to the relation
                 if relation.add_fact(self.next_fact_id, values) {
@@ -1495,7 +1532,10 @@ mod tests {
         );
 
         // Test incremental evaluation
-        assert!(dl.query_incremental_init(), "Should need evaluation");
+        assert!(
+            dl.query_incremental_init().unwrap(),
+            "Should need evaluation"
+        );
 
         // Initially, no ancestors should be derived yet
         let initial_results = dl.query_incremental_results_as_lists(&john_x);
@@ -1592,7 +1632,7 @@ mod tests {
         let query = Atom::new("path", vec![Constant(v_int(0)), Constant(v_int(50))]);
 
         // Initialize incremental evaluation
-        assert!(dl.query_incremental_init());
+        assert!(dl.query_incremental_init().unwrap_or(false));
 
         // Simulate a game loop with a maximum step limit per frame
         let max_steps_per_frame = 400; // Increased from 200
@@ -2010,12 +2050,12 @@ mod tests {
     #[test]
     fn test_stratified_negation_basic() {
         let mut dl = KnowledgeBase::new();
-        
+
         // Add base facts
         dl.add_fact("a", vec![v_int(1)]);
         dl.add_fact("a", vec![v_int(2)]);
         dl.add_fact("b", vec![v_int(2)]);
-        
+
         // Rule in stratum 1: c(X) :- a(X), not b(X)
         let x = dl.new_variable("X");
         let a_atom = Atom::new("a", vec![Variable(x.clone())]);
@@ -2025,7 +2065,7 @@ mod tests {
             c_atom.clone(),
             vec![Literal::Pos(a_atom), Literal::Neg(b_atom)],
         ));
-        
+
         // Query: c(X)
         let results = dl.query_as_lists(&c_atom);
         assert_eq!(results.len(), 1);
@@ -2035,15 +2075,21 @@ mod tests {
     #[test]
     fn test_stratified_negation_two_strata() {
         let mut dl = KnowledgeBase::new();
-        
+
         // Base facts
         dl.add_fact("person", vec![v_string("alice".to_string())]);
         dl.add_fact("person", vec![v_string("bob".to_string())]);
         dl.add_fact("person", vec![v_string("charlie".to_string())]);
-        
-        dl.add_fact("likes", vec![v_string("alice".to_string()), v_string("bob".to_string())]);
-        dl.add_fact("likes", vec![v_string("bob".to_string()), v_string("charlie".to_string())]);
-        
+
+        dl.add_fact(
+            "likes",
+            vec![v_string("alice".to_string()), v_string("bob".to_string())],
+        );
+        dl.add_fact(
+            "likes",
+            vec![v_string("bob".to_string()), v_string("charlie".to_string())],
+        );
+
         // Stratum 1: friend(X,Y) :- likes(X,Y), likes(Y,X)
         let x1 = dl.new_variable("X");
         let y1 = dl.new_variable("Y");
@@ -2051,7 +2097,7 @@ mod tests {
         let likes_yx = Atom::new("likes", vec![Variable(y1.clone()), Variable(x1.clone())]);
         let friend_atom = Atom::new("friend", vec![Variable(x1.clone()), Variable(y1.clone())]);
         dl.add_rule(Rule::new(friend_atom.clone(), vec![likes_xy, likes_yx]));
-        
+
         // Stratum 2: loner(X) :- person(X), not friend(X,_)
         let x2 = dl.new_variable("X");
         let y2 = dl.new_variable("Y");
@@ -2060,22 +2106,19 @@ mod tests {
         let loner_atom = Atom::new("loner", vec![Variable(x2.clone())]);
         dl.add_rule(Rule::with_negation(
             loner_atom.clone(),
-            vec![
-                Literal::Pos(person_atom),
-                Literal::Neg(friend_check),
-            ],
+            vec![Literal::Pos(person_atom), Literal::Neg(friend_check)],
         ));
-        
+
         // Query: loner(X)
         let results = dl.query_as_lists(&loner_atom);
-        
+
         // Since nobody has mutual likes, everyone should be a loner
         assert_eq!(results.len(), 3);
         let loners: Vec<String> = results
             .iter()
             .map(|row| row[0].as_string().unwrap().to_string())
             .collect();
-        
+
         assert!(loners.contains(&"alice".to_string()));
         assert!(loners.contains(&"bob".to_string()));
         assert!(loners.contains(&"charlie".to_string()));
@@ -2084,10 +2127,10 @@ mod tests {
     #[test]
     fn test_stratified_negation_cycle_detection() {
         let mut dl = KnowledgeBase::new();
-        
+
         // This should panic because it contains a cycle through negation
         dl.add_fact("a", vec![v_int(1)]);
-        
+
         // Rule: b(X) :- a(X), not c(X)
         let x1 = dl.new_variable("X");
         let a_atom = Atom::new("a", vec![Variable(x1.clone())]);
@@ -2097,7 +2140,7 @@ mod tests {
             b_atom.clone(),
             vec![Literal::Pos(a_atom), Literal::Neg(c_atom.clone())],
         ));
-        
+
         // Rule: c(X) :- b(X), not b(X)  -- Creates unstratifiable dependency
         let x2 = dl.new_variable("X");
         let b_atom2 = Atom::new("b", vec![Variable(x2.clone())]);
@@ -2107,33 +2150,99 @@ mod tests {
             c_atom2,
             vec![Literal::Pos(b_atom2), Literal::Neg(b_atom3)],
         ));
+
+        // This should return an error when trying to compute stratification
+        let result = dl.query_incremental_init();
+        match result {
+            Err(DatalogError::Unstratifiable { predicates }) => {
+                assert!(
+                    !predicates.is_empty(),
+                    "Should identify problematic predicates"
+                );
+            }
+            _ => panic!("Expected Unstratifiable error, got {:?}", result),
+        }
+
+        // The query method should also handle unstratifiable programs gracefully
+        let query_result = dl.query(&b_atom);
+        assert!(
+            query_result.is_empty(),
+            "Query should return empty result for unstratifiable program"
+        );
+    }
+
+    #[test]
+    fn test_error_types() {
+        // Test error type creation and properties
+        let cycle_error = DatalogError::unstratifiable(vec![Symbol::from("a"), Symbol::from("b")]);
+        assert!(!cycle_error.is_programming_error());
+        assert!(cycle_error.is_recoverable());
+
+        let arity_error = DatalogError::arity_mismatch(Symbol::from("test"), 2, 3);
+        assert!(!arity_error.is_programming_error());
+        assert!(arity_error.is_recoverable());
+
+        let internal_error = DatalogError::internal("test error");
+        assert!(internal_error.is_programming_error());
+        assert!(!internal_error.is_recoverable());
         
-        // This should panic when trying to compute stratification
-        let result = std::panic::catch_unwind(|| {
-            let mut test_dl = dl;
-            test_dl.query(&b_atom);
-        });
-        
-        assert!(result.is_err(), "Expected panic due to unstratifiable program");
+        let index_error = DatalogError::index_inconsistency(Symbol::from("test"), "test details");
+        assert!(index_error.is_programming_error());
+        assert!(!index_error.is_recoverable());
     }
 
     #[test]
     fn test_aggregation_count() {
         let mut dl = KnowledgeBase::new();
-        
+
         // Add base facts: student grades
-        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("math".to_string()), v_int(85)]);
-        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("english".to_string()), v_int(92)]);
-        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("science".to_string()), v_int(78)]);
-        dl.add_fact("grade", vec![v_string("bob".to_string()), v_string("math".to_string()), v_int(76)]);
-        dl.add_fact("grade", vec![v_string("bob".to_string()), v_string("english".to_string()), v_int(84)]);
-        
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("alice".to_string()),
+                v_string("math".to_string()),
+                v_int(85),
+            ],
+        );
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("alice".to_string()),
+                v_string("english".to_string()),
+                v_int(92),
+            ],
+        );
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("alice".to_string()),
+                v_string("science".to_string()),
+                v_int(78),
+            ],
+        );
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("bob".to_string()),
+                v_string("math".to_string()),
+                v_int(76),
+            ],
+        );
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("bob".to_string()),
+                v_string("english".to_string()),
+                v_int(84),
+            ],
+        );
+
         // Rule: course_count(Student, Count) :- Count = count(Subject) group by [Student] in grade(Student, Subject, _)
         let student_var = dl.new_variable("Student");
         let subject_var = dl.new_variable("Subject");
         let score_var = dl.new_variable("Score");
         let count_var = dl.new_variable("Count");
-        
+
         let grade_atom = Atom::new(
             "grade",
             vec![
@@ -2142,7 +2251,7 @@ mod tests {
                 Term::Variable(score_var.clone()),
             ],
         );
-        
+
         let agg_literal = AggregateLiteral::new(
             AggregateOp::Count,
             count_var.clone(),
@@ -2150,7 +2259,7 @@ mod tests {
             vec![student_var.clone()],
             grade_atom,
         );
-        
+
         let course_count_atom = Atom::new(
             "course_count",
             vec![
@@ -2158,23 +2267,23 @@ mod tests {
                 Term::Variable(count_var.clone()),
             ],
         );
-        
+
         dl.add_rule(Rule::with_literals(
             course_count_atom.clone(),
             vec![Literal::Aggregate(agg_literal)],
         ));
-        
+
         // Query: course_count(X, Y)
         let results = dl.query_as_lists(&course_count_atom);
         assert_eq!(results.len(), 2); // Alice and Bob
-        
+
         // Check results
         let mut found_alice = false;
         let mut found_bob = false;
         for result in &results {
             let student = result[0].as_string().unwrap();
             let count = result[1].as_integer().unwrap();
-            
+
             if student == "alice" {
                 assert_eq!(count, 3);
                 found_alice = true;
@@ -2189,20 +2298,55 @@ mod tests {
     #[test]
     fn test_aggregation_min_max() {
         let mut dl = KnowledgeBase::new();
-        
+
         // Add base facts: student grades
-        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("math".to_string()), v_int(85)]);
-        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("english".to_string()), v_int(92)]);
-        dl.add_fact("grade", vec![v_string("alice".to_string()), v_string("science".to_string()), v_int(78)]);
-        dl.add_fact("grade", vec![v_string("bob".to_string()), v_string("math".to_string()), v_int(76)]);
-        dl.add_fact("grade", vec![v_string("bob".to_string()), v_string("english".to_string()), v_int(84)]);
-        
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("alice".to_string()),
+                v_string("math".to_string()),
+                v_int(85),
+            ],
+        );
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("alice".to_string()),
+                v_string("english".to_string()),
+                v_int(92),
+            ],
+        );
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("alice".to_string()),
+                v_string("science".to_string()),
+                v_int(78),
+            ],
+        );
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("bob".to_string()),
+                v_string("math".to_string()),
+                v_int(76),
+            ],
+        );
+        dl.add_fact(
+            "grade",
+            vec![
+                v_string("bob".to_string()),
+                v_string("english".to_string()),
+                v_int(84),
+            ],
+        );
+
         // Rule: min_grade(Student, MinGrade) :- MinGrade = min(Score) group by [Student] in grade(Student, _, Score)
         let student_var = dl.new_variable("Student");
         let subject_var = dl.new_variable("Subject");
         let score_var = dl.new_variable("Score");
         let min_var = dl.new_variable("MinGrade");
-        
+
         let grade_atom = Atom::new(
             "grade",
             vec![
@@ -2211,7 +2355,7 @@ mod tests {
                 Term::Variable(score_var.clone()),
             ],
         );
-        
+
         let min_agg_literal = AggregateLiteral::new(
             AggregateOp::Min,
             min_var.clone(),
@@ -2219,7 +2363,7 @@ mod tests {
             vec![student_var.clone()],
             grade_atom.clone(),
         );
-        
+
         let min_grade_atom = Atom::new(
             "min_grade",
             vec![
@@ -2227,12 +2371,12 @@ mod tests {
                 Term::Variable(min_var.clone()),
             ],
         );
-        
+
         dl.add_rule(Rule::with_literals(
             min_grade_atom.clone(),
             vec![Literal::Aggregate(min_agg_literal)],
         ));
-        
+
         // Rule: max_grade(Student, MaxGrade) :- MaxGrade = max(Score) group by [Student] in grade(Student, _, Score)
         let max_var = dl.new_variable("MaxGrade");
         let max_agg_literal = AggregateLiteral::new(
@@ -2242,7 +2386,7 @@ mod tests {
             vec![student_var.clone()],
             grade_atom,
         );
-        
+
         let max_grade_atom = Atom::new(
             "max_grade",
             vec![
@@ -2250,35 +2394,35 @@ mod tests {
                 Term::Variable(max_var.clone()),
             ],
         );
-        
+
         dl.add_rule(Rule::with_literals(
             max_grade_atom.clone(),
             vec![Literal::Aggregate(max_agg_literal)],
         ));
-        
+
         // Query min grades
         let min_results = dl.query_as_lists(&min_grade_atom);
         assert_eq!(min_results.len(), 2);
-        
+
         for result in &min_results {
             let student = result[0].as_string().unwrap();
             let min_grade = result[1].as_integer().unwrap();
-            
+
             if student == "alice" {
                 assert_eq!(min_grade, 78); // Alice's minimum grade
             } else if student == "bob" {
                 assert_eq!(min_grade, 76); // Bob's minimum grade
             }
         }
-        
+
         // Query max grades
         let max_results = dl.query_as_lists(&max_grade_atom);
         assert_eq!(max_results.len(), 2);
-        
+
         for result in &max_results {
             let student = result[0].as_string().unwrap();
             let max_grade = result[1].as_integer().unwrap();
-            
+
             if student == "alice" {
                 assert_eq!(max_grade, 92); // Alice's maximum grade
             } else if student == "bob" {
@@ -2290,18 +2434,18 @@ mod tests {
     #[test]
     fn test_aggregation_no_grouping() {
         let mut dl = KnowledgeBase::new();
-        
+
         // Add some numbers
         for i in 1..=5 {
             dl.add_fact("number", vec![v_int(i)]);
         }
-        
+
         // Rule: total_count(Count) :- Count = count(X) group by [] in number(X)
         let x_var = dl.new_variable("X");
         let count_var = dl.new_variable("Count");
-        
+
         let number_atom = Atom::new("number", vec![Term::Variable(x_var.clone())]);
-        
+
         let count_agg_literal = AggregateLiteral::new(
             AggregateOp::Count,
             count_var.clone(),
@@ -2309,14 +2453,14 @@ mod tests {
             vec![], // No grouping variables
             number_atom,
         );
-        
+
         let total_count_atom = Atom::new("total_count", vec![Term::Variable(count_var.clone())]);
-        
+
         dl.add_rule(Rule::with_literals(
             total_count_atom.clone(),
             vec![Literal::Aggregate(count_agg_literal)],
         ));
-        
+
         // Query: total_count(X)
         let results = dl.query_as_lists(&total_count_atom);
         assert_eq!(results.len(), 1);
@@ -2326,24 +2470,59 @@ mod tests {
     #[test]
     fn test_aggregation_with_conditions() {
         let mut dl = KnowledgeBase::new();
-        
+
         // Add base facts: sales data
-        dl.add_fact("sale", vec![v_string("alice".to_string()), v_string("q1".to_string()), v_int(100)]);
-        dl.add_fact("sale", vec![v_string("alice".to_string()), v_string("q2".to_string()), v_int(150)]);
-        dl.add_fact("sale", vec![v_string("alice".to_string()), v_string("q3".to_string()), v_int(200)]);
-        dl.add_fact("sale", vec![v_string("bob".to_string()), v_string("q1".to_string()), v_int(80)]);
-        dl.add_fact("sale", vec![v_string("bob".to_string()), v_string("q2".to_string()), v_int(90)]);
-        
+        dl.add_fact(
+            "sale",
+            vec![
+                v_string("alice".to_string()),
+                v_string("q1".to_string()),
+                v_int(100),
+            ],
+        );
+        dl.add_fact(
+            "sale",
+            vec![
+                v_string("alice".to_string()),
+                v_string("q2".to_string()),
+                v_int(150),
+            ],
+        );
+        dl.add_fact(
+            "sale",
+            vec![
+                v_string("alice".to_string()),
+                v_string("q3".to_string()),
+                v_int(200),
+            ],
+        );
+        dl.add_fact(
+            "sale",
+            vec![
+                v_string("bob".to_string()),
+                v_string("q1".to_string()),
+                v_int(80),
+            ],
+        );
+        dl.add_fact(
+            "sale",
+            vec![
+                v_string("bob".to_string()),
+                v_string("q2".to_string()),
+                v_int(90),
+            ],
+        );
+
         // Add threshold fact
         dl.add_fact("high_performer_threshold", vec![v_int(400)]);
-        
+
         // Rule: total_sales(Person, Total) :- Total = sum(Amount) group by [Person] in sale(Person, _, Amount)
         // Note: We'll use count for now since sum isn't implemented, but multiply by average
         let person_var = dl.new_variable("Person");
         let quarter_var = dl.new_variable("Quarter");
         let amount_var = dl.new_variable("Amount");
         let total_var = dl.new_variable("Total");
-        
+
         let sale_atom = Atom::new(
             "sale",
             vec![
@@ -2352,7 +2531,7 @@ mod tests {
                 Term::Variable(amount_var.clone()),
             ],
         );
-        
+
         // For simplicity, let's count sales per person
         let count_agg_literal = AggregateLiteral::new(
             AggregateOp::Count,
@@ -2361,7 +2540,7 @@ mod tests {
             vec![person_var.clone()],
             sale_atom,
         );
-        
+
         let total_sales_atom = Atom::new(
             "sales_count",
             vec![
@@ -2369,16 +2548,17 @@ mod tests {
                 Term::Variable(total_var.clone()),
             ],
         );
-        
+
         dl.add_rule(Rule::with_literals(
             total_sales_atom.clone(),
             vec![Literal::Aggregate(count_agg_literal)],
         ));
-        
+
         // Rule: high_performer(Person) :- sales_count(Person, Count), Count >= 3
         // Since we don't have comparison operators, we'll check who has exactly 3 sales
-        let high_performer_atom = Atom::new("high_performer", vec![Term::Variable(person_var.clone())]);
-        
+        let high_performer_atom =
+            Atom::new("high_performer", vec![Term::Variable(person_var.clone())]);
+
         let sales_count_check = Atom::new(
             "sales_count",
             vec![
@@ -2386,25 +2566,25 @@ mod tests {
                 Term::Constant(Var::mk_integer(3)),
             ],
         );
-        
+
         dl.add_rule(Rule::new(
             high_performer_atom.clone(),
             vec![sales_count_check],
         ));
-        
+
         // Query: who are the high performers?
         let high_performer_results = dl.query_as_lists(&high_performer_atom);
         assert_eq!(high_performer_results.len(), 1);
         assert_eq!(high_performer_results[0][0].as_string().unwrap(), "alice");
-        
+
         // Query: what are the sales counts?
         let sales_count_results = dl.query_as_lists(&total_sales_atom);
         assert_eq!(sales_count_results.len(), 2);
-        
+
         for result in &sales_count_results {
             let person = result[0].as_string().unwrap();
             let count = result[1].as_integer().unwrap();
-            
+
             if person == "alice" {
                 assert_eq!(count, 3); // Alice has 3 sales
             } else if person == "bob" {
@@ -2430,10 +2610,10 @@ mod tests {
         // Let's say each position in Fibonacci sequence has "contributions" from its predecessors
         dl.add_fact("fib_contribution", vec![v_int(2), v_int(0), v_int(0)]); // fib(2) gets 0 from position 0
         dl.add_fact("fib_contribution", vec![v_int(2), v_int(1), v_int(1)]); // fib(2) gets 1 from position 1
-        
+
         dl.add_fact("fib_contribution", vec![v_int(3), v_int(1), v_int(1)]); // fib(3) gets 1 from position 1  
         dl.add_fact("fib_contribution", vec![v_int(3), v_int(2), v_int(1)]); // fib(3) gets 1 from position 2
-        
+
         dl.add_fact("fib_contribution", vec![v_int(4), v_int(2), v_int(1)]); // fib(4) gets 1 from position 2
         dl.add_fact("fib_contribution", vec![v_int(4), v_int(3), v_int(2)]); // fib(4) gets 2 from position 3
 
@@ -2477,7 +2657,10 @@ mod tests {
         // Query: fib_sum(2, X) - should count 2 contributions (0 + 1)
         let fib_sum_2 = Atom::new(
             "fib_sum",
-            vec![Term::Constant(v_int(2)), Term::Variable(dl.new_variable("X"))],
+            vec![
+                Term::Constant(v_int(2)),
+                Term::Variable(dl.new_variable("X")),
+            ],
         );
 
         let results = dl.query_as_lists(&fib_sum_2);
@@ -2485,10 +2668,13 @@ mod tests {
         let count_2 = results[0][0].as_integer().unwrap();
         assert_eq!(count_2, 2, "fib(2) should have 2 contributions"); // 0 + 1 = 1, counted as 2 items
 
-        // Query: fib_sum(3, X) - should count 2 contributions (1 + 1) 
+        // Query: fib_sum(3, X) - should count 2 contributions (1 + 1)
         let fib_sum_3 = Atom::new(
             "fib_sum",
-            vec![Term::Constant(v_int(3)), Term::Variable(dl.new_variable("X"))],
+            vec![
+                Term::Constant(v_int(3)),
+                Term::Variable(dl.new_variable("X")),
+            ],
         );
 
         let results = dl.query_as_lists(&fib_sum_3);
@@ -2499,7 +2685,10 @@ mod tests {
         // Query: fib_sum(4, X) - should count 2 contributions (1 + 2)
         let fib_sum_4 = Atom::new(
             "fib_sum",
-            vec![Term::Constant(v_int(4)), Term::Variable(dl.new_variable("X"))],
+            vec![
+                Term::Constant(v_int(4)),
+                Term::Variable(dl.new_variable("X")),
+            ],
         );
 
         let results = dl.query_as_lists(&fib_sum_4);
@@ -2559,10 +2748,13 @@ mod tests {
         let min_value = min_results[0][0].as_integer().unwrap();
         assert_eq!(min_value, 0, "Minimum Fibonacci value should be 0");
 
-        // Query max value  
+        // Query max value
         let max_results = dl.query_as_lists(&max_fib_atom);
         assert!(!max_results.is_empty(), "Should find max value");
         let max_value = max_results[0][0].as_integer().unwrap();
-        assert_eq!(max_value, 3, "Maximum Fibonacci value should be 3 (from fib(4))");
+        assert_eq!(
+            max_value, 3,
+            "Maximum Fibonacci value should be 3 (from fib(4))"
+        );
     }
 }

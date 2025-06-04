@@ -20,10 +20,27 @@ use std::collections::{HashMap, HashSet};
 /// Our bitset type for fact operations
 type FactSet = BitSet<config::_128bit>;
 
+/// Trait for different relation storage backends
+pub trait RelationBackend {
+    /// Get the predicate name for this relation
+    fn predicate(&self) -> &Symbol;
+
+    /// Add a fact to the relation
+    /// Returns true if the fact was newly added, false if it was already present
+    fn add_fact(&mut self, fact_id: u64, values: Vec<Var>) -> bool;
+
+    /// Get all facts in this relation
+    fn facts(&self) -> Vec<&Fact>;
+
+    /// Find facts that match an atom using indexes when possible
+    fn find_matching_facts(&self, atom: &Atom) -> Vec<&Fact>;
+}
+
 /// A relation in a Datalog knowledge base, representing a collection of facts
-/// with the same predicate.
+/// with the same predicate. This is the default in-memory implementation with
+/// hash indexes and bitset indexes for fast lookups.
 #[derive(Debug)]
-pub struct Relation {
+pub struct HashSetRelation {
     /// The name of this relation (predicate)
     predicate: Symbol,
     /// The facts in this relation
@@ -36,7 +53,7 @@ pub struct Relation {
     bitset_indexes: Vec<HashMap<Var, FactSet>>,
 }
 
-impl Relation {
+impl HashSetRelation {
     /// Create a new empty relation with the given predicate name
     pub fn new(predicate: Symbol) -> Self {
         Self {
@@ -46,15 +63,17 @@ impl Relation {
             bitset_indexes: Vec::new(),
         }
     }
+}
 
+impl RelationBackend for HashSetRelation {
     /// Get the predicate name for this relation
-    pub fn predicate(&self) -> &Symbol {
+    fn predicate(&self) -> &Symbol {
         &self.predicate
     }
 
     /// Add a fact to the relation
     /// Returns true if the fact was newly added, false if it was already present
-    pub fn add_fact(&mut self, fact_id: u64, values: Vec<Var>) -> bool {
+    fn add_fact(&mut self, fact_id: u64, values: Vec<Var>) -> bool {
         let fact = Fact::new(fact_id, self.predicate, values.clone());
 
         // Add to primary index
@@ -90,13 +109,13 @@ impl Relation {
     }
 
     /// Get all facts in this relation
-    pub fn facts(&self) -> &HashSet<Fact> {
-        &self.facts
+    fn facts(&self) -> Vec<&Fact> {
+        self.facts.iter().collect()
     }
 
     /// Find facts that match an atom using indexes when possible
     /// Uses bitset indexes for faster lookups when available
-    pub fn find_matching_facts(&self, atom: &Atom) -> Vec<&Fact> {
+    fn find_matching_facts(&self, atom: &Atom) -> Vec<&Fact> {
         // Check if we can use the bitset indexes for faster lookups
         let mut intersection_set = vec![];
 

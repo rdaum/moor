@@ -12,6 +12,7 @@
 //
 
 mod atom;
+mod error;
 mod fact;
 mod knowledge_base;
 mod relation;
@@ -20,10 +21,11 @@ mod term;
 mod variable;
 
 pub use atom::Atom;
+pub use error::{DatalogError, DatalogResult};
 pub use fact::Fact;
 pub use knowledge_base::KnowledgeBase;
 use moor_var::Var;
-pub use relation::Relation;
+pub use relation::{HashSetRelation, RelationBackend};
 pub use rule::{AggregateLiteral, AggregateOp, Literal, Rule};
 use std::collections::HashMap;
 pub use term::Term;

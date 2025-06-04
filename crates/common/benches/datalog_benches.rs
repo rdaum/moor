@@ -612,7 +612,7 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             |b, &_size| {
                 let (mut dl, _query) = create_ancestor_datalog();
                 b.iter(|| {
-                    black_box(dl.query_incremental_init());
+                    black_box(dl.query_incremental_init().unwrap_or(false));
                 });
             },
         );
@@ -622,7 +622,7 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &_size| {
                 let (mut dl, _query) = create_ancestor_datalog();
-                dl.query_incremental_init();
+                let _ = dl.query_incremental_init();
                 // Measure the time for each step
                 b.iter(|| {
                     black_box(dl.step_evaluation());
@@ -635,7 +635,7 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &_size| {
                 let (mut dl, _query) = create_ancestor_datalog();
-                dl.query_incremental_init();
+                let _ = dl.query_incremental_init();
                 b.iter(|| {
                     black_box(dl.complete_evaluation());
                 });
@@ -648,13 +648,13 @@ fn benchmark_incremental_query(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("path_init", size), size, |b, &size| {
             let (mut dl, _query) = create_path_datalog(size as usize);
             b.iter(|| {
-                black_box(dl.query_incremental_init());
+                black_box(dl.query_incremental_init().unwrap_or(false));
             });
         });
 
         group.bench_with_input(BenchmarkId::new("path_step", size), size, |b, &size| {
             let (mut dl, _query) = create_path_datalog(size as usize);
-            dl.query_incremental_init();
+            let _ = dl.query_incremental_init();
             b.iter(|| {
                 black_box(dl.step_evaluation());
             });
@@ -662,7 +662,7 @@ fn benchmark_incremental_query(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("path_complete", size), size, |b, &size| {
             let (mut dl, _query) = create_path_datalog(size as usize);
-            dl.query_incremental_init();
+            let _ = dl.query_incremental_init();
             b.iter(|| {
                 black_box(dl.complete_evaluation());
             });
@@ -677,7 +677,7 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             |b, &size| {
                 let (mut dl, _query) = create_adventure_game_datalog(size as usize);
                 b.iter(|| {
-                    black_box(dl.query_incremental_init());
+                    black_box(dl.query_incremental_init().unwrap_or(false));
                 });
             },
         );
@@ -687,7 +687,7 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &size| {
                 let (mut dl, _query) = create_adventure_game_datalog(size as usize);
-                dl.query_incremental_init();
+                let _ = dl.query_incremental_init();
                 b.iter(|| {
                     black_box(dl.step_evaluation());
                 });
@@ -699,7 +699,7 @@ fn benchmark_incremental_query(c: &mut Criterion) {
             size,
             |b, &size| {
                 let (mut dl, _query) = create_adventure_game_datalog(size as usize);
-                dl.query_incremental_init();
+                let _ = dl.query_incremental_init();
                 b.iter(|| {
                     black_box(dl.complete_evaluation());
                 });
@@ -722,7 +722,7 @@ fn benchmark_incremental_vs_complete(c: &mut Criterion) {
             |b, &size| {
                 b.iter(|| {
                     let (mut dl, query) = create_path_datalog(size as usize);
-                    dl.query_incremental_init();
+                    let _ = dl.query_incremental_init();
                     let mut found = false;
                     let mut steps = 0;
 
@@ -767,11 +767,11 @@ fn benchmark_step_overhead(c: &mut Criterion) {
             size,
             |b, &size| {
                 let (mut dl, _query) = create_path_datalog(size as usize);
-                dl.query_incremental_init();
+                let _ = dl.query_incremental_init();
 
                 b.iter(|| {
                     let (mut dl, _query) = create_path_datalog(size as usize);
-                    dl.query_incremental_init();
+                    let _ = dl.query_incremental_init();
                     let mut steps = 0;
 
                     while dl.step_evaluation() {
