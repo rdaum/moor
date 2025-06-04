@@ -14,7 +14,7 @@
 use crate::datalog::{Atom, Fact, Literal, Rule, Variable};
 use crate::datalog::{Relation, Substitution, Term};
 use moor_var::{Symbol, Var, v_list};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// A Datalog database / knowledge-base with rules and facts.
 #[derive(Debug)]
@@ -29,12 +29,16 @@ pub struct KnowledgeBase {
     next_fact_id: u64,
     /// Evaluation state for incremental evaluation
     evaluation_state: Option<EvaluationState>,
+    /// Rule stratification for proper negation handling
+    strata: Vec<Vec<usize>>,
 }
 
 /// State for incremental evaluation
 #[derive(Debug)]
 struct EvaluationState {
-    /// Current rule index being processed
+    /// Current stratum index being processed
+    stratum_idx: usize,
+    /// Current rule index within the current stratum
     rule_idx: usize,
     /// Current substitution index for the current rule
     substitution_idx: usize,
@@ -55,6 +59,7 @@ impl KnowledgeBase {
             next_var_id: 0,
             next_fact_id: 0,
             evaluation_state: None,
+            strata: Vec::new(),
         }
     }
 
@@ -68,6 +73,8 @@ impl KnowledgeBase {
     /// Add a rule to the program
     pub fn add_rule(&mut self, rule: Rule) {
         self.rules.push(rule);
+        // Invalidate existing stratification
+        self.strata.clear();
     }
 
     /// Add a fact to the program
@@ -169,6 +176,99 @@ impl KnowledgeBase {
         lists.into_iter().map(|list| v_list(&list)).collect()
     }
 
+    /// Compute stratification of rules based on dependencies
+    fn compute_stratification(&mut self) {
+        if !self.strata.is_empty() {
+            return; // Already computed
+        }
+
+        // Build dependency graph between predicates
+        let mut dependencies = HashMap::<Symbol, HashSet<Symbol>>::new();
+        let mut negative_dependencies = HashMap::<Symbol, HashSet<Symbol>>::new();
+        
+        // Collect all predicates used in rules
+        let mut all_predicates = HashSet::new();
+        for rule in &self.rules {
+            all_predicates.insert(rule.head.predicate);
+            for literal in &rule.body {
+                let predicate = match literal {
+                    Literal::Pos(atom) => atom.predicate,
+                    Literal::Neg(atom) => atom.predicate,
+                };
+                all_predicates.insert(predicate);
+            }
+        }
+
+        // Initialize dependency maps
+        for predicate in &all_predicates {
+            dependencies.insert(*predicate, HashSet::new());
+            negative_dependencies.insert(*predicate, HashSet::new());
+        }
+
+        // Build dependency relations
+        for rule in &self.rules {
+            let head_pred = rule.head.predicate;
+            for literal in &rule.body {
+                match literal {
+                    Literal::Pos(atom) => {
+                        dependencies.get_mut(&head_pred).unwrap().insert(atom.predicate);
+                    }
+                    Literal::Neg(atom) => {
+                        negative_dependencies.get_mut(&head_pred).unwrap().insert(atom.predicate);
+                    }
+                }
+            }
+        }
+
+        // Compute strata using topological sorting with negative edge constraints
+        let mut strata_map = HashMap::<Symbol, usize>::new();
+        let mut current_stratum = 0;
+        let mut remaining_predicates = all_predicates.clone();
+
+        while !remaining_predicates.is_empty() {
+            let mut stratum_predicates = HashSet::new();
+            
+            // Find predicates that can be placed in current stratum
+            for &predicate in &remaining_predicates {
+                let can_place = {
+                    // Check negative dependencies - all must be in strictly lower strata
+                    let neg_deps_ok = negative_dependencies.get(&predicate).unwrap()
+                        .iter()
+                        .all(|dep| strata_map.get(dep).map_or(false, |&s| s < current_stratum));
+                    
+                    // Positive dependencies can form cycles within the same stratum
+                    // We only care that negative dependencies are resolved
+                    neg_deps_ok
+                };
+                
+                if can_place {
+                    stratum_predicates.insert(predicate);
+                }
+            }
+
+            if stratum_predicates.is_empty() {
+                panic!("Unstratifiable program - contains cycles through negation");
+            }
+
+            // Assign stratum to predicates
+            for &predicate in &stratum_predicates {
+                strata_map.insert(predicate, current_stratum);
+                remaining_predicates.remove(&predicate);
+            }
+            
+            current_stratum += 1;
+        }
+
+        // Group rules by stratum
+        let max_stratum = strata_map.values().max().copied().unwrap_or(0);
+        self.strata = vec![Vec::new(); max_stratum + 1];
+        
+        for (rule_idx, rule) in self.rules.iter().enumerate() {
+            let head_stratum = strata_map[&rule.head.predicate];
+            self.strata[head_stratum].push(rule_idx);
+        }
+    }
+
     /// Evaluate a rule and return all possible substitutions
     fn evaluate_rule(&self, rule: &Rule) -> Vec<Substitution> {
         // Start with an empty substitution
@@ -266,8 +366,12 @@ impl KnowledgeBase {
             return false;
         }
 
+        // Compute stratification if not already done
+        self.compute_stratification();
+
         // Initialize the evaluation state
         self.evaluation_state = Some(EvaluationState {
+            stratum_idx: 0,
             rule_idx: 0,
             substitution_idx: 0,
             substitutions: Vec::new(),
@@ -294,24 +398,37 @@ impl KnowledgeBase {
         }
 
         // Extract state information to avoid borrow conflicts
+        let mut stratum_idx = 0;
         let mut rule_idx = 0;
         let mut need_evaluate_rule = false;
 
         // Extract state details to work with
         if let Some(state) = &mut self.evaluation_state {
+            stratum_idx = state.stratum_idx;
             rule_idx = state.rule_idx;
             let substitution_idx = state.substitution_idx;
             let new_facts = state.new_facts;
 
-            // If we've processed all rules, check if we need another iteration
-            if rule_idx >= self.rules.len() {
-                // If no new facts were added in this iteration, we're done
+            // If we've processed all strata, we're done
+            if stratum_idx >= self.strata.len() {
+                state.is_complete = true;
+                return false;
+            }
+
+            let current_stratum = &self.strata[stratum_idx];
+            
+            // If we've processed all rules in current stratum
+            if rule_idx >= current_stratum.len() {
+                // If no new facts were added in this stratum iteration, move to next stratum
                 if !new_facts {
-                    state.is_complete = true;
-                    return false;
+                    state.stratum_idx += 1;
+                    state.rule_idx = 0;
+                    state.substitution_idx = 0;
+                    state.new_facts = false;
+                    return true;
                 }
 
-                // Otherwise, start a new iteration
+                // Otherwise, start a new iteration within the same stratum
                 state.rule_idx = 0;
                 state.substitution_idx = 0;
                 state.new_facts = false;
@@ -322,8 +439,10 @@ impl KnowledgeBase {
             need_evaluate_rule = substitution_idx == 0;
         }
 
-        // Get the current rule
-        let rule = &self.rules[rule_idx];
+        // Get the current rule from the current stratum
+        let current_stratum = &self.strata[stratum_idx];
+        let actual_rule_idx = current_stratum[rule_idx];
+        let rule = &self.rules[actual_rule_idx];
 
         // If we haven't evaluated this rule yet or need to start over
         if need_evaluate_rule {
@@ -344,7 +463,7 @@ impl KnowledgeBase {
         // Process one substitution
         if state.substitution_idx < state.substitutions.len() {
             let substitution = &state.substitutions[state.substitution_idx];
-            let temp_atom_head = self.rules[rule_idx].head.clone();
+            let temp_atom_head = rule.head.clone();
             let head = temp_atom_head.apply_substitution(substitution);
 
             // If the head has any variables, we can't add it as a fact
@@ -373,7 +492,7 @@ impl KnowledgeBase {
             // Move to the next substitution
             state.substitution_idx += 1;
         } else {
-            // Move to the next rule
+            // Move to the next rule within the stratum
             state.rule_idx += 1;
             state.substitution_idx = 0;
         }
@@ -1795,5 +1914,115 @@ mod tests {
 
         let results = dl.query_as_lists(&qualified_for_lead);
         assert_eq!(results.len(), 0, "No one should be qualified for lead_dev");
+    }
+
+    #[test]
+    fn test_stratified_negation_basic() {
+        let mut dl = KnowledgeBase::new();
+        
+        // Add base facts
+        dl.add_fact("a", vec![v_int(1)]);
+        dl.add_fact("a", vec![v_int(2)]);
+        dl.add_fact("b", vec![v_int(2)]);
+        
+        // Rule in stratum 1: c(X) :- a(X), not b(X)
+        let x = dl.new_variable("X");
+        let a_atom = Atom::new("a", vec![Variable(x.clone())]);
+        let b_atom = Atom::new("b", vec![Variable(x.clone())]);
+        let c_atom = Atom::new("c", vec![Variable(x.clone())]);
+        dl.add_rule(Rule::with_negation(
+            c_atom.clone(),
+            vec![Literal::Pos(a_atom), Literal::Neg(b_atom)],
+        ));
+        
+        // Query: c(X)
+        let results = dl.query_as_lists(&c_atom);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0][0], v_int(1)); // Only 1 should be in c, not 2
+    }
+
+    #[test]
+    fn test_stratified_negation_two_strata() {
+        let mut dl = KnowledgeBase::new();
+        
+        // Base facts
+        dl.add_fact("person", vec![v_string("alice".to_string())]);
+        dl.add_fact("person", vec![v_string("bob".to_string())]);
+        dl.add_fact("person", vec![v_string("charlie".to_string())]);
+        
+        dl.add_fact("likes", vec![v_string("alice".to_string()), v_string("bob".to_string())]);
+        dl.add_fact("likes", vec![v_string("bob".to_string()), v_string("charlie".to_string())]);
+        
+        // Stratum 1: friend(X,Y) :- likes(X,Y), likes(Y,X)
+        let x1 = dl.new_variable("X");
+        let y1 = dl.new_variable("Y");
+        let likes_xy = Atom::new("likes", vec![Variable(x1.clone()), Variable(y1.clone())]);
+        let likes_yx = Atom::new("likes", vec![Variable(y1.clone()), Variable(x1.clone())]);
+        let friend_atom = Atom::new("friend", vec![Variable(x1.clone()), Variable(y1.clone())]);
+        dl.add_rule(Rule::new(friend_atom.clone(), vec![likes_xy, likes_yx]));
+        
+        // Stratum 2: loner(X) :- person(X), not friend(X,_)
+        let x2 = dl.new_variable("X");
+        let y2 = dl.new_variable("Y");
+        let person_atom = Atom::new("person", vec![Variable(x2.clone())]);
+        let friend_check = Atom::new("friend", vec![Variable(x2.clone()), Variable(y2.clone())]);
+        let loner_atom = Atom::new("loner", vec![Variable(x2.clone())]);
+        dl.add_rule(Rule::with_negation(
+            loner_atom.clone(),
+            vec![
+                Literal::Pos(person_atom),
+                Literal::Neg(friend_check),
+            ],
+        ));
+        
+        // Query: loner(X)
+        let results = dl.query_as_lists(&loner_atom);
+        
+        // Since nobody has mutual likes, everyone should be a loner
+        assert_eq!(results.len(), 3);
+        let loners: Vec<String> = results
+            .iter()
+            .map(|row| row[0].as_string().unwrap().to_string())
+            .collect();
+        
+        assert!(loners.contains(&"alice".to_string()));
+        assert!(loners.contains(&"bob".to_string()));
+        assert!(loners.contains(&"charlie".to_string()));
+    }
+
+    #[test]
+    fn test_stratified_negation_cycle_detection() {
+        let mut dl = KnowledgeBase::new();
+        
+        // This should panic because it contains a cycle through negation
+        dl.add_fact("a", vec![v_int(1)]);
+        
+        // Rule: b(X) :- a(X), not c(X)
+        let x1 = dl.new_variable("X");
+        let a_atom = Atom::new("a", vec![Variable(x1.clone())]);
+        let c_atom = Atom::new("c", vec![Variable(x1.clone())]);
+        let b_atom = Atom::new("b", vec![Variable(x1.clone())]);
+        dl.add_rule(Rule::with_negation(
+            b_atom.clone(),
+            vec![Literal::Pos(a_atom), Literal::Neg(c_atom.clone())],
+        ));
+        
+        // Rule: c(X) :- b(X), not b(X)  -- Creates unstratifiable dependency
+        let x2 = dl.new_variable("X");
+        let b_atom2 = Atom::new("b", vec![Variable(x2.clone())]);
+        let b_atom3 = Atom::new("b", vec![Variable(x2.clone())]);
+        let c_atom2 = Atom::new("c", vec![Variable(x2.clone())]);
+        dl.add_rule(Rule::with_negation(
+            c_atom2,
+            vec![Literal::Pos(b_atom2), Literal::Neg(b_atom3)],
+        ));
+        
+        // This should panic when trying to compute stratification
+        let result = std::panic::catch_unwind(|| {
+            let mut test_dl = dl;
+            test_dl.query(&b_atom);
+        });
+        
+        assert!(result.is_err(), "Expected panic due to unstratifiable program");
     }
 }
