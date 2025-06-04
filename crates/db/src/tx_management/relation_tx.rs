@@ -109,7 +109,6 @@ where
             domain.clone(),
             Entry {
                 ts: self.tx.ts,
-                hits: 0,
                 value,
                 size_bytes,
             },
@@ -187,7 +186,6 @@ where
             domain.clone(),
             Entry {
                 ts: self.tx.ts,
-                hits: 0,
                 value,
                 size_bytes,
             },
@@ -245,7 +243,6 @@ where
                 // Shove in local index.
                 let entry = Entry {
                     ts: read_ts,
-                    hits: 0,
                     value,
                     size_bytes,
                 };
@@ -344,7 +341,6 @@ where
                 d.clone(),
                 Entry {
                     ts,
-                    hits: 0,
                     value: c.clone(),
                     size_bytes,
                 },

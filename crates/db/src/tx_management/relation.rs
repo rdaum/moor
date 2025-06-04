@@ -26,7 +26,6 @@ use tracing::warn;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry<T: Clone + PartialEq> {
     pub ts: Timestamp,
-    pub hits: usize,
     pub value: T,
     pub size_bytes: usize,
 }
@@ -153,7 +152,6 @@ where
             if let Some((ts, codomain, size_bytes)) = self.source.get(domain)? {
                 let entry = Entry {
                     ts,
-                    hits: 0,
                     value: codomain.clone(),
                     size_bytes,
                 };
@@ -264,7 +262,6 @@ where
             domain.clone(),
             Entry {
                 ts,
-                hits: 0,
                 value: codomain,
                 size_bytes: entry_size_bytes,
             },
@@ -288,12 +285,8 @@ where
         }
     }
 
-    fn index_lookup(&mut self, domain: &Domain) -> Option<&mut Entry<Codomain>> {
-        let mut entry = self.entries.get_mut(domain);
-        if let Some(e) = &mut entry {
-            e.hits += 1;
-        }
-        entry
+    fn index_lookup(&self, domain: &Domain) -> Option<&Entry<Codomain>> {
+        self.entries.get(domain)
     }
 }
 
@@ -304,7 +297,17 @@ where
     Source: Provider<Domain, Codomain>,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error> {
+        // First try with read lock
+        {
+            let inner = self.index.read().unwrap();
+            if let Some(entry) = inner.index_lookup(domain) {
+                return Ok(Some((entry.ts, entry.value.clone(), entry.size_bytes)));
+            }
+        }
+        
+        // Not in cache, need write lock to potentially insert from backing store
         let mut inner = self.index.write().unwrap();
+        // Double-check since another thread might have inserted while we waited for write lock
         if let Some(entry) = inner.index_lookup(domain) {
             Ok(Some((entry.ts, entry.value.clone(), entry.size_bytes)))
         } else {
