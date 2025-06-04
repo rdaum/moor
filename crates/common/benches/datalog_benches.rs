@@ -12,9 +12,35 @@
 //
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use moor_common::datalog::{Atom, KnowledgeBase, Rule, Term}; // Removed Fact import
+use moor_common::datalog::Term::{Constant, Variable};
+use moor_common::datalog::{Atom, KnowledgeBase, Rule}; // Removed Fact import
 use moor_var::{Symbol, v_int, v_str, v_string};
 use std::hint::black_box;
+
+// Lazy init a bunch of symbols we'll use ("parent", "X", *Y, etc.), just so we're not really
+// measuring the time it takes to create these symbols in the benchmarks.
+lazy_static::lazy_static! {
+    static ref PARENT: Symbol = Symbol::from("parent");
+    static ref ANCESTOR: Symbol = Symbol::from("ancestor");
+    static ref EDGE: Symbol = Symbol::from("edge");
+    static ref PATH: Symbol = Symbol::from("path");
+    static ref CONNECTION: Symbol = Symbol::from("connection");
+    static ref CONTAINS: Symbol = Symbol::from("contains");
+    static ref UNLOCKS: Symbol = Symbol::from("unlocks");
+    static ref HAS_ITEM: Symbol = Symbol::from("has_item");
+    static ref CAN_ACCESS: Symbol = Symbol::from("can_access");
+    static ref CAN_FIND: Symbol = Symbol::from("can_find");
+    static ref X: Symbol = Symbol::from("X");
+    static ref Y: Symbol = Symbol::from("Y");
+    static ref Z: Symbol = Symbol::from("Y");
+    static ref PLAYER: Symbol = Symbol::from("player");
+    static ref FROM: Symbol = Symbol::from("From");
+    static ref TO: Symbol = Symbol::from("To");
+    static ref KEY: Symbol = Symbol::from("Key");
+    static ref ROOM: Symbol = Symbol::from("Room");
+    static ref ITEM: Symbol = Symbol::from("Item");
+    static ref START: Symbol = Symbol::from("Start");
+}
 
 fn create_ancestor_datalog() -> (KnowledgeBase, Atom) {
     let mut dl = KnowledgeBase::new();
@@ -23,40 +49,25 @@ fn create_ancestor_datalog() -> (KnowledgeBase, Atom) {
     for i in 0..100 {
         dl.add_fact(
             // Changed
-            Symbol::from("parent"),
+            *PARENT,
             vec![v_int(i), v_int(i + 1)],
         );
     }
 
     // Rule: ancestor(X, Y) :- parent(X, Y)
-    let x = dl.new_variable("X");
-    let y = dl.new_variable("Y");
-    let parent_atom = Atom::new(
-        Symbol::from("parent"),
-        vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-    );
-    let ancestor_atom = Atom::new(
-        Symbol::from("ancestor"),
-        vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-    );
+    let x = dl.new_variable(*X);
+    let y = dl.new_variable(*Y);
+    let parent_atom = Atom::new(*PARENT, vec![Variable(x.clone()), Variable(y.clone())]);
+    let ancestor_atom = Atom::new(*ANCESTOR, vec![Variable(x.clone()), Variable(y.clone())]);
     dl.add_rule(Rule::new(ancestor_atom, vec![parent_atom]));
 
     // Rule: ancestor(X, Z) :- parent(X, Y), ancestor(Y, Z)
-    let x = dl.new_variable("X");
-    let y = dl.new_variable("Y");
-    let z = dl.new_variable("Z");
-    let parent_atom = Atom::new(
-        Symbol::from("parent"),
-        vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-    );
-    let ancestor_atom_body = Atom::new(
-        Symbol::from("ancestor"),
-        vec![Term::Variable(y.clone()), Term::Variable(z.clone())],
-    );
-    let ancestor_atom_head = Atom::new(
-        Symbol::from("ancestor"),
-        vec![Term::Variable(x.clone()), Term::Variable(z.clone())],
-    );
+    let x = dl.new_variable(*X);
+    let y = dl.new_variable(*Y);
+    let z = dl.new_variable(*Z);
+    let parent_atom = Atom::new(*PARENT, vec![Variable(x.clone()), Variable(y.clone())]);
+    let ancestor_atom_body = Atom::new(*ANCESTOR, vec![Variable(y.clone()), Variable(z.clone())]);
+    let ancestor_atom_head = Atom::new(*ANCESTOR, vec![Variable(x.clone()), Variable(z.clone())]);
     dl.add_rule(Rule::new(
         ancestor_atom_head,
         vec![parent_atom, ancestor_atom_body],
@@ -64,11 +75,8 @@ fn create_ancestor_datalog() -> (KnowledgeBase, Atom) {
 
     // Query: ancestor(0, X)
     let query = Atom::new(
-        Symbol::from("ancestor"),
-        vec![
-            Term::Constant(v_int(0)),
-            Term::Variable(dl.new_variable("X")),
-        ],
+        *ANCESTOR,
+        vec![Constant(v_int(0)), Variable(dl.new_variable(*X))],
     );
 
     (dl, query)
@@ -83,7 +91,7 @@ fn create_path_datalog(size: usize) -> (KnowledgeBase, Atom) {
         // Add an edge to the next node
         dl.add_fact(
             // Changed
-            Symbol::from("edge"),
+            *EDGE,
             vec![v_int(i), v_int((i + 1) % size_i64)],
         );
 
@@ -91,57 +99,39 @@ fn create_path_datalog(size: usize) -> (KnowledgeBase, Atom) {
         if i % 5 == 0 && i + 10 < size_i64 {
             dl.add_fact(
                 // Changed
-                Symbol::from("edge"),
+                *EDGE,
                 vec![v_int(i), v_int(i + 10)],
             );
         }
         if i % 7 == 0 && i + 20 < size_i64 {
             dl.add_fact(
                 // Changed
-                Symbol::from("edge"),
+                *EDGE,
                 vec![v_int(i), v_int(i + 20)],
             );
         }
     }
 
     // Rule: path(X, Y) :- edge(X, Y)
-    let x = dl.new_variable("X");
-    let y = dl.new_variable("Y");
-    let edge_atom = Atom::new(
-        Symbol::from("edge"),
-        vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-    );
-    let path_atom = Atom::new(
-        Symbol::from("path"),
-        vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-    );
+    let x = dl.new_variable(*X);
+    let y = dl.new_variable(*Y);
+    let edge_atom = Atom::new(*EDGE, vec![Variable(x.clone()), Variable(y.clone())]);
+    let path_atom = Atom::new(*PATH, vec![Variable(x.clone()), Variable(y.clone())]);
     dl.add_rule(Rule::new(path_atom, vec![edge_atom]));
 
     // Rule: path(X, Z) :- edge(X, Y), path(Y, Z)
-    let x = dl.new_variable("X");
-    let y = dl.new_variable("Y");
-    let z = dl.new_variable("Z");
-    let edge_atom = Atom::new(
-        Symbol::from("edge"),
-        vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-    );
-    let path_atom_body = Atom::new(
-        Symbol::from("path"),
-        vec![Term::Variable(y.clone()), Term::Variable(z.clone())],
-    );
-    let path_atom_head = Atom::new(
-        Symbol::from("path"),
-        vec![Term::Variable(x.clone()), Term::Variable(z.clone())],
-    );
+    let x = dl.new_variable(*X);
+    let y = dl.new_variable(*Y);
+    let z = dl.new_variable(*Z);
+    let edge_atom = Atom::new(*EDGE, vec![Variable(x.clone()), Variable(y.clone())]);
+    let path_atom_body = Atom::new(*PATH, vec![Variable(y.clone()), Variable(z.clone())]);
+    let path_atom_head = Atom::new(*PATH, vec![Variable(x.clone()), Variable(z.clone())]);
     dl.add_rule(Rule::new(path_atom_head, vec![edge_atom, path_atom_body]));
 
     // Query: path(0, size/2)
     let query = Atom::new(
-        Symbol::from("path"),
-        vec![
-            Term::Constant(v_int(0)),
-            Term::Constant(v_int(size_i64 / 2)),
-        ],
+        *PATH,
+        vec![Constant(v_int(0)), Constant(v_int(size_i64 / 2))],
     );
 
     (dl, query)
@@ -167,7 +157,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
             if j + 1 < grid_size && room_id + 1 < size {
                 dl.add_fact(
                     // Changed
-                    Symbol::from("connection"),
+                    *CONNECTION,
                     vec![
                         v_string(room_name.clone()),
                         v_string(format!("room_{}", room_id + 1)),
@@ -180,7 +170,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
             if i + 1 < grid_size && room_id + grid_size < size {
                 dl.add_fact(
                     // Changed
-                    Symbol::from("connection"),
+                    *CONNECTION,
                     vec![
                         v_string(room_name.clone()),
                         v_string(format!("room_{}", room_id + grid_size)),
@@ -193,7 +183,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
             if room_id % 11 == 0 && room_id + grid_size + 1 < size {
                 dl.add_fact(
                     // Changed
-                    Symbol::from("connection"),
+                    *CONNECTION,
                     vec![
                         v_string(room_name.clone()),
                         v_string(format!("room_{}", room_id + grid_size + 1)),
@@ -206,7 +196,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
             if room_id % 5 == 0 {
                 dl.add_fact(
                     // Changed
-                    Symbol::from("contains"),
+                    *CONTAINS,
                     vec![
                         v_string(room_name.clone()),
                         v_string(format!("item_{}", room_id / 5)),
@@ -218,7 +208,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
             if room_id % 13 == 0 {
                 dl.add_fact(
                     // Changed
-                    Symbol::from("contains"),
+                    *CONTAINS,
                     vec![
                         v_string(room_name),
                         v_string(format!("key_{}", room_id / 13)),
@@ -229,7 +219,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     }
 
     // Add player facts
-    dl.add_fact(Symbol::from("player"), vec![v_str("player_1")]); // Changed
+    dl.add_fact(*PLAYER, vec![v_str("player_1")]);
 
     // Add key unlocking facts
     for i in 0..size / 13 {
@@ -239,7 +229,7 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
             if j * 11 + grid_size + 1 < size {
                 dl.add_fact(
                     // Changed
-                    Symbol::from("unlocks"),
+                    *UNLOCKS,
                     vec![
                         v_string(format!("key_{}", i)),
                         v_string(room1),
@@ -254,69 +244,66 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     for i in 0..size / 26 {
         dl.add_fact(
             // Changed
-            Symbol::from("has_item"),
+            *HAS_ITEM,
             vec![v_str("player_1"), v_string(format!("key_{}", i))],
         );
     }
 
     // Rules for room access
     // can_access(Player, From, To) :- connection(From, To, 0)
-    let player1 = dl.new_variable("Player");
-    let from1 = dl.new_variable("From");
-    let to1 = dl.new_variable("To");
+    let player1 = dl.new_variable(*PLAYER);
+    let from1 = dl.new_variable(*FROM);
+    let to1 = dl.new_variable(*TO);
     let unlocked_path_atom = Atom::new(
-        Symbol::from("connection"),
+        *CONNECTION,
         vec![
-            Term::Variable(from1.clone()),
-            Term::Variable(to1.clone()),
-            Term::Constant(v_int(0)),
+            Variable(from1.clone()),
+            Variable(to1.clone()),
+            Constant(v_int(0)),
         ],
     );
     let can_access_atom = Atom::new(
-        Symbol::from("can_access"),
+        *CAN_ACCESS,
         vec![
-            Term::Variable(player1.clone()),
-            Term::Variable(from1.clone()),
-            Term::Variable(to1.clone()),
+            Variable(player1.clone()),
+            Variable(from1.clone()),
+            Variable(to1.clone()),
         ],
     );
     dl.add_rule(Rule::new(can_access_atom, vec![unlocked_path_atom]));
 
     // can_access(Player, From, To) :- connection(From, To, 1), has_item(Player, Key), unlocks(Key, From, To)
-    let player2 = dl.new_variable("Player");
-    let from2 = dl.new_variable("From");
-    let to2 = dl.new_variable("To");
-    let key2 = dl.new_variable("Key");
+    let player2 = dl.new_variable(*PLAYER);
+    let from2 = dl.new_variable(*FROM);
+    let to2 = dl.new_variable(*TO);
+    let key2 = dl.new_variable(*KEY);
 
     let locked_path_atom = Atom::new(
-        Symbol::from("connection"),
+        *CONNECTION,
         vec![
-            Term::Variable(from2.clone()),
-            Term::Variable(to2.clone()),
-            Term::Constant(v_int(1)),
+            Variable(from2.clone()),
+            Variable(to2.clone()),
+            Constant(v_int(1)),
         ],
     );
     let has_item_atom = Atom::new(
-        Symbol::from("has_item"),
-        vec![
-            Term::Variable(player2.clone()),
-            Term::Variable(key2.clone()),
-        ],
+        *HAS_ITEM,
+        vec![Variable(player2.clone()), Variable(key2.clone())],
     );
     let unlocks_atom = Atom::new(
-        Symbol::from("unlocks"),
+        *UNLOCKS,
         vec![
-            Term::Variable(key2.clone()),
-            Term::Variable(from2.clone()),
-            Term::Variable(to2.clone()),
+            Variable(key2.clone()),
+            Variable(from2.clone()),
+            Variable(to2.clone()),
         ],
     );
     let can_access_locked_atom = Atom::new(
-        Symbol::from("can_access"),
+        *CAN_ACCESS,
         vec![
-            Term::Variable(player2.clone()),
-            Term::Variable(from2.clone()),
-            Term::Variable(to2.clone()),
+            Variable(player2.clone()),
+            Variable(from2.clone()),
+            Variable(to2.clone()),
         ],
     );
     dl.add_rule(Rule::new(
@@ -325,55 +312,55 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     ));
 
     // path(Player, X, Y) :- can_access(Player, X, Y)
-    let player3 = dl.new_variable("Player");
-    let x3 = dl.new_variable("X");
-    let y3 = dl.new_variable("Y");
+    let player3 = dl.new_variable(*PLAYER);
+    let x3 = dl.new_variable(*X);
+    let y3 = dl.new_variable(*Y);
     let can_access_atom = Atom::new(
-        Symbol::from("can_access"),
+        *CAN_ACCESS,
         vec![
-            Term::Variable(player3.clone()),
-            Term::Variable(x3.clone()),
-            Term::Variable(y3.clone()),
+            Variable(player3.clone()),
+            Variable(x3.clone()),
+            Variable(y3.clone()),
         ],
     );
     let path_atom = Atom::new(
-        Symbol::from("path"),
+        *PATH,
         vec![
-            Term::Variable(player3.clone()),
-            Term::Variable(x3.clone()),
-            Term::Variable(y3.clone()),
+            Variable(player3.clone()),
+            Variable(x3.clone()),
+            Variable(y3.clone()),
         ],
     );
     dl.add_rule(Rule::new(path_atom, vec![can_access_atom]));
 
     // path(Player, X, Z) :- can_access(Player, X, Y), path(Player, Y, Z)
-    let player4 = dl.new_variable("Player");
-    let x4 = dl.new_variable("X");
-    let y4 = dl.new_variable("Y");
-    let z4 = dl.new_variable("Z");
+    let player4 = dl.new_variable(*PLAYER);
+    let x4 = dl.new_variable(*X);
+    let y4 = dl.new_variable(*Y);
+    let z4 = dl.new_variable(*Z);
 
     let can_access_atom = Atom::new(
-        Symbol::from("can_access"),
+        *CAN_ACCESS,
         vec![
-            Term::Variable(player4.clone()),
-            Term::Variable(x4.clone()),
-            Term::Variable(y4.clone()),
+            Variable(player4.clone()),
+            Variable(x4.clone()),
+            Variable(y4.clone()),
         ],
     );
     let path_atom_body = Atom::new(
-        Symbol::from("path"),
+        *PATH,
         vec![
-            Term::Variable(player4.clone()),
-            Term::Variable(y4.clone()),
-            Term::Variable(z4.clone()),
+            Variable(player4.clone()),
+            Variable(y4.clone()),
+            Variable(z4.clone()),
         ],
     );
     let path_atom_head = Atom::new(
-        Symbol::from("path"),
+        *PATH,
         vec![
-            Term::Variable(player4.clone()),
-            Term::Variable(x4.clone()),
-            Term::Variable(z4.clone()),
+            Variable(player4.clone()),
+            Variable(x4.clone()),
+            Variable(z4.clone()),
         ],
     );
     dl.add_rule(Rule::new(
@@ -382,40 +369,34 @@ fn create_adventure_game_datalog(size: usize) -> (KnowledgeBase, Atom) {
     ));
 
     // can_find(Player, Item) :- path(Player, Start, Room), contains(Room, Item)
-    let player5 = dl.new_variable("Player");
-    let room5 = dl.new_variable("Room");
-    let item5 = dl.new_variable("Item");
-    let start5 = dl.new_variable("Start");
+    let player5 = dl.new_variable(*PLAYER);
+    let room5 = dl.new_variable(*ROOM);
+    let item5 = dl.new_variable(*ITEM);
+    let start5 = dl.new_variable(*START);
 
     let path_atom = Atom::new(
-        Symbol::from("path"),
+        *PATH,
         vec![
-            Term::Variable(player5.clone()),
-            Term::Variable(start5.clone()),
-            Term::Variable(room5.clone()),
+            Variable(player5.clone()),
+            Variable(start5.clone()),
+            Variable(room5.clone()),
         ],
     );
     let contains_atom = Atom::new(
-        Symbol::from("contains"),
-        vec![Term::Variable(room5.clone()), Term::Variable(item5.clone())],
+        *CONTAINS,
+        vec![Variable(room5.clone()), Variable(item5.clone())],
     );
     let can_find_atom = Atom::new(
-        Symbol::from("can_find"),
-        vec![
-            Term::Variable(player5.clone()),
-            Term::Variable(item5.clone()),
-        ],
+        *CAN_FIND,
+        vec![Variable(player5.clone()), Variable(item5.clone())],
     );
     dl.add_rule(Rule::new(can_find_atom, vec![path_atom, contains_atom]));
 
     // Query: can_find(player_1, item_X) - ask about a specific item
     let target_item = format!("item_{}", size / 10);
     let query = Atom::new(
-        Symbol::from("can_find"),
-        vec![
-            Term::Constant(v_str("player_1")),
-            Term::Constant(v_string(target_item)),
-        ],
+        *CAN_FIND,
+        vec![Constant(v_str("player_1")), Constant(v_string(target_item))],
     );
 
     (dl, query)
@@ -426,15 +407,19 @@ fn benchmark_full_query(c: &mut Criterion) {
     group.sample_size(10);
     // Ancestor benchmark with different sizes
     for size in [10, 50, 100].iter() {
-        group.bench_with_input(BenchmarkId::new("ancestor", size), size, |b, &_size| {
-            let (mut dl, query) = create_ancestor_datalog();
-            b.iter(|| dl.query(black_box(&query)));
-        });
+        group.bench_with_input(
+            BenchmarkId::new(ANCESTOR.as_str(), size),
+            size,
+            |b, &_size| {
+                let (mut dl, query) = create_ancestor_datalog();
+                b.iter(|| dl.query(black_box(&query)));
+            },
+        );
     }
 
     // Path benchmark with different sizes
     for size in [20, 50, 100].iter() {
-        group.bench_with_input(BenchmarkId::new("path", size), size, |b, &size| {
+        group.bench_with_input(BenchmarkId::new(PATH.as_str(), size), size, |b, &size| {
             let (mut dl, query) = create_path_datalog(size as usize);
             b.iter(|| dl.query(black_box(&query)));
         });

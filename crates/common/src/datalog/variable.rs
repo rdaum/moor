@@ -27,8 +27,11 @@ pub struct Variable {
 
 impl Variable {
     /// Create a new variable with the given name and id
-    pub fn new(name: Symbol, id: usize) -> Self {
-        Self { name, id }
+    pub fn new(name: impl Into<Symbol>, id: usize) -> Self {
+        Self {
+            name: name.into(),
+            id,
+        }
     }
 
     /// Get the name of the variable

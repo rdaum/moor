@@ -72,10 +72,10 @@ impl KnowledgeBase {
     }
 
     /// Create a new variable with the given name
-    pub fn new_variable(&mut self, name: &str) -> Variable {
+    pub fn new_variable(&mut self, name: impl Into<Symbol>) -> Variable {
         let id = self.next_var_id;
         self.next_var_id += 1;
-        Variable::new(Symbol::mk(name), id)
+        Variable::new(name.into(), id)
     }
 
     /// Add a rule to the program
@@ -84,7 +84,8 @@ impl KnowledgeBase {
     }
 
     /// Add a fact to the program
-    pub fn add_fact(&mut self, predicate: Symbol, values: Vec<Var>) {
+    pub fn add_fact(&mut self, predicate: impl Into<Symbol>, values: Vec<Var>) {
+        let predicate = predicate.into();
         let fact_id = self.next_fact_id;
         self.next_fact_id += 1;
         let fact = Fact::new(fact_id, predicate, values.clone());
@@ -175,45 +176,34 @@ impl KnowledgeBase {
         results
     }
 
+    fn subs_to_lists(substitutions: &[Substitution], query: &Atom) -> Vec<Vec<Var>> {
+        substitutions
+            .into_iter()
+            .map(|subst| {
+                query
+                    .terms()
+                    .iter()
+                    .filter_map(|term| {
+                        if let Some(var) = term.as_variable() {
+                            subst.get(var).cloned()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .collect::<Vec<_>>()
+    }
+
     /// Get the current results for an incremental query as lists.
     pub fn query_incremental_results_as_lists(&self, query: &Atom) -> Vec<Vec<Var>> {
-        let substitutions = self.query_incremental_results(query);
-        let mut results = Vec::new();
-
-        for substitution in substitutions {
-            let mut row = Vec::new();
-            for term in query.terms() {
-                if let Some(var) = term.as_variable() {
-                    if let Some(value) = substitution.get(var) {
-                        row.push(value.clone());
-                    }
-                }
-            }
-            results.push(row);
-        }
-
-        results
+        Self::subs_to_lists(&self.query_incremental_results(query), query)
     }
 
     /// Query the program and return the results as a list of lists,
     /// where each inner list contains the values for the variables in the query
     pub fn query_as_lists(&mut self, query: &Atom) -> Vec<Vec<Var>> {
-        let substitutions = self.query(query);
-        let mut results = Vec::new();
-
-        for substitution in substitutions {
-            let mut row = Vec::new();
-            for term in query.terms() {
-                if let Some(var) = term.as_variable() {
-                    if let Some(value) = substitution.get(var) {
-                        row.push(value.clone());
-                    }
-                }
-            }
-            results.push(row);
-        }
-
-        results
+        Self::subs_to_lists(&self.query(query), query)
     }
 
     /// Query the program and return the results as a list of Var lists
@@ -390,59 +380,59 @@ impl KnowledgeBase {
         }
 
         // Get the current substitutions and continue processing
-        if let Some(state) = &mut self.evaluation_state {
-            // Process one substitution
-            if state.substitution_idx < state.substitutions.len() {
-                let substitution = &state.substitutions[state.substitution_idx];
-                // Need to clone rule here or handle borrowing differently if rule is used later
-                // Cloning rule for simplicity, though it might be inefficient.
-                // A better way would be to clone rule.head only or pass its components.
-                // For now, let's assume self.rules[rule_idx] can be cloned or head processed without holding state borrow.
-                // The issue is `rule` is borrowed from `self.rules` which is immutable part of `self`
-                // while `self.facts` and `self.next_fact_id` need mutable access.
-                // Let's re-fetch the rule head's predicate and apply substitution to avoid complex borrow.
+        let Some(state) = &mut self.evaluation_state else {
+            return false; // No evaluation state, can't proceed
+        };
 
-                let current_rule_predicate = self.rules[rule_idx].head.predicate;
-                let current_rule_terms = self.rules[rule_idx].head.terms.clone();
-                let temp_atom_head = Atom::new(current_rule_predicate, current_rule_terms);
-                let head = temp_atom_head.apply_substitution(substitution);
+        // Process one substitution
+        if state.substitution_idx < state.substitutions.len() {
+            let substitution = &state.substitutions[state.substitution_idx];
+            // Need to clone rule here or handle borrowing differently if rule is used later
+            // Cloning rule for simplicity, though it might be inefficient.
+            // A better way would be to clone rule.head only or pass its components.
+            // For now, let's assume self.rules[rule_idx] can be cloned or head processed without holding state borrow.
+            // The issue is `rule` is borrowed from `self.rules` which is immutable part of `self`
+            // while `self.facts` and `self.next_fact_id` need mutable access.
+            // Let's re-fetch the rule head's predicate and apply substitution to avoid complex borrow.
 
-                // If the head has any variables, we can't add it as a fact
-                if !head.terms.iter().any(|term| term.is_variable()) {
-                    // Convert the head to a fact
-                    let values: Vec<Var> = head // Ensure values is Vec<Var>
-                        .terms
-                        .iter()
-                        .filter_map(|term| term.as_constant().cloned())
-                        .collect();
+            let current_rule_predicate = self.rules[rule_idx].head.predicate;
+            let current_rule_terms = self.rules[rule_idx].head.terms.clone();
+            let temp_atom_head = Atom::new(current_rule_predicate, current_rule_terms);
+            let head = temp_atom_head.apply_substitution(substitution);
 
-                    let fact_id = self.next_fact_id; // Tentative ID
-                    let fact = Fact::new(fact_id, head.predicate, values);
+            // If the head has any variables, we can't add it as a fact
+            if !head.terms.iter().any(|term| term.is_variable()) {
+                // Convert the head to a fact
+                let values: Vec<Var> = head // Ensure values is Vec<Var>
+                    .terms
+                    .iter()
+                    .filter_map(|term| term.as_constant().cloned())
+                    .collect();
 
-                    // Add the fact if it's new
-                    let facts_entry = self
-                        .facts
-                        .entry(*fact.predicate()) // Use getter
-                        .or_default();
-                    if facts_entry.insert(fact) {
-                        // If semantically new
-                        self.next_fact_id += 1; // Commit/consume the ID
-                        state.new_facts = true;
-                    }
+                let fact_id = self.next_fact_id; // Tentative ID
+                let fact = Fact::new(fact_id, head.predicate, values);
+
+                // Add the fact if it's new
+                let facts_entry = self
+                    .facts
+                    .entry(*fact.predicate()) // Use getter
+                    .or_default();
+                if facts_entry.insert(fact) {
+                    // If semantically new
+                    self.next_fact_id += 1; // Commit/consume the ID
+                    state.new_facts = true;
                 }
-
-                // Move to the next substitution
-                state.substitution_idx += 1;
-            } else {
-                // Move to the next rule
-                state.rule_idx += 1;
-                state.substitution_idx = 0;
             }
 
-            true
+            // Move to the next substitution
+            state.substitution_idx += 1;
         } else {
-            false
+            // Move to the next rule
+            state.rule_idx += 1;
+            state.substitution_idx = 0;
         }
+
+        true
     }
 
     /// Complete the evaluation process, running until fixpoint.
@@ -568,6 +558,7 @@ impl Default for KnowledgeBase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datalog::Term::{Constant, Variable};
     use moor_var::{v_int, v_string};
 
     #[test]
@@ -578,7 +569,7 @@ mod tests {
         for i in 0..100 {
             dl.add_fact(
                 // Changed
-                Symbol::from("index_test"),
+                "index_test",
                 vec![v_int(i), v_string(format!("value_{}", i))],
             );
         }
@@ -586,8 +577,8 @@ mod tests {
         // This query should use the index for position 0
         let query_var = dl.new_variable("X");
         let query = Atom::new(
-            Symbol::from("index_test"),
-            vec![Term::Constant(v_int(42)), Term::Variable(query_var.clone())],
+            "index_test",
+            vec![Constant(v_int(42)), Variable(query_var.clone())],
         );
 
         let results = dl.query(&query);
@@ -604,21 +595,21 @@ mod tests {
         // Add facts: parent(john, mary)
         dl.add_fact(
             // Changed
-            Symbol::from("parent"),
+            "parent",
             vec![v_string("john".to_string()), v_string("mary".to_string())],
         );
 
         // Add facts: parent(mary, bob)
         dl.add_fact(
             // Changed
-            Symbol::from("parent"),
+            "parent",
             vec![v_string("mary".to_string()), v_string("bob".to_string())],
         );
 
         // Add facts: parent(bob, alice)
         dl.add_fact(
             // Changed
-            Symbol::from("parent"),
+            "parent",
             vec![v_string("bob".to_string()), v_string("alice".to_string())],
         );
 
@@ -627,30 +618,20 @@ mod tests {
         let y = dl.new_variable("Y");
         let parent_atom = Atom::new(
             Symbol::mk("parent"),
-            vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
+            vec![Variable(x.clone()), Variable(y.clone())],
         );
-        let ancestor_atom = Atom::new(
-            Symbol::from("ancestor"),
-            vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-        );
+        let ancestor_atom = Atom::new("ancestor", vec![Variable(x.clone()), Variable(y.clone())]);
         dl.add_rule(Rule::new(ancestor_atom.clone(), vec![parent_atom]));
 
         // Rule: ancestor(X, Z) :- parent(X, Y), ancestor(Y, Z)
         let x = dl.new_variable("X");
         let y = dl.new_variable("Y");
         let z = dl.new_variable("Z");
-        let parent_atom = Atom::new(
-            Symbol::from("parent"),
-            vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-        );
-        let ancestor_atom_body = Atom::new(
-            Symbol::from("ancestor"),
-            vec![Term::Variable(y.clone()), Term::Variable(z.clone())],
-        );
-        let ancestor_atom_head = Atom::new(
-            Symbol::from("ancestor"),
-            vec![Term::Variable(x.clone()), Term::Variable(z.clone())],
-        );
+        let parent_atom = Atom::new("parent", vec![Variable(x.clone()), Variable(y.clone())]);
+        let ancestor_atom_body =
+            Atom::new("ancestor", vec![Variable(y.clone()), Variable(z.clone())]);
+        let ancestor_atom_head =
+            Atom::new("ancestor", vec![Variable(x.clone()), Variable(z.clone())]);
         dl.add_rule(Rule::new(
             ancestor_atom_head,
             vec![parent_atom, ancestor_atom_body],
@@ -658,10 +639,10 @@ mod tests {
 
         // Query: ancestor(john, X)
         let john_x = Atom::new(
-            Symbol::from("ancestor"),
+            "ancestor",
             vec![
-                Term::Constant(v_string("john".to_string())),
-                Term::Variable(dl.new_variable("X")),
+                Constant(v_string("john".to_string())),
+                Variable(dl.new_variable("X")),
             ],
         );
 
@@ -693,8 +674,8 @@ mod tests {
         let mut dl = KnowledgeBase::new();
 
         // Add base facts: fib(0, 0) and fib(1, 1)
-        dl.add_fact(Symbol::from("fib"), vec![v_int(0), v_int(0)]); // Changed
-        dl.add_fact(Symbol::from("fib"), vec![v_int(1), v_int(1)]); // Changed
+        dl.add_fact("fib", vec![v_int(0), v_int(0)]); // Changed
+        dl.add_fact("fib", vec![v_int(1), v_int(1)]); // Changed
 
         // Add rules for calculating Fibonacci numbers up to a limit
         for n in 2..35 {
@@ -702,7 +683,7 @@ mod tests {
             // For each n, add a fact: next(n-2, n-1, n)
             dl.add_fact(
                 // Changed
-                Symbol::from("next"),
+                "next",
                 vec![v_int(n - 2), v_int(n - 1), v_int(n)],
             );
         }
@@ -717,25 +698,19 @@ mod tests {
 
         // next(A, B, N)
         let next_atom = Atom::new(
-            Symbol::from("next"),
+            "next",
             vec![
-                Term::Variable(a.clone()),
-                Term::Variable(b.clone()),
-                Term::Variable(n.clone()),
+                Variable(a.clone()),
+                Variable(b.clone()),
+                Variable(n.clone()),
             ],
         );
 
         // fib(A, FA)
-        let fib_a_atom = Atom::new(
-            Symbol::from("fib"),
-            vec![Term::Variable(a.clone()), Term::Variable(fa.clone())],
-        );
+        let fib_a_atom = Atom::new("fib", vec![Variable(a.clone()), Variable(fa.clone())]);
 
         // fib(B, FB)
-        let fib_b_atom = Atom::new(
-            Symbol::from("fib"),
-            vec![Term::Variable(b.clone()), Term::Variable(fb.clone())],
-        );
+        let fib_b_atom = Atom::new("fib", vec![Variable(b.clone()), Variable(fb.clone())]);
 
         // For Datalog, we can't compute directly, so we'll add facts for sum
         for i in 0..35 {
@@ -744,7 +719,7 @@ mod tests {
                 // Increased range to handle larger Fibonacci numbers
                 dl.add_fact(
                     // Changed
-                    Symbol::from("sum"),
+                    "sum",
                     vec![v_int(i), v_int(j), v_int(i + j)],
                 );
             }
@@ -752,19 +727,16 @@ mod tests {
 
         // sum(FA, FB, F)
         let sum_atom = Atom::new(
-            Symbol::from("sum"),
+            "sum",
             vec![
-                Term::Variable(fa.clone()),
-                Term::Variable(fb.clone()),
-                Term::Variable(f.clone()),
+                Variable(fa.clone()),
+                Variable(fb.clone()),
+                Variable(f.clone()),
             ],
         );
 
         // fib(N, F)
-        let fib_atom = Atom::new(
-            Symbol::from("fib"),
-            vec![Term::Variable(n.clone()), Term::Variable(f.clone())],
-        );
+        let fib_atom = Atom::new("fib", vec![Variable(n.clone()), Variable(f.clone())]);
 
         dl.add_rule(Rule::new(
             fib_atom.clone(),
@@ -773,11 +745,8 @@ mod tests {
 
         // Query: fib(5, X)
         let fib_5 = Atom::new(
-            Symbol::from("fib"),
-            vec![
-                Term::Constant(v_int(5)),
-                Term::Variable(dl.new_variable("X")),
-            ],
+            "fib",
+            vec![Constant(v_int(5)), Variable(dl.new_variable("X"))],
         );
 
         let results = dl.query_as_lists(&fib_5);
@@ -786,11 +755,8 @@ mod tests {
 
         // Query: fib(9, X)
         let fib_9 = Atom::new(
-            Symbol::from("fib"),
-            vec![
-                Term::Constant(v_int(9)),
-                Term::Variable(dl.new_variable("X")),
-            ],
+            "fib",
+            vec![Constant(v_int(9)), Variable(dl.new_variable("X"))],
         );
 
         let results = dl.query_as_lists(&fib_9);
@@ -808,7 +774,7 @@ mod tests {
         // direct_path(from_room, to_room)
         dl.add_fact(
             // Changed
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("entrance".to_string()),
                 v_string("hall".to_string()),
@@ -816,7 +782,7 @@ mod tests {
         );
         dl.add_fact(
             // Changed
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("hall".to_string()),
                 v_string("kitchen".to_string()),
@@ -824,7 +790,7 @@ mod tests {
         );
         dl.add_fact(
             // Changed
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("hall".to_string()),
                 v_string("library".to_string()),
@@ -832,7 +798,7 @@ mod tests {
         );
         dl.add_fact(
             // Changed
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("kitchen".to_string()),
                 v_string("garden".to_string()),
@@ -840,7 +806,7 @@ mod tests {
         );
         dl.add_fact(
             // Changed
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("library".to_string()),
                 v_string("secret_room".to_string()),
@@ -852,13 +818,10 @@ mod tests {
         let x1 = dl.new_variable("X");
         let y1 = dl.new_variable("Y");
         let direct_path_atom = Atom::new(
-            Symbol::from("direct_path"),
-            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
+            "direct_path",
+            vec![Variable(x1.clone()), Variable(y1.clone())],
         );
-        let path_atom = Atom::new(
-            Symbol::from("path"),
-            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
-        );
+        let path_atom = Atom::new("path", vec![Variable(x1.clone()), Variable(y1.clone())]);
         dl.add_rule(Rule::new(path_atom, vec![direct_path_atom]));
 
         // path(X, Z) :- direct_path(X, Y), path(Y, Z)
@@ -866,17 +829,11 @@ mod tests {
         let y2 = dl.new_variable("Y");
         let z2 = dl.new_variable("Z");
         let direct_path_atom = Atom::new(
-            Symbol::from("direct_path"),
-            vec![Term::Variable(x2.clone()), Term::Variable(y2.clone())],
+            "direct_path",
+            vec![Variable(x2.clone()), Variable(y2.clone())],
         );
-        let path_atom_body = Atom::new(
-            Symbol::from("path"),
-            vec![Term::Variable(y2.clone()), Term::Variable(z2.clone())],
-        );
-        let path_atom_head = Atom::new(
-            Symbol::from("path"),
-            vec![Term::Variable(x2.clone()), Term::Variable(z2.clone())],
-        );
+        let path_atom_body = Atom::new("path", vec![Variable(y2.clone()), Variable(z2.clone())]);
+        let path_atom_head = Atom::new("path", vec![Variable(x2.clone()), Variable(z2.clone())]);
         dl.add_rule(Rule::new(
             path_atom_head,
             vec![direct_path_atom, path_atom_body],
@@ -884,10 +841,10 @@ mod tests {
 
         // Query: Can we reach the secret_room from the entrance?
         let entrance_to_secret = Atom::new(
-            Symbol::from("path"),
+            "path",
             vec![
-                Term::Constant(v_string("entrance".to_string())),
-                Term::Constant(v_string("secret_room".to_string())),
+                Constant(v_string("entrance".to_string())),
+                Constant(v_string("secret_room".to_string())),
             ],
         );
         let results = dl.query(&entrance_to_secret);
@@ -899,10 +856,10 @@ mod tests {
 
         // Query: From the entrance, what rooms can we reach?
         let reachable_from_entrance = Atom::new(
-            Symbol::from("path"),
+            "path",
             vec![
-                Term::Constant(v_string("entrance".to_string())),
-                Term::Variable(dl.new_variable("Room")),
+                Constant(v_string("entrance".to_string())),
+                Variable(dl.new_variable("Room")),
             ],
         );
         let results = dl.query_as_lists(&reachable_from_entrance);
@@ -931,12 +888,12 @@ mod tests {
         // location(object, place)
         dl.add_fact(
             // Changed
-            Symbol::from("location"),
+            "location",
             vec![v_string("key".to_string()), v_string("kitchen".to_string())],
         );
         dl.add_fact(
             // Changed
-            Symbol::from("location"),
+            "location",
             vec![
                 v_string("book".to_string()),
                 v_string("library".to_string()),
@@ -944,7 +901,7 @@ mod tests {
         );
         dl.add_fact(
             // Changed
-            Symbol::from("location"),
+            "location",
             vec![
                 v_string("sword".to_string()),
                 v_string("secret_room".to_string()),
@@ -952,7 +909,7 @@ mod tests {
         );
         dl.add_fact(
             // Changed
-            Symbol::from("location"),
+            "location",
             vec![
                 v_string("flower".to_string()),
                 v_string("garden".to_string()),
@@ -960,7 +917,7 @@ mod tests {
         );
         dl.add_fact(
             // Changed
-            Symbol::from("location"),
+            "location",
             vec![v_string("hat".to_string()), v_string("hall".to_string())],
         );
 
@@ -968,17 +925,17 @@ mod tests {
         // container(container_object, contained_object)
         dl.add_fact(
             // Changed
-            Symbol::from("container"),
+            "container",
             vec![v_string("chest".to_string()), v_string("gold".to_string())],
         );
         dl.add_fact(
             // Changed
-            Symbol::from("container"),
+            "container",
             vec![v_string("box".to_string()), v_string("silver".to_string())],
         );
         dl.add_fact(
             // Changed
-            Symbol::from("location"),
+            "location",
             vec![
                 v_string("chest".to_string()),
                 v_string("library".to_string()),
@@ -986,7 +943,7 @@ mod tests {
         );
         dl.add_fact(
             // Changed
-            Symbol::from("location"),
+            "location",
             vec![v_string("box".to_string()), v_string("kitchen".to_string())],
         );
 
@@ -995,12 +952,12 @@ mod tests {
         let obj1 = dl.new_variable("Obj");
         let cont1 = dl.new_variable("Cont");
         let container_atom = Atom::new(
-            Symbol::from("container"),
-            vec![Term::Variable(cont1.clone()), Term::Variable(obj1.clone())],
+            "container",
+            vec![Variable(cont1.clone()), Variable(obj1.clone())],
         );
         let contained_in_atom = Atom::new(
-            Symbol::from("contained_in"),
-            vec![Term::Variable(obj1.clone()), Term::Variable(cont1.clone())],
+            "contained_in",
+            vec![Variable(obj1.clone()), Variable(cont1.clone())],
         );
         dl.add_rule(Rule::new(contained_in_atom, vec![container_atom]));
 
@@ -1009,12 +966,12 @@ mod tests {
         let obj2 = dl.new_variable("Obj");
         let loc2 = dl.new_variable("Loc");
         let location_atom = Atom::new(
-            Symbol::from("location"),
-            vec![Term::Variable(obj2.clone()), Term::Variable(loc2.clone())],
+            "location",
+            vec![Variable(obj2.clone()), Variable(loc2.clone())],
         );
         let at_location_atom = Atom::new(
-            Symbol::from("at_location"),
-            vec![Term::Variable(obj2.clone()), Term::Variable(loc2.clone())],
+            "at_location",
+            vec![Variable(obj2.clone()), Variable(loc2.clone())],
         );
         dl.add_rule(Rule::new(at_location_atom, vec![location_atom]));
 
@@ -1023,16 +980,16 @@ mod tests {
         let cont3 = dl.new_variable("Cont");
         let loc3 = dl.new_variable("Loc");
         let contained_in_atom = Atom::new(
-            Symbol::from("contained_in"),
-            vec![Term::Variable(obj3.clone()), Term::Variable(cont3.clone())],
+            "contained_in",
+            vec![Variable(obj3.clone()), Variable(cont3.clone())],
         );
         let at_location_body_atom = Atom::new(
-            Symbol::from("at_location"),
-            vec![Term::Variable(cont3.clone()), Term::Variable(loc3.clone())],
+            "at_location",
+            vec![Variable(cont3.clone()), Variable(loc3.clone())],
         );
         let at_location_head_atom = Atom::new(
-            Symbol::from("at_location"),
-            vec![Term::Variable(obj3.clone()), Term::Variable(loc3.clone())],
+            "at_location",
+            vec![Variable(obj3.clone()), Variable(loc3.clone())],
         );
         dl.add_rule(Rule::new(
             at_location_head_atom,
@@ -1041,10 +998,10 @@ mod tests {
 
         // Query: Where is the gold?
         let gold_location = Atom::new(
-            Symbol::from("at_location"),
+            "at_location",
             vec![
-                Term::Constant(v_string("gold".to_string())),
-                Term::Variable(dl.new_variable("Location")),
+                Constant(v_string("gold".to_string())),
+                Variable(dl.new_variable("Location")),
             ],
         );
         let results = dl.query_as_lists(&gold_location);
@@ -1053,10 +1010,10 @@ mod tests {
 
         // Query: What objects are in the library?
         let library_objects = Atom::new(
-            Symbol::from("at_location"),
+            "at_location",
             vec![
-                Term::Variable(dl.new_variable("Object")),
-                Term::Constant(v_string("library".to_string())),
+                Variable(dl.new_variable("Object")),
+                Constant(v_string("library".to_string())),
             ],
         );
         let results = dl.query_as_lists(&library_objects);
@@ -1079,7 +1036,7 @@ mod tests {
         // Define room connections
         // direct_path(from_room, to_room, is_locked)
         dl.add_fact(
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("entrance".to_string()),
                 v_string("hall".to_string()),
@@ -1087,7 +1044,7 @@ mod tests {
             ],
         );
         dl.add_fact(
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("hall".to_string()),
                 v_string("kitchen".to_string()),
@@ -1095,7 +1052,7 @@ mod tests {
             ],
         );
         dl.add_fact(
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("hall".to_string()),
                 v_string("library".to_string()),
@@ -1103,7 +1060,7 @@ mod tests {
             ],
         );
         dl.add_fact(
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("kitchen".to_string()),
                 v_string("garden".to_string()),
@@ -1111,7 +1068,7 @@ mod tests {
             ],
         );
         dl.add_fact(
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
                 v_string("library".to_string()),
                 v_string("vault".to_string()),
@@ -1121,11 +1078,11 @@ mod tests {
 
         // Define locations of items
         dl.add_fact(
-            Symbol::from("location"),
+            "location",
             vec![v_string("key".to_string()), v_string("kitchen".to_string())],
         );
         dl.add_fact(
-            Symbol::from("location"),
+            "location",
             vec![
                 v_string("treasure".to_string()),
                 v_string("vault".to_string()),
@@ -1134,7 +1091,7 @@ mod tests {
 
         // Define locked door requirements
         dl.add_fact(
-            Symbol::from("unlocks"),
+            "unlocks",
             vec![
                 v_string("key".to_string()),
                 v_string("library".to_string()),
@@ -1146,31 +1103,28 @@ mod tests {
         // For unlocked paths, we need to ensure the Player variable is properly unified
         // We'll create a rule that works for any specific player by adding a fact about players
         // First, let's add facts about which players exist
-        dl.add_fact(Symbol::from("player"), vec![v_string("alice".to_string())]);
-        dl.add_fact(Symbol::from("player"), vec![v_string("bob".to_string())]);
+        dl.add_fact("player", vec![v_string("alice".to_string())]);
+        dl.add_fact("player", vec![v_string("bob".to_string())]);
 
         // can_access(Player, From, To) :- player(Player), direct_path(From, To, 0)
         let player1 = dl.new_variable("Player");
         let from1 = dl.new_variable("From");
         let to1 = dl.new_variable("To");
-        let player_atom = Atom::new(
-            Symbol::from("player"),
-            vec![Term::Variable(player1.clone())],
-        );
+        let player_atom = Atom::new("player", vec![Variable(player1.clone())]);
         let unlocked_path_atom = Atom::new(
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
-                Term::Variable(from1.clone()),
-                Term::Variable(to1.clone()),
-                Term::Constant(v_int(0)),
+                Variable(from1.clone()),
+                Variable(to1.clone()),
+                Constant(v_int(0)),
             ],
         );
         let can_access_atom = Atom::new(
-            Symbol::from("can_access"),
+            "can_access",
             vec![
-                Term::Variable(player1.clone()),
-                Term::Variable(from1.clone()),
-                Term::Variable(to1.clone()),
+                Variable(player1.clone()),
+                Variable(from1.clone()),
+                Variable(to1.clone()),
             ],
         );
         dl.add_rule(Rule::new(
@@ -1185,34 +1139,31 @@ mod tests {
         let key2 = dl.new_variable("Key");
 
         let locked_path_atom = Atom::new(
-            Symbol::from("direct_path"),
+            "direct_path",
             vec![
-                Term::Variable(from2.clone()),
-                Term::Variable(to2.clone()),
-                Term::Constant(v_int(1)),
+                Variable(from2.clone()),
+                Variable(to2.clone()),
+                Constant(v_int(1)),
             ],
         );
         let has_item_atom = Atom::new(
-            Symbol::from("has_item"),
-            vec![
-                Term::Variable(player2.clone()),
-                Term::Variable(key2.clone()),
-            ],
+            "has_item",
+            vec![Variable(player2.clone()), Variable(key2.clone())],
         );
         let unlocks_atom = Atom::new(
-            Symbol::from("unlocks"),
+            "unlocks",
             vec![
-                Term::Variable(key2.clone()),
-                Term::Variable(from2.clone()),
-                Term::Variable(to2.clone()),
+                Variable(key2.clone()),
+                Variable(from2.clone()),
+                Variable(to2.clone()),
             ],
         );
         let can_access_locked_atom = Atom::new(
-            Symbol::from("can_access"),
+            "can_access",
             vec![
-                Term::Variable(player2.clone()),
-                Term::Variable(from2.clone()),
-                Term::Variable(to2.clone()),
+                Variable(player2.clone()),
+                Variable(from2.clone()),
+                Variable(to2.clone()),
             ],
         );
         dl.add_rule(Rule::new(
@@ -1227,19 +1178,19 @@ mod tests {
         let y4 = dl.new_variable("Y");
 
         let can_access_atom = Atom::new(
-            Symbol::from("can_access"),
+            "can_access",
             vec![
-                Term::Variable(player4.clone()),
-                Term::Variable(x4.clone()),
-                Term::Variable(y4.clone()),
+                Variable(player4.clone()),
+                Variable(x4.clone()),
+                Variable(y4.clone()),
             ],
         );
         let path_atom = Atom::new(
-            Symbol::from("path"),
+            "path",
             vec![
-                Term::Variable(player4.clone()),
-                Term::Variable(x4.clone()),
-                Term::Variable(y4.clone()),
+                Variable(player4.clone()),
+                Variable(x4.clone()),
+                Variable(y4.clone()),
             ],
         );
         dl.add_rule(Rule::new(path_atom, vec![can_access_atom]));
@@ -1252,27 +1203,27 @@ mod tests {
         let z3 = dl.new_variable("Z");
 
         let can_access_atom = Atom::new(
-            Symbol::from("can_access"),
+            "can_access",
             vec![
-                Term::Variable(player3.clone()),
-                Term::Variable(x3.clone()),
-                Term::Variable(y3.clone()),
+                Variable(player3.clone()),
+                Variable(x3.clone()),
+                Variable(y3.clone()),
             ],
         );
         let path_atom_body = Atom::new(
-            Symbol::from("path"),
+            "path",
             vec![
-                Term::Variable(player3.clone()),
-                Term::Variable(y3.clone()),
-                Term::Variable(z3.clone()),
+                Variable(player3.clone()),
+                Variable(y3.clone()),
+                Variable(z3.clone()),
             ],
         );
         let path_atom_head = Atom::new(
-            Symbol::from("path"),
+            "path",
             vec![
-                Term::Variable(player3.clone()),
-                Term::Variable(x3.clone()),
-                Term::Variable(z3.clone()),
+                Variable(player3.clone()),
+                Variable(x3.clone()),
+                Variable(z3.clone()),
             ],
         );
         dl.add_rule(Rule::new(
@@ -1283,11 +1234,11 @@ mod tests {
         // Test scenario 1: Player without key can't access the vault
         // Alice doesn't have the key
         let alice_to_vault = Atom::new(
-            Symbol::from("path"),
+            "path",
             vec![
-                Term::Constant(v_string("alice".to_string())),
-                Term::Constant(v_string("entrance".to_string())),
-                Term::Constant(v_string("vault".to_string())),
+                Constant(v_string("alice".to_string())),
+                Constant(v_string("entrance".to_string())),
+                Constant(v_string("vault".to_string())),
             ],
         );
         let results = dl.query(&alice_to_vault);
@@ -1300,16 +1251,16 @@ mod tests {
         // Test scenario 2: Player with key can access the vault
         // Bob has the key
         dl.add_fact(
-            Symbol::from("has_item"),
+            "has_item",
             vec![v_string("bob".to_string()), v_string("key".to_string())],
         );
 
         // Verify the has_item fact is properly added
         let bob_has_key = Atom::new(
-            Symbol::from("has_item"),
+            "has_item",
             vec![
-                Term::Constant(v_string("bob".to_string())),
-                Term::Constant(v_string("key".to_string())),
+                Constant(v_string("bob".to_string())),
+                Constant(v_string("key".to_string())),
             ],
         );
         let results = dl.query(&bob_has_key);
@@ -1317,11 +1268,11 @@ mod tests {
 
         // Verify that can_access works for unlocked doors
         let bob_to_hall = Atom::new(
-            Symbol::from("can_access"),
+            "can_access",
             vec![
-                Term::Constant(v_string("bob".to_string())),
-                Term::Constant(v_string("entrance".to_string())),
-                Term::Constant(v_string("hall".to_string())),
+                Constant(v_string("bob".to_string())),
+                Constant(v_string("entrance".to_string())),
+                Constant(v_string("hall".to_string())),
             ],
         );
         let results = dl.query(&bob_to_hall);
@@ -1329,11 +1280,11 @@ mod tests {
 
         // Verify that can_access works for locked doors with keys
         let bob_library_to_vault = Atom::new(
-            Symbol::from("can_access"),
+            "can_access",
             vec![
-                Term::Constant(v_string("bob".to_string())),
-                Term::Constant(v_string("library".to_string())),
-                Term::Constant(v_string("vault".to_string())),
+                Constant(v_string("bob".to_string())),
+                Constant(v_string("library".to_string())),
+                Constant(v_string("vault".to_string())),
             ],
         );
         let results = dl.query(&bob_library_to_vault);
@@ -1345,11 +1296,11 @@ mod tests {
 
         // Now test the full path from entrance to vault
         let bob_to_vault = Atom::new(
-            Symbol::from("path"),
+            "path",
             vec![
-                Term::Constant(v_string("bob".to_string())),
-                Term::Constant(v_string("entrance".to_string())),
-                Term::Constant(v_string("vault".to_string())),
+                Constant(v_string("bob".to_string())),
+                Constant(v_string("entrance".to_string())),
+                Constant(v_string("vault".to_string())),
             ],
         );
         let results = dl.query(&bob_to_vault);
@@ -1361,11 +1312,11 @@ mod tests {
 
         // Find which rooms bob can reach from the entrance
         let bob_reachable = Atom::new(
-            Symbol::from("path"),
+            "path",
             vec![
-                Term::Constant(v_string("bob".to_string())),
-                Term::Constant(v_string("entrance".to_string())),
-                Term::Variable(dl.new_variable("Room")),
+                Constant(v_string("bob".to_string())),
+                Constant(v_string("entrance".to_string())),
+                Variable(dl.new_variable("Room")),
             ],
         );
         let results = dl.query_as_lists(&bob_reachable);
@@ -1378,32 +1329,29 @@ mod tests {
         let room5 = dl.new_variable("Room");
 
         let path_atom = Atom::new(
-            Symbol::from("path"),
+            "path",
             vec![
-                Term::Variable(player5.clone()),
-                Term::Constant(v_string("entrance".to_string())),
-                Term::Variable(room5.clone()),
+                Variable(player5.clone()),
+                Constant(v_string("entrance".to_string())),
+                Variable(room5.clone()),
             ],
         );
         let location_atom = Atom::new(
-            Symbol::from("location"),
-            vec![Term::Variable(item5.clone()), Term::Variable(room5.clone())],
+            "location",
+            vec![Variable(item5.clone()), Variable(room5.clone())],
         );
         let can_get_atom = Atom::new(
-            Symbol::from("can_get"),
-            vec![
-                Term::Variable(player5.clone()),
-                Term::Variable(item5.clone()),
-            ],
+            "can_get",
+            vec![Variable(player5.clone()), Variable(item5.clone())],
         );
         dl.add_rule(Rule::new(can_get_atom, vec![path_atom, location_atom]));
 
         // Query: Can Bob get the treasure?
         let bob_get_treasure = Atom::new(
-            Symbol::from("can_get"),
+            "can_get",
             vec![
-                Term::Constant(v_string("bob".to_string())),
-                Term::Constant(v_string("treasure".to_string())),
+                Constant(v_string("bob".to_string())),
+                Constant(v_string("treasure".to_string())),
             ],
         );
         let results = dl.query(&bob_get_treasure);
@@ -1411,10 +1359,10 @@ mod tests {
 
         // Query: Can Alice get the treasure?
         let alice_get_treasure = Atom::new(
-            Symbol::from("can_get"),
+            "can_get",
             vec![
-                Term::Constant(v_string("alice".to_string())),
-                Term::Constant(v_string("treasure".to_string())),
+                Constant(v_string("alice".to_string())),
+                Constant(v_string("treasure".to_string())),
             ],
         );
         let results = dl.query(&alice_get_treasure);
@@ -1431,45 +1379,32 @@ mod tests {
 
         // Add facts: parent(john, mary)
         dl.add_fact(
-            Symbol::from("parent"),
+            "parent",
             vec![v_string("john".to_string()), v_string("mary".to_string())],
         );
 
         // Add facts: parent(mary, bob)
         dl.add_fact(
-            Symbol::from("parent"),
+            "parent",
             vec![v_string("mary".to_string()), v_string("bob".to_string())],
         );
 
         // Rule: ancestor(X, Y) :- parent(X, Y)
         let x = dl.new_variable("X");
         let y = dl.new_variable("Y");
-        let parent_atom = Atom::new(
-            Symbol::from("parent"),
-            vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-        );
-        let ancestor_atom = Atom::new(
-            Symbol::from("ancestor"),
-            vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-        );
+        let parent_atom = Atom::new("parent", vec![Variable(x.clone()), Variable(y.clone())]);
+        let ancestor_atom = Atom::new("ancestor", vec![Variable(x.clone()), Variable(y.clone())]);
         dl.add_rule(Rule::new(ancestor_atom.clone(), vec![parent_atom]));
 
         // Rule: ancestor(X, Z) :- parent(X, Y), ancestor(Y, Z)
         let x = dl.new_variable("X");
         let y = dl.new_variable("Y");
         let z = dl.new_variable("Z");
-        let parent_atom = Atom::new(
-            Symbol::from("parent"),
-            vec![Term::Variable(x.clone()), Term::Variable(y.clone())],
-        );
-        let ancestor_atom_body = Atom::new(
-            Symbol::from("ancestor"),
-            vec![Term::Variable(y.clone()), Term::Variable(z.clone())],
-        );
-        let ancestor_atom_head = Atom::new(
-            Symbol::from("ancestor"),
-            vec![Term::Variable(x.clone()), Term::Variable(z.clone())],
-        );
+        let parent_atom = Atom::new("parent", vec![Variable(x.clone()), Variable(y.clone())]);
+        let ancestor_atom_body =
+            Atom::new("ancestor", vec![Variable(y.clone()), Variable(z.clone())]);
+        let ancestor_atom_head =
+            Atom::new("ancestor", vec![Variable(x.clone()), Variable(z.clone())]);
         dl.add_rule(Rule::new(
             ancestor_atom_head,
             vec![parent_atom, ancestor_atom_body],
@@ -1477,10 +1412,10 @@ mod tests {
 
         // Query: ancestor(john, X)
         let john_x = Atom::new(
-            Symbol::from("ancestor"),
+            "ancestor",
             vec![
-                Term::Constant(v_string("john".to_string())),
-                Term::Variable(dl.new_variable("X")),
+                Constant(v_string("john".to_string())),
+                Variable(dl.new_variable("X")),
             ],
         );
 
@@ -1545,25 +1480,22 @@ mod tests {
 
         // Set up a simple game world with many connected locations
         for i in 0..100 {
-            dl.add_fact(Symbol::from("connection"), vec![v_int(i), v_int(i + 1)]);
+            dl.add_fact("connection", vec![v_int(i), v_int(i + 1)]);
         }
 
         // Add a direct connection between 0 and 50 to ensure we can find it more easily
         // This ensures we have a short path to test with
-        dl.add_fact(Symbol::from("connection"), vec![v_int(0), v_int(50)]);
+        dl.add_fact("connection", vec![v_int(0), v_int(50)]);
 
         // Add rule for path transitivity - if there's a path from X to Y and from Y to Z, then there's a path from X to Z
         // path(X, Y) :- connection(X, Y)
         let x1 = dl.new_variable("X");
         let y1 = dl.new_variable("Y");
         let connection_atom = Atom::new(
-            Symbol::from("connection"),
-            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
+            "connection",
+            vec![Variable(x1.clone()), Variable(y1.clone())],
         );
-        let path_atom = Atom::new(
-            Symbol::from("path"),
-            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
-        );
+        let path_atom = Atom::new("path", vec![Variable(x1.clone()), Variable(y1.clone())]);
         dl.add_rule(Rule::new(path_atom, vec![connection_atom]));
 
         // path(X, Z) :- connection(X, Y), path(Y, Z)
@@ -1571,27 +1503,18 @@ mod tests {
         let y2 = dl.new_variable("Y");
         let z2 = dl.new_variable("Z");
         let connection_atom = Atom::new(
-            Symbol::from("connection"),
-            vec![Term::Variable(x2.clone()), Term::Variable(y2.clone())],
+            "connection",
+            vec![Variable(x2.clone()), Variable(y2.clone())],
         );
-        let path_atom_body = Atom::new(
-            Symbol::from("path"),
-            vec![Term::Variable(y2.clone()), Term::Variable(z2.clone())],
-        );
-        let path_atom_head = Atom::new(
-            Symbol::from("path"),
-            vec![Term::Variable(x2.clone()), Term::Variable(z2.clone())],
-        );
+        let path_atom_body = Atom::new("path", vec![Variable(y2.clone()), Variable(z2.clone())]);
+        let path_atom_head = Atom::new("path", vec![Variable(x2.clone()), Variable(z2.clone())]);
         dl.add_rule(Rule::new(
             path_atom_head,
             vec![connection_atom, path_atom_body],
         ));
 
         // Query: path(0, 50) - reachable in a complex graph
-        let query = Atom::new(
-            Symbol::from("path"),
-            vec![Term::Constant(v_int(0)), Term::Constant(v_int(50))],
-        );
+        let query = Atom::new("path", vec![Constant(v_int(0)), Constant(v_int(50))]);
 
         // Initialize incremental evaluation
         assert!(dl.query_incremental_init());
@@ -1652,29 +1575,26 @@ mod tests {
         let mut dl = KnowledgeBase::new();
 
         // Set up a directed graph with edge(from, to) facts
-        dl.add_fact(Symbol::from("edge"), vec![v_int(1), v_int(2)]);
-        dl.add_fact(Symbol::from("edge"), vec![v_int(2), v_int(3)]);
-        dl.add_fact(Symbol::from("edge"), vec![v_int(3), v_int(4)]);
-        dl.add_fact(Symbol::from("edge"), vec![v_int(4), v_int(5)]);
-        dl.add_fact(Symbol::from("edge"), vec![v_int(1), v_int(6)]);
-        dl.add_fact(Symbol::from("edge"), vec![v_int(6), v_int(7)]);
-        dl.add_fact(Symbol::from("edge"), vec![v_int(7), v_int(8)]);
-        dl.add_fact(Symbol::from("edge"), vec![v_int(8), v_int(9)]);
+        dl.add_fact("edge", vec![v_int(1), v_int(2)]);
+        dl.add_fact("edge", vec![v_int(2), v_int(3)]);
+        dl.add_fact("edge", vec![v_int(3), v_int(4)]);
+        dl.add_fact("edge", vec![v_int(4), v_int(5)]);
+        dl.add_fact("edge", vec![v_int(1), v_int(6)]);
+        dl.add_fact("edge", vec![v_int(6), v_int(7)]);
+        dl.add_fact("edge", vec![v_int(7), v_int(8)]);
+        dl.add_fact("edge", vec![v_int(8), v_int(9)]);
         // Create a disconnected component
-        dl.add_fact(Symbol::from("edge"), vec![v_int(10), v_int(11)]);
-        dl.add_fact(Symbol::from("edge"), vec![v_int(11), v_int(12)]);
+        dl.add_fact("edge", vec![v_int(10), v_int(11)]);
+        dl.add_fact("edge", vec![v_int(11), v_int(12)]);
 
         // Define reachability rules
         // Base case: If there's an edge from X to Y, then Y is reachable from X
         let x1 = dl.new_variable("X");
         let y1 = dl.new_variable("Y");
-        let edge_atom = Atom::new(
-            Symbol::from("edge"),
-            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
-        );
+        let edge_atom = Atom::new("edge", vec![Variable(x1.clone()), Variable(y1.clone())]);
         let reachable_atom = Atom::new(
-            Symbol::from("reachable"),
-            vec![Term::Variable(x1.clone()), Term::Variable(y1.clone())],
+            "reachable",
+            vec![Variable(x1.clone()), Variable(y1.clone())],
         );
         dl.add_rule(Rule::new(reachable_atom, vec![edge_atom]));
 
@@ -1683,16 +1603,13 @@ mod tests {
         let y2 = dl.new_variable("Y");
         let z2 = dl.new_variable("Z");
         let reachable_atom_body = Atom::new(
-            Symbol::from("reachable"),
-            vec![Term::Variable(x2.clone()), Term::Variable(y2.clone())],
+            "reachable",
+            vec![Variable(x2.clone()), Variable(y2.clone())],
         );
-        let edge_atom = Atom::new(
-            Symbol::from("edge"),
-            vec![Term::Variable(y2.clone()), Term::Variable(z2.clone())],
-        );
+        let edge_atom = Atom::new("edge", vec![Variable(y2.clone()), Variable(z2.clone())]);
         let reachable_atom_head = Atom::new(
-            Symbol::from("reachable"),
-            vec![Term::Variable(x2.clone()), Term::Variable(z2.clone())],
+            "reachable",
+            vec![Variable(x2.clone()), Variable(z2.clone())],
         );
         dl.add_rule(Rule::new(
             reachable_atom_head,
@@ -1701,11 +1618,8 @@ mod tests {
 
         // Query: What nodes are reachable from node 1?
         let reachable_from_1 = Atom::new(
-            Symbol::from("reachable"),
-            vec![
-                Term::Constant(v_int(1)),
-                Term::Variable(dl.new_variable("Node")),
-            ],
+            "reachable",
+            vec![Constant(v_int(1)), Variable(dl.new_variable("Node"))],
         );
         let results = dl.query_as_lists(&reachable_from_1);
 
@@ -1734,11 +1648,8 @@ mod tests {
 
         // Query: What nodes are reachable from node 10?
         let reachable_from_10 = Atom::new(
-            Symbol::from("reachable"),
-            vec![
-                Term::Constant(v_int(10)),
-                Term::Variable(dl.new_variable("Node")),
-            ],
+            "reachable",
+            vec![Constant(v_int(10)), Variable(dl.new_variable("Node"))],
         );
         let results = dl.query_as_lists(&reachable_from_10);
 
@@ -1757,15 +1668,15 @@ mod tests {
     #[test]
     fn test_negation_simple() {
         let mut dl = KnowledgeBase::new();
-        dl.add_fact(Symbol::from("foo"), vec![v_int(1)]);
-        dl.add_fact(Symbol::from("foo"), vec![v_int(2)]);
-        dl.add_fact(Symbol::from("bar"), vec![v_int(2)]);
+        dl.add_fact("foo", vec![v_int(1)]);
+        dl.add_fact("foo", vec![v_int(2)]);
+        dl.add_fact("bar", vec![v_int(2)]);
 
         // baz(X) :- foo(X), not bar(X)
         let x = dl.new_variable("X");
-        let foo_atom = Atom::new(Symbol::from("foo"), vec![Term::Variable(x.clone())]);
-        let bar_atom = Atom::new(Symbol::from("bar"), vec![Term::Variable(x.clone())]);
-        let baz_atom = Atom::new(Symbol::from("baz"), vec![Term::Variable(x.clone())]);
+        let foo_atom = Atom::new("foo", vec![Variable(x.clone())]);
+        let bar_atom = Atom::new("bar", vec![Variable(x.clone())]);
+        let baz_atom = Atom::new("baz", vec![Variable(x.clone())]);
         dl.add_rule(Rule::with_negation(
             baz_atom.clone(),
             vec![Literal::Pos(foo_atom), Literal::Neg(bar_atom)],
@@ -1781,16 +1692,16 @@ mod tests {
         let mut dl = KnowledgeBase::new();
         // foo: {1,2,3}, bar: {2}, baz: {3}
         for i in 1..=3 {
-            dl.add_fact(Symbol::from("foo"), vec![v_int(i)]);
+            dl.add_fact("foo", vec![v_int(i)]);
         }
-        dl.add_fact(Symbol::from("bar"), vec![v_int(2)]);
-        dl.add_fact(Symbol::from("baz"), vec![v_int(3)]);
+        dl.add_fact("bar", vec![v_int(2)]);
+        dl.add_fact("baz", vec![v_int(3)]);
         // qux(X) :- foo(X), not bar(X), not baz(X)
         let x = dl.new_variable("X");
-        let foo_atom = Atom::new(Symbol::from("foo"), vec![Term::Variable(x.clone())]);
-        let bar_atom = Atom::new(Symbol::from("bar"), vec![Term::Variable(x.clone())]);
-        let baz_atom = Atom::new(Symbol::from("baz"), vec![Term::Variable(x.clone())]);
-        let qux_atom = Atom::new(Symbol::from("qux"), vec![Term::Variable(x.clone())]);
+        let foo_atom = Atom::new("foo", vec![Variable(x.clone())]);
+        let bar_atom = Atom::new("bar", vec![Variable(x.clone())]);
+        let baz_atom = Atom::new("baz", vec![Variable(x.clone())]);
+        let qux_atom = Atom::new("qux", vec![Variable(x.clone())]);
         dl.add_rule(Rule::with_negation(
             qux_atom.clone(),
             vec![
@@ -1810,22 +1721,10 @@ mod tests {
         let mut dl = KnowledgeBase::new();
 
         // Add facts about people and their ages
-        dl.add_fact(
-            Symbol::from("person"),
-            vec![v_string("alice".to_string()), v_int(25)],
-        );
-        dl.add_fact(
-            Symbol::from("person"),
-            vec![v_string("bob".to_string()), v_int(17)],
-        );
-        dl.add_fact(
-            Symbol::from("person"),
-            vec![v_string("charlie".to_string()), v_int(32)],
-        );
-        dl.add_fact(
-            Symbol::from("person"),
-            vec![v_string("dave".to_string()), v_int(15)],
-        );
+        dl.add_fact("person", vec![v_string("alice".to_string()), v_int(25)]);
+        dl.add_fact("person", vec![v_string("bob".to_string()), v_int(17)]);
+        dl.add_fact("person", vec![v_string("charlie".to_string()), v_int(32)]);
+        dl.add_fact("person", vec![v_string("dave".to_string()), v_int(15)]);
 
         // Rule: minor(X) :- person(X, Age), not Age >= 18
         // In Datalog, we implement this as:
@@ -1834,19 +1733,15 @@ mod tests {
 
         // Define adult_age predicate
         for i in 18..=100 {
-            dl.add_fact(Symbol::from("adult_age"), vec![v_int(i)]);
+            dl.add_fact("adult_age", vec![v_int(i)]);
         }
 
         // Define the minor rule
         let x = dl.new_variable("X");
         let age = dl.new_variable("Age");
-        let person_atom = Atom::new(
-            Symbol::from("person"),
-            vec![Term::Variable(x.clone()), Term::Variable(age.clone())],
-        );
-        let adult_age_atom =
-            Atom::new(Symbol::from("adult_age"), vec![Term::Variable(age.clone())]);
-        let minor_atom = Atom::new(Symbol::from("minor"), vec![Term::Variable(x.clone())]);
+        let person_atom = Atom::new("person", vec![Variable(x.clone()), Variable(age.clone())]);
+        let adult_age_atom = Atom::new("adult_age", vec![Variable(age.clone())]);
+        let minor_atom = Atom::new("minor", vec![Variable(x.clone())]);
 
         dl.add_rule(Rule::with_negation(
             minor_atom.clone(),
@@ -1884,45 +1779,42 @@ mod tests {
 
         // Set up facts about people, their skills and job requirements
         // person(Name)
-        dl.add_fact(Symbol::from("person"), vec![v_string("alice".to_string())]);
-        dl.add_fact(Symbol::from("person"), vec![v_string("bob".to_string())]);
-        dl.add_fact(
-            Symbol::from("person"),
-            vec![v_string("charlie".to_string())],
-        );
-        dl.add_fact(Symbol::from("person"), vec![v_string("dave".to_string())]);
+        dl.add_fact("person", vec![v_string("alice".to_string())]);
+        dl.add_fact("person", vec![v_string("bob".to_string())]);
+        dl.add_fact("person", vec![v_string("charlie".to_string())]);
+        dl.add_fact("person", vec![v_string("dave".to_string())]);
 
         // has_skill(Person, Skill)
         dl.add_fact(
-            Symbol::from("has_skill"),
+            "has_skill",
             vec![
                 v_string("alice".to_string()),
                 v_string("programming".to_string()),
             ],
         );
         dl.add_fact(
-            Symbol::from("has_skill"),
+            "has_skill",
             vec![
                 v_string("alice".to_string()),
                 v_string("design".to_string()),
             ],
         );
         dl.add_fact(
-            Symbol::from("has_skill"),
+            "has_skill",
             vec![
                 v_string("bob".to_string()),
                 v_string("programming".to_string()),
             ],
         );
         dl.add_fact(
-            Symbol::from("has_skill"),
+            "has_skill",
             vec![
                 v_string("charlie".to_string()),
                 v_string("design".to_string()),
             ],
         );
         dl.add_fact(
-            Symbol::from("has_skill"),
+            "has_skill",
             vec![
                 v_string("dave".to_string()),
                 v_string("management".to_string()),
@@ -1931,28 +1823,28 @@ mod tests {
 
         // job_requires(Job, Skill)
         dl.add_fact(
-            Symbol::from("job_requires"),
+            "job_requires",
             vec![
                 v_string("developer".to_string()),
                 v_string("programming".to_string()),
             ],
         );
         dl.add_fact(
-            Symbol::from("job_requires"),
+            "job_requires",
             vec![
                 v_string("designer".to_string()),
                 v_string("design".to_string()),
             ],
         );
         dl.add_fact(
-            Symbol::from("job_requires"),
+            "job_requires",
             vec![
                 v_string("lead_dev".to_string()),
                 v_string("programming".to_string()),
             ],
         );
         dl.add_fact(
-            Symbol::from("job_requires"),
+            "job_requires",
             vec![
                 v_string("lead_dev".to_string()),
                 v_string("management".to_string()),
@@ -1964,30 +1856,21 @@ mod tests {
         let job_var = dl.new_variable("Job");
         let skill_var = dl.new_variable("Skill");
 
-        let person_atom = Atom::new(
-            Symbol::from("person"),
-            vec![Term::Variable(person_var.clone())],
-        );
+        let person_atom = Atom::new("person", vec![Variable(person_var.clone())]);
         let job_requires_atom = Atom::new(
-            Symbol::from("job_requires"),
-            vec![
-                Term::Variable(job_var.clone()),
-                Term::Variable(skill_var.clone()),
-            ],
+            "job_requires",
+            vec![Variable(job_var.clone()), Variable(skill_var.clone())],
         );
         let has_skill_atom = Atom::new(
-            Symbol::from("has_skill"),
-            vec![
-                Term::Variable(person_var.clone()),
-                Term::Variable(skill_var.clone()),
-            ],
+            "has_skill",
+            vec![Variable(person_var.clone()), Variable(skill_var.clone())],
         );
         let missing_skill_atom = Atom::new(
-            Symbol::from("missing_skill"),
+            "missing_skill",
             vec![
-                Term::Variable(person_var.clone()),
-                Term::Variable(job_var.clone()),
-                Term::Variable(skill_var.clone()),
+                Variable(person_var.clone()),
+                Variable(job_var.clone()),
+                Variable(skill_var.clone()),
             ],
         );
 
@@ -2006,31 +1889,22 @@ mod tests {
         let job_var2 = dl.new_variable("Job");
         let skill_var2 = dl.new_variable("Skill");
 
-        let person_atom2 = Atom::new(
-            Symbol::from("person"),
-            vec![Term::Variable(person_var2.clone())],
-        );
+        let person_atom2 = Atom::new("person", vec![Variable(person_var2.clone())]);
         let job_requires_atom2 = Atom::new(
-            Symbol::from("job_requires"),
-            vec![
-                Term::Variable(job_var2.clone()),
-                Term::Variable(skill_var2.clone()),
-            ],
+            "job_requires",
+            vec![Variable(job_var2.clone()), Variable(skill_var2.clone())],
         );
         let missing_skill_atom2 = Atom::new(
-            Symbol::from("missing_skill"),
+            "missing_skill",
             vec![
-                Term::Variable(person_var2.clone()),
-                Term::Variable(job_var2.clone()),
-                Term::Variable(dl.new_variable("AnySkill")), // We don't care which skill specifically
+                Variable(person_var2.clone()),
+                Variable(job_var2.clone()),
+                Variable(dl.new_variable("AnySkill")), // We don't care which skill specifically
             ],
         );
         let qualified_for_atom = Atom::new(
-            Symbol::from("qualified_for"),
-            vec![
-                Term::Variable(person_var2.clone()),
-                Term::Variable(job_var2.clone()),
-            ],
+            "qualified_for",
+            vec![Variable(person_var2.clone()), Variable(job_var2.clone())],
         );
 
         dl.add_rule(Rule::with_negation(
@@ -2044,11 +1918,11 @@ mod tests {
 
         // Query 1: Who is missing the management skill for the lead_dev job?
         let missing_management = Atom::new(
-            Symbol::from("missing_skill"),
+            "missing_skill",
             vec![
-                Term::Variable(dl.new_variable("Person")),
-                Term::Constant(v_string("lead_dev".to_string())),
-                Term::Constant(v_string("management".to_string())),
+                Variable(dl.new_variable("Person")),
+                Constant(v_string("lead_dev".to_string())),
+                Constant(v_string("management".to_string())),
             ],
         );
 
@@ -2071,10 +1945,10 @@ mod tests {
 
         // Query 2: Who is qualified for the developer job?
         let qualified_for_dev = Atom::new(
-            Symbol::from("qualified_for"),
+            "qualified_for",
             vec![
-                Term::Variable(dl.new_variable("Person")),
-                Term::Constant(v_string("developer".to_string())),
+                Variable(dl.new_variable("Person")),
+                Constant(v_string("developer".to_string())),
             ],
         );
 
@@ -2095,10 +1969,10 @@ mod tests {
 
         // Query 3: Who is qualified for the lead_dev job?
         let qualified_for_lead = Atom::new(
-            Symbol::from("qualified_for"),
+            "qualified_for",
             vec![
-                Term::Variable(dl.new_variable("Person")),
-                Term::Constant(v_string("lead_dev".to_string())),
+                Variable(dl.new_variable("Person")),
+                Constant(v_string("lead_dev".to_string())),
             ],
         );
 
