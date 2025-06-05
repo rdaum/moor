@@ -97,8 +97,7 @@ where
     Domain: AsByteBuffer + Clone + Eq + Hash,
     Codomain: AsByteBuffer + Clone + PartialEq,
 {
-    let size = d.size_bytes() + c.size_bytes();
-    table.upsert(d, c, size)
+    table.upsert(d, c)
 }
 
 impl WorldStateTransaction {
@@ -201,7 +200,7 @@ impl WorldStateTransaction {
 
     pub fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
         self.object_owner
-            .upsert(*obj, *owner, obj.size_bytes())
+            .upsert(*obj, *owner)
             .map_err(|e| {
                 WorldStateError::DatabaseError(format!("Error setting object owner: {:?}", e))
             })?;

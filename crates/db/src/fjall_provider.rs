@@ -140,9 +140,8 @@ where
     Domain: Clone + Eq + PartialEq + AsByteBuffer,
     Codomain: Clone + PartialEq + AsByteBuffer,
 {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error> {
+    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
         let key = domain.as_bytes().map_err(|_| Error::EncodingFailure)?;
-        let key_len = key.len();
         let Some(result) = self
             .fjall_partition
             .get(key)
@@ -150,9 +149,8 @@ where
         else {
             return Ok(None);
         };
-        let size = key_len + result.len();
         let (ts, codomain) = decode::<Codomain>(result)?;
-        Ok(Some((ts, codomain, size)))
+        Ok(Some((ts, codomain)))
     }
 
     fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error> {
@@ -178,19 +176,18 @@ where
         Ok(())
     }
 
-    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
+    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool,
     {
         let mut result = Vec::new();
         for entry in self.fjall_partition.iter() {
             let (key, value) = entry.map_err(|e| Error::RetrievalFailure(e.to_string()))?;
-            let size = key.len() + value.len();
             let domain =
                 Domain::from_bytes(key.clone().into()).map_err(|_| Error::EncodingFailure)?;
             let (ts, codomain) = decode::<Codomain>(value)?;
             if predicate(&domain, &codomain) {
-                result.push((ts, domain, codomain, size));
+                result.push((ts, domain, codomain));
             }
         }
         Ok(result)

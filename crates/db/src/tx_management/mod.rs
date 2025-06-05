@@ -42,12 +42,12 @@ pub enum Error {
 /// The `Provider` trait is a generic interface for a key-value store that back the transactional
 /// global cache.
 pub trait Provider<Domain, Codomain>: Clone {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error>;
+    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error>;
     fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error>;
     fn del(&self, timestamp: Timestamp, domain: &Domain) -> Result<(), Error>;
 
     /// Scan the database for all keys match the given predicate
-    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
+    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool;
 
@@ -58,8 +58,8 @@ pub trait Provider<Domain, Codomain>: Clone {
 /// Represents a "canonical" source for some domain/codomain pair, to be supplied to a
 /// transaction.
 pub trait Canonical<Domain, Codomain> {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error>;
-    fn scan<F>(&self, f: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
+    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error>;
+    fn scan<F>(&self, f: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool;
 }

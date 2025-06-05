@@ -88,7 +88,6 @@ where
         &mut self,
         domain: Domain,
         value: Codomain,
-        size_bytes: usize,
     ) -> Result<(), Error> {
         let mut index = self.index.borrow_mut();
         // If we or upstream has already inserted this domain, we can't insert it again.
@@ -97,7 +96,7 @@ where
         }
 
         // Not in the index, we check the backing source.
-        if let Some((read_ts, _, _)) = self.backing_source.get(&domain)? {
+        if let Some((read_ts, _)) = self.backing_source.get(&domain)? {
             if read_ts < self.tx.ts {
                 return Err(Error::Duplicate);
             }
@@ -110,7 +109,6 @@ where
             Entry {
                 ts: self.tx.ts,
                 value,
-                size_bytes,
             },
         );
         index.operations.insert(
@@ -129,7 +127,6 @@ where
         &mut self,
         domain: &Domain,
         value: Codomain,
-        size_bytes: usize,
     ) -> Result<Option<Codomain>, Error> {
         let mut index = self.index.borrow_mut();
 
@@ -142,7 +139,6 @@ where
 
             let old_value = entry.value.clone();
             entry.value = value.clone();
-            entry.size_bytes = size_bytes;
 
             // Check to see if we already have an operations-log entry for this domain.
             // If we do, we can update it to its new state.
@@ -176,7 +172,7 @@ where
         // update
 
         // Not in the index, we check the backing source.
-        let Some((read_ts, backing_value, _)) = self.backing_source.get(domain)? else {
+        let Some((read_ts, backing_value)) = self.backing_source.get(domain)? else {
             // Not in the backing source, we can't update it.
             return Ok(None);
         };
@@ -187,7 +183,6 @@ where
             Entry {
                 ts: self.tx.ts,
                 value,
-                size_bytes,
             },
         );
 
@@ -214,14 +209,13 @@ where
         &mut self,
         domain: Domain,
         value: Codomain,
-        size_bytes: usize,
     ) -> Result<Option<Codomain>, Error> {
         // TODO: We could probably more efficient about this, but there we bugs here before and this
         //   fixed them.
         if self.has_domain(&domain)? {
-            return self.update(&domain, value, size_bytes);
+            return self.update(&domain, value);
         }
-        self.insert(domain, value, size_bytes)?;
+        self.insert(domain, value)?;
         Ok(None)
     }
 
@@ -239,12 +233,11 @@ where
 
         // Try upstream.
         match self.backing_source.get(domain)? {
-            Some((read_ts, value, size_bytes)) if read_ts < self.tx.ts => {
+            Some((read_ts, value)) if read_ts < self.tx.ts => {
                 // Shove in local index.
                 let entry = Entry {
                     ts: read_ts,
                     value,
-                    size_bytes,
                 };
                 let value = entry.value.clone();
                 index.entries.insert(domain.clone(), entry);
@@ -295,7 +288,7 @@ where
         // update
 
         // Not in the index, we check the backing source.
-        let Some((read_ts, backing_value, _)) = self.backing_source.get(domain)? else {
+        let Some((read_ts, backing_value)) = self.backing_source.get(domain)? else {
             // Not in the backing source, we can't update it.
             return Ok(None);
         };
@@ -330,7 +323,7 @@ where
 
         // Feed in everything from upstream that we don't have locally, as long as the timestamp
         // is less than our own.
-        for (ts, d, c, size_bytes) in upstream {
+        for (ts, d, c) in upstream {
             if index.entries.get(&d).is_some() {
                 continue;
             };
@@ -342,7 +335,6 @@ where
                 Entry {
                     ts,
                     value: c.clone(),
-                    size_bytes,
                 },
             );
         }

@@ -27,7 +27,6 @@ use tracing::warn;
 pub struct Entry<T: Clone + PartialEq> {
     pub ts: Timestamp,
     pub value: T,
-    pub size_bytes: usize,
 }
 
 /// Represents the current "canonical" state of a relation.
@@ -56,7 +55,6 @@ where
             relation_name,
             index: Arc::new(RwLock::new(RelationIndex {
                 entries: Default::default(),
-                used_bytes: 0,
             })),
             source: provider,
         }
@@ -75,9 +73,6 @@ where
 {
     /// Internal index of the cache.
     entries: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
-
-    /// Total bytes used by the cache.
-    used_bytes: usize,
 }
 
 /// Holds a lock on the cache while a transaction commit is in progress.
@@ -102,10 +97,6 @@ where
 {
     pub fn num_entries(&self) -> usize {
         self.index.entries.len()
-    }
-
-    pub fn used_bytes(&self) -> usize {
-        self.index.used_bytes
     }
 
     pub fn dirty(&self) -> bool {
@@ -149,11 +140,10 @@ where
             }
 
             // Otherwise, pull from upstream and fetch to cache and check for conflict.
-            if let Some((ts, codomain, size_bytes)) = self.source.get(domain)? {
+            if let Some((ts, codomain)) = self.source.get(domain)? {
                 let entry = Entry {
                     ts,
                     value: codomain.clone(),
-                    size_bytes,
                 };
                 self.index.entries.insert(domain.clone(), entry);
 
@@ -195,12 +185,8 @@ where
                     let entry = codomain
                         .expect("Codomain should be non-None for insert or update operation");
                     self.source.put(op.write_ts, &domain, &entry.value).ok();
-                    self.index.insert_entry(
-                        op.write_ts,
-                        domain.clone(),
-                        entry.value,
-                        entry.size_bytes,
-                    );
+                    self.index
+                        .insert_entry(op.write_ts, domain.clone(), entry.value);
                 }
                 OpType::Delete => {
                     self.index.insert_tombstone(op.write_ts, domain.clone());
@@ -238,12 +224,6 @@ where
             dirty: false,
         }
     }
-
-    #[allow(dead_code)]
-    pub fn cache_usage_bytes(&self) -> usize {
-        let index = self.index.read().unwrap();
-        index.used_bytes
-    }
 }
 
 impl<Domain, Codomain> RelationIndex<Domain, Codomain>
@@ -251,38 +231,18 @@ where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq,
 {
-    fn insert_entry(
-        &mut self,
-        ts: Timestamp,
-        domain: Domain,
-        codomain: Codomain,
-        entry_size_bytes: usize,
-    ) {
-        match self.entries.insert(
+    fn insert_entry(&mut self, ts: Timestamp, domain: Domain, codomain: Codomain) {
+        self.entries.insert(
             domain.clone(),
             Entry {
                 ts,
                 value: codomain,
-                size_bytes: entry_size_bytes,
             },
-        ) {
-            None => {
-                self.used_bytes += entry_size_bytes;
-            }
-            Some(oe) => {
-                self.used_bytes -= oe.size_bytes;
-                self.used_bytes += entry_size_bytes;
-            }
-        }
+        );
     }
 
     fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain) {
-        match self.entries.remove(&domain) {
-            None => {}
-            Some(oe) => {
-                self.used_bytes -= oe.size_bytes;
-            }
-        }
+        self.entries.remove(&domain);
     }
 
     fn index_lookup(&self, domain: &Domain) -> Option<&Entry<Codomain>> {
@@ -296,12 +256,12 @@ where
     Codomain: Clone + PartialEq,
     Source: Provider<Domain, Codomain>,
 {
-    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain, usize)>, Error> {
+    fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
         // First try with read lock
         {
             let inner = self.index.read().unwrap();
             if let Some(entry) = inner.index_lookup(domain) {
-                return Ok(Some((entry.ts, entry.value.clone(), entry.size_bytes)));
+                return Ok(Some((entry.ts, entry.value.clone())));
             }
         }
 
@@ -309,28 +269,26 @@ where
         let mut inner = self.index.write().unwrap();
         // Double-check since another thread might have inserted while we waited for write lock
         if let Some(entry) = inner.index_lookup(domain) {
-            Ok(Some((entry.ts, entry.value.clone(), entry.size_bytes)))
+            Ok(Some((entry.ts, entry.value.clone())))
         } else {
             // Pull from backing store.
-            if let Some((ts, codomain, bytes)) = self.source.get(domain)? {
-                inner.insert_entry(ts, domain.clone(), codomain.clone(), bytes);
-                inner.used_bytes += bytes;
-                Ok(Some((ts, codomain, bytes)))
+            if let Some((ts, codomain)) = self.source.get(domain)? {
+                inner.insert_entry(ts, domain.clone(), codomain.clone());
+                Ok(Some((ts, codomain)))
             } else {
                 Ok(None)
             }
         }
     }
 
-    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain, usize)>, Error>
+    fn scan<F>(&self, predicate: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool,
     {
         let results = self.source.scan(&predicate)?;
-        for (ts, domain, codomain, size) in &results {
+        for (ts, domain, codomain) in &results {
             let mut index = self.index.write().unwrap();
-            index.insert_entry(*ts, domain.clone(), codomain.clone(), *size);
-            index.used_bytes += *size;
+            index.insert_entry(*ts, domain.clone(), codomain.clone());
         }
 
         Ok(results)
@@ -367,13 +325,10 @@ mod tests {
     }
 
     impl Provider<TestDomain, TestCodomain> for TestProvider {
-        fn get(
-            &self,
-            domain: &TestDomain,
-        ) -> Result<Option<(Timestamp, TestCodomain, usize)>, Error> {
+        fn get(&self, domain: &TestDomain) -> Result<Option<(Timestamp, TestCodomain)>, Error> {
             let data = self.data.lock().unwrap();
             if let Some(codomain) = data.get(domain) {
-                Ok(Some((Timestamp(0), codomain.clone(), 8)))
+                Ok(Some((Timestamp(0), codomain.clone())))
             } else {
                 Ok(None)
             }
@@ -399,7 +354,7 @@ mod tests {
         fn scan<F>(
             &self,
             predicate: &F,
-        ) -> Result<Vec<(Timestamp, TestDomain, TestCodomain, usize)>, Error>
+        ) -> Result<Vec<(Timestamp, TestDomain, TestCodomain)>, Error>
         where
             F: Fn(&TestDomain, &TestCodomain) -> bool,
         {
@@ -407,7 +362,7 @@ mod tests {
             Ok(data
                 .iter()
                 .filter(|(k, v)| predicate(k, v))
-                .map(|(k, v)| (Timestamp(0), k.clone(), v.clone(), 16))
+                .map(|(k, v)| (Timestamp(0), k.clone(), v.clone()))
                 .collect())
         }
 
@@ -429,7 +384,7 @@ mod tests {
 
         let tx = Tx { ts: Timestamp(1) };
         let mut lc = relation.clone().start(&tx);
-        lc.insert(domain.clone(), codomain.clone(), 16).unwrap();
+        lc.insert(domain.clone(), codomain.clone()).unwrap();
         assert_eq!(lc.get(&domain).unwrap(), Some(codomain.clone()));
         assert_eq!(lc.get(&TestDomain(0)).unwrap(), Some(TestCodomain(0)));
         let ws = lc.working_set();
@@ -457,9 +412,9 @@ mod tests {
 
         let mut r_tx_a = relation.clone().start(&tx_a);
 
-        r_tx_a.insert(domain.clone(), codomain_a, 16).unwrap();
+        r_tx_a.insert(domain.clone(), codomain_a).unwrap();
         let mut r_tx_b = relation.clone().start(&tx_b);
-        r_tx_b.insert(domain.clone(), codomain_b, 16).unwrap();
+        r_tx_b.insert(domain.clone(), codomain_b).unwrap();
         let ws_a = r_tx_a.working_set();
         let ws_b = r_tx_b.working_set();
         {
