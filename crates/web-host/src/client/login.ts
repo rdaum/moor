@@ -13,13 +13,13 @@
 
 /**
  * Login Module
- * 
+ *
  * This module handles the user authentication flow, including:
  * - Displaying the login form UI
  * - Processing login/create account requests
  * - Establishing WebSocket connections
  * - Managing authentication state
- * 
+ *
  * The module provides both the UI components and the authentication logic
  * needed to establish a connection to the Moor server.
  */
@@ -33,20 +33,26 @@ const { button, div, input, select, option, br, label } = van.tags;
 
 /**
  * Initiates authentication and connection to the Moor server
- * 
+ *
  * This function handles the entire authentication flow including:
  * 1. Sending credentials to the server
  * 2. Processing the authentication response
  * 3. Establishing a WebSocket connection
  * 4. Setting up event handlers for the connection
- * 
+ *
  * @param context - Application context to update with connection info
  * @param player - State object to update with player information
  * @param mode - Connection mode ('connect' for login or 'create' for new account)
  * @param username - Input element containing the username
  * @param password - Input element containing the password
  */
-async function connect(context: Context, player: State<Player>, mode: string, username: HTMLInputElement, password: HTMLInputElement) {
+async function connect(
+    context: Context,
+    player: State<Player>,
+    mode: string,
+    username: HTMLInputElement,
+    password: HTMLInputElement,
+) {
     try {
         // Validate inputs
         if (!username.value || !username.value.trim()) {
@@ -78,8 +84,8 @@ async function connect(context: Context, player: State<Player>, mode: string, us
 
         // Handle HTTP errors
         if (!result.ok) {
-            const errorMessage = result.status === 401 
-                ? "Invalid username or password" 
+            const errorMessage = result.status === 401
+                ? "Invalid username or password"
                 : `Failed to connect (${result.status}: ${result.statusText})`;
 
             console.error(`Authentication failed: ${result.status}`, result);
@@ -141,38 +147,39 @@ async function connect(context: Context, player: State<Player>, mode: string, us
 
             if (event.code !== 1000) { // 1000 is normal closure
                 context.systemMessage.show(
-                    `Connection closed: ${event.reason || "Server disconnected"}`
-                , 5);
+                    `Connection closed: ${event.reason || "Server disconnected"}`,
+                    5,
+                );
             }
         };
 
         // Update application context
         context.ws = ws;
         context.authToken = authToken;
-
     } catch (error) {
         // Handle any unexpected errors
         console.error("Connection error:", error);
         context.systemMessage.show(
-            `Connection error: ${error instanceof Error ? error.message : "Unknown error"}`
-        , 5);
+            `Connection error: ${error instanceof Error ? error.message : "Unknown error"}`,
+            5,
+        );
     }
 }
 
 /**
  * Login Component
- * 
+ *
  * Renders a login form that allows users to either connect to an existing
  * account or create a new one. The component automatically hides when
  * the user is connected and shows when disconnected.
- * 
+ *
  * Features:
  * - Toggle between connect/create modes
  * - Welcome message display using Djot format
  * - Input validation
  * - Enter key support for submission
  * - Automatic visibility management based on connection state
- * 
+ *
  * @param context - Application context
  * @param player - Player state information
  * @param loginMessage - Welcome message to display (in Djot format)
@@ -213,20 +220,16 @@ export const Login = (context: Context, player: State<Player>, loginMessage: Sta
     };
 
     // Create submit button
-    const goButton = button({ 
+    const goButton = button({
         onclick: handleConnect,
-        class: "login_button"
+        class: "login_button",
     }, "Go");
 
     // Create welcome message component using Djot rendering
-    const welcome = van.derive(() => 
-        div({ class: "welcome_box" }, displayDjot({ djot_text: loginMessage }))
-    );
+    const welcome = van.derive(() => div({ class: "welcome_box" }, displayDjot({ djot_text: loginMessage })));
 
     // Show login form only when not connected
-    const visibilityStyle = van.derive(() => 
-        !player.val.connected ? "display: block;" : "display: none;"
-    );
+    const visibilityStyle = van.derive(() => !player.val.connected ? "display: block;" : "display: none;");
 
     // Assemble the login form
     return div(
