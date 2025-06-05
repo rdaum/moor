@@ -14,7 +14,7 @@
 //! Global cache is a cache that acts as an origin for all local caches.
 
 use crate::tx_management::relation_tx::{OpType, RelationTransaction, WorkingSet};
-use crate::tx_management::{Canonical, Error, Provider, SizedCache, Timestamp, Tx};
+use crate::tx_management::{Canonical, Error, Provider, Timestamp, Tx};
 use ahash::AHasher;
 use minstant::Instant;
 use moor_var::Symbol;
@@ -304,7 +304,7 @@ where
                 return Ok(Some((entry.ts, entry.value.clone(), entry.size_bytes)));
             }
         }
-        
+
         // Not in cache, need write lock to potentially insert from backing store
         let mut inner = self.index.write().unwrap();
         // Double-check since another thread might have inserted while we waited for write lock
@@ -344,26 +344,6 @@ where
 {
     pub fn stop_provider(&self) -> Result<(), Error> {
         self.source.stop()
-    }
-}
-
-impl<Domain, Codomain, Source> SizedCache for Relation<Domain, Codomain, Source>
-where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
-    Source: Provider<Domain, Codomain>,
-{
-    fn select_victims(&self) {
-        // Noop
-    }
-
-    fn process_cache_evictions(&self) -> (usize, usize) {
-        // Noop
-        (0, 0)
-    }
-
-    fn cache_usage_bytes(&self) -> usize {
-        self.cache_usage_bytes()
     }
 }
 

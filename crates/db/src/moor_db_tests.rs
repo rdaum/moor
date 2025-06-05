@@ -1416,14 +1416,6 @@ mod tests {
         tx.delete_property(&object_c, c_uuid).unwrap();
     }
 
-    /// Simple provocation of cache eviction function on empty caches.
-    /// Just here to double-check the simplest no-flush scenario.
-    #[test]
-    fn test_trigger_cache_evictions() {
-        let db = test_db();
-        db.process_cache_evictions();
-    }
-
     #[test]
     fn test_regression_verb_cache_accidental_miss() {
         let db = test_db();

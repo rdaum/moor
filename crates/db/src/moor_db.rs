@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::config::{DEFAULT_EVICTION_INTERVAL, DatabaseConfig};
+use crate::config::DatabaseConfig;
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::prop_cache::PropResolutionCache;
-use crate::tx_management::{Relation, SizedCache, Timestamp, Tx, WorkingSet};
+use crate::tx_management::{Relation, Timestamp, Tx, WorkingSet};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::ws_transaction::WorldStateTransaction;
 use crate::{CommitSet, ObjAndUUIDHolder, StringHolder};
@@ -382,45 +382,8 @@ impl MoorDB {
         }
     }
 
-    fn caches(&self) -> Vec<&dyn SizedCache> {
-        vec![
-            &self.object_location,
-            &self.object_contents,
-            &self.object_flags,
-            &self.object_parent,
-            &self.object_children,
-            &self.object_owner,
-            &self.object_name,
-            &self.object_verbdefs,
-            &self.object_verbs,
-            &self.object_propdefs,
-            &self.object_propvalues,
-            &self.object_propflags,
-        ]
-    }
-
     pub fn usage_bytes(&self) -> usize {
         self.keyspace.disk_space() as usize
-    }
-
-    /// Provide a rough estimate of memory usage in bytes.
-    #[allow(dead_code)]
-    pub fn cache_usage_bytes(&self) -> usize {
-        self.caches()
-            .iter()
-            .map(|c| c.cache_usage_bytes())
-            .sum::<usize>()
-    }
-
-    #[allow(dead_code)]
-    pub fn process_cache_evictions(&self) -> (usize, usize) {
-        let (mut total_before, mut total_after) = (0, 0);
-        for c in self.caches().iter() {
-            let (before, after) = c.process_cache_evictions();
-            total_before += before;
-            total_after += after;
-        }
-        (total_before, total_after)
     }
 
     pub fn stop(&self) {
@@ -454,14 +417,13 @@ impl MoorDB {
         receiver: crossbeam_channel::Receiver<CommitSet>,
         usage_recv: crossbeam_channel::Receiver<oneshot::Sender<usize>>,
         kill_switch: Arc<AtomicBool>,
-        config: DatabaseConfig,
+        _config: DatabaseConfig,
     ) {
         let this = self.clone();
 
         let thread_builder = std::thread::Builder::new().name("moor-db-process".to_string());
         let jh = thread_builder
             .spawn(move || {
-                let mut last_eviction_check = Instant::now();
                 set_thread_priority(ThreadPriority::Highest).ok();
                 loop {
                     let counters = db_counters();
@@ -474,28 +436,6 @@ impl MoorDB {
                         msg.send(this.usage_bytes())
                             .map_err(|e| warn!("{}", e))
                             .ok();
-                    }
-
-                    // If eviction processing interval has passed, check for evictions.
-                    let evict_interval = config.cache_eviction_interval.unwrap_or(DEFAULT_EVICTION_INTERVAL);
-                    if last_eviction_check.elapsed() > evict_interval {
-                        let mut total_evicted_entries = 0;
-                        let mut total_evicted_bytes = 0;
-                        for cache in this.caches() {
-                            cache.select_victims();
-                            let (evicted_entries, evicted_bytes) = cache.process_cache_evictions();
-                            total_evicted_entries += evicted_entries;
-                            total_evicted_bytes += evicted_bytes;
-                        }
-
-                        if total_evicted_entries > 0 {
-                            warn!(
-                                "Evicted {} entries, freeing {} bytes",
-                                total_evicted_entries, total_evicted_bytes
-                            );
-                        }
-
-                        last_eviction_check = Instant::now();
                     }
 
                     let msg = receiver.recv_timeout(Duration::from_millis(100));

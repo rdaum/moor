@@ -18,7 +18,6 @@ use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig, ImportExpo
 use moor_textdump::EncodingMode;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 #[allow(dead_code)]
 #[derive(Parser, Debug)] // requires `derive` feature
@@ -374,13 +373,8 @@ pub struct DatabaseArgs {
 
 impl DatabaseArgs {
     #[allow(dead_code)]
-    pub fn merge_config(&self, config: &mut DatabaseConfig) {
-        if let Some(args) = self.cache_eviction_interval {
-            config.cache_eviction_interval = Some(Duration::from_secs(args));
-        }
-        if let Some(args) = self.default_eviction_threshold {
-            config.default_eviction_threshold = Some(args);
-        }
+    pub fn merge_config(&self, _config: &mut DatabaseConfig) {
+        // TODO
     }
 }
 

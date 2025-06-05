@@ -55,15 +55,6 @@ pub trait Provider<Domain, Codomain>: Clone {
     fn stop(&self) -> Result<(), Error>;
 }
 
-/// A `SizedCache` is a cache that has a maximum size in bytes, and will attempt to evict entries
-/// when the cache size exceeds the maximum size.
-pub trait SizedCache {
-    fn select_victims(&self);
-    fn process_cache_evictions(&self) -> (usize, usize);
-    #[allow(dead_code)]
-    fn cache_usage_bytes(&self) -> usize;
-}
-
 /// Represents a "canonical" source for some domain/codomain pair, to be supplied to a
 /// transaction.
 pub trait Canonical<Domain, Codomain> {
