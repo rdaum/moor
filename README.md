@@ -14,7 +14,7 @@ MOOs offer a unique digital experience through:
 
 - **Collaborative storytelling** where participants build a shared narrative
 - **Live programming** - modify the world while you're in it
-- **Community-driven development** through persistent interactions and relationships  
+- **Community-driven development** through persistent interactions and relationships
 - **Rich interaction** that engages users through both traditional command-line and modern web interfaces
 - **Complete customizability** - everything from objects to commands can be programmed
 
@@ -24,28 +24,31 @@ In a world of throwaway apps and walled gardens, mooR is cheerfully dragging the
 
 ## Status
 
-mooR is approaching its 1.0 release and is currently in late alpha, with a focus on documentation, testing and performance tuning. It successfully runs databases imported from LambdaMOO, with real world workloads, and lives through our cruel stress and performance testing regimen. 
+mooR is approaching its 1.0 release and is currently in late alpha, with a focus on documentation, testing and performance tuning. It successfully runs databases imported from LambdaMOO, with real world workloads, and lives through our cruel stress and performance testing regimen.
 
 Database formats and APIs may still change before the stable release, and we reserve the right to keep adding features right up until the last minute.
 
 ## Key Features & Enhancements
 
 **Runtime improvements:**
+
 - Fully multithreaded architecture for modern multicore systems
 - Native web front end with rich content presentation
 - Directory-based import/export format for version control integration
 - Modular architecture for easier extension
 
 **Language enhancements:**
+
 - All classic MOO features plus many extensions from ToastStunt
 - Maps: associative containers (`["key" -> "value"]`)
 - Lexically scoped variables with `begin`/`end` blocks
 - List/range comprehensions (`{x * 2 for x in [1..5]}`)
-- UTF-8 strings, 64-bit integers, booleans, symbols. 
+- UTF-8 strings, 64-bit integers, booleans, symbols.
 - Binary values.
 - Lightweight immutable objects ("flyweights")
 
 **Modern infrastructure:**
+
 - Fast, durable, transactional database
 - Support for multiple client protocols (web, telnet)
 - Easy deployment via Docker
@@ -59,11 +62,13 @@ docker compose up
 ```
 
 This starts three services:
+
 - **moor-daemon**: The backend MOO service
-- **moor-telnet-host**: Traditional telnet interface on port 8888  
+- **moor-telnet-host**: Traditional telnet interface on port 8888
 - **moor-web-host**: Modern web interface on port 8080
 
 Connect via:
+
 - **Web**: [http://localhost:8080](http://localhost:8080) (recommended for new users)
 - **Telnet**: `telnet localhost 8888` (classic experience)
 
@@ -76,17 +81,20 @@ For more detailed setup instructions, see the [Docker Compose Setup](https://rda
 mooR offers several opportunities for contribution:
 
 **Core Development** (Rust):
+
 - Server architecture improvements
 - New builtin functions
-- Performance optimizations  
+- Performance optimizations
 - Protocol extensions
 
 **World Building** (MOO language):
+
 - Creating new cores and experiences
 - Porting existing MOO content
 - Building modern web-enabled interfaces
 
 **Documentation & Testing**:
+
 - Expanding the mooR Book
 - Creating tutorials and examples
 - Stress testing and bug reports
@@ -94,7 +102,7 @@ mooR offers several opportunities for contribution:
 ### Getting Involved
 
 - **Issues**: Check our [GitHub Issues](https://github.com/rdaum/moor/issues) for current needs
-- **Discussion**: Join our [Discord](https://discord.gg/Ec94y5983z) community  
+- **Discussion**: Join our [Discord](https://discord.gg/Ec94y5983z) community
 - **Development**: See the [mooR Book](https://rdaum.github.io/moor/) for architecture details
 
 ## Resources
