@@ -154,17 +154,17 @@ impl VMExecState {
         verb_name: Symbol,
         args: List,
     ) -> ExecutionResult {
-        let call = VerbCall {
+        let call = Box::new(VerbCall {
             verb_name,
             location: v_obj(location),
-            this: this.clone(),
+            this,
             player: self.top().player,
-            args: args.iter().collect(),
+            args,
             // caller her is current-activation 'this', not activation caller() ...
             // unless we're a builtin, in which case we're #-1.
             argstr: "".to_string(),
             caller: self.caller(),
-        };
+        });
 
         let self_valid = world_state
             .valid(&location)
@@ -204,7 +204,7 @@ impl VMExecState {
         ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
             permissions,
             resolved_verb,
-            call: Box::new(call),
+            call,
             command: self.top().command.clone(),
             program,
         }))
@@ -387,7 +387,7 @@ impl VMExecState {
             name: bf_name,
             world_state,
             session,
-            args,
+            args: &args,
             task_scheduler_client: exec_args.task_scheduler_client,
             config: exec_args.config,
         };
@@ -451,7 +451,7 @@ impl VMExecState {
             world_state,
             session,
             // TODO: avoid copy here by using List inside BfCallState
-            args,
+            args: &args,
             task_scheduler_client: exec_args.task_scheduler_client,
             config: exec_args.config,
         };

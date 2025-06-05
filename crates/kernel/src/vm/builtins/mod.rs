@@ -134,7 +134,7 @@ pub(crate) struct BfCallState<'a> {
     /// The name of the invoked function.
     pub(crate) name: Symbol,
     /// Arguments passed to the function.
-    pub(crate) args: List,
+    pub(crate) args: &'a List,
     /// The current execution state of this task in this VM, including the stack
     /// so that BFs can inspect and manipulate it.
     pub(crate) exec_state: &'a mut VMExecState,
