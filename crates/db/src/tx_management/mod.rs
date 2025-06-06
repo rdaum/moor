@@ -30,7 +30,7 @@ pub struct Tx {
 pub enum Error {
     #[error("Duplicate key")]
     Duplicate,
-    #[error("Conflict detected at commit")]
+    #[error("Conflict detected")]
     Conflict,
     #[error("Retrieval error from backing store")]
     RetrievalFailure(String),

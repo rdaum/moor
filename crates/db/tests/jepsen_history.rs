@@ -137,6 +137,7 @@ pub fn parse_edn(path: &Path) -> Vec<Entry> {
 mod tests {
     use crate::{Operation, Type};
     use eyre::bail;
+    use moor_common::model::WorldStateError;
     use moor_db::{Error, Provider, Relation, Timestamp, Tx};
     use moor_var::Symbol;
     use std::collections::HashMap;
@@ -265,7 +266,7 @@ mod tests {
                         }
                     }
 
-                    let ws = cache.working_set();
+                    let ws = cache.working_set().expect("check failed in working set");
 
                     {
                         let mut cr = backing_store.begin_check();
@@ -300,7 +301,15 @@ mod tests {
                                 }
                             }
                         }
-                        let ws = cache.working_set();
+                        let ws = match cache.working_set() {
+                            Ok(ws) => ws,
+                            Err(WorldStateError::RollbackRetry) => {
+                                return Ok(());
+                            }
+                            Err(e) => {
+                                panic!("unexpected error in working set: {:?}", e);
+                            }
+                        };
                         let mut cr = backing_store.begin_check();
 
                         match cr.check(&ws) {

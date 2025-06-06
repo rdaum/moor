@@ -19,11 +19,11 @@ use lazy_static::lazy_static;
 use moor_common::model::WorldState;
 use moor_compiler::{Op, ScatterLabel, to_literal};
 use moor_var::{
-    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_error, v_string,
+    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_error,
 };
 use moor_var::{
     Error, IndexMode, Obj, Sequence, TypeClass, Var, Variant, v_bool_int, v_empty_list,
-    v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_sym,
+    v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
 };
 use moor_var::{Symbol, VarType};
 use std::ops::Add;

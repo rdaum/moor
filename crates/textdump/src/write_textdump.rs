@@ -207,7 +207,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
             if p.definer() != *db_objid {
                 break;
             }
-            propdefs.push(p.name().into());
+            propdefs.push(p.name());
         }
 
         let mut propvals = vec![];

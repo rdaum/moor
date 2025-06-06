@@ -49,7 +49,7 @@ struct RProp {
 fn resolve_prop(omap: &BTreeMap<Obj, Object>, offset: usize, o: &Object) -> Option<RProp> {
     let local_len = o.propdefs.len();
     if offset < local_len {
-        let name = o.propdefs[offset].clone();
+        let name = o.propdefs[offset];
         let pval = &o.propvals[offset];
         return Some(RProp {
             definer: o.id,

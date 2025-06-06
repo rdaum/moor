@@ -19,11 +19,11 @@ use moor_common::model::WorldStateError;
 use moor_common::model::{ObjFlag, ValSet};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_arc_string, v_string, v_sym};
+use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_arc_string, v_sym};
 use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Sequence, Symbol, v_list};
-use moor_var::{v_int, v_obj, v_str};
+use moor_var::{v_int, v_obj};
 
 use crate::vm::builtins::BfRet::{Ret, RetNil, VmInstr};
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction, world_state_bf_err};

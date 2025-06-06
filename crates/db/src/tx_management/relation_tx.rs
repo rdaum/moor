@@ -15,6 +15,7 @@ use crate::tx_management::indexes::RelationIndex;
 use crate::tx_management::{Canonical, Error, Timestamp, Tx};
 use ahash::AHasher;
 use indexmap::IndexMap;
+use moor_common::model::WorldStateError;
 use std::hash::{BuildHasherDefault, Hash};
 use std::sync::Arc;
 
@@ -49,8 +50,11 @@ pub(crate) enum OpType<Codomain>
 where
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
+    /// We wish to insert a tuple into the master index for this relation.
     Insert(Codomain),
+    /// We wish to update a tuple in the master index for this relation.
     Update(Codomain),
+    /// We wish to delete a tuple from the master index for this relation.
     Delete,
 }
 
@@ -81,7 +85,39 @@ where
     pub(crate) operation: OpType<Codomain>,
 }
 
-pub type WorkingSet<Domain, Codomain> = Vec<(Domain, Op<Codomain>)>;
+pub struct WorkingSet<Domain, Codomain>
+where
+    Domain: Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    tuples: Vec<(Domain, Op<Codomain>)>,
+}
+
+impl<Domain, Codomain> WorkingSet<Domain, Codomain>
+where
+    Domain: Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    pub fn new(tuples: Vec<(Domain, Op<Codomain>)>) -> WorkingSet<Domain, Codomain> {
+        WorkingSet { tuples }
+    }
+
+    pub fn len(&self) -> usize {
+        self.tuples.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tuples.is_empty()
+    }
+
+    pub fn tuples(self) -> Vec<(Domain, Op<Codomain>)> {
+        self.tuples
+    }
+
+    pub fn tuples_ref(&self) -> &Vec<(Domain, Op<Codomain>)> {
+        &self.tuples
+    }
+}
 
 /// Represents the state of a relation in the context of a current transaction.
 impl<Domain, Codomain, Source> RelationTransaction<Domain, Codomain, Source>
@@ -200,10 +236,12 @@ where
             return Ok(None);
         };
 
-        // If the timestamp is greater than our own, we can't update it, we shouldn't have seen this
-        // value, but we'll go ahead and log it anyways, and the conflict checker will catch it.
-        // What *could* happen here is that we could return conflict immediately, but our current
-        // error propagation model doesn't allow for that.
+        // If the timestamp is greater than our own, we won't be able to update it when we actually
+        // commit, so we may as well mark it as a conflict *now*.
+        // (Let's just hope the "upper layers" try to do the right thing here)
+        if read_ts >= self.tx.ts {
+            return Err(Error::Conflict);
+        }
 
         // Put in operations log
         // Copy into the local cache, but with updated value.
@@ -220,12 +258,75 @@ where
     }
 
     pub fn upsert(&mut self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
-        // TODO: We could probably more efficient about this, but there we bugs here before and this
-        //   fixed them.
-        if self.has_domain(&domain)? {
-            return self.update(&domain, value);
+        // Check local operations first - single lookup that handles all cases
+        if let Some(entry) = self.index.local_operations.get_mut(&domain) {
+            match &entry.operation {
+                OpType::Delete => {
+                    // Convert delete to insert - avoids duplicate key errors
+                    entry.write_ts = self.tx.ts;
+                    entry.operation = OpType::Insert(value);
+                    return Ok(None);
+                }
+                OpType::Insert(_) | OpType::Update(_) => {
+                    // Update existing entry
+                    entry.write_ts = self.tx.ts;
+                    let is_update = matches!(entry.operation, OpType::Update(_));
+                    let old_value = match std::mem::replace(
+                        &mut entry.operation,
+                        if is_update {
+                            OpType::Update(value)
+                        } else {
+                            OpType::Insert(value)
+                        },
+                    ) {
+                        OpType::Insert(old) | OpType::Update(old) => old,
+                        OpType::Delete => unreachable!(), // Already handled above
+                    };
+                    return Ok(Some(old_value));
+                }
+            }
         }
-        self.insert(domain, value)?;
+
+        // Check master entries for existing data
+        if let Some(entry) = self.index.master_entries.index_lookup(&domain) {
+            // Existing entry in master - do update via local operation
+            let old_value = entry.value.clone();
+            self.index.local_operations.insert(
+                domain,
+                Op {
+                    read_ts: entry.ts,
+                    write_ts: self.tx.ts,
+                    operation: OpType::Update(value),
+                },
+            );
+            return Ok(Some(old_value));
+        }
+
+        // Check backing source for existing data  
+        if let Some((read_ts, backing_value)) = self.backing_source.get(&domain)? {
+            if read_ts < self.tx.ts {
+                // Existing entry in backing - do update via local operation
+                self.index.local_operations.insert(
+                    domain,
+                    Op {
+                        read_ts,
+                        write_ts: self.tx.ts,
+                        operation: OpType::Update(value),
+                    },
+                );
+                return Ok(Some(backing_value));
+            }
+        }
+
+        // No existing entry anywhere - do insert via local operation
+        self.index.local_operations.insert(
+            domain,
+            Op {
+                read_ts: self.tx.ts,
+                write_ts: self.tx.ts,
+                operation: OpType::Insert(value),
+            },
+        );
         Ok(None)
     }
 
@@ -373,11 +474,11 @@ where
         Ok(results)
     }
 
-    pub fn working_set(self) -> WorkingSet<Domain, Codomain> {
+    pub fn working_set(self) -> Result<WorkingSet<Domain, Codomain>, WorldStateError> {
         let mut working_set = Vec::new();
         for (domain, op) in self.index.local_operations {
             working_set.push((domain, op));
         }
-        working_set
+        Ok(WorkingSet::new(working_set))
     }
 }

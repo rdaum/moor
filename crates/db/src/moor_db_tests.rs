@@ -435,7 +435,7 @@ mod tests {
         tx.add_object_verb(
             &oid,
             &oid,
-            &vec![Symbol::mk("test")],
+            &[Symbol::mk("test")],
             ProgramType::MooR(Program::new()),
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
@@ -747,7 +747,7 @@ mod tests {
         tx.add_object_verb(
             &a,
             &a,
-            &vec![Symbol::mk("test")],
+            &[Symbol::mk("test")],
             ProgramType::MooR(Program::new()),
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
@@ -796,7 +796,7 @@ mod tests {
         tx.add_object_verb(
             &a,
             &a,
-            &vec![Symbol::mk("test2")],
+            &[Symbol::mk("test2")],
             ProgramType::MooR(Program::new()),
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
@@ -866,7 +866,7 @@ mod tests {
         tx.add_object_verb(
             &a,
             &a,
-            &vec![Symbol::mk("test")],
+            &[Symbol::mk("test")],
             ProgramType::MooR(Program::new()),
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
@@ -1395,7 +1395,7 @@ mod tests {
         tx.add_object_verb(
             &a,
             &a,
-            &vec![Symbol::mk("test")],
+            &[Symbol::mk("test")],
             ProgramType::MooR(Program::new()),
             VerbFlag::rw(),
             VerbArgsSpec::none_none_none(),

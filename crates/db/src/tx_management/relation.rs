@@ -109,7 +109,7 @@ where
         let total_ops = working_set.len();
         self.dirty = !working_set.is_empty();
         // Check phase first.
-        for (n, (domain, op)) in working_set.iter().enumerate() {
+        for (n, (domain, op)) in working_set.tuples_ref().iter().enumerate() {
             if last_check_time.elapsed() > Duration::from_secs(5) {
                 warn!(
                     "Long check time for {}; running for {}s; {n}/{total_ops} checked",
@@ -172,7 +172,7 @@ where
         let mut last_check_time = start_time;
         let total_ops = working_set.len();
         // Apply phase.
-        for (n, (domain, op)) in working_set.into_iter().enumerate() {
+        for (n, (domain, op)) in working_set.tuples().into_iter().enumerate() {
             if last_check_time.elapsed() > Duration::from_secs(5) {
                 warn!(
                     "Long apply time for {}; running for {}s; {n}/{total_ops} checked",
@@ -362,7 +362,7 @@ mod tests {
         lc.insert(domain.clone(), codomain.clone()).unwrap();
         assert_eq!(lc.get(&domain).unwrap(), Some(codomain.clone()));
         assert_eq!(lc.get(&TestDomain(0)).unwrap(), Some(TestCodomain(0)));
-        let ws = lc.working_set();
+        let ws = lc.working_set().unwrap();
 
         let mut cr = relation.begin_check();
         cr.check(&ws).unwrap();
@@ -390,8 +390,8 @@ mod tests {
         r_tx_a.insert(domain.clone(), codomain_a).unwrap();
         let mut r_tx_b = relation.clone().start(&tx_b);
         r_tx_b.insert(domain.clone(), codomain_b).unwrap();
-        let ws_a = r_tx_a.working_set();
-        let ws_b = r_tx_b.working_set();
+        let ws_a = r_tx_a.working_set().unwrap();
+        let ws_b = r_tx_b.working_set().unwrap();
         {
             let mut cr_a = relation.begin_check();
             cr_a.check(&ws_a).unwrap();
@@ -430,7 +430,7 @@ mod tests {
         // T2 updates the value
         let mut r_tx_2 = relation.clone().start(&tx_2);
         r_tx_2.update(&domain, TestCodomain(20)).unwrap();
-        let ws_2 = r_tx_2.working_set();
+        let ws_2 = r_tx_2.working_set().unwrap();
 
         // Commit T2 first
         {
@@ -442,11 +442,7 @@ mod tests {
         }
 
         // Now T1 tries to update based on its read - this should conflict
-        r_tx_1.update(&domain, TestCodomain(11)).unwrap(); // 10 + 1
-        let ws_1 = r_tx_1.working_set();
-
-        let mut cr_1 = relation.begin_check();
-        let check_result = cr_1.check(&ws_1);
+        let check_result = r_tx_1.update(&domain, TestCodomain(11));
         assert!(matches!(check_result, Err(Error::Conflict)));
     }
 
@@ -471,8 +467,8 @@ mod tests {
         r_tx_1.update(&domain, TestCodomain(100)).unwrap();
         r_tx_2.update(&domain, TestCodomain(200)).unwrap();
 
-        let ws_1 = r_tx_1.working_set();
-        let ws_2 = r_tx_2.working_set();
+        let ws_1 = r_tx_1.working_set().unwrap();
+        let ws_2 = r_tx_2.working_set().unwrap();
 
         // Commit T1 first
         {
@@ -511,7 +507,7 @@ mod tests {
         // T2 inserts a new entry
         let mut r_tx_2 = relation.clone().start(&tx_2);
         r_tx_2.insert(domain_1.clone(), TestCodomain(100)).unwrap();
-        let ws_2 = r_tx_2.working_set();
+        let ws_2 = r_tx_2.working_set().unwrap();
 
         // Commit T2
         {
@@ -524,7 +520,7 @@ mod tests {
 
         // T1 now inserts another entry - this should succeed since it's a different key
         r_tx_1.insert(domain_2.clone(), TestCodomain(200)).unwrap();
-        let ws_1 = r_tx_1.working_set();
+        let ws_1 = r_tx_1.working_set().unwrap();
 
         let mut cr_1 = relation.begin_check();
         cr_1.check(&ws_1).unwrap(); // Should not conflict
@@ -548,7 +544,7 @@ mod tests {
         // T1 deletes the entry
         let mut r_tx_1 = relation.clone().start(&tx_1);
         r_tx_1.delete(&domain).unwrap();
-        let ws_1 = r_tx_1.working_set();
+        let ws_1 = r_tx_1.working_set().unwrap();
 
         // Commit T1 first
         {
@@ -562,7 +558,7 @@ mod tests {
         // Now T2 tries to insert the same key - should succeed since key was deleted
         let mut r_tx_2 = relation.clone().start(&tx_2);
         r_tx_2.insert(domain.clone(), TestCodomain(20)).unwrap();
-        let ws_2 = r_tx_2.working_set();
+        let ws_2 = r_tx_2.working_set().unwrap();
 
         let mut cr_2 = relation.begin_check();
         cr_2.check(&ws_2).unwrap();
@@ -587,7 +583,7 @@ mod tests {
         let result = r_tx.update(&domain, TestCodomain(100)).unwrap();
         assert_eq!(result, None); // Update of nonexistent key returns None
 
-        let ws = r_tx.working_set();
+        let ws = r_tx.working_set().unwrap();
         // The working set should be empty since no actual operation occurred
         assert_eq!(ws.len(), 0);
     }
@@ -612,7 +608,7 @@ mod tests {
             let current = r_tx.get(&domain).unwrap().unwrap();
             r_tx.update(&domain, TestCodomain(current.0 + 1)).unwrap();
 
-            let ws = r_tx.working_set();
+            let ws = r_tx.working_set().unwrap();
             let mut cr = relation.begin_check();
             cr.check(&ws).unwrap();
             cr.apply(ws).unwrap();
@@ -641,13 +637,13 @@ mod tests {
         let mut r_tx_1 = relation.clone().start(&tx_1);
         r_tx_1.update(&TestDomain(1), TestCodomain(200)).unwrap();
         r_tx_1.insert(TestDomain(2), TestCodomain(300)).unwrap();
-        let ws_1 = r_tx_1.working_set();
+        let ws_1 = r_tx_1.working_set().unwrap();
 
         // T2: Try to update the same key as T1 but to different value
         let mut r_tx_2 = relation.clone().start(&tx_2);
         r_tx_2.update(&TestDomain(1), TestCodomain(400)).unwrap();
         r_tx_2.insert(TestDomain(3), TestCodomain(500)).unwrap();
-        let ws_2 = r_tx_2.working_set();
+        let ws_2 = r_tx_2.working_set().unwrap();
 
         // Commit T1 first
         {
@@ -672,7 +668,7 @@ mod tests {
         r_tx_3
             .update(&TestDomain(1), TestCodomain(current_val.0 + 100))
             .unwrap();
-        let ws_3 = r_tx_3.working_set();
+        let ws_3 = r_tx_3.working_set().unwrap();
 
         {
             let mut cr_3 = relation.begin_check();
@@ -715,7 +711,7 @@ mod tests {
         // Newer transaction commits first
         let mut r_tx_newer = relation.clone().start(&tx_newer);
         r_tx_newer.update(&domain, TestCodomain(200)).unwrap();
-        let ws_newer = r_tx_newer.working_set();
+        let ws_newer = r_tx_newer.working_set().unwrap();
 
         {
             let mut cr_newer = relation.begin_check();
@@ -726,11 +722,7 @@ mod tests {
         }
 
         // Now older transaction tries to update - should conflict due to newer timestamp in cache
-        r_tx_older.update(&domain, TestCodomain(300)).unwrap();
-        let ws_older = r_tx_older.working_set();
-
-        let mut cr_older = relation.begin_check();
-        let check_result = cr_older.check(&ws_older);
+        let check_result = r_tx_older.update(&domain, TestCodomain(300));
         assert!(matches!(check_result, Err(Error::Conflict)));
     }
 
@@ -758,7 +750,7 @@ mod tests {
         r_tx.update(&TestDomain(1), TestCodomain(val1.0 + val2.0))
             .unwrap();
 
-        let ws = r_tx.working_set();
+        let ws = r_tx.working_set().unwrap();
         let mut cr = relation.begin_check();
         cr.check(&ws).unwrap();
         cr.apply(ws).unwrap();

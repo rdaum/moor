@@ -137,12 +137,11 @@ impl GlobalInternerState {
         // Fast O(1) lookup using direct boxcar indexing
         // repr_id == boxcar_index invariant is maintained by using push() return value as repr_id
         self.repr_id_to_symbol
-            .get(repr_id as usize)
-            .map(|arc_string| arc_string.clone())
+            .get(repr_id as usize).cloned()
     }
 }
 
-static GLOBAL_INTERNER: Lazy<GlobalInternerState> = Lazy::new(|| GlobalInternerState::new());
+static GLOBAL_INTERNER: Lazy<GlobalInternerState> = Lazy::new(GlobalInternerState::new);
 // --- End Global Interner ---
 
 /// An interned string used for things like verb names and property names.
@@ -455,7 +454,7 @@ mod tests {
     fn test_symbol_bincode() {
         let sym = Symbol::mk("test_bincode");
 
-        let encoded = bincode::encode_to_vec(&sym, bincode::config::standard()).unwrap();
+        let encoded = bincode::encode_to_vec(sym, bincode::config::standard()).unwrap();
         let decoded: Symbol = bincode::decode_from_slice(&encoded, bincode::config::standard())
             .unwrap()
             .0;
@@ -749,7 +748,7 @@ mod shuttle_tests {
                             for base in &base_strings {
                                 // Create variations
                                 let variants = [
-                                    format!("{}", base),
+                                    base.to_string(),
                                     format!("{}{}", base, i),
                                     format!("{}_{}", base, thread_id),
                                 ];

@@ -868,7 +868,7 @@ impl WorldStateTransaction {
         let verbdefs = self.get_verbs(oid)?;
 
         let uuid = Uuid::new_v4();
-        let verbdef = VerbDef::new(uuid, *oid, *owner, &names, flags, args);
+        let verbdef = VerbDef::new(uuid, *oid, *owner, names, flags, args);
 
         self.verb_resolution_cache.flush();
 
@@ -1256,18 +1256,18 @@ impl WorldStateTransaction {
         // Pull out the working sets
         let _t = PerfTimerGuard::new(&counters.tx_commit_mk_working_set_phase);
 
-        let object_location = self.object_location.working_set();
-        let object_contents = self.object_contents.working_set();
-        let object_parent = self.object_parent.working_set();
-        let object_children = self.object_children.working_set();
-        let object_owner = self.object_owner.working_set();
-        let object_flags = self.object_flags.working_set();
-        let object_name = self.object_name.working_set();
-        let object_verbdefs = self.object_verbdefs.working_set();
-        let object_verbs = self.object_verbs.working_set();
-        let object_propdefs = self.object_propdefs.working_set();
-        let object_propvalues = self.object_propvalues.working_set();
-        let object_propflags = self.object_propflags.working_set();
+        let object_location = self.object_location.working_set()?;
+        let object_contents = self.object_contents.working_set()?;
+        let object_parent = self.object_parent.working_set()?;
+        let object_children = self.object_children.working_set()?;
+        let object_owner = self.object_owner.working_set()?;
+        let object_flags = self.object_flags.working_set()?;
+        let object_name = self.object_name.working_set()?;
+        let object_verbdefs = self.object_verbdefs.working_set()?;
+        let object_verbs = self.object_verbs.working_set()?;
+        let object_propdefs = self.object_propdefs.working_set()?;
+        let object_propvalues = self.object_propvalues.working_set()?;
+        let object_propflags = self.object_propflags.working_set()?;
 
         let ws = Box::new(WorkingSets {
             tx: self.tx,

@@ -332,8 +332,8 @@ mod test {
             let mut o1_props = o1_props.iter().collect::<Vec<_>>();
             let mut o2_props = o2_props.iter().collect::<Vec<_>>();
 
-            o1_props.sort_by(|a, b| a.name().cmp(&b.name()));
-            o2_props.sort_by(|a, b| a.name().cmp(&b.name()));
+            o1_props.sort_by_key(|a| a.name());
+            o2_props.sort_by_key(|a| a.name());
 
             // We want to do equality testing, but ignore the UUID which can be different
             // between textdump loads...
