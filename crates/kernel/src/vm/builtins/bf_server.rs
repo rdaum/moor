@@ -1557,8 +1557,8 @@ fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
         result.push((
             op_name,
             v_list(&[
-                v_int(c.invocations.sum() as i64),
-                v_int(c.cumulative_duration_nanos.sum() as i64),
+                v_int(c.invocations().sum() as i64),
+                v_int(c.cumulative_duration_nanos().sum() as i64),
             ]),
         ));
     }

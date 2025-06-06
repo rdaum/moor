@@ -482,8 +482,8 @@ impl RpcServer {
                 for c in sched_counters().all_counters() {
                     sch.push((
                         c.operation,
-                        c.invocations.sum(),
-                        c.cumulative_duration_nanos.sum(),
+                        c.invocations().sum(),
+                        c.cumulative_duration_nanos().sum(),
                     ));
                 }
                 all_counters.push((Symbol::mk("sched"), sch));
@@ -492,8 +492,8 @@ impl RpcServer {
                 for c in db_counters().all_counters() {
                     db.push((
                         c.operation,
-                        c.invocations.sum(),
-                        c.cumulative_duration_nanos.sum(),
+                        c.invocations().sum(),
+                        c.cumulative_duration_nanos().sum(),
                     ));
                 }
                 all_counters.push((Symbol::mk("db"), db));
@@ -502,8 +502,8 @@ impl RpcServer {
                 for c in bf_perf_counters().all_counters() {
                     bf.push((
                         c.operation,
-                        c.invocations.sum(),
-                        c.cumulative_duration_nanos.sum(),
+                        c.invocations().sum(),
+                        c.cumulative_duration_nanos().sum(),
                     ));
                 }
                 all_counters.push((Symbol::mk("bf"), bf));

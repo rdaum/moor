@@ -32,3 +32,7 @@ shadow-rs.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+
+[features]
+default = []
+perf_counters = []
