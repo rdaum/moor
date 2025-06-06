@@ -19,6 +19,7 @@ use crate::rpc_server::RpcServer;
 use crate::workers_server::WorkersServer;
 use clap::Parser;
 use eyre::{Report, bail};
+use mimalloc::MiMalloc;
 use moor_common::build;
 use moor_db::{Database, TxDB};
 use moor_kernel::config::ImportExportFormat;
@@ -44,12 +45,9 @@ mod workers_server;
 // main.rs
 use moor_common::model::CommitResult;
 use moor_common::model::loader::LoaderInterface;
-#[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
 
-#[cfg(not(target_env = "msvc"))]
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn perform_import(
     config: &moor_kernel::config::Config,
