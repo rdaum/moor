@@ -164,10 +164,10 @@ mod tests {
         fn get(
             &self,
             domain: &TestDomain,
-        ) -> Result<Option<(Timestamp, TestCodomain, usize)>, Error> {
+        ) -> Result<Option<(Timestamp, TestCodomain)>, Error> {
             let data = self.data.lock().unwrap();
             if let Some(codomain) = data.get(domain) {
-                Ok(Some((Timestamp(0), codomain.clone(), 8)))
+                Ok(Some((Timestamp(0), codomain.clone())))
             } else {
                 Ok(None)
             }
@@ -193,7 +193,7 @@ mod tests {
         fn scan<F>(
             &self,
             predicate: &F,
-        ) -> Result<Vec<(Timestamp, TestDomain, TestCodomain, usize)>, Error>
+        ) -> Result<Vec<(Timestamp, TestDomain, TestCodomain)>, Error>
         where
             F: Fn(&TestDomain, &TestCodomain) -> bool,
         {
@@ -201,7 +201,7 @@ mod tests {
             Ok(data
                 .iter()
                 .filter(|(k, v)| predicate(k, v))
-                .map(|(k, v)| (Timestamp(0), k.clone(), v.clone(), 16))
+                .map(|(k, v)| (Timestamp(0), k.clone(), v.clone()))
                 .collect())
         }
 
@@ -255,7 +255,7 @@ mod tests {
                                     cache.get(&key).unwrap().unwrap_or(TestCodomain(vec![]));
                                 codomain.0.push(*value);
                                 cache
-                                    .upsert(key, codomain, 1)
+                                    .upsert(key, codomain)
                                     .map_err(|_| eyre::eyre!("append failed"))?;
                             }
                             Operation::Read(key, _) => {

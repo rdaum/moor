@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tx_management::relation::Entry;
+use crate::tx_management::relation::{Entry, RelationIndex};
 use crate::tx_management::{Canonical, Error, Timestamp, Tx};
 use ahash::AHasher;
 use indexmap::IndexMap;
@@ -25,8 +25,8 @@ use std::sync::Arc;
 pub struct RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
-    Domain: Hash + Eq,
-    Codomain: Clone + PartialEq,
+    Domain: Hash + Eq + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     tx: Tx,
 
@@ -38,11 +38,11 @@ where
 
 struct Inner<Domain, Codomain>
 where
-    Domain: Hash + Eq,
-    Codomain: Clone + PartialEq,
+    Domain: Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     operations: IndexMap<Domain, Op, BuildHasherDefault<AHasher>>,
-    entries: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
+    entries: Box<dyn RelationIndex<Domain, Codomain>>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -65,17 +65,17 @@ pub type WorkingSet<Domain, Codomain> = Vec<(Domain, Op, Option<Entry<Codomain>>
 impl<Domain, Codomain, Source> RelationTransaction<Domain, Codomain, Source>
 where
     Source: Canonical<Domain, Codomain>,
-    Domain: Clone + Hash + Eq,
-    Codomain: Clone + PartialEq,
+    Domain: Clone + Hash + Eq + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     pub fn new(
         tx: Tx,
-        canonical: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
+        canonical: Box<dyn RelationIndex<Domain, Codomain>>,
         backing_source: Source,
     ) -> RelationTransaction<Domain, Codomain, Source> {
         let inner = Inner {
             operations: IndexMap::default(),
-            entries: canonical.clone(),
+            entries: canonical,
         };
         RelationTransaction {
             tx,
@@ -91,7 +91,7 @@ where
     ) -> Result<(), Error> {
         let mut index = self.index.borrow_mut();
         // If we or upstream has already inserted this domain, we can't insert it again.
-        if index.entries.get(&domain).is_some() {
+        if index.entries.index_lookup(&domain).is_some() {
             return Err(Error::Duplicate);
         }
 
@@ -104,13 +104,7 @@ where
 
         // Not in the index, not in the backing source, we can insert freely.
         // Local index + also the operations log.
-        index.entries.insert(
-            domain.clone(),
-            Entry {
-                ts: self.tx.ts,
-                value,
-            },
-        );
+        index.entries.insert_entry(self.tx.ts, domain.clone(), value);
         index.operations.insert(
             domain.clone(),
             Op {
@@ -131,18 +125,19 @@ where
         let mut index = self.index.borrow_mut();
 
         // Is this already in the index?
-        if let Some(entry) = index.entries.get_mut(domain) {
+        if let Some(entry) = index.entries.index_lookup(domain) {
             if entry.ts > self.tx.ts {
                 // We can't update it, it's too new.
                 return Ok(None);
             }
 
             let old_value = entry.value.clone();
-            entry.value = value.clone();
+            let read_ts = entry.ts;
+            // Update the entry with new value
+            index.entries.insert_entry(self.tx.ts, domain.clone(), value.clone());
 
             // Check to see if we already have an operations-log entry for this domain.
             // If we do, we can update it to its new state.
-            let read_ts = entry.ts;
             if let Some(old_entry) = index.operations.get_mut(domain) {
                 old_entry.operation = match old_entry.operation {
                     OpType::Update => OpType::Update,
@@ -178,13 +173,7 @@ where
         };
 
         // Remember for later.
-        index.entries.insert(
-            domain.clone(),
-            Entry {
-                ts: self.tx.ts,
-                value,
-            },
-        );
+        index.entries.insert_entry(self.tx.ts, domain.clone(), value);
 
         // If the timestamp is greater than our own, we can't update it, we shouldn't have seen it.
         if read_ts > self.tx.ts {
@@ -227,7 +216,7 @@ where
         let mut index = self.index.borrow_mut();
 
         // Check entries
-        if let Some(entry) = index.entries.get(domain) {
+        if let Some(entry) = index.entries.index_lookup(domain) {
             return Ok(Some(entry.value.clone()));
         }
 
@@ -240,7 +229,7 @@ where
                     value,
                 };
                 let value = entry.value.clone();
-                index.entries.insert(domain.clone(), entry);
+                index.entries.insert_entry(read_ts, domain.clone(), value.clone());
                 Ok(Some(value))
             }
             _ => Ok(None),
@@ -251,7 +240,7 @@ where
         // This is like update, but we're removing.
         let mut index = self.index.borrow_mut();
 
-        if let Some(entry) = index.entries.remove(domain) {
+        if let Some(entry) = index.entries.remove_entry(domain) {
             let old_value = entry.value.clone();
 
             // Check to see if we already have an operations-log entry for this domain.
@@ -324,19 +313,13 @@ where
         // Feed in everything from upstream that we don't have locally, as long as the timestamp
         // is less than our own.
         for (ts, d, c) in upstream {
-            if index.entries.get(&d).is_some() {
+            if index.entries.index_lookup(&d).is_some() {
                 continue;
             };
             if ts > self.tx.ts {
                 continue;
             }
-            index.entries.insert(
-                d.clone(),
-                Entry {
-                    ts,
-                    value: c.clone(),
-                },
-            );
+            index.entries.insert_entry(ts, d.clone(), c.clone());
         }
 
         let mut results = Vec::new();
@@ -354,7 +337,7 @@ where
         let mut index = self.index.into_inner();
         let mut working_set = Vec::new();
         for (domain, op) in index.operations {
-            let codomain = index.entries.remove(&domain);
+            let codomain = index.entries.remove_entry(&domain);
             working_set.push((domain, op, codomain));
         }
         working_set

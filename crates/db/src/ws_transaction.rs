@@ -94,8 +94,8 @@ fn upsert<Domain, Codomain>(
     c: Codomain,
 ) -> Result<Option<Codomain>, Error>
 where
-    Domain: AsByteBuffer + Clone + Eq + Hash,
-    Codomain: AsByteBuffer + Clone + PartialEq,
+    Domain: AsByteBuffer + Clone + Eq + Hash + Send + Sync + 'static,
+    Codomain: AsByteBuffer + Clone + PartialEq + Send + Sync + 'static,
 {
     table.upsert(d, c)
 }

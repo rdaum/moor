@@ -30,60 +30,91 @@ pub struct Entry<T: Clone + PartialEq> {
 }
 
 /// Represents the current "canonical" state of a relation.
-#[derive(Clone)]
 pub struct Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
+    Domain: Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     relation_name: Symbol,
 
-    index: Arc<RwLock<RelationIndex<Domain, Codomain>>>,
+    index: Arc<RwLock<Box<dyn RelationIndex<Domain, Codomain>>>>,
 
     source: Arc<Source>,
 }
 
+impl<Domain, Codomain, Source> Clone for Relation<Domain, Codomain, Source>
+where
+    Domain: Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Source: Provider<Domain, Codomain>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            relation_name: self.relation_name,
+            index: self.index.clone(),
+            source: self.source.clone(),
+        }
+    }
+}
+
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
+    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
     Source: Provider<Domain, Codomain>,
 {
     pub fn new(relation_name: Symbol, provider: Arc<Source>) -> Self {
         Self {
             relation_name,
-            index: Arc::new(RwLock::new(RelationIndex {
-                entries: Default::default(),
-            })),
+            index: Arc::new(RwLock::new(Box::new(HashRelationIndex::new()))),
             source: provider,
         }
     }
 
-    pub fn write_lock(&self) -> RwLockWriteGuard<RelationIndex<Domain, Codomain>> {
+    pub fn write_lock(&self) -> RwLockWriteGuard<Box<dyn RelationIndex<Domain, Codomain>>> {
         self.index.write().unwrap()
     }
 }
 
+use std::any::Any;
+
+/// Trait for different indexing strategies for relation caches
+pub trait RelationIndex<Domain, Codomain>: Send + Sync
+where
+    Domain: Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    fn insert_entry(&mut self, ts: Timestamp, domain: Domain, codomain: Codomain);
+    fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain);
+    fn index_lookup(&self, domain: &Domain) -> Option<&Entry<Codomain>>;
+    fn remove_entry(&mut self, domain: &Domain) -> Option<Entry<Codomain>>;
+    fn iter(&self) -> Box<dyn Iterator<Item = (&Domain, &Entry<Codomain>)> + '_>;
+    fn len(&self) -> usize;
+    fn fork(&self) -> Box<dyn RelationIndex<Domain, Codomain>>;
+    fn as_any(&self) -> &dyn Any;
+}
+
+/// Hash-based implementation of RelationIndex using im::HashMap
 #[derive(Clone)]
-pub struct RelationIndex<Domain, Codomain>
+pub struct HashRelationIndex<Domain, Codomain>
 where
     Domain: Hash + PartialEq + Eq + Clone,
     Codomain: Clone + PartialEq,
 {
     /// Internal index of the cache.
-    entries: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
+    pub entries: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
 }
 
 /// Holds a lock on the cache while a transaction commit is in progress.
 /// (Just wraps the lock to avoid leaking the Inner type.)
 pub struct CheckRelation<Domain, Codomain, P>
 where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
+    Domain: Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
     P: Provider<Domain, Codomain>,
 {
-    index: RelationIndex<Domain, Codomain>,
+    index: Box<dyn RelationIndex<Domain, Codomain>>,
     relation_name: Symbol,
     source: Arc<P>,
     dirty: bool,
@@ -91,12 +122,12 @@ where
 
 impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
 where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
+    Domain: Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
     P: Provider<Domain, Codomain>,
 {
     pub fn num_entries(&self) -> usize {
-        self.index.entries.len()
+        self.index.len()
     }
 
     pub fn dirty(&self) -> bool {
@@ -123,7 +154,7 @@ where
                 last_check_time = Instant::now();
             }
             // Check local to see if we have one first, to see if there's a conflict.
-            if let Some(local_entry) = self.index.entries.get(domain) {
+            if let Some(local_entry) = self.index.index_lookup(domain) {
                 // If what we have is an insert, and there's something already there, that's a
                 // a conflict.
                 if op.operation == OpType::Insert {
@@ -141,11 +172,8 @@ where
 
             // Otherwise, pull from upstream and fetch to cache and check for conflict.
             if let Some((ts, codomain)) = self.source.get(domain)? {
-                let entry = Entry {
-                    ts,
-                    value: codomain.clone(),
-                };
-                self.index.entries.insert(domain.clone(), entry);
+                self.index
+                    .insert_entry(ts, domain.clone(), codomain.clone());
 
                 // If what we have is an insert, and there's something already there, that's also
                 // a conflict.
@@ -197,7 +225,7 @@ where
         Ok(())
     }
 
-    pub fn commit(self, inner: Option<RwLockWriteGuard<RelationIndex<Domain, Codomain>>>) {
+    pub fn commit(self, inner: Option<RwLockWriteGuard<Box<dyn RelationIndex<Domain, Codomain>>>>) {
         if let Some(mut inner) = inner {
             *inner = self.index;
         }
@@ -207,18 +235,18 @@ where
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
     Source: Provider<Domain, Codomain>,
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
+    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     pub fn start(&self, tx: &Tx) -> RelationTransaction<Domain, Codomain, Self> {
         let index = self.index.read().unwrap();
-        RelationTransaction::new(*tx, index.entries.clone(), self.clone())
+        RelationTransaction::new(*tx, index.fork(), self.clone())
     }
 
     pub fn begin_check(&self) -> CheckRelation<Domain, Codomain, Source> {
         let index = self.index.read().unwrap();
         CheckRelation {
-            index: index.clone(),
+            index: index.fork(),
             relation_name: self.relation_name,
             source: self.source.clone(),
             dirty: false,
@@ -226,10 +254,22 @@ where
     }
 }
 
-impl<Domain, Codomain> RelationIndex<Domain, Codomain>
+impl<Domain, Codomain> HashRelationIndex<Domain, Codomain>
 where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
+    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    pub fn new() -> Self {
+        Self {
+            entries: Default::default(),
+        }
+    }
+}
+
+impl<Domain, Codomain> RelationIndex<Domain, Codomain> for HashRelationIndex<Domain, Codomain>
+where
+    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     fn insert_entry(&mut self, ts: Timestamp, domain: Domain, codomain: Codomain) {
         self.entries.insert(
@@ -248,12 +288,32 @@ where
     fn index_lookup(&self, domain: &Domain) -> Option<&Entry<Codomain>> {
         self.entries.get(domain)
     }
+
+    fn remove_entry(&mut self, domain: &Domain) -> Option<Entry<Codomain>> {
+        self.entries.remove(domain)
+    }
+
+    fn iter(&self) -> Box<dyn Iterator<Item = (&Domain, &Entry<Codomain>)> + '_> {
+        Box::new(self.entries.iter())
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn fork(&self) -> Box<dyn RelationIndex<Domain, Codomain>> {
+        Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl<Domain, Codomain, Source> Canonical<Domain, Codomain> for Relation<Domain, Codomain, Source>
 where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
+    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
     Source: Provider<Domain, Codomain>,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
@@ -296,8 +356,8 @@ where
 }
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
+    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
     Source: Provider<Domain, Codomain>,
 {
     pub fn stop_provider(&self) -> Result<(), Error> {
