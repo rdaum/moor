@@ -19,7 +19,9 @@ use crate::program::opcode::{
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use lazy_static::lazy_static;
-use moor_var::{AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError};
+use moor_var::{
+    AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError, Symbol,
+};
 use moor_var::{ErrorCode, Var};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
@@ -77,6 +79,7 @@ impl Program {
     }
 
     pub fn find_var(&self, v: &str) -> Name {
+        let v = Symbol::mk(v);
         self.0
             .var_names
             .find_name(v)

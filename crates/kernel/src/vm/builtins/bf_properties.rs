@@ -14,10 +14,10 @@
 use moor_common::model::{PropAttrs, PropFlag, prop_flags_string};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
-use moor_var::Sequence;
 use moor_var::Variant;
 use moor_var::{E_ARGS, E_INVARG, E_TYPE};
 use moor_var::{List, v_empty_list};
+use moor_var::{Sequence, Symbol};
 use moor_var::{v_list, v_obj, v_string};
 
 use crate::vm::builtins::BfErr::{Code, ErrValue};
@@ -86,7 +86,7 @@ fn info_to_prop_attrs(info: &List) -> InfoParseResult {
     }
 
     InfoParseResult::Success(PropAttrs {
-        name,
+        name: name.as_deref().map(Symbol::mk),
         value: None,
         location: None,
         owner: Some(owner),

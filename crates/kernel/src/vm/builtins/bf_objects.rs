@@ -19,7 +19,7 @@ use moor_common::model::WorldStateError;
 use moor_common::model::{ObjFlag, ValSet};
 use moor_common::util::BitEnum;
 use moor_compiler::offset_for_builtin;
-use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_sym};
+use moor_var::{E_ARGS, E_INVARG, E_NACC, E_PERM, E_TYPE, v_arc_string, v_string, v_sym};
 use moor_var::{List, Variant, v_bool};
 use moor_var::{NOTHING, v_list_iter};
 use moor_var::{Sequence, Symbol, v_list};
@@ -877,7 +877,7 @@ fn bf_verbs(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?;
     let verbs: Vec<_> = verbs
         .iter()
-        .map(|v| v_str(v.names().first().unwrap()))
+        .map(|v| v_arc_string(v.names().first().unwrap().as_arc_string()))
         .collect();
     Ok(Ret(v_list(&verbs)))
 }
@@ -902,7 +902,10 @@ fn bf_properties(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let props: Vec<_> = if bf_args.config.use_symbols_in_builtins {
         props.iter().map(|p| v_sym(p.name())).collect()
     } else {
-        props.iter().map(|p| v_str(p.name())).collect()
+        props
+            .iter()
+            .map(|p| v_arc_string(p.name().as_arc_string()))
+            .collect()
     };
     Ok(Ret(v_list(&props)))
 }

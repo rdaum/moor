@@ -822,7 +822,7 @@ impl WorldStateTransaction {
         let Some(verbdefs) = verbdefs.with_updated(uuid, |ov| {
             let names = match &verb_attrs.names {
                 None => ov.names(),
-                Some(new_names) => new_names.iter().map(|n| n.as_str()).collect::<Vec<&str>>(),
+                Some(new_names) => new_names.clone(),
             };
             VerbDef::new(
                 ov.uuid(),
@@ -860,7 +860,7 @@ impl WorldStateTransaction {
         &mut self,
         oid: &Obj,
         owner: &Obj,
-        names: Vec<Symbol>,
+        names: &[Symbol],
         program: ProgramType,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
@@ -868,14 +868,7 @@ impl WorldStateTransaction {
         let verbdefs = self.get_verbs(oid)?;
 
         let uuid = Uuid::new_v4();
-        let verbdef = VerbDef::new(
-            uuid,
-            *oid,
-            *owner,
-            &names.iter().map(|n| n.as_str()).collect::<Vec<&str>>(),
-            flags,
-            args,
-        );
+        let verbdef = VerbDef::new(uuid, *oid, *owner, &names, flags, args);
 
         self.verb_resolution_cache.flush();
 
@@ -977,7 +970,7 @@ impl WorldStateTransaction {
         // But the key for the actual value is always composite of oid,uuid
         let u = Uuid::new_v4();
 
-        let prop = PropDef::new(u, *definer, *location, name.as_str());
+        let prop = PropDef::new(u, *definer, *location, name);
         upsert(&mut self.object_propdefs, *location, props.with_added(prop)).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error setting property definition: {:?}", e))
         })?;
@@ -1018,7 +1011,7 @@ impl WorldStateTransaction {
         uuid: Uuid,
         new_owner: Option<Obj>,
         new_flags: Option<BitEnum<PropFlag>>,
-        new_name: Option<String>,
+        new_name: Option<Symbol>,
     ) -> Result<(), WorldStateError> {
         if new_owner.is_none() && new_flags.is_none() && new_name.is_none() {
             return Ok(());
@@ -1029,7 +1022,7 @@ impl WorldStateTransaction {
             let props = self.get_properties(obj)?;
 
             let Some(props) = props.with_updated(uuid, |p| {
-                PropDef::new(p.uuid(), p.definer(), p.location(), &new_name)
+                PropDef::new(p.uuid(), p.definer(), p.location(), new_name)
             }) else {
                 return Err(WorldStateError::PropertyNotFound(*obj, format!("{}", uuid)));
             };

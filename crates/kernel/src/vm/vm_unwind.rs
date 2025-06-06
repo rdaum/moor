@@ -21,7 +21,7 @@ use moor_common::model::Named;
 use moor_common::model::VerbFlag;
 use moor_common::tasks::Exception;
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
-use moor_var::{Error, NOTHING, v_error, v_string};
+use moor_var::{Error, NOTHING, v_arc_string, v_error, v_string};
 use moor_var::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
@@ -51,7 +51,15 @@ impl VMExecState {
                 Frame::Moo(_) => {
                     vec![
                         a.this.clone(),
-                        v_str(a.verbdef.names().join(" ").as_str()),
+                        v_str(
+                            a.verbdef
+                                .names()
+                                .iter()
+                                .map(|s| s.as_string())
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                                .as_str(),
+                        ),
                         v_obj(a.permissions),
                         v_obj(a.verb_definer()),
                         v_obj(a.player),
@@ -62,7 +70,7 @@ impl VMExecState {
                     let bf_name = BUILTINS.name_of(bf_frame.bf_id).unwrap();
                     vec![
                         a.this.clone(),
-                        v_str(bf_name.as_str()),
+                        v_arc_string(bf_name.as_arc_string()),
                         v_obj(a.permissions),
                         v_obj(NOTHING),
                         v_obj(a.player),

@@ -110,7 +110,7 @@ mod test {
         assert_eq!(sysobj.owner, Obj::mk_id(3));
         assert_eq!(sysobj.parent, Obj::mk_id(1));
         assert_eq!(sysobj.location, NOTHING);
-        assert_eq!(sysobj.propdefs, Vec::<String>::new());
+        assert_eq!(sysobj.propdefs, Vec::<Symbol>::new());
 
         let rootobj = td
             .objects
@@ -120,7 +120,7 @@ mod test {
         assert_eq!(rootobj.owner, Obj::mk_id(3));
         assert_eq!(rootobj.parent, NOTHING);
         assert_eq!(rootobj.location, NOTHING);
-        assert_eq!(rootobj.propdefs, Vec::<String>::new());
+        assert_eq!(rootobj.propdefs, Vec::<Symbol>::new());
 
         let first_room = td
             .objects
@@ -130,14 +130,14 @@ mod test {
         assert_eq!(first_room.owner, Obj::mk_id(3));
         assert_eq!(first_room.parent, Obj::mk_id(1));
         assert_eq!(first_room.location, NOTHING);
-        assert_eq!(first_room.propdefs, Vec::<String>::new());
+        assert_eq!(first_room.propdefs, Vec::<Symbol>::new());
 
         let wizard = td.objects.get(&Obj::mk_id(3)).expect("Wizard not found");
         assert_eq!(wizard.name, "Wizard");
         assert_eq!(wizard.owner, Obj::mk_id(3));
         assert_eq!(wizard.parent, Obj::mk_id(1));
         assert_eq!(wizard.location, Obj::mk_id(2));
-        assert_eq!(wizard.propdefs, Vec::<String>::new());
+        assert_eq!(wizard.propdefs, Vec::<Symbol>::new());
 
         assert_eq!(sysobj.verbdefs.len(), 1);
         let do_login_command_verb = &sysobj.verbdefs[0];
@@ -332,8 +332,8 @@ mod test {
             let mut o1_props = o1_props.iter().collect::<Vec<_>>();
             let mut o2_props = o2_props.iter().collect::<Vec<_>>();
 
-            o1_props.sort_by(|a, b| a.name().cmp(b.name()));
-            o2_props.sort_by(|a, b| a.name().cmp(b.name()));
+            o1_props.sort_by(|a, b| a.name().cmp(&b.name()));
+            o2_props.sort_by(|a, b| a.name().cmp(&b.name()));
 
             // We want to do equality testing, but ignore the UUID which can be different
             // between textdump loads...
@@ -404,7 +404,13 @@ mod test {
 
             assert_eq!(o1_verbs.len(), o2_verbs.len());
             for (v1, v2) in o1_verbs.iter().zip(o2_verbs.iter()) {
-                let v1_name = v1.names().join(" ").to_string();
+                let v1_name = v1
+                    .names()
+                    .iter()
+                    .map(|s| s.as_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .to_string();
                 assert_eq!(v1.names(), v2.names(), "{}:{}, name mismatch", o, v1_name);
 
                 assert_eq!(v1.owner(), v2.owner(), "{}:{}, owner mismatch", o, v1_name);

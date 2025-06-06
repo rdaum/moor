@@ -22,9 +22,9 @@ pub struct PerfCounter {
 }
 
 impl PerfCounter {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: impl Into<Symbol>) -> Self {
         Self {
-            operation: Symbol::mk(name),
+            operation: name.into(),
             invocations: ConcurrentCounter::new(0),
             cumulative_duration_nanos: ConcurrentCounter::new(0),
         }

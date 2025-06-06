@@ -27,9 +27,9 @@ use moor_common::program::ProgramType;
 use moor_common::util::BitEnum;
 use moor_compiler::compile;
 use moor_compiler::{CompileOptions, Program};
-use moor_var::NOTHING;
 use moor_var::Obj;
 use moor_var::Var;
+use moor_var::{NOTHING, Symbol};
 use semver::Version;
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -40,7 +40,7 @@ use tracing::{info, span, trace, warn};
 
 struct RProp {
     definer: Obj,
-    name: String,
+    name: Symbol,
     owner: Obj,
     flags: u8,
     value: Var,
@@ -211,7 +211,7 @@ pub fn read_textdump<T: io::Read>(
                     .define_property(
                         &resolved.definer,
                         objid,
-                        resolved.name.as_str(),
+                        resolved.name,
                         &resolved.owner,
                         flags,
                         value,
@@ -226,17 +226,10 @@ pub fn read_textdump<T: io::Read>(
         for (pnum, p) in o.propvals.iter().enumerate() {
             let resolved = resolve_prop(&td.objects, pnum, o).unwrap();
             let flags: BitEnum<PropFlag> = BitEnum::from_u8(p.flags);
-            trace!(objid = ?objid, name = resolved.name, flags = ?flags, "Setting property");
             let value = (!p.is_clear).then(|| p.value.clone());
 
             loader
-                .set_property(
-                    objid,
-                    resolved.name.as_str(),
-                    Some(p.owner),
-                    Some(flags),
-                    value,
-                )
+                .set_property(objid, resolved.name, Some(p.owner), Some(flags), value)
                 .unwrap();
         }
     }
@@ -267,7 +260,7 @@ pub fn read_textdump<T: io::Read>(
                 iobj: cv_aspec_flag(iobjflags),
             };
 
-            let names: Vec<&str> = v.name.split(' ').collect();
+            let names: Vec<_> = v.name.split(' ').map(Symbol::mk).collect();
 
             let program = match td.verbs.get(&(*objid, vn)) {
                 Some(verb) if verb.program.is_some() => compile(
@@ -288,7 +281,7 @@ pub fn read_textdump<T: io::Read>(
             loader
                 .add_verb(
                     objid,
-                    names.clone(),
+                    &names,
                     &v.owner,
                     flags,
                     argspec,

@@ -38,7 +38,8 @@ use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
 use moor_db::db_counters;
 use moor_var::VarType::TYPE_STR;
 use moor_var::{
-    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Symbol, v_bool_int, v_list_iter,
+    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Symbol, v_arc_string, v_bool_int,
+    v_list_iter,
 };
 use moor_var::{Sequence, v_map};
 use moor_var::{Var, v_float, v_int, v_list, v_obj, v_str, v_string};
@@ -51,7 +52,7 @@ pub(crate) fn bf_noop(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     );
     Err(BfErr::Raise(E_INVIND.with_msg_and_value(
         || format!("Builtin {} is not implemented", bf_args.name),
-        v_str(bf_args.name.as_str()),
+        v_arc_string(bf_args.name.as_arc_string()),
     )))
 }
 
@@ -756,7 +757,7 @@ fn bf_queued_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let y = v_bool_int(false);
         let programmer = v_obj(task.permissions);
         let verb_loc = v_obj(task.verb_definer);
-        let verb_name = v_str(task.verb_name.as_str());
+        let verb_name = v_arc_string(task.verb_name.as_arc_string());
         let line = v_int(task.line_number as i64);
         let this = task.this.clone();
         v_list(&[
@@ -802,11 +803,11 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     });
 
-    let sym_or_str = |s| {
+    let sym_or_str = |s: Symbol| {
         if bf_args.config.symbol_type {
-            v_sym(Symbol::mk(s))
+            v_sym(s)
         } else {
-            v_str(s)
+            v_arc_string(s.as_arc_string())
         }
     };
 
@@ -820,7 +821,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 player,
                 command,
             } => v_list(&[
-                sym_or_str("command"),
+                sym_or_str(Symbol::mk("command")),
                 v_obj(*handler_object),
                 v_obj(*player),
                 v_str(command),
@@ -830,7 +831,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 player,
                 command,
             } => v_list(&[
-                sym_or_str("do_command"),
+                sym_or_str(Symbol::mk("do_command")),
                 v_obj(*handler_object),
                 v_obj(*player),
                 v_str(command),
@@ -842,10 +843,10 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 args,
                 argstr,
             } => v_list(&[
-                sym_or_str("verb"),
+                sym_or_str(Symbol::mk("verb")),
                 v_obj(*player),
                 vloc.clone(),
-                sym_or_str(verb.as_str()),
+                sym_or_str(*verb),
                 v_list_iter(args.iter()),
                 v_str(argstr),
             ]),
@@ -857,10 +858,20 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 let parent_task = v_int(fork_request.parent_task_id as i64);
                 let perms = v_obj(fork_request.progr);
                 let verb_loc = v_obj(fork_request.activation.verbdef.location());
-                let verb_name = v_str(fork_request.activation.verbdef.names().join(" ").as_str());
+                let verb_name = v_str(
+                    fork_request
+                        .activation
+                        .verbdef
+                        .names()
+                        .iter()
+                        .map(|s| s.as_string())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .as_str(),
+                );
                 let args = v_list_iter(fork_request.activation.args.iter());
                 v_list(&[
-                    sym_or_str("fork"),
+                    sym_or_str(Symbol::mk("fork")),
                     player,
                     perms,
                     parent_task,
@@ -870,7 +881,7 @@ fn bf_active_tasks(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 ])
             }
             TaskStart::StartEval { player, program: _ } => {
-                v_list(&[sym_or_str("eval"), v_obj(*player)])
+                v_list(&[sym_or_str(Symbol::mk("eval")), v_obj(*player)])
             }
         };
         let entry = v_list(&[task_id, player_id, task_start]);
@@ -1185,7 +1196,7 @@ fn bf_function_info_to_list(bf: &Builtin) -> Var {
     });
 
     v_list(&[
-        v_str(bf.name.as_str()),
+        v_arc_string(bf.name.as_arc_string()),
         min_args,
         max_args,
         v_list_iter(types),
@@ -1540,7 +1551,7 @@ fn counter_map(counters: &[&PerfCounter], use_symbols: bool) -> Var {
         let op_name = if use_symbols {
             v_sym(c.operation)
         } else {
-            v_str(c.operation.as_str())
+            v_arc_string(c.operation.as_arc_string())
         };
 
         result.push((
@@ -1663,7 +1674,7 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::Map(m) => {
                 for (k, v) in m.iter() {
                     let key = k.as_symbol().map_err(ErrValue)?;
-                    if key.as_str() == "timeout_seconds" {
+                    if key.as_string() == "timeout_seconds" {
                         if let Some(secs) = v.as_float() {
                             timeout = Some(Duration::from_secs_f64(secs));
                         }
@@ -1675,7 +1686,7 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     match pair.variant() {
                         Variant::List(pair_list) if pair_list.len() == 2 => {
                             let key = pair_list[0].as_symbol().map_err(ErrValue)?;
-                            if key.as_str() == "timeout_seconds" {
+                            if key.as_string() == "timeout_seconds" {
                                 if let Some(secs) = pair_list[1].as_float() {
                                     timeout = Some(Duration::from_secs_f64(secs));
                                 }

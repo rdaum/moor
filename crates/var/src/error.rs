@@ -110,7 +110,7 @@ impl ErrorCode {
             "E_FILE" => Some(E_FILE),
             "E_EXEC" => Some(E_EXEC),
             "E_INTRPT" => Some(E_INTRPT),
-            s => Some(ErrCustom(Symbol::mk_case_insensitive(s))),
+            s => Some(ErrCustom(Symbol::mk(s))),
         }
     }
 }

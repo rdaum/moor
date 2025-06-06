@@ -70,7 +70,7 @@ impl BfCounters {
     pub fn new() -> Self {
         let mut counters = Vec::with_capacity(BUILTINS.number_of());
         for b in BUILTINS.names.values() {
-            counters.push(PerfCounter::new(b.as_str()));
+            counters.push(PerfCounter::new(*b));
         }
         Self(counters)
     }

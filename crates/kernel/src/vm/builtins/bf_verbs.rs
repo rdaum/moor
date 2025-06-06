@@ -86,7 +86,11 @@ fn bf_verb_info(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let perms_string = verb_perms_string(perms);
 
     // Join names into a single string, this is how MOO presents it.
-    let verb_names = names.join(" ");
+    let verb_names = names
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let result = v_list(&[v_obj(owner), v_string(perms_string), v_string(verb_names)]);
     Ok(Ret(result))
@@ -148,7 +152,7 @@ fn parse_verb_info(info: &List) -> Result<VerbAttrs, Error> {
             let name_strings = names
                 .as_str()
                 .split(' ')
-                .map(Symbol::mk_case_insensitive)
+                .map(Symbol::mk)
                 .collect::<Vec<_>>();
 
             Ok(VerbAttrs {
@@ -672,7 +676,13 @@ fn bf_respond_to(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map_err(world_state_bf_err)?
         || oflags.contains(ObjFlag::Read)
     {
-        let names = v_str(&vd.names().join(" "));
+        let names = v_string(
+            vd.names()
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
         let result = v_list(&[v_obj(vd.location()), names]);
         Ok(Ret(result))
     } else {

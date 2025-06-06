@@ -199,11 +199,10 @@ impl<'a> ObjectDefinitionLoader<'a> {
     pub fn define_verbs(&mut self) -> Result<(), DirDumpReaderError> {
         for (obj, (path, def)) in &self.object_definitions {
             for v in &def.verbs {
-                let names = v.names.iter().map(|s| s.as_str());
                 self.loader
                     .add_verb(
                         obj,
-                        names.collect(),
+                        &v.names,
                         &v.owner,
                         v.flags,
                         v.argspec,
@@ -228,7 +227,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                     .define_property(
                         obj,
                         obj,
-                        pd.name.as_str(),
+                        pd.name,
                         &pd.perms.owner(),
                         pd.perms.flags(),
                         pd.value.clone(),
@@ -237,7 +236,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         DirDumpReaderError::CouldNotDefineProperty(
                             path.clone(),
                             *obj,
-                            pd.name.as_str().to_string(),
+                            (*pd.name.as_arc_string()).clone(),
                             wse,
                         )
                     })?;
@@ -254,7 +253,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                 self.loader
                     .set_property(
                         obj,
-                        pv.name.as_str(),
+                        pv.name,
                         pu.as_ref().map(|p| p.owner()),
                         pu.as_ref().map(|p| p.flags()),
                         pv.value.clone(),
@@ -263,7 +262,7 @@ impl<'a> ObjectDefinitionLoader<'a> {
                         DirDumpReaderError::CouldNotOverrideProperty(
                             path.clone(),
                             *obj,
-                            pv.name.as_str().to_string(),
+                            (*pv.name.as_arc_string()).clone(),
                             wse,
                         )
                     })?;
@@ -406,7 +405,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(v.unwrap().1.names().contains(&"look"));
+        assert!(v.unwrap().1.names().contains(&Symbol::mk("look")));
 
         let p = ws
             .retrieve_property(&SYSTEM_OBJECT, &Obj::mk_id(2), Symbol::mk("description"))

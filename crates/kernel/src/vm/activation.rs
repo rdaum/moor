@@ -25,10 +25,10 @@ use moor_common::model::VerbFlag;
 use moor_common::util::BitEnum;
 use moor_compiler::BuiltinId;
 use moor_compiler::Program;
-use moor_var::Obj;
 use moor_var::{AsByteBuffer, Symbol};
 use moor_var::{Error, v_empty_str};
 use moor_var::{List, NOTHING};
+use moor_var::{Obj, v_arc_string};
 use moor_var::{Var, v_empty_list, v_obj, v_str, v_string};
 
 use crate::vm::VerbExecutionRequest;
@@ -236,7 +236,7 @@ impl Activation {
         frame.set_global_variable(GlobalName::caller, verb_call_request.call.caller.clone());
         frame.set_global_variable(
             GlobalName::verb,
-            v_str(verb_call_request.call.verb_name.as_str()),
+            v_arc_string(verb_call_request.call.verb_name.as_arc_string()),
         );
         frame.set_global_variable(GlobalName::args, verb_call_request.call.args.clone().into());
 
@@ -295,7 +295,7 @@ impl Activation {
             Uuid::new_v4(),
             NOTHING,
             NOTHING,
-            &["eval"],
+            &[Symbol::mk("eval")],
             BitEnum::new_with(VerbFlag::Exec) | VerbFlag::Debug,
             VerbArgsSpec::this_none_this(),
         );
@@ -338,7 +338,7 @@ impl Activation {
             Uuid::new_v4(),
             NOTHING,
             NOTHING,
-            &[bf_name.as_str()],
+            &[bf_name],
             BitEnum::new_with(VerbFlag::Exec),
             VerbArgsSpec::this_none_this(),
         );

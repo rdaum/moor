@@ -292,7 +292,7 @@ pub mod vm_test_utils {
         args: List,
     ) -> ExecResult {
         execute(world_state, session, builtins, |world_state, vm_host| {
-            let verb_name = Symbol::mk_case_insensitive(verb_name);
+            let verb_name = Symbol::mk(verb_name);
             let (program, verbdef) = world_state
                 .find_method_verb_on(&SYSTEM_OBJECT, &SYSTEM_OBJECT, verb_name)
                 .unwrap();

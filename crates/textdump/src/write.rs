@@ -60,7 +60,7 @@ impl<W: io::Write> TextdumpWriter<W> {
                 self.writer,
                 "{}\n{}",
                 VarType::TYPE_SYMBOL as i64,
-                s.as_str()
+                s.as_arc_string()
             )?,
             Variant::Obj(o) => {
                 writeln!(self.writer, "{}\n{}", VarType::TYPE_OBJ as u64, o.id().0)?;

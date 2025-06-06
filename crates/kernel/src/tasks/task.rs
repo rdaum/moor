@@ -606,7 +606,7 @@ impl Task {
             }
         };
         let verb_call = VerbCall {
-            verb_name: Symbol::mk_case_insensitive(parsed_command.verb.as_str()),
+            verb_name: parsed_command.verb,
             location: v_obj(target),
             this: v_obj(target),
             player: *player,
@@ -644,7 +644,7 @@ fn find_verb_for_command(
         let match_result = ws.find_command_verb_on(
             player,
             &target,
-            Symbol::mk_case_insensitive(pc.verb.as_str()),
+            pc.verb,
             &pc.dobj.unwrap_or(NOTHING),
             pc.prep,
             &pc.iobj.unwrap_or(NOTHING),

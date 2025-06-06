@@ -83,12 +83,13 @@ impl Names {
         }
     }
 
-    pub fn find_name(&self, name: &str) -> Option<Name> {
+    pub fn find_name(&self, name: impl Into<Symbol>) -> Option<Name> {
+        let name = name.into();
         for (n, vr) in self.bound.iter() {
             let Named(sym) = vr.nr else {
                 continue;
             };
-            if sym.as_str() == name {
+            if sym == name {
                 return Some(*n);
             }
         }

@@ -177,12 +177,11 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
                         // Collect them into two iterators,
                         let slot_pairs = next.clone().into_inner().chunks(2);
                         for mut pair in &slot_pairs {
-                            let slot_name =
-                                Symbol::mk_case_insensitive(pair.next().unwrap().as_str());
+                            let slot_name = Symbol::mk(pair.next().unwrap().as_str());
 
                             // "delegate" and "slots" are forbidden slot names.
-                            if slot_name == Symbol::mk_case_insensitive("delegate")
-                                || slot_name == Symbol::mk_case_insensitive("slots")
+                            if slot_name == Symbol::mk("delegate")
+                                || slot_name == Symbol::mk("slots")
                             {
                                 return Err(VerbCompileError(CompileError::BadSlotName(
                                     CompileContext::new(next.line_col()),

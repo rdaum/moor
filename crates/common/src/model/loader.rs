@@ -23,8 +23,8 @@ use crate::model::{ObjAttrs, PropPerms};
 use crate::model::{PropDef, PropDefs};
 use crate::program::ProgramType;
 use crate::util::BitEnum;
-use moor_var::Obj;
 use moor_var::Var;
+use moor_var::{Obj, Symbol};
 
 /// Interface exposed to be used by the textdump/objdef loader. Overlap of functionality with what
 /// WorldState could provide, but potentially different constraints/semantics (e.g. no perms checks)
@@ -43,7 +43,7 @@ pub trait LoaderInterface: Send {
     fn add_verb(
         &mut self,
         obj: &Obj,
-        names: Vec<&str>,
+        names: &[Symbol],
         owner: &Obj,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
@@ -54,7 +54,7 @@ pub trait LoaderInterface: Send {
         &mut self,
         definer: &Obj,
         objid: &Obj,
-        propname: &str,
+        propname: Symbol,
         owner: &Obj,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
@@ -63,7 +63,7 @@ pub trait LoaderInterface: Send {
     fn set_property(
         &mut self,
         objid: &Obj,
-        propname: &str,
+        propname: Symbol,
         owner: Option<Obj>,
         flags: Option<BitEnum<PropFlag>>,
         value: Option<Var>,

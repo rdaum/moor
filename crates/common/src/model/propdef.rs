@@ -29,12 +29,12 @@ pub struct PropDef {
 
 impl PropDef {
     #[must_use]
-    pub fn new(uuid: Uuid, definer: Obj, location: Obj, name: &str) -> Self {
+    pub fn new(uuid: Uuid, definer: Obj, location: Obj, name: Symbol) -> Self {
         Self {
             uuid,
             definer,
             location,
-            name: Symbol::mk(name),
+            name,
         }
     }
 
@@ -48,17 +48,17 @@ impl PropDef {
     }
 
     #[must_use]
-    pub fn name(&self) -> &str {
-        self.name.as_str()
+    pub fn name(&self) -> Symbol {
+        self.name
     }
 }
 
 impl Named for PropDef {
     fn matches_name(&self, name: Symbol) -> bool {
-        self.name().to_lowercase() == name.as_str()
+        self.name() == name
     }
 
-    fn names(&self) -> Vec<&str> {
+    fn names(&self) -> Vec<Symbol> {
         vec![self.name()]
     }
 }
@@ -81,9 +81,14 @@ mod tests {
 
     #[test]
     fn test_in_propdefs() {
-        let test_pd1 = PropDef::new(Uuid::new_v4(), Obj::mk_id(1), Obj::mk_id(2), "test");
+        let test_pd1 = PropDef::new(Uuid::new_v4(), Obj::mk_id(1), Obj::mk_id(2), "test".into());
 
-        let test_pd2 = PropDef::new(Uuid::new_v4(), Obj::mk_id(10), Obj::mk_id(12), "test2");
+        let test_pd2 = PropDef::new(
+            Uuid::new_v4(),
+            Obj::mk_id(10),
+            Obj::mk_id(12),
+            "test2".into(),
+        );
 
         let pds = PropDefs::empty().with_all_added(&[test_pd1.clone(), test_pd2.clone()]);
         let pd1 = pds.find_first_named(Symbol::mk("test")).unwrap();
@@ -92,7 +97,7 @@ mod tests {
 
     #[test]
     fn test_clone_compare() {
-        let pd = PropDef::new(Uuid::new_v4(), Obj::mk_id(1), Obj::mk_id(2), "test");
+        let pd = PropDef::new(Uuid::new_v4(), Obj::mk_id(1), Obj::mk_id(2), "test".into());
         let pd2 = pd.clone();
         assert_eq!(pd, pd2);
         assert_eq!(pd.uuid(), pd2.uuid());
@@ -104,9 +109,19 @@ mod tests {
     #[test]
     fn test_propdefs_iter() {
         let pds_vec = vec![
-            PropDef::new(Uuid::new_v4(), Obj::mk_id(1), Obj::mk_id(2), "test1"),
-            PropDef::new(Uuid::new_v4(), Obj::mk_id(10), Obj::mk_id(12), "test2"),
-            PropDef::new(Uuid::new_v4(), Obj::mk_id(100), Obj::mk_id(120), "test3"),
+            PropDef::new(Uuid::new_v4(), Obj::mk_id(1), Obj::mk_id(2), "test1".into()),
+            PropDef::new(
+                Uuid::new_v4(),
+                Obj::mk_id(10),
+                Obj::mk_id(12),
+                "test2".into(),
+            ),
+            PropDef::new(
+                Uuid::new_v4(),
+                Obj::mk_id(100),
+                Obj::mk_id(120),
+                "test3".into(),
+            ),
         ];
 
         let pds = PropDefs::from_items(&pds_vec);

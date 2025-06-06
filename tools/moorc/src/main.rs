@@ -305,8 +305,8 @@ fn main() {
             if let Ok(verbs) = tx.verbs(&wizard, &o) {
                 for verb in verbs.iter() {
                     for name in verb.names() {
-                        if name.starts_with("test_") {
-                            unit_tests.push((o, Symbol::mk(name)));
+                        if name.as_arc_string().starts_with("test_") {
+                            unit_tests.push((o, name));
                         }
                     }
                 }

@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::warn;
 
-use moor_var::{ErrorCode, Var, v_str};
+use moor_var::{ErrorCode, Var, v_arc_string};
 use moor_var::{Variant, v_sym};
 
 use crate::Op::{
@@ -598,7 +598,7 @@ impl CodegenState {
                 self.generate_expr(delegate.as_ref())?;
                 for (k, v) in slots {
                     self.generate_expr(v)?;
-                    self.generate_expr(&Expr::Value(v_str(k.as_str())))?;
+                    self.generate_expr(&Expr::Value(v_arc_string(k.as_arc_string())))?;
                 }
                 self.generate_arg_list(contents)?;
                 self.emit(Op::MakeFlyweight(slots.len()));

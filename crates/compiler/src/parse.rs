@@ -421,13 +421,11 @@ impl TreeTransformer {
                                     // Collect them into two iterators,
                                     let slot_pairs = next.clone().into_inner().chunks(2);
                                     for mut pair in &slot_pairs {
-                                        let slot_name = Symbol::mk_case_insensitive(
-                                            pair.next().unwrap().as_str(),
-                                        );
+                                        let slot_name = Symbol::mk(pair.next().unwrap().as_str());
 
                                         // "delegate" and "slots" are forbidden slot names.
-                                        if slot_name == Symbol::mk_case_insensitive("delegate")
-                                            || slot_name == Symbol::mk_case_insensitive("slots")
+                                        if slot_name == Symbol::mk("delegate")
+                                            || slot_name == Symbol::mk("slots")
                                         {
                                             return Err(CompileError::BadSlotName(
                                                 self.compile_context(&next),
@@ -461,7 +459,7 @@ impl TreeTransformer {
                             .clone()
                             .parse_arglist(inner.next().unwrap().into_inner())?;
                         Ok(Expr::Call {
-                            function: Symbol::mk_case_insensitive(bf),
+                            function: Symbol::mk(bf),
                             args,
                         })
                     }

@@ -232,7 +232,7 @@ impl<'a> Unparse<'a> {
             }
             Expr::Call { function, args } => {
                 let mut buffer = String::new();
-                buffer.push_str(function.as_str());
+                buffer.push_str(&function.as_arc_string());
                 buffer.push('(');
                 buffer.push_str(self.unparse_args(args)?.as_str());
                 buffer.push(')');
@@ -335,11 +335,12 @@ impl<'a> Unparse<'a> {
                     }
                     let name = self.unparse_name(&var.id);
                     buffer.push_str(
-                        self.tree
+                        &self
+                            .tree
                             .names
                             .name_of(&name)
                             .ok_or(DecompileError::NameNotFound(name))?
-                            .as_str(),
+                            .as_arc_string(),
                     );
                     if let Some(expr) = &var.expr {
                         buffer.push_str(" = ");
@@ -362,7 +363,7 @@ impl<'a> Unparse<'a> {
                 if !slots.is_empty() {
                     buffer.push_str(", [");
                     for (i, (slot, value)) in slots.iter().enumerate() {
-                        buffer.push_str(slot.as_str());
+                        buffer.push_str(&slot.as_arc_string());
                         buffer.push_str(" -> ");
                         buffer.push_str(self.unparse_expr(value)?.as_str());
                         if i + 1 < slots.len() {
@@ -401,7 +402,7 @@ impl<'a> Unparse<'a> {
                     .names
                     .name_of(&self.unparse_name(variable))
                     .unwrap();
-                buffer.push_str(name.as_str());
+                buffer.push_str(&name.as_arc_string());
                 buffer.push_str(" in [");
                 buffer.push_str(&self.unparse_expr(from)?);
                 buffer.push_str("..");
@@ -427,7 +428,7 @@ impl<'a> Unparse<'a> {
                     .names
                     .name_of(&self.unparse_name(variable))
                     .unwrap();
-                buffer.push_str(name.as_str());
+                buffer.push_str(&name.as_arc_string());
                 buffer.push_str(" in (");
                 buffer.push_str(&self.unparse_expr(list)?);
                 buffer.push_str(") }");
@@ -545,11 +546,12 @@ impl<'a> Unparse<'a> {
                     let id = self.unparse_name(id);
 
                     base_str.push_str(
-                        self.tree
+                        &self
+                            .tree
                             .names
                             .name_of(&id)
                             .ok_or(DecompileError::NameNotFound(id))?
-                            .as_str(),
+                            .as_arc_string(),
                     );
                 }
                 stmt_lines.push(format!("{}({})", base_str, cond_frag));
@@ -568,11 +570,12 @@ impl<'a> Unparse<'a> {
                     let id = self.unparse_name(id);
 
                     base_str.push_str(
-                        self.tree
+                        &self
+                            .tree
                             .names
                             .name_of(&id)
                             .ok_or(DecompileError::NameNotFound(id))?
-                            .as_str(),
+                            .as_arc_string(),
                     );
                 }
                 stmt_lines.push(format!("{} ({})", base_str, delay_frag));
@@ -598,11 +601,12 @@ impl<'a> Unparse<'a> {
                         let id = self.unparse_name(id);
 
                         base_str.push_str(
-                            self.tree
+                            &self
+                                .tree
                                 .names
                                 .name_of(&id)
                                 .ok_or(DecompileError::NameNotFound(id))?
-                                .as_str(),
+                                .as_arc_string(),
                         );
                         base_str.push(' ');
                     }
@@ -637,11 +641,12 @@ impl<'a> Unparse<'a> {
                     let exit = self.unparse_name(exit);
 
                     base_str.push_str(
-                        self.tree
+                        &self
+                            .tree
                             .names
                             .name_of(&exit)
                             .ok_or(DecompileError::NameNotFound(exit))?
-                            .as_str(),
+                            .as_arc_string(),
                     );
                 }
                 base_str.push(';');
@@ -654,11 +659,12 @@ impl<'a> Unparse<'a> {
                     let exit = self.unparse_name(exit);
 
                     base_str.push_str(
-                        self.tree
+                        &self
+                            .tree
                             .names
                             .name_of(&exit)
                             .ok_or(DecompileError::NameNotFound(exit))?
-                            .as_str(),
+                            .as_arc_string(),
                     );
                 }
                 base_str.push(';');
@@ -878,7 +884,7 @@ pub fn to_literal(v: &Var) -> String {
                     if i > 0 {
                         result.push_str(", ");
                     }
-                    result.push_str(k.as_str());
+                    result.push_str(&k.as_arc_string());
                     result.push_str(" -> ");
                     result.push_str(to_literal(v).as_str());
                 }
@@ -900,7 +906,7 @@ pub fn to_literal(v: &Var) -> String {
             result
         }
         Variant::Sym(s) => {
-            format!("'{}", s.as_str())
+            format!("'{}", s.as_arc_string())
         }
         Variant::Binary(b) => {
             let encoded = general_purpose::URL_SAFE.encode(b.as_bytes());
@@ -959,7 +965,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
                     if i > 0 {
                         result.push_str(", ");
                     }
-                    result.push_str(k.as_str());
+                    result.push_str(&k.as_arc_string());
                     result.push_str(" -> ");
                     result.push_str(to_literal_objsub(v, name_subs).as_str());
                 }

@@ -236,7 +236,7 @@ impl Var {
     /// Otherwise, E_TYPE
     pub fn as_symbol(&self) -> Result<Symbol, Error> {
         match self.variant() {
-            Variant::Str(s) => Ok(Symbol::mk_case_insensitive(s.as_str())),
+            Variant::Str(s) => Ok(Symbol::mk(s.as_str())),
             Variant::Sym(s) => Ok(*s),
             Variant::Err(e) => Ok(e.name()),
             _ => Err(E_TYPE.with_msg(|| {
@@ -739,6 +739,34 @@ pub fn v_str(s: &str) -> Var {
 #[inline(always)]
 pub fn v_string(s: String) -> Var {
     Var::mk_str(&s)
+}
+
+#[inline(always)]
+pub fn v_arc_string(s: std::sync::Arc<String>) -> Var {
+    let str_val = crate::string::Str::mk_arc_str(s);
+    Var::from_variant(crate::variant::Variant::Str(str_val))
+}
+
+#[cfg(test)]
+mod v_arc_string_tests {
+    use super::*;
+    use crate::variant::Variant;
+    
+    #[test]
+    fn test_v_arc_string() {
+        let arc_string = std::sync::Arc::new("test_string".to_string());
+        let var = v_arc_string(arc_string.clone());
+        
+        match var.variant() {
+            Variant::Str(s) => {
+                assert_eq!(s.as_str(), "test_string");
+                assert_eq!(s.as_arc_string().as_ref(), arc_string.as_ref());
+                // Verify it's actually sharing the Arc (same pointer)
+                assert!(std::sync::Arc::ptr_eq(&s.as_arc_string(), &arc_string));
+            }
+            _ => panic!("Expected string variant"),
+        }
+    }
 }
 
 #[inline(always)]

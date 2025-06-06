@@ -133,10 +133,10 @@ impl DbWorldState {
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flatten()
-            .map(|prop| prop.name().to_string())
+            .map(|prop| prop.name())
             .collect();
         for obj_or_descendant_prop in obj_or_descendant_props {
-            if new_parent_or_ancestors_property_names.contains(obj_or_descendant_prop.name()) {
+            if new_parent_or_ancestors_property_names.contains(&obj_or_descendant_prop.name()) {
                 return Err(WorldStateError::ChparentPropertyNameConflict(
                     *obj,
                     *new_parent,
@@ -600,7 +600,7 @@ impl WorldState for DbWorldState {
             .check_object_allows(&obj_owner, objflags, ObjFlag::Write.into())?;
 
         self.get_tx_mut()
-            .add_object_verb(obj, owner, names, program, flags, args)?;
+            .add_object_verb(obj, owner, &names, program, flags, args)?;
         Ok(())
     }
 

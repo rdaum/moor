@@ -18,7 +18,9 @@ use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
 use moor_common::model::WorldState;
 use moor_compiler::{Op, ScatterLabel, to_literal};
-use moor_var::{E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_error};
+use moor_var::{
+    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_error, v_string,
+};
 use moor_var::{
     Error, IndexMode, Obj, Sequence, TypeClass, Var, Variant, v_bool_int, v_empty_list,
     v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_str, v_sym,
@@ -1084,7 +1086,7 @@ fn get_property(
                             if features_config.use_symbols_in_builtins {
                                 v_sym(*k)
                             } else {
-                                v_str(k.as_str())
+                                v_arc_string(k.as_arc_string())
                             },
                             v.clone(),
                         )

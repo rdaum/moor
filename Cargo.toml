@@ -114,11 +114,13 @@ ahash = "0.8"
 arc-swap = "1.7"
 binary-layout = "4.0"
 bincode = { version = "2.0", features = ["serde"] }
+boxcar = "0.2"
 byteview = "0.6"
 chrono = "0.4"
 criterion = { version = "0.6", features = ["async_tokio"] }
 crossbeam-channel = "0.5"
 crossbeam-utils = "0.8"
+dashmap = "6.1"
 encoding_rs = "0.8"
 enum-primitive-derive = "0.3"
 fast-counter = "1.0"
@@ -200,3 +202,7 @@ csv = "1.3.1"
 
 # Allocation
 tikv-jemallocator = "0.6"
+
+
+once_cell = { version = "1.21" } # Added sync feature
+parking_lot = "0.12"

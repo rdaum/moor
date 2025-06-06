@@ -39,7 +39,7 @@ impl VerbDef {
         uuid: Uuid,
         location: Obj,
         owner: Obj,
-        names: &[&str],
+        names: &[Symbol],
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
     ) -> Self {
@@ -49,7 +49,7 @@ impl VerbDef {
             owner,
             flags,
             args,
-            names: names.iter().map(|s| (*s).into()).collect(),
+            names: names.to_vec(),
         }
     }
 
@@ -94,11 +94,11 @@ impl Named for VerbDef {
     fn matches_name(&self, name: Symbol) -> bool {
         self.names()
             .iter()
-            .any(|verb| verbname_cmp(verb.to_lowercase().as_str(), name.as_str()))
+            .any(|verb| verbname_cmp(&verb.as_arc_str(), &name.as_arc_str()))
     }
 
-    fn names(&self) -> Vec<&str> {
-        self.names.iter().map(|s| s.as_str()).collect()
+    fn names(&self) -> Vec<Symbol> {
+        self.names.clone()
     }
 }
 

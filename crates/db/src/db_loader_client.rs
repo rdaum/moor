@@ -51,23 +51,14 @@ impl LoaderInterface for DbWorldState {
     fn add_verb(
         &mut self,
         obj: &Obj,
-        names: Vec<&str>,
+        names: &[Symbol],
         owner: &Obj,
         flags: BitEnum<VerbFlag>,
         args: VerbArgsSpec,
         program: ProgramType,
     ) -> Result<(), WorldStateError> {
-        self.get_tx_mut().add_object_verb(
-            obj,
-            owner,
-            names
-                .iter()
-                .map(|s| Symbol::mk_case_insensitive(s))
-                .collect(),
-            program,
-            flags,
-            args,
-        )?;
+        self.get_tx_mut()
+            .add_object_verb(obj, owner, names, program, flags, args)?;
         Ok(())
     }
 
@@ -75,33 +66,25 @@ impl LoaderInterface for DbWorldState {
         &mut self,
         definer: &Obj,
         objid: &Obj,
-        propname: &str,
+        propname: Symbol,
         owner: &Obj,
         flags: BitEnum<PropFlag>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
-        self.get_tx_mut().define_property(
-            definer,
-            objid,
-            Symbol::mk_case_insensitive(propname),
-            owner,
-            flags,
-            value,
-        )?;
+        self.get_tx_mut()
+            .define_property(definer, objid, propname, owner, flags, value)?;
         Ok(())
     }
     fn set_property(
         &mut self,
         objid: &Obj,
-        propname: &str,
+        propname: Symbol,
         owner: Option<Obj>,
         flags: Option<BitEnum<PropFlag>>,
         value: Option<Var>,
     ) -> Result<(), WorldStateError> {
         // First find the property.
-        let (propdef, _, _, _) = self
-            .get_tx()
-            .resolve_property(objid, Symbol::mk_case_insensitive(propname))?;
+        let (propdef, _, _, _) = self.get_tx().resolve_property(objid, propname)?;
 
         // Now set the value if provided.
         if let Some(value) = value {

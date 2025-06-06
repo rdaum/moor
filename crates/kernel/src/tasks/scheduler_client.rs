@@ -83,7 +83,7 @@ impl SchedulerClient {
             .send(SchedulerClientMsg::SubmitVerbTask {
                 player: *player,
                 vloc: vloc.clone(),
-                verb: Symbol::mk_case_insensitive(verb.as_str()),
+                verb,
                 args,
                 argstr,
                 perms: *perms,

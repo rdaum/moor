@@ -20,7 +20,7 @@ use moor_compiler::{
     ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, program_to_tree, to_literal,
     to_literal_objsub, unparse,
 };
-use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_str, v_string};
+use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_str, v_string, v_arc_string};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
@@ -61,7 +61,7 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
                 .get_verb_program(&o, v.uuid())
                 .expect("Failed to get verb binary");
             let ov = ObjVerbDef {
-                names: v.names().iter().map(|s| Symbol::mk(s)).collect(),
+                names: v.names(),
                 argspec: v.args(),
                 owner: v.owner(),
                 flags: v.flags(),
@@ -77,7 +77,7 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
         for (p, (value, perms)) in propdefs.iter() {
             if p.definer() == o {
                 let pd = ObjPropDef {
-                    name: Symbol::mk(p.name()),
+                    name: p.name(),
                     perms: perms.clone(),
                     value: value.clone(),
                 };
@@ -110,7 +110,7 @@ pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDef
                 }
 
                 let ps = ObjPropOverride {
-                    name: Symbol::mk(p.name()),
+                    name: p.name(),
                     perms_update,
                     value: override_value,
                 };
@@ -146,15 +146,15 @@ fn canon_name(oid: &Obj, index_names: &HashMap<Obj, String>) -> String {
 }
 
 fn propname(pname: Symbol) -> String {
-    if !pname.as_str().is_empty()
+    if !pname.as_arc_string().is_empty()
         && pname
             .to_string()
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_')
     {
-        pname.as_str().to_string()
+        (*pname.as_arc_string()).clone()
     } else {
-        let name = v_str(pname.as_str());
+        let name = v_arc_string(pname.as_arc_string());
         to_literal(&name)
     }
 }
@@ -313,7 +313,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '_')
             {
-                v.names[0].as_str().to_string()
+                (*v.names[0].as_arc_string()).clone()
             } else {
                 let names = v
                     .names

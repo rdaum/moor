@@ -35,8 +35,16 @@ impl Str {
         Str(Arc::new(s))
     }
 
+    pub fn mk_arc_str(s: Arc<String>) -> Self {
+        Str(s)
+    }
+
     pub fn as_str(&self) -> &str {
         self.0.as_ref()
+    }
+
+    pub fn as_arc_string(&self) -> Arc<String> {
+        self.0.clone()
     }
 
     pub fn str_append(&self, other: &Self) -> Var {

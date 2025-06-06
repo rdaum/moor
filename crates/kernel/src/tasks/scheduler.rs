@@ -598,7 +598,6 @@ impl Scheduler {
                         .expect("Could not send system property reply");
                     return;
                 };
-                let property = Symbol::mk_case_insensitive(property.as_str());
                 let Ok(property_value) =
                     world_state.retrieve_property(&SYSTEM_OBJECT, &object, property)
                 else {
@@ -653,19 +652,18 @@ impl Scheduler {
 
                 let mut props = Vec::new();
                 for prop in properties.iter() {
-                    let (info, perms) = match world_state.get_property_info(
-                        &perms,
-                        &object,
-                        Symbol::mk(prop.name()),
-                    ) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            reply
-                                .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
-                                .expect("Could not send properties reply");
-                            return;
-                        }
-                    };
+                    let (info, perms) =
+                        match world_state.get_property_info(&perms, &object, prop.name()) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                reply
+                                    .send(Err(CommandExecutionError(CommandError::DatabaseError(
+                                        e,
+                                    ))))
+                                    .expect("Could not send properties reply");
+                                return;
+                            }
+                        };
                     props.push((info, perms));
                 }
 

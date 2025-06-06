@@ -181,7 +181,7 @@ impl<R: Read> TextdumpReader<R> {
             }
             VarType::TYPE_SYMBOL => {
                 let s = self.read_string()?;
-                let s = Symbol::mk_case_insensitive(&s);
+                let s = Symbol::mk(&s);
                 v_sym(s)
             }
             VarType::TYPE_OBJ => v_obj(self.read_objid()?),
@@ -208,7 +208,7 @@ impl<R: Read> TextdumpReader<R> {
                         v_error(etype)
                     }
                     Err(..) => {
-                        let s = Symbol::mk_case_insensitive(&s);
+                        let s = Symbol::mk(&s);
                         v_err(ErrorCode::ErrCustom(s))
                     }
                 }
@@ -444,7 +444,7 @@ impl<R: Read> TextdumpReader<R> {
         let num_pdefs = self.read_num()? as usize;
         let mut propdefs = Vec::with_capacity(num_pdefs);
         for _ in 0..num_pdefs {
-            propdefs.push(self.read_string()?);
+            propdefs.push(Symbol::mk(&self.read_string()?));
         }
         let num_pvals = self.read_num()? as usize;
         let mut propvals = Vec::with_capacity(num_pvals);

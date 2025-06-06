@@ -150,7 +150,12 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
         let verbdefs = db_verbdefs
             .iter()
             .map(|db_verbdef| {
-                let name = db_verbdef.names().join(" ");
+                let name = db_verbdef
+                    .names()
+                    .iter()
+                    .map(|s| (*s.as_arc_string()).clone())
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 let owner = db_verbdef.owner();
                 let (flags, prep) = cv_arg(db_verbdef.flags(), db_verbdef.args());
                 Verbdef {

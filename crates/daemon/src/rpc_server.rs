@@ -667,7 +667,7 @@ impl RpcServer {
                             PropInfo {
                                 definer: propdef.definer(),
                                 location: propdef.location(),
-                                name: Symbol::mk(propdef.name()),
+                                name: propdef.name(),
                                 owner: propperms.owner(),
                                 r: propperms.flags().contains(PropFlag::Read),
                                 w: propperms.flags().contains(PropFlag::Write),
@@ -695,7 +695,7 @@ impl RpcServer {
                             VerbInfo {
                                 location: verbdef.location(),
                                 owner: verbdef.owner(),
-                                names: verbdef.names().iter().map(|s| Symbol::mk(s)).collect(),
+                                names: verbdef.names(),
                                 r: verbdef.flags().contains(VerbFlag::Read),
                                 w: verbdef.flags().contains(VerbFlag::Write),
                                 x: verbdef.flags().contains(VerbFlag::Exec),
@@ -738,7 +738,7 @@ impl RpcServer {
                     .map(|(propdef, propperms)| PropInfo {
                         definer: propdef.definer(),
                         location: propdef.location(),
-                        name: Symbol::mk(propdef.name()),
+                        name: propdef.name(),
                         owner: propperms.owner(),
                         r: propperms.flags().contains(PropFlag::Read),
                         w: propperms.flags().contains(PropFlag::Write),
@@ -764,7 +764,7 @@ impl RpcServer {
                     .map(|v| VerbInfo {
                         location: v.location(),
                         owner: v.owner(),
-                        names: v.names().iter().map(|s| Symbol::mk(s)).collect(),
+                        names: v.names(),
                         r: v.flags().contains(VerbFlag::Read),
                         w: v.flags().contains(VerbFlag::Write),
                         x: v.flags().contains(VerbFlag::Exec),
@@ -1178,7 +1178,6 @@ impl RpcServer {
         verb: Symbol,
         code: Vec<String>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        let verb = Symbol::mk_case_insensitive(verb.as_str());
         match scheduler_client.submit_verb_program(connection, connection, object, verb, code) {
             Ok((obj, verb)) => Ok(DaemonToClientReply::ProgramResponse(
                 VerbProgramResponse::Success(obj, verb.to_string()),

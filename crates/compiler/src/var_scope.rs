@@ -74,7 +74,7 @@ impl VarScope {
 
     /// Find a variable name, or declare in global scope.
     pub fn find_or_add_name_global(&mut self, name: &str, decl_type: DeclType) -> Option<Variable> {
-        let name = Symbol::mk_case_insensitive(name);
+        let name = Symbol::mk(name);
 
         // Check the current scopes, starting at the back (innermost scope)
         for scope in self.scopes.iter().rev() {
@@ -131,7 +131,7 @@ impl VarScope {
     }
 
     pub fn declare_or_use_name(&mut self, name: &str, decl_type: DeclType) -> Variable {
-        let name = Symbol::mk_case_insensitive(name);
+        let name = Symbol::mk(name);
         let unbound_name = self
             .new_unbound_variable(
                 name,
@@ -147,7 +147,7 @@ impl VarScope {
 
     /// Declare a (mutable) name in the current lexical scope.
     pub fn declare_name(&mut self, name: &str, decl_type: DeclType) -> Option<Variable> {
-        let name = Symbol::mk_case_insensitive(name);
+        let name = Symbol::mk(name);
         let unbound_name = self.new_unbound_variable(
             name,
             self.scopes.len() - 1,
@@ -161,7 +161,7 @@ impl VarScope {
 
     /// Declare a (mutable) name in the current lexical scope.
     pub fn declare_const(&mut self, name: &str, decl_type: DeclType) -> Option<Variable> {
-        let name = Symbol::mk_case_insensitive(name);
+        let name = Symbol::mk(name);
         let unbound_name =
             self.new_unbound_variable(name, self.scopes.len() - 1, true, BindMode::New, decl_type)?;
         self.scopes.last_mut().unwrap().push(unbound_name);
@@ -186,7 +186,7 @@ impl VarScope {
 
     /// If the same named variable exists in multiple scopes, return them all as a vector.
     pub fn find_named(&self, name: &str) -> Vec<Variable> {
-        let name = Symbol::mk_case_insensitive(name);
+        let name = Symbol::mk(name);
         let mut names = vec![];
         for Decl {
             identifier: binding,
@@ -202,7 +202,7 @@ impl VarScope {
 
     /// Find the first scoped name in the name table, if it exists.
     pub fn find_name(&self, name: &str) -> Option<Variable> {
-        let name = Named(Symbol::mk_case_insensitive(name));
+        let name = Named(Symbol::mk(name));
         for scope in self.scopes.iter().rev() {
             for n in scope.iter() {
                 if n.nr == name {

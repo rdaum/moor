@@ -211,7 +211,7 @@ mod tests {
         let command = "look obj";
         let pc = DefaultParseCommand::new();
         let parsed = pc.parse_command(command, &SimpleParseMatcher {}).unwrap();
-        assert_eq!(parsed.verb.as_str(), "look");
+        assert_eq!(parsed.verb.as_string(), "look");
         assert_eq!(parsed.dobjstr, Some("obj".to_string()));
         assert_eq!(parsed.dobj, Some(Obj::mk_id(1)));
         assert_eq!(parsed.prepstr, None);
@@ -228,7 +228,7 @@ mod tests {
         let pc = DefaultParseCommand::new();
         let parsed = pc.parse_command(command, &SimpleParseMatcher {}).unwrap();
 
-        assert_eq!(parsed.verb.as_str(), "test");
+        assert_eq!(parsed.verb.as_string(), "test");
         assert_eq!(parsed.dobjstr, Some("arg1 arg2 arg3".to_string()));
         assert_eq!(parsed.prepstr, None);
         assert_eq!(parsed.iobjstr, None);
@@ -247,7 +247,7 @@ mod tests {
         let command = "give obj to player";
         let pc = DefaultParseCommand::new();
         let parsed = pc.parse_command(command, &SimpleParseMatcher {}).unwrap();
-        assert_eq!(parsed.verb.as_str(), "give");
+        assert_eq!(parsed.verb.as_string(), "give");
         assert_eq!(parsed.dobjstr, Some("obj".to_string()));
         assert_eq!(parsed.dobj, Some(Obj::mk_id(1)));
         assert_eq!(parsed.prepstr, Some("to".to_string()));
@@ -267,7 +267,7 @@ mod tests {
         let command = "\"hello, world!";
         let pc = DefaultParseCommand::new();
         let parsed = pc.parse_command(command, &SimpleParseMatcher {}).unwrap();
-        assert_eq!(parsed.verb.as_str(), "say");
+        assert_eq!(parsed.verb.as_string(), "say");
         assert_eq!(parsed.dobjstr, Some("hello, world!".to_string()));
         assert_eq!(parsed.prepstr, None);
         assert_eq!(parsed.iobjstr, None);
@@ -283,7 +283,7 @@ mod tests {
         let command = ":waves happily.";
         let pc = DefaultParseCommand::new();
         let parsed = pc.parse_command(command, &SimpleParseMatcher {}).unwrap();
-        assert_eq!(parsed.verb.as_str(), "emote");
+        assert_eq!(parsed.verb.as_string(), "emote");
         assert_eq!(parsed.dobjstr, Some("waves happily.".to_string()));
         assert_eq!(parsed.prepstr, None);
         assert_eq!(parsed.iobjstr, None);
@@ -299,7 +299,7 @@ mod tests {
         let command = "emote waves happily.";
         let pc = DefaultParseCommand::new();
         let parsed = pc.parse_command(command, &SimpleParseMatcher {}).unwrap();
-        assert_eq!(parsed.verb.as_str(), "emote");
+        assert_eq!(parsed.verb.as_string(), "emote");
         assert_eq!(parsed.dobjstr, Some("waves happily.".to_string()));
         assert_eq!(parsed.prepstr, None);
         assert_eq!(parsed.iobjstr, None);
@@ -315,7 +315,7 @@ mod tests {
         let command = ";1 + 1";
         let pc = DefaultParseCommand::new();
         let parsed = pc.parse_command(command, &SimpleParseMatcher {}).unwrap();
-        assert_eq!(parsed.verb.as_str(), "eval");
+        assert_eq!(parsed.verb.as_string(), "eval");
         assert_eq!(parsed.dobjstr, Some("1 + 1".to_string()));
         assert_eq!(parsed.prepstr, None);
         assert_eq!(parsed.iobjstr, None);
@@ -331,7 +331,7 @@ mod tests {
         let command = "blork \"hello, world!\"";
         let pc = DefaultParseCommand::new();
         let parsed = pc.parse_command(command, &SimpleParseMatcher {}).unwrap();
-        assert_eq!(parsed.verb.as_str(), "blork");
+        assert_eq!(parsed.verb.as_string(), "blork");
         assert_eq!(parsed.dobjstr, Some("hello, world!".to_string()));
         assert_eq!(parsed.prepstr, None);
         assert_eq!(parsed.iobjstr, None);
@@ -347,7 +347,7 @@ mod tests {
         let command = "\"\"hello, world!\"";
         let pc = DefaultParseCommand::new();
         let parsed = pc.parse_command(command, &SimpleParseMatcher {}).unwrap();
-        assert_eq!(parsed.verb.as_str(), "say");
+        assert_eq!(parsed.verb.as_string(), "say");
         assert_eq!(parsed.dobjstr, Some("hello, world!".to_string()));
         assert_eq!(parsed.prepstr, None);
         assert_eq!(parsed.iobjstr, None);
@@ -366,7 +366,7 @@ mod tests {
         };
         let pc = DefaultParseCommand::new();
         let result = pc.parse_command("get thing1", &match_object_fn).unwrap();
-        assert_eq!(result.verb.as_str(), "get".to_string());
+        assert_eq!(result.verb.as_string(), "get".to_string());
         assert_eq!(result.argstr, "thing1".to_string());
         assert_eq!(result.args, vec![v_str("thing1")]);
         assert_eq!(result.dobjstr, Some("thing1".to_string()));
@@ -388,7 +388,7 @@ mod tests {
         let result = DefaultParseCommand::new()
             .parse_command("put thing1 in t2", &match_object_fn)
             .unwrap();
-        assert_eq!(result.verb.as_str(), "put".to_string());
+        assert_eq!(result.verb.as_string(), "put".to_string());
         assert_eq!(result.argstr, "thing1 in t2".to_string());
         assert_eq!(result.args, vec![v_str("thing1"), v_str("in"), v_str("t2")]);
         assert_eq!(result.dobjstr, Some("thing1".to_string()));
@@ -410,7 +410,7 @@ mod tests {
         let result = DefaultParseCommand::new()
             .parse_command("look at here", &match_object_fn)
             .unwrap();
-        assert_eq!(result.verb.as_str(), "look".to_string());
+        assert_eq!(result.verb.as_string(), "look".to_string());
         assert_eq!(result.argstr, "at here".to_string());
         assert_eq!(result.args, vec![v_str("at"), v_str("here"),]);
         assert_eq!(result.dobjstr, None);
@@ -434,7 +434,7 @@ mod tests {
         let result = DefaultParseCommand::new()
             .parse_command("ins 1", &match_object_fn)
             .unwrap();
-        assert_eq!(result.verb.as_str(), "ins".to_string());
+        assert_eq!(result.verb.as_string(), "ins".to_string());
         assert_eq!(result.prep, PrepSpec::None);
         assert_eq!(result.argstr, "1".to_string());
         assert_eq!(result.args, vec![v_str("1")]);

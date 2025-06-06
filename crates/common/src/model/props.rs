@@ -16,9 +16,9 @@ use binary_layout::binary_layout;
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use enum_primitive_derive::Primitive;
-use moor_var::Obj;
 use moor_var::Var;
 use moor_var::{AsByteBuffer, DecodingError, EncodingError};
+use moor_var::{Obj, Symbol};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd, Primitive, Encode, Decode)]
 pub enum PropFlag {
@@ -87,7 +87,7 @@ pub enum PropAttr {
 
 #[derive(Clone, Debug)]
 pub struct PropAttrs {
-    pub name: Option<String>,
+    pub name: Option<Symbol>,
     pub value: Option<Var>,
     pub location: Option<Obj>,
     pub owner: Option<Obj>,

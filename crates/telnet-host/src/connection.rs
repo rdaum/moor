@@ -817,7 +817,7 @@ fn markdown_to_ansi(markdown: &str) -> String {
 fn output_format(content: &Var, content_type: Option<Symbol>) -> Result<String, eyre::Error> {
     match content.variant() {
         Variant::Str(s) => output_str_format(s.as_str(), content_type),
-        Variant::Sym(s) => output_str_format(s.as_str(), content_type),
+        Variant::Sym(s) => output_str_format(&s.as_arc_string(), content_type),
         Variant::List(l) => {
             // If the content is a list, it must be a list of strings.
             let mut output = String::new();
@@ -840,8 +840,8 @@ fn output_str_format(content: &str, content_type: Option<Symbol>) -> Result<Stri
     let Some(content_type) = content_type else {
         return Ok(content.to_string());
     };
-    let content_type = content_type.as_str();
-    Ok(match content_type {
+    let content_type = content_type.as_arc_string();
+    Ok(match content_type.as_str() {
         CONTENT_TYPE_MARKDOWN => markdown_to_ansi(content),
         // text/plain, None, or unknown
         _ => content.to_string(),

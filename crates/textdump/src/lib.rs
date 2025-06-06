@@ -13,8 +13,8 @@
 
 pub use load_textdump::{read_textdump, textdump_load};
 use moor_compiler::CompileOptions;
-use moor_var::Obj;
 use moor_var::Var;
+use moor_var::{Obj, Symbol};
 pub use read::TextdumpReader;
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -206,7 +206,7 @@ pub struct Object {
     pub name: String,
     pub flags: u8,
     pub verbdefs: Vec<Verbdef>,
-    pub propdefs: Vec<String>,
+    pub propdefs: Vec<Symbol>,
     pub propvals: Vec<Propval>,
 }
 

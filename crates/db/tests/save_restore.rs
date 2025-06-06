@@ -96,7 +96,7 @@ mod tests {
         for (o, to) in objects.iter() {
             for (prop_name, prop_value) in to.properties.iter() {
                 let info = tx.get_property_info(&SYSTEM_OBJECT, o, *prop_name).unwrap();
-                assert_eq!(info.0.name(), prop_name.as_str());
+                assert_eq!(info.0.name(), *prop_name);
                 assert_eq!(info.0.location(), *o);
                 assert_eq!(info.0.definer(), *o);
                 assert_eq!(info.1.flags(), BitEnum::new_with(PropFlag::Read));
@@ -134,7 +134,7 @@ mod tests {
         for (o, to) in objects.iter() {
             for (prop_name, prop_value) in to.properties.iter() {
                 let info = tx.get_property_info(&SYSTEM_OBJECT, o, *prop_name).unwrap();
-                assert_eq!(info.0.name(), prop_name.as_str());
+                assert_eq!(info.0.name(), *prop_name);
                 assert_eq!(info.0.location(), *o);
                 assert_eq!(info.0.definer(), *o);
                 assert_eq!(info.1.flags(), BitEnum::new_with(PropFlag::Read));
