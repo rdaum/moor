@@ -492,4 +492,358 @@ mod tests {
             assert!(matches!(check_result, Err(Error::Conflict)));
         }
     }
+
+    #[test]
+    fn test_concurrent_read_write_conflict() {
+        // Test write-after-read dependency: T1 reads, T2 writes, T1 writes
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(10));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let domain = TestDomain(1);
+        
+        let tx_1 = Tx { ts: Timestamp(10) };
+        let tx_2 = Tx { ts: Timestamp(20) };
+
+        // T1 reads the value
+        let mut r_tx_1 = relation.clone().start(&tx_1);
+        let initial_value = r_tx_1.get(&domain).unwrap().unwrap();
+        assert_eq!(initial_value, TestCodomain(10));
+
+        // T2 updates the value
+        let mut r_tx_2 = relation.clone().start(&tx_2);
+        r_tx_2.update(&domain, TestCodomain(20)).unwrap();
+        let ws_2 = r_tx_2.working_set();
+
+        // Commit T2 first
+        {
+            let mut cr_2 = relation.begin_check();
+            cr_2.check(&ws_2).unwrap();
+            cr_2.apply(ws_2).unwrap();
+            let mut r = relation.index.write().unwrap();
+            *r = cr_2.index;
+        }
+
+        // Now T1 tries to update based on its read - this should conflict
+        r_tx_1.update(&domain, TestCodomain(11)).unwrap(); // 10 + 1
+        let ws_1 = r_tx_1.working_set();
+
+        let mut cr_1 = relation.begin_check();
+        let check_result = cr_1.check(&ws_1);
+        assert!(matches!(check_result, Err(Error::Conflict)));
+    }
+
+    #[test]
+    fn test_write_write_conflict() {
+        // Test two transactions updating the same key
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(10));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let domain = TestDomain(1);
+        
+        let tx_1 = Tx { ts: Timestamp(10) };
+        let tx_2 = Tx { ts: Timestamp(20) };
+
+        // Both transactions update the same key
+        let mut r_tx_1 = relation.clone().start(&tx_1);
+        let mut r_tx_2 = relation.clone().start(&tx_2);
+        
+        r_tx_1.update(&domain, TestCodomain(100)).unwrap();
+        r_tx_2.update(&domain, TestCodomain(200)).unwrap();
+        
+        let ws_1 = r_tx_1.working_set();
+        let ws_2 = r_tx_2.working_set();
+
+        // Commit T1 first
+        {
+            let mut cr_1 = relation.begin_check();
+            cr_1.check(&ws_1).unwrap();
+            cr_1.apply(ws_1).unwrap();
+            let mut r = relation.index.write().unwrap();
+            *r = cr_1.index;
+        }
+
+        // T2 should conflict
+        let mut cr_2 = relation.begin_check();
+        let check_result = cr_2.check(&ws_2);
+        assert!(matches!(check_result, Err(Error::Conflict)));
+    }
+
+    #[test]
+    fn test_phantom_read_protection() {
+        // Test that inserts are properly serialized to prevent phantom reads
+        let backing = HashMap::new();
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let domain_1 = TestDomain(1);
+        let domain_2 = TestDomain(2);
+        
+        let tx_1 = Tx { ts: Timestamp(10) };
+        let tx_2 = Tx { ts: Timestamp(20) };
+
+        // T1 scans for all entries (finds none)
+        let mut r_tx_1 = relation.clone().start(&tx_1);
+        let scan_result = r_tx_1.scan(&|_, _| true).unwrap();
+        assert_eq!(scan_result.len(), 0);
+
+        // T2 inserts a new entry
+        let mut r_tx_2 = relation.clone().start(&tx_2);
+        r_tx_2.insert(domain_1.clone(), TestCodomain(100)).unwrap();
+        let ws_2 = r_tx_2.working_set();
+
+        // Commit T2
+        {
+            let mut cr_2 = relation.begin_check();
+            cr_2.check(&ws_2).unwrap();
+            cr_2.apply(ws_2).unwrap();
+            let mut r = relation.index.write().unwrap();
+            *r = cr_2.index;
+        }
+
+        // T1 now inserts another entry - this should succeed since it's a different key
+        r_tx_1.insert(domain_2.clone(), TestCodomain(200)).unwrap();
+        let ws_1 = r_tx_1.working_set();
+
+        let mut cr_1 = relation.begin_check();
+        cr_1.check(&ws_1).unwrap(); // Should not conflict
+        cr_1.apply(ws_1).unwrap();
+    }
+
+    #[test]
+    fn test_delete_insert_sequence() {
+        // Test delete in one transaction followed by insert in another
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(10));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let domain = TestDomain(1);
+        
+        let tx_1 = Tx { ts: Timestamp(10) };
+        let tx_2 = Tx { ts: Timestamp(20) };
+
+        // T1 deletes the entry
+        let mut r_tx_1 = relation.clone().start(&tx_1);
+        r_tx_1.delete(&domain).unwrap();
+        let ws_1 = r_tx_1.working_set();
+
+        // Commit T1 first
+        {
+            let mut cr_1 = relation.begin_check();
+            cr_1.check(&ws_1).unwrap();
+            cr_1.apply(ws_1).unwrap();
+            let mut r = relation.index.write().unwrap();
+            *r = cr_1.index;
+        }
+
+        // Now T2 tries to insert the same key - should succeed since key was deleted
+        let mut r_tx_2 = relation.clone().start(&tx_2);
+        r_tx_2.insert(domain.clone(), TestCodomain(20)).unwrap();
+        let ws_2 = r_tx_2.working_set();
+
+        let mut cr_2 = relation.begin_check();
+        cr_2.check(&ws_2).unwrap();
+        cr_2.apply(ws_2).unwrap();
+
+        // Verify final state
+        assert_eq!(relation.get(&domain).unwrap().unwrap().1, TestCodomain(20));
+    }
+
+    #[test]
+    fn test_update_nonexistent_key() {
+        // Test updating a key that doesn't exist - the update should return None but not error
+        let backing = HashMap::new();
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let domain = TestDomain(1);
+        let tx = Tx { ts: Timestamp(10) };
+
+        let mut r_tx = relation.clone().start(&tx);
+        let result = r_tx.update(&domain, TestCodomain(100)).unwrap();
+        assert_eq!(result, None); // Update of nonexistent key returns None
+        
+        let ws = r_tx.working_set();
+        // The working set should be empty since no actual operation occurred
+        assert_eq!(ws.len(), 0);
+    }
+
+    #[test]
+    fn test_serial_execution_order() {
+        // Test that transactions maintain serializability when executed in timestamp order
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(0));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let domain = TestDomain(1);
+        
+        // Execute transactions in timestamp order
+        for i in 1..=5 {
+            let tx = Tx { ts: Timestamp(i) };
+            let mut r_tx = relation.clone().start(&tx);
+            
+            // Read current value and increment it
+            let current = r_tx.get(&domain).unwrap().unwrap();
+            r_tx.update(&domain, TestCodomain(current.0 + 1)).unwrap();
+            
+            let ws = r_tx.working_set();
+            let mut cr = relation.begin_check();
+            cr.check(&ws).unwrap();
+            cr.apply(ws).unwrap();
+            let mut r = relation.index.write().unwrap();
+            *r = cr.index;
+        }
+
+        // Final value should be 5 (0 + 5 increments)
+        assert_eq!(relation.get(&domain).unwrap().unwrap().1, TestCodomain(5));
+    }
+
+    #[test]
+    fn test_mixed_operations_serialization() {
+        // Test a complex scenario with inserts, updates, and deletes
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(100));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let tx_1 = Tx { ts: Timestamp(10) };
+        let tx_2 = Tx { ts: Timestamp(20) };
+        let tx_3 = Tx { ts: Timestamp(30) };
+
+        // T1: Update existing key and insert new key
+        let mut r_tx_1 = relation.clone().start(&tx_1);
+        r_tx_1.update(&TestDomain(1), TestCodomain(200)).unwrap();
+        r_tx_1.insert(TestDomain(2), TestCodomain(300)).unwrap();
+        let ws_1 = r_tx_1.working_set();
+
+        // T2: Try to update the same key as T1 but to different value
+        let mut r_tx_2 = relation.clone().start(&tx_2);
+        r_tx_2.update(&TestDomain(1), TestCodomain(400)).unwrap();
+        r_tx_2.insert(TestDomain(3), TestCodomain(500)).unwrap();
+        let ws_2 = r_tx_2.working_set();
+
+        // Commit T1 first
+        {
+            let mut cr_1 = relation.begin_check();
+            cr_1.check(&ws_1).unwrap();
+            cr_1.apply(ws_1).unwrap();
+            let mut r = relation.index.write().unwrap();
+            *r = cr_1.index;
+        }
+
+        // T2 should conflict because it tries to update what T1 already updated
+        {
+            let mut cr_2 = relation.begin_check();
+            let check_result = cr_2.check(&ws_2);
+            assert!(matches!(check_result, Err(Error::Conflict)));
+        }
+
+        // T3: Should be able to read T1's committed changes and make updates
+        let mut r_tx_3 = relation.clone().start(&tx_3);
+        let current_val = r_tx_3.get(&TestDomain(1)).unwrap().unwrap();
+        assert_eq!(current_val, TestCodomain(200)); // Should see T1's update
+        r_tx_3.update(&TestDomain(1), TestCodomain(current_val.0 + 100)).unwrap();
+        let ws_3 = r_tx_3.working_set();
+
+        {
+            let mut cr_3 = relation.begin_check();
+            cr_3.check(&ws_3).unwrap();
+            cr_3.apply(ws_3).unwrap();
+            let mut r = relation.index.write().unwrap();
+            *r = cr_3.index;
+        }
+
+        // Verify final state: T1's insert and T3's update should be there
+        assert_eq!(relation.get(&TestDomain(1)).unwrap().unwrap().1, TestCodomain(300));
+        assert_eq!(relation.get(&TestDomain(2)).unwrap().unwrap().1, TestCodomain(300));
+        assert!(relation.get(&TestDomain(3)).unwrap().is_none()); // T2 didn't commit
+    }
+
+    #[test]
+    fn test_timestamp_ordering_enforcement() {
+        // Test that operations respect timestamp ordering for conflict detection
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(100));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let domain = TestDomain(1);
+        
+        // Start both transactions, older one reads first
+        let tx_older = Tx { ts: Timestamp(10) };
+        let tx_newer = Tx { ts: Timestamp(20) };
+        
+        let mut r_tx_older = relation.clone().start(&tx_older);
+        let _old_val = r_tx_older.get(&domain).unwrap().unwrap(); // Read with ts=10
+        
+        // Newer transaction commits first
+        let mut r_tx_newer = relation.clone().start(&tx_newer);
+        r_tx_newer.update(&domain, TestCodomain(200)).unwrap();
+        let ws_newer = r_tx_newer.working_set();
+
+        {
+            let mut cr_newer = relation.begin_check();
+            cr_newer.check(&ws_newer).unwrap();
+            cr_newer.apply(ws_newer).unwrap();
+            let mut r = relation.index.write().unwrap();
+            *r = cr_newer.index;
+        }
+
+        // Now older transaction tries to update - should conflict due to newer timestamp in cache
+        r_tx_older.update(&domain, TestCodomain(300)).unwrap();
+        let ws_older = r_tx_older.working_set();
+
+        let mut cr_older = relation.begin_check();
+        let check_result = cr_older.check(&ws_older);
+        assert!(matches!(check_result, Err(Error::Conflict)));
+    }
+
+    #[test] 
+    fn test_consistent_snapshot_reads() {
+        // Test that reads within a transaction see a consistent snapshot
+        let mut backing = HashMap::new();
+        backing.insert(TestDomain(1), TestCodomain(100));
+        backing.insert(TestDomain(2), TestCodomain(200));
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+        let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
+
+        let tx = Tx { ts: Timestamp(10) };
+        let mut r_tx = relation.clone().start(&tx);
+        
+        // Read both keys - they should be consistent
+        let val1 = r_tx.get(&TestDomain(1)).unwrap().unwrap();
+        let val2 = r_tx.get(&TestDomain(2)).unwrap().unwrap();
+        
+        assert_eq!(val1, TestCodomain(100));
+        assert_eq!(val2, TestCodomain(200));
+        
+        // Update one key based on both reads
+        r_tx.update(&TestDomain(1), TestCodomain(val1.0 + val2.0)).unwrap();
+        
+        let ws = r_tx.working_set();
+        let mut cr = relation.begin_check();
+        cr.check(&ws).unwrap();
+        cr.apply(ws).unwrap();
+        
+        // Commit the changes to the relation
+        let guard = relation.index.write().unwrap();
+        cr.commit(Some(guard));
+        
+        // Verify the update was applied correctly
+        assert_eq!(relation.get(&TestDomain(1)).unwrap().unwrap().1, TestCodomain(300));
+    }
 }
