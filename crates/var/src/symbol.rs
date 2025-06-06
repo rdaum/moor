@@ -11,34 +11,46 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Symbol interning implementation for moor.
+//!
+//! This module provides efficient string interning with case-insensitive comparison
+//! while preserving the original case of strings. Symbols are represented by two IDs:
+//! - `compare_id`: Used for equality comparisons (case-insensitive)
+//! - `repr_id`: Used for retrieving the original string representation
+//!
+//! The implementation is thread-safe and uses lock-free data structures where possible.
+
+use std::fmt::{Debug, Display};
+use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
+
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use serde::{Deserialize, Deserializer, Serialize, Serializer}; // Adjusted Serde imports
-use std::fmt::{Debug, Display};
-use std::hash::{Hash, Hasher}; // Added Hash, Hasher
-
-// --- Lock-Free Global Interner ---
 use boxcar::Vec as BoxcarVec;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
-use parking_lot::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use unicase::UniCase;
 
-// Store all symbol data in a single entry to ensure atomicity
+// ============================================================================
+// Global Interner State
+// ============================================================================
+
+/// Store all symbol data in a single entry to ensure atomicity.
 #[derive(Clone)]
 struct SymbolData {
-    original_string: std::sync::Arc<String>,
+    original_string: Arc<String>,
     repr_id: u32,
     compare_id: u32,
 }
 
-// Container for all case variants of a symbol
+/// Container for all case variants of a symbol.
 struct SymbolGroup {
     compare_id: u32,
-    variants: BoxcarVec<SymbolData>, // all case variants for this compare_id
+    variants: BoxcarVec<SymbolData>,
 }
 
 impl SymbolGroup {
@@ -72,7 +84,7 @@ impl SymbolGroup {
         }
 
         // Push to global boxcar and use returned index as repr_id
-        let arc_string = std::sync::Arc::new(original.to_string());
+        let arc_string = Arc::new(original.to_string());
         let repr_id = global_state.repr_id_to_symbol.push(arc_string.clone()) as u32;
 
         let symbol_data = SymbolData {
@@ -84,27 +96,24 @@ impl SymbolGroup {
         // Push to group's variants boxcar
         self.variants.push(symbol_data.clone());
 
-        // Lock is automatically released here
         symbol_data
     }
 }
 
 struct GlobalInternerState {
-    // Single map: case-insensitive key -> symbol group containing all case variants
-    groups: DashMap<UniCase<String>, std::sync::Arc<SymbolGroup>>,
-    // Fast reverse lookup: repr_id as index -> symbol data
-    repr_id_to_symbol: BoxcarVec<std::sync::Arc<String>>,
-
-    // Atomic counter for compare_id generation
+    /// Single map: case-insensitive key -> symbol group containing all case variants
+    groups: DashMap<UniCase<String>, Arc<SymbolGroup>>,
+    /// Fast reverse lookup: repr_id as index -> symbol data
+    repr_id_to_symbol: BoxcarVec<Arc<String>>,
+    /// Atomic counter for compare_id generation
     next_compare_id: AtomicU32,
-
-    // Lock for atomic reservation of repr_id + boxcar slot (only used for NEW symbols)
+    /// Lock for atomic reservation of repr_id + boxcar slot (only used for NEW symbols)
     allocation_lock: Mutex<()>,
 }
 
 impl GlobalInternerState {
     fn new() -> Self {
-        GlobalInternerState {
+        Self {
             groups: DashMap::new(),
             repr_id_to_symbol: BoxcarVec::new(),
             next_compare_id: AtomicU32::new(0),
@@ -112,7 +121,7 @@ impl GlobalInternerState {
         }
     }
 
-    // Interns a string, returning (compare_id, repr_id)
+    /// Interns a string, returning (compare_id, repr_id).
     fn intern(&self, s: &str) -> (u32, u32) {
         let case_insensitive_key = UniCase::new(s.to_string());
 
@@ -121,7 +130,7 @@ impl GlobalInternerState {
             dashmap::mapref::entry::Entry::Occupied(entry) => entry.get().clone(),
             dashmap::mapref::entry::Entry::Vacant(entry) => {
                 let compare_id = self.next_compare_id.fetch_add(1, Ordering::Relaxed);
-                let group = std::sync::Arc::new(SymbolGroup::new(compare_id));
+                let group = Arc::new(SymbolGroup::new(compare_id));
                 entry.insert(group.clone());
                 group
             }
@@ -133,27 +142,108 @@ impl GlobalInternerState {
         (symbol_data.compare_id, symbol_data.repr_id)
     }
 
-    fn get_string_by_repr_id(&self, repr_id: u32) -> Option<std::sync::Arc<String>> {
+    fn get_string_by_repr_id(&self, repr_id: u32) -> Option<Arc<String>> {
         // Fast O(1) lookup using direct boxcar indexing
         // repr_id == boxcar_index invariant is maintained by using push() return value as repr_id
-        self.repr_id_to_symbol
-            .get(repr_id as usize).cloned()
+        self.repr_id_to_symbol.get(repr_id as usize).cloned()
     }
 }
 
 static GLOBAL_INTERNER: Lazy<GlobalInternerState> = Lazy::new(GlobalInternerState::new);
-// --- End Global Interner ---
+
+// ============================================================================
+// Symbol Type
+// ============================================================================
 
 /// An interned string used for things like verb names and property names.
-/// Not currently a permissible value in Var, but is used throughout the system.
-/// (There will eventually be a TYPE_SYMBOL and a syntax for it in the language, but not for 1.0.)
-#[derive(Copy, Clone)] // Removed Ord, PartialOrd, Hash, Eq, PartialEq for custom impl
+///
+/// Symbols provide case-insensitive equality while preserving the original case
+/// of the string. Two symbols with the same case-insensitive content will be
+/// equal, but may have different string representations.
+///
+/// # Examples
+///
+/// ```
+/// use moor_var::Symbol;
+///
+/// let sym1 = Symbol::mk("Hello");
+/// let sym2 = Symbol::mk("hello");
+/// let sym3 = Symbol::mk("HELLO");
+///
+/// // All are equal (case-insensitive)
+/// assert_eq!(sym1, sym2);
+/// assert_eq!(sym2, sym3);
+///
+/// // But preserve original case
+/// assert_eq!(sym1.as_string(), "Hello");
+/// assert_eq!(sym2.as_string(), "hello");
+/// assert_eq!(sym3.as_string(), "HELLO");
+/// ```
+#[derive(Copy, Clone)]
 pub struct Symbol {
     compare_id: u32,
     repr_id: u32,
 }
 
-// Custom implementations for Eq, PartialEq, Ord, PartialOrd, Hash
+// ============================================================================
+// Core Symbol Implementation
+// ============================================================================
+
+impl Symbol {
+    /// Create a new symbol from a string slice.
+    ///
+    /// This method interns the string, making subsequent creations of symbols
+    /// with the same case-insensitive content very fast.
+    pub fn mk(s: &str) -> Self {
+        let (compare_id, repr_id) = GLOBAL_INTERNER.intern(s);
+        Symbol {
+            compare_id,
+            repr_id,
+        }
+    }
+
+    /// Get the original string as an owned `String`.
+    pub fn as_string(&self) -> String {
+        GLOBAL_INTERNER
+            .get_string_by_repr_id(self.repr_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Symbol: Invalid repr_id {}. String not found in interner.",
+                    self.repr_id
+                )
+            })
+            .as_ref()
+            .clone()
+    }
+
+    /// Get the original string as an `Arc<String>`.
+    ///
+    /// This is more efficient than `as_string()` when you need to share
+    /// the string data or when the string will be cloned multiple times.
+    pub fn as_arc_string(&self) -> Arc<String> {
+        GLOBAL_INTERNER
+            .get_string_by_repr_id(self.repr_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Symbol: Invalid repr_id {}. String not found in interner.",
+                    self.repr_id
+                )
+            })
+    }
+
+    /// Get the original string as an `Arc<str>`.
+    ///
+    /// This provides a string slice that can be shared efficiently.
+    pub fn as_arc_str(&self) -> Arc<str> {
+        let arc_string = self.as_arc_string();
+        Arc::from(arc_string.as_str())
+    }
+}
+
+// ============================================================================
+// Trait Implementations
+// ============================================================================
+
 impl PartialEq for Symbol {
     fn eq(&self, other: &Self) -> bool {
         self.compare_id == other.compare_id
@@ -183,86 +273,6 @@ impl Hash for Symbol {
     }
 }
 
-impl Serialize for Symbol {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.as_arc_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for Symbol {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s: String = Deserialize::deserialize(deserializer)?;
-        let (compare_id, repr_id) = GLOBAL_INTERNER.intern(&s);
-        Ok(Symbol {
-            compare_id,
-            repr_id,
-        })
-    }
-}
-
-impl Symbol {
-    pub fn as_string(&self) -> String {
-        GLOBAL_INTERNER
-            .get_string_by_repr_id(self.repr_id)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Symbol: Invalid repr_id {}. String not found in interner.",
-                    self.repr_id
-                )
-            })
-            .as_ref()
-            .clone()
-    }
-
-    pub fn as_arc_string(&self) -> std::sync::Arc<String> {
-        GLOBAL_INTERNER
-            .get_string_by_repr_id(self.repr_id)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Symbol: Invalid repr_id {}. String not found in interner.",
-                    self.repr_id
-                )
-            })
-    }
-
-    pub fn as_arc_str(&self) -> std::sync::Arc<str> {
-        let arc_string = self.as_arc_string();
-        // Convert Arc<String> to Arc<str>
-        std::sync::Arc::from(arc_string.as_str())
-    }
-
-    pub fn mk(s: &str) -> Self {
-        let (compare_id, repr_id) = GLOBAL_INTERNER.intern(s);
-        Symbol {
-            compare_id,
-            repr_id,
-        }
-    }
-
-    // mk is no longer needed as mk() + case-insensitive Eq/Hash achieves the primary goal.
-    // The old behavior of storing a lowercased string is not the current requirement.
-}
-
-impl From<&str> for Symbol {
-    fn from(s: &str) -> Self {
-        Symbol::mk(s)
-    }
-}
-
-impl From<String> for Symbol {
-    fn from(s: String) -> Self {
-        Symbol::mk(&s)
-    }
-}
-
-impl From<&String> for Symbol {
-    fn from(s: &String) -> Self {
-        Symbol::mk(s.as_str())
-    }
-}
-
-// From<Ustr> is removed as Ustr is no longer the underlying type.
-
 impl Display for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_arc_string().as_ref())
@@ -288,6 +298,49 @@ impl Debug for Symbol {
     }
 }
 
+// ============================================================================
+// Conversion Traits
+// ============================================================================
+
+impl From<&str> for Symbol {
+    fn from(s: &str) -> Self {
+        Symbol::mk(s)
+    }
+}
+
+impl From<String> for Symbol {
+    fn from(s: String) -> Self {
+        Symbol::mk(&s)
+    }
+}
+
+impl From<&String> for Symbol {
+    fn from(s: &String) -> Self {
+        Symbol::mk(s.as_str())
+    }
+}
+
+// ============================================================================
+// Serialization Support
+// ============================================================================
+
+impl Serialize for Symbol {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.as_arc_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Symbol {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        let (compare_id, repr_id) = GLOBAL_INTERNER.intern(&s);
+        Ok(Symbol {
+            compare_id,
+            repr_id,
+        })
+    }
+}
+
 impl Encode for Symbol {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         self.as_arc_string().encode(encoder)
@@ -295,7 +348,6 @@ impl Encode for Symbol {
 }
 
 impl<C> Decode<C> for Symbol {
-    // C is context, not used here
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let s: String = Decode::decode(decoder)?;
         let (compare_id, repr_id) = GLOBAL_INTERNER.intern(&s);
@@ -307,7 +359,6 @@ impl<C> Decode<C> for Symbol {
 }
 
 impl<'de, C> BorrowDecode<'de, C> for Symbol {
-    // C is context
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         // For simplicity and to ensure correct interning, decode to String first.
         // True borrowed interning would be more complex.
@@ -320,10 +371,14 @@ impl<'de, C> BorrowDecode<'de, C> for Symbol {
     }
 }
 
+// ============================================================================
+// Tests
+// ============================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use std::thread;
 
     // Create a fresh Symbol from an isolated interner for testing
@@ -370,9 +425,6 @@ mod tests {
                 .as_ref(),
             original
         );
-
-        // Note: as_string() and as_arc_str() use the global interner,
-        // so they may not work with our test interner
     }
 
     #[test]
@@ -424,8 +476,6 @@ mod tests {
 
     #[test]
     fn test_symbol_hashing() {
-        use std::collections::HashMap;
-
         let sym1 = Symbol::mk("test");
         let sym2 = Symbol::mk("TEST");
         let sym3 = Symbol::mk("different");
@@ -580,7 +630,7 @@ mod tests {
         }
 
         // Group symbols by their string representation
-        let mut by_string = std::collections::HashMap::new();
+        let mut by_string = HashMap::new();
         for sym in all_symbols {
             by_string
                 .entry(sym.as_string())

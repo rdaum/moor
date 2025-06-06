@@ -3166,7 +3166,6 @@ dependencies = [
  "minstant",
  "num-traits",
  "once_cell",
- "parking_lot",
  "paste",
  "perf-event2",
  "serde",
@@ -5580,12 +5579,13 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shuttle"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d9a8db61a44e2b663f169a08206a789bcbd22ba32011e14951562848e7b9c98"
+checksum = "e72e65e5ac3437476a310bd73ec924dc75e3055ffa61f376266f80576f3869ff"
 dependencies = [
  "assoc",
  "bitvec",
+ "cfg-if",
  "generator",
  "hex",
  "owo-colors 3.5.0",

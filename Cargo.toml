@@ -138,7 +138,6 @@ shadow-rs = "1.1"
 similar = "*"
 similar-asserts = "*"
 strum = { version = "0.27", features = ["derive"] }
-ustr = "1.0"
 uuid = { version = "1.16", features = ["v4", "serde"] }
 xml-rs = "0.8"
 
@@ -203,6 +202,7 @@ csv = "1.3.1"
 # Allocation
 tikv-jemallocator = "0.6"
 
-
+# for symtab
+shuttle = "0.8"
 once_cell = { version = "1.21" } # Added sync feature
-parking_lot = "0.12"
+unicase = "2.8"
