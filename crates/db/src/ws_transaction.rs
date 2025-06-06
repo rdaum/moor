@@ -199,11 +199,9 @@ impl WorldStateTransaction {
     }
 
     pub fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError> {
-        self.object_owner
-            .upsert(*obj, *owner)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting object owner: {:?}", e))
-            })?;
+        self.object_owner.upsert(*obj, *owner).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error setting object owner: {:?}", e))
+        })?;
         self.has_mutations = true;
         Ok(())
     }

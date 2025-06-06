@@ -11,11 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::tx_management::relation::{Entry, RelationIndex};
+use crate::tx_management::indexes::RelationIndex;
 use crate::tx_management::{Canonical, Error, Timestamp, Tx};
 use ahash::AHasher;
 use indexmap::IndexMap;
-use std::cell::RefCell;
 use std::hash::{BuildHasherDefault, Hash};
 use std::sync::Arc;
 
@@ -32,7 +31,7 @@ where
 
     // Note: This is RefCell for interior mutability since even get/scan operations can modify the
     //   index.
-    index: RefCell<Inner<Domain, Codomain>>,
+    index: Inner<Domain, Codomain>,
     backing_source: Arc<Source>,
 }
 
@@ -41,25 +40,48 @@ where
     Domain: Clone + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
-    operations: IndexMap<Domain, Op, BuildHasherDefault<AHasher>>,
-    entries: Box<dyn RelationIndex<Domain, Codomain>>,
+    local_operations: IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>,
+    master_entries: Box<dyn RelationIndex<Domain, Codomain>>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(crate) enum OpType {
-    Insert,
-    Update,
+pub(crate) enum OpType<Codomain>
+where
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    Insert(Codomain),
+    Update(Codomain),
     Delete,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Op {
-    pub(crate) read_ts: Timestamp,
-    pub(crate) write_ts: Timestamp,
-    pub(crate) operation: OpType,
+impl<Codomain> OpType<Codomain>
+where
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    pub fn is_insert(&self) -> bool {
+        matches!(self, OpType::Insert(_))
+    }
+
+    pub fn is_update(&self) -> bool {
+        matches!(self, OpType::Update(_))
+    }
+
+    pub fn is_delete(&self) -> bool {
+        matches!(self, OpType::Delete)
+    }
 }
 
-pub type WorkingSet<Domain, Codomain> = Vec<(Domain, Op, Option<Entry<Codomain>>)>;
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Op<Codomain>
+where
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    pub(crate) read_ts: Timestamp,
+    pub(crate) write_ts: Timestamp,
+    pub(crate) operation: OpType<Codomain>,
+}
+
+pub type WorkingSet<Domain, Codomain> = Vec<(Domain, Op<Codomain>)>;
 
 /// Represents the state of a relation in the context of a current transaction.
 impl<Domain, Codomain, Source> RelationTransaction<Domain, Codomain, Source>
@@ -74,24 +96,28 @@ where
         backing_source: Source,
     ) -> RelationTransaction<Domain, Codomain, Source> {
         let inner = Inner {
-            operations: IndexMap::default(),
-            entries: canonical,
+            local_operations: IndexMap::default(),
+            master_entries: canonical,
         };
         RelationTransaction {
             tx,
-            index: RefCell::new(inner),
+            index: Inner {
+                local_operations: inner.local_operations,
+                master_entries: inner.master_entries,
+            },
             backing_source: backing_source.into(),
         }
     }
 
-    pub fn insert(
-        &mut self,
-        domain: Domain,
-        value: Codomain,
-    ) -> Result<(), Error> {
-        let mut index = self.index.borrow_mut();
+    pub fn insert(&mut self, domain: Domain, value: Codomain) -> Result<(), Error> {
         // If we or upstream has already inserted this domain, we can't insert it again.
-        if index.entries.index_lookup(&domain).is_some() {
+        if self.index.master_entries.index_lookup(&domain).is_some() {
+            return Err(Error::Duplicate);
+        }
+
+        // We also have to check our own local index to see if we have an entry for this domain.
+        // IF we do, we can't insert it.
+        if self.index.local_operations.contains_key(&domain) {
             return Err(Error::Duplicate);
         }
 
@@ -104,28 +130,45 @@ where
 
         // Not in the index, not in the backing source, we can insert freely.
         // Local index + also the operations log.
-        index.entries.insert_entry(self.tx.ts, domain.clone(), value);
-        index.operations.insert(
+        self.index.local_operations.insert(
             domain.clone(),
             Op {
                 read_ts: self.tx.ts,
                 write_ts: self.tx.ts,
-                operation: OpType::Insert,
+                operation: OpType::Insert(value.clone()),
             },
         );
 
         Ok(())
     }
 
-    pub fn update(
-        &mut self,
-        domain: &Domain,
-        value: Codomain,
-    ) -> Result<Option<Codomain>, Error> {
-        let mut index = self.index.borrow_mut();
+    pub fn update(&mut self, domain: &Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
+        // Check our local index first.
+        // If we have an entry for this domain, we can update it.
+        if let Some(entry) = self.index.local_operations.get_mut(domain) {
+            // If the operation is a delete, we can't update it.
+            if entry.operation.is_delete() {
+                return Ok(None);
+            }
+            // If it's an insert or update, we can update it.
+            entry.write_ts = self.tx.ts;
+            let is_update = entry.operation.is_update();
+            let old_value = match std::mem::replace(
+                &mut entry.operation,
+                if is_update {
+                    OpType::Update(value)
+                } else {
+                    OpType::Insert(value)
+                },
+            ) {
+                OpType::Insert(value) | OpType::Update(value) => value,
+                OpType::Delete => return Ok(None),
+            };
+            return Ok(Some(old_value));
+        }
 
-        // Is this already in the index?
-        if let Some(entry) = index.entries.index_lookup(domain) {
+        // Is this already in the *master* index?
+        if let Some(entry) = self.index.master_entries.index_lookup(domain) {
             if entry.ts > self.tx.ts {
                 // We can't update it, it's too new.
                 return Ok(None);
@@ -133,31 +176,16 @@ where
 
             let old_value = entry.value.clone();
             let read_ts = entry.ts;
-            // Update the entry with new value
-            index.entries.insert_entry(self.tx.ts, domain.clone(), value.clone());
 
-            // Check to see if we already have an operations-log entry for this domain.
-            // If we do, we can update it to its new state.
-            if let Some(old_entry) = index.operations.get_mut(domain) {
-                old_entry.operation = match old_entry.operation {
-                    OpType::Update => OpType::Update,
-                    OpType::Delete => {
-                        return Ok(None);
-                    }
-                    OpType::Insert => OpType::Insert,
-                };
-                old_entry.write_ts = self.tx.ts;
-            } else {
-                // We need to entry in the ops log which has to be "update" since we're updating.
-                index.operations.insert(
-                    domain.clone(),
-                    Op {
-                        read_ts,
-                        write_ts: self.tx.ts,
-                        operation: OpType::Update,
-                    },
-                );
-            }
+            // We need to entry in the ops log which has to be "update" since we're updating.
+            self.index.local_operations.insert(
+                domain.clone(),
+                Op {
+                    read_ts,
+                    write_ts: self.tx.ts,
+                    operation: OpType::Update(value),
+                },
+            );
 
             return Ok(Some(old_value));
         }
@@ -172,33 +200,26 @@ where
             return Ok(None);
         };
 
-        // Remember for later.
-        index.entries.insert_entry(self.tx.ts, domain.clone(), value);
-
-        // If the timestamp is greater than our own, we can't update it, we shouldn't have seen it.
-        if read_ts > self.tx.ts {
-            return Ok(None);
-        }
+        // If the timestamp is greater than our own, we can't update it, we shouldn't have seen this
+        // value, but we'll go ahead and log it anyways, and the conflict checker will catch it.
+        // What *could* happen here is that we could return conflict immediately, but our current
+        // error propagation model doesn't allow for that.
 
         // Put in operations log
         // Copy into the local cache, but with updated value.
-        index.operations.insert(
+        self.index.local_operations.insert(
             domain.clone(),
             Op {
                 read_ts,
                 write_ts: self.tx.ts,
-                operation: OpType::Update,
+                operation: OpType::Update(value),
             },
         );
 
         Ok(Some(backing_value))
     }
 
-    pub fn upsert(
-        &mut self,
-        domain: Domain,
-        value: Codomain,
-    ) -> Result<Option<Codomain>, Error> {
+    pub fn upsert(&mut self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
         // TODO: We could probably more efficient about this, but there we bugs here before and this
         //   fixed them.
         if self.has_domain(&domain)? {
@@ -213,45 +234,60 @@ where
     }
 
     pub fn get(&self, domain: &Domain) -> Result<Option<Codomain>, Error> {
-        let mut index = self.index.borrow_mut();
+        // Check local operations first.
+        if let Some(op) = self.index.local_operations.get(domain) {
+            match &op.operation {
+                // If it's a delete, we don't have it.
+                OpType::Delete => return Ok(None),
+                // If it's an insert or update, we have it.
+                OpType::Insert(value) | OpType::Update(value) => {
+                    return Ok(Some(value.clone()));
+                }
+            }
+        }
 
         // Check entries
-        if let Some(entry) = index.entries.index_lookup(domain) {
+        if let Some(entry) = self.index.master_entries.index_lookup(domain) {
             return Ok(Some(entry.value.clone()));
         }
 
         // Try upstream.
         match self.backing_source.get(domain)? {
-            Some((read_ts, value)) if read_ts < self.tx.ts => {
-                // Shove in local index.
-                let entry = Entry {
-                    ts: read_ts,
-                    value,
-                };
-                let value = entry.value.clone();
-                index.entries.insert_entry(read_ts, domain.clone(), value.clone());
-                Ok(Some(value))
-            }
+            Some((read_ts, value)) if read_ts < self.tx.ts => Ok(Some(value)),
             _ => Ok(None),
         }
     }
 
     pub fn delete(&mut self, domain: &Domain) -> Result<Option<Codomain>, Error> {
         // This is like update, but we're removing.
-        let mut index = self.index.borrow_mut();
+        // Check our local index first.
+        // If we have an entry for this domain, we can delete it and move on
+        if let Some(entry) = self.index.local_operations.get_mut(domain) {
+            // If the operation is a delete, we can't delete it again.
+            if entry.operation.is_delete() {
+                return Ok(None);
+            }
+            // If it's an insert or update, we can delete it.
+            entry.write_ts = self.tx.ts;
+            let old_value = match std::mem::replace(&mut entry.operation, OpType::Delete) {
+                OpType::Insert(value) | OpType::Update(value) => value,
+                OpType::Delete => return Ok(None),
+            };
+            return Ok(Some(old_value));
+        }
 
-        if let Some(entry) = index.entries.remove_entry(domain) {
+        if let Some(entry) = self.index.master_entries.index_lookup(domain) {
             let old_value = entry.value.clone();
 
             // Check to see if we already have an operations-log entry for this domain.
             // If we do, we can update it to its new state.
-            if let Some(old_entry) = index.operations.get_mut(domain) {
+            if let Some(old_entry) = self.index.local_operations.get_mut(domain) {
                 old_entry.operation = match old_entry.operation {
-                    OpType::Update => OpType::Delete,
+                    OpType::Update(_) => OpType::Delete,
                     OpType::Delete => {
                         return Ok(None);
                     }
-                    OpType::Insert => OpType::Delete,
+                    OpType::Insert(_) => OpType::Delete,
                 };
                 old_entry.write_ts = self.tx.ts;
                 return Ok(Some(old_value));
@@ -259,7 +295,7 @@ where
                 // Upstream may or may not have this key to delete, but we'll log the operation
                 // anyways.
                 let read_ts = entry.ts;
-                index.operations.insert(
+                self.index.local_operations.insert(
                     domain.clone(),
                     Op {
                         read_ts,
@@ -289,7 +325,7 @@ where
 
         // It's there upstream, so log a delete for it in the operations log as something we need
         // to do.
-        index.operations.insert(
+        self.index.local_operations.insert(
             domain.clone(),
             Op {
                 read_ts,
@@ -305,40 +341,42 @@ where
     where
         F: Fn(&Domain, &Codomain) -> bool,
     {
-        // Scan in the upstream first, and then merge the set with local changes.
-        let upstream = self.backing_source.scan(predicate)?;
-
-        let mut index = self.index.borrow_mut();
-
-        // Feed in everything from upstream that we don't have locally, as long as the timestamp
-        // is less than our own.
-        for (ts, d, c) in upstream {
-            if index.entries.index_lookup(&d).is_some() {
-                continue;
-            };
-            if ts > self.tx.ts {
-                continue;
-            }
-            index.entries.insert_entry(ts, d.clone(), c.clone());
-        }
+        // Scan in the upstream first, to make sure it's seeded.
+        let _ = self.backing_source.scan(predicate)?;
 
         let mut results = Vec::new();
 
-        // Now scan the merged local.
-        for (domain, entry) in index.entries.iter() {
+        // Now scan the upstream index.
+        for (domain, entry) in self.index.master_entries.iter() {
+            if entry.ts > self.tx.ts {
+                continue;
+            }
             if predicate(domain, &entry.value) {
                 results.push((domain.clone(), entry.value.clone()));
             }
         }
+
+        // And then scan our local operations.
+        for (domain, op) in self.index.local_operations.iter() {
+            match &op.operation {
+                OpType::Insert(value) | OpType::Update(value) => {
+                    if predicate(domain, value) {
+                        results.push((domain.clone(), value.clone()));
+                    }
+                }
+                OpType::Delete => {
+                    // We don't include deletes in the results.
+                }
+            }
+        }
+
         Ok(results)
     }
 
     pub fn working_set(self) -> WorkingSet<Domain, Codomain> {
-        let mut index = self.index.into_inner();
         let mut working_set = Vec::new();
-        for (domain, op) in index.operations {
-            let codomain = index.entries.remove_entry(&domain);
-            working_set.push((domain, op, codomain));
+        for (domain, op) in self.index.local_operations {
+            working_set.push((domain, op));
         }
         working_set
     }

@@ -13,21 +13,15 @@
 
 //! Global cache is a cache that acts as an origin for all local caches.
 
+use crate::tx_management::indexes::{HashRelationIndex, RelationIndex};
 use crate::tx_management::relation_tx::{OpType, RelationTransaction, WorkingSet};
 use crate::tx_management::{Canonical, Error, Provider, Timestamp, Tx};
-use ahash::AHasher;
 use minstant::Instant;
 use moor_var::Symbol;
-use std::hash::{BuildHasherDefault, Hash};
+use std::hash::Hash;
 use std::sync::{Arc, RwLock, RwLockWriteGuard};
 use std::time::Duration;
 use tracing::warn;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Entry<T: Clone + PartialEq> {
-    pub ts: Timestamp,
-    pub value: T,
-}
 
 /// Represents the current "canonical" state of a relation.
 pub struct Relation<Domain, Codomain, Source>
@@ -77,35 +71,6 @@ where
     }
 }
 
-use std::any::Any;
-
-/// Trait for different indexing strategies for relation caches
-pub trait RelationIndex<Domain, Codomain>: Send + Sync
-where
-    Domain: Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
-{
-    fn insert_entry(&mut self, ts: Timestamp, domain: Domain, codomain: Codomain);
-    fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain);
-    fn index_lookup(&self, domain: &Domain) -> Option<&Entry<Codomain>>;
-    fn remove_entry(&mut self, domain: &Domain) -> Option<Entry<Codomain>>;
-    fn iter(&self) -> Box<dyn Iterator<Item = (&Domain, &Entry<Codomain>)> + '_>;
-    fn len(&self) -> usize;
-    fn fork(&self) -> Box<dyn RelationIndex<Domain, Codomain>>;
-    fn as_any(&self) -> &dyn Any;
-}
-
-/// Hash-based implementation of RelationIndex using im::HashMap
-#[derive(Clone)]
-pub struct HashRelationIndex<Domain, Codomain>
-where
-    Domain: Hash + PartialEq + Eq + Clone,
-    Codomain: Clone + PartialEq,
-{
-    /// Internal index of the cache.
-    pub entries: im::HashMap<Domain, Entry<Codomain>, BuildHasherDefault<AHasher>>,
-}
-
 /// Holds a lock on the cache while a transaction commit is in progress.
 /// (Just wraps the lock to avoid leaking the Inner type.)
 pub struct CheckRelation<Domain, Codomain, P>
@@ -144,7 +109,7 @@ where
         let total_ops = working_set.len();
         self.dirty = !working_set.is_empty();
         // Check phase first.
-        for (n, (domain, op, _)) in working_set.iter().enumerate() {
+        for (n, (domain, op)) in working_set.iter().enumerate() {
             if last_check_time.elapsed() > Duration::from_secs(5) {
                 warn!(
                     "Long check time for {}; running for {}s; {n}/{total_ops} checked",
@@ -156,8 +121,8 @@ where
             // Check local to see if we have one first, to see if there's a conflict.
             if let Some(local_entry) = self.index.index_lookup(domain) {
                 // If what we have is an insert, and there's something already there, that's a
-                // a conflict.
-                if op.operation == OpType::Insert {
+                // conflict.
+                if op.operation.is_insert() {
                     return Err(Error::Conflict);
                 }
 
@@ -165,6 +130,14 @@ where
                 // If the ts there is greater than the read-ts of our own op, that's a conflict
                 // Someone got to it first.
                 if ts > op.read_ts {
+                    return Err(Error::Conflict);
+                }
+                // If the transactions *write stamp* is earlier than the read stamp, that's a
+                // conflict indicating that the transaction is trying to update something
+                // it should not have read.
+                // (This only happens because we're not able to early-bail on update operations
+                // like this, so there's some waste here.)
+                if op.read_ts > op.write_ts {
                     return Err(Error::Conflict);
                 }
                 continue;
@@ -177,13 +150,13 @@ where
 
                 // If what we have is an insert, and there's something already there, that's also
                 // a conflict.
-                if op.operation == OpType::Insert || ts > op.read_ts {
+                if op.operation.is_insert() || ts > op.read_ts {
                     return Err(Error::Conflict);
                 }
             } else {
                 // If upstream doesn't have it, and it's not an insert or delete, that's a conflict, this
                 // should not have happened.
-                if op.operation == OpType::Update {
+                if op.operation.is_update() {
                     return Err(Error::Conflict);
                 }
             }
@@ -199,7 +172,7 @@ where
         let mut last_check_time = start_time;
         let total_ops = working_set.len();
         // Apply phase.
-        for (n, (domain, op, codomain)) in working_set.into_iter().enumerate() {
+        for (n, (domain, op)) in working_set.into_iter().enumerate() {
             if last_check_time.elapsed() > Duration::from_secs(5) {
                 warn!(
                     "Long apply time for {}; running for {}s; {n}/{total_ops} checked",
@@ -209,12 +182,10 @@ where
                 last_check_time = Instant::now();
             }
             match op.operation {
-                OpType::Insert | OpType::Update => {
-                    let entry = codomain
-                        .expect("Codomain should be non-None for insert or update operation");
-                    self.source.put(op.write_ts, &domain, &entry.value).ok();
+                OpType::Insert(codomain) | OpType::Update(codomain) => {
+                    self.source.put(op.write_ts, &domain, &codomain).ok();
                     self.index
-                        .insert_entry(op.write_ts, domain.clone(), entry.value);
+                        .insert_entry(op.write_ts, domain.clone(), codomain);
                 }
                 OpType::Delete => {
                     self.index.insert_tombstone(op.write_ts, domain.clone());
@@ -251,62 +222,6 @@ where
             source: self.source.clone(),
             dirty: false,
         }
-    }
-}
-
-impl<Domain, Codomain> HashRelationIndex<Domain, Codomain>
-where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
-{
-    pub fn new() -> Self {
-        Self {
-            entries: Default::default(),
-        }
-    }
-}
-
-impl<Domain, Codomain> RelationIndex<Domain, Codomain> for HashRelationIndex<Domain, Codomain>
-where
-    Domain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
-    Codomain: Clone + PartialEq + Send + Sync + 'static,
-{
-    fn insert_entry(&mut self, ts: Timestamp, domain: Domain, codomain: Codomain) {
-        self.entries.insert(
-            domain.clone(),
-            Entry {
-                ts,
-                value: codomain,
-            },
-        );
-    }
-
-    fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain) {
-        self.entries.remove(&domain);
-    }
-
-    fn index_lookup(&self, domain: &Domain) -> Option<&Entry<Codomain>> {
-        self.entries.get(domain)
-    }
-
-    fn remove_entry(&mut self, domain: &Domain) -> Option<Entry<Codomain>> {
-        self.entries.remove(domain)
-    }
-
-    fn iter(&self) -> Box<dyn Iterator<Item = (&Domain, &Entry<Codomain>)> + '_> {
-        Box::new(self.entries.iter())
-    }
-
-    fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    fn fork(&self) -> Box<dyn RelationIndex<Domain, Codomain>> {
-        Box::new(self.clone())
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -503,7 +418,7 @@ mod tests {
         let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
         let domain = TestDomain(1);
-        
+
         let tx_1 = Tx { ts: Timestamp(10) };
         let tx_2 = Tx { ts: Timestamp(20) };
 
@@ -545,17 +460,17 @@ mod tests {
         let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
         let domain = TestDomain(1);
-        
+
         let tx_1 = Tx { ts: Timestamp(10) };
         let tx_2 = Tx { ts: Timestamp(20) };
 
         // Both transactions update the same key
         let mut r_tx_1 = relation.clone().start(&tx_1);
         let mut r_tx_2 = relation.clone().start(&tx_2);
-        
+
         r_tx_1.update(&domain, TestCodomain(100)).unwrap();
         r_tx_2.update(&domain, TestCodomain(200)).unwrap();
-        
+
         let ws_1 = r_tx_1.working_set();
         let ws_2 = r_tx_2.working_set();
 
@@ -584,7 +499,7 @@ mod tests {
 
         let domain_1 = TestDomain(1);
         let domain_2 = TestDomain(2);
-        
+
         let tx_1 = Tx { ts: Timestamp(10) };
         let tx_2 = Tx { ts: Timestamp(20) };
 
@@ -626,7 +541,7 @@ mod tests {
         let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
         let domain = TestDomain(1);
-        
+
         let tx_1 = Tx { ts: Timestamp(10) };
         let tx_2 = Tx { ts: Timestamp(20) };
 
@@ -671,7 +586,7 @@ mod tests {
         let mut r_tx = relation.clone().start(&tx);
         let result = r_tx.update(&domain, TestCodomain(100)).unwrap();
         assert_eq!(result, None); // Update of nonexistent key returns None
-        
+
         let ws = r_tx.working_set();
         // The working set should be empty since no actual operation occurred
         assert_eq!(ws.len(), 0);
@@ -687,16 +602,16 @@ mod tests {
         let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
         let domain = TestDomain(1);
-        
+
         // Execute transactions in timestamp order
         for i in 1..=5 {
             let tx = Tx { ts: Timestamp(i) };
             let mut r_tx = relation.clone().start(&tx);
-            
+
             // Read current value and increment it
             let current = r_tx.get(&domain).unwrap().unwrap();
             r_tx.update(&domain, TestCodomain(current.0 + 1)).unwrap();
-            
+
             let ws = r_tx.working_set();
             let mut cr = relation.begin_check();
             cr.check(&ws).unwrap();
@@ -754,7 +669,9 @@ mod tests {
         let mut r_tx_3 = relation.clone().start(&tx_3);
         let current_val = r_tx_3.get(&TestDomain(1)).unwrap().unwrap();
         assert_eq!(current_val, TestCodomain(200)); // Should see T1's update
-        r_tx_3.update(&TestDomain(1), TestCodomain(current_val.0 + 100)).unwrap();
+        r_tx_3
+            .update(&TestDomain(1), TestCodomain(current_val.0 + 100))
+            .unwrap();
         let ws_3 = r_tx_3.working_set();
 
         {
@@ -766,8 +683,14 @@ mod tests {
         }
 
         // Verify final state: T1's insert and T3's update should be there
-        assert_eq!(relation.get(&TestDomain(1)).unwrap().unwrap().1, TestCodomain(300));
-        assert_eq!(relation.get(&TestDomain(2)).unwrap().unwrap().1, TestCodomain(300));
+        assert_eq!(
+            relation.get(&TestDomain(1)).unwrap().unwrap().1,
+            TestCodomain(300)
+        );
+        assert_eq!(
+            relation.get(&TestDomain(2)).unwrap().unwrap().1,
+            TestCodomain(300)
+        );
         assert!(relation.get(&TestDomain(3)).unwrap().is_none()); // T2 didn't commit
     }
 
@@ -781,14 +704,14 @@ mod tests {
         let relation = Arc::new(Relation::new(Symbol::mk("test"), provider));
 
         let domain = TestDomain(1);
-        
+
         // Start both transactions, older one reads first
         let tx_older = Tx { ts: Timestamp(10) };
         let tx_newer = Tx { ts: Timestamp(20) };
-        
+
         let mut r_tx_older = relation.clone().start(&tx_older);
         let _old_val = r_tx_older.get(&domain).unwrap().unwrap(); // Read with ts=10
-        
+
         // Newer transaction commits first
         let mut r_tx_newer = relation.clone().start(&tx_newer);
         r_tx_newer.update(&domain, TestCodomain(200)).unwrap();
@@ -811,7 +734,7 @@ mod tests {
         assert!(matches!(check_result, Err(Error::Conflict)));
     }
 
-    #[test] 
+    #[test]
     fn test_consistent_snapshot_reads() {
         // Test that reads within a transaction see a consistent snapshot
         let mut backing = HashMap::new();
@@ -823,27 +746,31 @@ mod tests {
 
         let tx = Tx { ts: Timestamp(10) };
         let mut r_tx = relation.clone().start(&tx);
-        
+
         // Read both keys - they should be consistent
         let val1 = r_tx.get(&TestDomain(1)).unwrap().unwrap();
         let val2 = r_tx.get(&TestDomain(2)).unwrap().unwrap();
-        
+
         assert_eq!(val1, TestCodomain(100));
         assert_eq!(val2, TestCodomain(200));
-        
+
         // Update one key based on both reads
-        r_tx.update(&TestDomain(1), TestCodomain(val1.0 + val2.0)).unwrap();
-        
+        r_tx.update(&TestDomain(1), TestCodomain(val1.0 + val2.0))
+            .unwrap();
+
         let ws = r_tx.working_set();
         let mut cr = relation.begin_check();
         cr.check(&ws).unwrap();
         cr.apply(ws).unwrap();
-        
+
         // Commit the changes to the relation
         let guard = relation.index.write().unwrap();
         cr.commit(Some(guard));
-        
+
         // Verify the update was applied correctly
-        assert_eq!(relation.get(&TestDomain(1)).unwrap().unwrap().1, TestCodomain(300));
+        assert_eq!(
+            relation.get(&TestDomain(1)).unwrap().unwrap().1,
+            TestCodomain(300)
+        );
     }
 }

@@ -161,10 +161,7 @@ mod tests {
     }
 
     impl Provider<TestDomain, TestCodomain> for TestProvider {
-        fn get(
-            &self,
-            domain: &TestDomain,
-        ) -> Result<Option<(Timestamp, TestCodomain)>, Error> {
+        fn get(&self, domain: &TestDomain) -> Result<Option<(Timestamp, TestCodomain)>, Error> {
             let data = self.data.lock().unwrap();
             if let Some(codomain) = data.get(domain) {
                 Ok(Some((Timestamp(0), codomain.clone())))

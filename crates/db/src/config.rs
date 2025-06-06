@@ -14,8 +14,7 @@
 use fjall::PartitionCreateOptions;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct DatabaseConfig {
     /// Per-table configurations
     pub object_location: Option<TableConfig>,
@@ -31,7 +30,6 @@ pub struct DatabaseConfig {
     pub object_propvalues: Option<TableConfig>,
     pub object_propflags: Option<TableConfig>,
 }
-
 
 /// Per-table configuration.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
