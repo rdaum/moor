@@ -36,7 +36,7 @@ pub const FAILED_MATCH: Obj = Obj::mk_id(-3);
 /// For now this is the global unique DB object id.
 /// In the future this may also encode other object types (anonymous objects, etc)
 #[derive(
-    Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode, Serialize, Deserialize,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Encode, Decode, Serialize, Deserialize,
 )]
 pub struct Obj(u64);
 
@@ -84,6 +84,12 @@ impl Add for Obj {
 
     fn add(self, rhs: Self) -> Self::Output {
         Self::mk_id(self.id().0 + rhs.id().0)
+    }
+}
+
+impl Debug for Obj {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Obj(#{})", self.decode_as_objid()))
     }
 }
 
