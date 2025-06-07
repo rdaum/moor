@@ -11,7 +11,28 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-mod args;
-pub mod connections;
+//! Shared data types for connections management
 
-pub use args::FeatureArgs;
+use bincode::{Decode, Encode};
+use std::time::SystemTime;
+
+mod fjall_persistence;
+mod in_memory;
+mod persistence;
+mod registry;
+
+pub use registry::{ConnectionRegistry, ConnectionRegistryFactory};
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ConnectionRecord {
+    pub client_id: u128,
+    pub connected_time: SystemTime,
+    pub last_activity: SystemTime,
+    pub last_ping: SystemTime,
+    pub hostname: String,
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ConnectionsRecords {
+    pub connections: Vec<ConnectionRecord>,
+}

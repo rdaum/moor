@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::args::Args;
+use crate::connections::ConnectionRegistryFactory;
 use crate::rpc_server::RpcServer;
 use crate::workers_server::WorkersServer;
 use clap::Parser;
@@ -31,10 +32,8 @@ use rpc_common::load_keypair;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-mod connections;
-
 mod args;
-mod connections_fjall;
+mod connections;
 mod rpc_hosts;
 mod rpc_server;
 mod rpc_session;
@@ -244,10 +243,25 @@ fn main() -> Result<(), Report> {
     zmq_ctx
         .set_io_threads(args.num_io_threads)
         .expect("Failed to set number of IO threads");
+
+    // Create the connections registry based on args/config
+    let connections = match &args.connections_file {
+        Some(path) => {
+            info!("Using connections database at {:?}", path);
+            ConnectionRegistryFactory::with_fjall_persistence(Some(path))
+                .expect("Failed to create connections database")
+        }
+        None => {
+            info!("Using in-memory connections registry");
+            ConnectionRegistryFactory::in_memory_only()
+                .expect("Failed to create in-memory connections registry")
+        }
+    };
+
     let rpc_server = Arc::new(RpcServer::new(
         public_key.clone(),
         private_key.clone(),
-        args.connections_file,
+        connections,
         zmq_ctx.clone(),
         args.events_listen.as_str(),
         config.clone(),

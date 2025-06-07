@@ -19,13 +19,11 @@ use flume::{Receiver, Sender};
 use papaya::HashMap as PapayaHashMap;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::connections::ConnectionsDB;
-use crate::connections_fjall::ConnectionsFjall;
+use crate::connections::ConnectionRegistry;
 use crate::rpc_hosts::Hosts;
 use crate::rpc_session::{RpcSession, SessionActions};
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, preposition_to_string};
@@ -71,7 +69,7 @@ pub struct RpcServer {
 
     pub(crate) kill_switch: Arc<AtomicBool>,
 
-    connections: Box<dyn ConnectionsDB + Send + Sync>,
+    connections: Box<dyn ConnectionRegistry + Send + Sync>,
     task_handles: Mutex<HashMap<TaskId, (Uuid, TaskHandle)>>,
     mailbox_receive: Receiver<SessionActions>,
 
@@ -108,10 +106,9 @@ impl RpcServer {
     pub fn new(
         public_key: Key<32>,
         private_key: Key<64>,
-        connections_db_path: PathBuf,
+        connections: Box<dyn ConnectionRegistry + Send + Sync>,
         zmq_context: zmq::Context,
         narrative_endpoint: &str,
-        // For determining the flavor for the connections database.
         config: Arc<Config>,
     ) -> Self {
         info!(
@@ -126,7 +123,6 @@ impl RpcServer {
         publish
             .bind(narrative_endpoint)
             .expect("Unable to bind ZMQ PUB socket");
-        let connections = Box::new(ConnectionsFjall::open(Some(&connections_db_path)));
         info!(
             "Created connections list, with {} initial known connections",
             connections.connections().len()
@@ -237,8 +233,8 @@ impl RpcServer {
                         }
                     }
                     SessionActions::RequestClientInput {
-                        client_id: client_id,
-                        connection: connection,
+                        client_id,
+                        connection,
                         request_id: input_request_id,
                     } => {
                         if let Err(e) =
@@ -248,8 +244,8 @@ impl RpcServer {
                         }
                     }
                     SessionActions::SendSystemMessage {
-                        client_id: client_id,
-                        connection: connection,
+                        client_id,
+                        connection,
                         system_message: message,
                     } => {
                         if let Err(e) = self.send_system_message(client_id, connection, message) {
@@ -548,9 +544,9 @@ impl RpcServer {
                 Ok(NewConnection(token, oid))
             }
             HostClientToDaemonMessage::Attach {
-                auth_token: auth_token,
-                connect_type: connect_type,
-                handler_object: handler_object,
+                auth_token,
+                connect_type,
+                handler_object,
                 peer_addr: hostname,
             } => {
                 // Validate the auth token, and get the player.
@@ -601,7 +597,7 @@ impl RpcServer {
             }
             HostClientToDaemonMessage::LoginCommand {
                 client_token: token,
-                handler_object: handler_object,
+                handler_object,
                 connect_args: args,
                 do_attach: attach,
             } => {

@@ -56,7 +56,7 @@ pub struct Args {
         value_hint = ValueHint::FilePath,
         default_value = "connections.db"
     )]
-    pub connections_file: PathBuf,
+    pub connections_file: Option<PathBuf>,
 
     #[arg(
         short = 'x',

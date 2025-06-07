@@ -112,8 +112,8 @@ impl WebHost {
             .make_client_rpc_call(
                 client_id,
                 Attach {
-                    auth_token: auth_token,
-                    connect_type: connect_type,
+                    auth_token,
+                    connect_type,
                     handler_object: self.handler_object,
                     peer_addr: peer_addr.to_string(),
                 },
