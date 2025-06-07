@@ -131,6 +131,7 @@ pub async fn create_user_session(
             client_id,
             ConnectionEstablish {
                 peer_addr: peer_addr.to_string(),
+                acceptable_content_types: None,
             },
         )
         .await

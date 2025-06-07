@@ -18,7 +18,7 @@ use std::sync::Mutex;
 use uuid::Uuid;
 
 use moor_common::tasks::NarrativeEvent;
-use moor_common::tasks::{Session, SessionError, SessionFactory};
+use moor_common::tasks::{ConnectionDetails, Session, SessionError, SessionFactory};
 use moor_var::Obj;
 
 use crate::rpc_server::RpcServer;
@@ -54,6 +54,11 @@ pub(crate) enum SessionActions {
         Uuid,
         Option<Obj>,
         oneshot::Sender<Result<Vec<Obj>, SessionError>>,
+    ),
+    RequestConnectionDetails(
+        Uuid,
+        Option<Obj>,
+        oneshot::Sender<Result<Vec<ConnectionDetails>, SessionError>>,
     ),
 }
 
@@ -191,6 +196,21 @@ impl Session for RpcSession {
         let (tx, rx) = oneshot::channel();
         self.send
             .send(SessionActions::RequestConnections(
+                self.client_id,
+                player,
+                tx,
+            ))
+            .map_err(|_e| SessionError::DeliveryError)?;
+        rx.recv().map_err(|_e| SessionError::DeliveryError)?
+    }
+
+    fn connection_details(
+        &self,
+        player: Option<Obj>,
+    ) -> Result<Vec<ConnectionDetails>, SessionError> {
+        let (tx, rx) = oneshot::channel();
+        self.send
+            .send(SessionActions::RequestConnectionDetails(
                 self.client_id,
                 player,
                 tx,

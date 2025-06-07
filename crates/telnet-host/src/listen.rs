@@ -15,7 +15,7 @@ use crate::connection::TelnetConnection;
 use eyre::bail;
 use futures_util::StreamExt;
 use futures_util::stream::SplitSink;
-use moor_var::Obj;
+use moor_var::{Obj, Symbol};
 use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_async_client::{ListenersClient, ListenersMessage};
 use rpc_common::HostClientToDaemonMessage::ConnectionEstablish;
@@ -208,6 +208,10 @@ impl Listener {
                     client_id,
                     ConnectionEstablish {
                         peer_addr: peer_addr.to_string(),
+                        acceptable_content_types: Some(vec![
+                            Symbol::mk("text/plain"),
+                            Symbol::mk("text/markdown"),
+                        ]),
                     },
                 )
                 .await

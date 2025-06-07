@@ -42,31 +42,82 @@ any session.
 4. **The connection object is useful** - You can use it to send events that are relevant only for that specific physical
    connection.
 
+## Content Types and Rich Client Support
+
+mooR supports rich client capabilities through a content type system. Each connection advertises which content types it
+can handle, allowing MOO code to send appropriately formatted content to different types of clients.
+
+### Supported Content Types
+
+- **`text/plain`**: Plain text (always supported by all connections)
+- **`text/markdown`**: Markdown-formatted text (supported by telnet clients)
+- **`text/html`**: HTML-formatted text (supported by web clients)
+- **`text/djot`**: Djot-formatted text (supported by web clients)
+
+### Content Type Negotiation
+
+The content types are automatically negotiated when a connection is established:
+
+- **Telnet connections** advertise: `["text/plain", "text/markdown"]`
+- **Web connections** advertise: `["text/plain", "text/html", "text/djot"]`
+- **Default/fallback** connections advertise: `["text/plain"]`
+
+You can discover the content types supported by a connection using the `connections()` function:
+
+```moo
+// Check what content types a connection supports
+foreach conn in (connections())
+    {connection_obj, hostname, idle_time, content_types} = conn;
+    if ("text/html" in content_types)
+        notify(connection_obj, "<h1>Welcome!</h1>", "text/html");
+    else
+        notify(connection_obj, "# Welcome!", "text/markdown");
+    endif
+endfor
+```
+
+### Using Content Types with notify()
+
+The `notify()` function supports an optional third argument for specifying content type:
+
+```moo
+notify(player, "Hello **world**!", "text/markdown");
+notify(player, "<strong>Hello world!</strong>", "text/html");
+notify(player, "Hello world!");  // defaults to text/plain
+```
+
 ### The `connections()` Function
 
-The `connections([player])` builtin function returns the set of connection objects associated with the current player
+The `connections([player])` builtin function returns detailed connection information for the current player
 or a specified player (with wizard permissions).
 
 **Syntax**: `connections()` or `connections(player)`
 
-**Returns**: A list containing the connection objects associated with the specified player or the current player if no
-player is specified. The first item in the list is the connection object for the current session if no player is
-specified.
+**Returns**: A list of lists containing connection details. Each inner list contains:
+- Index 0: The connection object (negative ID, e.g., #-42)
+- Index 1: The hostname/connection name (string)
+- Index 2: The idle time in seconds (float)
+- Index 3: The acceptable content types for this connection (list of strings/symbols)
 
 **Examples**:
 
 ```moo
 // Get connection info for current session
 connections()
-=> {#-42, #123}  // Connection #-42, logged in as player #123
+=> {{#-42, "player.example.com", 15.3, {"text/plain", "text/markdown"}}}  // One telnet connection
 
 // Get connection info for another player (requires wizard permissions)
 connections(#456)
-=> {#-89, #456}  // Player #456 is on connection #-89
+=> {{#-89, "other.example.com", 0.5, {"text/plain", "text/html", "text/djot"}}}  // Web connection
 
-// Check an unlogged connection
+// Multiple connections for same player (telnet + web)
+connections()
+=> {{#-42, "desktop.example.com", 5.0, {"text/plain", "text/markdown"}}, 
+    {#-43, "mobile.example.com", 300.5, {"text/plain", "text/html", "text/djot"}}}
+
+// Check an unlogged connection (would need to be called from that context)
 connections()  // Called from an unlogged connection
-=> {#-55}  // Only connection object, no player logged in
+=> {{#-55, "unknown.host.com", 0.0, {"text/plain"}}}  // Default content type
 ```
 
 **Permission Requirements**:

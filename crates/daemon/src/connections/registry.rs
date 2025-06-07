@@ -20,7 +20,7 @@ use crate::connections::in_memory::ConnectionRegistryMemory;
 use crate::connections::persistence::NullPersistence;
 use eyre::Report as Error;
 use moor_common::tasks::SessionError;
-use moor_var::Obj;
+use moor_var::{Obj, Symbol};
 use rpc_common::RpcMessageError;
 use std::path::Path;
 
@@ -42,6 +42,7 @@ pub trait ConnectionRegistry {
         client_id: Uuid,
         hostname: String,
         player: Option<Obj>,
+        acceptable_content_types: Option<Vec<Symbol>>,
     ) -> Result<Obj, RpcMessageError>;
 
     /// Record activity for the given client.
@@ -72,6 +73,9 @@ pub trait ConnectionRegistry {
 
     /// Remove the given client from the connection database.
     fn remove_client_connection(&self, client_id: Uuid) -> Result<(), eyre::Error>;
+
+    /// Get the acceptable content types for a connection.
+    fn acceptable_content_types_for(&self, connection: Obj) -> Result<Vec<Symbol>, SessionError>;
 }
 
 pub enum ConnectionRegistryConfig {
@@ -129,7 +133,7 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None)
+            .new_connection(client_id, "test.host".to_string(), None, None)
             .unwrap();
 
         assert_eq!(
@@ -147,7 +151,7 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "persistent.host".to_string(), None)
+            .new_connection(client_id, "persistent.host".to_string(), None, None)
             .unwrap();
 
         assert_eq!(
@@ -169,7 +173,7 @@ mod tests {
         for db in configs {
             let client_id = Uuid::new_v4();
             let connection_obj = db
-                .new_connection(client_id, "compat.test".to_string(), None)
+                .new_connection(client_id, "compat.test".to_string(), None, None)
                 .unwrap();
 
             // Basic operations should work identically
@@ -199,7 +203,7 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None)
+            .new_connection(client_id, "test.host".to_string(), None, None)
             .unwrap();
 
         // Initially no player associated

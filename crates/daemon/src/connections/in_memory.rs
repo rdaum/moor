@@ -17,7 +17,7 @@ use std::time::SystemTime;
 
 use eyre::{Error, bail};
 use moor_common::tasks::SessionError;
-use moor_var::Obj;
+use moor_var::{Obj, Symbol};
 use rpc_common::RpcMessageError;
 use tracing::info;
 use uuid::Uuid;
@@ -145,6 +145,7 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         client_id: Uuid,
         hostname: String,
         player: Option<Obj>,
+        acceptable_content_types: Option<Vec<Symbol>>,
     ) -> Result<Obj, RpcMessageError> {
         let mut inner = self.inner.lock().unwrap();
 
@@ -168,6 +169,8 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
             last_activity: now,
             last_ping: now,
             hostname,
+            acceptable_content_types: acceptable_content_types
+                .unwrap_or_else(|| vec![Symbol::mk("text/plain")]),
         };
 
         // Add to connection records
@@ -517,6 +520,23 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         self.persist_changes(client_changes, player_changes)?;
         Ok(())
     }
+
+    fn acceptable_content_types_for(&self, connection: Obj) -> Result<Vec<Symbol>, SessionError> {
+        let inner = self.inner.lock().unwrap();
+
+        if let Some(connection_records) = inner.connection_records.get(&connection) {
+            // Return the content types from the first connection record
+            // (all records for the same connection should have the same content types)
+            if let Some(record) = connection_records.connections.first() {
+                Ok(record.acceptable_content_types.clone())
+            } else {
+                // Default to text/plain if no records
+                Ok(vec![Symbol::mk("text/plain")])
+            }
+        } else {
+            Err(SessionError::NoConnectionForPlayer(connection))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -537,7 +557,7 @@ mod tests {
 
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None)
+            .new_connection(client_id, "test.host".to_string(), None, None)
             .unwrap();
 
         // Test basic operations
@@ -619,7 +639,7 @@ mod tests {
         // Create connection - should not trigger persistence calls (no player logged in)
         let client_id = Uuid::new_v4();
         let connection_obj = db
-            .new_connection(client_id, "test.host".to_string(), None)
+            .new_connection(client_id, "test.host".to_string(), None, None)
             .unwrap();
 
         assert_eq!(client_calls.load(Ordering::SeqCst), 0);
@@ -654,7 +674,7 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("host-{}-{}.test", i, j);
 
-                    match db.new_connection(client_id, hostname, None) {
+                    match db.new_connection(client_id, hostname, None, None) {
                         Ok(connection_obj) => {
                             created_clients.push((client_id, connection_obj));
                         }
@@ -699,7 +719,7 @@ mod tests {
         for i in 0..5 {
             let client_id = Uuid::new_v4();
             let connection_obj = db
-                .new_connection(client_id, format!("host-{}.test", i), None)
+                .new_connection(client_id, format!("host-{}.test", i), None, None)
                 .unwrap();
             client_connections.push((client_id, connection_obj));
         }
@@ -773,7 +793,7 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("host-{}-{}.test", thread_id, i);
 
-                    if let Ok(connection_obj) = db.new_connection(client_id, hostname, None) {
+                    if let Ok(connection_obj) = db.new_connection(client_id, hostname, None, None) {
                         creation_count.fetch_add(1, Ordering::SeqCst);
                         local_connections.push((client_id, connection_obj));
 
@@ -831,7 +851,7 @@ mod tests {
         for i in 0..3 {
             let client_id = Uuid::new_v4();
             let connection_obj = db
-                .new_connection(client_id, format!("old-host-{}.test", i), None)
+                .new_connection(client_id, format!("old-host-{}.test", i), None, None)
                 .unwrap();
             old_connections.push((client_id, connection_obj));
         }
@@ -868,7 +888,7 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("new-host-{}-{}.test", i, j);
 
-                    if let Ok(connection_obj) = db.new_connection(client_id, hostname, None) {
+                    if let Ok(connection_obj) = db.new_connection(client_id, hostname, None, None) {
                         // Keep these connections alive
                         let _ = db.notify_is_alive(client_id, connection_obj);
                         let _ = db.record_client_activity(client_id, connection_obj);
@@ -980,7 +1000,7 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("persist-host-{}-{}.test", thread_id, i);
 
-                    if let Ok(connection_obj) = db.new_connection(client_id, hostname, None) {
+                    if let Ok(connection_obj) = db.new_connection(client_id, hostname, None, None) {
                         connections.push((client_id, connection_obj));
 
                         // For some connections, associate a player to test player persistence

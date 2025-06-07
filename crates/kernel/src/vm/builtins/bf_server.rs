@@ -1738,7 +1738,7 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     }
 
-    let connections = match bf_args.session.connections(player) {
+    let connection_details = match bf_args.session.connection_details(player) {
         Ok(result) => result,
         Err(SessionError::NoConnectionForPlayer(_)) => {
             return Err(ErrValue(E_INVARG.msg("No connection found for player")));
@@ -1750,7 +1750,31 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         }
     };
 
-    Ok(Ret(v_list_iter(connections.into_iter().map(v_obj))))
+    // Convert connection details to a list of lists with connection info
+    let mut connections_list = Vec::new();
+    for detail in connection_details {
+        // Convert acceptable content types to a list of symbols or strings
+        let content_types = if bf_args.config.symbol_type {
+            v_list_iter(detail.acceptable_content_types.iter().map(|ct| v_sym(*ct)))
+        } else {
+            v_list_iter(
+                detail
+                    .acceptable_content_types
+                    .iter()
+                    .map(|ct| v_arc_string(ct.as_arc_string())),
+            )
+        };
+
+        let connection_list = v_list(&[
+            v_obj(detail.connection_obj),
+            v_str(&detail.peer_addr),
+            v_float(detail.idle_seconds),
+            content_types,
+        ]);
+        connections_list.push(connection_list);
+    }
+
+    Ok(Ret(v_list_iter(connections_list)))
 }
 
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {

@@ -68,7 +68,11 @@ pub struct PropInfo {
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum HostClientToDaemonMessage {
     /// Establish a new connection, requesting a client token and a connection object
-    ConnectionEstablish { peer_addr: String },
+    ConnectionEstablish {
+        peer_addr: String,
+        /// Optional list of acceptable content types (text/plain is always implied)
+        acceptable_content_types: Option<Vec<Symbol>>,
+    },
     /// Anonymously request a sysprop (e.g. $login.welcome_message)
     RequestSysProp(ClientToken, ObjectRef, Symbol),
     /// Login using the words (e.g. "create player bob" or "connect player bob") and return an
@@ -87,6 +91,8 @@ pub enum HostClientToDaemonMessage {
         connect_type: Option<ConnectType>,
         handler_object: Obj,
         peer_addr: String,
+        /// Optional list of acceptable content types (text/plain is always implied)
+        acceptable_content_types: Option<Vec<Symbol>>,
     },
     /// Send a command to be executed.
     Command(ClientToken, AuthToken, Obj, String),
