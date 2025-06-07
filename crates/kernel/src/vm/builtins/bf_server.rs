@@ -31,7 +31,7 @@ use moor_common::build::{PKG_VERSION, SHORT_COMMIT};
 use moor_common::model::{Named, ObjFlag, WorldStateError};
 use moor_common::tasks::Event::{Present, Unpresent};
 use moor_common::tasks::TaskId;
-use moor_common::tasks::{NarrativeEvent, Presentation};
+use moor_common::tasks::{NarrativeEvent, Presentation, SessionError};
 use moor_common::util::PerfCounter;
 use moor_compiler::compile;
 use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
@@ -1708,6 +1708,51 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     )))
 }
 
+fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() > 1 {
+        return Err(ErrValue(E_ARGS.msg("connections() requires 0 or 1 arguments")));
+    }
+
+    let player = if bf_args.args.is_empty() {
+        None
+    } else {
+        let Some(player) = bf_args.args[0].as_object() else {
+            return Err(ErrValue(
+                E_TYPE.msg("connections() requires an object as the first argument"),
+            ));
+        };
+        Some(player)
+    };
+
+    // Permission check: if requesting for another player, must be wizard or same player
+    if let Some(target_player) = player {
+        let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+        if target_player != task_perms.who && !task_perms.check_is_wizard().map_err(world_state_bf_err)? {
+            return Err(ErrValue(E_PERM.msg(
+                "connections() requires the caller to be a wizard or requesting their own connections",
+            )));
+        }
+    }
+
+    let (connection_obj, player_obj) = match bf_args.session.connections(player) {
+        Ok(result) => result,
+        Err(SessionError::NoConnectionForPlayer(_)) => {
+            return Err(ErrValue(E_INVARG.msg("No connection found for player")));
+        }
+        Err(_) => {
+            return Err(ErrValue(E_INVARG.msg("Unable to get connection information")));
+        }
+    };
+
+    let result = if let Some(player_obj) = player_obj {
+        v_list(&[v_obj(connection_obj), v_obj(player_obj)])
+    } else {
+        v_list(&[v_obj(connection_obj)])
+    };
+
+    Ok(Ret(result))
+}
+
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(bf_notify);
     builtins[offset_for_builtin("connected_players")] = Box::new(bf_connected_players);
@@ -1755,4 +1800,5 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("rollback")] = Box::new(bf_rollback);
     builtins[offset_for_builtin("present")] = Box::new(bf_present);
     builtins[offset_for_builtin("worker_request")] = Box::new(bf_worker_request);
+    builtins[offset_for_builtin("connections")] = Box::new(bf_connections);
 }

@@ -14,6 +14,7 @@
 use std::sync::Arc;
 
 use flume::Sender;
+use oneshot;
 use std::sync::Mutex;
 use uuid::Uuid;
 
@@ -50,6 +51,7 @@ pub(crate) enum SessionActions {
     RequestConnectedPlayers(Uuid, oneshot::Sender<Result<Vec<Obj>, SessionError>>),
     RequestConnectedSeconds(Uuid, Obj, oneshot::Sender<Result<f64, SessionError>>),
     RequestIdleSeconds(Uuid, Obj, oneshot::Sender<Result<f64, SessionError>>),
+    RequestConnections(Uuid, Option<Obj>, oneshot::Sender<Result<(Obj, Option<Obj>), SessionError>>),
 }
 
 impl RpcSession {
@@ -174,6 +176,18 @@ impl Session for RpcSession {
         let (tx, rx) = oneshot::channel();
         self.send
             .send(SessionActions::RequestIdleSeconds(
+                self.client_id,
+                player,
+                tx,
+            ))
+            .map_err(|_e| SessionError::DeliveryError)?;
+        rx.recv().map_err(|_e| SessionError::DeliveryError)?
+    }
+
+    fn connections(&self, player: Option<Obj>) -> Result<(Obj, Option<Obj>), SessionError> {
+        let (tx, rx) = oneshot::channel();
+        self.send
+            .send(SessionActions::RequestConnections(
                 self.client_id,
                 player,
                 tx,

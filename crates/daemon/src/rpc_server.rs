@@ -306,6 +306,18 @@ impl RpcServer {
                             error!(error = ?e, "Unable to send idle seconds");
                         }
                     }
+                    SessionActions::RequestConnections(client_id, player, reply) => {
+                        let connections_send_result = match self.connections_for(client_id, player) {
+                            Ok(c) => reply.send(Ok(c)),
+                            Err(e) => {
+                                error!(error = ?e, "Unable to get connections");
+                                reply.send(Err(e))
+                            }
+                        };
+                        if let Err(e) = connections_send_result {
+                            error!(error = ?e, "Unable to send connections");
+                        }
+                    }
                 }
             }
         }
@@ -1685,6 +1697,29 @@ impl RpcServer {
             .filter(|o| o > &&SYSTEM_OBJECT)
             .cloned()
             .collect())
+    }
+
+    fn connections_for(&self, client_id: Uuid, player: Option<Obj>) -> Result<(Obj, Option<Obj>), SessionError> {
+        if let Some(target_player) = player {
+            // Return connections for the specified player
+            // We need to find the connection and player objects for this player
+            // Since we're looking up by player object, we need to search through the registry
+            let client_ids = self.connections.client_ids_for(target_player)?;
+            if let Some(first_client_id) = client_ids.first() {
+                let connection_obj = self.connections.connection_object_for_client(*first_client_id)
+                    .ok_or(SessionError::NoConnectionForPlayer(target_player))?;
+                let player_obj = self.connections.player_object_for_client(*first_client_id);
+                Ok((connection_obj, player_obj))
+            } else {
+                Err(SessionError::NoConnectionForPlayer(target_player))
+            }
+        } else {
+            // Return connections for the current session's client
+            let connection_obj = self.connections.connection_object_for_client(client_id)
+                .ok_or(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))?;
+            let player_obj = self.connections.player_object_for_client(client_id);
+            Ok((connection_obj, player_obj))
+        }
     }
 
     fn request_sys_prop(

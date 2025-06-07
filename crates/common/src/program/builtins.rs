@@ -1237,6 +1237,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             implemented: true,
         },
         Builtin {
+            name: Symbol::mk("connections"),
+            min_args: Q(0),
+            max_args: Q(1),
+            types: vec![Typed(TYPE_OBJ)],
+            implemented: true,
+        },
+        Builtin {
             name: Symbol::mk("error_message"),
             min_args: Q(1),
             max_args: Q(1),

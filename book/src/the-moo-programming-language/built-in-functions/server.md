@@ -84,6 +84,27 @@
 
 - : Optional player to check (defaults to current player if omitted) `player`
 
+### `connections`
+
+**Description:** Returns the connection and player object identifiers for the current or specified session. This function provides access to the underlying connection objects that mooR maintains separately from player objects, following the classic LambdaMOO connection model.  
+**Arguments:**
+
+- `player`: Optional player object to query. If omitted, returns information for the current session. If provided, requires wizard permissions or must be the caller's own object.
+
+**Returns:** A list containing 1-2 elements:
+- `[connection_obj]` - if no player is logged in to the connection
+- `[connection_obj, player_obj]` - if a player is logged in
+
+**Permission Requirements:**
+- No arguments: Available to all users for their own session
+- With player argument: Requires wizard permissions OR the player must be the caller's own object
+
+**Notes:** 
+- Connection objects use negative IDs (e.g., #-123) and represent the physical connection/line
+- Player objects use positive IDs and represent the logged-in user
+- Unlike LambdaMOO, mooR supports multiple connections per player
+- Both connection and player objects can be used with `notify()` and other functions
+
 ### `queued_tasks`
 
 **Description:** Returns a list of tasks currently in the queue waiting to be executed.  

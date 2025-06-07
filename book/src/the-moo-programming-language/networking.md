@@ -14,6 +14,67 @@ the conversion had failed, using instead a printable representation of the low-l
 `name_lookup_timeout` exists on `$server_options` and has an integer as its value, that integer is used instead as the
 timeout interval.
 
+## Connection Objects and Player Objects
+
+mooR follows the classic LambdaMOO connection model, which makes a clear distinction between _connection objects_ and
+_player objects_:
+
+- **Connection Objects**: Each network connection is represented by a unique object with a negative ID (e.g., #-123).
+  These represent the physical network connection or "line" and persist for the entire duration of the connection,
+  regardless of login status.
+- **Player Objects**: These have positive IDs and represent logged-in users. A player object only exists when someone
+  has successfully logged in.
+
+This dual-object model is important to understand because:
+
+1. **Connection objects don't "go away" after login** - Unlike LambdaMOO implementations, the negative connection object
+   continues to exist and can be used with functions like `notify()` even after a player has logged in.
+
+2. **Multiple connections per player** - Unlike traditional LambdaMOO, mooR supports multiple simultaneous connections
+   for the same player object. Each connection maintains its own connection object.
+
+3. **Both objects work with functions** - You can use `notify()`, `boot_player()`, and other functions with either the
+   negative connection object or the positive player object.
+
+You can use the `connections()` builtin function to discover the relationship between connection and player objects for
+any session.
+
+4. **The connection object is useful** - You can use it to send events that are relevant only for that specific physical
+   connection.
+
+### The `connections()` Function
+
+The `connections([player])` builtin function returns information about the connection and player objects for a session:
+
+**Syntax**: `connections()` or `connections(player)`
+
+**Returns**: A list containing 1-2 elements:
+
+- `[connection_obj]` - if no player is logged in to the connection
+- `[connection_obj, player_obj]` - if a player is logged in
+
+**Examples**:
+
+```moo
+// Get connection info for current session
+connections()
+=> {#-42, #123}  // Connection #-42, logged in as player #123
+
+// Get connection info for another player (requires wizard permissions)
+connections(#456)
+=> {#-89, #456}  // Player #456 is on connection #-89
+
+// Check an unlogged connection
+connections()  // Called from an unlogged connection
+=> {#-55}  // Only connection object, no player logged in
+```
+
+**Permission Requirements**:
+
+- `connections()` with no arguments: Available to all users for their own session
+- `connections(player)` with a player argument: Requires wizard permissions OR the player must be the caller's own
+  object
+
 ## Associating Network Connections with Players
 
 When a network connection is first made to the MOO, it is identified by a unique, negative object number. Such a
@@ -87,10 +148,11 @@ side.
 
 It is not an error if any of these five verbs do not exist; the corresponding call is simply skipped.
 
-> Note: Only one network connection can be controlling a given player object at a given time; should a second connection
-> attempt to log in as that player, the first connection is unceremoniously closed (and `$user_reconnected()` called, as
-> described above). This makes it easy to recover from various kinds of network problems that leave connections open but
-> inaccessible.
+> Note: Unlike traditional LambdaMOO, mooR supports multiple simultaneous connections for the same player object. Each
+> connection maintains its own connection object (with a negative ID), while all connections associated with the same
+> player share the same player object (positive ID). This allows users to connect from multiple devices or applications
+> simultaneously. The `connections()` function can be used to discover the relationship between connection and player
+> objects.
 
 When the network connection is first established, the null command is automatically entered by the server, resulting in
 an initial call to `$do_login_command()` with no arguments. This signal can be used by the verb to print out a welcome

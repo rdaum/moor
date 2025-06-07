@@ -147,6 +147,7 @@ repository issue tracker](http://www.github.com/rdaum/moor/issues).
 | [`connected_seconds`](server.md#connected_seconds)     | &check;  |                                                                          |
 | [`idle_seconds`](server.md#idle_seconds)               | &check;  |                                                                          |
 | [`connection_name`](server.md#connection_name)         | &check;  | To make this 100% compat with core, reverse DNS & listen port is needed. |
+| [`connections`](server.md#connections)                 | &check;  | Returns connection and player objects for session. mooR extension.       |
 | [`notify`](server.md#notify)                           | &check;  | With `rich_notify` feature on, supports sending additional content types |
 | [`boot_player`](server.md#boot_player)                 | &check;  |                                                                          |
 | [`server_log`](server.md#server_log)                   | &check;  |                                                                          |
