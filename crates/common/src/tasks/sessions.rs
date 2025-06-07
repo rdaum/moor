@@ -99,11 +99,11 @@ pub trait Session: Send + Sync {
     /// Return how many seconds the given player has been idle (no tasks submitted).
     fn idle_seconds(&self, player: Obj) -> Result<f64, SessionError>;
 
-    /// Get connection and player object IDs for a session.
+    /// Get all current connections for the given player.
     /// If player is None, returns info for the current session's player.
     /// If player is Some(obj), returns info for that specific player.
-    /// Returns (connection_obj, player_obj) where player_obj is None if not logged in.
-    fn connections(&self, player: Option<Obj>) -> Result<(Obj, Option<Obj>), SessionError>;
+    /// Returns the set of open connections, with the first Obj being the current active connection
+    fn connections(&self, player: Option<Obj>) -> Result<Vec<Obj>, SessionError>;
 }
 
 /// A handle back to the controlling process (e.g. RpcServer) for handling system level events,
@@ -213,7 +213,7 @@ impl Session for NoopClientSession {
         Ok(0.0)
     }
 
-    fn connections(&self, _player: Option<Obj>) -> Result<(Obj, Option<Obj>), SessionError> {
+    fn connections(&self, _player: Option<Obj>) -> Result<Vec<Obj>, SessionError> {
         Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
     }
 }
@@ -359,7 +359,7 @@ impl Session for MockClientSession {
         Ok(0.0)
     }
 
-    fn connections(&self, _player: Option<Obj>) -> Result<(Obj, Option<Obj>), SessionError> {
+    fn connections(&self, _player: Option<Obj>) -> Result<Vec<Obj>, SessionError> {
         Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
     }
 }

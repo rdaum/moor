@@ -44,14 +44,14 @@ any session.
 
 ### The `connections()` Function
 
-The `connections([player])` builtin function returns information about the connection and player objects for a session:
+The `connections([player])` builtin function returns the set of connection objects associated with the current player
+or a specified player (with wizard permissions).
 
 **Syntax**: `connections()` or `connections(player)`
 
-**Returns**: A list containing 1-2 elements:
-
-- `[connection_obj]` - if no player is logged in to the connection
-- `[connection_obj, player_obj]` - if a player is logged in
+**Returns**: A list containing the connection objects associated with the specified player or the current player if no
+player is specified. The first item in the list is the connection object for the current session if no player is
+specified.
 
 **Examples**:
 
@@ -151,8 +151,7 @@ It is not an error if any of these five verbs do not exist; the corresponding ca
 > Note: Unlike traditional LambdaMOO, mooR supports multiple simultaneous connections for the same player object. Each
 > connection maintains its own connection object (with a negative ID), while all connections associated with the same
 > player share the same player object (positive ID). This allows users to connect from multiple devices or applications
-> simultaneously. The `connections()` function can be used to discover the relationship between connection and player
-> objects.
+> simultaneously. The `connections()` function can be used to discover the active connections for a player.
 
 When the network connection is first established, the null command is automatically entered by the server, resulting in
 an initial call to `$do_login_command()` with no arguments. This signal can be used by the verb to print out a welcome

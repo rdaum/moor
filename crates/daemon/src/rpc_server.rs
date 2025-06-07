@@ -307,7 +307,8 @@ impl RpcServer {
                         }
                     }
                     SessionActions::RequestConnections(client_id, player, reply) => {
-                        let connections_send_result = match self.connections_for(client_id, player) {
+                        let connections_send_result = match self.connections_for(client_id, player)
+                        {
                             Ok(c) => reply.send(Ok(c)),
                             Err(e) => {
                                 error!(error = ?e, "Unable to get connections");
@@ -1699,26 +1700,43 @@ impl RpcServer {
             .collect())
     }
 
-    fn connections_for(&self, client_id: Uuid, player: Option<Obj>) -> Result<(Obj, Option<Obj>), SessionError> {
+    fn connections_for(
+        &self,
+        client_id: Uuid,
+        player: Option<Obj>,
+    ) -> Result<Vec<Obj>, SessionError> {
         if let Some(target_player) = player {
-            // Return connections for the specified player
-            // We need to find the connection and player objects for this player
-            // Since we're looking up by player object, we need to search through the registry
+            // First find the client IDs for the player
             let client_ids = self.connections.client_ids_for(target_player)?;
-            if let Some(first_client_id) = client_ids.first() {
-                let connection_obj = self.connections.connection_object_for_client(*first_client_id)
-                    .ok_or(SessionError::NoConnectionForPlayer(target_player))?;
-                let player_obj = self.connections.player_object_for_client(*first_client_id);
-                Ok((connection_obj, player_obj))
-            } else {
-                Err(SessionError::NoConnectionForPlayer(target_player))
+            // Then return the connections for those client IDs
+            let mut connections = vec![];
+            for id in client_ids {
+                if let Some(connection) = self.connections.connection_object_for_client(id) {
+                    connections.push(connection);
+                }
             }
+            Ok(connections)
         } else {
-            // Return connections for the current session's client
-            let connection_obj = self.connections.connection_object_for_client(client_id)
-                .ok_or(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))?;
+            // We want all connections for the player associated with this client_id, but we'll
+            // put the connection associated with the client_id first.  So let's get that first.
+            let mut connections = vec![];
+            if let Some(connection) = self.connections.connection_object_for_client(client_id) {
+                connections.push(connection);
+            }
+            // Now get all connections for the player associated with this client_id
             let player_obj = self.connections.player_object_for_client(client_id);
-            Ok((connection_obj, player_obj))
+            if let Some(player_obj) = player_obj {
+                let client_ids = self.connections.client_ids_for(player_obj)?;
+                for id in client_ids {
+                    if let Some(connection) = self.connections.connection_object_for_client(id) {
+                        // Avoid adding the same connection again
+                        if !connections.contains(&connection) {
+                            connections.push(connection);
+                        }
+                    }
+                }
+            }
+            Ok(connections)
         }
     }
 

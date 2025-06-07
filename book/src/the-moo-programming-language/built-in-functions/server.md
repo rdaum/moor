@@ -86,20 +86,24 @@
 
 ### `connections`
 
-**Description:** Returns the connection and player object identifiers for the current or specified session. This function provides access to the underlying connection objects that mooR maintains separately from player objects, following the classic LambdaMOO connection model.  
+**Description:** Returns the connection objects associated with the current or another player. Connection objects all
+have negative IDs (e.g., #-123) and represent the physical connection or line to the server.
 **Arguments:**
 
-- `player`: Optional player object to query. If omitted, returns information for the current session. If provided, requires wizard permissions or must be the caller's own object.
+- `player`: Optional player object to query. If omitted, returns information for the current session. If provided,
+  requires wizard permissions or must be the caller's own object.
 
-**Returns:** A list containing 1-2 elements:
-- `[connection_obj]` - if no player is logged in to the connection
-- `[connection_obj, player_obj]` - if a player is logged in
+**Returns:** A list containing all connection objects associated with the specified player (or the current player if no
+player is specified). If the player is the current player, the first item in the list is the connection object for the
+current session.
 
 **Permission Requirements:**
+
 - No arguments: Available to all users for their own session
 - With player argument: Requires wizard permissions OR the player must be the caller's own object
 
-**Notes:** 
+**Notes:**
+
 - Connection objects use negative IDs (e.g., #-123) and represent the physical connection/line
 - Player objects use positive IDs and represent the logged-in user
 - Unlike LambdaMOO, mooR supports multiple connections per player

@@ -1710,7 +1710,9 @@ fn bf_worker_request(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
 fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() > 1 {
-        return Err(ErrValue(E_ARGS.msg("connections() requires 0 or 1 arguments")));
+        return Err(ErrValue(
+            E_ARGS.msg("connections() requires 0 or 1 arguments"),
+        ));
     }
 
     let player = if bf_args.args.is_empty() {
@@ -1727,30 +1729,28 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Permission check: if requesting for another player, must be wizard or same player
     if let Some(target_player) = player {
         let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
-        if target_player != task_perms.who && !task_perms.check_is_wizard().map_err(world_state_bf_err)? {
+        if target_player != task_perms.who
+            && !task_perms.check_is_wizard().map_err(world_state_bf_err)?
+        {
             return Err(ErrValue(E_PERM.msg(
                 "connections() requires the caller to be a wizard or requesting their own connections",
             )));
         }
     }
 
-    let (connection_obj, player_obj) = match bf_args.session.connections(player) {
+    let connections = match bf_args.session.connections(player) {
         Ok(result) => result,
         Err(SessionError::NoConnectionForPlayer(_)) => {
             return Err(ErrValue(E_INVARG.msg("No connection found for player")));
         }
         Err(_) => {
-            return Err(ErrValue(E_INVARG.msg("Unable to get connection information")));
+            return Err(ErrValue(
+                E_INVARG.msg("Unable to get connection information"),
+            ));
         }
     };
 
-    let result = if let Some(player_obj) = player_obj {
-        v_list(&[v_obj(connection_obj), v_obj(player_obj)])
-    } else {
-        v_list(&[v_obj(connection_obj)])
-    };
-
-    Ok(Ret(result))
+    Ok(Ret(v_list_iter(connections.into_iter().map(v_obj))))
 }
 
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
