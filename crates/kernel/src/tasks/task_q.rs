@@ -357,11 +357,34 @@ impl SuspensionQ {
 }
 
 fn from_epoch_micros_to_instant(time_since_epoch_micros: u128) -> Instant {
-    let time_since_epoch_systime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    // Convert stored epoch micros back to SystemTime
+    let stored_system_time =
+        UNIX_EPOCH + Duration::from_micros(time_since_epoch_micros.min(u64::MAX as u128) as u64);
 
-    let time_since_epoch_duration = Duration::from_micros(time_since_epoch_micros as u64);
-    let time_since_epoch_instant = Instant::now() - time_since_epoch_systime;
-    time_since_epoch_instant + time_since_epoch_duration
+    // Calculate how far in the future (or past) this time is relative to now
+    let now_system = SystemTime::now();
+    let now_instant = Instant::now();
+
+    match stored_system_time.cmp(&now_system) {
+        std::cmp::Ordering::Greater => {
+            // Future time - add the difference
+            let time_diff = stored_system_time
+                .duration_since(now_system)
+                .unwrap_or(Duration::ZERO);
+            now_instant + time_diff
+        }
+        std::cmp::Ordering::Less => {
+            // Past time - subtract the difference (but don't go negative)
+            let time_diff = now_system
+                .duration_since(stored_system_time)
+                .unwrap_or(Duration::ZERO);
+            now_instant.checked_sub(time_diff).unwrap_or(now_instant)
+        }
+        std::cmp::Ordering::Equal => {
+            // Same time
+            now_instant
+        }
+    }
 }
 
 impl Encode for SuspendedTask {
@@ -408,12 +431,24 @@ impl Encode for WakeCondition {
         match self {
             WakeCondition::Never => Ok(()),
             WakeCondition::Time(t) => {
-                // Convert to a time since epoch and encode as micros.
-                let time_since_epoch_systime =
-                    SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-                let from_now_instant = t.duration_since(Instant::now());
-                let time_to_wake = time_since_epoch_systime + from_now_instant;
-                time_to_wake.as_micros().encode(encoder)
+                // Convert Instant to absolute epoch time for storage
+                let now_system = SystemTime::now();
+                let now_instant = Instant::now();
+
+                let epoch_time = if *t >= now_instant {
+                    // Future time - add the difference
+                    let time_diff = t.duration_since(now_instant);
+                    now_system + time_diff
+                } else {
+                    // Past time - subtract the difference (but don't go before epoch)
+                    let time_diff = now_instant.duration_since(*t);
+                    now_system.checked_sub(time_diff).unwrap_or(UNIX_EPOCH)
+                };
+
+                let time_since_epoch = epoch_time
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or(Duration::ZERO);
+                time_since_epoch.as_micros().encode(encoder)
             }
             WakeCondition::Input(uuid) => uuid.as_u128().encode(encoder),
             WakeCondition::Task(task_id) => task_id.encode(encoder),

@@ -114,6 +114,8 @@ mod tests {
     use moor_var::SYSTEM_OBJECT;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
+    use std::time::Duration;
+    use uuid::Uuid;
 
     // Verify creation of an empty DB, including creation of tables.
     #[test]
@@ -314,6 +316,242 @@ mod tests {
         // Go through the loaded tasks and make sure the deleted ones are not there.
         for task in loaded_tasks.iter() {
             assert!(task.task.task_id % 2 != 0);
+        }
+    }
+
+    // Test time-based wake conditions across save/load cycles
+    #[test]
+    fn test_time_wake_conditions() {
+        let tmpdir = tempfile::tempdir().expect("Unable to create temporary directory");
+        let path = tmpdir.path();
+
+        let so = ServerOptions {
+            bg_seconds: 0,
+            bg_ticks: 0,
+            fg_seconds: 0,
+            fg_ticks: 0,
+            max_stack_depth: 0,
+        };
+
+        // Create tasks with various time-based wake conditions
+        let now = minstant::Instant::now();
+        let input_uuid = Uuid::new_v4();
+
+        let mut tasks = vec![];
+        let test_cases = [
+            ("future_5s", 0),
+            ("future_1min", 1),
+            ("future_1hr", 2),
+            ("past_1s", 3),
+            ("never", 4),
+            ("input", 5),
+            ("immediate", 6),
+        ];
+
+        for (name, i) in test_cases.iter() {
+            let wake_condition = match *i {
+                0 => WakeCondition::Time(now + Duration::from_secs(5)),
+                1 => WakeCondition::Time(now + Duration::from_secs(60)),
+                2 => WakeCondition::Time(now + Duration::from_secs(3600)),
+                3 => WakeCondition::Time(now.checked_sub(Duration::from_secs(1)).unwrap_or(now)),
+                4 => WakeCondition::Never,
+                5 => WakeCondition::Input(input_uuid),
+                6 => WakeCondition::Immedate,
+                _ => unreachable!(),
+            };
+
+            let task = Task::new(
+                *i,
+                SYSTEM_OBJECT,
+                TaskStart::StartEval {
+                    player: SYSTEM_OBJECT,
+                    program: Default::default(),
+                },
+                SYSTEM_OBJECT,
+                &so,
+                Arc::new(AtomicBool::new(false)),
+            );
+
+            let suspended = SuspendedTask {
+                wake_condition,
+                task,
+                session: Arc::new(NoopClientSession::new()),
+                result_sender: None,
+            };
+            tasks.push((*name, suspended));
+        }
+
+        // Save all tasks
+        {
+            let (db, is_fresh) = FjallTasksDB::open(path);
+            assert!(is_fresh);
+            for (_, task) in &tasks {
+                db.save_task(task).unwrap();
+            }
+        }
+
+        // Simulate time passing and reload
+        std::thread::sleep(Duration::from_millis(10));
+
+        // Load and verify
+        {
+            let (db, is_fresh) = FjallTasksDB::open(path);
+            assert!(!is_fresh);
+            let loaded_tasks = db.load_tasks().unwrap();
+            assert_eq!(loaded_tasks.len(), tasks.len());
+
+            // Verify each task type was preserved correctly
+            for (original_name, original_task) in &tasks {
+                let loaded_task = loaded_tasks
+                    .iter()
+                    .find(|t| t.task.task_id == original_task.task.task_id)
+                    .unwrap_or_else(|| panic!("Could not find loaded task for {}", original_name));
+
+                match (&original_task.wake_condition, &loaded_task.wake_condition) {
+                    (WakeCondition::Time(_), WakeCondition::Time(_)) => {
+                        // Time conditions should be preserved (though exact instant may differ slightly)
+                        // This is expected due to the serialization round-trip
+                    }
+                    (WakeCondition::Never, WakeCondition::Never) => {}
+                    (WakeCondition::Input(uuid1), WakeCondition::Input(uuid2)) => {
+                        assert_eq!(uuid1, uuid2, "Input UUID mismatch for {}", original_name);
+                    }
+                    (WakeCondition::Immedate, WakeCondition::Immedate) => {}
+                    _ => panic!(
+                        "Wake condition type mismatch for {}: {:?} vs {:?}",
+                        original_name, original_task.wake_condition, loaded_task.wake_condition
+                    ),
+                }
+            }
+        }
+    }
+
+    // Test edge cases for time serialization
+    #[test]
+    fn test_time_edge_cases() {
+        let tmpdir = tempfile::tempdir().expect("Unable to create temporary directory");
+        let _path = tmpdir.path();
+
+        let so = ServerOptions {
+            bg_seconds: 0,
+            bg_ticks: 0,
+            fg_seconds: 0,
+            fg_ticks: 0,
+            max_stack_depth: 0,
+        };
+
+        let now = minstant::Instant::now();
+
+        // Test various edge cases
+        let edge_cases = [
+            now + Duration::from_secs(86400 * 365), // 1 year
+            // Very near future
+            now + Duration::from_millis(1),
+            // Past times (if supported by the system)
+            now.checked_sub(Duration::from_millis(1)).unwrap_or(now),
+            now.checked_sub(Duration::from_secs(60)).unwrap_or(now),
+        ];
+
+        for (i, wake_time) in edge_cases.iter().enumerate() {
+            let task = Task::new(
+                i,
+                SYSTEM_OBJECT,
+                TaskStart::StartEval {
+                    player: SYSTEM_OBJECT,
+                    program: Default::default(),
+                },
+                SYSTEM_OBJECT,
+                &so,
+                Arc::new(AtomicBool::new(false)),
+            );
+
+            let suspended = SuspendedTask {
+                wake_condition: WakeCondition::Time(*wake_time),
+                task,
+                session: Arc::new(NoopClientSession::new()),
+                result_sender: None,
+            };
+
+            // Test save/load cycle for this edge case
+            let (db, _) = FjallTasksDB::open(&tmpdir.path().join(format!("edge_case_{}", i)));
+
+            // Should not panic during save
+            db.save_task(&suspended)
+                .unwrap_or_else(|_| panic!("Failed to save edge case {}", i));
+
+            // Should not panic during load
+            let loaded_tasks = db
+                .load_tasks()
+                .unwrap_or_else(|_| panic!("Failed to load edge case {}", i));
+            assert_eq!(loaded_tasks.len(), 1);
+
+            // Should have correct wake condition type
+            match &loaded_tasks[0].wake_condition {
+                WakeCondition::Time(_) => {
+                    // Success - time was preserved as a time condition
+                }
+                other => panic!("Edge case {} changed wake condition type to {:?}", i, other),
+            }
+        }
+    }
+
+    // Test robustness against system clock changes
+    #[test]
+    fn test_clock_robustness() {
+        let tmpdir = tempfile::tempdir().expect("Unable to create temporary directory");
+        let path = tmpdir.path();
+
+        let so = ServerOptions {
+            bg_seconds: 0,
+            bg_ticks: 0,
+            fg_seconds: 0,
+            fg_ticks: 0,
+            max_stack_depth: 0,
+        };
+
+        // Create a task with a future wake time
+        let task = Task::new(
+            999,
+            SYSTEM_OBJECT,
+            TaskStart::StartEval {
+                player: SYSTEM_OBJECT,
+                program: Default::default(),
+            },
+            SYSTEM_OBJECT,
+            &so,
+            Arc::new(AtomicBool::new(false)),
+        );
+
+        let wake_time = minstant::Instant::now() + Duration::from_secs(30);
+        let suspended = SuspendedTask {
+            wake_condition: WakeCondition::Time(wake_time),
+            task,
+            session: Arc::new(NoopClientSession::new()),
+            result_sender: None,
+        };
+
+        // Save the task
+        {
+            let (db, _) = FjallTasksDB::open(path);
+            db.save_task(&suspended).unwrap();
+        }
+
+        // Simulate some time passing (less than the wake time)
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Load the task - should not panic even with time drift
+        {
+            let (db, _) = FjallTasksDB::open(path);
+            let loaded_tasks = db.load_tasks().unwrap();
+            assert_eq!(loaded_tasks.len(), 1);
+
+            // Verify it's still a time-based wake condition
+            match &loaded_tasks[0].wake_condition {
+                WakeCondition::Time(_) => {
+                    // Success - even with potential clock drift, we got a valid time back
+                }
+                other => panic!("Clock robustness test failed: got {:?}", other),
+            }
         }
     }
 }

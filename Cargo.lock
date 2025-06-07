@@ -2982,6 +2982,7 @@ dependencies = [
  "flume",
  "gdt-cpus",
  "mimalloc",
+ "minstant",
  "moor-common",
  "moor-db",
  "moor-kernel",

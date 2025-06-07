@@ -59,6 +59,7 @@ eyre.workspace = true
 fjall.workspace = true
 flume = "0.11"
 gdt-cpus.workspace = true
+minstant.workspace = true
 oneshot.workspace = true
 papaya.workspace = true
 semver.workspace = true
