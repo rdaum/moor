@@ -277,9 +277,17 @@ impl TelnetConnection {
                     };
                     let line = line.unwrap();
                     let words = parse_into_words(&line);
-                    let response = &mut self.rpc_client.make_client_rpc_call(self.client_id,
-                        HostClientToDaemonMessage::LoginCommand(self.client_token.clone(), self.handler_object, words, true)).await.expect("Unable to send login request to RPC server");
-                    if let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(Some((auth_token, connect_type, player)))) = response {
+                    let response = &mut self.rpc_client.make_client_rpc_call(
+                        self.client_id,
+                        HostClientToDaemonMessage::LoginCommand {
+                            client_token: self.client_token.clone(),
+                            handler_object: self.handler_object,
+                            connect_args: words,
+                            do_attach: true,
+                        },
+                    ).await?;
+                    if let ReplyResult::ClientSuccess(DaemonToClientReply::LoginResult(
+                        Some((auth_token, connect_type, player)))) = response {
                         info!(?player, client_id = ?self.client_id, "Login successful");
                         self.connection_oid = *player;
                         return Ok((auth_token.clone(), *player, *connect_type))
