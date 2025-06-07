@@ -204,7 +204,12 @@ impl Listener {
             let mut rpc_client = RpcSendClient::new(rpc_request_sock);
 
             let (client_token, connection_oid) = match rpc_client
-                .make_client_rpc_call(client_id, ConnectionEstablish(peer_addr.to_string()))
+                .make_client_rpc_call(
+                    client_id,
+                    ConnectionEstablish {
+                        peer_addr: peer_addr.to_string(),
+                    },
+                )
                 .await
             {
                 Ok(ReplyResult::ClientSuccess(DaemonToClientReply::NewConnection(

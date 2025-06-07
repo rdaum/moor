@@ -751,12 +751,12 @@ pub fn v_arc_string(s: std::sync::Arc<String>) -> Var {
 mod v_arc_string_tests {
     use super::*;
     use crate::variant::Variant;
-    
+
     #[test]
     fn test_v_arc_string() {
         let arc_string = std::sync::Arc::new("test_string".to_string());
         let var = v_arc_string(arc_string.clone());
-        
+
         match var.variant() {
             Variant::Str(s) => {
                 assert_eq!(s.as_str(), "test_string");

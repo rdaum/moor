@@ -127,7 +127,12 @@ pub async fn create_user_session(
     let client_id = uuid::Uuid::new_v4();
     let peer_addr = format!("{}.test", Uuid::new_v4());
     let (client_token, connection_oid) = match rpc_client
-        .make_client_rpc_call(client_id, ConnectionEstablish(peer_addr.to_string()))
+        .make_client_rpc_call(
+            client_id,
+            ConnectionEstablish {
+                peer_addr: peer_addr.to_string(),
+            },
+        )
         .await
     {
         Ok(ReplyResult::ClientSuccess(DaemonToClientReply::NewConnection(token, objid))) => {
@@ -167,12 +172,12 @@ pub async fn create_user_session(
     let response = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::LoginCommand(
-                client_token.clone(),
-                SYSTEM_OBJECT,
-                vec!["connect".to_string(), "wizard".to_string()],
-                false,
-            ),
+            HostClientToDaemonMessage::LoginCommand {
+                client_token: client_token.clone(),
+                handler_object: SYSTEM_OBJECT,
+                connect_args: vec!["connect".to_string(), "wizard".to_string()],
+                do_attach: false,
+            },
         )
         .await
         .expect("Unable to send login request to RPC server");

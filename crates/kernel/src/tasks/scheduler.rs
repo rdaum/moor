@@ -185,7 +185,7 @@ impl Scheduler {
         let task_receiver = self.task_control_receiver.clone();
         let scheduler_receiver = self.scheduler_receiver.clone();
         let worker_receiver = self.worker_request_recv.clone();
-        
+
         let mut last_wake_time = Instant::now();
 
         self.reload_server_options();
@@ -221,19 +221,19 @@ impl Scheduler {
 
             // Use flume's Selector to properly select across channels with different types
             let selector = flume::Selector::new();
-            
+
             // Add task receiver
             let selector = selector.recv(&task_receiver, |result| match result {
                 Ok((task_id, msg)) => Some(SchedulerMessage::Task(task_id, msg)),
                 Err(_) => None,
             });
-            
-            // Add scheduler receiver  
+
+            // Add scheduler receiver
             let selector = selector.recv(&scheduler_receiver, |result| match result {
                 Ok(msg) => Some(SchedulerMessage::Scheduler(msg)),
                 Err(_) => None,
             });
-            
+
             // Add worker receiver if present
             let selector = if let Some(ref wr) = worker_receiver {
                 selector.recv(wr, |result| match result {

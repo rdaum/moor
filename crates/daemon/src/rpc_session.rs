@@ -29,16 +29,22 @@ pub struct RpcSession {
     player: Obj,
     // TODO: manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
     //  should be mmap'd to disk or something.
-    // TODO: We could also use Boxcar or other append-only lockless container for this, since we only
-    //  ever append.
     session_buffer: Mutex<Vec<(Obj, Box<NarrativeEvent>)>>,
     send: Sender<SessionActions>,
 }
 
 pub(crate) enum SessionActions {
     PublishNarrativeEvents(Vec<(Obj, Box<NarrativeEvent>)>),
-    RequestClientInput(Uuid, Obj, Uuid),
-    SendSystemMessage(Uuid, Obj, String),
+    RequestClientInput {
+        client_id: Uuid,
+        connection: Obj,
+        request_id: Uuid,
+    },
+    SendSystemMessage {
+        client_id: Uuid,
+        connection: Obj,
+        system_message: String,
+    },
     RequestConnectionName(Uuid, Obj, oneshot::Sender<Result<String, SessionError>>),
     Disconnect(Uuid, Obj),
     RequestConnectedPlayers(Uuid, oneshot::Sender<Result<Vec<Obj>, SessionError>>),
@@ -86,11 +92,11 @@ impl Session for RpcSession {
 
     fn request_input(&self, player: Obj, input_request_id: Uuid) -> Result<(), SessionError> {
         self.send
-            .send(SessionActions::RequestClientInput(
-                self.client_id,
-                player,
-                input_request_id,
-            ))
+            .send(SessionActions::RequestClientInput {
+                client_id: self.client_id,
+                connection: player,
+                request_id: input_request_id,
+            })
             .map_err(|e| SessionError::CommitError(e.to_string()))?;
         Ok(())
     }
@@ -102,11 +108,11 @@ impl Session for RpcSession {
 
     fn send_system_msg(&self, player: Obj, msg: &str) -> Result<(), SessionError> {
         self.send
-            .send(SessionActions::SendSystemMessage(
-                self.client_id,
-                player,
-                msg.to_string(),
-            ))
+            .send(SessionActions::SendSystemMessage {
+                client_id: self.client_id,
+                connection: player,
+                system_message: msg.to_string(),
+            })
             .map_err(|e| SessionError::CommitError(e.to_string()))?;
         Ok(())
     }
@@ -117,11 +123,11 @@ impl Session for RpcSession {
             None => "** Server is shutting down ** ".to_string(),
         };
         self.send
-            .send(SessionActions::SendSystemMessage(
-                self.client_id,
-                self.player,
-                shutdown_msg,
-            ))
+            .send(SessionActions::SendSystemMessage {
+                client_id: self.client_id,
+                connection: self.player,
+                system_message: shutdown_msg,
+            })
             .map_err(|e| SessionError::CommitError(e.to_string()))
     }
 

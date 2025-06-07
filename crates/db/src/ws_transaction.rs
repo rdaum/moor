@@ -13,12 +13,12 @@
 
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
+use crate::moor_db::CachePadded;
 use crate::moor_db::WorkingSets;
 use crate::prop_cache::PropResolutionCache;
 use crate::tx_management::{Relation, RelationTransaction, Tx};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
-use crate::moor_db::CachePadded;
 use ahash::AHasher;
 use flume::Sender;
 use moor_common::model::{
@@ -36,7 +36,6 @@ use std::sync::atomic::AtomicI64;
 use std::time::{Duration, Instant};
 use tracing::warn;
 use uuid::Uuid;
-
 
 type RTx<Domain, Codomain> = RelationTransaction<
     Domain,

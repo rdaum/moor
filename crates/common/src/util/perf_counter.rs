@@ -23,12 +23,12 @@ impl DummyCounter {
     pub fn add(&self, _value: isize) {
         // No-op
     }
-    
+
     #[inline]
     pub fn get(&self) -> isize {
         0
     }
-    
+
     #[inline]
     pub fn sum(&self) -> isize {
         0

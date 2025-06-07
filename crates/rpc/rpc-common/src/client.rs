@@ -68,16 +68,26 @@ pub struct PropInfo {
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub enum HostClientToDaemonMessage {
     /// Establish a new connection, requesting a client token and a connection object
-    ConnectionEstablish(String),
+    ConnectionEstablish { peer_addr: String },
     /// Anonymously request a sysprop (e.g. $login.welcome_message)
     RequestSysProp(ClientToken, ObjectRef, Symbol),
     /// Login using the words (e.g. "create player bob" or "connect player bob") and return an
     /// auth token and the object id of the player. None if the login failed.
-    LoginCommand(ClientToken, Obj, Vec<String>, bool /* attach? */),
+    LoginCommand {
+        client_token: ClientToken,
+        handler_object: Obj,
+        connect_args: Vec<String>,
+        do_attach: bool,
+    },
     /// Attach to a previously-authenticated user, returning the object id of the player,
     /// and a client token -- or None if the auth token is not valid.
     /// If a ConnectType is specified, the user_connected verb will be called.
-    Attach(AuthToken, Option<ConnectType>, Obj, String),
+    Attach {
+        auth_token: AuthToken,
+        connect_type: Option<ConnectType>,
+        handler_object: Obj,
+        peer_addr: String,
+    },
     /// Send a command to be executed.
     Command(ClientToken, AuthToken, Obj, String),
     /// Return the (visible) verbs on the given object.

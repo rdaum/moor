@@ -13,8 +13,8 @@
 
 use crate::tx_management::{Error, Provider, Timestamp};
 use byteview::ByteView;
-use flume::Sender;
 use fjall::UserValue;
+use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_var::AsByteBuffer;
 use std::marker::PhantomData;

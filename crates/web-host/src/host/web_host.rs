@@ -111,12 +111,12 @@ impl WebHost {
         let (client_token, player) = match rpc_client
             .make_client_rpc_call(
                 client_id,
-                Attach(
-                    auth_token,
-                    connect_type,
-                    self.handler_object,
-                    peer_addr.to_string(),
-                ),
+                Attach {
+                    auth_token: auth_token,
+                    connect_type: connect_type,
+                    handler_object: self.handler_object,
+                    peer_addr: peer_addr.to_string(),
+                },
             )
             .await
         {
@@ -211,7 +211,12 @@ impl WebHost {
         let mut rpc_client = RpcSendClient::new(rcp_request_sock);
 
         let client_token = match rpc_client
-            .make_client_rpc_call(client_id, ConnectionEstablish(addr.to_string()))
+            .make_client_rpc_call(
+                client_id,
+                ConnectionEstablish {
+                    peer_addr: addr.to_string(),
+                },
+            )
             .await
         {
             Ok(ReplyResult::ClientSuccess(DaemonToClientReply::NewConnection(

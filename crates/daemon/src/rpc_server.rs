@@ -13,16 +13,16 @@
 
 //! The core of the server logic for the RPC daemon
 
+use ahash::AHasher;
 use eyre::{Context, Error};
 use flume::{Receiver, Sender};
+use papaya::HashMap as PapayaHashMap;
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
-use papaya::HashMap as PapayaHashMap;
-use ahash::AHasher;
-use std::hash::BuildHasherDefault;
 
 use crate::connections::ConnectionsDB;
 use crate::connections_fjall::ConnectionsFjall;
@@ -236,14 +236,22 @@ impl RpcServer {
                             error!(error = ?e, "Unable to publish narrative events");
                         }
                     }
-                    SessionActions::RequestClientInput(client_id, connection, input_request_id) => {
+                    SessionActions::RequestClientInput {
+                        client_id: client_id,
+                        connection: connection,
+                        request_id: input_request_id,
+                    } => {
                         if let Err(e) =
                             self.request_client_input(client_id, connection, input_request_id)
                         {
                             error!(error = ?e, "Unable to request client input");
                         }
                     }
-                    SessionActions::SendSystemMessage(client_id, connection, message) => {
+                    SessionActions::SendSystemMessage {
+                        client_id: client_id,
+                        connection: connection,
+                        system_message: message,
+                    } => {
                         if let Err(e) = self.send_system_message(client_id, connection, message) {
                             error!(error = ?e, "Unable to send system message");
                         }
@@ -532,17 +540,19 @@ impl RpcServer {
         request: HostClientToDaemonMessage,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
         match request {
-            HostClientToDaemonMessage::ConnectionEstablish(hostname) => {
+            HostClientToDaemonMessage::ConnectionEstablish {
+                peer_addr: hostname,
+            } => {
                 let oid = self.connections.new_connection(client_id, hostname, None)?;
                 let token = self.make_client_token(client_id);
                 Ok(NewConnection(token, oid))
             }
-            HostClientToDaemonMessage::Attach(
-                auth_token,
-                connect_type,
-                handler_object,
-                hostname,
-            ) => {
+            HostClientToDaemonMessage::Attach {
+                auth_token: auth_token,
+                connect_type: connect_type,
+                handler_object: handler_object,
+                peer_addr: hostname,
+            } => {
                 // Validate the auth token, and get the player.
                 let player = self.validate_auth_token(auth_token, None)?;
 
@@ -589,7 +599,12 @@ impl RpcServer {
 
                 self.request_sys_prop(scheduler_client, connection, object, property)
             }
-            HostClientToDaemonMessage::LoginCommand(token, handler_object, args, attach) => {
+            HostClientToDaemonMessage::LoginCommand {
+                client_token: token,
+                handler_object: handler_object,
+                connect_args: args,
+                do_attach: attach,
+            } => {
                 let connection = self.client_auth(token, client_id)?;
 
                 self.perform_login(

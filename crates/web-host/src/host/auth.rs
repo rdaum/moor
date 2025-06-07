@@ -86,12 +86,12 @@ async fn auth_handler(
     let response = rpc_client
         .make_client_rpc_call(
             client_id,
-            HostClientToDaemonMessage::LoginCommand(
-                client_token.clone(),
-                host.handler_object,
-                words,
-                false,
-            ),
+            HostClientToDaemonMessage::LoginCommand {
+                client_token: client_token.clone(),
+                handler_object: host.handler_object,
+                connect_args: words,
+                do_attach: false,
+            },
         )
         .await
         .expect("Unable to send login request to RPC server");

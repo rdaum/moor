@@ -302,7 +302,7 @@ where
             return Ok(Some(old_value));
         }
 
-        // Check backing source for existing data  
+        // Check backing source for existing data
         if let Some((read_ts, backing_value)) = self.backing_source.get(&domain)? {
             if read_ts < self.tx.ts {
                 // Existing entry in backing - do update via local operation

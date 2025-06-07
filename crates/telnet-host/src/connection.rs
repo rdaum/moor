@@ -157,12 +157,12 @@ impl TelnetConnection {
         self.rpc_client
             .make_client_rpc_call(
                 self.client_id,
-                HostClientToDaemonMessage::LoginCommand(
-                    self.client_token.clone(),
-                    self.handler_object,
-                    vec![],
-                    false,
-                ),
+                HostClientToDaemonMessage::LoginCommand {
+                    client_token: self.client_token.clone(),
+                    handler_object: self.handler_object,
+                    connect_args: vec![],
+                    do_attach: false,
+                },
             )
             .await
             .expect("Unable to send login request to RPC server");
