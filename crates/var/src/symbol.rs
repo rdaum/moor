@@ -65,11 +65,11 @@ impl SymbolGroup {
         &self,
         original: &str,
         global_state: &GlobalInternerState,
-    ) -> SymbolData {
+    ) -> &SymbolData {
         // Linear search through existing variants to find exact match
         for (_index, variant) in self.variants.iter() {
             if variant.original_string.as_ref() == original {
-                return variant.clone();
+                return &variant;
             }
         }
 
@@ -79,7 +79,7 @@ impl SymbolGroup {
         // Double-check after acquiring lock (another thread might have added it)
         for (_index, variant) in self.variants.iter() {
             if variant.original_string.as_ref() == original {
-                return variant.clone();
+                return &variant;
             }
         }
 
@@ -94,9 +94,58 @@ impl SymbolGroup {
         };
 
         // Push to group's variants boxcar
-        self.variants.push(symbol_data.clone());
+        let offset = self.variants.push(symbol_data);
 
-        symbol_data
+        &self.variants[offset]
+    }
+}
+
+#[cfg_attr(
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "powerpc64",
+    ),
+    repr(align(128))
+)]
+#[cfg_attr(
+    any(
+        target_arch = "arm",
+        target_arch = "mips",
+        target_arch = "mips64",
+        target_arch = "riscv64",
+    ),
+    repr(align(32))
+)]
+#[cfg_attr(target_arch = "s390x", repr(align(256)))]
+#[cfg_attr(
+    not(any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "powerpc64",
+        target_arch = "arm",
+        target_arch = "mips",
+        target_arch = "mips64",
+        target_arch = "riscv64",
+        target_arch = "s390x",
+    )),
+    repr(align(64))
+)]
+pub struct CachePadded<T> {
+    pub value: T,
+}
+
+impl<T> CachePadded<T> {
+    pub fn new(value: T) -> Self {
+        Self { value }
+    }
+}
+
+impl<T> std::ops::Deref for CachePadded<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
 
@@ -106,7 +155,7 @@ struct GlobalInternerState {
     /// Fast reverse lookup: repr_id as index -> symbol data
     repr_id_to_symbol: BoxcarVec<Arc<String>>,
     /// Atomic counter for compare_id generation
-    next_compare_id: AtomicU32,
+    next_compare_id: CachePadded<AtomicU32>,
     /// Lock for atomic reservation of repr_id + boxcar slot (only used for NEW symbols)
     allocation_lock: Mutex<()>,
 }
@@ -116,7 +165,7 @@ impl GlobalInternerState {
         Self {
             groups: Default::default(),
             repr_id_to_symbol: BoxcarVec::new(),
-            next_compare_id: AtomicU32::new(0),
+            next_compare_id: CachePadded::new(AtomicU32::new(0)),
             allocation_lock: Mutex::new(()),
         }
     }
@@ -141,10 +190,10 @@ impl GlobalInternerState {
         (symbol_data.compare_id, symbol_data.repr_id)
     }
 
-    fn get_string_by_repr_id(&self, repr_id: u32) -> Option<Arc<String>> {
+    fn get_string_by_repr_id(&self, repr_id: u32) -> Option<&Arc<String>> {
         // Fast O(1) lookup using direct boxcar indexing
         // repr_id == boxcar_index invariant is maintained by using push() return value as repr_id
-        self.repr_id_to_symbol.get(repr_id as usize).cloned()
+        self.repr_id_to_symbol.get(repr_id as usize)
     }
 }
 
@@ -228,6 +277,7 @@ impl Symbol {
                     self.repr_id
                 )
             })
+            .clone()
     }
 
     /// Get the original string as an `Arc<str>`.
