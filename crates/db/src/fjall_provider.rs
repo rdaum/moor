@@ -13,7 +13,7 @@
 
 use crate::tx_management::{Error, Provider, Timestamp};
 use byteview::ByteView;
-use crossbeam_channel::Sender;
+use flume::Sender;
 use fjall::UserValue;
 use gdt_cpus::ThreadPriority;
 use moor_var::AsByteBuffer;
@@ -74,7 +74,7 @@ where
 {
     pub fn new(relation_name: &str, fjall_partition: fjall::PartitionHandle) -> Self {
         let kill_switch = Arc::new(AtomicBool::new(false));
-        let (ops_tx, ops_rx) = crossbeam_channel::unbounded::<WriteOp<Domain, Codomain>>();
+        let (ops_tx, ops_rx) = flume::unbounded::<WriteOp<Domain, Codomain>>();
 
         let fj = fjall_partition.clone();
         let ks = kill_switch.clone();

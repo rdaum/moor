@@ -172,7 +172,7 @@ fn do_program(
     let mut vm_host = prepare_vm_execution(&state_source, program, max_ticks);
     let mut tx = state_source.new_world_state().unwrap();
     let session = Arc::new(NoopClientSession::new());
-    let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
+    let (scs_tx, _scs_rx) = flume::unbounded();
     let task_scheduler_client = TaskSchedulerClient::new(0, scs_tx);
 
     for _ in 0..iters {

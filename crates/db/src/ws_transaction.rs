@@ -18,9 +18,9 @@ use crate::prop_cache::PropResolutionCache;
 use crate::tx_management::{Relation, RelationTransaction, Tx};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
+use crate::moor_db::CachePadded;
 use ahash::AHasher;
-use crossbeam_channel::Sender;
-use crossbeam_utils::CachePadded;
+use flume::Sender;
 use moor_common::model::{
     CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectRef, PropDef, PropDefs,
     PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
@@ -36,6 +36,7 @@ use std::sync::atomic::AtomicI64;
 use std::time::{Duration, Instant};
 use tracing::warn;
 use uuid::Uuid;
+
 
 type RTx<Domain, Codomain> = RelationTransaction<
     Domain,

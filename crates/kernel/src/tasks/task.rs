@@ -30,7 +30,7 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use crossbeam_channel::Sender;
+use flume::Sender;
 use lazy_static::lazy_static;
 use tracing::{error, warn};
 
@@ -734,7 +734,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
 
-    use crossbeam_channel::{Receiver, unbounded};
+    use flume::{Receiver, unbounded};
 
     use moor_common::model::{
         ArgSpec, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,

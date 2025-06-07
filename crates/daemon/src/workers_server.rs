@@ -39,7 +39,7 @@ pub struct WorkersServer {
     public_key: Key<32>,
     #[allow(dead_code)]
     private_key: Key<64>,
-    scheduler_send: crossbeam_channel::Sender<WorkerResponse>,
+    scheduler_send: flume::Sender<WorkerResponse>,
     token_cache: Arc<RwLock<HashMap<WorkerToken, (Instant, Uuid)>>>,
 }
 
@@ -82,8 +82,8 @@ fn ack(rpc_socket: &zmq::Socket) {
 fn process(
     publish: zmq::Socket,
     ks: Arc<AtomicBool>,
-    recv: crossbeam_channel::Receiver<WorkerRequest>,
-    send: crossbeam_channel::Sender<WorkerResponse>,
+    recv: flume::Receiver<WorkerRequest>,
+    send: flume::Sender<WorkerResponse>,
     workers: Arc<RwLock<HashMap<Uuid, Worker>>>,
 ) {
     let mut last_ping_out = Instant::now();
@@ -218,7 +218,7 @@ impl WorkersServer {
         public_key: Key<32>,
         private_key: Key<64>,
         zmq_context: zmq::Context,
-        scheduler_send: crossbeam_channel::Sender<WorkerResponse>,
+        scheduler_send: flume::Sender<WorkerResponse>,
     ) -> Self {
         Self {
             public_key,
@@ -237,8 +237,8 @@ impl WorkersServer {
     pub fn start(
         &mut self,
         workers_broadcast: &str,
-    ) -> Result<crossbeam_channel::Sender<WorkerRequest>, eyre::Report> {
-        let (send, recv) = crossbeam_channel::unbounded::<WorkerRequest>();
+    ) -> Result<flume::Sender<WorkerRequest>, eyre::Report> {
+        let (send, recv) = flume::unbounded::<WorkerRequest>();
         let b = std::thread::Builder::new().name("moor-workers-out".into());
         let ks = self.kill_switch.clone();
 

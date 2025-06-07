@@ -13,8 +13,8 @@
 
 //! The core of the server logic for the RPC daemon
 
-use crossbeam_channel::{Receiver, Select, Sender};
 use eyre::{Context, Error};
+use flume::{Receiver, Sender};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -129,7 +129,7 @@ impl RpcServer {
             connections.connections().len()
         );
         let kill_switch = Arc::new(AtomicBool::new(false));
-        let (mailbox_sender, mailbox_receive) = crossbeam_channel::unbounded();
+        let (mailbox_sender, mailbox_receive) = flume::unbounded();
         Self {
             public_key,
             private_key,
@@ -1590,9 +1590,8 @@ impl RpcServer {
     // Task Q
 
     fn process_task_completions(&self, timeout: Duration) {
-        // Collect all the receives into one crossbeam select and see if any of them are ready.
-        // If so, process the first one we hit. We'll loop around and do this until we hit
-        // the deadline.
+        // Collect all the receives into one timeout-based select and see if any of them are ready.
+        // If so, process the first one we hit.
         let mut receives = vec![];
         let mut task_client_ids = vec![];
         {
@@ -1602,45 +1601,54 @@ impl RpcServer {
                 task_client_ids.push((*task_id, *client_id));
             }
         }
-        let mut select = Select::new();
-        for recv in &receives {
-            select.recv(recv);
-        }
-        if let Ok(index) = select.ready_timeout(timeout) {
-            let recv = &receives[index];
-            let client_id = task_client_ids[index].1;
-            match recv.recv_timeout(timeout) {
-                Ok((task_id, r)) => {
-                    let result = match r {
-                        Ok(TaskResult::Result(v)) => ClientEvent::TaskSuccess(task_id, v),
-                        Ok(TaskResult::Replaced(th)) => {
-                            info!(?client_id, ?task_id, "Task restarted");
-                            let mut th_q = self.task_handles.lock().unwrap();
-                            th_q.insert(task_id, (client_id, th));
-                            return;
+
+        // Use flume's Selector to select across all receivers simultaneously
+        let selector = flume::Selector::new();
+
+        // Add all receivers to the selector with their index as the mapped value
+        let selector = receives
+            .iter()
+            .enumerate()
+            .fold(selector, |sel, (index, recv)| {
+                sel.recv(recv, move |result| (index, result))
+            });
+
+        match selector.wait_timeout(timeout) {
+            Ok((index, result)) => {
+                let client_id = task_client_ids[index].1;
+                match result {
+                    Ok((task_id, r)) => {
+                        let result = match r {
+                            Ok(TaskResult::Result(v)) => ClientEvent::TaskSuccess(task_id, v),
+                            Ok(TaskResult::Replaced(th)) => {
+                                info!(?client_id, ?task_id, "Task restarted");
+                                let mut th_q = self.task_handles.lock().unwrap();
+                                th_q.insert(task_id, (client_id, th));
+                                return;
+                            }
+                            Err(e) => ClientEvent::TaskError(task_id, e),
+                        };
+                        let payload = bincode::encode_to_vec(&result, bincode::config::standard())
+                            .expect("Unable to serialize task result");
+                        let payload = vec![client_id.as_bytes().to_vec(), payload];
+                        {
+                            let publish = self.events_publish.lock().unwrap();
+                            if let Err(e) = publish.send_multipart(payload, 0) {
+                                error!(error = ?e, "Unable to send task result");
+                            }
                         }
-                        Err(e) => ClientEvent::TaskError(task_id, e),
-                    };
-                    let payload = bincode::encode_to_vec(&result, bincode::config::standard())
-                        .expect("Unable to serialize task result");
-                    let payload = vec![client_id.as_bytes().to_vec(), payload];
-                    {
-                        let publish = self.events_publish.lock().unwrap();
-                        if let Err(e) = publish.send_multipart(payload, 0) {
-                            error!(error = ?e, "Unable to send task result");
-                        }
+                        let mut th_q = self.task_handles.lock().unwrap();
+                        th_q.remove(&task_id);
                     }
-                    let mut th_q = self.task_handles.lock().unwrap();
-                    th_q.remove(&task_id);
-                }
-                Err(e) => {
-                    if e.is_disconnected() {
-                        // The client disconnected, so we need to remove the task handle from the
-                        // queue, and break out of this loop to avoid polling this channel again.
+                    Err(_) => {
+                        // Channel disconnected, remove the task handle
                         let mut th_q = self.task_handles.lock().unwrap();
                         th_q.remove(&task_client_ids[index].0);
                     }
                 }
+            }
+            Err(_) => {
+                // Timeout occurred, no tasks completed
             }
         }
     }

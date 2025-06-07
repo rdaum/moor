@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crossbeam_channel::Sender;
+use flume::Sender;
 use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;

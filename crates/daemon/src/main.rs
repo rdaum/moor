@@ -254,7 +254,7 @@ fn main() -> Result<(), Report> {
     ));
     let kill_switch = rpc_server.kill_switch.clone();
 
-    let (worker_scheduler_send, worker_scheduler_recv) = crossbeam_channel::unbounded();
+    let (worker_scheduler_send, worker_scheduler_recv) = flume::unbounded();
 
     // Workers RPC server
     let mut workers_server = WorkersServer::new(

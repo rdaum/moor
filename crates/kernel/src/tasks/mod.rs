@@ -15,7 +15,7 @@ use std::fmt::Debug;
 use std::time::SystemTime;
 
 use bincode::{Decode, Encode};
-use crossbeam_channel::Receiver;
+use flume::Receiver;
 use lazy_static::lazy_static;
 use moor_compiler::Program;
 use moor_var::{List, Obj};
@@ -231,7 +231,7 @@ pub mod vm_test_utils {
     where
         F: FnOnce(&mut dyn WorldState, &mut VmHost),
     {
-        let (scs_tx, _scs_rx) = crossbeam_channel::unbounded();
+        let (scs_tx, _scs_rx) = flume::unbounded();
         let task_scheduler_client =
             crate::tasks::task_scheduler_client::TaskSchedulerClient::new(0, scs_tx);
         let mut vm_host = VmHost::new(0, 20, 90_000, Duration::from_secs(5));

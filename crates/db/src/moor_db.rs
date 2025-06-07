@@ -20,8 +20,7 @@ use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::ws_transaction::WorldStateTransaction;
 use crate::{CommitSet, ObjAndUUIDHolder, StringHolder};
 use arc_swap::ArcSwap;
-use crossbeam_channel::Sender;
-use crossbeam_utils::CachePadded;
+use flume::Sender;
 use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use gdt_cpus::{ThreadPriority, set_thread_priority};
 use minstant::Instant;
@@ -36,6 +35,25 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 use tempfile::TempDir;
 use tracing::{error, warn};
+
+#[repr(align(64))]
+pub struct CachePadded<T> {
+    value: T,
+}
+
+impl<T> CachePadded<T> {
+    pub fn new(value: T) -> Self {
+        Self { value }
+    }
+}
+
+impl<T> std::ops::Deref for CachePadded<T> {
+    type Target = T;
+    
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
 
 pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
@@ -304,8 +322,8 @@ impl MoorDB {
         let object_propflags =
             Relation::new(Symbol::mk("object_propflags"), Arc::new(object_propflags));
 
-        let (commit_channel, commit_receiver) = crossbeam_channel::unbounded();
-        let (usage_send, usage_recv) = crossbeam_channel::unbounded();
+        let (commit_channel, commit_receiver) = flume::unbounded();
+        let (usage_send, usage_recv) = flume::unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
         let verb_resolution_cache = ArcSwap::new(Arc::new(VerbResolutionCache::new()));
         let prop_resolution_cache = ArcSwap::new(Arc::new(PropResolutionCache::new()));
@@ -414,8 +432,8 @@ impl MoorDB {
 
     fn start_processing_thread(
         self: Arc<Self>,
-        receiver: crossbeam_channel::Receiver<CommitSet>,
-        usage_recv: crossbeam_channel::Receiver<oneshot::Sender<usize>>,
+        receiver: flume::Receiver<CommitSet>,
+        usage_recv: flume::Receiver<oneshot::Sender<usize>>,
         kill_switch: Arc<AtomicBool>,
         _config: DatabaseConfig,
     ) {
@@ -455,10 +473,10 @@ impl MoorDB {
                             }
                             continue;
                         }
-                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                        Err(flume::RecvTimeoutError::Timeout) => {
                             continue;
                         }
-                        Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                        Err(flume::RecvTimeoutError::Disconnected) => {
                             break;
                         }
                     };

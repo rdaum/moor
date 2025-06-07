@@ -11,8 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crossbeam_channel::Sender;
-use crossbeam_channel::{Receiver, Select};
+use flume::{Receiver, Sender};
 use lazy_static::lazy_static;
 use minstant::Instant;
 use std::fs::File;
@@ -138,8 +137,8 @@ impl Scheduler {
         worker_request_send: Option<Sender<WorkerRequest>>,
         worker_request_recv: Option<Receiver<WorkerResponse>>,
     ) -> Self {
-        let (task_control_sender, task_control_receiver) = crossbeam_channel::unbounded();
-        let (scheduler_sender, scheduler_receiver) = crossbeam_channel::unbounded();
+        let (task_control_sender, task_control_receiver) = flume::unbounded();
+        let (scheduler_sender, scheduler_receiver) = flume::unbounded();
         let suspension_q = SuspensionQ::new(tasks_database);
         let task_q = TaskQ {
             active: Default::default(),
@@ -182,67 +181,81 @@ impl Scheduler {
         self.running = true;
         info!("Starting scheduler loop");
 
-        // Set up a single select to listen for task control messages, scheduler messages, and worker requests.
-        // This way we can avoid a series of try_recv calls, and only wake up when there is work to do.
-        let mut select = Select::new();
+        // Set up receivers for listening to various message types
         let task_receiver = self.task_control_receiver.clone();
         let scheduler_receiver = self.scheduler_receiver.clone();
-        let worker_receiver = self
-            .worker_request_recv
-            .clone()
-            .unwrap_or_else(crossbeam_channel::never);
-        select.recv(&task_receiver);
-        select.recv(&scheduler_receiver);
-        select.recv(&worker_receiver);
-
-        let wake_tick = crossbeam_channel::tick(SCHEDULER_WAKE_TASKS_INTERVAL);
-        select.recv(&wake_tick);
+        let worker_receiver = self.worker_request_recv.clone();
+        
+        let mut last_wake_time = Instant::now();
 
         self.reload_server_options();
         while self.running {
-            match select.select_timeout(Duration::from_millis(100)) {
-                Ok(i) => {
-                    // Task messages
-                    if i.index() == 0 {
-                        if let Ok((task_id, msg)) = i.recv(&task_receiver) {
-                            self.handle_task_msg(task_id, msg);
+            // Check if it's time to wake tasks
+            if last_wake_time.elapsed() >= SCHEDULER_WAKE_TASKS_INTERVAL {
+                last_wake_time = Instant::now();
+                if let Some(to_wake) = self.task_q.collect_wake_tasks() {
+                    for sr in to_wake {
+                        let task_id = sr.task.task_id;
+                        if let Err(e) = self.task_q.resume_task_thread(
+                            sr.task,
+                            v_int(0),
+                            sr.session,
+                            sr.result_sender,
+                            &self.task_control_sender,
+                            self.database.as_ref(),
+                            self.builtin_registry.clone(),
+                            self.config.clone(),
+                        ) {
+                            error!(?task_id, ?e, "Error resuming task");
                         }
-                    } else if i.index() == 1 {
-                        if let Ok(msg) = i.recv(&scheduler_receiver) {
-                            self.handle_scheduler_msg(msg);
-                        }
-                    } else if i.index() == 2 {
-                        if let Ok(worker_request) = i.recv(&worker_receiver) {
-                            self.handle_worker_response(worker_request);
-                        }
-                    } else if i.index() == 3 {
-                        if i.recv(&wake_tick).is_err() {
-                            continue;
-                        }
-                        // Look for tasks that need to be woken (have hit their wakeup-time), and wake them.
-                        if let Some(to_wake) = self.task_q.collect_wake_tasks() {
-                            for sr in to_wake {
-                                let task_id = sr.task.task_id;
-                                if let Err(e) = self.task_q.resume_task_thread(
-                                    sr.task,
-                                    v_int(0),
-                                    sr.session,
-                                    sr.result_sender,
-                                    &self.task_control_sender,
-                                    self.database.as_ref(),
-                                    self.builtin_registry.clone(),
-                                    self.config.clone(),
-                                ) {
-                                    error!(?task_id, ?e, "Error resuming task");
-                                }
-                            }
-                        }
-                    } else {
-                        warn!("Unexpected select index: {}", i.index());
                     }
                 }
-                Err(_e) => {
-                    continue;
+            }
+
+            // Define an enum to handle different message types
+            enum SchedulerMessage {
+                Task(TaskId, TaskControlMsg),
+                Scheduler(SchedulerClientMsg),
+                Worker(WorkerResponse),
+            }
+
+            // Use flume's Selector to properly select across channels with different types
+            let selector = flume::Selector::new();
+            
+            // Add task receiver
+            let selector = selector.recv(&task_receiver, |result| match result {
+                Ok((task_id, msg)) => Some(SchedulerMessage::Task(task_id, msg)),
+                Err(_) => None,
+            });
+            
+            // Add scheduler receiver  
+            let selector = selector.recv(&scheduler_receiver, |result| match result {
+                Ok(msg) => Some(SchedulerMessage::Scheduler(msg)),
+                Err(_) => None,
+            });
+            
+            // Add worker receiver if present
+            let selector = if let Some(ref wr) = worker_receiver {
+                selector.recv(wr, |result| match result {
+                    Ok(response) => Some(SchedulerMessage::Worker(response)),
+                    Err(_) => None,
+                })
+            } else {
+                selector
+            };
+
+            match selector.wait_timeout(Duration::from_millis(10)) {
+                Ok(Some(SchedulerMessage::Task(task_id, msg))) => {
+                    self.handle_task_msg(task_id, msg);
+                }
+                Ok(Some(SchedulerMessage::Scheduler(msg))) => {
+                    self.handle_scheduler_msg(msg);
+                }
+                Ok(Some(SchedulerMessage::Worker(response))) => {
+                    self.handle_worker_response(response);
+                }
+                Ok(None) | Err(_) => {
+                    // Timeout or channel disconnected, continue
                 }
             }
         }
@@ -1505,7 +1518,7 @@ impl TaskQ {
         let _t = PerfTimerGuard::new(&perfc.start_task);
         let is_background = task_start.is_background();
 
-        let (sender, receiver) = crossbeam_channel::bounded(1);
+        let (sender, receiver) = flume::bounded(1);
 
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
 
