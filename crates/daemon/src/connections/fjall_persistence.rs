@@ -15,17 +15,17 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
+use crate::connections::FIRST_CONNECTION_ID;
+use crate::connections::persistence::{
+    ClientMappingChanges, ConnectionRegistryPersistence, InitialConnectionRegistryState,
+    PlayerConnectionChanges,
+};
 use byteview::ByteView;
 use eyre::Error;
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use moor_var::{AsByteBuffer, BINCODE_CONFIG, Obj};
 use tracing::info;
 use uuid::Uuid;
-
-use crate::connections::persistence::{
-    ClientMappingChanges, ConnectionRegistryPersistence, InitialConnectionRegistryState,
-    PlayerConnectionChanges,
-};
 
 pub struct FjallPersistence {
     inner: Mutex<FjallInner>,
@@ -66,7 +66,7 @@ impl FjallPersistence {
         // Fill in the connection_id_sequence
         let connection_id_sequence = match sequences_partition.get("connection_id_sequence") {
             Ok(Some(bytes)) => i32::from_le_bytes(bytes[0..size_of::<i32>()].try_into()?),
-            _ => -3,
+            _ => FIRST_CONNECTION_ID,
         };
 
         let inner = FjallInner {

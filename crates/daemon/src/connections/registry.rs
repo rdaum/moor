@@ -27,9 +27,10 @@ use std::path::Path;
 pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);
 
 pub trait ConnectionRegistry {
-    /// Update the connection record for the given connection object to point to the given player.
+    /// Update the connection record for the given connection object to point to the given player
+    /// object..
     /// This is used when a player logs in.
-    fn update_client_connection(
+    fn associate_client_connection(
         &self,
         from_connection: Obj,
         to_player: Obj,

@@ -16,7 +16,7 @@ use moor_var::Obj;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-use crate::connections::ConnectionsRecords;
+use crate::connections::{ConnectionsRecords, FIRST_CONNECTION_ID};
 
 /// Abstraction for persisting connection data.
 /// This trait separates the persistence layer from the in-memory connection management.
@@ -107,7 +107,7 @@ pub struct NullPersistence {
 impl NullPersistence {
     pub fn new() -> Self {
         Self {
-            sequence: std::sync::atomic::AtomicI32::new(-3),
+            sequence: std::sync::atomic::AtomicI32::new(FIRST_CONNECTION_ID),
         }
     }
 }

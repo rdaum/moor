@@ -910,7 +910,7 @@ impl RpcServer {
 
         let Ok(_) = self
             .connections
-            .update_client_connection(*connection, player)
+            .associate_client_connection(*connection, player)
         else {
             return Err(RpcMessageError::InternalError(
                 "Unable to update client connection".to_string(),

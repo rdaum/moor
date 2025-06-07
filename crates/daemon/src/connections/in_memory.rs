@@ -19,6 +19,7 @@ use eyre::{Error, bail};
 use moor_common::tasks::SessionError;
 use moor_var::Obj;
 use rpc_common::RpcMessageError;
+use tracing::info;
 use uuid::Uuid;
 
 use crate::connections::persistence::{
@@ -71,13 +72,21 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistryMemory<P> {
 }
 
 impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistryMemory<P> {
-    fn update_client_connection(&self, from_connection: Obj, to_player: Obj) -> Result<(), Error> {
+    fn associate_client_connection(
+        &self,
+        from_connection: Obj,
+        to_player: Obj,
+    ) -> Result<(), Error> {
         let mut inner = self.inner.lock().unwrap();
 
-        let Some(mut crs) = inner.player_clients.remove(&from_connection) else {
+        let Some(mut crs) = inner.player_clients.get(&from_connection).cloned() else {
             bail!("No connection found for {:?}", from_connection);
         };
 
+        info!(
+            "Associating connection {:?} to player {:?}",
+            from_connection, to_player
+        );
         let mut client_changes = ClientMappingChanges::new();
         let mut player_changes = PlayerConnectionChanges::new();
 
@@ -360,6 +369,7 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connections::FIRST_CONNECTION_ID;
     use crate::connections::persistence::{InitialConnectionRegistryState, NullPersistence};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Barrier};
@@ -410,7 +420,7 @@ mod tests {
                 Self {
                     client_calls,
                     player_calls,
-                    sequence: std::sync::atomic::AtomicI32::new(-3),
+                    sequence: std::sync::atomic::AtomicI32::new(FIRST_CONNECTION_ID),
                 }
             }
         }

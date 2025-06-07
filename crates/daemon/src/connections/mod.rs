@@ -21,6 +21,8 @@ mod in_memory;
 mod persistence;
 mod registry;
 
+pub const FIRST_CONNECTION_ID: i32 = -4;
+
 pub use registry::{ConnectionRegistry, ConnectionRegistryFactory};
 
 #[derive(Debug, Clone, Encode, Decode)]
