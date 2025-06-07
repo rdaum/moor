@@ -54,6 +54,9 @@ mod bf_strings;
 mod bf_values;
 mod bf_verbs;
 
+#[cfg(test)]
+mod test_connections;
+
 lazy_static! {
     static ref BF_COUNTERS: BfCounters = BfCounters::new();
 }

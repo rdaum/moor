@@ -93,14 +93,31 @@ have negative IDs (e.g., #-123) and represent the physical connection or line to
 - `player`: Optional player object to query. If omitted, returns information for the current session. If provided,
   requires wizard permissions or must be the caller's own object.
 
-**Returns:** A list containing all connection objects associated with the specified player (or the current player if no
-player is specified). If the player is the current player, the first item in the list is the connection object for the
-current session.
+**Returns:** A list of lists, where each inner list contains connection details:
+- Index 0: The connection object (negative ID)
+- Index 1: The hostname/connection name (string)  
+- Index 2: The idle time in seconds (float)
 
 **Permission Requirements:**
 
 - No arguments: Available to all users for their own session
 - With player argument: Requires wizard permissions OR the player must be the caller's own object
+
+**Examples:**
+
+```moo
+// Get connection info for current session
+connections()
+=> {{#-42, "player.example.com", 15.3}}
+
+// Get connection info for another player (requires wizard permissions)  
+connections(#123)
+=> {{#-89, "other.example.com", 0.5}, {#-90, "mobile.example.com", 120.0}}
+
+// Multiple connections for same player
+connections()
+=> {{#-42, "desktop.example.com", 5.0}, {#-43, "mobile.example.com", 300.5}}
+```
 
 **Notes:**
 
@@ -108,6 +125,7 @@ current session.
 - Player objects use positive IDs and represent the logged-in user
 - Unlike LambdaMOO, mooR supports multiple connections per player
 - Both connection and player objects can be used with `notify()` and other functions
+- The function now returns enriched connection information including hostname and idle time
 
 ### `queued_tasks`
 

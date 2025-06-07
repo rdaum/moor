@@ -19,6 +19,17 @@ use uuid::Uuid;
 use crate::tasks::NarrativeEvent;
 use moor_var::{Error, Obj, SYSTEM_OBJECT};
 
+/// Detailed information about a connection
+#[derive(Debug, Clone)]
+pub struct ConnectionDetails {
+    /// The connection object ID
+    pub connection_obj: Obj,
+    /// The hostname/connection name
+    pub hostname: String,
+    /// How long ago the last activity was (in seconds)
+    pub idle_seconds: f64,
+}
+
 /// The interface for managing the user I/O connection side of state, exposed by the scheduler to
 /// the VM during execution and by the host server to the scheduler.
 ///
@@ -104,6 +115,12 @@ pub trait Session: Send + Sync {
     /// If player is Some(obj), returns info for that specific player.
     /// Returns the set of open connections, with the first Obj being the current active connection
     fn connections(&self, player: Option<Obj>) -> Result<Vec<Obj>, SessionError>;
+
+    /// Get detailed connection information for the given player.
+    /// If player is None, returns info for the current session's player.
+    /// If player is Some(obj), returns info for that specific player.
+    /// Returns connection details including hostname and idle time.
+    fn connection_details(&self, player: Option<Obj>) -> Result<Vec<ConnectionDetails>, SessionError>;
 }
 
 /// A handle back to the controlling process (e.g. RpcServer) for handling system level events,
@@ -214,6 +231,10 @@ impl Session for NoopClientSession {
     }
 
     fn connections(&self, _player: Option<Obj>) -> Result<Vec<Obj>, SessionError> {
+        Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
+    }
+
+    fn connection_details(&self, _player: Option<Obj>) -> Result<Vec<ConnectionDetails>, SessionError> {
         Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
     }
 }
@@ -360,6 +381,10 @@ impl Session for MockClientSession {
     }
 
     fn connections(&self, _player: Option<Obj>) -> Result<Vec<Obj>, SessionError> {
+        Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
+    }
+
+    fn connection_details(&self, _player: Option<Obj>) -> Result<Vec<ConnectionDetails>, SessionError> {
         Err(SessionError::NoConnectionForPlayer(moor_var::SYSTEM_OBJECT))
     }
 }

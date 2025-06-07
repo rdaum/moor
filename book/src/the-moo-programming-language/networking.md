@@ -44,29 +44,34 @@ any session.
 
 ### The `connections()` Function
 
-The `connections([player])` builtin function returns the set of connection objects associated with the current player
+The `connections([player])` builtin function returns detailed connection information for the current player
 or a specified player (with wizard permissions).
 
 **Syntax**: `connections()` or `connections(player)`
 
-**Returns**: A list containing the connection objects associated with the specified player or the current player if no
-player is specified. The first item in the list is the connection object for the current session if no player is
-specified.
+**Returns**: A list of lists containing connection details. Each inner list contains:
+- Index 0: The connection object (negative ID, e.g., #-42)
+- Index 1: The hostname/connection name (string)
+- Index 2: The idle time in seconds (float)
 
 **Examples**:
 
 ```moo
 // Get connection info for current session
 connections()
-=> {#-42, #123}  // Connection #-42, logged in as player #123
+=> {{#-42, "player.example.com", 15.3}}  // One connection with details
 
 // Get connection info for another player (requires wizard permissions)
 connections(#456)
-=> {#-89, #456}  // Player #456 is on connection #-89
+=> {{#-89, "other.example.com", 0.5}}  // Player #456 connection details
 
-// Check an unlogged connection
+// Multiple connections for same player
+connections()
+=> {{#-42, "desktop.example.com", 5.0}, {#-43, "mobile.example.com", 300.5}}
+
+// Check an unlogged connection (would need to be called from that context)
 connections()  // Called from an unlogged connection
-=> {#-55}  // Only connection object, no player logged in
+=> {{#-55, "unknown.host.com", 0.0}}  // Only connection object, no player logged in
 ```
 
 **Permission Requirements**:

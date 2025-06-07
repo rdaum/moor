@@ -319,6 +319,18 @@ impl RpcServer {
                             error!(error = ?e, "Unable to send connections");
                         }
                     }
+                    SessionActions::RequestConnectionDetails(client_id, player, reply) => {
+                        let connection_details_send_result = match self.connection_details_for(client_id, player) {
+                            Ok(details) => reply.send(Ok(details)),
+                            Err(e) => {
+                                error!(error = ?e, "Unable to get connection details");
+                                reply.send(Err(e))
+                            }
+                        };
+                        if let Err(e) = connection_details_send_result {
+                            error!(error = ?e, "Unable to send connection details");
+                        }
+                    }
                 }
             }
         }
@@ -1737,6 +1749,68 @@ impl RpcServer {
                 }
             }
             Ok(connections)
+        }
+    }
+
+    fn connection_details_for(
+        &self,
+        client_id: Uuid,
+        player: Option<Obj>,
+    ) -> Result<Vec<moor_common::tasks::ConnectionDetails>, SessionError> {
+        use moor_common::tasks::ConnectionDetails;
+
+        if let Some(target_player) = player {
+            // Get connection details for the specified player
+            let client_ids = self.connections.client_ids_for(target_player)?;
+            let mut details = vec![];
+            for id in client_ids {
+                if let Some(connection_obj) = self.connections.connection_object_for_client(id) {
+                    let hostname = self.connections.connection_name_for(connection_obj)?;
+                    let idle_seconds = self.idle_seconds_for(connection_obj)?;
+                    details.push(ConnectionDetails {
+                        connection_obj,
+                        hostname,
+                        idle_seconds,
+                    });
+                }
+            }
+            Ok(details)
+        } else {
+            // Get connection details for the player associated with this client_id
+            let mut details = vec![];
+            
+            // Start with the connection for this specific client_id
+            if let Some(connection_obj) = self.connections.connection_object_for_client(client_id) {
+                let hostname = self.connections.connection_name_for(connection_obj)?;
+                let idle_seconds = self.idle_seconds_for(connection_obj)?;
+                details.push(ConnectionDetails {
+                    connection_obj,
+                    hostname,
+                    idle_seconds,
+                });
+            }
+
+            // Now get all other connections for the same player
+            if let Some(player_obj) = self.connections.player_object_for_client(client_id) {
+                let client_ids = self.connections.client_ids_for(player_obj)?;
+                for id in client_ids {
+                    if id != client_id { // Skip the one we already added
+                        if let Some(connection_obj) = self.connections.connection_object_for_client(id) {
+                            // Check if we already have this connection to avoid duplicates
+                            if !details.iter().any(|d| d.connection_obj == connection_obj) {
+                                let hostname = self.connections.connection_name_for(connection_obj)?;
+                                let idle_seconds = self.idle_seconds_for(connection_obj)?;
+                                details.push(ConnectionDetails {
+                                    connection_obj,
+                                    hostname,
+                                    idle_seconds,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(details)
         }
     }
 
