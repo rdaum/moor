@@ -29,8 +29,8 @@ moor-var = { path = "../var" }
 ahash.workspace = true
 arc-swap.workspace = true
 byteview.workspace = true
-flume = "0.11"
 fjall.workspace = true
+flume = "0.11"
 gdt-cpus.workspace = true
 im.workspace = true
 indexmap.workspace = true

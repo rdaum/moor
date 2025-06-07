@@ -51,14 +51,16 @@ clap.workspace = true
 clap_derive.workspace = true
 
 # General.
+ahash.workspace = true
 bincode.workspace = true
 byteview.workspace = true
 color-eyre.workspace = true
-flume = "0.11"
 eyre.workspace = true
 fjall.workspace = true
+flume = "0.11"
 gdt-cpus.workspace = true
 oneshot.workspace = true
+papaya.workspace = true
 semver.workspace = true
 signal-hook.workspace = true
 tempfile.workspace = true

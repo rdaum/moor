@@ -20,6 +20,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
+use papaya::HashMap as PapayaHashMap;
+use ahash::AHasher;
+use std::hash::BuildHasherDefault;
 
 use crate::connections::ConnectionsDB;
 use crate::connections_fjall::ConnectionsFjall;
@@ -74,9 +77,9 @@ pub struct RpcServer {
 
     pub(crate) hosts: RwLock<Hosts>,
 
-    host_token_cache: RwLock<HashMap<HostToken, (Instant, HostType)>>,
-    auth_token_cache: RwLock<HashMap<AuthToken, (Instant, Obj)>>,
-    client_token_cache: RwLock<HashMap<ClientToken, Instant>>,
+    host_token_cache: PapayaHashMap<HostToken, (Instant, HostType), BuildHasherDefault<AHasher>>,
+    auth_token_cache: PapayaHashMap<AuthToken, (Instant, Obj), BuildHasherDefault<AHasher>>,
+    client_token_cache: PapayaHashMap<ClientToken, Instant, BuildHasherDefault<AHasher>>,
 
     pub(crate) mailbox_sender: Sender<SessionActions>,
     pub(crate) events_publish: Mutex<Socket>,
@@ -142,9 +145,9 @@ impl RpcServer {
             hosts: Default::default(),
             mailbox_sender,
             mailbox_receive,
-            host_token_cache: RwLock::new(Default::default()),
-            auth_token_cache: RwLock::new(Default::default()),
-            client_token_cache: RwLock::new(Default::default()),
+            host_token_cache: Default::default(),
+            auth_token_cache: Default::default(),
+            client_token_cache: Default::default(),
         }
     }
 
@@ -1267,9 +1270,8 @@ impl RpcServer {
     fn validate_host_token(&self, token: &HostToken) -> Result<HostType, RpcMessageError> {
         // Check cache first.
         {
-            let host_tokens = self.host_token_cache.read().unwrap();
-
-            if let Some((t, host_type)) = host_tokens.get(token) {
+            let guard = self.host_token_cache.pin();
+            if let Some((t, host_type)) = guard.get(token) {
                 if t.elapsed().as_secs() <= 60 {
                     return Ok(*host_type);
                 }
@@ -1294,8 +1296,8 @@ impl RpcServer {
         };
 
         // Cache the result.
-        let mut host_tokens = self.host_token_cache.write().unwrap();
-        host_tokens.insert(token.clone(), (Instant::now(), host_type));
+        let guard = self.host_token_cache.pin();
+        guard.insert(token.clone(), (Instant::now(), host_type));
 
         Ok(host_type)
     }
@@ -1308,8 +1310,8 @@ impl RpcServer {
         client_id: Uuid,
     ) -> Result<(), RpcMessageError> {
         {
-            let client_tokens = self.client_token_cache.read().unwrap();
-            if let Some(t) = client_tokens.get(&token) {
+            let guard = self.client_token_cache.pin();
+            if let Some(t) = guard.get(&token) {
                 if t.elapsed().as_secs() <= 60 {
                     return Ok(());
                 }
@@ -1357,8 +1359,8 @@ impl RpcServer {
             return Err(RpcMessageError::PermissionDenied);
         }
 
-        let mut client_tokens = self.client_token_cache.write().unwrap();
-        client_tokens.insert(token.clone(), Instant::now());
+        let guard = self.client_token_cache.pin();
+        guard.insert(token.clone(), Instant::now());
 
         Ok(())
     }
@@ -1375,8 +1377,8 @@ impl RpcServer {
         objid: Option<&Obj>,
     ) -> Result<Obj, RpcMessageError> {
         {
-            let auth_tokens = self.auth_token_cache.read().unwrap();
-            if let Some((t, o)) = auth_tokens.get(&token) {
+            let guard = self.auth_token_cache.pin();
+            if let Some((t, o)) = guard.get(&token) {
                 if t.elapsed().as_secs() <= 60 {
                     return Ok(*o);
                 }
@@ -1429,8 +1431,8 @@ impl RpcServer {
         //   code with checks to make sure that the player objid is valid before letting it go
         //   forwards.
 
-        let mut auth_tokens = self.auth_token_cache.write().unwrap();
-        auth_tokens.insert(token.clone(), (Instant::now(), token_player));
+        let guard = self.auth_token_cache.pin();
+        guard.insert(token.clone(), (Instant::now(), token_player));
         Ok(token_player)
     }
 

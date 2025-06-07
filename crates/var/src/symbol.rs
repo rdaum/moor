@@ -20,19 +20,19 @@
 //!
 //! The implementation is thread-safe and uses lock-free data structures where possible.
 
-use std::fmt::{Debug, Display};
-use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
-
+use ahash::AHasher;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use boxcar::Vec as BoxcarVec;
-use dashmap::DashMap;
 use once_cell::sync::Lazy;
+use papaya::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt::{Debug, Display};
+use std::hash::{BuildHasherDefault, Hash, Hasher};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use unicase::UniCase;
 
 // ============================================================================
@@ -102,7 +102,7 @@ impl SymbolGroup {
 
 struct GlobalInternerState {
     /// Single map: case-insensitive key -> symbol group containing all case variants
-    groups: DashMap<UniCase<String>, Arc<SymbolGroup>>,
+    groups: HashMap<UniCase<String>, Arc<SymbolGroup>, BuildHasherDefault<AHasher>>,
     /// Fast reverse lookup: repr_id as index -> symbol data
     repr_id_to_symbol: BoxcarVec<Arc<String>>,
     /// Atomic counter for compare_id generation
@@ -114,7 +114,7 @@ struct GlobalInternerState {
 impl GlobalInternerState {
     fn new() -> Self {
         Self {
-            groups: DashMap::new(),
+            groups: Default::default(),
             repr_id_to_symbol: BoxcarVec::new(),
             next_compare_id: AtomicU32::new(0),
             allocation_lock: Mutex::new(()),
@@ -125,16 +125,15 @@ impl GlobalInternerState {
     fn intern(&self, s: &str) -> (u32, u32) {
         let case_insensitive_key = UniCase::new(s.to_string());
 
-        // Get or create the symbol group for this case-insensitive key
-        let group = match self.groups.entry(case_insensitive_key) {
-            dashmap::mapref::entry::Entry::Occupied(entry) => entry.get().clone(),
-            dashmap::mapref::entry::Entry::Vacant(entry) => {
-                let compare_id = self.next_compare_id.fetch_add(1, Ordering::Relaxed);
-                let group = Arc::new(SymbolGroup::new(compare_id));
-                entry.insert(group.clone());
-                group
-            }
-        };
+        // Pin the map to get a guard
+        let guard = self.groups.pin();
+
+        // Get or create the symbol group for this case-insensitive key using get_or_insert
+        let group = guard.get_or_insert(case_insensitive_key, {
+            // If group doesn't exist, create new one
+            let compare_id = self.next_compare_id.fetch_add(1, Ordering::Relaxed);
+            Arc::new(SymbolGroup::new(compare_id))
+        });
 
         // Get or create the specific case variant within the group
         let symbol_data = group.get_or_insert_variant(s, self);

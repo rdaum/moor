@@ -2971,6 +2971,7 @@ dependencies = [
 name = "moor-daemon"
 version = "0.9.0-alpha"
 dependencies = [
+ "ahash",
  "bincode",
  "byteview",
  "clap",
@@ -2988,6 +2989,7 @@ dependencies = [
  "moor-textdump",
  "moor-var",
  "oneshot",
+ "papaya",
  "rpc-common",
  "rusty_paseto",
  "semver",
@@ -3187,16 +3189,17 @@ dependencies = [
 name = "moor-var"
 version = "0.9.0-alpha"
 dependencies = [
+ "ahash",
  "binary-layout",
  "bincode",
  "boxcar",
  "byteview",
- "dashmap",
  "im",
  "lazy_static",
  "minstant",
  "num-traits",
  "once_cell",
+ "papaya",
  "paste",
  "perf-event2",
  "serde",
