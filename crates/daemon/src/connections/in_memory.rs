@@ -35,17 +35,38 @@ pub struct ConnectionRegistryMemory<P: ConnectionRegistryPersistence> {
 }
 
 struct Inner {
-    client_players: HashMap<Uuid, Obj>,
-    player_clients: HashMap<Obj, ConnectionsRecords>,
+    // Maps client_id -> (connection_obj, player_obj)
+    // connection_obj is always present, player_obj is Some after login
+    client_objects: HashMap<Uuid, (Obj, Option<Obj>)>,
+    // Maps connection objects to their connection records
+    connection_records: HashMap<Obj, ConnectionsRecords>,
+    // Maps player objects to their connection records (for logged-in players)
+    player_connections: HashMap<Obj, ConnectionsRecords>,
 }
 
 impl<P: ConnectionRegistryPersistence> ConnectionRegistryMemory<P> {
     pub fn new(persistence: P) -> Result<Self, Error> {
         let initial_state = persistence.load_initial_state()?;
 
+        // Convert old format to new format
+        let mut client_objects = HashMap::new();
+        let mut connection_records = HashMap::new();
+        let mut player_connections = HashMap::new();
+
+        // For now, treat existing data as player objects (backwards compatibility)
+        for (client_id, obj) in initial_state.client_players {
+            client_objects.insert(client_id, (obj, Some(obj)));
+        }
+
+        for (obj, connections) in initial_state.player_clients {
+            connection_records.insert(obj, connections.clone());
+            player_connections.insert(obj, connections);
+        }
+
         let inner = Inner {
-            client_players: initial_state.client_players,
-            player_clients: initial_state.player_clients,
+            client_objects,
+            connection_records,
+            player_connections,
         };
 
         Ok(Self {
@@ -72,42 +93,46 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistryMemory<P> {
 }
 
 impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistryMemory<P> {
-    fn associate_client_connection(
-        &self,
-        from_connection: Obj,
-        to_player: Obj,
-    ) -> Result<(), Error> {
+    fn associate_player_object(&self, connection_obj: Obj, player_obj: Obj) -> Result<(), Error> {
         let mut inner = self.inner.lock().unwrap();
 
-        let Some(mut crs) = inner.player_clients.get(&from_connection).cloned() else {
-            bail!("No connection found for {:?}", from_connection);
+        let Some(connections_record) = inner.connection_records.get(&connection_obj).cloned()
+        else {
+            bail!("No connection found for {:?}", connection_obj);
         };
 
         info!(
             "Associating connection {:?} to player {:?}",
-            from_connection, to_player
+            connection_obj, player_obj
         );
         let mut client_changes = ClientMappingChanges::new();
         let mut player_changes = PlayerConnectionChanges::new();
 
-        // Update all clients to point to new player
-        for cr in &crs.connections {
+        // Update all clients for this connection to have the player object
+        for cr in &connections_record.connections {
             let client_id = Uuid::from_u128(cr.client_id);
-            inner.client_players.insert(client_id, to_player);
-            client_changes.update(client_id, to_player);
+            if let Some((conn_obj, _)) = inner.client_objects.get(&client_id).copied() {
+                inner
+                    .client_objects
+                    .insert(client_id, (conn_obj, Some(player_obj)));
+                client_changes.update(client_id, player_obj);
+            }
         }
 
-        // Merge with existing connections for to_player
+        // Add/merge connections to player_connections
         inner
-            .player_clients
-            .entry(to_player)
-            .and_modify(|existing| existing.connections.append(&mut crs.connections))
-            .or_insert(crs);
+            .player_connections
+            .entry(player_obj)
+            .and_modify(|existing| {
+                existing
+                    .connections
+                    .extend(connections_record.connections.clone())
+            })
+            .or_insert(connections_record.clone());
 
         // Mark changes for persistence
-        player_changes.remove(from_connection);
-        if let Some(connections) = inner.player_clients.get(&to_player) {
-            player_changes.update(to_player, connections.clone());
+        if let Some(connections) = inner.player_connections.get(&player_obj) {
+            player_changes.update(player_obj, connections.clone());
         }
 
         drop(inner);
@@ -123,18 +148,18 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
     ) -> Result<Obj, RpcMessageError> {
         let mut inner = self.inner.lock().unwrap();
 
-        let player_id = match player {
-            None => {
-                let id = self
-                    .persistence
-                    .next_connection_sequence()
-                    .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
-                Obj::mk_id(id)
-            }
-            Some(id) => id,
+        let connection_id = {
+            let id = self
+                .persistence
+                .next_connection_sequence()
+                .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
+            Obj::mk_id(id)
         };
 
-        inner.client_players.insert(client_id, player_id);
+        // Store both connection object and optional player object
+        inner
+            .client_objects
+            .insert(client_id, (connection_id, player));
 
         let now = SystemTime::now();
         let cr = ConnectionRecord {
@@ -145,35 +170,51 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
             hostname,
         };
 
+        // Add to connection records
         inner
-            .player_clients
-            .entry(player_id)
+            .connection_records
+            .entry(connection_id)
             .or_insert(ConnectionsRecords {
                 connections: vec![],
             })
             .connections
-            .push(cr);
+            .push(cr.clone());
+
+        // If there's a player, also add to player connections
+        if let Some(player_obj) = player {
+            inner
+                .player_connections
+                .entry(player_obj)
+                .or_insert(ConnectionsRecords {
+                    connections: vec![],
+                })
+                .connections
+                .push(cr);
+        }
 
         // Prepare changes for persistence
         let mut client_changes = ClientMappingChanges::new();
         let mut player_changes = PlayerConnectionChanges::new();
 
-        client_changes.update(client_id, player_id);
-        if let Some(connections) = inner.player_clients.get(&player_id) {
-            player_changes.update(player_id, connections.clone());
+        if let Some(player_obj) = player {
+            client_changes.update(client_id, player_obj);
+            if let Some(connections) = inner.player_connections.get(&player_obj) {
+                player_changes.update(player_obj, connections.clone());
+            }
         }
 
         drop(inner);
         self.persist_changes(client_changes, player_changes)
             .map_err(|e| RpcMessageError::InternalError(e.to_string()))?;
 
-        Ok(player_id)
+        Ok(connection_id)
     }
 
     fn record_client_activity(&self, client_id: Uuid, connobj: Obj) -> Result<(), Error> {
         let mut inner = self.inner.lock().unwrap();
 
-        let Some(connections_record) = inner.player_clients.get_mut(&connobj) else {
+        // Update connection record
+        let Some(connections_record) = inner.connection_records.get_mut(&connobj) else {
             bail!("No connection found for {:?}", connobj);
         };
 
@@ -189,7 +230,20 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         client.last_activity = now;
 
         let mut player_changes = PlayerConnectionChanges::new();
-        player_changes.update(connobj, connections_record.clone());
+
+        // Also update player connection record if logged in
+        if let Some((_, Some(player_obj))) = inner.client_objects.get(&client_id).copied() {
+            if let Some(player_connections) = inner.player_connections.get_mut(&player_obj) {
+                if let Some(client) = player_connections
+                    .connections
+                    .iter_mut()
+                    .find(|cr| cr.client_id == client_id.as_u128())
+                {
+                    client.last_activity = now;
+                }
+                player_changes.update(player_obj, player_connections.clone());
+            }
+        }
 
         drop(inner);
         self.persist_changes(ClientMappingChanges::new(), player_changes)?;
@@ -199,7 +253,8 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
     fn notify_is_alive(&self, client_id: Uuid, connection: Obj) -> Result<(), Error> {
         let mut inner = self.inner.lock().unwrap();
 
-        let Some(connections_record) = inner.player_clients.get_mut(&connection) else {
+        // Update connection record
+        let Some(connections_record) = inner.connection_records.get_mut(&connection) else {
             bail!("No connection found for {:?}", connection);
         };
 
@@ -215,7 +270,20 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         cr.last_ping = now;
 
         let mut player_changes = PlayerConnectionChanges::new();
-        player_changes.update(connection, connections_record.clone());
+
+        // Also update player connection record if logged in
+        if let Some((_, Some(player_obj))) = inner.client_objects.get(&client_id).copied() {
+            if let Some(player_connections) = inner.player_connections.get_mut(&player_obj) {
+                if let Some(cr) = player_connections
+                    .connections
+                    .iter_mut()
+                    .find(|cr| cr.client_id == client_id.as_u128())
+                {
+                    cr.last_ping = now;
+                }
+                player_changes.update(player_obj, player_connections.clone());
+            }
+        }
 
         drop(inner);
         self.persist_changes(ClientMappingChanges::new(), player_changes)?;
@@ -226,41 +294,70 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         let mut inner = self.inner.lock().unwrap();
 
         let mut to_remove = vec![];
-        for (player_id, connections_record) in inner.player_clients.iter() {
+        for (connection_id, connections_record) in inner.connection_records.iter() {
             for cr in &connections_record.connections {
                 match cr.last_ping.elapsed() {
                     Ok(elapsed) if elapsed < CONNECTION_TIMEOUT_DURATION => {
                         continue;
                     }
                     _ => {
-                        to_remove.push((*player_id, cr.client_id));
+                        to_remove.push((*connection_id, cr.client_id));
                     }
                 }
             }
         }
 
+        let mut client_changes = ClientMappingChanges::new();
         let mut player_changes = PlayerConnectionChanges::new();
 
-        for (player_id, client_id) in to_remove {
-            if let Some(connections_record) = inner.player_clients.get_mut(&player_id) {
+        for (connection_id, client_id) in to_remove {
+            let client_uuid = Uuid::from_u128(client_id);
+
+            // Remove from client_objects
+            if let Some((_, player_obj)) = inner.client_objects.remove(&client_uuid) {
+                client_changes.remove(client_uuid);
+
+                // Remove from player connections if logged in
+                if let Some(player_obj) = player_obj {
+                    if let Some(player_connections) = inner.player_connections.get_mut(&player_obj)
+                    {
+                        player_connections
+                            .connections
+                            .retain(|cr| cr.client_id != client_id);
+                        if player_connections.connections.is_empty() {
+                            inner.player_connections.remove(&player_obj);
+                            player_changes.remove(player_obj);
+                        } else {
+                            player_changes.update(player_obj, player_connections.clone());
+                        }
+                    }
+                }
+            }
+
+            // Remove from connection records
+            if let Some(connections_record) = inner.connection_records.get_mut(&connection_id) {
                 connections_record
                     .connections
                     .retain(|cr| cr.client_id != client_id);
-                player_changes.update(player_id, connections_record.clone());
+                if connections_record.connections.is_empty() {
+                    inner.connection_records.remove(&connection_id);
+                }
             }
         }
 
         drop(inner);
-        self.persist_changes(ClientMappingChanges::new(), player_changes)
-            .ok();
+        self.persist_changes(client_changes, player_changes).ok();
     }
 
     fn last_activity_for(&self, connection: Obj) -> Result<SystemTime, SessionError> {
         let inner = self.inner.lock().unwrap();
 
-        let Some(connections_record) = inner.player_clients.get(&connection) else {
-            return Err(SessionError::NoConnectionForPlayer(connection));
-        };
+        // Check both connection records and player connections
+        let connections_record = inner
+            .connection_records
+            .get(&connection)
+            .or_else(|| inner.player_connections.get(&connection))
+            .ok_or(SessionError::NoConnectionForPlayer(connection))?;
 
         let Some(last_activity) = connections_record
             .connections
@@ -277,9 +374,11 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
     fn connection_name_for(&self, player: Obj) -> Result<String, SessionError> {
         let inner = self.inner.lock().unwrap();
 
+        // Check both connection records and player connections
         let connections_records = inner
-            .player_clients
+            .connection_records
             .get(&player)
+            .or_else(|| inner.player_connections.get(&player))
             .ok_or(SessionError::NoConnectionForPlayer(player))?;
 
         let name = connections_records
@@ -295,9 +394,12 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
     fn connected_seconds_for(&self, player: Obj) -> Result<f64, SessionError> {
         let inner = self.inner.lock().unwrap();
 
-        let Some(connections_record) = inner.player_clients.get(&player) else {
-            return Err(SessionError::NoConnectionForPlayer(player));
-        };
+        // Check both connection records and player connections
+        let connections_record = inner
+            .connection_records
+            .get(&player)
+            .or_else(|| inner.player_connections.get(&player))
+            .ok_or(SessionError::NoConnectionForPlayer(player))?;
 
         let connected_seconds = connections_record
             .connections
@@ -314,7 +416,12 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         let empty_record = ConnectionsRecords {
             connections: vec![],
         };
-        let connections_record = inner.player_clients.get(&player).unwrap_or(&empty_record);
+        // Check both connection records and player connections
+        let connections_record = inner
+            .connection_records
+            .get(&player)
+            .or_else(|| inner.player_connections.get(&player))
+            .unwrap_or(&empty_record);
 
         let client_ids = connections_record
             .connections
@@ -328,23 +435,51 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
     fn connections(&self) -> Vec<Obj> {
         let inner = self.inner.lock().unwrap();
 
-        inner
-            .player_clients
-            .iter()
-            .filter(|&(_o, c)| !c.connections.is_empty())
-            .map(|(o, _c)| *o)
-            .collect()
+        let mut connections = Vec::new();
+
+        // Add all connection objects
+        connections.extend(
+            inner
+                .connection_records
+                .iter()
+                .filter(|&(_o, c)| !c.connections.is_empty())
+                .map(|(o, _c)| *o),
+        );
+
+        // Add all player objects (for logged-in players)
+        connections.extend(
+            inner
+                .player_connections
+                .iter()
+                .filter(|&(_o, c)| !c.connections.is_empty())
+                .map(|(o, _c)| *o),
+        );
+
+        connections.sort();
+        connections.dedup();
+        connections
     }
 
     fn connection_object_for_client(&self, client_id: Uuid) -> Option<Obj> {
         let inner = self.inner.lock().unwrap();
-        inner.client_players.get(&client_id).cloned()
+        inner
+            .client_objects
+            .get(&client_id)
+            .map(|(conn_obj, _)| *conn_obj)
+    }
+
+    fn player_object_for_client(&self, client_id: Uuid) -> Option<Obj> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .client_objects
+            .get(&client_id)
+            .and_then(|(_, player_obj)| *player_obj)
     }
 
     fn remove_client_connection(&self, client_id: Uuid) -> Result<(), Error> {
         let mut inner = self.inner.lock().unwrap();
 
-        let Some(player_id) = inner.client_players.remove(&client_id) else {
+        let Some((connection_obj, player_obj)) = inner.client_objects.remove(&client_id) else {
             bail!("No connection to prune found for {:?}", client_id);
         };
 
@@ -353,11 +488,29 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
 
         client_changes.remove(client_id);
 
-        if let Some(connections_record) = inner.player_clients.get_mut(&player_id) {
+        // Remove from connection records
+        if let Some(connections_record) = inner.connection_records.get_mut(&connection_obj) {
             connections_record
                 .connections
                 .retain(|cr| cr.client_id != client_id.as_u128());
-            player_changes.update(player_id, connections_record.clone());
+            if connections_record.connections.is_empty() {
+                inner.connection_records.remove(&connection_obj);
+            }
+        }
+
+        // Remove from player connections if logged in
+        if let Some(player_obj) = player_obj {
+            if let Some(connections_record) = inner.player_connections.get_mut(&player_obj) {
+                connections_record
+                    .connections
+                    .retain(|cr| cr.client_id != client_id.as_u128());
+                if connections_record.connections.is_empty() {
+                    inner.player_connections.remove(&player_obj);
+                    player_changes.remove(player_obj);
+                } else {
+                    player_changes.update(player_obj, connections_record.clone());
+                }
+            }
         }
 
         drop(inner);
@@ -383,19 +536,24 @@ mod tests {
         let db = ConnectionRegistryMemory::new(persistence).unwrap();
 
         let client_id = Uuid::new_v4();
-        let player_obj = db
+        let connection_obj = db
             .new_connection(client_id, "test.host".to_string(), None)
             .unwrap();
 
         // Test basic operations
-        assert_eq!(db.connection_object_for_client(client_id), Some(player_obj));
-        assert_eq!(db.client_ids_for(player_obj).unwrap(), vec![client_id]);
-        assert_eq!(db.connections(), vec![player_obj]);
+        assert_eq!(
+            db.connection_object_for_client(client_id),
+            Some(connection_obj)
+        );
+        assert_eq!(db.player_object_for_client(client_id), None);
+        assert_eq!(db.client_ids_for(connection_obj).unwrap(), vec![client_id]);
+        assert_eq!(db.connections(), vec![connection_obj]);
 
         // Test activity tracking
-        db.record_client_activity(client_id, player_obj).unwrap();
-        db.notify_is_alive(client_id, player_obj).unwrap();
-        assert!(db.last_activity_for(player_obj).is_ok());
+        db.record_client_activity(client_id, connection_obj)
+            .unwrap();
+        db.notify_is_alive(client_id, connection_obj).unwrap();
+        assert!(db.last_activity_for(connection_obj).is_ok());
 
         // Test removal
         db.remove_client_connection(client_id).unwrap();
@@ -458,19 +616,20 @@ mod tests {
         let persistence = CountingPersistence::new(client_calls.clone(), player_calls.clone());
         let db = ConnectionRegistryMemory::new(persistence).unwrap();
 
-        // Create connection - should trigger both client and player persistence
+        // Create connection - should not trigger persistence calls (no player logged in)
         let client_id = Uuid::new_v4();
-        let player_obj = db
+        let connection_obj = db
             .new_connection(client_id, "test.host".to_string(), None)
             .unwrap();
 
-        assert_eq!(client_calls.load(Ordering::SeqCst), 1);
-        assert_eq!(player_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(client_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(player_calls.load(Ordering::SeqCst), 0);
 
-        // Activity update - should only trigger player persistence
-        db.record_client_activity(client_id, player_obj).unwrap();
-        assert_eq!(client_calls.load(Ordering::SeqCst), 1); // No change
-        assert_eq!(player_calls.load(Ordering::SeqCst), 2); // Incremented
+        // Activity update - should not trigger persistence (no player logged in)
+        db.record_client_activity(client_id, connection_obj)
+            .unwrap();
+        assert_eq!(client_calls.load(Ordering::SeqCst), 0); // No change
+        assert_eq!(player_calls.load(Ordering::SeqCst), 0); // No change
     }
 
     #[test]
@@ -496,8 +655,8 @@ mod tests {
                     let hostname = format!("host-{}-{}.test", i, j);
 
                     match db.new_connection(client_id, hostname, None) {
-                        Ok(player_obj) => {
-                            created_clients.push((client_id, player_obj));
+                        Ok(connection_obj) => {
+                            created_clients.push((client_id, connection_obj));
                         }
                         Err(e) => panic!("Failed to create connection: {:?}", e),
                     }
@@ -522,10 +681,10 @@ mod tests {
         assert_eq!(client_ids.len(), num_threads * connections_per_thread);
 
         // Verify all connections are accessible
-        for (client_id, player_obj) in &all_connections {
+        for (client_id, connection_obj) in &all_connections {
             assert_eq!(
                 db.connection_object_for_client(*client_id),
-                Some(*player_obj)
+                Some(*connection_obj)
             );
         }
     }
@@ -539,10 +698,10 @@ mod tests {
         let mut client_connections = vec![];
         for i in 0..5 {
             let client_id = Uuid::new_v4();
-            let player_obj = db
+            let connection_obj = db
                 .new_connection(client_id, format!("host-{}.test", i), None)
                 .unwrap();
-            client_connections.push((client_id, player_obj));
+            client_connections.push((client_id, connection_obj));
         }
 
         let num_threads = 8;
@@ -559,12 +718,12 @@ mod tests {
                 barrier.wait();
 
                 for _ in 0..updates_per_thread {
-                    for (client_id, player_obj) in &connections {
+                    for (client_id, connection_obj) in &connections {
                         // Alternate between different types of updates
-                        let _ = db.record_client_activity(*client_id, *player_obj);
-                        let _ = db.notify_is_alive(*client_id, *player_obj);
-                        let _ = db.last_activity_for(*player_obj);
-                        let _ = db.client_ids_for(*player_obj);
+                        let _ = db.record_client_activity(*client_id, *connection_obj);
+                        let _ = db.notify_is_alive(*client_id, *connection_obj);
+                        let _ = db.last_activity_for(*connection_obj);
+                        let _ = db.client_ids_for(*connection_obj);
                     }
                 }
             });
@@ -576,13 +735,13 @@ mod tests {
         }
 
         // Verify all connections are still accessible and valid
-        for (client_id, player_obj) in &client_connections {
+        for (client_id, connection_obj) in &client_connections {
             assert_eq!(
                 db.connection_object_for_client(*client_id),
-                Some(*player_obj)
+                Some(*connection_obj)
             );
-            assert!(db.last_activity_for(*player_obj).is_ok());
-            assert!(!db.client_ids_for(*player_obj).unwrap().is_empty());
+            assert!(db.last_activity_for(*connection_obj).is_ok());
+            assert!(!db.client_ids_for(*connection_obj).unwrap().is_empty());
         }
     }
 
@@ -614,13 +773,13 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("host-{}-{}.test", thread_id, i);
 
-                    if let Ok(player_obj) = db.new_connection(client_id, hostname, None) {
+                    if let Ok(connection_obj) = db.new_connection(client_id, hostname, None) {
                         creation_count.fetch_add(1, Ordering::SeqCst);
-                        local_connections.push((client_id, player_obj));
+                        local_connections.push((client_id, connection_obj));
 
                         // Do some activity
-                        let _ = db.record_client_activity(client_id, player_obj);
-                        let _ = db.notify_is_alive(client_id, player_obj);
+                        let _ = db.record_client_activity(client_id, connection_obj);
+                        let _ = db.notify_is_alive(client_id, connection_obj);
                     }
 
                     // Randomly remove some connections
@@ -671,10 +830,10 @@ mod tests {
         let mut old_connections = vec![];
         for i in 0..3 {
             let client_id = Uuid::new_v4();
-            let player_obj = db
+            let connection_obj = db
                 .new_connection(client_id, format!("old-host-{}.test", i), None)
                 .unwrap();
-            old_connections.push((client_id, player_obj));
+            old_connections.push((client_id, connection_obj));
         }
 
         // Simulate old connections by not updating their ping times
@@ -709,14 +868,14 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("new-host-{}-{}.test", i, j);
 
-                    if let Ok(player_obj) = db.new_connection(client_id, hostname, None) {
+                    if let Ok(connection_obj) = db.new_connection(client_id, hostname, None) {
                         // Keep these connections alive
-                        let _ = db.notify_is_alive(client_id, player_obj);
-                        let _ = db.record_client_activity(client_id, player_obj);
+                        let _ = db.notify_is_alive(client_id, connection_obj);
+                        let _ = db.record_client_activity(client_id, connection_obj);
 
                         // Do some queries
                         let _ = db.connection_object_for_client(client_id);
-                        let _ = db.client_ids_for(player_obj);
+                        let _ = db.client_ids_for(connection_obj);
                         let _ = db.connections();
 
                         // Some connections get removed
@@ -821,17 +980,23 @@ mod tests {
                     let client_id = Uuid::new_v4();
                     let hostname = format!("persist-host-{}-{}.test", thread_id, i);
 
-                    if let Ok(player_obj) = db.new_connection(client_id, hostname, None) {
-                        connections.push((client_id, player_obj));
+                    if let Ok(connection_obj) = db.new_connection(client_id, hostname, None) {
+                        connections.push((client_id, connection_obj));
+
+                        // For some connections, associate a player to test player persistence
+                        if i % 2 == 0 {
+                            let player_obj = Obj::mk_id(-(thread_id as i32 + 1000) - i);
+                            let _ = db.associate_player_object(connection_obj, player_obj);
+                        }
 
                         // Generate activity that requires persistence
-                        let _ = db.record_client_activity(client_id, player_obj);
-                        let _ = db.notify_is_alive(client_id, player_obj);
+                        let _ = db.record_client_activity(client_id, connection_obj);
+                        let _ = db.notify_is_alive(client_id, connection_obj);
                     }
                 }
 
                 // Clean up half the connections
-                for (client_id, _player_obj) in &connections {
+                for (client_id, _connection_obj) in &connections {
                     let _ = db.remove_client_connection(*client_id);
                 }
             });

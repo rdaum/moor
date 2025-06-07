@@ -613,64 +613,112 @@ impl RpcServer {
                 )
             }
             HostClientToDaemonMessage::Command(token, auth_token, handler_object, command) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
 
                 self.perform_command(
                     scheduler_client,
                     client_id,
                     &handler_object,
-                    &connection,
+                    &player,
                     command,
                 )
             }
             HostClientToDaemonMessage::RequestedInput(token, auth_token, request_id, input) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
 
-                self.respond_input(scheduler_client, client_id, &connection, request_id, input)
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
+
+                self.respond_input(scheduler_client, client_id, &player, request_id, input)
             }
             HostClientToDaemonMessage::OutOfBand(token, auth_token, handler_object, command) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
 
                 self.perform_out_of_band(
                     scheduler_client,
                     &handler_object,
                     client_id,
-                    &connection,
+                    &player,
                     command,
                 )
             }
 
             HostClientToDaemonMessage::Eval(token, auth_token, evalstr) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
-                self.eval(scheduler_client, client_id, &connection, evalstr)
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
+
+                self.eval(scheduler_client, client_id, &player, evalstr)
             }
 
             HostClientToDaemonMessage::InvokeVerb(token, auth_token, object, verb, args) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
 
-                self.invoke_verb(
-                    scheduler_client,
-                    client_id,
-                    &connection,
-                    &object,
-                    verb,
-                    args,
-                )
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
+
+                self.invoke_verb(scheduler_client, client_id, &player, &object, verb, args)
             }
 
             HostClientToDaemonMessage::Retrieve(token, auth_token, who, retr_type, what) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
 
                 match retr_type {
                     EntityType::Property => {
                         let (propdef, propperms, value) = scheduler_client
-                            .request_property(&connection, &connection, &who, what)
+                            .request_property(&player, &player, &who, what)
                             .map_err(|e| {
                                 error!(error = ?e, "Error requesting property");
                                 RpcMessageError::EntityRetrievalError(
@@ -692,7 +740,7 @@ impl RpcServer {
                     }
                     EntityType::Verb => {
                         let (verbdef, code) = scheduler_client
-                            .request_verb(&connection, &connection, &who, what)
+                            .request_verb(&player, &player, &who, what)
                             .map_err(|e| {
                                 error!(error = ?e, "Error requesting verb");
                                 RpcMessageError::EntityRetrievalError(
@@ -722,11 +770,20 @@ impl RpcServer {
                 }
             }
             HostClientToDaemonMessage::Resolve(token, auth_token, objref) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
 
                 let resolved = scheduler_client
-                    .resolve_object(connection, objref)
+                    .resolve_object(player, objref)
                     .map_err(|e| {
                         error!(error = ?e, "Error resolving object");
                         RpcMessageError::EntityRetrievalError("error resolving object".to_string())
@@ -735,11 +792,20 @@ impl RpcServer {
                 Ok(DaemonToClientReply::ResolveResult(resolved))
             }
             HostClientToDaemonMessage::Properties(token, auth_token, obj) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
 
                 let props = scheduler_client
-                    .request_properties(&connection, &connection, &obj)
+                    .request_properties(&player, &player, &obj)
                     .map_err(|e| {
                         error!(error = ?e, "Error requesting properties");
                         RpcMessageError::EntityRetrievalError(
@@ -763,11 +829,20 @@ impl RpcServer {
                 Ok(DaemonToClientReply::Properties(props))
             }
             HostClientToDaemonMessage::Verbs(token, auth_token, obj) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
 
                 let verbs = scheduler_client
-                    .request_verbs(&connection, &connection, &obj)
+                    .request_verbs(&player, &player, &obj)
                     .map_err(|e| {
                         error!(error = ?e, "Error requesting verbs");
                         RpcMessageError::EntityRetrievalError("error requesting verbs".to_string())
@@ -795,16 +870,15 @@ impl RpcServer {
             }
             HostClientToDaemonMessage::Detach(token) => {
                 info!(?client_id, "Detaching client");
-                let connection = self.client_auth(token, client_id)?;
+                let _connection = self.client_auth(token, client_id)?;
 
-                // Submit disconnected only if this is an authenticated user... that is,
-                // the connection oid >= 0
-                if connection.is_positive() {
+                // Submit disconnected only if there's a logged-in player
+                if let Some(player) = self.connections.player_object_for_client(client_id) {
                     if let Err(e) = self.submit_disconnected_task(
                         &SYSTEM_OBJECT,
                         scheduler_client,
                         client_id,
-                        &connection,
+                        &player,
                     ) {
                         error!(error = ?e, "Error submitting user_disconnected task");
                     }
@@ -819,17 +893,19 @@ impl RpcServer {
                 Ok(DaemonToClientReply::Disconnected)
             }
             HostClientToDaemonMessage::Program(token, auth_token, object, verb, code) => {
-                let connection = self.client_auth(token, client_id)?;
-                self.validate_auth_token(auth_token, Some(&connection))?;
+                let _connection = self.client_auth(token, client_id)?;
+                let player = self.validate_auth_token(auth_token, None)?;
 
-                self.program_verb(
-                    scheduler_client,
-                    client_id,
-                    &connection,
-                    &object,
-                    verb,
-                    code,
-                )
+                // Verify the player matches the logged-in player for this connection
+                let Some(logged_in_player) = self.connections.player_object_for_client(client_id)
+                else {
+                    return Err(RpcMessageError::PermissionDenied);
+                };
+                if player != logged_in_player {
+                    return Err(RpcMessageError::PermissionDenied);
+                }
+
+                self.program_verb(scheduler_client, client_id, &player, &object, verb, code)
             }
         }
     }
@@ -910,7 +986,7 @@ impl RpcServer {
 
         let Ok(_) = self
             .connections
-            .associate_client_connection(*connection, player)
+            .associate_player_object(*connection, player)
         else {
             return Err(RpcMessageError::InternalError(
                 "Unable to update client connection".to_string(),
@@ -1002,31 +1078,34 @@ impl RpcServer {
         scheduler_client: SchedulerClient,
         client_id: Uuid,
         handler_object: &Obj,
-        connection: &Obj,
+        player: &Obj,
         command: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
+        // Get the connection object for activity tracking and session management
+        let connection = self
+            .connections
+            .connection_object_for_client(client_id)
+            .ok_or(RpcMessageError::InternalError(
+                "Connection not found".to_string(),
+            ))?;
+
         let session = Arc::new(RpcSession::new(
             client_id,
-            *connection,
+            connection,
             self.mailbox_sender.clone(),
         ));
 
         if let Err(e) = self
             .connections
-            .record_client_activity(client_id, *connection)
+            .record_client_activity(client_id, connection)
         {
             warn!("Unable to update client connection activity: {}", e);
         };
 
-        debug!(
-            command,
-            ?client_id,
-            ?connection,
-            "Invoking submit_command_task"
-        );
+        debug!(command, ?client_id, ?player, "Invoking submit_command_task");
         let parse_command_task_handle = match scheduler_client.submit_command_task(
             handler_object,
-            connection,
+            player,
             command.as_str(),
             session,
         ) {
@@ -1044,20 +1123,27 @@ impl RpcServer {
         &self,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: &Obj,
+        player: &Obj,
         input_request_id: Uuid,
         input: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
+        // Get the connection object for activity tracking
+        let connection = self
+            .connections
+            .connection_object_for_client(client_id)
+            .ok_or(RpcMessageError::InternalError(
+                "Connection not found".to_string(),
+            ))?;
+
         if let Err(e) = self
             .connections
-            .record_client_activity(client_id, *connection)
+            .record_client_activity(client_id, connection)
         {
             warn!("Unable to update client connection activity: {}", e);
         };
 
-        // Pass this back over to the scheduler to handle.
-        if let Err(e) = scheduler_client.submit_requested_input(connection, input_request_id, input)
-        {
+        // Pass this back over to the scheduler to handle using the player object.
+        if let Err(e) = scheduler_client.submit_requested_input(player, input_request_id, input) {
             error!(error = ?e, "Error submitting requested input");
             return Err(RpcMessageError::InternalError(e.to_string()));
         }
@@ -1072,19 +1158,27 @@ impl RpcServer {
         scheduler_client: SchedulerClient,
         handler_object: &Obj,
         client_id: Uuid,
-        connection: &Obj,
+        player: &Obj,
         command: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
+        // Get the connection object for session management
+        let connection = self
+            .connections
+            .connection_object_for_client(client_id)
+            .ok_or(RpcMessageError::InternalError(
+                "Connection not found".to_string(),
+            ))?;
+
         let session = Arc::new(RpcSession::new(
             client_id,
-            *connection,
+            connection,
             self.mailbox_sender.clone(),
         ));
 
         let command_components = parse_into_words(command.as_str());
         let task_handle = match scheduler_client.submit_out_of_band_task(
             handler_object,
-            connection,
+            player,
             command_components,
             command,
             session,
@@ -1107,18 +1201,26 @@ impl RpcServer {
         &self,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: &Obj,
+        player: &Obj,
         expression: String,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
+        // Get the connection object for session management
+        let connection = self
+            .connections
+            .connection_object_for_client(client_id)
+            .ok_or(RpcMessageError::InternalError(
+                "Connection not found".to_string(),
+            ))?;
+
         let session = Arc::new(RpcSession::new(
             client_id,
-            *connection,
+            connection,
             self.mailbox_sender.clone(),
         ));
 
         let mut task_handle = match scheduler_client.submit_eval_task(
-            connection,
-            connection,
+            player,
+            player,
             expression,
             session,
             self.config.features_config.clone(),
@@ -1150,19 +1252,27 @@ impl RpcServer {
         &self,
         scheduler_client: SchedulerClient,
         client_id: Uuid,
-        connection: &Obj,
+        player: &Obj,
         object: &ObjectRef,
         verb: Symbol,
         args: Vec<Var>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
+        // Get the connection object for session management
+        let connection = self
+            .connections
+            .connection_object_for_client(client_id)
+            .ok_or(RpcMessageError::InternalError(
+                "Connection not found".to_string(),
+            ))?;
+
         let session = Arc::new(RpcSession::new(
             client_id,
-            *connection,
+            connection,
             self.mailbox_sender.clone(),
         ));
 
         let task_handle = match scheduler_client.submit_verb_task(
-            connection,
+            player,
             object,
             verb,
             List::mk_list(&args),
@@ -1187,12 +1297,12 @@ impl RpcServer {
         &self,
         scheduler_client: SchedulerClient,
         _client_id: Uuid,
-        connection: &Obj,
+        player: &Obj,
         object: &ObjectRef,
         verb: Symbol,
         code: Vec<String>,
     ) -> Result<DaemonToClientReply, RpcMessageError> {
-        match scheduler_client.submit_verb_program(connection, connection, object, verb, code) {
+        match scheduler_client.submit_verb_program(player, player, object, verb, code) {
             Ok((obj, verb)) => Ok(DaemonToClientReply::ProgramResponse(
                 VerbProgramResponse::Success(obj, verb.to_string()),
             )),
@@ -1498,11 +1608,11 @@ impl RpcServer {
         // Mark this client as in `input mode`, which means that instead of dispatching its next
         // line to the scheduler as a command, it should instead dispatch it as an input event.
 
-        // Validate first.
-        let Some(connection) = self.connections.connection_object_for_client(client_id) else {
+        // Validate first - check that the player matches the logged-in player for this client
+        let Some(logged_in_player) = self.connections.player_object_for_client(client_id) else {
             return Err(SessionError::NoConnectionForPlayer(player));
         };
-        if connection != player {
+        if logged_in_player != player {
             return Err(SessionError::NoConnectionForPlayer(player));
         }
 

@@ -27,13 +27,13 @@ use std::path::Path;
 pub const CONNECTION_TIMEOUT_DURATION: Duration = Duration::from_secs(30);
 
 pub trait ConnectionRegistry {
-    /// Update the connection record for the given connection object to point to the given player
-    /// object..
+    /// Associate the given player object with the connection object.
     /// This is used when a player logs in.
-    fn associate_client_connection(
+    /// The connection object remains associated with the client.
+    fn associate_player_object(
         &self,
-        from_connection: Obj,
-        to_player: Obj,
+        connection_obj: Obj,
+        player_obj: Obj,
     ) -> Result<(), eyre::Error>;
 
     /// Create a new connection object for the given client.
@@ -66,6 +66,9 @@ pub trait ConnectionRegistry {
 
     /// Retrieve the connection object for the given client.
     fn connection_object_for_client(&self, client_id: Uuid) -> Option<Obj>;
+
+    /// Retrieve the player object for the given client (if logged in).
+    fn player_object_for_client(&self, client_id: Uuid) -> Option<Obj>;
 
     /// Remove the given client from the connection database.
     fn remove_client_connection(&self, client_id: Uuid) -> Result<(), eyre::Error>;
@@ -125,12 +128,16 @@ mod tests {
         let db = ConnectionRegistryFactory::in_memory_only().unwrap();
 
         let client_id = Uuid::new_v4();
-        let player_obj = db
+        let connection_obj = db
             .new_connection(client_id, "test.host".to_string(), None)
             .unwrap();
 
-        assert_eq!(db.connection_object_for_client(client_id), Some(player_obj));
-        assert_eq!(db.connections(), vec![player_obj]);
+        assert_eq!(
+            db.connection_object_for_client(client_id),
+            Some(connection_obj)
+        );
+        assert_eq!(db.player_object_for_client(client_id), None);
+        assert_eq!(db.connections(), vec![connection_obj]);
     }
 
     #[test]
@@ -139,12 +146,16 @@ mod tests {
         let db = ConnectionRegistryFactory::with_fjall_persistence(Some(temp_dir.path())).unwrap();
 
         let client_id = Uuid::new_v4();
-        let player_obj = db
+        let connection_obj = db
             .new_connection(client_id, "persistent.host".to_string(), None)
             .unwrap();
 
-        assert_eq!(db.connection_object_for_client(client_id), Some(player_obj));
-        assert_eq!(db.connections(), vec![player_obj]);
+        assert_eq!(
+            db.connection_object_for_client(client_id),
+            Some(connection_obj)
+        );
+        assert_eq!(db.player_object_for_client(client_id), None);
+        assert_eq!(db.connections(), vec![connection_obj]);
     }
 
     #[test]
@@ -157,23 +168,69 @@ mod tests {
 
         for db in configs {
             let client_id = Uuid::new_v4();
-            let player_obj = db
+            let connection_obj = db
                 .new_connection(client_id, "compat.test".to_string(), None)
                 .unwrap();
 
             // Basic operations should work identically
-            assert_eq!(db.connection_object_for_client(client_id), Some(player_obj));
-            assert_eq!(db.client_ids_for(player_obj).unwrap(), vec![client_id]);
-            assert_eq!(db.connections(), vec![player_obj]);
+            assert_eq!(
+                db.connection_object_for_client(client_id),
+                Some(connection_obj)
+            );
+            assert_eq!(db.player_object_for_client(client_id), None);
+            assert_eq!(db.client_ids_for(connection_obj).unwrap(), vec![client_id]);
+            assert_eq!(db.connections(), vec![connection_obj]);
 
             // Activity tracking
-            db.record_client_activity(client_id, player_obj).unwrap();
-            db.notify_is_alive(client_id, player_obj).unwrap();
-            assert!(db.last_activity_for(player_obj).is_ok());
+            db.record_client_activity(client_id, connection_obj)
+                .unwrap();
+            db.notify_is_alive(client_id, connection_obj).unwrap();
+            assert!(db.last_activity_for(connection_obj).is_ok());
 
             // Cleanup
             db.remove_client_connection(client_id).unwrap();
             assert_eq!(db.connections(), vec![]);
         }
+    }
+
+    #[test]
+    fn test_connection_player_association() {
+        let db = ConnectionRegistryFactory::in_memory_only().unwrap();
+
+        let client_id = Uuid::new_v4();
+        let connection_obj = db
+            .new_connection(client_id, "test.host".to_string(), None)
+            .unwrap();
+
+        // Initially no player associated
+        assert_eq!(
+            db.connection_object_for_client(client_id),
+            Some(connection_obj)
+        );
+        assert_eq!(db.player_object_for_client(client_id), None);
+
+        // Associate a player object
+        use moor_var::Obj;
+        let player_obj = Obj::mk_id(100);
+        db.associate_player_object(connection_obj, player_obj)
+            .unwrap();
+
+        // Now should have both connection and player
+        assert_eq!(
+            db.connection_object_for_client(client_id),
+            Some(connection_obj)
+        );
+        assert_eq!(db.player_object_for_client(client_id), Some(player_obj));
+
+        // Both connection and player should be in connections list
+        let mut connections = db.connections();
+        connections.sort();
+        let mut expected = vec![connection_obj, player_obj];
+        expected.sort();
+        assert_eq!(connections, expected);
+
+        // Client IDs should work for both connection and player objects
+        assert_eq!(db.client_ids_for(connection_obj).unwrap(), vec![client_id]);
+        assert_eq!(db.client_ids_for(player_obj).unwrap(), vec![client_id]);
     }
 }
