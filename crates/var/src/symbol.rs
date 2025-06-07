@@ -69,7 +69,7 @@ impl SymbolGroup {
         // Linear search through existing variants to find exact match
         for (_index, variant) in self.variants.iter() {
             if variant.original_string.as_ref() == original {
-                return &variant;
+                return variant;
             }
         }
 
@@ -79,7 +79,7 @@ impl SymbolGroup {
         // Double-check after acquiring lock (another thread might have added it)
         for (_index, variant) in self.variants.iter() {
             if variant.original_string.as_ref() == original {
-                return &variant;
+                return variant;
             }
         }
 
