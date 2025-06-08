@@ -314,6 +314,9 @@ export interface NarrativeEvent extends BaseEvent {
 
     /** Who or what generated this message */
     readonly author: string;
+
+    /** Whether this is a historical event (for visual distinction) */
+    readonly is_historical?: boolean;
 }
 
 /**
@@ -360,6 +363,55 @@ export interface Traceback {
     readonly traceback: ReadonlyArray<string>;
 }
 
+/**
+ * Historical event from the server's event log
+ */
+export interface HistoricalEvent {
+    /** The event ID */
+    readonly event_id: string;
+
+    /** Who or what authored this event */
+    readonly author: any;
+
+    /** The event content/message */
+    readonly message: any;
+
+    /** When the event occurred */
+    readonly timestamp: string;
+
+    /** Whether this is a historical event (should always be true) */
+    readonly is_historical: boolean;
+
+    /** The player this event was for */
+    readonly player: any;
+}
+
+/**
+ * Response from the history API containing batched historical events
+ */
+export interface HistoryResponse {
+    /** Array of historical events in chronological order */
+    readonly events: ReadonlyArray<HistoricalEvent>;
+
+    /** Metadata about the response */
+    readonly meta: {
+        /** Total number of events in this response */
+        readonly total_events: number;
+
+        /** Time range covered by this response */
+        readonly time_range: readonly [string, string];
+
+        /** Whether there are more events available before the earliest returned */
+        readonly has_more_before: boolean;
+
+        /** The earliest event ID in this response */
+        readonly earliest_event_id: string | null;
+
+        /** The latest event ID in this response */
+        readonly latest_event_id: string | null;
+    };
+}
+
 // Legacy alias for PresentationData - kept for backward compatibility
 export interface Presentation extends PresentationData {}
 
@@ -403,6 +455,9 @@ export class Context {
     /** Manager for UI presentations (windows, panels, etc.) */
     readonly presentations: State<PresentationManager>;
 
+    /** Timestamp boundary for deduplication - events before this time are considered historical */
+    historyBoundaryTime: number | null;
+
     constructor() {
         this.ws = null;
         this.history = [];
@@ -412,6 +467,7 @@ export class Context {
         this.player = new Player("", "", false);
         this.spool = null;
         this.presentations = van.state(new PresentationManager());
+        this.historyBoundaryTime = null;
     }
 
     /**
@@ -449,5 +505,21 @@ export class Context {
      */
     isEditing(): boolean {
         return this.spool !== null;
+    }
+
+    /**
+     * Sets the history boundary timestamp for deduplication
+     * Called when history loading begins
+     */
+    setHistoryBoundary(): void {
+        this.historyBoundaryTime = Date.now();
+    }
+
+    /**
+     * Checks if an event should be considered a duplicate based on timestamp
+     * Events with timestamps before the history boundary are considered duplicates
+     */
+    isHistoricalDuplicate(eventTimestamp: number): boolean {
+        return this.historyBoundaryTime !== null && eventTimestamp < this.historyBoundaryTime;
     }
 }

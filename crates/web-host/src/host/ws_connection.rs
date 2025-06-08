@@ -56,6 +56,9 @@ pub struct WebSocketConnection {
 /// The JSON output of a narrative event.
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NarrativeOutput {
+    /// The unique event ID for this narrative event
+    #[serde(skip_serializing_if = "Option::is_none")]
+    event_id: Option<String>,
     /// The object that authored or caused the event.
     author: Value,
     /// If this is a system message, this is the message.
@@ -126,6 +129,8 @@ impl WebSocketConnection {
             connect_message.to_string(),
         )
         .await;
+
+        // History is now requested on-demand via REST API instead of automatically on connection
 
         debug!(client_id = ?self.client_id, "Entering command dispatch loop");
 
@@ -224,11 +229,13 @@ impl WebSocketConnection {
             }
             ClientEvent::Narrative(_author, event) => {
                 let msg = event.event();
+                let event_id = event.event_id().to_string();
                 match &msg {
                     Event::Notify(msg, content_type) => {
                         let content_type = content_type.map(|s| s.to_string());
                         Self::emit_narrative_msg(
                             ws_sender,
+                            Some(event_id),
                             event.author(),
                             content_type,
                             msg.clone(),
@@ -236,13 +243,13 @@ impl WebSocketConnection {
                         .await;
                     }
                     Event::Traceback(exception) => {
-                        Self::emit_traceback(ws_sender, event.author(), exception).await;
+                        Self::emit_traceback(ws_sender, Some(event_id), event.author(), exception).await;
                     }
                     Event::Present(p) => {
-                        Self::emit_present(ws_sender, event.author(), p.clone()).await;
+                        Self::emit_present(ws_sender, Some(event_id), event.author(), p.clone()).await;
                     }
                     Event::Unpresent(id) => {
-                        Self::emit_unpresent(ws_sender, event.author(), id.clone()).await;
+                        Self::emit_unpresent(ws_sender, Some(event_id), event.author(), id.clone()).await;
                     }
                 }
             }
@@ -518,12 +525,14 @@ impl WebSocketConnection {
 
     async fn emit_present(
         ws_sender: &mut SplitSink<WebSocket, Message>,
+        event_id: Option<String>,
         author: &Var,
         present: Presentation,
     ) {
         Self::emit_narrative(
             ws_sender,
             NarrativeOutput {
+                event_id,
                 author: var_as_json(&author.clone()),
                 system_message: None,
                 message: None,
@@ -539,12 +548,14 @@ impl WebSocketConnection {
 
     async fn emit_unpresent(
         ws_sender: &mut SplitSink<WebSocket, Message>,
+        event_id: Option<String>,
         author: &Var,
         id: String,
     ) {
         Self::emit_narrative(
             ws_sender,
             NarrativeOutput {
+                event_id,
                 author: var_as_json(&author.clone()),
                 system_message: None,
                 message: None,
@@ -560,6 +571,7 @@ impl WebSocketConnection {
 
     async fn emit_narrative_msg(
         ws_sender: &mut SplitSink<WebSocket, Message>,
+        event_id: Option<String>,
         author: &Var,
         content_type: Option<String>,
         msg: Var,
@@ -567,6 +579,7 @@ impl WebSocketConnection {
         Self::emit_narrative(
             ws_sender,
             NarrativeOutput {
+                event_id,
                 author: var_as_json(&author.clone()),
                 system_message: None,
                 message: Some(var_as_json(&msg)),
@@ -589,6 +602,7 @@ impl WebSocketConnection {
         Self::emit_narrative(
             ws_sender,
             NarrativeOutput {
+                event_id: None, // System messages don't have event IDs
                 author: var_as_json(&v_obj(*author)),
                 system_message: Some(msg),
                 message: None,
@@ -604,6 +618,7 @@ impl WebSocketConnection {
 
     async fn emit_traceback(
         ws_sender: &mut SplitSink<WebSocket, Message>,
+        event_id: Option<String>,
         author: &Var,
         exception: &Exception,
     ) {
@@ -617,6 +632,7 @@ impl WebSocketConnection {
         Self::emit_narrative(
             ws_sender,
             NarrativeOutput {
+                event_id,
                 author: var_as_json(author),
                 system_message: None,
                 message: None,

@@ -26,7 +26,7 @@
 
 import van, { State } from "vanjs-core";
 import { Context, Player } from "./model";
-import { displayDjot, handleEvent } from "./narrative";
+import { displayDjot, handleEvent, fetchAndDisplayHistory } from "./narrative";
 
 // Extract commonly used VanJS elements
 const { button, div, input, select, option, br, label } = van.tags;
@@ -98,6 +98,7 @@ async function connect(
         const loginComponents = loginResult.split(" ");
         const playerOid = loginComponents[0];
         const authToken = result.headers.get("X-Moor-Auth-Token");
+        context.authToken = authToken;
 
         // Validate authentication token
         if (!authToken) {
@@ -108,9 +109,21 @@ async function connect(
 
         // Update player state (authorized but not yet connected)
         player.val = new Player(playerOid, authToken, false);
-        context.systemMessage.show("Authenticated! Establishing connection...", 2);
+        context.systemMessage.show("Authenticated! Loading history...", 2);
 
-        // Establish WebSocket connection
+        // Fetch and display historical events BEFORE opening WebSocket
+        // This ensures a clean temporal boundary between historical and live events
+        try {
+            await fetchAndDisplayHistory(context, 1000);
+            console.log("History loaded successfully, now establishing WebSocket connection");
+        } catch (error) {
+            console.error("Failed to load history:", error);
+            // Continue with connection even if history fails
+        }
+
+        context.systemMessage.show("Establishing connection...", 2);
+
+        // Establish WebSocket connection AFTER history is loaded
         const baseUrl = window.location.host;
         const isSecure = window.location.protocol === "https:";
         const wsUrl = `${isSecure ? "wss://" : "ws://"}${baseUrl}/ws/attach/${mode}/${authToken}`;
@@ -155,7 +168,6 @@ async function connect(
 
         // Update application context
         context.ws = ws;
-        context.authToken = authToken;
     } catch (error) {
         // Handle any unexpected errors
         console.error("Connection error:", error);

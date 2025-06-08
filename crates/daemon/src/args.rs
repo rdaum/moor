@@ -69,6 +69,16 @@ pub struct Args {
     pub tasks_db: PathBuf,
 
     #[arg(
+        short = 'e',
+        long,
+        value_name = "events-db",
+        help = "Path to persistent events database to use or create",
+        value_hint = ValueHint::FilePath,
+        default_value = "events.db"
+    )]
+    pub events_db: PathBuf,
+
+    #[arg(
         long,
         value_name = "rpc-listen",
         help = "RPC server address",

@@ -17,7 +17,7 @@ use thiserror::Error;
 
 pub use client::{
     ClientEvent, ClientsBroadcastEvent, ConnectType, DaemonToClientReply, EntityType,
-    HostClientToDaemonMessage, PropInfo, VerbInfo, VerbProgramResponse,
+    HistoryRecall, HistoryResponse, HistoricalNarrativeEvent, HostClientToDaemonMessage, PropInfo, VerbInfo, VerbProgramResponse,
 };
 pub use host::{DaemonToHostReply, HostBroadcastEvent, HostToDaemonMessage, HostType};
 pub use worker::{DaemonToWorkerMessage, DaemonToWorkerReply, WorkerToDaemonMessage};

@@ -21,15 +21,17 @@ use moor_common::tasks::NarrativeEvent;
 use moor_common::tasks::{ConnectionDetails, Session, SessionError, SessionFactory};
 use moor_var::Obj;
 
+use crate::event_log::EventLog;
 use crate::rpc_server::RpcServer;
 
 /// A "session" that runs over the RPC system.
 pub struct RpcSession {
     client_id: Uuid,
     player: Obj,
-    // TODO: manage this buffer better -- e.g. if it grows too big, for long-running tasks, etc. it
-    //  should be mmap'd to disk or something.
-    session_buffer: Mutex<Vec<(Obj, Box<NarrativeEvent>)>>,
+    /// Shared event log for persistent storage across all sessions
+    event_log: Arc<EventLog>,
+    /// Transaction-local buffer for events pending commit
+    transaction_buffer: Mutex<Vec<(Obj, Box<NarrativeEvent>)>>,
     send: Sender<SessionActions>,
 }
 
@@ -63,11 +65,17 @@ pub(crate) enum SessionActions {
 }
 
 impl RpcSession {
-    pub fn new(client_id: Uuid, player: Obj, sender: Sender<SessionActions>) -> Self {
+    pub fn new(
+        client_id: Uuid,
+        player: Obj,
+        event_log: Arc<EventLog>,
+        sender: Sender<SessionActions>,
+    ) -> Self {
         Self {
             client_id,
             player,
-            session_buffer: Mutex::new(Vec::new()),
+            event_log,
+            transaction_buffer: Mutex::new(Vec::new()),
             send: sender,
         }
     }
@@ -76,10 +84,16 @@ impl RpcSession {
 impl Session for RpcSession {
     fn commit(&self) -> Result<(), SessionError> {
         let events: Vec<_> = {
-            let mut session_buffer = self.session_buffer.lock().unwrap();
-            session_buffer.drain(..).collect()
+            let mut transaction_buffer = self.transaction_buffer.lock().unwrap();
+            transaction_buffer.drain(..).collect()
         };
 
+        // First, persist all events to the shared EventLog
+        for (player, event) in &events {
+            self.event_log.append(*player, event.clone());
+        }
+
+        // Then, publish them to connected clients
         self.send
             .send(SessionActions::PublishNarrativeEvents(events))
             .map_err(|e| SessionError::CommitError(e.to_string()))?;
@@ -87,8 +101,8 @@ impl Session for RpcSession {
     }
 
     fn rollback(&self) -> Result<(), SessionError> {
-        let mut session_buffer = self.session_buffer.lock().unwrap();
-        session_buffer.clear();
+        let mut transaction_buffer = self.transaction_buffer.lock().unwrap();
+        transaction_buffer.clear();
         Ok(())
     }
 
@@ -96,6 +110,7 @@ impl Session for RpcSession {
         Ok(Arc::new(Self::new(
             self.client_id,
             self.player,
+            self.event_log.clone(),
             self.send.clone(),
         )))
     }
@@ -112,7 +127,7 @@ impl Session for RpcSession {
     }
 
     fn send_event(&self, player: Obj, event: Box<NarrativeEvent>) -> Result<(), SessionError> {
-        self.session_buffer.lock().unwrap().push((player, event));
+        self.transaction_buffer.lock().unwrap().push((player, event));
         Ok(())
     }
 
@@ -226,7 +241,12 @@ impl SessionFactory for RpcServer {
         player: &Obj,
     ) -> Result<Arc<dyn Session>, SessionError> {
         let client_id = Uuid::new_v4();
-        let session = RpcSession::new(client_id, *player, self.mailbox_sender.clone());
+        let session = RpcSession::new(
+            client_id,
+            *player,
+            self.event_log.clone(),
+            self.mailbox_sender.clone(),
+        );
         let session = Arc::new(session);
         Ok(session)
     }

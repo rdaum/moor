@@ -16,11 +16,15 @@ use bincode::{Decode, Encode};
 use moor_var::{Symbol, Var};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
+use uuid::Uuid;
 
 /// A narrative event is a record of something that happened in the world, and is what `bf_notify`
 /// or similar ultimately create.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct NarrativeEvent {
+    /// Chronologically-ordered unique identifier for this event (UUID v7 with embedded timestamp)
+    #[bincode(with_serde)]
+    pub event_id: Uuid,
     /// When the event happened, in the server's system time.
     pub timestamp: SystemTime,
     /// The object that authored or caused the event.
@@ -72,12 +76,17 @@ impl NarrativeEvent {
     #[must_use]
     pub fn notify(author: Var, value: Var, content_type: Option<Symbol>) -> Self {
         Self {
+            event_id: Uuid::now_v7(),
             timestamp: SystemTime::now(),
             author,
             event: Event::Notify(value, content_type),
         }
     }
 
+    #[must_use]
+    pub fn event_id(&self) -> Uuid {
+        self.event_id
+    }
     #[must_use]
     pub fn timestamp(&self) -> SystemTime {
         self.timestamp

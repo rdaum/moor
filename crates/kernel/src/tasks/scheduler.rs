@@ -1011,6 +1011,7 @@ impl Scheduler {
                 if let Err(send_error) = task.session.send_event(
                     task.player,
                     Box::new(NarrativeEvent {
+                        event_id: uuid::Uuid::now_v7(),
                         timestamp: SystemTime::now(),
                         author: v_obj(task.player),
                         event: Event::Traceback(exception.as_ref().clone()),

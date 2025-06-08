@@ -147,6 +147,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.len() == 2 {
         let event = Unpresent(id.as_str().to_string());
         let event = NarrativeEvent {
+            event_id: uuid::Uuid::now_v7(),
             timestamp: SystemTime::now(),
             author: bf_args.exec_state.this(),
             event,
@@ -263,6 +264,7 @@ fn bf_present(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     };
 
     let event = NarrativeEvent {
+        event_id: uuid::Uuid::now_v7(),
         timestamp: SystemTime::now(),
         author: bf_args.exec_state.this(),
         event: Present(event),

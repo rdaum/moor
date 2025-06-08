@@ -276,3 +276,59 @@ html, body {
     white-space: pre-wrap;
     color: #00ff00;
 }
+
+/* Historical events styling - lighter, muted appearance */
+.historical_narrative {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 1em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow: auto;
+    padding: 0.0em;
+    margin: 0;
+    color: #999999; /* Lighter gray for historical events */
+    opacity: 0.8; /* Slightly transparent */
+}
+
+.historical_djot {
+    color: #999999;
+    opacity: 0.8;
+}
+
+.historical_html {
+    color: #999999;
+    opacity: 0.8;
+}
+
+/* Live events styling - keep original appearance */
+.live_narrative {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 1em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow: auto;
+    padding: 0.0em;
+    margin: 0;
+    color: white; /* Original bright color for live events */
+}
+
+.live_djot {
+    /* Inherits normal styling */
+}
+
+.live_html {
+    /* Inherits normal styling */
+}
+
+/* Visual separator between historical and live events */
+.history_separator {
+    font-family: 'Roboto', sans-serif;
+    font-size: 0.9em;
+    text-align: center;
+    color: #4169E1; /* Blue color similar to system messages */
+    padding: 0.5em 0;
+    margin: 0.5em 0;
+    border-top: 1px solid #4169E1;
+    border-bottom: 1px solid #4169E1;
+    background-color: rgba(65, 105, 225, 0.1); /* Very light blue background */
+}

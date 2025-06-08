@@ -17,7 +17,7 @@ use crate::host::ws_connection::WebSocketConnection;
 use crate::host::{auth, var_as_json};
 use axum::Json;
 use axum::body::{Body, Bytes};
-use axum::extract::{ConnectInfo, Path, State, WebSocketUpgrade};
+use axum::extract::{ConnectInfo, Path, Query, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use eyre::eyre;
@@ -28,8 +28,8 @@ use rpc_async_client::rpc_client::RpcSendClient;
 use rpc_common::AuthToken;
 use rpc_common::HostClientToDaemonMessage::{Attach, ConnectionEstablish};
 use rpc_common::{
-    CLIENT_BROADCAST_TOPIC, ConnectType, DaemonToClientReply, HostClientToDaemonMessage,
-    ReplyResult,
+    CLIENT_BROADCAST_TOPIC, ConnectType, DaemonToClientReply,
+    HistoryRecall, HostClientToDaemonMessage, ReplyResult,
 };
 use rpc_common::{ClientToken, RpcMessageError};
 use std::net::SocketAddr;
@@ -38,6 +38,10 @@ use tmq::{request, subscribe};
 use tracing::warn;
 use tracing::{debug, error, info};
 use uuid::Uuid;
+use serde_derive::Deserialize;
+use serde_json::json;
+use moor_common::tasks::Event;
+use moor_var::v_obj;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum LoginType {
@@ -509,4 +513,107 @@ pub async fn ws_create_attach_handler(
     info!("Connection from {}", addr);
 
     attach(ws, addr, ConnectType::Created, &ws_host, token).await
+}
+
+#[derive(Deserialize)]
+pub struct HistoryQuery {
+    since_seconds: Option<u64>,
+    since_event: Option<String>, // UUID as string
+    until_event: Option<String>, // UUID as string
+    limit: Option<usize>,
+}
+
+/// REST endpoint to retrieve player event history
+pub async fn history_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Query(query): Query<HistoryQuery>,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let history_recall = if let Some(since_seconds) = query.since_seconds {
+        HistoryRecall::SinceSeconds(since_seconds, query.limit)
+    } else if let Some(since_event_str) = query.since_event {
+        match Uuid::parse_str(&since_event_str) {
+            Ok(uuid) => HistoryRecall::SinceEvent(uuid, query.limit),
+            Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+        }
+    } else if let Some(until_event_str) = query.until_event {
+        match Uuid::parse_str(&until_event_str) {
+            Ok(uuid) => HistoryRecall::UntilEvent(uuid, query.limit),
+            Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+        }
+    } else {
+        HistoryRecall::None
+    };
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        HostClientToDaemonMessage::RequestHistory(client_token.clone(), auth_token.clone(), history_recall),
+    ).await {
+        Ok(DaemonToClientReply::HistoryResponse(history)) => {
+            Json(json!({
+                "events": history.events.iter().map(|e| {
+                    json!({
+                        "event_id": e.event.event_id(),
+                        "author": var_as_json(e.event.author()),
+                        "message": match e.event.event() {
+                            Event::Notify(msg, content_type) => json!({
+                                "type": "notify",
+                                "content": var_as_json(&msg),
+                                "content_type": content_type
+                            }),
+                            Event::Traceback(ex) => json!({
+                                "type": "traceback", 
+                                "error": format!("{}", ex)
+                            }),
+                            Event::Present(p) => json!({
+                                "type": "present",
+                                "presentation": p
+                            }),
+                            Event::Unpresent(id) => json!({
+                                "type": "unpresent",
+                                "id": id
+                            })
+                        },
+                        "timestamp": e.event.timestamp(),
+                        "is_historical": e.is_historical,
+                        "player": var_as_json(&v_obj(e.player))
+                    })
+                }).collect::<Vec<_>>(),
+                "meta": {
+                    "total_events": history.total_events,
+                    "time_range": history.time_range,
+                    "has_more_before": history.has_more_before,
+                    "earliest_event_id": history.earliest_event_id,
+                    "latest_event_id": history.latest_event_id
+                }
+            }))
+        }
+        Ok(other) => {
+            error!("Unexpected daemon response: {:?}", other);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Err(e) => {
+            error!("RPC error getting history: {:?}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response.into_response()
 }

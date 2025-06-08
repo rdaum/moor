@@ -137,7 +137,7 @@ shadow-rs = "1.1"
 similar = "*"
 similar-asserts = "*"
 strum = { version = "0.27", features = ["derive"] }
-uuid = { version = "1.16", features = ["v4", "serde"] }
+uuid = { version = "1.16", features = ["v4", "v7", "serde"] }
 xml-rs = "0.8"
 
 ## Required for MOO builtins.

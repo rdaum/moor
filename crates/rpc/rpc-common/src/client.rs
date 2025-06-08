@@ -29,6 +29,19 @@ pub enum ConnectType {
     Created,
 }
 
+/// History recall options for connection establishment
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+pub enum HistoryRecall {
+    /// Request events since a specific event ID (for efficient reconnections)
+    SinceEvent(#[bincode(with_serde)] Uuid, Option<usize>),
+    /// Request events up to (but not including) a specific event ID (for session boundaries)
+    UntilEvent(#[bincode(with_serde)] Uuid, Option<usize>),
+    /// Request events from the last N seconds (user-friendly for "show me last 5 minutes")
+    SinceSeconds(u64, Option<usize>),
+    /// No historical events requested (default for new connections)
+    None,
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Encode, Decode)]
 #[repr(u8)]
 pub enum EntityType {
@@ -62,6 +75,36 @@ pub struct PropInfo {
     pub r: bool,
     pub w: bool,
     pub chown: bool,
+}
+
+/// Response containing batched historical events
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+pub struct HistoryResponse {
+    /// The events in chronological order  
+    pub events: Vec<HistoricalNarrativeEvent>,
+    /// The range of time covered by this response
+    pub time_range: (SystemTime, SystemTime),
+    /// Total number of events found (may be larger than returned if limited)
+    pub total_events: usize,
+    /// Whether there are more events available before the earliest returned
+    pub has_more_before: bool,
+    /// The earliest event ID in this response (for pagination)
+    #[bincode(with_serde)]
+    pub earliest_event_id: Option<Uuid>,
+    /// The latest event ID in this response (for pagination) 
+    #[bincode(with_serde)]
+    pub latest_event_id: Option<Uuid>,
+}
+
+/// Historical narrative event with additional metadata
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+pub struct HistoricalNarrativeEvent {
+    /// The original narrative event
+    pub event: NarrativeEvent,
+    /// Explicitly mark this as historical
+    pub is_historical: bool,
+    /// The player this event was for
+    pub player: Obj,
 }
 
 /// An RPC message sent from a host to the daemon on behalf of a client.
@@ -116,6 +159,8 @@ pub enum HostClientToDaemonMessage {
     Resolve(ClientToken, AuthToken, ObjectRef),
     /// Respond to a client ping request.
     ClientPong(ClientToken, SystemTime, Obj, HostType, SocketAddr),
+    /// Request historical events based on the history recall option.
+    RequestHistory(ClientToken, AuthToken, HistoryRecall),
     /// We're done with this connection, buh-bye.
     Detach(ClientToken),
 }
@@ -153,6 +198,8 @@ pub enum DaemonToClientReply {
     VerbValue(VerbInfo, Vec<String>),
     /// Response to `Resolve`
     ResolveResult(Var),
+    /// Response to `RequestHistory` - historical events in a single response
+    HistoryResponse(HistoryResponse),
     /// This Client has been disconnected and is not expected to be heard from again.
     Disconnected,
 }

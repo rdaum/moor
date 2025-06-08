@@ -24,6 +24,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::connections::ConnectionRegistry;
+use crate::event_log::EventLog;
 use crate::rpc_hosts::Hosts;
 use crate::rpc_session::{RpcSession, SessionActions};
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, preposition_to_string};
@@ -45,9 +46,10 @@ use rpc_common::DaemonToClientReply::{LoginResult, NewConnection};
 use rpc_common::{
     AuthToken, CLIENT_BROADCAST_TOPIC, ClientEvent, ClientToken, ClientsBroadcastEvent,
     ConnectType, DaemonToClientReply, DaemonToHostReply, EntityType, HOST_BROADCAST_TOPIC,
-    HostBroadcastEvent, HostClientToDaemonMessage, HostToDaemonMessage, HostToken, HostType,
-    MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, MessageType,
-    PropInfo, ReplyResult, RpcMessageError, VerbInfo, VerbProgramResponse,
+    HistoricalNarrativeEvent, HistoryRecall, HistoryResponse, HostBroadcastEvent,
+    HostClientToDaemonMessage, HostToDaemonMessage, HostToken, HostType, MOOR_AUTH_TOKEN_FOOTER,
+    MOOR_HOST_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, MessageType, PropInfo, ReplyResult,
+    RpcMessageError, VerbInfo, VerbProgramResponse,
 };
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
@@ -81,6 +83,9 @@ pub struct RpcServer {
 
     pub(crate) mailbox_sender: Sender<SessionActions>,
     pub(crate) events_publish: Mutex<Socket>,
+
+    /// Shared event log for persistent narrative event storage
+    pub(crate) event_log: Arc<EventLog>,
 }
 
 /// If we don't hear from a host in this time, we consider it dead and its listeners gone.
@@ -110,6 +115,7 @@ impl RpcServer {
         zmq_context: zmq::Context,
         narrative_endpoint: &str,
         config: Arc<Config>,
+        events_db_path: &std::path::Path,
     ) -> Self {
         info!(
             "Creating new RPC server; with {} ZMQ IO threads...",
@@ -144,6 +150,10 @@ impl RpcServer {
             host_token_cache: Default::default(),
             auth_token_cache: Default::default(),
             client_token_cache: Default::default(),
+            event_log: Arc::new(EventLog::with_config(
+                crate::event_log::EventLogConfig::default(),
+                Some(events_db_path),
+            )),
         }
     }
 
@@ -905,6 +915,15 @@ impl RpcServer {
 
                 Ok(DaemonToClientReply::Verbs(verbs))
             }
+            HostClientToDaemonMessage::RequestHistory(_token, auth_token, history_recall) => {
+                // Validate the auth token to get the player
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Build history response based on history recall option
+                let history_response = self.build_history_response(player, history_recall);
+
+                Ok(DaemonToClientReply::HistoryResponse(history_response))
+            }
             HostClientToDaemonMessage::Detach(token) => {
                 info!(?client_id, "Detaching client");
                 let _connection = self.client_auth(token, client_id)?;
@@ -971,6 +990,7 @@ impl RpcServer {
         let session = Arc::new(RpcSession::new(
             client_id,
             *connection,
+            self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
         let mut task_handle = match scheduler_client.submit_verb_task(
@@ -1061,6 +1081,7 @@ impl RpcServer {
         let session = Arc::new(RpcSession::new(
             client_id,
             *player,
+            self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
 
@@ -1093,6 +1114,7 @@ impl RpcServer {
         let session = Arc::new(RpcSession::new(
             client_id,
             *player,
+            self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
 
@@ -1129,6 +1151,7 @@ impl RpcServer {
         let session = Arc::new(RpcSession::new(
             client_id,
             connection,
+            self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
 
@@ -1209,6 +1232,7 @@ impl RpcServer {
         let session = Arc::new(RpcSession::new(
             client_id,
             connection,
+            self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
 
@@ -1252,6 +1276,7 @@ impl RpcServer {
         let session = Arc::new(RpcSession::new(
             client_id,
             connection,
+            self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
 
@@ -1305,6 +1330,7 @@ impl RpcServer {
         let session = Arc::new(RpcSession::new(
             client_id,
             connection,
+            self.event_log.clone(),
             self.mailbox_sender.clone(),
         ));
 
@@ -1928,6 +1954,94 @@ impl RpcServer {
             Err(_) => {
                 // Timeout occurred, no tasks completed
             }
+        }
+    }
+
+    /// Build a history response for events relevant to a specific player
+    fn build_history_response(
+        &self,
+        player: Obj,
+        history_recall: HistoryRecall,
+    ) -> HistoryResponse {
+        let (events, total_events_available, has_more_before) = match history_recall {
+            HistoryRecall::SinceEvent(since_id, limit) => {
+                let all_events = self
+                    .event_log
+                    .events_for_player_since(player, Some(since_id));
+                let total_available = all_events.len();
+                let has_more = limit.is_some_and(|l| total_available > l);
+                let events = if let Some(limit) = limit {
+                    all_events.into_iter().take(limit).collect()
+                } else {
+                    all_events
+                };
+                (events, total_available, has_more)
+            },
+            HistoryRecall::UntilEvent(until_id, limit) => {
+                let all_events = self
+                    .event_log
+                    .events_for_player_until(player, Some(until_id));
+                let total_available = all_events.len();
+                let has_more = limit.is_some_and(|l| total_available > l);
+                let events = if let Some(limit) = limit {
+                    all_events.into_iter().take(limit).collect()
+                } else {
+                    all_events
+                };
+                (events, total_available, has_more)
+            },
+            HistoryRecall::SinceSeconds(seconds_ago, limit) => {
+                let all_events = self
+                    .event_log
+                    .events_for_player_since_seconds(player, seconds_ago);
+                let total_available = all_events.len();
+                let has_more = limit.is_some_and(|l| total_available > l);
+                let events = if let Some(limit) = limit {
+                    all_events.into_iter().take(limit).collect()
+                } else {
+                    all_events
+                };
+                (events, total_available, has_more)
+            },
+            HistoryRecall::None => (Vec::new(), 0, false),
+        };
+
+        let historical_events = events
+            .into_iter()
+            .map(|logged_event| HistoricalNarrativeEvent {
+                event: (*logged_event.event).clone(),
+                is_historical: true,
+                player: logged_event.player,
+            })
+            .collect::<Vec<_>>();
+
+        // Calculate metadata
+        let (earliest_time, latest_time) = if historical_events.is_empty() {
+            (SystemTime::now(), SystemTime::now())
+        } else {
+            (
+                historical_events.first().unwrap().event.timestamp(),
+                historical_events.last().unwrap().event.timestamp(),
+            )
+        };
+
+        debug!(
+            "Built history response with {} events for player {} (total available: {}, has more: {}, time range: {:?} to {:?})",
+            historical_events.len(),
+            player,
+            total_events_available,
+            has_more_before,
+            earliest_time,
+            latest_time
+        );
+
+        HistoryResponse {
+            total_events: total_events_available,
+            earliest_event_id: historical_events.first().map(|e| e.event.event_id()),
+            latest_event_id: historical_events.last().map(|e| e.event.event_id()),
+            time_range: (earliest_time, latest_time),
+            has_more_before,
+            events: historical_events,
         }
     }
 }

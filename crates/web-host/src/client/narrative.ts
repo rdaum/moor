@@ -28,6 +28,8 @@ import van, { State } from "vanjs-core";
 import {
     BaseEvent,
     Context,
+    HistoricalEvent,
+    HistoryResponse,
     NarrativeEvent,
     Player,
     Presentation,
@@ -45,6 +47,138 @@ import { launchVerbEditor, showVerbEditor } from "./verb_edit";
 
 // Extract common VanJS elements for better readability
 const { div, span, textarea } = van.tags;
+
+/**
+ * Fetches historical events from the server and displays them in the narrative
+ * 
+ * @param context - Application context containing auth token and other state
+ * @param maxEvents - Maximum number of events to fetch (default: 1000)
+ */
+export async function fetchAndDisplayHistory(context: Context, maxEvents: number = 1000): Promise<void> {
+    if (!context.authToken) {
+        console.warn("Cannot fetch history: no auth token available");
+        return;
+    }
+
+    try {
+        // Set up simple time-based query for recent history
+        const params = new URLSearchParams({
+            since_seconds: "3600", // Last hour by default
+            limit: maxEvents.toString()
+        });
+        
+        console.log("Fetching history (time-based query for last hour)");
+
+
+        // Set the timestamp boundary for deduplication
+        context.setHistoryBoundary();
+
+        const response = await fetch(`/api/history?${params}`, {
+            method: "GET",
+            headers: {
+                "X-Moor-Auth-Token": context.authToken,
+                "Content-Type": "application/json"
+            }
+        });
+
+        if (!response.ok) {
+            console.error(`Failed to fetch history: ${response.status} ${response.statusText}`);
+            return;
+        }
+
+        const historyData: HistoryResponse = await response.json();
+        
+        if (historyData.events.length === 0) {
+            console.log("No historical events to display");
+        } else {
+            // Display historical events in chronological order (oldest first)
+            console.log(`Displaying ${historyData.events.length} historical events`);
+            
+            for (const event of historyData.events) {
+                displayHistoricalEvent(context, event);
+            }
+
+            // Add a visual separator between history and live events
+            addHistorySeparator();
+        }
+
+    } catch (error) {
+        console.error("Error fetching history:", error);
+        context.systemMessage.show("Failed to load message history", 3);
+    }
+}
+
+
+/**
+ * Displays a single historical event in the narrative with historical styling
+ * 
+ * @param context - Application context
+ * @param event - The historical event to display
+ */
+function displayHistoricalEvent(context: Context, event: HistoricalEvent): void {
+    // Convert historical event to narrative event format
+    const narrativeEvent: NarrativeEvent = {
+        kind: "narrative_message" as any, // Use string to match enum value
+        message: convertEventMessage(event.message),
+        content_type: event.message.content_type || "text/plain",
+        author: event.author,
+        is_historical: true, // Mark as historical for visual distinction
+        timestamp: new Date(event.timestamp).getTime()
+    };
+
+    // Process the event through the normal narrative pipeline
+    processNarrativeMessage(context, narrativeEvent);
+}
+
+/**
+ * Converts the event message from the history API format to narrative format
+ * 
+ * @param message - The message object from history API
+ * @returns String content for display
+ */
+function convertEventMessage(message: any): string {
+    if (typeof message === "string") {
+        return message;
+    }
+    
+    if (message.type === "notify") {
+        return message.content;
+    } else if (message.type === "traceback") {
+        return `ERROR: ${message.error}`;
+    } else if (message.type === "present") {
+        return `[Presentation: ${message.presentation}]`;
+    } else if (message.type === "unpresent") {
+        return `[Closed: ${message.id}]`;
+    }
+    
+    // Fallback for unknown message types
+    return JSON.stringify(message);
+}
+
+/**
+ * Adds a visual separator between historical and live events
+ */
+function addHistorySeparator(): void {
+    const output = document.getElementById("output_window");
+    if (!output) {
+        console.error("Cannot find output window element");
+        return;
+    }
+
+    const separator = div({
+        class: "history_separator"
+    }, "─── Live Events ───");
+    
+    output.appendChild(separator);
+    
+    // Scroll to the separator
+    setTimeout(() => {
+        const narrative = document.getElementById("narrative");
+        if (narrative) {
+            narrative.scrollTop = narrative.scrollHeight;
+        }
+    }, 0);
+}
 
 /**
  * Content type constants
@@ -446,6 +580,10 @@ function processMessageContent(context: Context, msg: NarrativeEvent, contentTyp
     // Create a container for the content
     const contentNode = span();
 
+    // Determine styling classes based on content type and historical status
+    const isHistorical = msg.is_historical || false;
+    const baseClass = isHistorical ? "historical" : "live";
+
     // Render content based on its type
     if (contentType === CONTENT_TYPES.DJOT) {
         // Parse and render Djot content
@@ -455,7 +593,7 @@ function processMessageContent(context: Context, msg: NarrativeEvent, contentTyp
 
         // Add all elements to the content node with appropriate styling
         for (let i = 0; i < elements.length; i++) {
-            contentNode.append(div({ class: "text_djot" }, elements[i]));
+            contentNode.append(div({ class: `text_djot ${baseClass}_djot` }, elements[i]));
         }
     } else if (contentType === CONTENT_TYPES.HTML) {
         // Sanitize and render HTML content
@@ -464,11 +602,11 @@ function processMessageContent(context: Context, msg: NarrativeEvent, contentTyp
 
         // Add all elements to the content node with appropriate styling
         for (let i = 0; i < elements.length; i++) {
-            contentNode.append(div({ class: "text_html" }, elements[i]));
+            contentNode.append(div({ class: `text_html ${baseClass}_html` }, elements[i]));
         }
     } else {
         // Default case: plain text
-        contentNode.append(div({ class: "text_narrative" }, content));
+        contentNode.append(div({ class: `text_narrative ${baseClass}_narrative` }, content));
     }
 
     // Add the content to the narrative display
@@ -694,6 +832,14 @@ function handleTraceback(context: Context, traceback: Traceback) {
  * @param msg - The raw message string from the WebSocket
  */
 export function handleEvent(context: Context, msg: string): void {
+    // Process the event directly (no queuing needed since history is loaded before WebSocket opens)
+    processEvent(context, msg);
+}
+
+/**
+ * Internal function to actually process an event
+ */
+function processEvent(context: Context, msg: string): void {
     // Parse the JSON message
     let event: any;
     try {
@@ -706,6 +852,16 @@ export function handleEvent(context: Context, msg: string): void {
     if (!event) {
         console.warn("Received empty event");
         return;
+    }
+
+    // Check for duplicate events based on server timestamp
+    // Events sent before history boundary are considered duplicates
+    if (event.server_time) {
+        const eventTimestamp = new Date(event.server_time).getTime();
+        if (context.isHistoricalDuplicate(eventTimestamp)) {
+            console.log(`Skipping duplicate historical event (timestamp: ${new Date(eventTimestamp).toISOString()})`);
+            return;
+        }
     }
 
     // Dispatch to the appropriate handler based on event type

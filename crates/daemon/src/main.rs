@@ -34,6 +34,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 mod args;
 mod connections;
+mod event_log;
 mod rpc_hosts;
 mod rpc_server;
 mod rpc_session;
@@ -265,6 +266,7 @@ fn main() -> Result<(), Report> {
         zmq_ctx.clone(),
         args.events_listen.as_str(),
         config.clone(),
+        &args.events_db,
     ));
     let kill_switch = rpc_server.kill_switch.clone();
 

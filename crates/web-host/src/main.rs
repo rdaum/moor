@@ -306,6 +306,7 @@ fn mk_routes(web_host: WebHost, dist_dir: &Path) -> eyre::Result<Router> {
             "/properties/{object}/{name}",
             get(host::property_retrieval_handler),
         )
+        .route("/api/history", get(host::history_handler))
         .fallback_service(dist_service)
         .with_state(web_host);
 
