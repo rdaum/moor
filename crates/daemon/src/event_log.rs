@@ -1374,6 +1374,140 @@ mod tests {
     }
 
     #[test]
+    fn test_web_client_pagination_sequence() {
+        let tmpdir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = tmpdir.path();
+        let player = SYSTEM_OBJECT;
+
+        println!("=== Testing Web Client Pagination Sequence ===");
+
+        // Step 1: Create lots of events to test pagination
+        let _all_event_ids = {
+            println!("1. Creating EventLog and logging 20 events...");
+            let log = EventLog::with_config(create_test_config(), Some(db_path));
+
+            let mut event_ids = Vec::new();
+            for i in 0..20 {
+                let event_id = log.append(
+                    player,
+                    create_test_event(player, &format!("Event {}: User says something", i + 1)),
+                );
+                event_ids.push(event_id);
+                // Small delay to ensure different timestamps
+                thread::sleep(Duration::from_millis(1));
+            }
+
+            // Wait for background persistence
+            thread::sleep(Duration::from_millis(500));
+            println!("   Logged {} events in cache", log.len());
+            
+            drop(log);
+            event_ids
+        };
+
+        println!("2. Creating fresh EventLog (simulating daemon restart)...");
+        let log = EventLog::with_config(create_test_config(), Some(db_path));
+        println!("   Fresh EventLog created, cache size: {}", log.len());
+
+        // Step 2: Initial load - get most recent 5 events (like web client initial load)
+        println!("3. Initial load: getting most recent 5 events...");
+        let initial_events = log.events_for_player_since_seconds(player, 3600);
+        println!("   Found {} total events", initial_events.len());
+        
+        // Simulate taking the most recent 5 (what the server would return with limit)
+        let len = initial_events.len();
+        let recent_5: Vec<_> = if len > 5 {
+            initial_events.into_iter().skip(len - 5).collect()
+        } else {
+            initial_events
+        };
+        println!("   Taking most recent 5 events:");
+        for (i, event) in recent_5.iter().enumerate() {
+            println!("     {}. Event ID: {}", i + 1, event.event.event_id());
+        }
+        
+        assert_eq!(recent_5.len(), 5, "Should have 5 recent events");
+        let earliest_from_initial = recent_5[0].event.event_id();
+        println!("   Earliest event ID from initial load: {}", earliest_from_initial);
+
+        // Step 3: First back-scroll - get events until the earliest from initial load
+        println!("4. First back-scroll: getting events until {}...", earliest_from_initial);
+        let first_backscroll = log.events_for_player_until(player, Some(earliest_from_initial));
+        println!("   Found {} events in first back-scroll", first_backscroll.len());
+        
+        if first_backscroll.is_empty() {
+            println!("   ERROR: First back-scroll returned no events!");
+        } else {
+            println!("   First back-scroll events:");
+            for (i, event) in first_backscroll.iter().enumerate() {
+                println!("     {}. Event ID: {}", i + 1, event.event.event_id());
+            }
+        }
+
+        // Take the last 5 from first backscroll (most recent 5 before the boundary)
+        let len = first_backscroll.len();
+        let first_batch: Vec<_> = if len > 5 {
+            first_backscroll.into_iter().skip(len - 5).collect()
+        } else {
+            first_backscroll
+        };
+        
+        if !first_batch.is_empty() {
+            let earliest_from_first_batch = first_batch[0].event.event_id();
+            println!("   Earliest event ID from first batch: {}", earliest_from_first_batch);
+
+            // Step 4: Second back-scroll - get events until the earliest from first batch
+            println!("5. Second back-scroll: getting events until {}...", earliest_from_first_batch);
+            let second_backscroll = log.events_for_player_until(player, Some(earliest_from_first_batch));
+            println!("   Found {} events in second back-scroll", second_backscroll.len());
+            
+            if second_backscroll.is_empty() {
+                println!("   ERROR: Second back-scroll returned no events!");
+            } else {
+                println!("   Second back-scroll events:");
+                for (i, event) in second_backscroll.iter().enumerate() {
+                    println!("     {}. Event ID: {}", i + 1, event.event.event_id());
+                }
+            }
+
+            // Verify we're getting different events each time
+            let initial_ids: Vec<_> = recent_5.iter().map(|e| e.event.event_id()).collect();
+            let first_ids: Vec<_> = first_batch.iter().map(|e| e.event.event_id()).collect();
+            let second_ids: Vec<_> = second_backscroll.iter().map(|e| e.event.event_id()).collect();
+
+            println!("6. Verifying pagination correctness...");
+            println!("   Initial load IDs: {:?}", initial_ids);
+            println!("   First batch IDs: {:?}", first_ids);
+            println!("   Second batch IDs: {:?}", second_ids);
+
+            // Verify no overlap between batches
+            for id in &initial_ids {
+                assert!(!first_ids.contains(id), "Initial and first batch should not overlap");
+                assert!(!second_ids.contains(id), "Initial and second batch should not overlap");
+            }
+            
+            if !first_batch.is_empty() && !second_backscroll.is_empty() {
+                for id in &first_ids {
+                    assert!(!second_ids.contains(id), "First and second batch should not overlap");
+                }
+            }
+
+            // Verify chronological ordering (older events should have smaller UUIDs)
+            if !first_batch.is_empty() {
+                let latest_from_first = first_batch.last().unwrap().event.event_id();
+                let earliest_from_initial = recent_5[0].event.event_id();
+                assert!(latest_from_first < earliest_from_initial, 
+                    "Latest from first batch should be older than earliest from initial");
+            }
+
+            println!("=== SUCCESS: Pagination working correctly ===");
+        } else {
+            println!("=== FAILURE: First back-scroll returned no events ===");
+            assert!(!first_batch.is_empty(), "First back-scroll should return events");
+        }
+    }
+
+    #[test]
     fn test_web_client_history_simulation() {
         let tmpdir = TempDir::new().expect("Failed to create temp dir");
         let db_path = tmpdir.path();

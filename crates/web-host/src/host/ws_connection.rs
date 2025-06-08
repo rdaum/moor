@@ -130,8 +130,6 @@ impl WebSocketConnection {
         )
         .await;
 
-        // History is now requested on-demand via REST API instead of automatically on connection
-
         debug!(client_id = ?self.client_id, "Entering command dispatch loop");
 
         let mut expecting_input = VecDeque::new();
@@ -243,13 +241,16 @@ impl WebSocketConnection {
                         .await;
                     }
                     Event::Traceback(exception) => {
-                        Self::emit_traceback(ws_sender, Some(event_id), event.author(), exception).await;
+                        Self::emit_traceback(ws_sender, Some(event_id), event.author(), exception)
+                            .await;
                     }
                     Event::Present(p) => {
-                        Self::emit_present(ws_sender, Some(event_id), event.author(), p.clone()).await;
+                        Self::emit_present(ws_sender, Some(event_id), event.author(), p.clone())
+                            .await;
                     }
                     Event::Unpresent(id) => {
-                        Self::emit_unpresent(ws_sender, Some(event_id), event.author(), id.clone()).await;
+                        Self::emit_unpresent(ws_sender, Some(event_id), event.author(), id.clone())
+                            .await;
                     }
                 }
             }

@@ -114,7 +114,7 @@ async function connect(
         // Fetch and display historical events BEFORE opening WebSocket
         // This ensures a clean temporal boundary between historical and live events
         try {
-            await fetchAndDisplayHistory(context, 1000);
+            await fetchAndDisplayHistory(context, 100);
             console.log("History loaded successfully, now establishing WebSocket connection");
         } catch (error) {
             console.error("Failed to load history:", error);

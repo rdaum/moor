@@ -46,32 +46,42 @@ import { matchRef } from "./var";
 import { launchVerbEditor, showVerbEditor } from "./verb_edit";
 
 // Extract common VanJS elements for better readability
-const { div, span, textarea } = van.tags;
+const { div, span, textarea, button } = van.tags;
 
 /**
  * Fetches historical events from the server and displays them in the narrative
  * 
  * @param context - Application context containing auth token and other state
  * @param maxEvents - Maximum number of events to fetch (default: 1000)
+ * @param sinceEvent - Optional event ID to fetch history since (for pagination)
  */
-export async function fetchAndDisplayHistory(context: Context, maxEvents: number = 1000): Promise<void> {
+export async function fetchAndDisplayHistory(context: Context, maxEvents: number = 1000, sinceEvent?: string): Promise<HistoryResponse | null> {
     if (!context.authToken) {
         console.warn("Cannot fetch history: no auth token available");
-        return;
+        return null;
     }
 
     try {
-        // Set up simple time-based query for recent history
+        // Set up query parameters - prefer N lines over time-based for initial load
         const params = new URLSearchParams({
-            since_seconds: "3600", // Last hour by default
             limit: maxEvents.toString()
         });
         
-        console.log("Fetching history (time-based query for last hour)");
+        if (sinceEvent) {
+            // For pagination, fetch events BEFORE the earliest event we have
+            params.append("until_event", sinceEvent);
+        } else {
+            // Initial load: get recent history with a reasonable time window
+            // Use a longer time window (24 hours) to ensure we get content
+            params.append("since_seconds", "86400"); // Last 24 hours
+        }
+        
+        console.log(`Fetching history${sinceEvent ? ' (pagination)' : ' (initial)'}: limit=${maxEvents}${sinceEvent ? `, until=${sinceEvent}` : ''}`);
 
-
-        // Set the timestamp boundary for deduplication
-        context.setHistoryBoundary();
+        // Set the timestamp boundary for deduplication only on initial load
+        if (!sinceEvent) {
+            context.setHistoryBoundary();
+        }
 
         const response = await fetch(`/api/history?${params}`, {
             method: "GET",
@@ -83,10 +93,18 @@ export async function fetchAndDisplayHistory(context: Context, maxEvents: number
 
         if (!response.ok) {
             console.error(`Failed to fetch history: ${response.status} ${response.statusText}`);
-            return;
+            return null;
         }
 
         const historyData: HistoryResponse = await response.json();
+        
+        // Update context state based on response
+        context.hasMoreHistory = historyData.meta.has_more_before;
+        
+        // Always use the metadata's earliest_event_id for next pagination boundary
+        if (historyData.meta.earliest_event_id) {
+            context.earliestHistoryEventId = historyData.meta.earliest_event_id;
+        }
         
         if (historyData.events.length === 0) {
             console.log("No historical events to display");
@@ -94,17 +112,81 @@ export async function fetchAndDisplayHistory(context: Context, maxEvents: number
             // Display historical events in chronological order (oldest first)
             console.log(`Displaying ${historyData.events.length} historical events`);
             
-            for (const event of historyData.events) {
-                displayHistoricalEvent(context, event);
+            // For prepending (pagination), we need to reverse the order so newest events get prepended first
+            const eventsToDisplay = sinceEvent ? [...historyData.events].reverse() : historyData.events;
+            
+            for (const event of eventsToDisplay) {
+                displayHistoricalEvent(context, event, sinceEvent ? "prepend" : "append");
             }
 
-            // Add a visual separator between history and live events
-            addHistorySeparator();
+            // Add a visual separator between history and live events only on initial load
+            if (!sinceEvent) {
+                addHistorySeparator();
+                // Update virtual spacer height for initial load
+                updateVirtualSpacerHeight(context);
+                
+                // Set initial scroll position to just above the separator
+                setTimeout(() => {
+                    const narrative = document.getElementById("narrative");
+                    const separator = document.querySelector(".history_separator");
+                    if (narrative && separator) {
+                        const separatorPosition = (separator as HTMLElement).offsetTop;
+                        const virtualSpacer = document.getElementById("virtual_history_spacer");
+                        const spacerHeight = virtualSpacer ? parseInt(virtualSpacer.style.height) || 0 : 0;
+                        narrative.scrollTop = separatorPosition - 100; // Scroll to just above separator
+                    }
+                }, 50);
+            }
         }
 
+        return historyData;
     } catch (error) {
         console.error("Error fetching history:", error);
         context.systemMessage.show("Failed to load message history", 3);
+        return null;
+    }
+}
+
+/**
+ * Loads more historical events for infinite scrolling
+ * 
+ * @param context - Application context
+ * @param chunkSize - Number of events to fetch (default: 50)
+ */
+export async function loadMoreHistory(context: Context, chunkSize: number = 50): Promise<boolean> {
+    // Don't load if already loading or no more history available
+    if (context.historyLoading || !context.hasMoreHistory || !context.earliestHistoryEventId) {
+        return false;
+    }
+
+    context.historyLoading = true;
+    
+    try {
+        const historyData = await fetchAndDisplayHistory(context, chunkSize, context.earliestHistoryEventId);
+        return historyData !== null && historyData.events.length > 0;
+    } finally {
+        context.historyLoading = false;
+    }
+}
+
+/**
+ * Updates the virtual spacer height to maintain scrollbar appearance
+ * 
+ * @param context - Application context 
+ */
+function updateVirtualSpacerHeight(context: Context): void {
+    const virtualSpacer = document.getElementById("virtual_history_spacer");
+    if (!virtualSpacer) return;
+    
+    // Increase virtual spacer height based on available history
+    // This creates the illusion of more content above
+    if (context.hasMoreHistory) {
+        const currentHeight = parseInt(virtualSpacer.style.height) || 1000;
+        const newHeight = Math.max(currentHeight, 2000); // At least 2000px
+        virtualSpacer.style.height = `${newHeight}px`;
+    } else {
+        // Gradually reduce spacer height when no more history
+        virtualSpacer.style.height = "100px";
     }
 }
 
@@ -114,8 +196,9 @@ export async function fetchAndDisplayHistory(context: Context, maxEvents: number
  * 
  * @param context - Application context
  * @param event - The historical event to display
+ * @param insertMode - Whether to append or prepend the event
  */
-function displayHistoricalEvent(context: Context, event: HistoricalEvent): void {
+function displayHistoricalEvent(context: Context, event: HistoricalEvent, insertMode: "append" | "prepend" = "append"): void {
     // Convert historical event to narrative event format
     const narrativeEvent: NarrativeEvent = {
         kind: "narrative_message" as any, // Use string to match enum value
@@ -127,7 +210,7 @@ function displayHistoricalEvent(context: Context, event: HistoricalEvent): void 
     };
 
     // Process the event through the normal narrative pipeline
-    processNarrativeMessage(context, narrativeEvent);
+    processNarrativeMessage(context, narrativeEvent, insertMode);
 }
 
 /**
@@ -414,20 +497,33 @@ export function djotRender(author: string, ast: any): string {
 }
 
 /**
- * Appends content to the narrative window and scrolls to the bottom
+ * Adds content to the narrative window
  *
- * @param contentNode - The HTML element to append to the narrative
+ * @param contentNode - The HTML element to add to the narrative
+ * @param insertMode - Whether to append or prepend the content
  * @throws Error if output_window or narrative elements don't exist
  */
-function narrativeAppend(contentNode: HTMLElement): void {
+function narrativeInsert(contentNode: HTMLElement, insertMode: "append" | "prepend" = "append"): void {
     const output = document.getElementById("output_window");
     if (!output) {
         console.error("Cannot find output window element");
         return;
     }
 
-    // Add the content to the output window
-    output.appendChild(contentNode);
+    if (insertMode === "prepend") {
+        // Find the virtual spacer (should be first child)
+        const virtualSpacer = document.getElementById("virtual_history_spacer");
+        if (virtualSpacer && virtualSpacer.parentNode === output) {
+            // Insert after the virtual spacer
+            output.insertBefore(contentNode, virtualSpacer.nextSibling);
+        } else {
+            // Fallback: insert at the beginning
+            output.insertBefore(contentNode, output.firstChild);
+        }
+    } else {
+        // Add the content to the end of the output window
+        output.appendChild(contentNode);
+    }
 
     // Find the narrative container
     const narrative = document.getElementById("narrative");
@@ -436,12 +532,22 @@ function narrativeAppend(contentNode: HTMLElement): void {
         return;
     }
 
-    // Scroll both the narrative container and body to the bottom
-    // Using setTimeout to ensure this happens after rendering
-    setTimeout(() => {
-        narrative.scrollTop = narrative.scrollHeight;
-        document.body.scrollTop = document.body.scrollHeight;
-    }, 0);
+    // For append mode, scroll to bottom. For prepend mode, maintain scroll position
+    if (insertMode === "append") {
+        setTimeout(() => {
+            narrative.scrollTop = narrative.scrollHeight;
+            document.body.scrollTop = document.body.scrollHeight;
+        }, 0);
+    }
+}
+
+/**
+ * Appends content to the narrative window and scrolls to the bottom (legacy function)
+ *
+ * @param contentNode - The HTML element to append to the narrative
+ */
+function narrativeAppend(contentNode: HTMLElement): void {
+    narrativeInsert(contentNode, "append");
 }
 
 /**
@@ -449,8 +555,9 @@ function narrativeAppend(contentNode: HTMLElement): void {
  *
  * @param context - Application context
  * @param msg - The narrative event to process
+ * @param insertMode - Whether to append or prepend the content
  */
-function processNarrativeMessage(context: Context, msg: NarrativeEvent): void {
+function processNarrativeMessage(context: Context, msg: NarrativeEvent, insertMode: "append" | "prepend" = "append"): void {
     // Determine content type, defaulting to plain text
     const contentType = msg.content_type || CONTENT_TYPES.PLAIN;
 
@@ -466,7 +573,7 @@ function processNarrativeMessage(context: Context, msg: NarrativeEvent): void {
     }
 
     // Continue processing with spool or regular content handling
-    processMessageContent(context, msg, contentType);
+    processMessageContent(context, msg, contentType, insertMode);
 }
 
 /**
@@ -541,8 +648,9 @@ function handleMcpCommand(context: Context, message: string): boolean {
  * @param context - Application context
  * @param msg - The narrative event to process
  * @param contentType - The content type of the message
+ * @param insertMode - Whether to append or prepend the content
  */
-function processMessageContent(context: Context, msg: NarrativeEvent, contentType: string): void {
+function processMessageContent(context: Context, msg: NarrativeEvent, contentType: string, insertMode: "append" | "prepend" = "append"): void {
     // Handle active spool collection for text content
     if (context.spool !== null && contentType === CONTENT_TYPES.PLAIN) {
         // A single period on a line marks the end of spool data collection
@@ -610,7 +718,7 @@ function processMessageContent(context: Context, msg: NarrativeEvent, contentTyp
     }
 
     // Add the content to the narrative display
-    narrativeAppend(contentNode);
+    narrativeInsert(contentNode, insertMode);
 }
 
 function handleSystemMessage(context: Context, msg: SystemEvent) {
@@ -888,11 +996,12 @@ function processEvent(context: Context, msg: string): void {
 /**
  * Component that displays the narrative output content
  *
+ * @param context - Application context for history state
  * @param player - Reactive player state
  * @returns A VanJS component
  */
-const OutputWindow = (player: State<Player>): HTMLElement => {
-    return div({
+const OutputWindow = (context: Context, player: State<Player>): HTMLElement => {
+    const outputWindow = div({
         id: "output_window",
         class: "output_window",
         role: "log",
@@ -902,6 +1011,18 @@ const OutputWindow = (player: State<Player>): HTMLElement => {
         "aria-label": "Game narrative content",
         "aria-relevant": "additions",
     });
+
+    // Add a virtual spacer at the top to create the illusion of more content
+    // This makes the scrollbar appear to have more content above
+    const virtualSpacer = div({
+        id: "virtual_history_spacer",
+        style: "height: 2000px; background: transparent; pointer-events: none;", // Start with significant height
+        "aria-hidden": "true"
+    });
+    
+    outputWindow.appendChild(virtualSpacer);
+    
+    return outputWindow;
 };
 
 /**
@@ -1086,6 +1207,101 @@ const InputArea = (context: Context, player: State<Player>): HTMLElement => {
 };
 
 /**
+ * Handles scroll events to trigger infinite history loading and track viewing state
+ * 
+ * @param context - Application context
+ * @param narrativeElement - The narrative container element
+ */
+function handleScrollForHistoryLoading(context: Context, narrativeElement: HTMLElement): void {
+    const scrollTop = narrativeElement.scrollTop;
+    const scrollHeight = narrativeElement.scrollHeight;
+    const clientHeight = narrativeElement.clientHeight;
+    
+    // Check if user is near the bottom (within 100px)
+    const isNearBottom = (scrollTop + clientHeight) >= (scrollHeight - 100);
+    
+    // Update viewing history state
+    context.isViewingHistory = !isNearBottom;
+    
+    // Only load more history when scrolled near the top (accounting for virtual spacer)
+    const scrollThreshold = 200; // pixels from virtual top
+    const virtualSpacer = document.getElementById("virtual_history_spacer");
+    const virtualSpacerHeight = virtualSpacer ? parseInt(virtualSpacer.style.height) || 0 : 0;
+    
+    if (scrollTop <= (virtualSpacerHeight + scrollThreshold) && context.hasMoreHistory && !context.historyLoading) {
+        console.log("Loading more history due to scroll position");
+        
+        // Store current scroll position to restore after loading
+        const currentScrollHeight = narrativeElement.scrollHeight;
+        const currentScrollTop = narrativeElement.scrollTop;
+        
+        loadMoreHistory(context).then((loaded) => {
+            if (loaded) {
+                // Update virtual spacer height
+                updateVirtualSpacerHeight(context);
+                
+                // Restore scroll position after new content is added
+                setTimeout(() => {
+                    const newScrollHeight = narrativeElement.scrollHeight;
+                    const heightDifference = newScrollHeight - currentScrollHeight;
+                    narrativeElement.scrollTop = currentScrollTop + heightDifference;
+                }, 10);
+            }
+        });
+    }
+}
+
+/**
+ * Scrolls to the bottom of the narrative (jump to now)
+ * 
+ * @param context - Application context
+ */
+function jumpToNow(context: Context): void {
+    const narrative = document.getElementById("narrative");
+    if (narrative) {
+        narrative.scrollTop = narrative.scrollHeight;
+        context.isViewingHistory = false;
+    }
+}
+
+/**
+ * Component that shows "viewing history" indicator with jump to now button
+ * 
+ * @param context - Application context
+ * @returns A VanJS component
+ */
+const HistoryIndicator = (context: Context): HTMLElement => {
+    // Create reactive state for the indicator visibility
+    const isVisible = van.state(false);
+    
+    // Update visibility based on context state
+    const updateVisibility = () => {
+        isVisible.val = context.isViewingHistory;
+    };
+    
+    // Check visibility periodically (simple approach for reactivity)
+    setInterval(updateVisibility, 100);
+    
+    return div(
+        {
+            class: "history_indicator",
+            style: van.derive(() => isVisible.val ? 
+                "display: flex; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); color: white; padding: 8px 16px; border-radius: 20px; z-index: 1000; align-items: center; gap: 10px; font-size: 14px;" :
+                "display: none;"
+            )
+        },
+        span("You're looking at the past..."),
+        button(
+            {
+                style: "background: #5865f2; color: white; border: none; padding: 4px 12px; border-radius: 12px; cursor: pointer; font-size: 12px;",
+                onclick: () => jumpToNow(context)
+            },
+            "Jump to Now"
+        )
+    );
+};
+
+/**
  * Main narrative component that displays the game interface
  *
  * This component combines the output window and input area to create
@@ -1099,16 +1315,34 @@ export const Narrative = (context: Context, player: State<Player>): HTMLElement 
     // Hide the narrative when not connected
     const visibilityStyle = van.derive(() => player.val.connected ? "display: block;" : "display: none;");
 
-    return div(
+    const narrativeElement = div(
         {
             class: "narrative",
             id: "narrative",
             style: visibilityStyle,
             "aria-label": "Game interface",
         },
+        // History viewing indicator
+        HistoryIndicator(context),
         // Output display area
-        OutputWindow(player),
+        OutputWindow(context, player),
         // Command input area
         InputArea(context, player),
     );
+
+    // Add scroll event handler for infinite history loading
+    let scrollTimeout: number | null = null;
+    narrativeElement.addEventListener("scroll", () => {
+        // Throttle scroll events
+        if (scrollTimeout !== null) {
+            clearTimeout(scrollTimeout);
+        }
+        
+        scrollTimeout = setTimeout(() => {
+            handleScrollForHistoryLoading(context, narrativeElement);
+            scrollTimeout = null;
+        }, 100);
+    });
+
+    return narrativeElement;
 };

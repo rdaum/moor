@@ -1984,7 +1984,14 @@ impl RpcServer {
                 let total_available = all_events.len();
                 let has_more = limit.is_some_and(|l| total_available > l);
                 let events = if let Some(limit) = limit {
-                    all_events.into_iter().take(limit).collect()
+                    // For UntilEvent, we want the MOST RECENT events before the boundary, not the oldest
+                    // So take from the end of the chronologically sorted list
+                    let len = all_events.len();
+                    if len > limit {
+                        all_events.into_iter().skip(len - limit).collect()
+                    } else {
+                        all_events
+                    }
                 } else {
                     all_events
                 };
@@ -1997,7 +2004,14 @@ impl RpcServer {
                 let total_available = all_events.len();
                 let has_more = limit.is_some_and(|l| total_available > l);
                 let events = if let Some(limit) = limit {
-                    all_events.into_iter().take(limit).collect()
+                    // For SinceSeconds, we want the MOST RECENT events, not the oldest
+                    // So take from the end of the chronologically sorted list
+                    let len = all_events.len();
+                    if len > limit {
+                        all_events.into_iter().skip(len - limit).collect()
+                    } else {
+                        all_events
+                    }
                 } else {
                     all_events
                 };
@@ -2035,10 +2049,19 @@ impl RpcServer {
             latest_time
         );
 
+        // Find actual earliest and latest event IDs from the returned events
+        let (earliest_event_id, latest_event_id) = if historical_events.is_empty() {
+            (None, None)
+        } else {
+            let mut event_ids: Vec<_> = historical_events.iter().map(|e| e.event.event_id()).collect();
+            event_ids.sort(); // UUIDs sort chronologically
+            (Some(event_ids[0]), Some(event_ids[event_ids.len() - 1]))
+        };
+
         HistoryResponse {
             total_events: total_events_available,
-            earliest_event_id: historical_events.first().map(|e| e.event.event_id()),
-            latest_event_id: historical_events.last().map(|e| e.event.event_id()),
+            earliest_event_id,
+            latest_event_id,
             time_range: (earliest_time, latest_time),
             has_more_before,
             events: historical_events,

@@ -458,6 +458,18 @@ export class Context {
     /** Timestamp boundary for deduplication - events before this time are considered historical */
     historyBoundaryTime: number | null;
 
+    /** Whether we're currently loading more history */
+    historyLoading: boolean;
+
+    /** The earliest event ID we've loaded, used for pagination */
+    earliestHistoryEventId: string | null;
+
+    /** Whether there are more historical events available to load */
+    hasMoreHistory: boolean;
+
+    /** Whether the user is currently viewing historical content (not at bottom) */
+    isViewingHistory: boolean;
+
     constructor() {
         this.ws = null;
         this.history = [];
@@ -468,6 +480,10 @@ export class Context {
         this.spool = null;
         this.presentations = van.state(new PresentationManager());
         this.historyBoundaryTime = null;
+        this.historyLoading = false;
+        this.earliestHistoryEventId = null;
+        this.hasMoreHistory = true;
+        this.isViewingHistory = false;
     }
 
     /**
