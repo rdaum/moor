@@ -222,6 +222,68 @@ pub mod vm_test_utils {
 
     pub type ExecResult = Result<Var, Exception>;
 
+    fn execute_fork(
+        world_state: &mut dyn WorldState,
+        session: Arc<dyn Session>,
+        builtins: &BuiltinRegistry,
+        fork_request: crate::vm::Fork,
+        task_id: usize,
+    ) -> ExecResult {
+        let (scs_tx, _scs_rx) = flume::unbounded();
+        let task_scheduler_client =
+            crate::tasks::task_scheduler_client::TaskSchedulerClient::new(task_id, scs_tx);
+        let mut vm_host = VmHost::new(task_id, 20, 90_000, Duration::from_secs(5));
+
+        vm_host.start_fork(task_id, &fork_request, false);
+
+        let config = Arc::new(FeaturesConfig::default());
+
+        // Execute the forked task until completion
+        loop {
+            match vm_host.exec_interpreter(
+                task_id,
+                world_state,
+                &task_scheduler_client,
+                session.as_ref(),
+                builtins,
+                config.as_ref(),
+            ) {
+                VMHostResponse::ContinueOk => {
+                    continue;
+                }
+                VMHostResponse::DispatchFork(nested_fork) => {
+                    // Recursively handle nested forks
+                    execute_fork(world_state, session.clone(), builtins, *nested_fork, task_id + 1)?;
+                    continue;
+                }
+                VMHostResponse::AbortLimit(a) => {
+                    panic!("Fork task aborted: {:?}", a);
+                }
+                VMHostResponse::CompleteException(e) => {
+                    return Err(e.as_ref().clone());
+                }
+                VMHostResponse::CompleteSuccess(v) => {
+                    return Ok(v);
+                }
+                VMHostResponse::CompleteAbort => {
+                    panic!("Fork task aborted");
+                }
+                VMHostResponse::Suspend(_) => {
+                    panic!("Fork task suspended");
+                }
+                VMHostResponse::SuspendNeedInput => {
+                    panic!("Fork task needs input");
+                }
+                VMHostResponse::RollbackRetry => {
+                    panic!("Fork task rollback retry");
+                }
+                VMHostResponse::CompleteRollback(_) => {
+                    panic!("Fork task rollback");
+                }
+            }
+        }
+    }
+
     fn execute<F>(
         world_state: &mut dyn WorldState,
         session: Arc<dyn Session>,
@@ -254,7 +316,9 @@ pub mod vm_test_utils {
                     continue;
                 }
                 VMHostResponse::DispatchFork(f) => {
-                    panic!("Unexpected fork: {:?}", f);
+                    // Handle fork for testing purposes by executing sequentially
+                    execute_fork(world_state, session.clone(), &builtins, *f, 1)?;
+                    continue;
                 }
                 VMHostResponse::AbortLimit(a) => {
                     panic!("Unexpected abort: {:?}", a);
@@ -323,6 +387,15 @@ pub mod vm_test_utils {
         execute(world_state, session, builtins, |world_state, vm_host| {
             vm_host.start_eval(0, &player, program, world_state);
         })
+    }
+
+    pub fn call_fork(
+        world_state: &mut dyn WorldState,
+        session: Arc<dyn Session>,
+        builtins: BuiltinRegistry,
+        fork_request: crate::vm::Fork,
+    ) -> ExecResult {
+        execute_fork(world_state, session, &builtins, fork_request, 0)
     }
 }
 

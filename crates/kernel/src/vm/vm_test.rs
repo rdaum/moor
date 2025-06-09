@@ -1339,4 +1339,76 @@ mod tests {
         );
         assert_eq!(result.unwrap(), v_list(&[v_int(666), v_int(321)]));
     }
+
+    #[test]
+    fn test_simple_fork() {
+        let program = r#"
+        fork (0)
+            return 42;
+        endfork
+        return 24;
+        "#;
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result.unwrap(), v_int(24));
+    }
+
+    #[test]
+    fn test_fork_error_line_numbers() {
+        // This test verifies that line numbers are correctly reported in exceptions
+        // that occur within fork blocks during testing
+        let program = r#"
+        x = 1;
+        fork (0)
+            y = 2;
+            z = 3;
+            raise(E_ARGS);  
+        endfork
+        return 99;
+        "#;
+        
+        let mut state = world_with_test_program(program);
+        let session = Arc::new(NoopClientSession::new());
+        
+        // First run the normal way to trigger the fork execution
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test", 
+            List::mk_list(&[]),
+        );
+        
+        // The main verb returns 99, but the fork should have executed and raised an error
+        // Since our vm_test_utils now handles forks sequentially, the error from the fork
+        // should propagate back to us
+        match result {
+            Err(exception) => {
+                // We should get the exception from the fork
+                assert_eq!(exception.error, Error::from(E_ARGS));
+                // Check that we have backtrace information
+                assert!(!exception.backtrace.is_empty());
+                
+                // The backtrace should contain line number information for the raise() call
+                // Looking at the output: "... called from #0:test (line 7)"
+                // This verifies that line numbers are preserved in fork execution
+                let backtrace_str = exception.backtrace[1].as_string().unwrap();
+                assert!(backtrace_str.contains("line 7"));
+                
+                println!("✓ Fork exception caught with correct line number!");
+                println!("Error: {:?}", exception.error);
+                println!("Backtrace: {:?}", exception.backtrace);
+            }
+            Ok(_) => {
+                panic!("Expected an exception to be raised from the fork");
+            }
+        }
+    }
 }
