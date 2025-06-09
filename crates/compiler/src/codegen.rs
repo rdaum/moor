@@ -65,7 +65,10 @@ pub struct CodegenState {
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
     pub(crate) fork_vectors: Vec<(usize, Vec<Op>)>,
+    // TODO: these are incorrect for fork vectors and maybe each fork vector should have its own
+    //   set of line-no-spans here, and in PrgInner?
     pub(crate) line_number_spans: Vec<(usize, usize)>,
+    pub(crate) fork_line_number_spans: Vec<Vec<(usize, usize)>>,
     pub(crate) current_line_col: (usize, usize),
     pub(crate) compile_options: CompileOptions,
 }
@@ -91,6 +94,7 @@ impl CodegenState {
             for_sequence_operands: vec![],
             range_comprehensions: vec![],
             line_number_spans: vec![],
+            fork_line_number_spans: vec![],
             current_line_col: (0, 0),
             compile_options,
             list_comprehensions: vec![],
@@ -205,10 +209,10 @@ impl CodegenState {
         self.saved_stack = old
     }
 
-    fn add_fork_vector(&mut self, offset: usize, opcodes: Vec<Op>) -> Offset {
+    fn add_fork_vector(&mut self, offset: usize, opcodes: Vec<Op>, line_spans: Vec<(usize, usize)>) -> Offset {
         let fv = self.fork_vectors.len();
-        // The offset is the current length of the main vector (ops) at the time of forking.
         self.fork_vectors.push((offset, opcodes));
+        self.fork_line_number_spans.push(line_spans);
         Offset(fv as u16)
     }
 
@@ -886,17 +890,26 @@ impl CodegenState {
             }
             StmtNode::Fork { id, body, time } => {
                 self.generate_expr(time)?;
-                // Stash all of main vector in a temporary buffer, then begin compilation of the forked code.
-                // Once compiled, we can create a fork vector from the new buffer, and then restore the main vector.
-                let offset = self.ops.len();
+                // Record the position in main vector where the fork starts
+                let fork_main_position = self.ops.len();
+                
+                // Stash current ops and line number spans to generate fork vector separately
                 let stashed_ops = std::mem::take(&mut self.ops);
+                let stashed_line_spans = std::mem::take(&mut self.line_number_spans);
+                
+                // Generate fork body into separate vector
                 for stmt in body {
                     self.generate_stmt(stmt)?;
                 }
                 self.emit(Op::Done);
                 let forked_ops = std::mem::take(&mut self.ops);
-                let fv_id = self.add_fork_vector(offset, forked_ops);
+                let fork_line_spans = std::mem::take(&mut self.line_number_spans);
+                
+                // Restore main vector and continue from where we left off
                 self.ops = stashed_ops;
+                self.line_number_spans = stashed_line_spans;
+                
+                let fv_id = self.add_fork_vector(fork_main_position, forked_ops, fork_line_spans);
                 self.emit(Op::Fork {
                     id: id.as_ref().map(|id| self.binding_mappings[id]),
                     fv_offset: fv_id,
@@ -1080,6 +1093,7 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
         main_vector: cg_state.ops,
         fork_vectors: cg_state.fork_vectors,
         line_number_spans: cg_state.line_number_spans,
+        fork_line_number_spans: cg_state.fork_line_number_spans,
         error_operands: cg_state.error_operands,
     });
     let program = Program(program);

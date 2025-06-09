@@ -123,8 +123,7 @@ impl MooStackFrame {
         match self.pc_type {
             PcType::Main => Some(self.program.line_num_for_position(pc, 0)),
             PcType::ForkVector(fv) => {
-                let offset = self.program.fork_vector_offset(fv);
-                Some(self.program.line_num_for_position(pc, offset))
+                Some(self.program.fork_line_num_for_position(fv, pc))
             }
         }
     }
