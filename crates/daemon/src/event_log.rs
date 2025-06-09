@@ -19,7 +19,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 use bincode::{Decode, Encode};
-use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
+use fjall::{CompressionType, Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use flume::{Receiver, Sender};
 use moor_common::tasks::NarrativeEvent;
 use moor_var::{BINCODE_CONFIG, Obj};
@@ -101,10 +101,12 @@ impl EventPersistence {
         info!("Opening event log database at {:?}", path);
         let keyspace = Config::new(&path).open()?;
 
+        let partition_creation_options =
+            PartitionCreateOptions::default().compression(CompressionType::Lz4);
         let events_partition =
-            keyspace.open_partition("events", PartitionCreateOptions::default())?;
+            keyspace.open_partition("events", partition_creation_options.clone())?;
         let player_index_partition =
-            keyspace.open_partition("player_index", PartitionCreateOptions::default())?;
+            keyspace.open_partition("player_index", partition_creation_options)?;
 
         Ok(Self {
             _tmpdir: tmpdir,
@@ -1400,7 +1402,7 @@ mod tests {
             // Wait for background persistence
             thread::sleep(Duration::from_millis(500));
             println!("   Logged {} events in cache", log.len());
-            
+
             drop(log);
             event_ids
         };
@@ -1413,7 +1415,7 @@ mod tests {
         println!("3. Initial load: getting most recent 5 events...");
         let initial_events = log.events_for_player_since_seconds(player, 3600);
         println!("   Found {} total events", initial_events.len());
-        
+
         // Simulate taking the most recent 5 (what the server would return with limit)
         let len = initial_events.len();
         let recent_5: Vec<_> = if len > 5 {
@@ -1425,16 +1427,25 @@ mod tests {
         for (i, event) in recent_5.iter().enumerate() {
             println!("     {}. Event ID: {}", i + 1, event.event.event_id());
         }
-        
+
         assert_eq!(recent_5.len(), 5, "Should have 5 recent events");
         let earliest_from_initial = recent_5[0].event.event_id();
-        println!("   Earliest event ID from initial load: {}", earliest_from_initial);
+        println!(
+            "   Earliest event ID from initial load: {}",
+            earliest_from_initial
+        );
 
         // Step 3: First back-scroll - get events until the earliest from initial load
-        println!("4. First back-scroll: getting events until {}...", earliest_from_initial);
+        println!(
+            "4. First back-scroll: getting events until {}...",
+            earliest_from_initial
+        );
         let first_backscroll = log.events_for_player_until(player, Some(earliest_from_initial));
-        println!("   Found {} events in first back-scroll", first_backscroll.len());
-        
+        println!(
+            "   Found {} events in first back-scroll",
+            first_backscroll.len()
+        );
+
         if first_backscroll.is_empty() {
             println!("   ERROR: First back-scroll returned no events!");
         } else {
@@ -1451,16 +1462,26 @@ mod tests {
         } else {
             first_backscroll
         };
-        
+
         if !first_batch.is_empty() {
             let earliest_from_first_batch = first_batch[0].event.event_id();
-            println!("   Earliest event ID from first batch: {}", earliest_from_first_batch);
+            println!(
+                "   Earliest event ID from first batch: {}",
+                earliest_from_first_batch
+            );
 
             // Step 4: Second back-scroll - get events until the earliest from first batch
-            println!("5. Second back-scroll: getting events until {}...", earliest_from_first_batch);
-            let second_backscroll = log.events_for_player_until(player, Some(earliest_from_first_batch));
-            println!("   Found {} events in second back-scroll", second_backscroll.len());
-            
+            println!(
+                "5. Second back-scroll: getting events until {}...",
+                earliest_from_first_batch
+            );
+            let second_backscroll =
+                log.events_for_player_until(player, Some(earliest_from_first_batch));
+            println!(
+                "   Found {} events in second back-scroll",
+                second_backscroll.len()
+            );
+
             if second_backscroll.is_empty() {
                 println!("   ERROR: Second back-scroll returned no events!");
             } else {
@@ -1473,7 +1494,10 @@ mod tests {
             // Verify we're getting different events each time
             let initial_ids: Vec<_> = recent_5.iter().map(|e| e.event.event_id()).collect();
             let first_ids: Vec<_> = first_batch.iter().map(|e| e.event.event_id()).collect();
-            let second_ids: Vec<_> = second_backscroll.iter().map(|e| e.event.event_id()).collect();
+            let second_ids: Vec<_> = second_backscroll
+                .iter()
+                .map(|e| e.event.event_id())
+                .collect();
 
             println!("6. Verifying pagination correctness...");
             println!("   Initial load IDs: {:?}", initial_ids);
@@ -1482,13 +1506,22 @@ mod tests {
 
             // Verify no overlap between batches
             for id in &initial_ids {
-                assert!(!first_ids.contains(id), "Initial and first batch should not overlap");
-                assert!(!second_ids.contains(id), "Initial and second batch should not overlap");
+                assert!(
+                    !first_ids.contains(id),
+                    "Initial and first batch should not overlap"
+                );
+                assert!(
+                    !second_ids.contains(id),
+                    "Initial and second batch should not overlap"
+                );
             }
-            
+
             if !first_batch.is_empty() && !second_backscroll.is_empty() {
                 for id in &first_ids {
-                    assert!(!second_ids.contains(id), "First and second batch should not overlap");
+                    assert!(
+                        !second_ids.contains(id),
+                        "First and second batch should not overlap"
+                    );
                 }
             }
 
@@ -1496,14 +1529,19 @@ mod tests {
             if !first_batch.is_empty() {
                 let latest_from_first = first_batch.last().unwrap().event.event_id();
                 let earliest_from_initial = recent_5[0].event.event_id();
-                assert!(latest_from_first < earliest_from_initial, 
-                    "Latest from first batch should be older than earliest from initial");
+                assert!(
+                    latest_from_first < earliest_from_initial,
+                    "Latest from first batch should be older than earliest from initial"
+                );
             }
 
             println!("=== SUCCESS: Pagination working correctly ===");
         } else {
             println!("=== FAILURE: First back-scroll returned no events ===");
-            assert!(!first_batch.is_empty(), "First back-scroll should return events");
+            assert!(
+                !first_batch.is_empty(),
+                "First back-scroll should return events"
+            );
         }
     }
 
