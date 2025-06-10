@@ -49,13 +49,6 @@ import { launchVerbEditor, showVerbEditor } from "./verb_edit";
 const { div, span, textarea, button } = van.tags;
 
 /**
- * Fetches historical events from the server and displays them in the narrative
- *
- * @param context - Application context containing auth token and other state
- * @param maxEvents - Maximum number of events to fetch (default: 1000)
- * @param sinceEvent - Optional event ID to fetch history since (for pagination)
- */
-/**
  * Fetches and displays current presentations from the server
  * This is called at login to restore presentation state
  *
