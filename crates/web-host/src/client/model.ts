@@ -254,6 +254,27 @@ export class PresentationManager {
     }
 
     /**
+     * Gets presentations specifically for the left dock panel
+     */
+    leftDockPresentations(): string[] {
+        return this.getPresentationsForTarget("left-dock");
+    }
+
+    /**
+     * Gets presentations specifically for the top dock panel
+     */
+    topDockPresentations(): string[] {
+        return this.getPresentationsForTarget("top-dock");
+    }
+
+    /**
+     * Gets presentations specifically for the bottom dock panel
+     */
+    bottomDockPresentations(): string[] {
+        return this.getPresentationsForTarget("bottom-dock");
+    }
+
+    /**
      * Retrieves a specific presentation by ID
      */
     getPresentation(id: string): State<PresentationModel> | undefined {

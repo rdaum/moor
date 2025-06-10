@@ -21,6 +21,79 @@ import { retrieveWelcome } from "./rpc";
 const { button, div, span, input, select, option, br, pre, form, a, p } = van.tags;
 
 /**
+ * Creates a dock component for the specified dock type
+ *
+ * @param context - Application context containing presentations and other state
+ * @param dockType - The type of dock ("left-dock", "right-dock", "top-dock", "bottom-dock")
+ * @param dockClass - The CSS class for the dock container
+ * @param panelClass - The CSS class for individual panels
+ * @returns DOM element containing the dock and its panels
+ */
+const createDock = (context: Context, dockType: string, dockClass: string, panelClass: string) => {
+    const presentations = context.presentations;
+
+    // Show dock only when presentations exist
+    // Use flex for top/bottom docks to enable horizontal layout
+    const displayType = (dockType === "top-dock" || dockType === "bottom-dock") ? "flex" : "block";
+    const hidden_style = van.derive(() => {
+        const length = presentations.val.getPresentationsForTarget(dockType).length;
+        return length > 0 ? `display: ${displayType};` : "display: none;";
+    });
+
+    const panels = div({
+        class: dockClass,
+        style: hidden_style,
+    });
+
+    // Reactively update panels when presentations change
+    van.derive(() => {
+        // Clear existing content
+        panels.innerHTML = "";
+
+        // Create panels for each active presentation
+        for (const presentationId of presentations.val.getPresentationsForTarget(dockType)) {
+            const presentation = presentations.val.getPresentation(presentationId);
+            if (!presentation || presentation.val.closed.val) {
+                continue;
+            }
+
+            // Create panel with title bar and content
+            panels.appendChild(div(
+                {
+                    id: presentationId,
+                    class: panelClass,
+                },
+                div(
+                    {
+                        class: `${panelClass}_title`,
+                    },
+                    button(
+                        {
+                            class: `${panelClass}_close`,
+                            onclick: () => {
+                                console.log(`Closing ${dockType} presentation:`, presentationId);
+                                // Use the proper dismiss handler
+                                handleUserClosePresentation(context, presentationId);
+                            },
+                        },
+                        "×",
+                    ),
+                    van.derive(() => presentation.val.attrs["title"] || presentationId),
+                ),
+                div(
+                    {
+                        class: `${panelClass}_content`,
+                    },
+                    presentation.val.content,
+                ),
+            ));
+        }
+    });
+
+    return panels;
+};
+
+/**
  * RightDock Component
  *
  * Renders a collection of panels in the right dock area of the UI.
@@ -37,65 +110,28 @@ const { button, div, span, input, select, option, br, pre, form, a, p } = van.ta
  * @returns DOM element containing the right dock and its panels
  */
 const RightDock = (context: Context) => {
-    const presentations = context.presentations;
+    return createDock(context, "right-dock", "right_dock", "right_dock_panel");
+};
 
-    // Show dock only when presentations exist
-    const hidden_style = van.derive(() => {
-        const length = presentations.val.rightDockPresentations().length;
-        return length > 0 ? "display: block;" : "display: none;";
-    });
+/**
+ * LeftDock Component - Similar to RightDock but positioned on the left
+ */
+const LeftDock = (context: Context) => {
+    return createDock(context, "left-dock", "left_dock", "left_dock_panel");
+};
 
-    const panels = div({
-        class: "right_dock",
-        style: hidden_style,
-    });
+/**
+ * TopDock Component - Positioned at the top of the interface
+ */
+const TopDock = (context: Context) => {
+    return createDock(context, "top-dock", "top_dock", "top_dock_panel");
+};
 
-    // Reactively update panels when presentations change
-    van.derive(() => {
-        // Clear existing content
-        panels.innerHTML = "";
-
-        // Create panels for each active presentation
-        for (const presentationId of presentations.val.rightDockPresentations()) {
-            const presentation = presentations.val.getPresentation(presentationId);
-            if (!presentation || presentation.val.closed.val) {
-                continue;
-            }
-
-            // Create panel with title bar and content
-            panels.appendChild(div(
-                {
-                    id: presentationId,
-                    class: "right_dock_panel",
-                },
-                div(
-                    {
-                        class: "right_dock_panel_title",
-                    },
-                    button(
-                        {
-                            class: "right_dock_panel_close",
-                            onclick: () => {
-                                console.log("Closing right-dock presentation:", presentationId);
-                                // Use the proper dismiss handler
-                                handleUserClosePresentation(context, presentationId);
-                            },
-                        },
-                        "×",
-                    ),
-                    van.derive(() => presentation.val.attrs["title"] || presentationId),
-                ),
-                div(
-                    {
-                        class: "right_dock_panel_content",
-                    },
-                    presentation.val.content,
-                ),
-            ));
-        }
-    });
-
-    return panels;
+/**
+ * BottomDock Component - Positioned at the bottom of the interface
+ */
+const BottomDock = (context: Context) => {
+    return createDock(context, "bottom-dock", "bottom_dock", "bottom_dock_panel");
 };
 
 /**
@@ -142,13 +178,23 @@ const App = (context: Context) => {
         MessageBoard(van.state(context.systemMessage)),
         // Login component (shows/hides based on connection state)
         Login(context, player, welcomeMessage),
-        // Main content grid (narrative and panels)
+        // Main application layout with all docks
         div(
-            { class: "columns_grid" },
-            // Main narrative display with command input
-            Narrative(context, player),
-            // Right dock for auxiliary UI panels
-            RightDock(context),
+            { class: "app_layout" },
+            // Top dock for horizontal panels
+            TopDock(context),
+            // Middle section with left dock, narrative, and right dock
+            div(
+                { class: "middle_section" },
+                // Left dock for auxiliary UI panels
+                LeftDock(context),
+                // Main narrative display with command input
+                Narrative(context, player),
+                // Right dock for auxiliary UI panels
+                RightDock(context),
+            ),
+            // Bottom dock for horizontal panels
+            BottomDock(context),
         ),
     );
 };

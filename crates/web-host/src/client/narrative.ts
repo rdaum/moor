@@ -337,6 +337,9 @@ const CONTENT_TYPES = {
 const TARGET_TYPES = {
     WINDOW: "window",
     RIGHT_DOCK: "right-dock",
+    LEFT_DOCK: "left-dock",
+    TOP_DOCK: "top-dock",
+    BOTTOM_DOCK: "bottom-dock",
     VERB_EDITOR: "verb-editor",
 };
 
@@ -891,7 +894,10 @@ function handlePresent(context: Context, msg: Presentation): void {
             break;
 
         case TARGET_TYPES.RIGHT_DOCK:
-            // Right dock presentations are handled by the RightDock component
+        case TARGET_TYPES.LEFT_DOCK:
+        case TARGET_TYPES.TOP_DOCK:
+        case TARGET_TYPES.BOTTOM_DOCK:
+            // Dock presentations are handled by their respective dock components
             // They're automatically displayed when added to the presentation manager
             break;
 
@@ -1424,18 +1430,13 @@ const HistoryIndicator = (context: Context): HTMLElement => {
 
     return div(
         {
-            class: "history_indicator",
-            style: van.derive(() =>
-                isVisible.val
-                    ? "display: flex; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); color: white; padding: 8px 16px; border-radius: 20px; z-index: 1000; align-items: center; gap: 10px; font-size: 14px;"
-                    : "display: none;"
+            class: van.derive(() =>
+                isVisible.val ? "history_indicator" : "history_indicator hidden"
             ),
         },
         span("You're looking at the past..."),
         button(
             {
-                style:
-                    "background: #5865f2; color: white; border: none; padding: 4px 12px; border-radius: 12px; cursor: pointer; font-size: 12px;",
                 onclick: () => jumpToNow(context),
             },
             "Jump to Now",
