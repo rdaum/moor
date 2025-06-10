@@ -34,25 +34,25 @@ Those changes can include moving things within the virtual world, altering thing
 Here's what a typical interaction looks like. A player sees a description of their surroundings, other characters
 present, and objects they can interact with. They then type commands to interact with this virtual world:
 
-```
-The Living Room
-It is very bright, open, and airy here, with large plate-glass windows looking southward over the pool to the gardens
-beyond.  On the north wall, there is a rough stonework fireplace.  The east and west walls are almost completely covered
-with large, well-stocked bookcases.  An exit in the northwest corner leads to the kitchen and, in a more northerly
-direction, to the entrance hall.  The door into the coat closet is at the north end of the east wall, and at the south
-end is a sliding glass door leading out onto a wooden deck.  There are two sets of couches, one clustered around the
-fireplace and one with a view out the windows.
-
-You see Welcome Poster, a fireplace, the living room couch, Statue, a map of LambdaHouse, Fun Activities Board, Helpful
-Person Finder, The Birthday Machine, lag meter, and Cockatoo here.
-
-erin (out on his feet), elsa, lisdude (out on his feet), benny (out on his feet), and Fox (out on his feet) are here.
-
-> poke cockatoo
-
-The Cockatoo shifts about on its perch and bobs its head.
-Cockatoo squawks, "unless they are a brand new char with no objects."
-```
+> **The Living Room**
+>
+> It is very bright, open, and airy here, with large plate-glass windows looking southward over the pool to the gardens
+> beyond. On the north wall, there is a rough stonework fireplace. The east and west walls are almost completely covered
+> with large, well-stocked bookcases. An exit in the northwest corner leads to the kitchen and, in a more northerly
+> direction, to the entrance hall. The door into the coat closet is at the north end of the east wall, and at the south
+> end is a sliding glass door leading out onto a wooden deck. There are two sets of couches, one clustered around the
+> fireplace and one with a view out the windows.
+>
+> You see Welcome Poster, a fireplace, the living room couch, Statue, a map of LambdaHouse, Fun Activities Board,
+> Helpful
+> Person Finder, The Birthday Machine, lag meter, and Cockatoo here.
+>
+> erin (out on his feet), elsa, lisdude (out on his feet), benny (out on his feet), and Fox (out on his feet) are here.
+>
+> **> poke cockatoo**
+>
+> The Cockatoo shifts about on its perch and bobs its head.
+> Cockatoo squawks, "unless they are a brand new char with no objects."
 
 ## Getting Started
 
@@ -71,10 +71,15 @@ programs written in the MOO programming language.
 The database contains representations of all the objects in the shared space, including the MOO programs that the server
 executes to give those objects their specific behaviors.
 
-Almost every command is parsed by the server into a call on a MOO procedure, or _verb_, that actually does the work:
+Almost every command is parsed by the server into a call on a MOO procedure, or _verb_, that actually does the work.
+
+So for example, when a player types `poke cockatoo`, the server parses that command and calls the `poke` verb on the
+`cockatoo` object. The `poke` verb is a MOO procedure that defines what happens when a player pokes the cockatoo, and
+here is an example of what that verb might look like in the database:
 
 ```moocode
 > @list cockatoo:poke
+
 #1479:"gag poke"   this none none
  1:  "gag/poke <this>";
  2:  "See the help for an extensive description of gag setting.";
