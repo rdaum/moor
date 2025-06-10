@@ -19,6 +19,7 @@ harness = false
 criterion.workspace = true
 edn-format.workspace = true
 eyre.workspace = true
+shuttle.workspace = true
 tempfile.workspace = true
 
 [dependencies]

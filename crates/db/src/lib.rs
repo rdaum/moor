@@ -29,6 +29,8 @@ pub mod db_worldstate;
 mod fjall_provider;
 pub(crate) mod moor_db;
 mod moor_db_tests;
+#[cfg(test)]
+mod moor_db_concurrent_tests;
 mod ws_transaction;
 
 use crate::db_worldstate::DbWorldState;

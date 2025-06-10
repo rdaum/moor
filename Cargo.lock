@@ -3032,6 +3032,7 @@ dependencies = [
  "oneshot",
  "rand 0.8.5",
  "serde",
+ "shuttle",
  "tempfile",
  "thiserror 2.0.12",
  "tracing",
