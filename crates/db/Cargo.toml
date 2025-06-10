@@ -23,27 +23,42 @@ shuttle.workspace = true
 tempfile.workspace = true
 
 [dependencies]
-## Own
+# Internal Dependencies
 moor-common = { path = "../common" }
 moor-var = { path = "../var" }
 
-ahash.workspace = true
-arc-swap.workspace = true
-byteview.workspace = true
-fjall.workspace = true
-flume.workspace = true
+# Core Runtime & System
 gdt-cpus.workspace = true
+
+# Serialization & Data Formats
+serde.workspace = true
+
+# Database & Persistence
+fjall.workspace = true
+
+# Async Runtime & Concurrency
+arc-swap.workspace = true
+flume.workspace = true
+oneshot.workspace = true
+
+# Collections & Data Structures
+ahash.workspace = true
 im.workspace = true
 indexmap.workspace = true
-lazy_static.workspace = true
-minstant.workspace = true
-oneshot.workspace = true
-rand.workspace = true
-serde.workspace = true
-tempfile.workspace = true
+
+# Error Handling & Logging
 thiserror.workspace = true
 tracing.workspace = true
+
+# Utilities & Helpers
+byteview.workspace = true
+lazy_static.workspace = true
+minstant.workspace = true
+rand.workspace = true
 uuid.workspace = true
+
+# Testing & Development
+tempfile.workspace = true
 
 [features]
 relbox = []

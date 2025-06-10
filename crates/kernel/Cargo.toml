@@ -45,7 +45,7 @@ name = "vm_benches"
 harness = false
 
 [dependencies]
-## Own
+# Internal Dependencies
 moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
 moor-db = { path = "../db" }
@@ -54,46 +54,52 @@ moor-objdef = { path = "../objdef" }
 moor-textdump = { path = "../textdump" }
 moor-var = { path = "../var" }
 
-## General usefulness
-ahash.workspace = true
-byteview.workspace = true
-chrono.workspace = true
-flume.workspace = true
+# Core Runtime & System
 gdt-cpus.workspace = true
-lazy_static.workspace = true
 libc.workspace = true
-minstant.workspace = true
-oneshot.workspace = true
-semver.workspace = true
-serde.workspace = true
-strum.workspace = true
-uuid.workspace = true
 
-## Required for MOO builtins.
+# Serialization & Data Formats
+bincode.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+xml-rs.workspace = true
+
+# Async Runtime & Concurrency
+flume.workspace = true
+oneshot.workspace = true
+
+# Authentication & Security
 age = { workspace = true, features = ["ssh"] }
 argon2.workspace = true
 base64.workspace = true
-chrono-tz.workspace = true
 hmac.workspace = true
-iana-time-zone.workspace = true
 md-5.workspace = true
-onig.workspace = true
 pwhash.workspace = true
-rand.workspace = true
 sha1.workspace = true
 sha2.workspace = true
 ssh-key.workspace = true
-xml-rs.workspace = true
 
-## Error declaration/ handling
+# Time & Locale
+chrono.workspace = true
+chrono-tz.workspace = true
+iana-time-zone.workspace = true
+
+# Text Processing & Regex
+onig.workspace = true
+
+# Collections & Data Structures
+ahash.workspace = true
+
+# Error Handling & Logging
 thiserror.workspace = true
-
-## For macro-ing
-paste.workspace = true
-
-## Logging & tracing
 tracing.workspace = true
 
-# For the DB layer.
-bincode.workspace = true
-serde_json.workspace = true
+# Utilities & Helpers
+byteview.workspace = true
+lazy_static.workspace = true
+minstant.workspace = true
+paste.workspace = true
+rand.workspace = true
+semver.workspace = true
+strum.workspace = true
+uuid.workspace = true

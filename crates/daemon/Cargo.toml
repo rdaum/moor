@@ -38,6 +38,7 @@ name = "moor-daemon"
 path = "src/main.rs"
 
 [dependencies]
+# Internal Dependencies
 moor-common = { path = "../common" }
 moor-db = { path = "../db" }
 moor-kernel = { path = "../kernel" }
@@ -46,38 +47,46 @@ moor-textdump = { path = "../textdump" }
 moor-var = { path = "../var" }
 rpc-common = { path = "../rpc/rpc-common" }
 
-## Command line arguments parsing & configuration generally.
+# Core Runtime & System
+gdt-cpus.workspace = true
+mimalloc.workspace = true
+signal-hook.workspace = true
+
+# Command Line & Configuration
 clap.workspace = true
 clap_derive.workspace = true
 
-# General.
-ahash.workspace = true
+# Serialization & Data Formats
 bincode.workspace = true
-byteview.workspace = true
-color-eyre.workspace = true
-eyre.workspace = true
+serde_json.workspace = true
+
+# Database & Persistence
 fjall.workspace = true
-flume.workspace = true
 fs2.workspace = true
-gdt-cpus.workspace = true
-minstant.workspace = true
+
+# Networking & Communication
+zmq.workspace = true
+
+# Async Runtime & Concurrency
+flume.workspace = true
 oneshot.workspace = true
 papaya.workspace = true
-semver.workspace = true
-signal-hook.workspace = true
-tempfile.workspace = true
 
-## Logging & tracing
+# Authentication & Security
+rusty_paseto.workspace = true
+
+# Error Handling & Logging
+color-eyre.workspace = true
+eyre.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
-## RPC daemon support
-serde_json.workspace = true
+# Utilities & Helpers
+ahash.workspace = true
+byteview.workspace = true
+minstant.workspace = true
+semver.workspace = true
 uuid.workspace = true
-zmq.workspace = true
 
-# Auth/Auth
-rusty_paseto.workspace = true
-
-# Memory management
-mimalloc.workspace = true
+# Testing & Development
+tempfile.workspace = true

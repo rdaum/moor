@@ -26,18 +26,29 @@ name = "var_benches"
 harness = false
 
 [dependencies]
-ahash.workspace = true
-binary-layout.workspace = true
+# Serialization & Data Formats
 bincode.workspace = true
+serde.workspace = true
+
+# Async Runtime & Concurrency
 boxcar.workspace = true
-byteview.workspace = true
+papaya.workspace = true
+
+# Collections & Data Structures
+ahash.workspace = true
 im.workspace = true
+
+# Text Processing & Regex
+unicase.workspace = true
+
+# Error Handling
+thiserror.workspace = true
+
+# Utilities & Helpers
+binary-layout.workspace = true
+byteview.workspace = true
 lazy_static.workspace = true
 num-traits.workspace = true
 once_cell.workspace = true
-papaya.workspace = true
 paste.workspace = true
-serde.workspace = true
 strum.workspace = true
-thiserror.workspace = true
-unicase.workspace = true

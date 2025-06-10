@@ -15,6 +15,7 @@ description = "A tool for importing, compiling, and exporting mooR cores without
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
 
 [dependencies]
+# Internal Dependencies
 moor-common = { path = "../../crates/common" }
 moor-compiler = { path = "../../crates/compiler" }
 moor-daemon = { path = "../../crates/daemon" }
@@ -25,16 +26,18 @@ moor-objdef = { path = "../../crates/objdef" }
 moor-textdump = { path = "../../crates/textdump" }
 moor-var = { path = "../../crates/var" }
 
-## Command line arguments parsing.
+# Command Line & Configuration
 clap.workspace = true
 clap_derive.workspace = true
 
-# General.
+# Error Handling & Logging
 color-eyre.workspace = true
 eyre.workspace = true
-semver.workspace = true
-tempfile.workspace = true
-
-## Logging & tracing
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+# Utilities & Helpers
+semver.workspace = true
+
+# Testing & Development
+tempfile.workspace = true

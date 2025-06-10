@@ -79,130 +79,117 @@ lto = "fat"
 debug = "full"
 
 [workspace.dependencies]
-## Command line arguments parsing.
+# Core Runtime & System
+gdt-cpus = "25.5"
+libc = "0.2"
+mimalloc = "0.1"
+minstant = { version = "0.1", features = ["fallback-coarse"] }
+perf-event2 = "0.7"
+signal-hook = "0.3"
+
+# Command Line & Configuration
 clap = "4.5"
 clap_derive = "4.5"
-
-# Formats/ config
 figment = { version = "0.10", features = ["yaml", "json"] }
+
+# Serialization & Data Formats
+bincode = { version = "2.0", features = ["serde"] }
+csv = "1.3.1"
+edn-format = "3.3"
+serde = { version = "1.0", features = ["derive", "rc"] }
 serde_derive = "1.0"
 serde_json = "1.0"
-
-## HTTP/websockets front-end
-axum = { version = "0.8", features = ["ws"] }
-serde = { version = "1.0", features = ["derive", "rc"] }
-
-## Asynchronous transaction processing & networking, used in web-host and telnet-host.
-## the daemon itself uses its own threading
-futures = "0.3"
-futures-util = { version = "0.3", features = ["sink", "std"] }
-reqwest = "0.12"
-tokio = { version = "1.44", features = ["full"] }
-tokio-util = { version = "0.7", features = ["full"] }
-tower-http = { version = "0.6", features = ["fs"] }
-
-# Used for RPC daemon/client
-tmq = "0.5"
-zmq = "0.10"
-
-## Logging & tracing
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
-# General usefulness
-ahash = "0.8"
-arc-swap = "1.7"
-binary-layout = "4.0"
-bincode = { version = "2.0", features = ["serde"] }
-boxcar = "0.2"
-byteview = "0.6"
-chrono = "0.4"
-criterion = { version = "0.6", features = ["async_tokio"] }
-encoding_rs = "0.8"
-enum-primitive-derive = "0.3"
-fast-counter = "1.0"
-fs2 = "0.4"
-flume = "0.11"
-gdt-cpus = "25.5"
-im = "15.1"
-indexmap = "2.9"
-itertools = "0.14"
-lazy_static = "1.5"
-minstant = { version = "0.1", features = ["fallback-coarse"] }
-num-traits = "0.2"
-oneshot = { version = "0.1", default-features = false, features = ["std"] }
-papaya = "0.2"
-perf-event2 = "0.7"
-semver = "1.0"
-shadow-rs = "1.1"
-similar = "*"
-similar-asserts = "*"
-strum = { version = "0.27", features = ["derive"] }
-uuid = { version = "1.16", features = ["v4", "v7", "serde"] }
 xml-rs = "0.8"
 
-## Required for MOO builtins.
+# Database & Persistence
+fjall = { version = "2.11", default-features = false, features = ["lz4"] }
+fs2 = "0.4"
+
+# Networking & Communication
+axum = { version = "0.8", features = ["ws"] }
+reqwest = "0.12"
+tmq = "0.5"
+tower-http = { version = "0.6", features = ["fs"] }
+zmq = "0.10"
+
+# Async Runtime & Concurrency
+arc-swap = "1.7"
+boxcar = "0.2"
+flume = "0.11"
+futures = "0.3"
+futures-util = { version = "0.3", features = ["sink", "std"] }
+oneshot = { version = "0.1", default-features = false, features = ["std"] }
+papaya = "0.2"
+shuttle = "0.8"
+tokio = { version = "1.44", features = ["full"] }
+tokio-util = { version = "0.7", features = ["full"] }
+
+# Authentication & Security
+age = "0.11"
 argon2 = "0.5"
-chrono-tz = "0.10"
+base64 = "0.21"
+ed25519-dalek = { version = "2.1", features = ["pkcs8", "pem", "signature"] }
 hmac = "0.12"
-iana-time-zone = "0.1"
 md-5 = "0.10" # For MOO's "string_hash"
-onig = { version = "6.4", default-features = false }
 pwhash = { version = "1.0", default-features = false }
-rand = "0.8"
+rusty_paseto = { version = "0.7" }
 sha1 = "0.10"
 sha2 = "0.10"
+ssh-key = "0.6"
 
-## Compiler grammar/parser
+# Time & Locale
+chrono = "0.4"
+chrono-tz = "0.10"
+iana-time-zone = "0.1"
+
+# Text Processing & Regex
+encoding_rs = "0.8"
+onig = { version = "6.4", default-features = false }
+unicase = "2.8"
+
+# Compiler & Language Processing
 pest = "2.8"
 pest_derive = "2.8"
 
-## Error declaration/ handling
+# Collections & Data Structures
+ahash = "0.8"
+im = "15.1"
+indexmap = "2.9"
+itertools = "0.14"
+
+# Error Handling & Logging
 color-eyre = "0.6"
 eyre = "0.6"
 thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
 
-## For macro-ing
+# Utilities & Helpers
+binary-layout = "4.0"
+byteview = "0.6"
+enum-primitive-derive = "0.3"
+fast-counter = "1.0"
+lazy_static = "1.5"
+num-traits = "0.2"
+once_cell = { version = "1.21" }
 paste = "1.0"
+rand = "0.8"
+semver = "1.0"
+shadow-rs = "1.1"
+strum = { version = "0.27", features = ["derive"] }
+uuid = { version = "1.16", features = ["v4", "v7", "serde"] }
 
-# For the DB & common layer.
-fjall = { version = "2.11", default-features = false, features = ["lz4"] }
-libc = "0.2"
-
-# Dev dependencies
-tempfile = "3.10"
-
-# testing
+# Testing & Development
+criterion = { version = "0.6", features = ["async_tokio"] }
 escargot = "0.5"
 pretty_assertions = "1.4"
 serial_test = "3.1"
+similar = "*"
+similar-asserts = "*"
+tempfile = "3.10"
 test-case = "3.3"
 test_each_file = "0.3"
 unindent = "0.2"
 
-# Auth/Auth
-ed25519-dalek = { version = "2.1", features = ["pkcs8", "pem", "signature"] }
-rusty_paseto = { version = "0.7" }
-signal-hook = "0.3"
-
-# For the telnet host
-termimad = "0.31"
-
-# For age encryption
-age = "0.11"
-base64 = "0.22"
-ssh-key = "0.6"
-
-# For the consistency checker in `load-tools`
-edn-format = "3.3"
-
-# For benching / testing
-csv = "1.3.1"
-
-# Allocation
-mimalloc = "0.1"
-
-# for symtab
-once_cell = { version = "1.21" } # Added sync feature
-shuttle = "0.8"
-unicase = "2.8"
+# Terminal & UI
+termimad = "0.33"

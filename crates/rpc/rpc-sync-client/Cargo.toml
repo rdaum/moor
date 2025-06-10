@@ -12,10 +12,17 @@ rust-version.workspace = true
 description = "Utilities for connection to the 0MQ RPC server via blocking synchronous calls"
 
 [dependencies]
-# Own
+# Internal Dependencies
 rpc-common = { path = "../rpc-common" }
 
+# Serialization & Data Formats
 bincode.workspace = true
-tracing.workspace = true
-uuid.workspace = true
+
+# Networking & Communication
 zmq.workspace = true
+
+# Error Handling & Logging
+tracing.workspace = true
+
+# Utilities & Helpers
+uuid.workspace = true

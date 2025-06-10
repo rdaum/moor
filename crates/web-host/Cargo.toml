@@ -31,40 +31,41 @@ maintainer-scripts = "debian/scripts"
 systemd-units = { enable = false }
 
 [dependencies]
+# Internal Dependencies
 moor-common = { path = "../common" }
 moor-var = { path = "../var" }
 rpc-async-client = { path = "../rpc/rpc-async-client" }
 rpc-common = { path = "../rpc/rpc-common" }
 
-## Command line arguments parsing.
+# Command Line & Configuration
 clap.workspace = true
 clap_derive.workspace = true
 figment.workspace = true
 
-# General.
+# Serialization & Data Formats
 base64.workspace = true
-color-eyre.workspace = true
-eyre.workspace = true
-futures-util.workspace = true
 serde.workspace = true
-thiserror.workspace = true
+serde_derive.workspace = true
+serde_json.workspace = true
 
-## Asynchronous transaction processing & networking
+# Networking & Communication
+axum.workspace = true
+tmq.workspace = true
+tower-http.workspace = true
+
+# Async Runtime & Concurrency
+futures-util.workspace = true
 tokio.workspace = true
 
-## Logging & tracing
+# Error Handling & Logging
+color-eyre.workspace = true
+eyre.workspace = true
+thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
-## ZMQ / RPC
-tmq.workspace = true
+# Utilities & Helpers
 uuid.workspace = true
-
-# HTTP/websockets layer
-axum.workspace = true
-serde_derive.workspace = true
-serde_json.workspace = true
-tower-http.workspace = true
 
 #
 rolldown = { git = "https://github.com/rolldown/rolldown" }

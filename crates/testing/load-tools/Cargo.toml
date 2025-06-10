@@ -23,21 +23,27 @@ name = "load-test"
 path = "src/verb-dispatch-load-test.rs"
 
 [dependencies]
+# Internal Dependencies
 moor-common = { path = "../../common" }
 moor-var = { path = "../../var" }
 rpc-async-client = { path = "../../rpc/rpc-async-client" }
 rpc-common = { path = "../../rpc/rpc-common" }
 
+# Command Line & Configuration
 clap.workspace = true
 clap_derive.workspace = true
-color-eyre.workspace = true
+
+# Serialization & Data Formats
 csv.workspace = true
+
+# Networking & Communication
+tmq.workspace = true
+
+# Error Handling & Logging
+color-eyre.workspace = true
 eyre.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-
-## ZMQ / RPC
-tmq.workspace = true
 uuid.workspace = true
 
 ## Asynchronous transaction processing & networking

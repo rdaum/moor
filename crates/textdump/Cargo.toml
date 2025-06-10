@@ -17,20 +17,22 @@ moor-db = { path = "../db" }
 similar-asserts.workspace = true
 
 [dependencies]
-## Own
+# Internal Dependencies
 moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
 moor-var = { path = "../var" }
 
-## General usefulness
+# Serialization & Data Formats
 base64.workspace = true
-encoding_rs.workspace = true
-semver.workspace = true
 serde.workspace = true
-strum.workspace = true
 
-## Logging & tracing
+# Text Processing & Regex
+encoding_rs.workspace = true
+
+# Error Handling & Logging
+thiserror.workspace = true
 tracing.workspace = true
 
-## Error declaration/ handling
-thiserror.workspace = true
+# Utilities & Helpers
+semver.workspace = true
+strum.workspace = true

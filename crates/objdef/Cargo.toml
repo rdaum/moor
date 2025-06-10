@@ -18,16 +18,14 @@ moor-textdump = { path = "../textdump" }
 tempfile.workspace = true
 
 [dependencies]
-## Own
+# Internal Dependencies
 moor-common = { path = "../common" }
 moor-compiler = { path = "../compiler" }
 moor-var = { path = "../var" }
 
-## General usefulness
-semver.workspace = true
-
-## Logging & tracing
+# Error Handling & Logging
+thiserror.workspace = true
 tracing.workspace = true
 
-## Error declaration/ handling
-thiserror.workspace = true
+# Utilities & Helpers
+semver.workspace = true

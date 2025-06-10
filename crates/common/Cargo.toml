@@ -15,22 +15,29 @@ description = "The set of values, and model/entities used across the system"
 shadow-rs.workspace = true
 
 [dependencies]
+# Internal Dependencies
 moor-var = { path = "../var" }
 
-binary-layout.workspace = true
+# Serialization & Data Formats
 bincode.workspace = true
+
+# Collections & Data Structures
+itertools.workspace = true
+
+# Utilities & Helpers
+binary-layout.workspace = true
 byteview.workspace = true
 enum-primitive-derive.workspace = true
 fast-counter.workspace = true
-itertools.workspace = true
 lazy_static.workspace = true
 minstant.workspace = true
 num-traits.workspace = true
-serde.workspace = true
 shadow-rs.workspace = true
 strum.workspace = true
-thiserror.workspace = true
 uuid.workspace = true
+
+# Error Handling
+thiserror.workspace = true
 
 [features]
 default = []

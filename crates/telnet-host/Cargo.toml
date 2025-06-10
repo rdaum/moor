@@ -33,38 +33,40 @@ systemd-units = { enable = false }
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
 
 [dependencies]
+# Internal Dependencies
 moor-common = { path = "../common" }
-moor-compiler = { path = "../compiler" }
 moor-moot = { path = "../testing/moot", features = ["colors"] }
 moor-var = { path = "../var" }
 rpc-async-client = { path = "../rpc/rpc-async-client" }
 rpc-common = { path = "../rpc/rpc-common" }
 
-## Command line arguments & config parsing.
+# Command Line & Configuration
 clap.workspace = true
 clap_derive.workspace = true
 figment.workspace = true
+
+# Serialization & Data Formats
 serde.workspace = true
 
-## General.
-color-eyre.workspace = true
-eyre.workspace = true
-futures-util.workspace = true
+# Networking & Communication
+tmq.workspace = true
 
-## Asynchronous transaction processing & networking
+# Async Runtime & Concurrency
+futures-util.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 
-## Logging & tracing
+# Error Handling & Logging
+color-eyre.workspace = true
+eyre.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
-## ZMQ / RPC
-tmq.workspace = true
-uuid.workspace = true
-
-## Rich content
+# Terminal & UI
 termimad.workspace = true
+
+# Utilities & Helpers
+uuid.workspace = true
 
 # Testing
 [dev-dependencies]

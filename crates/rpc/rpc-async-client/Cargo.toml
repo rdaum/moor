@@ -12,16 +12,27 @@ rust-version.workspace = true
 description = "Utilities for connection to the 0MQ RPC server via tokio/async calls"
 
 [dependencies]
-# Own
+# Internal Dependencies
 moor-common = { path = "../../common" }
 moor-var = { path = "../../var" }
 rpc-common = { path = "../rpc-common" }
 
+# Serialization & Data Formats
 bincode.workspace = true
-futures-util.workspace = true
-rusty_paseto.workspace = true
-thiserror.workspace = true
+
+# Networking & Communication
 tmq.workspace = true
+
+# Async Runtime & Concurrency
+futures-util.workspace = true
 tokio.workspace = true
+
+# Authentication & Security
+rusty_paseto.workspace = true
+
+# Error Handling & Logging
+thiserror.workspace = true
 tracing.workspace = true
+
+# Utilities & Helpers
 uuid.workspace = true

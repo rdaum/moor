@@ -17,25 +17,23 @@ test-case.workspace = true
 unindent.workspace = true
 
 [dependencies]
-## Own
+# Internal Dependencies
 moor-common = { path = "../common" }
 moor-var = { path = "../var" }
 
-## General usefulness
+# Serialization & Data Formats
 base64.workspace = true
-bincode.workspace = true
-byteview.workspace = true
-itertools.workspace = true
-lazy_static.workspace = true
-strum.workspace = true
 
-## Compiler grammar/parser
+# Compiler & Language Processing
 pest.workspace = true
 pest_derive.workspace = true
 
-## Error declaration/ handling
-thiserror.workspace = true
+# Collections & Data Structures
+itertools.workspace = true
 
-## Logging & tracing
+# Error Handling & Logging
+thiserror.workspace = true
 tracing.workspace = true
-uuid = { version = "1.16.0", features = ["v4"] }
+
+# Utilities & Helpers
+strum.workspace = true

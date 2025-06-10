@@ -12,18 +12,27 @@ rust-version.workspace = true
 description = "Execute MOO interaction tests described in simple text files."
 
 [dependencies]
+# Internal Dependencies
+moor-var = { path = "../../var" }
+
+# Compiler & Language Processing
+pest.workspace = true
+pest_derive.workspace = true
+
+# Error Handling & Logging
+eyre.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Testing & Development
+pretty_assertions.workspace = true
+
+# Terminal & UI (optional dependencies for color support)
 # Optional dependencies are not supported for workspace-inherited dependencies.
 # Alternative to optional color support is enforced color support; then we can move `anstream`
 # and `anstyle` to the top level as usual.
 anstream = { version = "0.6.18", optional = true, features = ["test"] }
 anstyle = { version = "1.0.10", optional = true }
-eyre.workspace = true
-moor-var = { path = "../../var" }
-pest.workspace = true
-pest_derive.workspace = true
-pretty_assertions.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
 
 [features]
 colors = ["dep:anstream", "dep:anstyle"]
