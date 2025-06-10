@@ -11,7 +11,6 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-
 export enum ORefKind {
     Oid,
     SysObj,

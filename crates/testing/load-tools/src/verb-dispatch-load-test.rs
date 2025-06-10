@@ -101,7 +101,7 @@ try
     add_property(player, "test_objects", {}, {player, "rw"});
     notify(player, "Added test_objects property");
     for i in [1..num_objects]
-        let object = create(player);
+        object = create(player);
         player.test_objects = {@player.test_objects, object};
         notify(player, "Created object: " + toliteral(object));
     endfor

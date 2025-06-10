@@ -1,7 +1,8 @@
 # Introduction
 
 mooR is a network-accessible, multi-user, programmable, interactive system well-suited to the construction of online
-social environments, games, conferencing systems, and other collaborative software. Think of a MOO as a text-based
+social environments, games, conferencing systems, and other collaborative software. The first application that mooR
+supports is MOO. Think of a MOO as a text-based
 virtual world, similar to an early predecessor of modern MMORPGs, but where both the environment and its rules can be
 programmed by its participants. Its most common use, however, is as a multi-participant, shared narrative system in the
 style of adventure games or "MUDs", and it is with this focus in
@@ -16,15 +17,17 @@ MOOs offer a unique digital experience through:
 - **Community development** through persistent interactions and relationships
 - **Text-based immersion** that engages imagination differently than graphics-heavy games
 
-Participants (usually referred to as _players_) "connect" to mooR using a web browser -- or, historically through
-`telnet`, `SSH`, or a specialized [mud client](https://en.wikipedia.org/wiki/MUD_client).
+Participants (usually referred to as players) "connect" to mooR using a web browser -- or, historically through telnet,
+SSH, or a specialized mud client. They interact with a virtual world that is represented by text, and their commands and
+the results are conveyed via text.
 
-Upon connection, they are usually presented with a _welcome message_ explaining how to either create a new _character_
-or connect to an existing one. Characters are the embodiment of players in the virtual reality that is a MOO.
+The players can move around the virtual world and explore it, interact with other players or with simulated players or
+other programmed entities, or with larger simulated devices or structures.
 
-Having connected to a character, players then give one-line commands that are parsed and interpreted by mooR as
-appropriate. Such commands may cause changes in the shared reality, such as the location of a character, or may simply
-report on the current state of that reality, such as the appearance of some object.
+The player's actions can cause changes in that virtual world, and those changes are persistent; both the characters and
+anything they create in the MOO world will persist until they are deliberately deleted. If the user disconnects and
+reconnects days, months or even years later, they will still be there. If the server reboots, they will still be there.
+Those changes can include moving things within the virtual world, altering things, and creating new things.
 
 ## A Typical MOO Interaction
 
@@ -39,10 +42,14 @@ with large, well-stocked bookcases.  An exit in the northwest corner leads to th
 direction, to the entrance hall.  The door into the coat closet is at the north end of the east wall, and at the south
 end is a sliding glass door leading out onto a wooden deck.  There are two sets of couches, one clustered around the
 fireplace and one with a view out the windows.
+
 You see Welcome Poster, a fireplace, the living room couch, Statue, a map of LambdaHouse, Fun Activities Board, Helpful
 Person Finder, The Birthday Machine, lag meter, and Cockatoo here.
+
 erin (out on his feet), elsa, lisdude (out on his feet), benny (out on his feet), and Fox (out on his feet) are here.
+
 > poke cockatoo
+
 The Cockatoo shifts about on its perch and bobs its head.
 Cockatoo squawks, "unless they are a brand new char with no objects."
 ```
@@ -97,8 +104,8 @@ games.
 
 In the next chapter, I describe the structure and contents of a mooR database. The following chapter gives a complete
 description of how the server performs its primary duty: parsing the commands typed by players. Next, I describe the
-complete syntax and semantics of the MOO programming language. Finally, I describe aspects of server configuration and 
-administration, including how to run a mooR server and how to control the execution of tasks. 
+complete syntax and semantics of the MOO programming language. Finally, I describe aspects of server configuration and
+administration, including how to run a mooR server and how to control the execution of tasks.
 
 
 

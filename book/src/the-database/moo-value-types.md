@@ -123,7 +123,23 @@ first_fruit = fruits[1]; // "apple"
 fruits = setadd(fruits, "date"); // {"apple", "banana", "cherry", "date"}
 ```
 
-Lists are immutable: when you "change" a list, you actually create a new one.
+Lists are immutable: when you "change" a list, you actually create a new one. In the case of some functions for list
+manipulation, this is implicit, but existing moo code often does this explicitly. For example, the recommended and
+common style for appending to a list is to use the list expansion operator, the @ character, to expand the old list's
+contents into a declaration of a new list:
+
+```
+newlist = {@oldlist, newelement};
+```
+
+The newly declared list can, of course, be assigned to the old list variable:
+
+```
+oldlist = {@oldlist, newelement};
+```
+
+(Note that @ is also a standard prefix character to denote certain kinds of user commands, but these two facts are not
+connected.)
 
 ## Map Type
 

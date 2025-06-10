@@ -30,34 +30,29 @@ fall of 2022, with the intent of trying to revive the ideas behind MOO
 but with a more "21st century" technological foundation that would
 make it easier to maintain and scale such applications going forward.
 
-I did this because I perceived then (and still do) that there is a
-problem in the way the "social _media_" landscape has evolved, and
-felt the desire to see a return of an earlier type of interaction on
-the Internet. But felt that to make that happen I couldn't just start
-with a fork of the original LambdaMOO (as e.g. ToastStunt had done),
-but with a brand new implementation which fulfilled the following
-requirements:
+mooR is a technology layer to provide a foundation for a new kind of social media; a kind of social media that brings
+back to the forefront the promise of the earlier internet, a type of interaction that is meaningful in a way the earlier
+era Internet was, but designed to take advantage of the power of modern hardware and support the strengths of social
+media as we know it today.
 
-* That it be built from day 1 to be able to meet the expectations of
-  today's users to provide "rich" content (images, styled text,
-  video) and not require a custom client. So to start with the idea
-  that the user would be connecting by a web browser, and to make
-  the platform and core database with that in mind.
-* That it be built from day 1 with modern computers in mind -- to
-  take advantage of multiple threads, on multiple cores, potentially
-  distributed across multiple machines in a datacentre.
-* That it be built in such a way that it would be easier to extend
-  and add behaviours -- new builtin functions, new protocols for
-  connecting, new integrations to outside services, and even new
-  languages (beyond "MOOcode") for writing verbs. And so be built in
-  a modular fashion.
+But I felt that to make that happen I couldn't just start with a fork of the original LambdaMOO (as e.g. ToastStunt had
+done), but with a brand new implementation which fulfilled the following requirements:
+
+* **Modern user experience**: Built from day 1 to meet today's expectations for rich content (images, styled text,
+  video), user accessibility, and web-based interfaces that don't require custom clients. The platform and core
+  database are designed with web browsers as the primary connection method.
+* **Modern computing architecture**: Built to take advantage of multiple execution threads, multiple cores, and
+  potentially distributed deployment across multiple servers in a datacenter environment.
+* **Technological extensibility**: Built in a modular fashion to easily support new behaviors, new builtin functions,
+  new protocols for connecting, new integrations to outside services, and even new languages (beyond "MOOcode") for
+  writing verbs.
 
 But why did I start from LambdaMOO -- instead of building something
-new from scratch? Nostalgia could be one explanation, but the primary
-motivator was the desire to have a "benchmark" to measure my
-deliverables. When the system could bring in and successfully run an
-existing LambdaMOO core database -- and offer additional features on
-top of that -- then it would be ready for release.
+new from scratch? The meaningful user experience that LambdaMOO delivered for both end-users and user-developers is core
+to the goal of mooR, so LambdaMOO as the first support target serves as a good "benchmark" that preserves the foundation
+of that user experience while keeping the development effort grounded and focused on concrete progress. When the system
+could bring in and successfully run an existing LambdaMOO core database -- and support development of further features
+beyond that -- then it would be ready for release.
 
 The choice of Rust as the implementation language for mooR was driven
 by many reasons, which I need not go into here. But I feel that it is
