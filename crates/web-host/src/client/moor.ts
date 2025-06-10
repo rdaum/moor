@@ -15,7 +15,7 @@ import van, { State } from "vanjs-core";
 import { MessageBoard } from "./components/ui-components";
 import { Login } from "./login";
 import { Context, Notice, PresentationManager, PresentationModel } from "./model";
-import { htmlPurifySetup, Narrative } from "./narrative";
+import { handleUserClosePresentation, htmlPurifySetup, Narrative } from "./narrative";
 import { retrieveWelcome } from "./rpc";
 
 const { button, div, span, input, select, option, br, pre, form, a, p } = van.tags;
@@ -33,10 +33,12 @@ const { button, div, span, input, select, option, br, pre, form, a, p } = van.ta
  * - Provides close buttons for each panel
  * - Uses presentation titles from attributes when available
  *
- * @param presentations - Reactive state containing the presentation manager
+ * @param context - Application context containing presentations and other state
  * @returns DOM element containing the right dock and its panels
  */
-const RightDock = (presentations: State<PresentationManager>) => {
+const RightDock = (context: Context) => {
+    const presentations = context.presentations;
+
     // Show dock only when presentations exist
     const hidden_style = van.derive(() => {
         const length = presentations.val.rightDockPresentations().length;
@@ -74,8 +76,9 @@ const RightDock = (presentations: State<PresentationManager>) => {
                         {
                             class: "right_dock_panel_close",
                             onclick: () => {
-                                console.log("Closing presentation:", presentationId);
-                                presentation.val.closed.val = true;
+                                console.log("Closing right-dock presentation:", presentationId);
+                                // Use the proper dismiss handler
+                                handleUserClosePresentation(context, presentationId);
                             },
                         },
                         "X",
@@ -140,7 +143,7 @@ const App = (context: Context) => {
             // Main narrative display with command input
             Narrative(context, player),
             // Right dock for auxiliary UI panels
-            RightDock(context.presentations),
+            RightDock(context),
         ),
     );
 };

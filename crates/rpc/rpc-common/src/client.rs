@@ -161,6 +161,10 @@ pub enum HostClientToDaemonMessage {
     ClientPong(ClientToken, SystemTime, Obj, HostType, SocketAddr),
     /// Request historical events based on the history recall option.
     RequestHistory(ClientToken, AuthToken, HistoryRecall),
+    /// Request current presentations for the authenticated player.
+    RequestCurrentPresentations(ClientToken, AuthToken),
+    /// Dismiss a specific presentation by ID.
+    DismissPresentation(ClientToken, AuthToken, String),
     /// We're done with this connection, buh-bye.
     Detach(ClientToken),
 }
@@ -200,6 +204,10 @@ pub enum DaemonToClientReply {
     ResolveResult(Var),
     /// Response to `RequestHistory` - historical events in a single response
     HistoryResponse(HistoryResponse),
+    /// Response to `RequestCurrentPresentations` - current presentation state
+    CurrentPresentations(Vec<moor_common::tasks::Presentation>),
+    /// Response to `DismissPresentation` - acknowledgment of dismissal
+    PresentationDismissed,
     /// This Client has been disconnected and is not expected to be heard from again.
     Disconnected,
 }

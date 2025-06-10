@@ -50,12 +50,64 @@ const { div, span, textarea, button } = van.tags;
 
 /**
  * Fetches historical events from the server and displays them in the narrative
- * 
+ *
  * @param context - Application context containing auth token and other state
  * @param maxEvents - Maximum number of events to fetch (default: 1000)
  * @param sinceEvent - Optional event ID to fetch history since (for pagination)
  */
-export async function fetchAndDisplayHistory(context: Context, maxEvents: number = 1000, sinceEvent?: string): Promise<HistoryResponse | null> {
+/**
+ * Fetches and displays current presentations from the server
+ * This is called at login to restore presentation state
+ *
+ * @param context - Application context containing auth token and presentation manager
+ * @returns Promise<boolean> - true if presentations were successfully loaded
+ */
+export async function fetchAndDisplayCurrentPresentations(context: Context): Promise<boolean> {
+    if (!context.authToken) {
+        console.warn("Cannot fetch presentations: no auth token available");
+        return false;
+    }
+
+    try {
+        console.log("Fetching current presentations...");
+
+        const response = await fetch("/api/presentations", {
+            headers: {
+                "X-Moor-Auth-Token": context.authToken,
+            },
+        });
+
+        if (!response.ok) {
+            console.error(`Failed to fetch presentations: ${response.status} ${response.statusText}`);
+            return false;
+        }
+
+        const data = await response.json();
+        const presentations = data.presentations || [];
+
+        console.log(`Loaded ${presentations.length} current presentations`);
+
+        // Display each presentation
+        for (const presentation of presentations) {
+            try {
+                handlePresent(context, presentation);
+            } catch (error) {
+                console.error(`Error displaying presentation ${presentation.id}:`, error);
+            }
+        }
+
+        return true;
+    } catch (error) {
+        console.error("Error fetching presentations:", error);
+        return false;
+    }
+}
+
+export async function fetchAndDisplayHistory(
+    context: Context,
+    maxEvents: number = 1000,
+    sinceEvent?: string,
+): Promise<HistoryResponse | null> {
     if (!context.authToken) {
         console.warn("Cannot fetch history: no auth token available");
         return null;
@@ -64,9 +116,9 @@ export async function fetchAndDisplayHistory(context: Context, maxEvents: number
     try {
         // Set up query parameters - prefer N lines over time-based for initial load
         const params = new URLSearchParams({
-            limit: maxEvents.toString()
+            limit: maxEvents.toString(),
         });
-        
+
         if (sinceEvent) {
             // For pagination, fetch events BEFORE the earliest event we have
             params.append("until_event", sinceEvent);
@@ -75,8 +127,12 @@ export async function fetchAndDisplayHistory(context: Context, maxEvents: number
             // Use a longer time window (24 hours) to ensure we get content
             params.append("since_seconds", "86400"); // Last 24 hours
         }
-        
-        console.log(`Fetching history${sinceEvent ? ' (pagination)' : ' (initial)'}: limit=${maxEvents}${sinceEvent ? `, until=${sinceEvent}` : ''}`);
+
+        console.log(
+            `Fetching history${sinceEvent ? " (pagination)" : " (initial)"}: limit=${maxEvents}${
+                sinceEvent ? `, until=${sinceEvent}` : ""
+            }`,
+        );
 
         // Set the timestamp boundary for deduplication only on initial load
         if (!sinceEvent) {
@@ -87,8 +143,8 @@ export async function fetchAndDisplayHistory(context: Context, maxEvents: number
             method: "GET",
             headers: {
                 "X-Moor-Auth-Token": context.authToken,
-                "Content-Type": "application/json"
-            }
+                "Content-Type": "application/json",
+            },
         });
 
         if (!response.ok) {
@@ -97,24 +153,24 @@ export async function fetchAndDisplayHistory(context: Context, maxEvents: number
         }
 
         const historyData: HistoryResponse = await response.json();
-        
+
         // Update context state based on response
         context.hasMoreHistory = historyData.meta.has_more_before;
-        
+
         // Always use the metadata's earliest_event_id for next pagination boundary
         if (historyData.meta.earliest_event_id) {
             context.earliestHistoryEventId = historyData.meta.earliest_event_id;
         }
-        
+
         if (historyData.events.length === 0) {
             console.log("No historical events to display");
         } else {
             // Display historical events in chronological order (oldest first)
             console.log(`Displaying ${historyData.events.length} historical events`);
-            
+
             // For prepending (pagination), we need to reverse the order so newest events get prepended first
             const eventsToDisplay = sinceEvent ? [...historyData.events].reverse() : historyData.events;
-            
+
             for (const event of eventsToDisplay) {
                 displayHistoricalEvent(context, event, sinceEvent ? "prepend" : "append");
             }
@@ -124,7 +180,7 @@ export async function fetchAndDisplayHistory(context: Context, maxEvents: number
                 addHistorySeparator();
                 // Update virtual spacer height for initial load
                 updateVirtualSpacerHeight(context);
-                
+
                 // Set initial scroll position to just above the separator
                 setTimeout(() => {
                     const narrative = document.getElementById("narrative");
@@ -149,7 +205,7 @@ export async function fetchAndDisplayHistory(context: Context, maxEvents: number
 
 /**
  * Loads more historical events for infinite scrolling
- * 
+ *
  * @param context - Application context
  * @param chunkSize - Number of events to fetch (default: 50)
  */
@@ -160,7 +216,7 @@ export async function loadMoreHistory(context: Context, chunkSize: number = 50):
     }
 
     context.historyLoading = true;
-    
+
     try {
         const historyData = await fetchAndDisplayHistory(context, chunkSize, context.earliestHistoryEventId);
         return historyData !== null && historyData.events.length > 0;
@@ -171,13 +227,13 @@ export async function loadMoreHistory(context: Context, chunkSize: number = 50):
 
 /**
  * Updates the virtual spacer height to maintain scrollbar appearance
- * 
- * @param context - Application context 
+ *
+ * @param context - Application context
  */
 function updateVirtualSpacerHeight(context: Context): void {
     const virtualSpacer = document.getElementById("virtual_history_spacer");
     if (!virtualSpacer) return;
-    
+
     // Increase virtual spacer height based on available history
     // This creates the illusion of more content above
     if (context.hasMoreHistory) {
@@ -190,15 +246,18 @@ function updateVirtualSpacerHeight(context: Context): void {
     }
 }
 
-
 /**
  * Displays a single historical event in the narrative with historical styling
- * 
+ *
  * @param context - Application context
  * @param event - The historical event to display
  * @param insertMode - Whether to append or prepend the event
  */
-function displayHistoricalEvent(context: Context, event: HistoricalEvent, insertMode: "append" | "prepend" = "append"): void {
+function displayHistoricalEvent(
+    context: Context,
+    event: HistoricalEvent,
+    insertMode: "append" | "prepend" = "append",
+): void {
     // Convert historical event to narrative event format
     const narrativeEvent: NarrativeEvent = {
         kind: "narrative_message" as any, // Use string to match enum value
@@ -206,7 +265,7 @@ function displayHistoricalEvent(context: Context, event: HistoricalEvent, insert
         content_type: event.message.content_type || "text/plain",
         author: event.author,
         is_historical: true, // Mark as historical for visual distinction
-        timestamp: new Date(event.timestamp).getTime()
+        timestamp: new Date(event.timestamp).getTime(),
     };
 
     // Process the event through the normal narrative pipeline
@@ -215,7 +274,7 @@ function displayHistoricalEvent(context: Context, event: HistoricalEvent, insert
 
 /**
  * Converts the event message from the history API format to narrative format
- * 
+ *
  * @param message - The message object from history API
  * @returns String content for display
  */
@@ -223,7 +282,7 @@ function convertEventMessage(message: any): string {
     if (typeof message === "string") {
         return message;
     }
-    
+
     if (message.type === "notify") {
         return message.content;
     } else if (message.type === "traceback") {
@@ -233,7 +292,7 @@ function convertEventMessage(message: any): string {
     } else if (message.type === "unpresent") {
         return `[Closed: ${message.id}]`;
     }
-    
+
     // Fallback for unknown message types
     return JSON.stringify(message);
 }
@@ -249,11 +308,11 @@ function addHistorySeparator(): void {
     }
 
     const separator = div({
-        class: "history_separator"
+        class: "history_separator",
     }, "─── Live Events ───");
-    
+
     output.appendChild(separator);
-    
+
     // Scroll to the separator
     setTimeout(() => {
         const narrative = document.getElementById("narrative");
@@ -557,7 +616,11 @@ function narrativeAppend(contentNode: HTMLElement): void {
  * @param msg - The narrative event to process
  * @param insertMode - Whether to append or prepend the content
  */
-function processNarrativeMessage(context: Context, msg: NarrativeEvent, insertMode: "append" | "prepend" = "append"): void {
+function processNarrativeMessage(
+    context: Context,
+    msg: NarrativeEvent,
+    insertMode: "append" | "prepend" = "append",
+): void {
     // Determine content type, defaulting to plain text
     const contentType = msg.content_type || CONTENT_TYPES.PLAIN;
 
@@ -650,7 +713,12 @@ function handleMcpCommand(context: Context, message: string): boolean {
  * @param contentType - The content type of the message
  * @param insertMode - Whether to append or prepend the content
  */
-function processMessageContent(context: Context, msg: NarrativeEvent, contentType: string, insertMode: "append" | "prepend" = "append"): void {
+function processMessageContent(
+    context: Context,
+    msg: NarrativeEvent,
+    contentType: string,
+    insertMode: "append" | "prepend" = "append",
+): void {
     // Handle active spool collection for text content
     if (context.spool !== null && contentType === CONTENT_TYPES.PLAIN) {
         // A single period on a line marks the end of spool data collection
@@ -815,7 +883,7 @@ function handlePresent(context: Context, msg: Presentation): void {
     // Handle specific presentation targets
     switch (msg.target) {
         case TARGET_TYPES.WINDOW:
-            createFloatingWindow(model, attrs, content);
+            createFloatingWindow(context, model, attrs, content);
             break;
 
         case TARGET_TYPES.VERB_EDITOR:
@@ -833,13 +901,48 @@ function handlePresent(context: Context, msg: Presentation): void {
 }
 
 /**
+ * Dismisses a presentation on the server side
+ *
+ * @param context - Application context
+ * @param presentationId - ID of the presentation to dismiss
+ */
+export async function dismissPresentation(context: Context, presentationId: string): Promise<void> {
+    if (!context.authToken) {
+        console.warn("Cannot dismiss presentation: no auth token available");
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/presentations/${encodeURIComponent(presentationId)}`, {
+            method: "DELETE",
+            headers: {
+                "X-Moor-Auth-Token": context.authToken,
+            },
+        });
+
+        if (!response.ok) {
+            console.error(
+                `Failed to dismiss presentation ${presentationId}: ${response.status} ${response.statusText}`,
+            );
+            return;
+        }
+
+        console.log(`Successfully dismissed presentation: ${presentationId}`);
+    } catch (error) {
+        console.error(`Error dismissing presentation ${presentationId}:`, error);
+    }
+}
+
+/**
  * Creates a floating window for a window-target presentation
  *
+ * @param context - Application context
  * @param model - The presentation model
  * @param attrs - Presentation attributes
  * @param content - The content element to display
  */
 function createFloatingWindow(
+    context: Context,
     model: State<PresentationModel>,
     attrs: Record<string, string>,
     content: HTMLElement,
@@ -849,13 +952,33 @@ function createFloatingWindow(
     const width = parseInt(attrs["width"] || `${DEFAULT_PRESENTATION.WIDTH}`, 10);
     const height = parseInt(attrs["height"] || `${DEFAULT_PRESENTATION.HEIGHT}`, 10);
 
+    // Create our own close state that triggers dismiss
+    const customClosed = van.state(false);
+
+    // Watch our custom close state and handle user close
+    van.derive(() => {
+        if (customClosed.val) {
+            console.log(`User closed floating window presentation ${model.val.id}, dismissing...`);
+            // Call our dismiss handler
+            handleUserClosePresentation(context, model.val.id);
+        }
+    });
+
+    // Also watch for server-initiated closes (from unpresent events)
+    van.derive(() => {
+        if (model.val.closed.val) {
+            console.log(`Server closed presentation ${model.val.id}, closing window...`);
+            customClosed.val = true;
+        }
+    });
+
     // Create the floating window
     const windowElement = div(
         FloatingWindow(
             {
                 parentDom: document.body,
                 title: title,
-                closed: model.val.closed,
+                closed: customClosed, // Use our custom closed state that triggers dismiss
                 id: `window-present-${model.val.id}`,
                 width,
                 height,
@@ -922,6 +1045,23 @@ function handleUnpresent(context: Context, id: string): void {
         context.presentations.val = presentationManager.withRemoved(id);
         console.log(`Closed presentation: ${id}`);
     }
+}
+
+/**
+ * Handles user-initiated close of a presentation (e.g., clicking close button)
+ * This should be called when the user closes a presentation locally
+ *
+ * @param context - Application context
+ * @param id - ID of the presentation to close
+ */
+export function handleUserClosePresentation(context: Context, id: string): void {
+    console.log(`User closed presentation: ${id}`);
+
+    // First dismiss on the server
+    dismissPresentation(context, id);
+
+    // Then handle local cleanup
+    handleUnpresent(context, id);
 }
 
 function handleTraceback(context: Context, traceback: Traceback) {
@@ -1017,11 +1157,11 @@ const OutputWindow = (context: Context, player: State<Player>): HTMLElement => {
     const virtualSpacer = div({
         id: "virtual_history_spacer",
         style: "height: 2000px; background: transparent; pointer-events: none;", // Start with significant height
-        "aria-hidden": "true"
+        "aria-hidden": "true",
     });
-    
+
     outputWindow.appendChild(virtualSpacer);
-    
+
     return outputWindow;
 };
 
@@ -1208,7 +1348,7 @@ const InputArea = (context: Context, player: State<Player>): HTMLElement => {
 
 /**
  * Handles scroll events to trigger infinite history loading and track viewing state
- * 
+ *
  * @param context - Application context
  * @param narrativeElement - The narrative container element
  */
@@ -1216,30 +1356,30 @@ function handleScrollForHistoryLoading(context: Context, narrativeElement: HTMLE
     const scrollTop = narrativeElement.scrollTop;
     const scrollHeight = narrativeElement.scrollHeight;
     const clientHeight = narrativeElement.clientHeight;
-    
+
     // Check if user is near the bottom (within 100px)
     const isNearBottom = (scrollTop + clientHeight) >= (scrollHeight - 100);
-    
+
     // Update viewing history state
     context.isViewingHistory = !isNearBottom;
-    
+
     // Only load more history when scrolled near the top (accounting for virtual spacer)
     const scrollThreshold = 200; // pixels from virtual top
     const virtualSpacer = document.getElementById("virtual_history_spacer");
     const virtualSpacerHeight = virtualSpacer ? parseInt(virtualSpacer.style.height) || 0 : 0;
-    
+
     if (scrollTop <= (virtualSpacerHeight + scrollThreshold) && context.hasMoreHistory && !context.historyLoading) {
         console.log("Loading more history due to scroll position");
-        
+
         // Store current scroll position to restore after loading
         const currentScrollHeight = narrativeElement.scrollHeight;
         const currentScrollTop = narrativeElement.scrollTop;
-        
+
         loadMoreHistory(context).then((loaded) => {
             if (loaded) {
                 // Update virtual spacer height
                 updateVirtualSpacerHeight(context);
-                
+
                 // Restore scroll position after new content is added
                 setTimeout(() => {
                     const newScrollHeight = narrativeElement.scrollHeight;
@@ -1253,7 +1393,7 @@ function handleScrollForHistoryLoading(context: Context, narrativeElement: HTMLE
 
 /**
  * Scrolls to the bottom of the narrative (jump to now)
- * 
+ *
  * @param context - Application context
  */
 function jumpToNow(context: Context): void {
@@ -1266,38 +1406,40 @@ function jumpToNow(context: Context): void {
 
 /**
  * Component that shows "viewing history" indicator with jump to now button
- * 
+ *
  * @param context - Application context
  * @returns A VanJS component
  */
 const HistoryIndicator = (context: Context): HTMLElement => {
     // Create reactive state for the indicator visibility
     const isVisible = van.state(false);
-    
+
     // Update visibility based on context state
     const updateVisibility = () => {
         isVisible.val = context.isViewingHistory;
     };
-    
+
     // Check visibility periodically (simple approach for reactivity)
     setInterval(updateVisibility, 100);
-    
+
     return div(
         {
             class: "history_indicator",
-            style: van.derive(() => isVisible.val ? 
-                "display: flex; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); color: white; padding: 8px 16px; border-radius: 20px; z-index: 1000; align-items: center; gap: 10px; font-size: 14px;" :
-                "display: none;"
-            )
+            style: van.derive(() =>
+                isVisible.val
+                    ? "display: flex; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); color: white; padding: 8px 16px; border-radius: 20px; z-index: 1000; align-items: center; gap: 10px; font-size: 14px;"
+                    : "display: none;"
+            ),
         },
         span("You're looking at the past..."),
         button(
             {
-                style: "background: #5865f2; color: white; border: none; padding: 4px 12px; border-radius: 12px; cursor: pointer; font-size: 12px;",
-                onclick: () => jumpToNow(context)
+                style:
+                    "background: #5865f2; color: white; border: none; padding: 4px 12px; border-radius: 12px; cursor: pointer; font-size: 12px;",
+                onclick: () => jumpToNow(context),
             },
-            "Jump to Now"
-        )
+            "Jump to Now",
+        ),
     );
 };
 
@@ -1337,7 +1479,7 @@ export const Narrative = (context: Context, player: State<Player>): HTMLElement 
         if (scrollTimeout !== null) {
             clearTimeout(scrollTimeout);
         }
-        
+
         scrollTimeout = setTimeout(() => {
             handleScrollForHistoryLoading(context, narrativeElement);
             scrollTimeout = null;

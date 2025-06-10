@@ -307,6 +307,8 @@ fn mk_routes(web_host: WebHost, dist_dir: &Path) -> eyre::Result<Router> {
             get(host::property_retrieval_handler),
         )
         .route("/api/history", get(host::history_handler))
+        .route("/api/presentations", get(host::presentations_handler))
+        .route("/api/presentations/{presentation_id}", axum::routing::delete(host::dismiss_presentation_handler))
         .fallback_service(dist_service)
         .with_state(web_host);
 

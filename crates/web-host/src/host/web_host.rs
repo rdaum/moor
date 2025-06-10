@@ -617,3 +617,93 @@ pub async fn history_handler(
 
     response.into_response()
 }
+
+/// REST endpoint to retrieve current presentations for the authenticated player
+pub async fn presentations_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        HostClientToDaemonMessage::RequestCurrentPresentations(client_token.clone(), auth_token.clone()),
+    ).await {
+        Ok(DaemonToClientReply::CurrentPresentations(presentations)) => {
+            Json(json!({
+                "presentations": presentations
+            }))
+        }
+        Ok(other) => {
+            error!("Unexpected daemon response: {:?}", other);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Err(e) => {
+            error!("RPC error getting presentations: {:?}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response.into_response()
+}
+
+/// REST endpoint to dismiss a specific presentation for the authenticated player
+pub async fn dismiss_presentation_handler(
+    State(host): State<WebHost>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    header_map: HeaderMap,
+    Path(presentation_id): Path<String>,
+) -> Response {
+    let (auth_token, client_id, client_token, mut rpc_client) =
+        match auth::auth_auth(host.clone(), addr, header_map.clone()).await {
+            Ok(connection_details) => connection_details,
+            Err(status) => return status.into_response(),
+        };
+
+    let response = match rpc_call(
+        client_id,
+        &mut rpc_client,
+        HostClientToDaemonMessage::DismissPresentation(client_token.clone(), auth_token.clone(), presentation_id.clone()),
+    ).await {
+        Ok(DaemonToClientReply::PresentationDismissed) => {
+            Json(json!({
+                "dismissed": true,
+                "presentation_id": presentation_id
+            }))
+        }
+        Ok(other) => {
+            error!("Unexpected daemon response: {:?}", other);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Err(e) => {
+            error!("RPC error dismissing presentation: {:?}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // We're done with this RPC connection, so we detach it.
+    let _ = rpc_client
+        .make_client_rpc_call(
+            client_id,
+            HostClientToDaemonMessage::Detach(client_token.clone()),
+        )
+        .await
+        .expect("Unable to send detach to RPC server");
+
+    response.into_response()
+}

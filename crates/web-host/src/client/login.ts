@@ -26,7 +26,7 @@
 
 import van, { State } from "vanjs-core";
 import { Context, Player } from "./model";
-import { displayDjot, handleEvent, fetchAndDisplayHistory } from "./narrative";
+import { displayDjot, fetchAndDisplayCurrentPresentations, fetchAndDisplayHistory, handleEvent } from "./narrative";
 
 // Extract commonly used VanJS elements
 const { button, div, input, select, option, br, label } = van.tags;
@@ -111,15 +111,26 @@ async function connect(
         player.val = new Player(playerOid, authToken, false);
         context.systemMessage.show("Authenticated! Loading history...", 2);
 
-        // Fetch and display historical events BEFORE opening WebSocket
+        // Fetch and display historical events and current presentations BEFORE opening WebSocket
         // This ensures a clean temporal boundary between historical and live events
         try {
             await fetchAndDisplayHistory(context, 100);
-            console.log("History loaded successfully, now establishing WebSocket connection");
+            console.log("History loaded successfully");
         } catch (error) {
             console.error("Failed to load history:", error);
             // Continue with connection even if history fails
         }
+
+        // Fetch and restore current presentations
+        try {
+            await fetchAndDisplayCurrentPresentations(context);
+            console.log("Current presentations loaded successfully");
+        } catch (error) {
+            console.error("Failed to load current presentations:", error);
+            // Continue with connection even if presentations fail
+        }
+
+        console.log("Now establishing WebSocket connection");
 
         context.systemMessage.show("Establishing connection...", 2);
 

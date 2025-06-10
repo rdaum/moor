@@ -924,6 +924,25 @@ impl RpcServer {
 
                 Ok(DaemonToClientReply::HistoryResponse(history_response))
             }
+            HostClientToDaemonMessage::RequestCurrentPresentations(_token, auth_token) => {
+                // Validate the auth token to get the player
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Get current presentations from event log
+                let presentations = self.event_log.current_presentations(player);
+                let presentation_list: Vec<_> = presentations.into_values().collect();
+
+                Ok(DaemonToClientReply::CurrentPresentations(presentation_list))
+            }
+            HostClientToDaemonMessage::DismissPresentation(_token, auth_token, presentation_id) => {
+                // Validate the auth token to get the player
+                let player = self.validate_auth_token(auth_token, None)?;
+
+                // Remove the presentation from the event log state
+                self.event_log.dismiss_presentation(player, presentation_id);
+
+                Ok(DaemonToClientReply::PresentationDismissed)
+            }
             HostClientToDaemonMessage::Detach(token) => {
                 info!(?client_id, "Detaching client");
                 let _connection = self.client_auth(token, client_id)?;
