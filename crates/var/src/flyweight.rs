@@ -12,17 +12,13 @@
 //
 
 //! A "flyweight" is a lightweight object type which consists only of a delegate, a set of
-//! "slots" (symbol -> var pairs), a single "contents" value (a list), and an optional sealed/signed
-//! state which makes it opaque.
+//! "slots" (symbol -> var pairs), a single "contents" value (a list)
 //!
 //! It is a reference counted, immutable bucket of slots.
 //! Verbs called on it dispatch to the delegate.  `this`, `caller`, perms etc all resolve to the
 //!  actual flyweight.
 //! Properties are resolved in the slots, then the delegate.
 //! Verbs are resolved in the delegate.
-//!
-//! Type protocol for an unsealed flyweight is a sequence. It behaves like a list around the
-//! contents portion.  The slots are accessed with a property access notation.
 //!
 //! The delegate is visible via the `.delegate` property access.
 //! The slots can be listed with a `.slots` property access.
@@ -34,21 +30,6 @@
 //! Literal syntax is:
 //!
 //! `< delegate, [ slot -> value, ... ], contents >`
-//!
-//! Setting the secret is done with the `seal(priv-key, secret)` function, which signs the flyweight with a
-//! private key. The flyweight then becomes opaque without calling `unseal(pub-key, secret)` with the
-//! right public key and the correct secret.
-//!
-//! When a flyweight is sealed, `.slots`, and `.delegate` (and literal output) will not
-//! be available without calling `unseal()` with the correct secret.
-//!
-//! The purpose is to support two kinds of scenarios:
-//!    "Lightweight" non-persistent patterns where a full object would be overkill.
-//!    "Capability" style security patterns where the flyweight is a capability to a full object.
-//!
-//!
-//! The structure of the flyweight also resembles an XML/HTML node, with a delegate as the tag name,
-//!  slots as the attributes, and contents as the inner text/nodes.
 
 use crate::error::ErrorCode::E_TYPE;
 use crate::{Error, List, Obj, Sequence, Symbol, Var, Variant};
@@ -67,19 +48,10 @@ struct Inner {
     delegate: Obj,
     slots: im::Vector<(Symbol, Var)>,
     contents: List,
-    /// If `secret` is present it's a string signed with a key-pair that can be used to unseal
-    /// the flyweight.
-    /// The meaning of the key is up to the application.
-    seal: Option<String>,
 }
 
 impl PartialEq for Inner {
     fn eq(&self, other: &Self) -> bool {
-        // Two flyweights where there are 'secrets' involved are never eq.
-        // To avoid leaking information about the secret.
-        if self.seal.is_some() || other.seal.is_some() {
-            return false;
-        }
         self.delegate == other.delegate
             && self.slots == other.slots
             && self.contents == other.contents
@@ -91,7 +63,6 @@ impl Hash for Flyweight {
         self.0.delegate.hash(state);
         self.0.slots.hash(state);
         self.0.contents.hash(state);
-        self.0.seal.hash(state);
     }
 }
 
@@ -103,8 +74,7 @@ impl Encode for Inner {
             k.encode(encoder)?;
             v.encode(encoder)?;
         }
-        self.contents.encode(encoder)?;
-        self.seal.encode(encoder)
+        self.contents.encode(encoder)
     }
 }
 
@@ -119,12 +89,10 @@ impl<C> Decode<C> for Inner {
             slots.push_back((k, v));
         }
         let contents = List::decode(decoder)?;
-        let seal = Option::<String>::decode(decoder)?;
         Ok(Self {
             delegate,
             slots,
             contents,
-            seal,
         })
     }
 }
@@ -140,41 +108,29 @@ impl<'a, C> BorrowDecode<'a, C> for Inner {
             slots.push_back((k, v));
         }
         let contents = List::borrow_decode(decoder)?;
-        let seal = Option::<String>::borrow_decode(decoder)?;
         Ok(Self {
             delegate,
             slots,
             contents,
-            seal,
         })
     }
 }
 impl Debug for Flyweight {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.0.seal.is_some() {
-            write!(f, "<sealed flyweight>")
-        } else {
-            write!(
-                f,
-                "<{:?}, {:?}, {:?}>",
-                self.0.delegate, self.0.slots, self.0.contents
-            )
-        }
+        write!(
+            f,
+            "<{:?}, {:?}, {:?}>",
+            self.0.delegate, self.0.slots, self.0.contents
+        )
     }
 }
 
 impl Flyweight {
-    pub fn mk_flyweight(
-        delegate: Obj,
-        slots: &[(Symbol, Var)],
-        contents: List,
-        seal: Option<String>,
-    ) -> Self {
+    pub fn mk_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Self {
         Self(Box::new(Inner {
             delegate,
             slots: im::Vector::from(slots),
             contents,
-            seal,
         }))
     }
 }
@@ -193,16 +149,8 @@ impl Flyweight {
         &self.0.delegate
     }
 
-    pub fn seal(&self) -> Option<&String> {
-        self.0.seal.as_ref()
-    }
-
     pub fn contents(&self) -> &List {
         &self.0.contents
-    }
-
-    pub fn is_sealed(&self) -> bool {
-        self.0.seal.is_some()
     }
 
     pub fn with_new_contents(&self, new_contents: List) -> Var {
@@ -210,7 +158,6 @@ impl Flyweight {
             delegate: self.0.delegate,
             slots: self.0.slots.clone(),
             contents: new_contents,
-            seal: self.0.seal.clone(),
         };
         let fl = Flyweight(Box::new(fi));
         let variant = Variant::Flyweight(fl);

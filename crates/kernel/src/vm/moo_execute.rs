@@ -444,7 +444,7 @@ pub fn moo_frame_execute(
                 };
                 // Slots should be v_str -> value, num_slots times
 
-                let flyweight = v_flyweight(delegate, &slots, contents.clone(), None);
+                let flyweight = v_flyweight(delegate, &slots, contents.clone());
                 f.push(flyweight);
             }
             Op::PutTemp => {

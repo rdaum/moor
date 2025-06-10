@@ -862,11 +862,6 @@ pub fn to_literal(v: &Var) -> String {
         }
         Variant::Err(e) => e.name().to_string().to_uppercase(),
         Variant::Flyweight(fl) => {
-            // If sealed, just return <sealed flyweight>
-            if fl.seal().is_some() {
-                return "<sealed flyweight>".to_string();
-            }
-
             // Syntax:
             // < delegate, [ s -> v, ... ], v, v, v ... >
             let mut result = String::new();
@@ -944,11 +939,6 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
             result.push(']');
         }
         Variant::Flyweight(fl) => {
-            // TODO: sealed flyweight in object dump...
-            if fl.seal().is_some() {
-                return "<sealed flyweight>".to_string();
-            }
-
             // Syntax:
             // < delegate, [ s -> v, ... ], v, v, v ... >
             result.push('<');

@@ -136,7 +136,7 @@ fn bf_xml_parse(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 })?;
                 // Turn this into a flyweight and push into the children of the parent
                 let children = List::mk_list(&children);
-                let fl = v_flyweight(obj, &attributes, children, None);
+                let fl = v_flyweight(obj, &attributes, children);
                 if let Some(parent) = current_node.last_mut() {
                     parent.2.push(fl);
                 } else {
@@ -425,7 +425,7 @@ fn bf_remove_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .map(|(k, v)| (*k, v.clone()))
         .collect();
 
-    let f = v_flyweight(*f.delegate(), &slots, f.contents().clone(), None);
+    let f = v_flyweight(*f.delegate(), &slots, f.contents().clone());
     Ok(Ret(f))
 }
 
@@ -469,7 +469,7 @@ fn bf_add_slot(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     } else {
         slots.push((key, value));
     }
-    let f = v_flyweight(*f.delegate(), &slots, f.contents().clone(), None);
+    let f = v_flyweight(*f.delegate(), &slots, f.contents().clone());
     Ok(Ret(f))
 }
 

@@ -134,15 +134,7 @@ impl<W: io::Write> TextdumpWriter<W> {
                 for v in flyweight.contents().iter() {
                     self.write_var(&v, false)?;
                 }
-                match flyweight.seal() {
-                    Some(s) => {
-                        writeln!(self.writer, "1")?;
-                        writeln!(self.writer, "{}", s)?;
-                    }
-                    None => {
-                        writeln!(self.writer, "0")?;
-                    }
-                }
+                writeln!(self.writer, "0")?;
             }
         }
         Ok(())

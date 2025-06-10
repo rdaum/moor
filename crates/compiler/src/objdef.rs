@@ -205,12 +205,7 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
                     }
                 };
             }
-            Ok(v_flyweight(
-                delegate,
-                &slots,
-                List::mk_list(&contents),
-                None,
-            ))
+            Ok(v_flyweight(delegate, &slots, List::mk_list(&contents)))
         }
         _ => {
             panic!("Unimplemented literal: {:?}", pair);
@@ -1055,7 +1050,6 @@ mod tests {
                 Obj::mk_id(1),
                 &[(Symbol::mk("a"), v_int(1)), (Symbol::mk("b"), v_int(2))],
                 List::mk_list(&[v_int(1), v_int(2), v_int(3)]),
-                None
             )
         );
     }

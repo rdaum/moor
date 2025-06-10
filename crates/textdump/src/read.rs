@@ -248,13 +248,8 @@ impl<R: Read> TextdumpReader<R> {
                 }
                 let c_size = self.read_num()?;
                 let contents: Vec<Var> = (0..c_size).map(|_i| self.read_var().unwrap()).collect();
-                let seal = if self.read_num()? == 1 {
-                    Some(self.read_string()?)
-                } else {
-                    None
-                };
 
-                v_flyweight(delegate, &slots, List::from_iter(contents), seal)
+                v_flyweight(delegate, &slots, List::from_iter(contents))
             }
             VarType::_TOAST_TYPE_WAIF => {
                 warn!("found ToastStunt WAIF type; treating as None");

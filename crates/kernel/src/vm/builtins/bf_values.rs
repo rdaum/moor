@@ -40,13 +40,7 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::Map(_) => result.push_str("[map]"),
             Variant::Sym(s) => result.push_str(&s.to_string()),
             Variant::Err(e) => result.push_str(&e.name().as_arc_string()),
-            Variant::Flyweight(fl) => {
-                if fl.is_sealed() {
-                    result.push_str("<sealed flyweight>")
-                } else {
-                    result.push_str("<flyweight>")
-                }
-            }
+            Variant::Flyweight(_) => result.push_str("<flyweight>"),
         }
     }
     Ok(Ret(v_str(result.as_str())))

@@ -825,13 +825,8 @@ pub fn v_binary(bytes: Vec<u8>) -> Var {
 }
 
 #[inline(always)]
-pub fn v_flyweight(
-    delegate: Obj,
-    slots: &[(Symbol, Var)],
-    contents: List,
-    seal: Option<String>,
-) -> Var {
-    let fl = Flyweight::mk_flyweight(delegate, slots, contents, seal);
+pub fn v_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Var {
+    let fl = Flyweight::mk_flyweight(delegate, slots, contents);
     Var::from_variant(Variant::Flyweight(fl))
 }
 

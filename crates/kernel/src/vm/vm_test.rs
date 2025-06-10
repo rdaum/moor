@@ -1102,7 +1102,6 @@ mod tests {
                 Obj::mk_id(1),
                 &[(Symbol::mk("slot"), v_str("123"))],
                 List::mk_list(&[v_int(1), v_int(2), v_int(3)]),
-                None
             )
         );
     }
@@ -1145,7 +1144,6 @@ mod tests {
                     Obj::mk_id(1),
                     &[(Symbol::mk("bananas"), v_str("456"))],
                     List::mk_list(&[v_int(1), v_int(2), v_int(3)]),
-                    None,
                 ),
                 v_map(&[(v_sym("bananas"), v_str("456"))])
             ])
