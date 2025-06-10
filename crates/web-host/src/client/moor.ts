@@ -21,6 +21,49 @@ import { retrieveWelcome } from "./rpc";
 const { button, div, span, input, select, option, br, pre, form, a, p } = van.tags;
 
 /**
+ * Theme toggle component for switching between light and dark modes
+ *
+ * @returns A button that toggles between light and dark themes, hidden until hover
+ */
+const ThemeToggle = () => {
+    // Check if user has a saved theme preference
+    const savedTheme = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+    // Initialize theme state (use saved preference, fallback to system preference, default to dark)
+    const isDarkTheme = van.state(savedTheme ? savedTheme === "dark" : prefersDark);
+
+    // Apply the theme class on initial load
+    if (!isDarkTheme.val) {
+        document.body.classList.add("light-theme");
+    }
+
+    // Toggle theme function
+    const toggleTheme = () => {
+        isDarkTheme.val = !isDarkTheme.val;
+        if (isDarkTheme.val) {
+            document.body.classList.remove("light-theme");
+            localStorage.setItem("theme", "dark");
+        } else {
+            document.body.classList.add("light-theme");
+            localStorage.setItem("theme", "light");
+        }
+    };
+
+    // Return hover area with toggle button inside
+    return div(
+        { class: "theme-toggle-area" },
+        button(
+            {
+                class: "theme-toggle",
+                onclick: toggleTheme,
+            },
+            () => (isDarkTheme.val ? "Switch to Light Theme" : "Switch to Dark Theme"),
+        ),
+    );
+};
+
+/**
  * Creates a dock component for the specified dock type
  *
  * @param context - Application context containing presentations and other state
@@ -176,6 +219,8 @@ const App = (context: Context) => {
         div({ class: "main" }),
         // System message notifications area (toast-style)
         MessageBoard(van.state(context.systemMessage)),
+        // Theme toggle button
+        ThemeToggle(),
         // Login component (shows/hides based on connection state)
         Login(context, player, welcomeMessage),
         // Main application layout with all docks

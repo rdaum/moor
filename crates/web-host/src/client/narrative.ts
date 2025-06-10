@@ -1430,9 +1430,7 @@ const HistoryIndicator = (context: Context): HTMLElement => {
 
     return div(
         {
-            class: van.derive(() =>
-                isVisible.val ? "history_indicator" : "history_indicator hidden"
-            ),
+            class: van.derive(() => isVisible.val ? "history_indicator" : "history_indicator hidden"),
         },
         span("You're looking at the past..."),
         button(

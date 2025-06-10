@@ -433,7 +433,7 @@ impl EventLog {
     fn update_presentation(&self, player: Obj, presentation: Presentation) {
         let presentation_id = presentation.id.clone();
         let mut presentations = self.presentations.lock().unwrap();
-        let player_presentations = presentations.entry(player).or_insert_with(HashMap::new);
+        let player_presentations = presentations.entry(player).or_default();
         player_presentations.insert(presentation_id.clone(), presentation);
 
         debug!(

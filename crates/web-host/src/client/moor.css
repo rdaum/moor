@@ -1,6 +1,6 @@
 /*
  * Moor Web Host CSS
- * A clean, organized stylesheet for the Moor web interface
+ * A clean, organized stylesheet with light/dark theme support
  */
 
 /* ====== FONTS & BASE STYLES ====== */
@@ -8,7 +8,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
 
 :root {
-  /* Color Palette */
+  /* Default theme: dark */
+
+  /* Color Palette - Dark Theme */
   --color-bg-base: #000;
   --color-bg-primary: #333;
   --color-bg-secondary: #1a1a1a;
@@ -16,7 +18,7 @@
   --color-bg-header: #3a3a3a;
   --color-bg-input: #555;
 
-  /* Text Colors */
+  /* Text Colors - Dark Theme */
   --color-text-primary: #fff;
   --color-text-secondary: #ccc;
   --color-text-header: #eee;
@@ -25,30 +27,85 @@
   --color-text-success: #00ff00;
   --color-text-historical: #999;
 
-  /* Border Colors */
+  /* Border Colors - Dark Theme */
   --color-border-light: #333;
   --color-border-medium: #444;
   --color-border-dark: #555;
 
-  /* Interactive Elements */
+  /* Interactive Elements - Dark Theme */
   --color-danger: #e74c3c;
   --color-button-primary: #5865f2;
+  --color-shadow: rgba(0, 0, 0, 0.3);
 
-  /* Spacing & Sizing */
+  /* Light Theme Colors - Will be applied with .light-theme class */
+  --light-color-bg-base: #f5f5f5;
+  --light-color-bg-primary: #ffffff;
+  --light-color-bg-secondary: #eaeaea;
+  --light-color-bg-tertiary: #e0e0e0;
+  --light-color-bg-header: #d0d0d0;
+  --light-color-bg-input: #f0f0f0;
+
+  --light-color-text-primary: #222;
+  --light-color-text-secondary: #555;
+  --light-color-text-header: #333;
+  --light-color-text-accent: #1a53ff;
+  --light-color-text-error: #d32f2f;
+  --light-color-text-success: #2e7d32;
+  --light-color-text-historical: #777;
+
+  --light-color-border-light: #ccc;
+  --light-color-border-medium: #aaa;
+  --light-color-border-dark: #888;
+
+  --light-color-danger: #f44336;
+  --light-color-button-primary: #3f51b5;
+  --light-color-shadow: rgba(0, 0, 0, 0.1);
+
+  /* Spacing & Sizing - Shared between themes */
   --space-xs: 0.15em;
   --space-sm: 0.25em;
   --space-md: 0.5em;
   --space-lg: 1em;
 
-  /* Border Radius */
+  /* Border Radius - Shared between themes */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
   --radius-pill: 20px;
 
-  /* Typography */
+  /* Typography - Shared between themes */
   --font-mono: 'Roboto Mono', monospace;
   --font-sans: 'Roboto', sans-serif;
+}
+
+/* Light Theme Class - Applied to body or other container */
+.light-theme {
+  /* Color Palette - Light Theme */
+  --color-bg-base: var(--light-color-bg-base);
+  --color-bg-primary: var(--light-color-bg-primary);
+  --color-bg-secondary: var(--light-color-bg-secondary);
+  --color-bg-tertiary: var(--light-color-bg-tertiary);
+  --color-bg-header: var(--light-color-bg-header);
+  --color-bg-input: var(--light-color-bg-input);
+
+  /* Text Colors - Light Theme */
+  --color-text-primary: var(--light-color-text-primary);
+  --color-text-secondary: var(--light-color-text-secondary);
+  --color-text-header: var(--light-color-text-header);
+  --color-text-accent: var(--light-color-text-accent);
+  --color-text-error: var(--light-color-text-error);
+  --color-text-success: var(--light-color-text-success);
+  --color-text-historical: var(--light-color-text-historical);
+
+  /* Border Colors - Light Theme */
+  --color-border-light: var(--light-color-border-light);
+  --color-border-medium: var(--light-color-border-medium);
+  --color-border-dark: var(--light-color-border-dark);
+
+  /* Interactive Elements - Light Theme */
+  --color-danger: var(--light-color-danger);
+  --color-button-primary: var(--light-color-button-primary);
+  --color-shadow: var(--light-color-shadow);
 }
 
 html, body {
@@ -56,6 +113,8 @@ html, body {
   height: 100%;
   overflow: hidden;
   background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .main {
@@ -518,4 +577,67 @@ html, body {
   cursor: pointer;
   font-size: 12px;
   font-family: var(--font-sans);
+}
+
+/* Theme toggle button - hidden by default, appears on hover */
+.theme-toggle-area {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 80px;
+  height: 80px;
+  z-index: 1100;
+  cursor: pointer;
+}
+
+/* Subtle indicator in the corner */
+.theme-toggle-area::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  opacity: 0.7;
+  transition: all 0.3s ease;
+  border: 1px solid var(--color-border-medium);
+}
+
+.theme-toggle-area:hover::after {
+  opacity: 0;
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 1100;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-pill);
+  padding: 0.5em 1em;
+  font-family: var(--font-sans);
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
+.theme-toggle-area:hover .theme-toggle,
+.theme-toggle:hover {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.theme-toggle:hover {
+  background-color: var(--color-bg-header);
 }
