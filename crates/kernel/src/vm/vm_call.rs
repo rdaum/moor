@@ -37,15 +37,15 @@ use moor_var::{List, Obj};
 use moor_var::{Var, v_int, v_obj};
 
 lazy_static! {
-    static ref LIST_SYM: Symbol = Symbol::mk("list");
-    static ref MAP_SYM: Symbol = Symbol::mk("map");
-    static ref STRING_SYM: Symbol = Symbol::mk("string");
-    static ref INTEGER_SYM: Symbol = Symbol::mk("integer");
-    static ref FLOAT_SYM: Symbol = Symbol::mk("float");
-    static ref ERROR_SYM: Symbol = Symbol::mk("error");
-    static ref BOOL_SYM: Symbol = Symbol::mk("boolean");
-    static ref SYM_SYM: Symbol = Symbol::mk("symbol");
-    static ref FLYWEIGHT_SYM: Symbol = Symbol::mk("flyweight");
+    static ref LIST_SYM: Symbol = Symbol::mk("list_proto");
+    static ref MAP_SYM: Symbol = Symbol::mk("map_proto");
+    static ref STRING_SYM: Symbol = Symbol::mk("str_proto");
+    static ref INTEGER_SYM: Symbol = Symbol::mk("int_proto");
+    static ref FLOAT_SYM: Symbol = Symbol::mk("float_proto");
+    static ref ERROR_SYM: Symbol = Symbol::mk("err_proto");
+    static ref BOOL_SYM: Symbol = Symbol::mk("bool_proto");
+    static ref SYM_SYM: Symbol = Symbol::mk("sym_proto");
+    static ref FLYWEIGHT_SYM: Symbol = Symbol::mk("flyweight_proto");
 }
 
 /// The set of parameters for a scheduler-requested *resolved* verb method dispatch.
