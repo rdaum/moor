@@ -16,11 +16,12 @@ use clap_derive::{Parser, ValueEnum};
 use moor_db::DatabaseConfig;
 use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig, ImportExportFormat};
 use moor_textdump::EncodingMode;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 #[allow(dead_code)]
-#[derive(Parser, Debug)] // requires `derive` feature
+#[derive(Parser, Debug, Serialize, Deserialize)] // requires `derive` feature
 pub struct Args {
     #[arg(
         value_name = "data-dir",
@@ -39,18 +40,11 @@ pub struct Args {
     #[command(flatten)]
     feature_args: Option<FeatureArgs>,
 
-    #[arg(
-        long,
-        value_name = "write-merged-config",
-        help = "If set, this is a path to write the current configuration (with merged values from command line arguments), in JSON format",
-        value_hint = ValueHint::FilePath
-    )]
-    pub write_merged_config: Option<PathBuf>,
 
     #[arg(
         long,
         value_name = "config",
-        help = "Path to configuration (json) file to use, if any. If not specified, defaults are used.\
+        help = "Path to configuration (YAML) file to use, if any. If not specified, defaults are used.\
                 Configuration file values can be overridden by command line arguments.",
         value_hint = ValueHint::FilePath
     )]
@@ -143,7 +137,7 @@ pub struct Args {
     pub debug: bool,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize, Deserialize)]
 pub struct FeatureArgs {
     /// Whether to allow notify() to send arbitrary MOO common to players. The interpretation of
     /// the common varies depending on host/client.
@@ -263,7 +257,7 @@ impl FeatureArgs {
 }
 
 /// Formats for import or export
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Default, Serialize, Deserialize)]
 pub enum Format {
     /// Traditional LambdaMOO textdump format
     #[default]
@@ -273,7 +267,7 @@ pub enum Format {
 }
 
 #[allow(dead_code)]
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize, Deserialize)]
 pub struct ImportExportArgs {
     #[arg(short, long, value_name = "import", help = "Path to a textdump or objdef directory to import", value_hint = ValueHint::FilePath)]
     pub import: Option<PathBuf>,
@@ -361,7 +355,7 @@ impl ImportExportArgs {
 }
 
 #[allow(dead_code)]
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize, Deserialize)]
 pub struct DatabaseArgs {
     #[arg(
         long,

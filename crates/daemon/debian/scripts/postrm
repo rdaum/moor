@@ -1,6 +1,6 @@
 #!/bin/sh
 
-MOOR_CONF=/etc/moor-daemon/config.json
+MOOR_CONF=/etc/moor/daemon-config.yaml
 
 case "$1" in
 purge)

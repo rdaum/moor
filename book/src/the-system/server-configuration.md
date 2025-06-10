@@ -60,19 +60,14 @@ configuration.
 
 ## Configuration File Format
 
-The configuration file uses JSON format. You can specify the path to your configuration file using the `--config-file`
-command-line argument. If you want to see what configuration is actually being used (after merging command-line
-arguments with the configuration file), you can use the `--write-merged-config` option to output the merged
-configuration to a file.
-
-// TODO: TOML format for the configuration file is planned for the future.
+The configuration file uses YAML format. You can specify the path to your configuration file using the `--config-file`
+command-line argument. Configuration file values can be overridden by command-line arguments.
 
 ## General Server Options
 
 These options control the basic server behavior:
 
-- `--config-file <PATH>`: Path to configuration (JSON) file to use. If not specified, defaults are used.
-- `--write-merged-config <PATH>`: Write the current merged configuration to a JSON file
+- `--config-file <PATH>`: Path to configuration (YAML) file to use. If not specified, defaults are used.
 - `--connections-file <PATH>` (default: `connections.db`): Path to connections database
 - `--tasks-db <PATH>` (default: `tasks.db`): Path to persistent tasks database
 - `--rpc-listen <ADDR>` (default: `ipc:///tmp/moor_rpc.sock`): RPC server address
@@ -128,32 +123,32 @@ These options control database import and export functionality:
 
 Here's an example configuration file:
 
-```json
-{
-  "database_config": {
-    "cache_eviction_interval": 300,
-    "default_eviction_threshold": 100000000
-  },
-  "features_config": {
-    "persistent_tasks": true,
-    "rich_notify": true,
-    "lexical_scopes": true,
-    "map_type": true,
-    "bool_type": true,
-    "symbol_type": true,
-    "type_dispatch": true,
-    "flyweight_type": true,
-    "list_comprehensions": true,
-    "use_boolean_returns": false,
-    "use_symbols_in_builtins": false,
-    "custom_errors": false
-  },
-  "import_export_config": {
-    "output_encoding": "UTF8",
-    "checkpoint_interval": 60,
-    "export_format": "Objdef"
-  }
-}
+```yaml
+# Database configuration
+database_config:
+  cache_eviction_interval: 300
+  default_eviction_threshold: 100000000
+
+# Language features configuration
+features_config:
+  persistent_tasks: true
+  rich_notify: true
+  lexical_scopes: true
+  map_type: true
+  bool_type: true
+  symbol_type: true
+  type_dispatch: true
+  flyweight_type: true
+  list_comprehensions: true
+  use_boolean_returns: false
+  use_symbols_in_builtins: false
+  custom_errors: false
+
+# Import/export configuration
+import_export_config:
+  output_encoding: "UTF8"
+  checkpoint_interval: "60s"
+  export_format: "Objdef"
 ```
 
 ## LambdaMOO Compatibility Mode
@@ -161,24 +156,23 @@ Here's an example configuration file:
 If you need to maintain compatibility with LambdaMOO 1.8, you'll need to disable several features. Here's a
 configuration that maintains LambdaMOO compatibility:
 
-```json
-{
-  "features_config": {
-    "persistent_tasks": true,
-    "rich_notify": false,
-    "lexical_scopes": false,
-    "map_type": false,
-    "bool_type": false,
-    "symbol_type": false,
-    "type_dispatch": false,
-    "flyweight_type": false,
-    "list_comprehensions": false,
-    "use_boolean_returns": false,
-    "use_symbols_in_builtins": false,
-    "custom_errors": false
-  },
-  "import_export_config": {
-    "output_encoding": "ISO8859_1"
-  }
-}
+```yaml
+# LambdaMOO 1.8 compatible features
+features_config:
+  persistent_tasks: true
+  rich_notify: false
+  lexical_scopes: false
+  map_type: false
+  bool_type: false
+  symbol_type: false
+  type_dispatch: false
+  flyweight_type: false
+  list_comprehensions: false
+  use_boolean_returns: false
+  use_symbols_in_builtins: false
+  custom_errors: false
+
+# LambdaMOO compatible import/export
+import_export_config:
+  output_encoding: "ISO8859_1"
 ```

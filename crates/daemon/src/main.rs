@@ -18,6 +18,8 @@ use std::fs::{File, OpenOptions};
 use crate::args::Args;
 use fs2::FileExt;
 use eyre::{eyre, bail};
+use figment::Figment;
+use figment::providers::{Format, Serialized, Yaml};
 
 // Helper functions for resolving database paths relative to data_dir
 impl Args {
@@ -86,7 +88,7 @@ use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_objdef::ObjectDefinitionLoader;
 use moor_textdump::textdump_load;
 use rpc_common::load_keypair;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 mod args;
@@ -188,7 +190,14 @@ fn main() -> Result<(), Report> {
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
 
-    let args: Args = Args::parse();
+    let cli_args: Args = Args::parse();
+    let config_file = cli_args.config_file.clone();
+    let mut args_figment = Figment::new().merge(Serialized::defaults(cli_args));
+    if let Some(config_file) = config_file {
+        args_figment = args_figment.merge(Yaml::file(config_file));
+    }
+    let args = args_figment.extract::<Args>()
+        .map_err(|e| eyre!("Unable to parse configuration: {}", e))?;
 
     let main_subscriber = tracing_subscriber::fmt()
         .compact()
@@ -219,25 +228,14 @@ fn main() -> Result<(), Report> {
         );
     };
 
-    let config = match args.config_file.as_ref() {
-        Some(path) => {
-            let file = std::fs::File::open(path)
-                .map_err(|e| eyre!("Unable to open config file {}: {}", path.display(), e))?;
-
-            serde_json::from_reader(file)
-                .map_err(|e| eyre!("Unable to parse config file {}: {}", path.display(), e))?
-        }
-        None => Default::default(),
-    };
-    let config = Arc::new(args.merge_config(config));
-
-    if let Some(write_config) = args.write_merged_config.as_ref() {
-        let merged_config_json = serde_json::to_string_pretty(config.as_ref())
-            .map_err(|e| eyre!("Unable to serialize config: {}", e))?;
-        debug!("Merged config: {}", merged_config_json);
-        std::fs::write(write_config, &merged_config_json)
-            .map_err(|e| eyre!("Unable to write merged config to {}: {}", write_config.display(), e))?;
+    // Load core moor config using figment, merging from config file and CLI args
+    let mut config_figment = Figment::new().merge(Serialized::defaults(moor_kernel::config::Config::default()));
+    if let Some(config_file) = args.config_file.as_ref() {
+        config_figment = config_figment.merge(Yaml::file(config_file).nested());
     }
+    let base_config = config_figment.extract::<moor_kernel::config::Config>()
+        .unwrap_or_default();
+    let config = Arc::new(args.merge_config(base_config));
 
     // Acquire exclusive lock on the data directory to prevent multiple daemon instances
     let _data_dir_lock = acquire_data_directory_lock(&args.data_dir)?;

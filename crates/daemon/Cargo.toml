@@ -24,7 +24,7 @@ assets = [
         "/lib/systemd/system/moor-daemon.service",
         "644",
     ],
-    ["debian/moor-daemon-config.json", "/etc/moor/daemon-config.json", "644"],
+    ["debian/moor-daemon-config.yaml", "/etc/moor/daemon-config.yaml", "644"],
 ]
 maintainer-scripts = "debian/scripts"
 systemd-units = { enable = false }
@@ -55,9 +55,11 @@ signal-hook.workspace = true
 # Command Line & Configuration
 clap.workspace = true
 clap_derive.workspace = true
+figment.workspace = true
 
 # Serialization & Data Formats
 bincode.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 # Database & Persistence
