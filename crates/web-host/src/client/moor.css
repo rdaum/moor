@@ -112,49 +112,63 @@ html, body {
     min-height: min-content;
     flex-grow: 1;
     margin: 0.5em;
-    padding: 0.5em;
+    padding: 0;
     background-color: #444;
     color: white;
-    border-radius: 10px;
+    border-radius: 6px;
     font-family: 'Roboto', sans-serif;
+    border: 1px solid #555;
 
     overflow-y: auto;
-
     resize: vertical;
+}
+
+.right_dock_panel_content {
+    padding: 0.5em;
 }
 
 /* title for each panel entry */
 .right_dock_panel_title {
     font-family: 'Roboto', sans-serif;
-    font-size: 1.0em;
-    font-weight: bold;
-    margin: 0.5em;
+    font-size: 0.9em;
+    font-weight: normal;
+    margin: 0;
+    padding: 0.3em 0.5em;
 
-    /* vertical-center the text inside */
-    vertical-align: top;
+    /* horizontal layout with close button on left, title on right */
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
 
-    /* should take up the full width */
-    display: inline-flex;
-    width: 90%;
-
-    /* dark on light background, rounded corners */
-    background-color: #aaa;
-    color: black;
-    border-radius: 10px;
-    padding: 0.5em;
-}
-
-/* there's an X button, just lightly pad it out mildly and darken up the background */
-.right_dock_panel_close {
+    /* subtle background like a window title bar */
     background-color: #666;
     color: white;
-    border-radius: 5px;
-    padding: 0.2em;
-    margin: 0.2em 0.8em 0.2em 0.2em;
-    vertical-align: center;
+    border-radius: 6px 6px 0 0;
+    border-bottom: 1px solid #555;
+    overflow: hidden;
+}
 
-    /* font is smaller */
-    font-size: 0.8em;
+/* close button - more like standard window controls */
+.right_dock_panel_close {
+    background-color: transparent;
+    color: #ccc;
+    border: none;
+    border-radius: 3px;
+    padding: 0.25em 0.5em;
+    margin: 0 0 0 -0.2em;
+    font-size: 0.85em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    min-width: 1.4em;
+    text-align: center;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.right_dock_panel_close:hover {
+    background-color: #e74c3c;
+    color: white;
 }
 
 .output_window {
@@ -265,10 +279,54 @@ html, body {
 
 .presentation_window {
     font-family: 'Roboto', sans-serif;
+    border: 1px solid #555;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .presentation_window_content {
     font-family: 'Roboto', sans-serif;
+    background-color: #444;
+    color: white;
+    padding: 0.5em;
+    border-radius: 0 0 6px 6px;
+}
+
+/* Floating window title bar styling */
+.presentation_window .window-title-bar {
+    background-color: #666;
+    color: white;
+    padding: 0.3em 0.5em;
+    font-size: 0.9em;
+    font-weight: normal;
+    border-radius: 6px 6px 0 0;
+    border-bottom: 1px solid #555;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    overflow: hidden;
+}
+
+.presentation_window .window-close-button {
+    background-color: transparent;
+    color: #ccc;
+    border: none;
+    border-radius: 3px;
+    padding: 0.25em 0.5em;
+    margin: 0 0 0 -0.2em;
+    font-size: 0.85em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    min-width: 1.4em;
+    text-align: center;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.presentation_window .window-close-button:hover {
+    background-color: #e74c3c;
+    color: white;
 }
 
 .input_echo {

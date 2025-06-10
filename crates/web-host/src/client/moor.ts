@@ -68,11 +68,11 @@ const RightDock = (context: Context) => {
                     id: presentationId,
                     class: "right_dock_panel",
                 },
-                span(
+                div(
                     {
                         class: "right_dock_panel_title",
                     },
-                    span(
+                    button(
                         {
                             class: "right_dock_panel_close",
                             onclick: () => {
@@ -81,11 +81,16 @@ const RightDock = (context: Context) => {
                                 handleUserClosePresentation(context, presentationId);
                             },
                         },
-                        "X",
+                        "×",
                     ),
                     van.derive(() => presentation.val.attrs["title"] || presentationId),
                 ),
-                presentation.val.content,
+                div(
+                    {
+                        class: "right_dock_panel_content",
+                    },
+                    presentation.val.content,
+                ),
             ));
         }
     });
