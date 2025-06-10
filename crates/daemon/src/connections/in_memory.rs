@@ -19,7 +19,6 @@ use eyre::{Error, bail};
 use moor_common::tasks::SessionError;
 use moor_var::{Obj, Symbol};
 use rpc_common::RpcMessageError;
-use tracing::info;
 use uuid::Uuid;
 
 use crate::connections::persistence::{
@@ -101,10 +100,6 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
             bail!("No connection found for {:?}", connection_obj);
         };
 
-        info!(
-            "Associating connection {:?} to player {:?}",
-            connection_obj, player_obj
-        );
         let mut client_changes = ClientMappingChanges::new();
         let mut player_changes = PlayerConnectionChanges::new();
 

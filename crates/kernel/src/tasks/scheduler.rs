@@ -1695,9 +1695,7 @@ impl TaskQ {
             return;
         };
         let result = result.map(|v| TaskResult::Result(v.clone()));
-        if result_sender.send((task_id, result)).is_err() {
-            error!("Notify to task {} failed", task_id);
-        }
+        result_sender.send((task_id, result)).ok();
     }
 
     fn retry_task(

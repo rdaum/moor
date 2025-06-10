@@ -944,7 +944,6 @@ impl RpcServer {
                 Ok(DaemonToClientReply::PresentationDismissed)
             }
             HostClientToDaemonMessage::Detach(token) => {
-                info!(?client_id, "Detaching client");
                 let _connection = self.client_auth(token, client_id)?;
 
                 // Submit disconnected only if there's a logged-in player
@@ -1995,7 +1994,7 @@ impl RpcServer {
                     all_events
                 };
                 (events, total_available, has_more)
-            },
+            }
             HistoryRecall::UntilEvent(until_id, limit) => {
                 let all_events = self
                     .event_log
@@ -2015,7 +2014,7 @@ impl RpcServer {
                     all_events
                 };
                 (events, total_available, has_more)
-            },
+            }
             HistoryRecall::SinceSeconds(seconds_ago, limit) => {
                 let all_events = self
                     .event_log
@@ -2035,7 +2034,7 @@ impl RpcServer {
                     all_events
                 };
                 (events, total_available, has_more)
-            },
+            }
             HistoryRecall::None => (Vec::new(), 0, false),
         };
 
@@ -2072,7 +2071,10 @@ impl RpcServer {
         let (earliest_event_id, latest_event_id) = if historical_events.is_empty() {
             (None, None)
         } else {
-            let mut event_ids: Vec<_> = historical_events.iter().map(|e| e.event.event_id()).collect();
+            let mut event_ids: Vec<_> = historical_events
+                .iter()
+                .map(|e| e.event.event_id())
+                .collect();
             event_ids.sort(); // UUIDs sort chronologically
             (Some(event_ids[0]), Some(event_ids[event_ids.len() - 1]))
         };
