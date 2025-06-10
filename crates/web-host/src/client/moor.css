@@ -1,716 +1,521 @@
-/* bring in roboto mono font */
+/*
+ * Moor Web Host CSS
+ * A clean, organized stylesheet for the Moor web interface
+ */
+
+/* ====== FONTS & BASE STYLES ====== */
 @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap');
-/* and proportional */
 @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
 
+:root {
+  /* Color Palette */
+  --color-bg-base: #000;
+  --color-bg-primary: #333;
+  --color-bg-secondary: #1a1a1a;
+  --color-bg-tertiary: #2a2a2a;
+  --color-bg-header: #3a3a3a;
+  --color-bg-input: #555;
+
+  /* Text Colors */
+  --color-text-primary: #fff;
+  --color-text-secondary: #ccc;
+  --color-text-header: #eee;
+  --color-text-accent: #4169E1;
+  --color-text-error: #cc0000;
+  --color-text-success: #00ff00;
+  --color-text-historical: #999;
+
+  /* Border Colors */
+  --color-border-light: #333;
+  --color-border-medium: #444;
+  --color-border-dark: #555;
+
+  /* Interactive Elements */
+  --color-danger: #e74c3c;
+  --color-button-primary: #5865f2;
+
+  /* Spacing & Sizing */
+  --space-xs: 0.15em;
+  --space-sm: 0.25em;
+  --space-md: 0.5em;
+  --space-lg: 1em;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 20px;
+
+  /* Typography */
+  --font-mono: 'Roboto Mono', monospace;
+  --font-sans: 'Roboto', sans-serif;
+}
+
 html, body {
-    margin: 0;
-    height: 100%;
-    overflow: hidden;
-    background-color: #000;
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-bg-base);
 }
 
 .main {
-    font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
 }
 
-.login_window {
-    width: 800px;
-
-    /* put me right in the middle of the screen */
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-
-    background-color: #444;
-    color: white;
-    border-radius: 10px;
-    padding: 1.0em;
-    margin: 1.0em;
-    /* proportional font */
-    font-family: 'Roboto', sans-serif;
-
-    resize: both;
-    overflow: hidden;
-    border: 1px solid;
-    display: inline-flex;
-}
-
-.welcome_box {
-    background-color: #333;
-    color: white;
-    border-radius: 10px;
-    padding: 1.0em;
-    margin: 1.0em;
-    overflow: auto;
-    font-family: 'Roboto', sans-serif;
-}
-
-.login_prompt {
-    background-color: #333;
-    color: white;
-    border-radius: 10px;
-    padding: 1.0em;
-    margin: 1.0em;
-    font-family: 'Roboto', sans-serif;
-}
-
-/* Main application layout with all docks */
+/* ====== LAYOUT STRUCTURE ====== */
 .app_layout {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
 }
 
-/* Middle section containing left dock, narrative, and right dock */
 .middle_section {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: row;
-    flex-grow: 1;
-    min-height: 0; /* Allow shrinking */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  flex-grow: 1;
+  min-height: 0; /* Allow shrinking */
 }
 
-/* Legacy support - container div for two panes, narrative (majority) and right-panel */
 .columns_grid {
-    width: 100%;
-    height: 100%;
-
-    display: inline-flex;
-
-    /* expand to fill the space */
-    flex-grow: 1;
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  flex-grow: 1;
 }
 
-/* this one is the main container for the narrative */
+/* ====== NARRATIVE AREA ====== */
 .narrative {
-    background-color: #333;
-    color: white;
-    border-radius: 10px;
-    padding: 1.0em;
-    margin: 1.0em 0.25em;
-    position: relative; /* Enable absolute positioning for child elements */
-
-    font-family: 'Roboto', sans-serif;
-
-    overflow-y: scroll;
-
-    min-width: 50%;
-
-    height: calc(100% - 4em);
-    resize: horizontal;
-
-    width: 100%;
+  position: relative;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin: var(--space-lg) var(--space-sm);
+  font-family: var(--font-sans);
+  overflow-y: scroll;
+  min-width: 50%;
+  height: calc(100% - 4em);
+  resize: horizontal;
+  width: 100%;
 }
 
-/* Right dock - on the right side of the narrative */
-.right_dock {
-    background-color: #1a1a1a;
-    color: #ccc;
-    border-radius: 8px;
-    padding: 0.2em;
-    margin: 1.0em 1.0em 1.0em 0.25em;
-    border: 1px solid #333;
-
-    font-family: 'Roboto', sans-serif;
-
-    overflow-y: auto;
-
-    /* should expand to fill the space */
-    flex-grow: 1;
-    min-width: 20em;
-
-    /* starts out hidden and will only display when we put content into it */
-    display: none;
-}
-
-/* Left dock - on the left side of the narrative */
-.left_dock {
-    background-color: #1a1a1a;
-    color: #ccc;
-    border-radius: 8px;
-    padding: 0.2em;
-    margin: 1.0em 0.25em 1.0em 1.0em;
-    border: 1px solid #333;
-
-    font-family: 'Roboto', sans-serif;
-
-    overflow-y: auto;
-
-    /* should expand to fill the space */
-    flex-grow: 1;
-    min-width: 20em;
-    resize: horizontal;
-
-    /* starts out hidden and will only display when we put content into it */
-    display: none;
-}
-
-/* Top dock - above the middle section */
-.top_dock {
-    background-color: #1a1a1a;
-    color: #ccc;
-    border-radius: 8px;
-    padding: 1.0em;
-    margin: 1.0em 1.0em 0.25em 1.0em;
-    border: 1px solid #333;
-
-    font-family: 'Roboto', sans-serif;
-
-    overflow-x: auto;
-    overflow-y: hidden;
-
-    /* horizontal layout for top/bottom docks - panels flow left to right */
-    display: none;
-    flex-direction: row;
-    max-height: 15em;
-    min-height: 10em;
-    resize: vertical;
-    gap: 0.5em;
-}
-
-/* Bottom dock - below the middle section */
-.bottom_dock {
-    background-color: #1a1a1a;
-    color: #ccc;
-    border-radius: 8px;
-    padding: 1.0em;
-    margin: 0.25em 1.0em 1.0em 1.0em;
-    border: 1px solid #333;
-
-    font-family: 'Roboto', sans-serif;
-
-    overflow-x: auto;
-    overflow-y: hidden;
-
-    /* horizontal layout for top/bottom docks - panels flow left to right */
-    display: none;
-    flex-direction: row;
-    max-height: 15em;
-    min-height: 10em;
-    resize: none; /* Disable resize for now to fix handle position issue */
-    gap: 0.5em;
-}
-
-
-/* vertically stacked divs that live in the right_dock */
-.right_dock_panel {
-    min-height: min-content;
-    flex-grow: 1;
-    margin: 0.2em;
-    padding: 0;
-    background-color: #2a2a2a;
-    color: #ddd;
-    border-radius: 6px;
-    font-family: 'Roboto', sans-serif;
-    border: 1px solid #444;
-
-    overflow-y: auto;
-    resize: vertical;
-}
-
-.right_dock_panel_content {
-    padding: 0.15em 0.3em;
-}
-
-/* Left dock panels - same styling as right dock */
-.left_dock_panel {
-    min-height: min-content;
-    flex-grow: 1;
-    margin: 0.2em;
-    padding: 0;
-    background-color: #2a2a2a;
-    color: #ddd;
-    border-radius: 6px;
-    font-family: 'Roboto', sans-serif;
-    border: 1px solid #444;
-
-    overflow-y: auto;
-    resize: vertical;
-}
-
-.left_dock_panel_content {
-    padding: 0.15em 0.3em;
-}
-
-.left_dock_panel_title {
-    font-family: 'Roboto', sans-serif;
-    font-size: 0.9em;
-    font-weight: normal;
-    margin: 0;
-    padding: 0.3em 0.5em;
-
-    /* horizontal layout with close button on left, title on right */
-    display: flex;
-    align-items: center;
-    gap: 0.4em;
-
-    /* subtle background like a window title bar */
-    background-color: #3a3a3a;
-    color: #eee;
-    border-radius: 6px 6px 0 0;
-    border-bottom: 1px solid #333;
-    overflow: hidden;
-}
-
-.left_dock_panel_close {
-    background-color: transparent;
-    color: #ccc;
-    border: none;
-    border-radius: 3px;
-    padding: 0.25em 0.5em;
-    margin: 0 0 0 -0.2em;
-    font-size: 0.85em;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    min-width: 1.4em;
-    text-align: center;
-    line-height: 1;
-    flex-shrink: 0;
-}
-
-.left_dock_panel_close:hover {
-    background-color: #e74c3c;
-    color: white;
-}
-
-/* Top dock panels - horizontal layout */
-.top_dock_panel {
-    min-width: 20em;
-    max-width: 30em;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    background-color: #2a2a2a;
-    color: #ddd;
-    border-radius: 6px;
-    font-family: 'Roboto', sans-serif;
-    border: 1px solid #444;
-    flex-shrink: 0;
-
-    overflow: auto;
-    resize: horizontal;
-    display: flex;
-    flex-direction: column;
-}
-
-.top_dock_panel_content {
-    padding: 0.15em 0.3em;
-    flex-grow: 1;
-    overflow: auto;
-}
-
-.top_dock_panel_title {
-    font-family: 'Roboto', sans-serif;
-    font-size: 0.9em;
-    font-weight: normal;
-    margin: 0;
-    padding: 0.3em 0.5em;
-
-    /* horizontal layout with close button on left, title on right */
-    display: flex;
-    align-items: center;
-    gap: 0.4em;
-
-    /* subtle background like a window title bar */
-    background-color: #3a3a3a;
-    color: #eee;
-    border-radius: 6px 6px 0 0;
-    border-bottom: 1px solid #333;
-    overflow: hidden;
-    flex-shrink: 0;
-}
-
-.top_dock_panel_close {
-    background-color: transparent;
-    color: #ccc;
-    border: none;
-    border-radius: 3px;
-    padding: 0.25em 0.5em;
-    margin: 0 0 0 -0.2em;
-    font-size: 0.85em;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    min-width: 1.4em;
-    text-align: center;
-    line-height: 1;
-    flex-shrink: 0;
-}
-
-.top_dock_panel_close:hover {
-    background-color: #e74c3c;
-    color: white;
-}
-
-/* Bottom dock panels - horizontal layout */
-.bottom_dock_panel {
-    min-width: 20em;
-    max-width: 30em;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    background-color: #2a2a2a;
-    color: #ddd;
-    border-radius: 6px;
-    font-family: 'Roboto', sans-serif;
-    border: 1px solid #444;
-    flex-shrink: 0;
-
-    overflow: auto;
-    resize: horizontal;
-    display: flex;
-    flex-direction: column;
-}
-
-.bottom_dock_panel_content {
-    padding: 0.15em 0.3em;
-    flex-grow: 1;
-    overflow: auto;
-}
-
-.bottom_dock_panel_title {
-    font-family: 'Roboto', sans-serif;
-    font-size: 0.9em;
-    font-weight: normal;
-    margin: 0;
-    padding: 0.3em 0.5em;
-
-    /* horizontal layout with close button on left, title on right */
-    display: flex;
-    align-items: center;
-    gap: 0.4em;
-
-    /* subtle background like a window title bar */
-    background-color: #3a3a3a;
-    color: #eee;
-    border-radius: 6px 6px 0 0;
-    border-bottom: 1px solid #333;
-    overflow: hidden;
-    flex-shrink: 0;
-}
-
-.bottom_dock_panel_close {
-    background-color: transparent;
-    color: #ccc;
-    border: none;
-    border-radius: 3px;
-    padding: 0.25em 0.5em;
-    margin: 0 0 0 -0.2em;
-    font-size: 0.85em;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    min-width: 1.4em;
-    text-align: center;
-    line-height: 1;
-    flex-shrink: 0;
-}
-
-.bottom_dock_panel_close:hover {
-    background-color: #e74c3c;
-    color: white;
-}
-
-/* title for each panel entry */
-.right_dock_panel_title {
-    font-family: 'Roboto', sans-serif;
-    font-size: 0.9em;
-    font-weight: normal;
-    margin: 0;
-    padding: 0.3em 0.5em;
-
-    /* horizontal layout with close button on left, title on right */
-    display: flex;
-    align-items: center;
-    gap: 0.4em;
-
-    /* subtle background like a window title bar */
-    background-color: #3a3a3a;
-    color: #eee;
-    border-radius: 6px 6px 0 0;
-    border-bottom: 1px solid #333;
-    overflow: hidden;
-}
-
-/* close button - more like standard window controls */
-.right_dock_panel_close {
-    background-color: transparent;
-    color: #ccc;
-    border: none;
-    border-radius: 3px;
-    padding: 0.25em 0.5em;
-    margin: 0 0 0 -0.2em;
-    font-size: 0.85em;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    min-width: 1.4em;
-    text-align: center;
-    line-height: 1;
-    flex-shrink: 0;
-}
-
-.right_dock_panel_close:hover {
-    background-color: #e74c3c;
-    color: white;
-}
-
-.output_window {
-    background-color: #333;
-    color: white;
-    overflow: auto;
-    word-wrap: break-word;
-    margin: 0.5em;
-    font-family: 'Roboto Mono', monospace;
-
-    /* i should centre relative to parent ... */
-    align-self: center;
-
-    /* round out the top corners */
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-}
-
+/* Text styles within narrative */
 .text_narrative {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 1em;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    overflow: auto;
-    padding: 0.0em;
-    margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: auto;
+  padding: 0;
+  margin: 0;
 }
 
 .system_message_narrative {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 1em;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    overflow: auto;
-    padding: 0.0em;
-    margin: 0;
-    /* emp with a little blue-osity */
-    color: #4169E1;
+  font-family: var(--font-mono);
+  font-size: 1em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: auto;
+  padding: 0;
+  margin: 0;
+  color: var(--color-text-accent);
 }
 
 .traceback_narrative {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 1em;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    overflow: auto;
-    padding: 0.0em;
-    margin: 0;
-    /* emp with a little redness */
-    color: #cc0000;
-}
-
-.input_area {
-    background-color: #555;
-    color: white;
-    font-family: 'Roboto Mono', monospace;
-    padding: 0.5em;
-    margin: 0;
-    width: 100%;
-    border: none;
-    border-bottom-left-radius: 10px;
-    border-bottom-right-radius: 10px;
-
-    resize: vertical;
-    overflow: auto;
-}
-
-.message_board {
-    background-color: #555;
-    color: white;
-    border-radius: 10px;
-    padding: 1.0em;
-    margin: 1.0em;
-    /* proportional font */
-    font-family: 'Roboto', sans-serif;
-
-    /* pinned to top of page, and centred horizontally and sized to the width of its internal text content
-     */
-    position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: auto;
-}
-
-.editor_container {
-    background-color: #555;
-    color: white;
-    border-radius: 10px;
-    font-family: 'Roboto', sans-serif;
-}
-
-.verb_compile_errors {
-    /* proportional font */
-    font-family: 'Roboto', sans-serif;
-    width: 100%;
-    /* word wrap on horizontal overflow */
-
-    word-break-wrap: break-word;
-    overflow: auto;;
-    word-break: normal;
-    white-space: pre-wrap;
-
-    /* scroll bars if needed */
-    scrollbar-width: thin;
-    scrollbar-color: #444 #555;
-}
-
-.presentation_window {
-    font-family: 'Roboto', sans-serif;
-    border: 1px solid #555;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.presentation_window_content {
-    font-family: 'Roboto', sans-serif;
-    background-color: #444;
-    color: white;
-    padding: 0.5em;
-    border-radius: 0 0 6px 6px;
-}
-
-/* Floating window title bar styling */
-.presentation_window .window-title-bar {
-    background-color: #666;
-    color: white;
-    padding: 0.3em 0.5em;
-    font-size: 0.9em;
-    font-weight: normal;
-    border-radius: 6px 6px 0 0;
-    border-bottom: 1px solid #555;
-    display: flex;
-    align-items: center;
-    gap: 0.4em;
-    overflow: hidden;
-}
-
-.presentation_window .window-close-button {
-    background-color: transparent;
-    color: #ccc;
-    border: none;
-    border-radius: 3px;
-    padding: 0.25em 0.5em;
-    margin: 0 0 0 -0.2em;
-    font-size: 0.85em;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    min-width: 1.4em;
-    text-align: center;
-    line-height: 1;
-    flex-shrink: 0;
-}
-
-.presentation_window .window-close-button:hover {
-    background-color: #e74c3c;
-    color: white;
+  font-family: var(--font-mono);
+  font-size: 1em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: auto;
+  padding: 0;
+  margin: 0;
+  color: var(--color-text-error);
 }
 
 .input_echo {
-    font-family: 'Roboto Mono', monospace;
-    white-space: pre-wrap;
-    color: #00ff00;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  color: var(--color-text-success);
 }
 
-/* Historical events styling - lighter, muted appearance */
+/* ====== DOCK CONTAINERS ====== */
+/* Common dock styles */
+.right_dock,
+.left_dock {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs);
+  border: 1px solid var(--color-border-light);
+  font-family: var(--font-sans);
+  overflow-y: auto;
+  flex-grow: 1;
+  min-width: 20em;
+  display: none; /* starts hidden */
+}
+
+.right_dock {
+  margin: var(--space-lg) var(--space-lg) var(--space-lg) var(--space-sm);
+}
+
+.left_dock {
+  margin: var(--space-lg) var(--space-sm) var(--space-lg) var(--space-lg);
+  resize: horizontal;
+}
+
+.top_dock,
+.bottom_dock {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  border: 1px solid var(--color-border-light);
+  font-family: var(--font-sans);
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: none; /* starts hidden */
+  flex-direction: row;
+  max-height: 15em;
+  min-height: 10em;
+  gap: var(--space-md);
+}
+
+.top_dock {
+  margin: var(--space-lg) var(--space-lg) var(--space-sm) var(--space-lg);
+  resize: vertical;
+}
+
+.bottom_dock {
+  margin: var(--space-sm) var(--space-lg) var(--space-lg) var(--space-lg);
+  resize: none; /* Disable resize for now to fix handle position issue */
+}
+
+/* ====== DOCK PANELS ====== */
+/* Common panel styles */
+.right_dock_panel,
+.left_dock_panel {
+  min-height: min-content;
+  flex-grow: 1;
+  margin: var(--space-sm);
+  padding: 0;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  border: 1px solid var(--color-border-medium);
+  overflow-y: auto;
+  resize: vertical;
+}
+
+.right_dock_panel_content,
+.left_dock_panel_content {
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.top_dock_panel,
+.bottom_dock_panel {
+  min-width: 20em;
+  max-width: 30em;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  border: 1px solid var(--color-border-medium);
+  flex-shrink: 0;
+  overflow: auto;
+  resize: horizontal;
+  display: flex;
+  flex-direction: column;
+}
+
+.top_dock_panel_content,
+.bottom_dock_panel_content {
+  padding: var(--space-xs) var(--space-sm);
+  flex-grow: 1;
+  overflow: auto;
+}
+
+/* Panel titles */
+.right_dock_panel_title,
+.left_dock_panel_title,
+.top_dock_panel_title,
+.bottom_dock_panel_title {
+  font-family: var(--font-sans);
+  font-size: 0.9em;
+  font-weight: normal;
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  background-color: var(--color-bg-header);
+  color: var(--color-text-header);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-bottom: 1px solid var(--color-border-light);
+  overflow: hidden;
+}
+
+.top_dock_panel_title,
+.bottom_dock_panel_title {
+  flex-shrink: 0;
+}
+
+/* Close buttons */
+.right_dock_panel_close,
+.left_dock_panel_close,
+.top_dock_panel_close,
+.bottom_dock_panel_close {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  border-radius: 3px;
+  padding: var(--space-sm) var(--space-md);
+  margin: 0 0 0 -0.2em;
+  font-size: 0.85em;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 1.4em;
+  text-align: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.right_dock_panel_close:hover,
+.left_dock_panel_close:hover,
+.top_dock_panel_close:hover,
+.bottom_dock_panel_close:hover {
+  background-color: var(--color-danger);
+  color: var(--color-text-primary);
+}
+
+/* ====== OUTPUT & INPUT AREAS ====== */
+.output_window {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  overflow: auto;
+  word-wrap: break-word;
+  margin: var(--space-md);
+  font-family: var(--font-mono);
+  align-self: center;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+
+.input_area {
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  padding: var(--space-md);
+  margin: 0;
+  width: 100%;
+  border: none;
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+  resize: vertical;
+  overflow: auto;
+}
+
+/* ====== WINDOWS & DIALOGS ====== */
+.login_window {
+  width: 800px;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin: var(--space-lg);
+  font-family: var(--font-sans);
+  resize: both;
+  overflow: hidden;
+  border: 1px solid;
+  display: inline-flex;
+}
+
+.welcome_box,
+.login_prompt {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin: var(--space-lg);
+  font-family: var(--font-sans);
+}
+
+.welcome_box {
+  overflow: auto;
+}
+
+.message_board {
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin: var(--space-lg);
+  font-family: var(--font-sans);
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+}
+
+/* ====== PRESENTATION WINDOWS ====== */
+.presentation_window {
+  font-family: var(--font-sans);
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.presentation_window_content {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+  padding: var(--space-md);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.presentation_window .window-title-bar {
+  background-color: #666;
+  color: var(--color-text-primary);
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.9em;
+  font-weight: normal;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-bottom: 1px solid var(--color-border-dark);
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  overflow: hidden;
+}
+
+.presentation_window .window-close-button {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  border-radius: 3px;
+  padding: var(--space-sm) var(--space-md);
+  margin: 0 0 0 -0.2em;
+  font-size: 0.85em;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 1.4em;
+  text-align: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.presentation_window .window-close-button:hover {
+  background-color: var(--color-danger);
+  color: var(--color-text-primary);
+}
+
+/* ====== EDITOR COMPONENTS ====== */
+.editor_container {
+  background-color: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-sans);
+}
+
+.verb_compile_errors {
+  font-family: var(--font-sans);
+  width: 100%;
+  word-break-wrap: break-word;
+  overflow: auto;
+  word-break: normal;
+  white-space: pre-wrap;
+  scrollbar-width: thin;
+  scrollbar-color: #444 var(--color-bg-input);
+}
+
+/* ====== HISTORICAL CONTENT ====== */
+/* Historical events - lighter, muted appearance */
 .historical_narrative {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 1em;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    overflow: auto;
-    padding: 0.0em;
-    margin: 0;
-    color: #999999; /* Lighter gray for historical events */
-    opacity: 0.8; /* Slightly transparent */
+  font-family: var(--font-mono);
+  font-size: 1em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: auto;
+  padding: 0;
+  margin: 0;
+  color: var(--color-text-historical);
+  opacity: 0.8;
 }
 
-.historical_djot {
-    color: #999999;
-    opacity: 0.8;
-}
-
+.historical_djot,
 .historical_html {
-    color: #999999;
-    opacity: 0.8;
+  color: var(--color-text-historical);
+  opacity: 0.8;
 }
 
-/* Live events styling - keep original appearance */
+/* Live events - normal appearance */
 .live_narrative {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 1em;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    overflow: auto;
-    padding: 0.0em;
-    margin: 0;
-    color: white; /* Original bright color for live events */
+  font-family: var(--font-mono);
+  font-size: 1em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: auto;
+  padding: 0;
+  margin: 0;
+  color: var(--color-text-primary);
 }
 
-.live_djot {
-    /* Inherits normal styling */
-}
-
-.live_html {
-    /* Inherits normal styling */
-}
-
-/* Visual separator between historical and live events */
+/* History separator */
 .history_separator {
-    font-family: 'Roboto', sans-serif;
-    font-size: 0.9em;
-    text-align: center;
-    color: #4169E1; /* Blue color similar to system messages */
-    padding: 0.5em 0;
-    margin: 0.5em 0;
-    border-top: 1px solid #4169E1;
-    border-bottom: 1px solid #4169E1;
-    background-color: rgba(65, 105, 225, 0.1); /* Very light blue background */
+  font-family: var(--font-sans);
+  font-size: 0.9em;
+  text-align: center;
+  color: var(--color-text-accent);
+  padding: var(--space-md) 0;
+  margin: var(--space-md) 0;
+  border-top: 1px solid var(--color-text-accent);
+  border-bottom: 1px solid var(--color-text-accent);
+  background-color: rgba(65, 105, 225, 0.1);
 }
 
-/* History indicator - "Jump to Now" button that appears when viewing history */
+/* History indicator - "Jump to Now" button */
 .history_indicator {
-    display: flex;
-    position: sticky;
-    top: 10px;
-    width: fit-content;
-    margin: 0 auto 10px auto;
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 8px 16px;
-    border-radius: 20px;
-    z-index: 1000;
-    align-items: center;
-    gap: 10px;
-    font-size: 14px;
-    pointer-events: auto;
-    font-family: 'Roboto', sans-serif;
+  display: flex;
+  position: sticky;
+  top: 10px;
+  width: fit-content;
+  margin: 0 auto 10px auto;
+  background: rgba(0, 0, 0, 0.9);
+  color: var(--color-text-primary);
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  z-index: 1000;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  pointer-events: auto;
+  font-family: var(--font-sans);
 }
 
 .history_indicator.hidden {
-    display: none;
+  display: none;
 }
 
 .history_indicator button {
-    background: #5865f2;
-    color: white;
-    border: none;
-    padding: 4px 12px;
-    border-radius: 12px;
-    cursor: pointer;
-    font-size: 12px;
-    font-family: 'Roboto', sans-serif;
+  background: var(--color-button-primary);
+  color: var(--color-text-primary);
+  border: none;
+  padding: 4px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-sans);
 }
