@@ -22,6 +22,14 @@ use std::sync::Arc;
 #[allow(dead_code)]
 #[derive(Parser, Debug)] // requires `derive` feature
 pub struct Args {
+    #[arg(
+        value_name = "data-dir",
+        help = "Directory to store all database files under",
+        value_hint = ValueHint::DirPath,
+        default_value = "./moor-data"
+    )]
+    pub data_dir: PathBuf,
+
     #[command(flatten)]
     pub db_args: DatabaseArgs,
 
@@ -52,9 +60,8 @@ pub struct Args {
         short,
         long,
         value_name = "connections-db",
-        help = "Path to connections database to use or create",
-        value_hint = ValueHint::FilePath,
-        default_value = "connections.db"
+        help = "Path to connections database to use or create (relative to data-dir if not absolute)",
+        value_hint = ValueHint::FilePath
     )]
     pub connections_file: Option<PathBuf>,
 
@@ -62,21 +69,19 @@ pub struct Args {
         short = 'x',
         long,
         value_name = "tasks-db",
-        help = "Path to persistent tasks database to use or create",
-        value_hint = ValueHint::FilePath,
-        default_value = "tasks.db"
+        help = "Path to persistent tasks database to use or create (relative to data-dir if not absolute)",
+        value_hint = ValueHint::FilePath
     )]
-    pub tasks_db: PathBuf,
+    pub tasks_db: Option<PathBuf>,
 
     #[arg(
         short = 'e',
         long,
         value_name = "events-db",
-        help = "Path to persistent events database to use or create",
-        value_hint = ValueHint::FilePath,
-        default_value = "events.db"
+        help = "Path to persistent events database to use or create (relative to data-dir if not absolute)",
+        value_hint = ValueHint::FilePath
     )]
-    pub events_db: PathBuf,
+    pub events_db: Option<PathBuf>,
 
     #[arg(
         long,
@@ -358,7 +363,13 @@ impl ImportExportArgs {
 #[allow(dead_code)]
 #[derive(Parser, Debug)]
 pub struct DatabaseArgs {
-    #[arg(value_name = "db", help = "Path to database file to use or create", value_hint = ValueHint::FilePath)]
+    #[arg(
+        long,
+        value_name = "db",
+        help = "Main database filename (relative to data-dir if not absolute)",
+        value_hint = ValueHint::FilePath,
+        default_value = "world.db"
+    )]
     pub db: PathBuf,
 
     #[arg(
@@ -405,4 +416,5 @@ impl Args {
 
         config
     }
+
 }

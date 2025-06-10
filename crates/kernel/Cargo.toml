@@ -58,7 +58,7 @@ moor-var = { path = "../var" }
 ahash.workspace = true
 byteview.workspace = true
 chrono.workspace = true
-flume = "0.11"
+flume.workspace = true
 gdt-cpus.workspace = true
 lazy_static.workspace = true
 libc.workspace = true

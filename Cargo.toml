@@ -121,6 +121,7 @@ criterion = { version = "0.6", features = ["async_tokio"] }
 encoding_rs = "0.8"
 enum-primitive-derive = "0.3"
 fast-counter = "1.0"
+fs2 = "0.4"
 flume = "0.11"
 gdt-cpus = "25.5"
 im = "15.1"

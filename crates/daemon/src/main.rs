@@ -13,13 +13,70 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::fs::{File, OpenOptions};
 
 use crate::args::Args;
+use fs2::FileExt;
+use eyre::{eyre, bail};
+
+// Helper functions for resolving database paths relative to data_dir
+impl Args {
+    /// Resolve the main database path relative to data_dir
+    fn resolved_db_path(&self) -> PathBuf {
+        if self.db_args.db.is_absolute() {
+            self.db_args.db.clone()
+        } else {
+            self.data_dir.join(&self.db_args.db)
+        }
+    }
+
+    /// Resolve the tasks database path relative to data_dir
+    fn resolved_tasks_db_path(&self) -> PathBuf {
+        match &self.tasks_db {
+            Some(path) => {
+                if path.is_absolute() {
+                    path.clone()
+                } else {
+                    self.data_dir.join(path)
+                }
+            }
+            None => self.data_dir.join("tasks.db")
+        }
+    }
+
+    /// Resolve the connections database path relative to data_dir
+    fn resolved_connections_db_path(&self) -> Option<PathBuf> {
+        match &self.connections_file {
+            Some(path) => {
+                if path.is_absolute() {
+                    Some(path.clone())
+                } else {
+                    Some(self.data_dir.join(path))
+                }
+            }
+            None => Some(self.data_dir.join("connections.db"))
+        }
+    }
+
+    /// Resolve the events database path relative to data_dir
+    fn resolved_events_db_path(&self) -> PathBuf {
+        match &self.events_db {
+            Some(path) => {
+                if path.is_absolute() {
+                    path.clone()
+                } else {
+                    self.data_dir.join(path)
+                }
+            }
+            None => self.data_dir.join("events.db")
+        }
+    }
+}
 use crate::connections::ConnectionRegistryFactory;
 use crate::rpc_server::RpcServer;
 use crate::workers_server::WorkersServer;
 use clap::Parser;
-use eyre::{Report, bail};
+use eyre::Report;
 use mimalloc::MiMalloc;
 use moor_common::build;
 use moor_db::{Database, TxDB};
@@ -48,6 +105,37 @@ use moor_common::model::loader::LoaderInterface;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+
+/// Acquire an exclusive lock on the data directory to prevent multiple daemon instances
+/// from operating on the same data.
+fn acquire_data_directory_lock(data_dir: &PathBuf) -> Result<File, Report> {
+    // Create the data directory if it doesn't exist
+    std::fs::create_dir_all(data_dir)?;
+    
+    // Create a lock file in the data directory
+    let lock_file_path = data_dir.join(".moor-daemon.lock");
+    
+    let lock_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&lock_file_path)?;
+    
+    // Try to acquire exclusive lock
+    match lock_file.try_lock_exclusive() {
+        Ok(()) => {
+            info!("Acquired exclusive lock on data directory: {:?}", data_dir);
+            Ok(lock_file)
+        }
+        Err(e) => {
+            error!(
+                "Failed to acquire lock on data directory {:?}. Another moor-daemon instance may already be running in this directory.",
+                data_dir
+            );
+            bail!("Directory lock acquisition failed: {}", e);
+        }
+    }
+}
 
 fn perform_import(
     config: &moor_kernel::config::Config,
@@ -97,7 +185,8 @@ fn perform_import(
 fn main() -> Result<(), Report> {
     color_eyre::install()?;
 
-    let version = semver::Version::parse(build::PKG_VERSION).expect("Invalid moor version");
+    let version = semver::Version::parse(build::PKG_VERSION)
+        .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
 
     let args: Args = Args::parse();
 
@@ -115,60 +204,43 @@ fn main() -> Result<(), Report> {
             tracing::Level::INFO
         })
         .finish();
-    tracing::subscriber::set_global_default(main_subscriber).unwrap_or_else(|e| {
-        eprintln!("Unable to set configure logging: {}", e);
-        std::process::exit(1);
-    });
+    tracing::subscriber::set_global_default(main_subscriber)
+        .map_err(|e| eyre!("Unable to configure logging: {}", e))?;
 
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
     // the keypair from it...
     let (private_key, public_key) = if args.public_key.exists() && args.private_key.exists() {
-        match load_keypair(&args.public_key, &args.private_key) {
-            Ok(keypair) => keypair,
-            Err(e) => {
-                error!(
-                    "Unable to load keypair from public and private key files: {}",
-                    e
-                );
-                std::process::exit(1);
-            }
-        }
+        load_keypair(&args.public_key, &args.private_key)
+            .map_err(|e| eyre!("Unable to load keypair from public and private key files: {}", e))?
     } else {
-        error!(
+        bail!(
             "Public ({:?}) and/or private ({:?}) key files must exist",
             args.public_key, args.private_key
         );
-        std::process::exit(1);
     };
 
     let config = match args.config_file.as_ref() {
         Some(path) => {
-            let file = match std::fs::File::open(path) {
-                Ok(file) => file,
-                Err(e) => {
-                    error!("Unable to open config file {}: {}", path.display(), e);
-                    std::process::exit(1);
-                }
-            };
+            let file = std::fs::File::open(path)
+                .map_err(|e| eyre!("Unable to open config file {}: {}", path.display(), e))?;
 
-            match serde_json::from_reader(file) {
-                Ok(config) => config,
-                Err(e) => {
-                    error!("Unable to parse config file {}: {}", path.display(), e);
-                    std::process::exit(1);
-                }
-            }
+            serde_json::from_reader(file)
+                .map_err(|e| eyre!("Unable to parse config file {}: {}", path.display(), e))?
         }
         None => Default::default(),
     };
     let config = Arc::new(args.merge_config(config));
 
     if let Some(write_config) = args.write_merged_config.as_ref() {
-        let merged_config_json =
-            serde_json::to_string_pretty(config.as_ref()).expect("Unable to serialize config");
+        let merged_config_json = serde_json::to_string_pretty(config.as_ref())
+            .map_err(|e| eyre!("Unable to serialize config: {}", e))?;
         debug!("Merged config: {}", merged_config_json);
-        std::fs::write(write_config, merged_config_json).expect("Unable to write merged config");
+        std::fs::write(write_config, &merged_config_json)
+            .map_err(|e| eyre!("Unable to write merged config to {}: {}", write_config.display(), e))?;
     }
+
+    // Acquire exclusive lock on the data directory to prevent multiple daemon instances
+    let _data_dir_lock = acquire_data_directory_lock(&args.data_dir)?;
 
     let (phys_cores, logical_cores) = (
         gdt_cpus::num_physical_cores()
@@ -179,16 +251,17 @@ fn main() -> Result<(), Report> {
             .unwrap_or_else(|_| "unknown".to_string()),
     );
 
+    let resolved_db_path = args.resolved_db_path();
     info!(
         "moor {} daemon starting. {phys_cores} physical cores; {logical_cores} logical cores. Using database at {:?}",
-        version, args.db_args.db
+        version, resolved_db_path
     );
     let (database, freshly_made) = TxDB::open(
-        Some(&args.db_args.db),
+        Some(&resolved_db_path),
         config.database_config.clone().unwrap_or_default(),
     );
     let database = Box::new(database);
-    info!(path = ?args.db_args.db, "Opened database");
+    info!(path = ?resolved_db_path, "Opened database");
 
     if let Some(import_path) = config.import_export_config.input_path.as_ref() {
         // If the database already existed, do not try to import the textdump...
@@ -198,42 +271,47 @@ fn main() -> Result<(), Report> {
             info!("Loading textdump from {:?}", import_path);
             let loader_interface = database
                 .loader_client()
-                .expect("Unable to get loader interface from database");
+                .map_err(|e| eyre!("Unable to get loader interface from database: {}", e))?;
 
-            if perform_import(
+            if let Err(import_error) = perform_import(
                 config.as_ref(),
                 import_path,
                 loader_interface,
                 version.clone(),
-            )
-            .is_err()
-            {
+            ) {
                 // If import failed, we need to get the old database file out of the way. We don't want to
                 // leave a dirty empty database file around, or it will be picked up next time.
                 // We could just delete the databse, but we might have regrets about that,
                 // So let's move the whole directory to XXX.timestamp ...
-                info!("Import failed. Deleting database at {:?}", args.db_args.db);
-                let destination = format!(
-                    "{}.{}",
-                    args.db_args.db.to_str().unwrap(),
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs()
-                );
-                if let Err(e) = std::fs::rename(&args.db_args.db, &destination) {
-                    error!("Failed to rename database: {:?}", e);
-                } else {
-                    info!("Moved (likely empty) database to {:?}", destination);
+                error!("Import failed: {}", import_error);
+                
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                    
+                let destination_str = resolved_db_path
+                    .to_str()
+                    .ok_or_else(|| eyre!("Database path contains invalid UTF-8"))?;
+                let destination = format!("{}.{}", destination_str, timestamp);
+                
+                match std::fs::rename(&resolved_db_path, &destination) {
+                    Ok(()) => {
+                        info!("Moved (likely empty) database to {:?}", destination);
+                    }
+                    Err(e) => {
+                        error!("Failed to rename database from {:?} to {}: {}", resolved_db_path, destination, e);
+                    }
                 }
-                error!("Exiting due to import failure...");
-                std::process::exit(1);
+                
+                bail!("Import failed: {}", import_error);
             }
         }
     }
 
+    let resolved_tasks_db_path = args.resolved_tasks_db_path();
     let tasks_db: Box<dyn TasksDb> = if config.features_config.persistent_tasks {
-        Box::new(tasks_fjall::FjallTasksDB::open(&args.tasks_db).0)
+        Box::new(tasks_fjall::FjallTasksDB::open(&resolved_tasks_db_path).0)
     } else {
         Box::new(NoopTasksDb {})
     };
@@ -243,22 +321,24 @@ fn main() -> Result<(), Report> {
     let zmq_ctx = zmq::Context::new();
     zmq_ctx
         .set_io_threads(args.num_io_threads)
-        .expect("Failed to set number of IO threads");
+        .map_err(|e| eyre!("Failed to set number of IO threads to {}: {}", args.num_io_threads, e))?;
 
     // Create the connections registry based on args/config
-    let connections = match &args.connections_file {
+    let resolved_connections_db_path = args.resolved_connections_db_path();
+    let connections = match resolved_connections_db_path {
         Some(path) => {
             info!("Using connections database at {:?}", path);
-            ConnectionRegistryFactory::with_fjall_persistence(Some(path))
-                .expect("Failed to create connections database")
+            ConnectionRegistryFactory::with_fjall_persistence(Some(&path))
+                .map_err(|e| eyre!("Failed to create connections database at {:?}: {}", path, e))?
         }
         None => {
             info!("Using in-memory connections registry");
             ConnectionRegistryFactory::in_memory_only()
-                .expect("Failed to create in-memory connections registry")
+                .map_err(|e| eyre!("Failed to create in-memory connections registry: {}", e))?
         }
     };
 
+    let resolved_events_db_path = args.resolved_events_db_path();
     let rpc_server = Arc::new(RpcServer::new(
         public_key.clone(),
         private_key.clone(),
@@ -266,7 +346,7 @@ fn main() -> Result<(), Report> {
         zmq_ctx.clone(),
         args.events_listen.as_str(),
         config.clone(),
-        &args.events_db,
+        &resolved_events_db_path,
     ));
     let kill_switch = rpc_server.kill_switch.clone();
 
@@ -282,12 +362,13 @@ fn main() -> Result<(), Report> {
     );
     let workers_sender = workers_server
         .start(&args.workers_request_listen)
-        .expect("Failed to start workers server");
+        .map_err(|e| eyre!("Failed to start workers server on {}: {}", args.workers_request_listen, e))?;
 
+    let workers_listen_addr = args.workers_response_listen.clone();
     std::thread::spawn(move || {
-        workers_server
-            .listen(&args.workers_response_listen)
-            .expect("Failed to listen for workers");
+        if let Err(e) = workers_server.listen(&workers_listen_addr) {
+            error!("Workers server failed to listen on {}: {}", workers_listen_addr, e);
+        }
     });
 
     // The pieces from core we're going to use:
@@ -302,7 +383,8 @@ fn main() -> Result<(), Report> {
         Some(workers_sender),
         Some(worker_scheduler_recv),
     );
-    let scheduler_client = scheduler.client().expect("Failed to get scheduler client");
+    let scheduler_client = scheduler.client()
+        .map_err(|e| eyre!("Failed to get scheduler client: {}", e))?;
 
     // The scheduler thread:
     let scheduler_rpc_server = rpc_server.clone();
@@ -330,9 +412,9 @@ fn main() -> Result<(), Report> {
                         info!("Checkpointing thread exiting.");
                         break;
                     }
-                    checkpoint_scheduler_client
-                        .request_checkpoint()
-                        .expect("Failed to submit checkpoint");
+                    if let Err(e) = checkpoint_scheduler_client.request_checkpoint() {
+                        error!("Failed to submit checkpoint request: {}", e);
+                    }
                     std::thread::sleep(checkpoint_interval);
                 }
             })?;
@@ -345,9 +427,9 @@ fn main() -> Result<(), Report> {
     let rpc_loop_thread = std::thread::Builder::new()
         .name("moor-rpc".to_string())
         .spawn(move || {
-            rpc_server
-                .request_loop(rpc_listen, rpc_loop_scheduler_client)
-                .expect("RPC thread failed");
+            if let Err(e) = rpc_server.request_loop(rpc_listen.clone(), rpc_loop_scheduler_client) {
+                error!("RPC server failed on {}: {}", rpc_listen, e);
+            }
         })?;
 
     signal_hook::flag::register(signal_hook::consts::SIGTERM, kill_switch.clone())?;
@@ -357,14 +439,19 @@ fn main() -> Result<(), Report> {
         events_endpoint = args.events_listen,
         "Daemon started. Listening for RPC events."
     );
-    rpc_loop_thread.join().expect("RPC thread panicked");
+    if let Err(e) = rpc_loop_thread.join() {
+        error!("RPC thread panicked: {:?}", e);
+    }
     warn!("RPC thread exited. Departing...");
 
-    scheduler_client
-        .submit_shutdown("System shutting down")
-        .expect("Scheduler thread failed to stop");
-    scheduler_loop_jh.join().expect("Scheduler thread panicked");
+    if let Err(e) = scheduler_client.submit_shutdown("System shutting down") {
+        error!("Failed to send shutdown signal to scheduler: {}", e);
+    }
+    
+    if let Err(e) = scheduler_loop_jh.join() {
+        error!("Scheduler thread panicked: {:?}", e);
+    }
+    
     info!("Done.");
-
     Ok(())
 }
