@@ -564,13 +564,18 @@ html, body {
   font-family: var(--font-sans);
 }
 
+.light-theme .history_indicator {
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+}
+
 .history_indicator.hidden {
   display: none;
 }
 
 .history_indicator button {
   background: var(--color-button-primary);
-  color: var(--color-text-primary);
+  color: white;
   border: none;
   padding: 4px 12px;
   border-radius: 12px;
