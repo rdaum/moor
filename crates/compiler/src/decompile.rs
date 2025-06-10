@@ -612,9 +612,12 @@ impl Decompile {
             Op::MakeFlyweight(num_slots) => {
                 let mut slots = Vec::with_capacity(num_slots);
                 let contents = self.pop_expr()?;
-                let Expr::List(contents) = contents else {
-                    return Err(MalformedProgram("expected list for contents".to_string()));
+                // Contents can be any expression now, not just a list
+                let contents = match contents {
+                    Expr::List(ref list) if list.is_empty() => None,
+                    _ => Some(Box::new(contents)),
                 };
+
                 for _ in 0..num_slots {
                     let k = self.pop_expr()?;
                     let v = self.pop_expr()?;

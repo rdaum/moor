@@ -127,7 +127,10 @@ impl Session for RpcSession {
     }
 
     fn send_event(&self, player: Obj, event: Box<NarrativeEvent>) -> Result<(), SessionError> {
-        self.transaction_buffer.lock().unwrap().push((player, event));
+        self.transaction_buffer
+            .lock()
+            .unwrap()
+            .push((player, event));
         Ok(())
     }
 

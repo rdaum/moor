@@ -169,7 +169,7 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
             let mut slots = vec![];
             let mut contents = vec![];
 
-            // If the next is `flyweight_slots`, parse the pairs inside it
+            // Parse the remaining parts: optional slots, optional contents
             for next in parts {
                 match next.as_rule() {
                     Rule::literal_flyweight_slots => {

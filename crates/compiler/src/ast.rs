@@ -165,7 +165,7 @@ pub enum Expr {
     Index(Box<Expr>, Box<Expr>),
     List(Vec<Arg>),
     Map(Vec<(Expr, Expr)>),
-    Flyweight(Box<Expr>, Vec<(Symbol, Expr)>, Vec<Arg>),
+    Flyweight(Box<Expr>, Vec<(Symbol, Expr)>, Option<Box<Expr>>),
     Scatter(Vec<ScatterItem>, Box<Expr>),
     Length,
     ComprehendList {

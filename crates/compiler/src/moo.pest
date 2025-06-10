@@ -170,10 +170,9 @@ atom     = { integer | float | string | object | err | boolean | symbol | type_c
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
 
-// flyweight is < parent, [ prop -> value, ... ], { contents, ... } >
-flyweight     = { "<" ~ expr ~ ("," ~ flyweight_slots)? ~ ("," ~ flyweight_contents)? ~ ">" }
+// flyweight is < parent, [ prop -> value, ... ], contents >
+flyweight     = { "<" ~ expr ~ ("," ~ flyweight_slots)? ~ ("," ~ expr)? ~ ">" }
 flyweight_slots    = { ("[" ~ (ident ~ "->" ~ expr) ~ ("," ~ ident ~ "->" ~ expr)* ~ "]") | ( "[" ~ "]") }
-flyweight_contents = { "{" ~ exprlist?  ~ "}" }
 
 exprlist = { argument ~ ("," ~ argument)* }
 argument = { expr | "@" ~ expr }

@@ -132,7 +132,11 @@ impl EventPersistence {
         })
     }
 
-    fn write_narrative_event(&self, event_id: Uuid, event: &LoggedNarrativeEvent) -> Result<(), eyre::Error> {
+    fn write_narrative_event(
+        &self,
+        event_id: Uuid,
+        event: &LoggedNarrativeEvent,
+    ) -> Result<(), eyre::Error> {
         // Serialize the event
         let event_bytes = bincode::encode_to_vec(event, *BINCODE_CONFIG)?;
 
@@ -148,7 +152,10 @@ impl EventPersistence {
         Ok(())
     }
 
-    fn write_presentation_state(&self, player_presentations: &PlayerPresentations) -> Result<(), eyre::Error> {
+    fn write_presentation_state(
+        &self,
+        player_presentations: &PlayerPresentations,
+    ) -> Result<(), eyre::Error> {
         // Serialize the presentation state
         let state_bytes = bincode::encode_to_vec(player_presentations, *BINCODE_CONFIG)?;
 
@@ -160,7 +167,10 @@ impl EventPersistence {
         Ok(())
     }
 
-    fn load_narrative_events_since(&self, since: Option<Uuid>) -> Result<Vec<LoggedNarrativeEvent>, eyre::Error> {
+    fn load_narrative_events_since(
+        &self,
+        since: Option<Uuid>,
+    ) -> Result<Vec<LoggedNarrativeEvent>, eyre::Error> {
         let mut events = Vec::new();
 
         let start_bound = match since {
@@ -185,7 +195,10 @@ impl EventPersistence {
                 events.push(event);
             }
         } else {
-            for entry in self.narrative_events_partition.range(start_bound.as_slice()..) {
+            for entry in self
+                .narrative_events_partition
+                .range(start_bound.as_slice()..)
+            {
                 let (_, value) = entry?;
                 let (event, _): (LoggedNarrativeEvent, usize) =
                     bincode::decode_from_slice(&value, *BINCODE_CONFIG)?;
@@ -196,7 +209,10 @@ impl EventPersistence {
         Ok(events)
     }
 
-    fn load_narrative_events_until(&self, until: Option<Uuid>) -> Result<Vec<LoggedNarrativeEvent>, eyre::Error> {
+    fn load_narrative_events_until(
+        &self,
+        until: Option<Uuid>,
+    ) -> Result<Vec<LoggedNarrativeEvent>, eyre::Error> {
         let mut events = Vec::new();
 
         let end_bound = match until {
@@ -205,7 +221,10 @@ impl EventPersistence {
         };
 
         // Fjall range query from start to end_bound (exclusive)
-        for entry in self.narrative_events_partition.range(..end_bound.as_slice()) {
+        for entry in self
+            .narrative_events_partition
+            .range(..end_bound.as_slice())
+        {
             let (_, value) = entry?;
             let (event, _): (LoggedNarrativeEvent, usize) =
                 bincode::decode_from_slice(&value, *BINCODE_CONFIG)?;
@@ -242,9 +261,12 @@ impl EventPersistence {
     }
 
     #[allow(dead_code)]
-    fn load_presentation_state(&self, player: Obj) -> Result<Option<PlayerPresentations>, eyre::Error> {
+    fn load_presentation_state(
+        &self,
+        player: Obj,
+    ) -> Result<Option<PlayerPresentations>, eyre::Error> {
         let player_key = player.to_literal();
-        
+
         if let Some(value) = self.presentations_partition.get(player_key.as_bytes())? {
             let (presentations, _): (PlayerPresentations, usize) =
                 bincode::decode_from_slice(&value, *BINCODE_CONFIG)?;
@@ -358,10 +380,16 @@ impl EventLog {
         }
     }
 
-    fn flush_narrative_write_batch(persistence: &EventPersistence, batch: &mut Vec<(Uuid, LoggedNarrativeEvent)>) {
+    fn flush_narrative_write_batch(
+        persistence: &EventPersistence,
+        batch: &mut Vec<(Uuid, LoggedNarrativeEvent)>,
+    ) {
         for (event_id, event) in batch.drain(..) {
             if let Err(e) = persistence.write_narrative_event(event_id, &event) {
-                error!("Failed to write narrative event {} to disk: {}", event_id, e);
+                error!(
+                    "Failed to write narrative event {} to disk: {}",
+                    event_id, e
+                );
             }
         }
     }
@@ -421,8 +449,14 @@ impl EventLog {
 
         // Send to background persistence thread
         if let Some(ref sender) = self.persistence_sender {
-            if let Err(e) = sender.send(PersistenceMessage::WriteNarrativeEvent(event_id, logged_event)) {
-                error!("Failed to send narrative event to persistence thread: {}", e);
+            if let Err(e) = sender.send(PersistenceMessage::WriteNarrativeEvent(
+                event_id,
+                logged_event,
+            )) {
+                error!(
+                    "Failed to send narrative event to persistence thread: {}",
+                    e
+                );
             }
         }
 
@@ -448,7 +482,10 @@ impl EventLog {
                 presentations: player_presentations.clone(),
             };
             if let Err(e) = sender.send(PersistenceMessage::WritePresentationState(state)) {
-                error!("Failed to send presentation state to persistence thread: {}", e);
+                error!(
+                    "Failed to send presentation state to persistence thread: {}",
+                    e
+                );
             }
         }
     }
@@ -471,7 +508,10 @@ impl EventLog {
                     presentations: player_presentations.clone(),
                 };
                 if let Err(e) = sender.send(PersistenceMessage::WritePresentationState(state)) {
-                    error!("Failed to send presentation state to persistence thread: {}", e);
+                    error!(
+                        "Failed to send presentation state to persistence thread: {}",
+                        e
+                    );
                 }
             }
         }
@@ -524,7 +564,10 @@ impl EventLog {
 
     /// Load current presentations for a player from disk (called when player connects)
     #[allow(dead_code)]
-    pub fn load_player_presentations(&self, player: Obj) -> Result<HashMap<String, Presentation>, eyre::Error> {
+    pub fn load_player_presentations(
+        &self,
+        player: Obj,
+    ) -> Result<HashMap<String, Presentation>, eyre::Error> {
         let presentations = match self.load_presentation_state_from_disk(player)? {
             Some(state) => {
                 // Update in-memory state
@@ -535,14 +578,19 @@ impl EventLog {
             None => HashMap::new(),
         };
 
-        debug!("Loaded {} presentations for player {} from disk", presentations.len(), player);
+        debug!(
+            "Loaded {} presentations for player {} from disk",
+            presentations.len(),
+            player
+        );
         Ok(presentations)
     }
 
     /// Load recent narrative events for a player into cache (called when player connects)
     #[allow(dead_code)]
     pub fn preload_player_events(&self, player: Obj, days: u64) -> Result<usize, eyre::Error> {
-        let events = self.load_narrative_from_disk_for_player_since_seconds(player, days * 24 * 3600)?;
+        let events =
+            self.load_narrative_from_disk_for_player_since_seconds(player, days * 24 * 3600)?;
         let count = events.len();
 
         if !events.is_empty() {
@@ -550,7 +598,10 @@ impl EventLog {
             for event in events {
                 cache.insert(event.event.event_id(), event);
             }
-            debug!("Preloaded {} narrative events for player {} from disk", count, player);
+            debug!(
+                "Preloaded {} narrative events for player {} from disk",
+                count, player
+            );
         }
 
         Ok(count)
@@ -591,16 +642,20 @@ impl EventLog {
 
         // If cache is empty or incomplete, try disk
         if cache_events.is_empty() {
-            self.load_narrative_from_disk_since(since).unwrap_or_else(|e| {
-                debug!("Failed to load narrative events from disk: {}", e);
-                cache_events
-            })
+            self.load_narrative_from_disk_since(since)
+                .unwrap_or_else(|e| {
+                    debug!("Failed to load narrative events from disk: {}", e);
+                    cache_events
+                })
         } else {
             cache_events
         }
     }
 
-    fn load_narrative_from_disk_since(&self, since: Option<Uuid>) -> Result<Vec<LoggedNarrativeEvent>, eyre::Error> {
+    fn load_narrative_from_disk_since(
+        &self,
+        since: Option<Uuid>,
+    ) -> Result<Vec<LoggedNarrativeEvent>, eyre::Error> {
         let persistence_guard = self.persistence.lock().unwrap();
         if let Some(ref persistence) = *persistence_guard {
             persistence.load_narrative_events_since(since)
@@ -609,7 +664,10 @@ impl EventLog {
         }
     }
 
-    fn load_narrative_from_disk_until(&self, until: Option<Uuid>) -> Result<Vec<LoggedNarrativeEvent>, eyre::Error> {
+    fn load_narrative_from_disk_until(
+        &self,
+        until: Option<Uuid>,
+    ) -> Result<Vec<LoggedNarrativeEvent>, eyre::Error> {
         let persistence_guard = self.persistence.lock().unwrap();
         if let Some(ref persistence) = *persistence_guard {
             persistence.load_narrative_events_until(until)
@@ -619,7 +677,10 @@ impl EventLog {
     }
 
     #[allow(dead_code)]
-    fn load_presentation_state_from_disk(&self, player: Obj) -> Result<Option<PlayerPresentations>, eyre::Error> {
+    fn load_presentation_state_from_disk(
+        &self,
+        player: Obj,
+    ) -> Result<Option<PlayerPresentations>, eyre::Error> {
         let persistence_guard = self.persistence.lock().unwrap();
         if let Some(ref persistence) = *persistence_guard {
             persistence.load_presentation_state(player)
@@ -678,7 +739,11 @@ impl EventLog {
     }
 
     /// Get all narrative events for a specific player since the given UUID
-    pub fn events_for_player_since(&self, player: Obj, since: Option<Uuid>) -> Vec<LoggedNarrativeEvent> {
+    pub fn events_for_player_since(
+        &self,
+        player: Obj,
+        since: Option<Uuid>,
+    ) -> Vec<LoggedNarrativeEvent> {
         // First try cache - get ALL events from cache
         let all_cache_events = self.events_since(since);
 
@@ -716,7 +781,11 @@ impl EventLog {
     }
 
     /// Get all narrative events for a specific player until the given UUID
-    pub fn events_for_player_until(&self, player: Obj, until: Option<Uuid>) -> Vec<LoggedNarrativeEvent> {
+    pub fn events_for_player_until(
+        &self,
+        player: Obj,
+        until: Option<Uuid>,
+    ) -> Vec<LoggedNarrativeEvent> {
         // First try cache - get ALL events from cache
         let all_cache_events = self.events_until(until);
 
@@ -1090,7 +1159,7 @@ mod tests {
         // Check narrative events (only Notify events should be stored)
         let narrative_events = log.events_since(None);
         assert_eq!(narrative_events.len(), 2);
-        
+
         // Check presentation state (should be empty after unpresent)
         let presentations = log.current_presentations(player);
         assert!(presentations.is_empty());
@@ -1210,7 +1279,10 @@ mod tests {
 
         // Add more events than cache limit
         for i in 0..10 {
-            log.append(player, create_test_notify_event(player, &format!("event{}", i)));
+            log.append(
+                player,
+                create_test_notify_event(player, &format!("event{}", i)),
+            );
         }
 
         // Wait for background processing
@@ -1317,7 +1389,10 @@ mod tests {
                 for i in 0..10 {
                     log_clone.append(
                         player,
-                        create_test_notify_event(player, &format!("thread{}_event{}", thread_id, i)),
+                        create_test_notify_event(
+                            player,
+                            &format!("thread{}_event{}", thread_id, i),
+                        ),
                     );
                 }
             });
@@ -1738,7 +1813,10 @@ mod tests {
             for i in 0..20 {
                 let event_id = log.append(
                     player,
-                    create_test_notify_event(player, &format!("Event {}: User says something", i + 1)),
+                    create_test_notify_event(
+                        player,
+                        &format!("Event {}: User says something", i + 1),
+                    ),
                 );
                 event_ids.push(event_id);
                 // Small delay to ensure different timestamps
@@ -1904,7 +1982,10 @@ mod tests {
             println!("1. Creating EventLog and logging some events...");
             let log = EventLog::with_config(create_test_config(), Some(db_path));
 
-            let event1 = log.append(player, create_test_notify_event(player, "User says 'hello'"));
+            let event1 = log.append(
+                player,
+                create_test_notify_event(player, "User says 'hello'"),
+            );
             let event2 = log.append(
                 player,
                 create_test_notify_event(player, "User says 'how are you?'"),

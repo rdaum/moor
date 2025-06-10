@@ -209,7 +209,12 @@ impl CodegenState {
         self.saved_stack = old
     }
 
-    fn add_fork_vector(&mut self, offset: usize, opcodes: Vec<Op>, line_spans: Vec<(usize, usize)>) -> Offset {
+    fn add_fork_vector(
+        &mut self,
+        offset: usize,
+        opcodes: Vec<Op>,
+        line_spans: Vec<(usize, usize)>,
+    ) -> Offset {
         let fv = self.fork_vectors.len();
         self.fork_vectors.push((offset, opcodes));
         self.fork_line_number_spans.push(line_spans);
@@ -604,7 +609,13 @@ impl CodegenState {
                     self.generate_expr(v)?;
                     self.generate_expr(&Expr::Value(v_arc_string(k.as_arc_string())))?;
                 }
-                self.generate_arg_list(contents)?;
+                match contents {
+                    Some(expr) => self.generate_expr(expr.as_ref())?,
+                    None => {
+                        self.emit(Op::ImmEmptyList);
+                        self.push_stack(1);
+                    }
+                }
                 self.emit(Op::MakeFlyweight(slots.len()));
                 self.pop_stack(1 + (slots.len() * 2));
             }
@@ -892,11 +903,11 @@ impl CodegenState {
                 self.generate_expr(time)?;
                 // Record the position in main vector where the fork starts
                 let fork_main_position = self.ops.len();
-                
+
                 // Stash current ops and line number spans to generate fork vector separately
                 let stashed_ops = std::mem::take(&mut self.ops);
                 let stashed_line_spans = std::mem::take(&mut self.line_number_spans);
-                
+
                 // Generate fork body into separate vector
                 for stmt in body {
                     self.generate_stmt(stmt)?;
@@ -904,11 +915,11 @@ impl CodegenState {
                 self.emit(Op::Done);
                 let forked_ops = std::mem::take(&mut self.ops);
                 let fork_line_spans = std::mem::take(&mut self.line_number_spans);
-                
+
                 // Restore main vector and continue from where we left off
                 self.ops = stashed_ops;
                 self.line_number_spans = stashed_line_spans;
-                
+
                 let fv_id = self.add_fork_vector(fork_main_position, forked_ops, fork_line_spans);
                 self.emit(Op::Fork {
                     id: id.as_ref().map(|id| self.binding_mappings[id]),

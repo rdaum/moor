@@ -411,9 +411,9 @@ impl TreeTransformer {
                             .parse_expr(parts.next().unwrap().into_inner())?;
 
                         let mut slots = vec![];
-                        let mut contents = vec![];
+                        let mut contents = None;
 
-                        // If the next is `flyweight_slots`, parse the pairs inside it
+                        // Parse the remaining parts: optional slots, optional contents
                         for next in parts {
                             match next.as_rule() {
                                 Rule::flyweight_slots => {
@@ -439,11 +439,11 @@ impl TreeTransformer {
                                         slots.push((slot_name, slot_expr));
                                     }
                                 }
-                                Rule::flyweight_contents => {
-                                    if let Some(exprlist) = next.into_inner().next() {
-                                        let exprlist = exprlist.into_inner();
-                                        contents = primary_self.clone().parse_exprlist(exprlist)?;
-                                    }
+                                Rule::expr => {
+                                    // This is the contents expression
+                                    let expr =
+                                        primary_self.clone().parse_expr(next.into_inner())?;
+                                    contents = Some(Box::new(expr));
                                 }
                                 _ => {
                                     panic!("Unexpected rule: {:?}", next.as_rule());
@@ -3030,7 +3030,7 @@ mod tests {
             vec![StmtNode::Expr(Flyweight(
                 Box::new(Value(v_objid(1))),
                 vec![],
-                vec![],
+                None,
             ))]
         );
     }
@@ -3044,7 +3044,7 @@ mod tests {
             vec![StmtNode::Expr(Flyweight(
                 Box::new(Value(v_objid(1))),
                 vec![],
-                vec![Normal(Value(v_int(2)))],
+                Some(Box::new(Expr::List(vec![Normal(Value(v_int(2)))]))),
             ))]
         );
     }
@@ -3057,7 +3057,7 @@ mod tests {
             vec![StmtNode::Expr(Flyweight(
                 Box::new(Value(v_objid(1))),
                 vec![],
-                vec![Normal(Value(v_int(2)))],
+                Some(Box::new(Expr::List(vec![Normal(Value(v_int(2)))]))),
             ))]
         );
     }
@@ -3074,7 +3074,23 @@ mod tests {
                     (Symbol::mk("a"), Value(v_int(1))),
                     (Symbol::mk("b"), Value(v_int(2)))
                 ],
+                None,
+            ))]
+        );
+    }
+
+    #[test]
+    fn test_flyweight_arbitrary_expression_contents() {
+        // Test that flyweight contents can be any expression, not just lists
+        let program = r#"<#1, [], a_list>;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+        let a_list_var = parse.variables.find_name("a_list").unwrap();
+        assert_eq!(
+            stripped_stmts(&parse.stmts),
+            vec![StmtNode::Expr(Flyweight(
+                Box::new(Value(v_objid(1))),
                 vec![],
+                Some(Box::new(Id(a_list_var))),
             ))]
         );
     }

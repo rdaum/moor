@@ -372,15 +372,9 @@ impl<'a> Unparse<'a> {
                     }
                     buffer.push(']');
                 }
-                if !contents.is_empty() {
-                    buffer.push_str(", {");
-                    for (i, value) in contents.iter().enumerate() {
-                        buffer.push_str(self.unparse_arg(value)?.as_str());
-                        if i + 1 < contents.len() {
-                            buffer.push_str(", ");
-                        }
-                    }
-                    buffer.push('}');
+                if let Some(contents_expr) = contents {
+                    buffer.push_str(", ");
+                    buffer.push_str(self.unparse_expr(contents_expr)?.as_str());
                 }
                 buffer.push('>');
                 Ok(buffer)

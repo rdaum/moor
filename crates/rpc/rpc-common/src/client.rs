@@ -91,7 +91,7 @@ pub struct HistoryResponse {
     /// The earliest event ID in this response (for pagination)
     #[bincode(with_serde)]
     pub earliest_event_id: Option<Uuid>,
-    /// The latest event ID in this response (for pagination) 
+    /// The latest event ID in this response (for pagination)
     #[bincode(with_serde)]
     pub latest_event_id: Option<Uuid>,
 }

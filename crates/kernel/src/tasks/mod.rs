@@ -253,7 +253,13 @@ pub mod vm_test_utils {
                 }
                 VMHostResponse::DispatchFork(nested_fork) => {
                     // Recursively handle nested forks
-                    execute_fork(world_state, session.clone(), builtins, *nested_fork, task_id + 1)?;
+                    execute_fork(
+                        world_state,
+                        session.clone(),
+                        builtins,
+                        *nested_fork,
+                        task_id + 1,
+                    )?;
                     continue;
                 }
                 VMHostResponse::AbortLimit(a) => {

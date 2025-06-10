@@ -30,7 +30,8 @@ pub use verbs::verb_retrieval_handler;
 pub use verbs::verbs_handler;
 pub use web_host::WebHost;
 pub use web_host::{
-    dismiss_presentation_handler, eval_handler, history_handler, presentations_handler, resolve_objref_handler, welcome_message_handler, ws_connect_attach_handler,
+    dismiss_presentation_handler, eval_handler, history_handler, presentations_handler,
+    resolve_objref_handler, welcome_message_handler, ws_connect_attach_handler,
     ws_create_attach_handler,
 };
 
