@@ -14,6 +14,7 @@
 use crate::tx_management::indexes::RelationIndex;
 use crate::tx_management::{Canonical, Error, Timestamp, Tx};
 use ahash::AHasher;
+use im::HashMap;
 use indexmap::IndexMap;
 use moor_common::model::WorldStateError;
 use std::hash::{BuildHasherDefault, Hash};
@@ -442,18 +443,31 @@ where
     where
         F: Fn(&Domain, &Codomain) -> bool,
     {
-        // Scan in the upstream first, to make sure it's seeded.
-        let _ = self.backing_source.scan(predicate)?;
+        // TODO: this is brutally inefficient. we should be able to get the master index to populate
+        //   the results for us, and then we can just merge in the local operations, but will require
+        //   some refactoring of the RelationIndex trait to allow for that.
 
-        let mut results = Vec::new();
+        // Bring in the results from the backing source first, indexed by domain, filtering
+        // by the predicate.
+        let mut results: HashMap<_, _> = self
+            .backing_source
+            .scan(predicate)?
+            .iter()
+            .filter_map(|(ts, domain, value)| {
+                if *ts <= self.tx.ts && predicate(domain, value) {
+                    return Some((domain.clone(), value.clone()));
+                }
+                None
+            })
+            .collect();
 
-        // Now scan the upstream index.
+        // Now, we need to merge in the master entries from the index.
         for (domain, entry) in self.index.master_entries.iter() {
-            if entry.ts > self.tx.ts {
-                continue;
-            }
-            if predicate(domain, &entry.value) {
-                results.push((domain.clone(), entry.value.clone()));
+            if !results.contains_key(domain)
+                && entry.ts <= self.tx.ts
+                && predicate(domain, &entry.value)
+            {
+                results.insert(domain.clone(), entry.value.clone());
             }
         }
 
@@ -462,7 +476,7 @@ where
             match &op.operation {
                 OpType::Insert(value) | OpType::Update(value) => {
                     if predicate(domain, value) {
-                        results.push((domain.clone(), value.clone()));
+                        results.insert(domain.clone(), value.clone());
                     }
                 }
                 OpType::Delete => {
@@ -471,7 +485,7 @@ where
             }
         }
 
-        Ok(results)
+        Ok(results.into_iter().collect())
     }
 
     pub fn working_set(self) -> Result<WorkingSet<Domain, Codomain>, WorldStateError> {
