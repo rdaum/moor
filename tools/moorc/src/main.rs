@@ -101,7 +101,7 @@ pub struct Args {
     debug: bool,
 }
 
-fn main() {
+fn main() -> Result<(), eyre::Report> {
     color_eyre::install().unwrap();
     let args: Args = Args::parse();
 
@@ -165,7 +165,7 @@ fn main() {
 
     let mut features = FeaturesConfig::default();
     if let Some(fa) = args.feature_args.as_ref() {
-        fa.merge_config(&mut features)
+        fa.merge_config(&mut features)?;
     }
     info!("Importing with features: {features:?}");
 
@@ -195,7 +195,7 @@ fn main() {
         if let Err(e) = od.read_dirdump(features.compile_options(), objdef_dir.as_ref()) {
             error!("Compilation failure @ {}", e.path().display());
             error!("{:#}", e);
-            return;
+            return Ok(());
         }
         info!("Loaded objdef directory in {:?}", start.elapsed());
         loader_interface
@@ -216,7 +216,7 @@ fn main() {
                 "Unable to open temporary database at {}",
                 db_dir.path().display()
             );
-            return;
+            return Ok(());
         };
 
         let version = semver::Version::parse(build::PKG_VERSION).expect("Invalid moor version");
@@ -227,7 +227,7 @@ fn main() {
 
         let Ok(mut output) = File::create(&textdump_path) else {
             error!("Could not open textdump file for writing");
-            return;
+            return Ok(());
         };
 
         trace!("Creating textdump...");
@@ -237,7 +237,7 @@ fn main() {
         let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
         if let Err(e) = writer.write_textdump(&textdump) {
             error!(?e, "Could not write textdump");
-            return;
+            return Ok(());
         }
 
         // Now that the dump has been written, strip the in-progress suffix.
@@ -254,7 +254,7 @@ fn main() {
                 "Unable to open temporary database at {}",
                 db_dir.path().display()
             );
-            return;
+            return Ok(());
         };
 
         info!("Collecting objects for dump...");
@@ -267,7 +267,7 @@ fn main() {
 
     if args.run_tests != Some(true) && args.test_directory.is_none() {
         info!("No tests to run. Exiting.");
-        return;
+        return Ok(());
     }
 
     let wizard = Obj::mk_id(args.test_wizard.expect("Must specify wizard object"));
@@ -316,7 +316,7 @@ fn main() {
     }
 
     let config = Config {
-        features_config: Arc::new(features),
+        features: Arc::new(features),
         ..Default::default()
     };
     let scheduler = Scheduler::new(
@@ -370,7 +370,7 @@ fn main() {
                             };
                             error!("{s}");
                         }
-                        return;
+                        return Ok(());
                     }
                     _ => {
                         panic!("Test {}:{} failed: {:?}", o, verb, e);
@@ -426,4 +426,6 @@ fn main() {
     scheduler_loop_jh
         .join()
         .expect("Failed to join() scheduler");
+
+    Ok(())
 }

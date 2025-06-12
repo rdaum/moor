@@ -142,7 +142,7 @@ impl Task {
                 session.as_ref(),
                 world_state,
                 &builtin_registry,
-                config.features_config.as_ref(),
+                config.features.as_ref(),
             ) {
                 (task, world_state) = continuation_task;
             } else {

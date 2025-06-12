@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-mod args;
 pub mod connections;
+pub mod feature_args;
 
-pub use args::FeatureArgs;
+pub use feature_args::FeatureArgs;

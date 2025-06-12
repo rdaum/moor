@@ -25,9 +25,9 @@ use std::time::Duration;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub database_config: Option<DatabaseConfig>,
-    pub features_config: Arc<FeaturesConfig>,
-    pub import_export_config: ImportExportConfig,
+    pub database: Option<DatabaseConfig>,
+    pub features: Arc<FeaturesConfig>,
+    pub import_export: ImportExportConfig,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -140,6 +140,7 @@ pub struct ImportExportConfig {
     pub output_encoding: EncodingMode,
     /// Interval between database checkpoints.
     /// If None, no checkpoints will be made.
+    #[serde(deserialize_with = "parse_duration")]
     pub checkpoint_interval: Option<Duration>,
     /// Version override string to put into the textdump.
     /// If None, the moor version + a serialization of the features config is used + the encoding.
@@ -182,5 +183,19 @@ impl ImportExportConfig {
             );
             tv.to_version_string()
         })
+    }
+}
+
+// Use humantime to parse durations from strings
+fn parse_duration<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt: Option<String> = Option::deserialize(deserializer)?;
+    match opt {
+        Some(s) => humantime::parse_duration(&s)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+        None => Ok(None),
     }
 }

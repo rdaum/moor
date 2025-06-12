@@ -1,7 +1,6 @@
 # Moor Daemon Configuration for Debian Package
 # This file contains the core moor configuration for a system installation
-
-features_config:
+features:
   persistent_tasks: true
   rich_notify: true
   lexical_scopes: true
@@ -15,7 +14,7 @@ features_config:
   symbol_type: true
   use_symbols_in_builtins: false
 
-import_export_config:
+import_export:
   input_path: "/var/lib/moor/JHCore-DEV-2.db"
   import_format: "Textdump"
   output_path: "/var/spool/moor-daemon/core.export"
@@ -24,4 +23,4 @@ import_export_config:
   checkpoint_interval: "600s"
 
 # Database configuration (empty - use defaults)
-database_config: {}
+database: { }

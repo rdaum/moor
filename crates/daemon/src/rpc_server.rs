@@ -1303,7 +1303,7 @@ impl RpcServer {
             player,
             expression,
             session,
-            self.config.features_config.clone(),
+            self.config.features.clone(),
         ) {
             Ok(t) => t,
             Err(e) => {

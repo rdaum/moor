@@ -11,10 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::feature_args::FeatureArgs;
 use clap::builder::ValueHint;
 use clap_derive::{Parser, ValueEnum};
+use eyre::eyre;
+use figment::Figment;
+use figment::providers::{Format as ProviderFormat, Serialized, Yaml};
 use moor_db::DatabaseConfig;
-use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig, ImportExportFormat};
+use moor_kernel::config::{Config, ImportExportConfig, ImportExportFormat};
 use moor_textdump::EncodingMode;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -39,7 +43,6 @@ pub struct Args {
 
     #[command(flatten)]
     feature_args: Option<FeatureArgs>,
-
 
     #[arg(
         long,
@@ -137,127 +140,10 @@ pub struct Args {
     pub debug: bool,
 }
 
-#[derive(Parser, Debug, Serialize, Deserialize)]
-pub struct FeatureArgs {
-    /// Whether to allow notify() to send arbitrary MOO common to players. The interpretation of
-    /// the common varies depending on host/client.
-    /// If this is false, only strings are allowed, as in LambdaMOO.
-    #[arg(
-        long,
-        help = "Enable rich_notify, allowing notify() to send arbitrary MOO common to players. \
-                The interpretation of the common varies depending on host/client. \
-                If this is false, only strings are allowed, as in LambdaMOO."
-    )]
-    pub rich_notify: Option<bool>,
-
-    #[arg(
-        long,
-        help = "Enable block-level lexical scoping in programs. \
-                Adds the `begin`/`end` syntax for creating lexical scopes, and `let` and `global`
-                for declaring variables. \
-                This is a feature that is not present in LambdaMOO, so if you need backwards compatibility, turn this off."
-    )]
-    pub lexical_scopes: Option<bool>,
-
-    #[arg(
-        long,
-        help = "Enable the Map datatype ([ k -> v, .. ]) compatible with Stunt/ToastStunt"
-    )]
-    pub map_type: Option<bool>,
-
-    #[arg(
-        long,
-        help = "Enable primitive-type verb dispatching. E.g. \"test\":reverse() becomes $string:reverse(\"test\")"
-    )]
-    pub type_dispatch: Option<bool>,
-
-    #[arg(
-        long,
-        help = "Enable flyweight types. Flyweights are a lightweight, object delegate"
-    )]
-    pub flyweight_type: Option<bool>,
-
-    #[arg(long, help = "Enable boolean true/false literals and a boolean type")]
-    pub bool_type: Option<bool>,
-
-    #[arg(
-        long,
-        help = "Whether to have builtins that return truth values return boolean types instead of integer 1 or 0. Same goes for binary value operators like <, !, ==, <= etc."
-    )]
-    pub use_boolean_returns: Option<bool>,
-
-    #[arg(long, help = "Enable 'symbol literals")]
-    pub symbol_type: Option<bool>,
-
-    #[arg(
-        long,
-        help = "Enable error symbols beyond the standard builtin set, with no integer conversions for them."
-    )]
-    pub custom_errors: Option<bool>,
-
-    #[arg(
-        long,
-        help = "Whether to have certain builtins use or return symbols instead of strings for things like property names, etc."
-    )]
-    pub use_symbols_in_builtins: Option<bool>,
-
-    #[arg(
-        long,
-        help = "Enable support for list / range comprehensions in the language"
-    )]
-    pub list_comprehensions: Option<bool>,
-
-    #[arg(
-        long,
-        help = "Enable persistent tasks, which persist the state of suspended/forked tasks between restarts. \
-                Note that this is the default behaviour in LambdaMOO."
-    )]
-    pub persistent_tasks: Option<bool>,
-}
-
-impl FeatureArgs {
-    pub fn merge_config(&self, config: &mut FeaturesConfig) {
-        if let Some(args) = self.rich_notify {
-            config.rich_notify = args;
-        }
-        if let Some(args) = self.lexical_scopes {
-            config.lexical_scopes = args;
-        }
-        if let Some(args) = self.map_type {
-            config.map_type = args;
-        }
-        if let Some(args) = self.type_dispatch {
-            config.type_dispatch = args;
-        }
-        if let Some(args) = self.flyweight_type {
-            config.flyweight_type = args;
-        }
-        if let Some(args) = self.bool_type {
-            config.bool_type = args;
-        }
-        if let Some(args) = self.use_boolean_returns {
-            config.use_boolean_returns = args;
-        }
-        if let Some(args) = self.custom_errors {
-            config.custom_errors = args;
-        }
-        if let Some(args) = self.symbol_type {
-            config.symbol_type = args;
-        }
-        if let Some(args) = self.use_symbols_in_builtins {
-            config.use_symbols_in_builtins = args;
-        }
-        if let Some(args) = self.persistent_tasks {
-            config.persistent_tasks = args;
-        }
-        if let Some(args) = self.list_comprehensions {
-            config.list_comprehensions = args;
-        }
-    }
-}
-
 /// Formats for import or export
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Default, Serialize, Deserialize,
+)]
 pub enum Format {
     /// Traditional LambdaMOO textdump format
     #[default]
@@ -327,7 +213,7 @@ pub struct ImportExportArgs {
 }
 
 impl ImportExportArgs {
-    pub fn merge_config(&self, config: &mut ImportExportConfig) {
+    pub fn merge_config(&self, config: &mut ImportExportConfig) -> Result<(), eyre::Report> {
         if let Some(args) = self.import.as_ref() {
             config.input_path = Some(args.clone());
         }
@@ -351,6 +237,7 @@ impl ImportExportArgs {
             Format::Textdump => ImportExportFormat::Textdump,
             Format::Objdef => ImportExportFormat::Objdef,
         };
+        Ok(())
     }
 }
 
@@ -365,50 +252,110 @@ pub struct DatabaseArgs {
         default_value = "world.db"
     )]
     pub db: PathBuf,
-
-    #[arg(
-        long,
-        value_name = "cache-eviction-interval-seconds",
-        help = "Rate to run cache eviction cycles at, in seconds"
-    )]
-    pub cache_eviction_interval: Option<u64>,
-
-    #[arg(
-        long,
-        value_name = "default-eviction-threshold",
-        help = "The default eviction threshold for each transaction-global cache. If a value is not specified \
-          for a specific table, this value will be used. \
-          Every `cache_eviction_interval` seconds, the total memory usage of the cache will be checked, \
-          and if it exceeds this threshold, random entries will be put onto the eviction queue. \
-          If they are still there, untouched, by the next eviction cycle, they will be removed."
-    )]
-    pub default_eviction_threshold: Option<usize>,
-    // TODO: per table options
 }
 
 impl DatabaseArgs {
-    #[allow(dead_code)]
-    pub fn merge_config(&self, _config: &mut DatabaseConfig) {
-        // TODO
+    pub(crate) fn merge_config(&self, _db_config: &mut DatabaseConfig) -> Result<(), eyre::Report> {
+        // Noop for now
+        Ok(())
     }
 }
 
 impl Args {
     #[allow(dead_code)]
-    pub fn merge_config(&self, mut config: Config) -> Config {
+    fn merge_config(&self, mut config: Config) -> Result<Config, eyre::Report> {
         if let Some(args) = self.import_export_args.as_ref() {
-            args.merge_config(&mut config.import_export_config);
+            args.merge_config(&mut config.import_export)?;
         }
         if let Some(args) = self.feature_args.as_ref() {
-            let mut copy = config.features_config.as_ref().clone();
-            args.merge_config(&mut copy);
-            config.features_config = Arc::new(copy);
+            let mut copy = config.features.as_ref().clone();
+            args.merge_config(&mut copy)?;
+            config.features = Arc::new(copy);
         }
-        if let Some(database_config) = config.database_config.as_mut() {
-            self.db_args.merge_config(database_config);
+        if let Some(database_config) = config.database.as_mut() {
+            self.db_args.merge_config(database_config)?;
         }
 
-        config
+        Ok(config)
     }
 
+    /// Load the configuration file if we have it, and then we'll merge the arguments into it.
+    pub fn load_config(&self) -> Result<Arc<Config>, eyre::Report> {
+        // We use figment to load, but cannot use its merge functionality because our clap enums are
+        // nested using flattening, and figment doesn't support that.
+        let config_path = self.config_file.clone();
+        let config = Config::default();
+        let config = config_path
+            .map(|config_path| {
+                let f = Figment::new()
+                    .merge(Serialized::defaults(config))
+                    .merge(Yaml::file(config_path.clone()));
+
+                f.extract::<Config>().map_err(|e| {
+                    eyre!(
+                        "Failed to parse configuration from {:?}: {}",
+                        config_path,
+                        e
+                    )
+                })
+            })
+            .unwrap_or_else(|| Ok(Config::default()))?;
+        let config = self.merge_config(config)?;
+        let config = Arc::new(config);
+        Ok(config)
+    }
+}
+
+// Helper functions for resolving database paths relative to data_dir
+impl Args {
+    /// Resolve the main database path relative to data_dir
+    pub(crate) fn resolved_db_path(&self) -> PathBuf {
+        if self.db_args.db.is_absolute() {
+            self.db_args.db.clone()
+        } else {
+            self.data_dir.join(&self.db_args.db)
+        }
+    }
+
+    /// Resolve the tasks database path relative to data_dir
+    pub(crate) fn resolved_tasks_db_path(&self) -> PathBuf {
+        match &self.tasks_db {
+            Some(path) => {
+                if path.is_absolute() {
+                    path.clone()
+                } else {
+                    self.data_dir.join(path)
+                }
+            }
+            None => self.data_dir.join("tasks.db"),
+        }
+    }
+
+    /// Resolve the connections database path relative to data_dir
+    pub(crate) fn resolved_connections_db_path(&self) -> Option<PathBuf> {
+        match &self.connections_file {
+            Some(path) => {
+                if path.is_absolute() {
+                    Some(path.clone())
+                } else {
+                    Some(self.data_dir.join(path))
+                }
+            }
+            None => Some(self.data_dir.join("connections.db")),
+        }
+    }
+
+    /// Resolve the events database path relative to data_dir
+    pub(crate) fn resolved_events_db_path(&self) -> PathBuf {
+        match &self.events_db {
+            Some(path) => {
+                if path.is_absolute() {
+                    path.clone()
+                } else {
+                    self.data_dir.join(path)
+                }
+            }
+            None => self.data_dir.join("events.db"),
+        }
+    }
 }

@@ -347,7 +347,7 @@ impl Scheduler {
 
             let program = compile(
                 code.join("\n").as_str(),
-                self.config.features_config.compile_options(),
+                self.config.features.compile_options(),
             )
             .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?;
 
@@ -1331,7 +1331,7 @@ impl Scheduler {
     }
 
     fn checkpoint(&self) -> Result<(), SchedulerError> {
-        let Some(textdump_path) = self.config.import_export_config.output_path.clone() else {
+        let Some(textdump_path) = self.config.import_export.output_path.clone() else {
             error!("Cannot textdump as output directory not configured");
             return Err(SchedulerError::CouldNotStartTask);
         };
@@ -1353,7 +1353,7 @@ impl Scheduler {
                 .as_secs()
         ));
 
-        let encoding_mode = self.config.import_export_config.output_encoding;
+        let encoding_mode = self.config.import_export.output_encoding;
 
         let loader_client = {
             match self.database.loader_client() {
@@ -1367,9 +1367,9 @@ impl Scheduler {
 
         let version_string = self
             .config
-            .import_export_config
-            .version_string(&self.version, &self.config.features_config);
-        let dirdump = self.config.import_export_config.export_format == ImportExportFormat::Objdef;
+            .import_export
+            .version_string(&self.version, &self.config.features);
+        let dirdump = self.config.import_export.export_format == ImportExportFormat::Objdef;
 
         let tr = std::thread::Builder::new()
             .name("moor-export".to_string())

@@ -11,69 +11,15 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use std::path::PathBuf;
-use std::sync::Arc;
 use std::fs::{File, OpenOptions};
+use std::path::PathBuf;
+use std::process::exit;
+use std::sync::Arc;
 
 use crate::args::Args;
+use eyre::{bail, eyre};
 use fs2::FileExt;
-use eyre::{eyre, bail};
-use figment::Figment;
-use figment::providers::{Format, Serialized, Yaml};
 
-// Helper functions for resolving database paths relative to data_dir
-impl Args {
-    /// Resolve the main database path relative to data_dir
-    fn resolved_db_path(&self) -> PathBuf {
-        if self.db_args.db.is_absolute() {
-            self.db_args.db.clone()
-        } else {
-            self.data_dir.join(&self.db_args.db)
-        }
-    }
-
-    /// Resolve the tasks database path relative to data_dir
-    fn resolved_tasks_db_path(&self) -> PathBuf {
-        match &self.tasks_db {
-            Some(path) => {
-                if path.is_absolute() {
-                    path.clone()
-                } else {
-                    self.data_dir.join(path)
-                }
-            }
-            None => self.data_dir.join("tasks.db")
-        }
-    }
-
-    /// Resolve the connections database path relative to data_dir
-    fn resolved_connections_db_path(&self) -> Option<PathBuf> {
-        match &self.connections_file {
-            Some(path) => {
-                if path.is_absolute() {
-                    Some(path.clone())
-                } else {
-                    Some(self.data_dir.join(path))
-                }
-            }
-            None => Some(self.data_dir.join("connections.db"))
-        }
-    }
-
-    /// Resolve the events database path relative to data_dir
-    fn resolved_events_db_path(&self) -> PathBuf {
-        match &self.events_db {
-            Some(path) => {
-                if path.is_absolute() {
-                    path.clone()
-                } else {
-                    self.data_dir.join(path)
-                }
-            }
-            None => self.data_dir.join("events.db")
-        }
-    }
-}
 use crate::connections::ConnectionRegistryFactory;
 use crate::rpc_server::RpcServer;
 use crate::workers_server::WorkersServer;
@@ -82,7 +28,7 @@ use eyre::Report;
 use mimalloc::MiMalloc;
 use moor_common::build;
 use moor_db::{Database, TxDB};
-use moor_kernel::config::ImportExportFormat;
+use moor_kernel::config::{Config, ImportExportFormat};
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_objdef::ObjectDefinitionLoader;
@@ -94,6 +40,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 mod args;
 mod connections;
 mod event_log;
+mod feature_args;
 mod rpc_hosts;
 mod rpc_server;
 mod rpc_session;
@@ -113,16 +60,16 @@ static GLOBAL: MiMalloc = MiMalloc;
 fn acquire_data_directory_lock(data_dir: &PathBuf) -> Result<File, Report> {
     // Create the data directory if it doesn't exist
     std::fs::create_dir_all(data_dir)?;
-    
+
     // Create a lock file in the data directory
     let lock_file_path = data_dir.join(".moor-daemon.lock");
-    
+
     let lock_file = OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
         .open(&lock_file_path)?;
-    
+
     // Try to acquire exclusive lock
     match lock_file.try_lock_exclusive() {
         Ok(()) => {
@@ -140,7 +87,7 @@ fn acquire_data_directory_lock(data_dir: &PathBuf) -> Result<File, Report> {
 }
 
 fn perform_import(
-    config: &moor_kernel::config::Config,
+    config: &Config,
     import_path: &PathBuf,
     mut loader_interface: Box<dyn LoaderInterface>,
     version: semver::Version,
@@ -149,23 +96,18 @@ fn perform_import(
     // We have two ways of loading textdump.
     // legacy "textdump" format from LambdaMOO,
     // or our own exploded objdef format.
-    match &config.import_export_config.import_format {
+    match &config.import_export.import_format {
         ImportExportFormat::Objdef => {
             let mut od = ObjectDefinitionLoader::new(loader_interface.as_mut());
-            od.read_dirdump(
-                config.features_config.compile_options(),
-                import_path.as_ref(),
-            )
-            .unwrap();
+            od.read_dirdump(config.features.compile_options(), import_path.as_ref())?;
         }
         ImportExportFormat::Textdump => {
             textdump_load(
                 loader_interface.as_mut(),
                 import_path.clone(),
                 version.clone(),
-                config.features_config.compile_options(),
-            )
-            .unwrap();
+                config.features.compile_options(),
+            )?;
         }
     }
 
@@ -187,17 +129,10 @@ fn perform_import(
 fn main() -> Result<(), Report> {
     color_eyre::install()?;
 
+    let args = Args::parse();
+
     let version = semver::Version::parse(build::PKG_VERSION)
         .map_err(|e| eyre!("Invalid moor version '{}': {}", build::PKG_VERSION, e))?;
-
-    let cli_args: Args = Args::parse();
-    let config_file = cli_args.config_file.clone();
-    let mut args_figment = Figment::new().merge(Serialized::defaults(cli_args));
-    if let Some(config_file) = config_file {
-        args_figment = args_figment.merge(Yaml::file(config_file));
-    }
-    let args = args_figment.extract::<Args>()
-        .map_err(|e| eyre!("Unable to parse configuration: {}", e))?;
 
     let main_subscriber = tracing_subscriber::fmt()
         .compact()
@@ -219,23 +154,19 @@ fn main() -> Result<(), Report> {
     // Check the public/private keypair file to see if it exists. If it does, parse it and establish
     // the keypair from it...
     let (private_key, public_key) = if args.public_key.exists() && args.private_key.exists() {
-        load_keypair(&args.public_key, &args.private_key)
-            .map_err(|e| eyre!("Unable to load keypair from public and private key files: {}", e))?
+        load_keypair(&args.public_key, &args.private_key).map_err(|e| {
+            eyre!(
+                "Unable to load keypair from public and private key files: {}",
+                e
+            )
+        })?
     } else {
         bail!(
             "Public ({:?}) and/or private ({:?}) key files must exist",
-            args.public_key, args.private_key
+            args.public_key,
+            args.private_key
         );
     };
-
-    // Load core moor config using figment, merging from config file and CLI args
-    let mut config_figment = Figment::new().merge(Serialized::defaults(moor_kernel::config::Config::default()));
-    if let Some(config_file) = args.config_file.as_ref() {
-        config_figment = config_figment.merge(Yaml::file(config_file).nested());
-    }
-    let base_config = config_figment.extract::<moor_kernel::config::Config>()
-        .unwrap_or_default();
-    let config = Arc::new(args.merge_config(base_config));
 
     // Acquire exclusive lock on the data directory to prevent multiple daemon instances
     let _data_dir_lock = acquire_data_directory_lock(&args.data_dir)?;
@@ -249,6 +180,8 @@ fn main() -> Result<(), Report> {
             .unwrap_or_else(|_| "unknown".to_string()),
     );
 
+    let config = args.load_config()?;
+
     let resolved_db_path = args.resolved_db_path();
     info!(
         "moor {} daemon starting. {phys_cores} physical cores; {logical_cores} logical cores. Using database at {:?}",
@@ -256,12 +189,12 @@ fn main() -> Result<(), Report> {
     );
     let (database, freshly_made) = TxDB::open(
         Some(&resolved_db_path),
-        config.database_config.clone().unwrap_or_default(),
+        config.database.clone().unwrap_or_default(),
     );
     let database = Box::new(database);
     info!(path = ?resolved_db_path, "Opened database");
 
-    if let Some(import_path) = config.import_export_config.input_path.as_ref() {
+    if let Some(import_path) = config.import_export.input_path.as_ref() {
         // If the database already existed, do not try to import the textdump...
         if !freshly_made {
             info!("Database already exists, skipping textdump import");
@@ -277,38 +210,28 @@ fn main() -> Result<(), Report> {
                 loader_interface,
                 version.clone(),
             ) {
-                // If import failed, we need to get the old database file out of the way. We don't want to
-                // leave a dirty empty database file around, or it will be picked up next time.
-                // We could just delete the databse, but we might have regrets about that,
-                // So let's move the whole directory to XXX.timestamp ...
                 error!("Import failed: {}", import_error);
-                
-                let timestamp = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                    
-                let destination_str = resolved_db_path
-                    .to_str()
-                    .ok_or_else(|| eyre!("Database path contains invalid UTF-8"))?;
-                let destination = format!("{}.{}", destination_str, timestamp);
-                
-                match std::fs::rename(&resolved_db_path, &destination) {
-                    Ok(()) => {
-                        info!("Moved (likely empty) database to {:?}", destination);
-                    }
-                    Err(e) => {
-                        error!("Failed to rename database from {:?} to {}: {}", resolved_db_path, destination, e);
-                    }
+
+                // Just delete the created database file if the import fails.
+                if let Err(e) = std::fs::remove_file(&resolved_db_path) {
+                    panic!(
+                        "Failed to remove database {:?} after import failure: {}",
+                        resolved_db_path, e
+                    );
+                } else {
+                    info!(
+                        "Removed bad database {:?} after import failure",
+                        resolved_db_path
+                    );
                 }
-                
-                bail!("Import failed: {}", import_error);
+
+                exit(1);
             }
         }
     }
 
     let resolved_tasks_db_path = args.resolved_tasks_db_path();
-    let tasks_db: Box<dyn TasksDb> = if config.features_config.persistent_tasks {
+    let tasks_db: Box<dyn TasksDb> = if config.features.persistent_tasks {
         Box::new(tasks_fjall::FjallTasksDB::open(&resolved_tasks_db_path).0)
     } else {
         Box::new(NoopTasksDb {})
@@ -317,9 +240,13 @@ fn main() -> Result<(), Report> {
     // We have to create the RpcServer before starting the scheduler because we need to pass it in
     // as a parameter to the scheduler for background session construction.
     let zmq_ctx = zmq::Context::new();
-    zmq_ctx
-        .set_io_threads(args.num_io_threads)
-        .map_err(|e| eyre!("Failed to set number of IO threads to {}: {}", args.num_io_threads, e))?;
+    zmq_ctx.set_io_threads(args.num_io_threads).map_err(|e| {
+        eyre!(
+            "Failed to set number of IO threads to {}: {}",
+            args.num_io_threads,
+            e
+        )
+    })?;
 
     // Create the connections registry based on args/config
     let resolved_connections_db_path = args.resolved_connections_db_path();
@@ -360,12 +287,21 @@ fn main() -> Result<(), Report> {
     );
     let workers_sender = workers_server
         .start(&args.workers_request_listen)
-        .map_err(|e| eyre!("Failed to start workers server on {}: {}", args.workers_request_listen, e))?;
+        .map_err(|e| {
+            eyre!(
+                "Failed to start workers server on {}: {}",
+                args.workers_request_listen,
+                e
+            )
+        })?;
 
     let workers_listen_addr = args.workers_response_listen.clone();
     std::thread::spawn(move || {
         if let Err(e) = workers_server.listen(&workers_listen_addr) {
-            error!("Workers server failed to listen on {}: {}", workers_listen_addr, e);
+            error!(
+                "Workers server failed to listen on {}: {}",
+                workers_listen_addr, e
+            );
         }
     });
 
@@ -381,7 +317,8 @@ fn main() -> Result<(), Report> {
         Some(workers_sender),
         Some(worker_scheduler_recv),
     );
-    let scheduler_client = scheduler.client()
+    let scheduler_client = scheduler
+        .client()
         .map_err(|e| eyre!("Failed to get scheduler client: {}", e))?;
 
     // The scheduler thread:
@@ -392,8 +329,8 @@ fn main() -> Result<(), Report> {
 
     // Background DB checkpoint thread.
     if let (Some(checkpoint_interval), Some(output_path)) = (
-        config.import_export_config.checkpoint_interval,
-        config.import_export_config.output_path.clone(),
+        config.import_export.checkpoint_interval,
+        config.import_export.output_path.clone(),
     ) {
         let checkpoint_kill_switch = kill_switch.clone();
         let checkpoint_scheduler_client = scheduler_client.clone();
@@ -445,11 +382,11 @@ fn main() -> Result<(), Report> {
     if let Err(e) = scheduler_client.submit_shutdown("System shutting down") {
         error!("Failed to send shutdown signal to scheduler: {}", e);
     }
-    
+
     if let Err(e) = scheduler_loop_jh.join() {
         error!("Scheduler thread panicked: {:?}", e);
     }
-    
+
     info!("Done.");
     Ok(())
 }
