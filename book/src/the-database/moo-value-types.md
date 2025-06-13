@@ -376,8 +376,8 @@ To create a symbol, you put a single quote (apostrophe) before the text, like th
 
 **Symbols don't support string operations**
 
-- You can't slice symbols like `'hello`[1..3]
-- You can't index into them like `'test`[2]
+- You can't slice symbols like `'hello[1..3]`
+- You can't index into them like `'test[2]`
 - They're meant to be used whole, not manipulated like text
 
 **Symbols with the same text are identical**
