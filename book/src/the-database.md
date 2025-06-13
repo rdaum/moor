@@ -3,8 +3,8 @@
 ## What makes MOO unique
 
 MOO (MUD Object Oriented) is fundamentally different from most programming environments. Instead of writing programs
-that manipulate external data, **MOO programs live inside a persistent object database that represents a virtual world
-**. Every room, character, item, and even the programs themselves are objects stored in this database.
+that manipulate external data, **MOO programs live inside a persistent object database that represents a virtual world**.
+Every room, character, item, and even the programs themselves are objects stored in this database.
 
 What makes this special:
 
