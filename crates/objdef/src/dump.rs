@@ -250,7 +250,7 @@ fn collect_nested_constants(
                 let file_name = if path.is_empty() {
                     pd.name.to_string()
                 } else {
-                    format!("{}_{}", path.join("_"), pd.name.to_string())
+                    format!("{}_{}", path.join("_"), pd.name)
                 };
                 
                 // Add this candidate
