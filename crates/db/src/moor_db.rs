@@ -15,7 +15,7 @@ use crate::config::DatabaseConfig;
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
 use crate::prop_cache::PropResolutionCache;
-use crate::tx_management::{Relation, Timestamp, Tx, WorkingSet};
+use crate::tx_management::{Canonical, Relation, Timestamp, Tx, WorkingSet};
 use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 use crate::ws_transaction::WorldStateTransaction;
 use crate::{CommitSet, ObjAndUUIDHolder, StringHolder};
@@ -302,6 +302,44 @@ impl MoorDB {
             Relation::new(Symbol::mk("object_propvalues"), Arc::new(object_propvalues));
         let object_propflags =
             Relation::new(Symbol::mk("object_propflags"), Arc::new(object_propflags));
+
+        // Fill the relations with all the values from their providers.
+        object_location
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_contents
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_flags
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_parent
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_children
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_owner
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_name
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_verbdefs
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_verbs
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_propdefs
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_propvalues
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
+        object_propflags
+            .scan(&|_, _| true)
+            .expect("Failed to seed base relation");
 
         let (commit_channel, commit_receiver) = flume::unbounded();
         let (usage_send, usage_recv) = flume::unbounded();
