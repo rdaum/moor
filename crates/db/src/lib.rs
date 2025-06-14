@@ -31,6 +31,7 @@ pub(crate) mod moor_db;
 #[cfg(test)]
 mod moor_db_concurrent_tests;
 mod moor_db_tests;
+mod relation_defs;
 mod ws_transaction;
 
 use crate::db_worldstate::DbWorldState;

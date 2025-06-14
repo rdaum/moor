@@ -54,6 +54,7 @@ tracing.workspace = true
 byteview.workspace = true
 lazy_static.workspace = true
 minstant.workspace = true
+paste.workspace = true
 rand.workspace = true
 uuid.workspace = true
 

@@ -13,14 +13,10 @@
 
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
-use crate::moor_db::CachePadded;
-use crate::moor_db::WorkingSets;
-use crate::prop_cache::PropResolutionCache;
-use crate::tx_management::{Relation, RelationTransaction, Tx};
-use crate::verb_cache::{AncestryCache, VerbResolutionCache};
+use crate::moor_db::{WorkingSets, WorldStateTransaction, SEQUENCE_MAX_OBJECT};
+use crate::tx_management::{Relation, RelationTransaction};
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
-use flume::Sender;
 use moor_common::model::{
     CommitResult, HasUuid, Named, ObjAttrs, ObjFlag, ObjSet, ObjectRef, PropDef, PropDefs,
     PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
@@ -31,8 +27,6 @@ use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hash};
-use std::sync::Arc;
-use std::sync::atomic::AtomicI64;
 use std::time::{Duration, Instant};
 use tracing::warn;
 use uuid::Uuid;
@@ -43,50 +37,6 @@ type RTx<Domain, Codomain> = RelationTransaction<
     Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>,
 >;
 
-pub const SEQUENCE_MAX_OBJECT: usize = 0;
-
-pub struct WorldStateTransaction {
-    #[allow(dead_code)]
-    pub(crate) tx: Tx,
-
-    /// Channel to send our working set to the main thread for commit.
-    /// Reply channel is used to send back the result of the commit.
-    pub(crate) commit_channel: Sender<CommitSet>,
-
-    /// Channel to request the current disk usage of the database.
-    /// Note that for now the usage doesn't include the current pending transaction.
-    pub(crate) usage_channel: Sender<oneshot::Sender<usize>>,
-
-    pub(crate) object_location: RTx<Obj, Obj>,
-    pub(crate) object_contents: RTx<Obj, ObjSet>,
-    pub(crate) object_flags: RTx<Obj, BitEnum<ObjFlag>>,
-    pub(crate) object_parent: RTx<Obj, Obj>,
-    pub(crate) object_children: RTx<Obj, ObjSet>,
-    pub(crate) object_owner: RTx<Obj, Obj>,
-    pub(crate) object_name: RTx<Obj, StringHolder>,
-
-    pub(crate) object_verbdefs: RTx<Obj, VerbDefs>,
-    pub(crate) object_verbs: RTx<ObjAndUUIDHolder, ProgramType>,
-    pub(crate) object_propdefs: RTx<Obj, PropDefs>,
-    pub(crate) object_propvalues: RTx<ObjAndUUIDHolder, Var>,
-    pub(crate) object_propflags: RTx<ObjAndUUIDHolder, PropPerms>,
-
-    pub(crate) sequences: [Arc<CachePadded<AtomicI64>>; 16],
-
-    /// Our fork of the global verb resolution cache. We fill or flush in our local copy, and
-    /// when we submit ours becomes the new global.
-    pub(crate) verb_resolution_cache: Box<VerbResolutionCache>,
-
-    /// Same as above but for properties.
-    pub(crate) prop_resolution_cache: Box<PropResolutionCache>,
-
-    /// A (local-tx-only for now) cache of the ancestors of objects, as we look them up.
-    pub(crate) ancestry_cache: Box<AncestryCache>,
-
-    /// True if this transaction has any *writes* at all. If not, our commits can be immediate
-    /// and successful.
-    pub(crate) has_mutations: bool,
-}
 
 fn upsert<Domain, Codomain>(
     table: &mut RTx<Domain, Codomain>,

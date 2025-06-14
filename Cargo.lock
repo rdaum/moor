@@ -3045,6 +3045,7 @@ dependencies = [
  "moor-common",
  "moor-var",
  "oneshot",
+ "paste",
  "rand 0.8.5",
  "serde",
  "shuttle",

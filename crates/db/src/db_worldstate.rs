@@ -15,7 +15,7 @@ use ahash::HashSet;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-use crate::ws_transaction::WorldStateTransaction;
+use crate::moor_db::WorldStateTransaction;
 use moor_common::model::Perms;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;

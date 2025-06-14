@@ -15,7 +15,7 @@ mod indexes;
 mod relation;
 mod relation_tx;
 
-pub use relation::Relation;
+pub use relation::{CheckRelation, Relation};
 pub use relation_tx::{RelationTransaction, WorkingSet};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
