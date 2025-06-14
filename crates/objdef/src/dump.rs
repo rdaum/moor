@@ -159,22 +159,140 @@ fn propname(pname: Symbol) -> String {
     }
 }
 
-pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path: &Path) {
-    // Find #0 in the object_defs, and look at its properties to find $names for certain objects
-    // we'll use those for filenames when we can
-    // TODO: this doesn't help with nested values
+fn extract_system_object_references(object_defs: &[ObjectDefinition]) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
+    // Collect all potential constants from direct and nested properties
+    let mut all_candidates = Vec::new();
+    let mut visited = std::collections::HashSet::new();
+    
+    if let Some(sysobj) = object_defs.iter().find(|od| od.oid == SYSTEM_OBJECT) {
+        collect_nested_constants(object_defs, sysobj, &[], &mut all_candidates, &mut visited);
+    }
+    
+    // Group candidates by object to handle multiple constants pointing to same object
+    let mut candidates_by_obj: HashMap<Obj, Vec<_>> = HashMap::new();
+    for candidate in all_candidates {
+        candidates_by_obj.entry(candidate.obj).or_default().push(candidate);
+    }
+    
+    // Pick the best candidate for each object and filter out ambiguous constant names
+    let mut constant_name_counts = HashMap::new();
+    let mut selected_candidates = Vec::new();
+    
+    for (_obj, mut candidates) in candidates_by_obj {
+        // Sort by preference: shorter paths first, then alphabetical
+        candidates.sort_by(|a, b| {
+            a.path_depth.cmp(&b.path_depth)
+                .then_with(|| a.constant_name.cmp(&b.constant_name))
+        });
+        
+        // Pick the best candidate
+        if let Some(best) = candidates.into_iter().next() {
+            *constant_name_counts.entry(best.constant_name.clone()).or_insert(0) += 1;
+            selected_candidates.push(best);
+        }
+    }
+    
+    // Add SYSOBJ for #0 if no constant already exists for it
+    let sysobj_constant_name = "SYSOBJ".to_string();
+    if !selected_candidates.iter().any(|c| c.obj == SYSTEM_OBJECT) {
+        *constant_name_counts.entry(sysobj_constant_name.clone()).or_insert(0) += 1;
+        selected_candidates.push(ConstantCandidate {
+            obj: SYSTEM_OBJECT,
+            constant_name: sysobj_constant_name,
+            file_name: "sysobj".to_string(),
+            path_depth: 0,
+        });
+    }
+    
+    // Filter out ambiguous constant names and build final maps
     let mut index_names = HashMap::new();
     let mut file_names = HashMap::new();
-    if let Some(sysobj) = object_defs.iter().find(|od| od.oid == SYSTEM_OBJECT) {
-        for pd in sysobj.property_definitions.iter() {
-            if let Some(value) = pd.value.as_ref() {
-                if let Some(oid) = value.as_object() {
-                    index_names.insert(oid, pd.name.to_string().to_ascii_uppercase());
-                    file_names.insert(oid, pd.name.to_string());
+    
+    for candidate in selected_candidates {
+        if *constant_name_counts.get(&candidate.constant_name).unwrap_or(&0) == 1 {
+            index_names.insert(candidate.obj, candidate.constant_name);
+            file_names.insert(candidate.obj, candidate.file_name);
+        }
+    }
+    
+    (index_names, file_names)
+}
+
+#[derive(Debug, Clone)]
+struct ConstantCandidate {
+    obj: Obj,
+    constant_name: String,
+    file_name: String,
+    path_depth: usize,
+}
+
+fn collect_nested_constants(
+    object_defs: &[ObjectDefinition],
+    current_obj: &ObjectDefinition,
+    path: &[String],
+    candidates: &mut Vec<ConstantCandidate>,
+    visited: &mut std::collections::HashSet<Obj>,
+) {
+    // Prevent infinite recursion by checking if we've already visited this object
+    if visited.contains(&current_obj.oid) {
+        return;
+    }
+    visited.insert(current_obj.oid);
+    
+    for pd in current_obj.property_definitions.iter() {
+        if let Some(value) = pd.value.as_ref() {
+            if let Some(oid) = value.as_object() {
+                // Build the constant name from the path
+                let mut constant_parts = path.to_vec();
+                constant_parts.push(pd.name.to_string());
+                
+                let constant_name = constant_parts.join("_").to_ascii_uppercase();
+                let file_name = if path.is_empty() {
+                    pd.name.to_string()
+                } else {
+                    format!("{}_{}", path.join("_"), pd.name.to_string())
+                };
+                
+                // Add this candidate
+                candidates.push(ConstantCandidate {
+                    obj: oid,
+                    constant_name,
+                    file_name,
+                    path_depth: path.len(),
+                });
+                
+                // Recursively traverse nested object properties
+                if let Some(nested_obj) = object_defs.iter().find(|od| od.oid == oid) {
+                    let mut new_path = path.to_vec();
+                    new_path.push(pd.name.to_string());
+                    collect_nested_constants(object_defs, nested_obj, &new_path, candidates, visited);
                 }
             }
         }
     }
+    
+    // Remove from visited set when done to allow this object to be visited in different paths
+    visited.remove(&current_obj.oid);
+}
+
+fn generate_constants_file(index_names: &HashMap<Obj, String>, directory_path: &Path) {
+    let mut constants = String::new();
+    // Sort incrementally by object id.
+    let mut objects: Vec<_> = index_names.iter().collect();
+    objects.sort_by(|a, b| a.0.id().0.cmp(&b.0.id().0));
+    for i in objects {
+        constants.push_str(&format!("define {} = {};\n", i.1.to_ascii_uppercase(), i.0));
+    }
+    let constants_file = directory_path.join("constants.moo");
+    let mut constants_file = std::fs::File::create(constants_file).unwrap();
+    constants_file.write_all(constants.as_bytes()).unwrap();
+}
+
+pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path: &Path) {
+    // Find #0 in the object_defs, and look at its properties to find $names for certain objects
+    // we'll use those for filenames when we can
+    // TODO: this doesn't help with nested values
+    let (index_names, file_names) = extract_system_object_references(object_defs);
 
     // We will generate one file per object.
     // Otherwise for large cores it just gets insane.
@@ -190,19 +308,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         );
     }
 
-    // Output a "constants.moo" file "define X = #5;";
-    {
-        let mut constants = String::new();
-        // Sort incrementall by object id.
-        let mut objects: Vec<_> = index_names.iter().collect();
-        objects.sort_by(|a, b| a.0.id().0.cmp(&b.0.id().0));
-        for i in objects {
-            constants.push_str(&format!("define {} = {};\n", i.1.to_ascii_uppercase(), i.0));
-        }
-        let constants_file = directory_path.join("constants.moo");
-        let mut constants_file = std::fs::File::create(constants_file).unwrap();
-        constants_file.write_all(constants.as_bytes()).unwrap();
-    }
+    generate_constants_file(&index_names, directory_path);
 
     for o in object_defs {
         // Pick a file name.
