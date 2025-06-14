@@ -24,6 +24,7 @@ use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, WorldStateSource};
 use moor_common::tasks::SchedulerError;
 use moor_common::tasks::{NoopSystemControl, SessionFactory};
 use moor_db::{Database, DatabaseConfig, TxDB};
+use moor_kernel::SchedulerClient;
 use moor_kernel::config::{Config, FeaturesConfig, ImportExportConfig};
 use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TaskResult};
@@ -99,6 +100,48 @@ pub struct Args {
 
     #[clap(long, help = "Enable debug logging")]
     debug: bool,
+}
+
+fn run_tests(
+    test_directory: &PathBuf,
+    player: Obj,
+    programmer: Obj,
+    wizard: Obj,
+    scheduler_client: SchedulerClient,
+) -> Result<(), eyre::Report> {
+    let moot_options = MootOptions::default()
+        .wizard_object(wizard)
+        .nonprogrammer_object(player)
+        .programmer_object(programmer)
+        .init_logging(false);
+
+    // Iterate all the .moot tests and run them in the context of the current database.
+    warn!("Running integration tests in {}", test_directory.display());
+    let Ok(dir) = std::fs::read_dir(test_directory) else {
+        error!(
+            "Failed to read test directory: {}",
+            test_directory.display()
+        );
+        return Ok(());
+    };
+    for entry in dir {
+        let Ok(entry) = entry else {
+            continue;
+        };
+
+        let path = entry.path();
+        let Some(extension) = path.extension() else {
+            continue;
+        };
+
+        if extension != "moot" {
+            continue;
+        }
+
+        run_test(&moot_options, scheduler_client.clone(), &path);
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<(), eyre::Report> {
@@ -394,30 +437,13 @@ fn main() -> Result<(), eyre::Report> {
             args.test_programmer
                 .expect("Must specify programmer object"),
         );
-        let moot_options = MootOptions::default()
-            .wizard_object(wizard)
-            .nonprogrammer_object(player)
-            .programmer_object(programmer)
-            .init_logging(false);
-
-        // Iterate all the .moot tests and run them in the context of the current database.
-        warn!("Running integration tests in {}", test_directory.display());
-        for entry in std::fs::read_dir(test_directory).unwrap() {
-            let Ok(entry) = entry else {
-                continue;
-            };
-
-            let path = entry.path();
-            let Some(extension) = path.extension() else {
-                continue;
-            };
-
-            if extension != "moot" {
-                continue;
-            }
-
-            run_test(&moot_options, scheduler_client.clone(), &path);
-        }
+        run_tests(
+            &test_directory,
+            player,
+            programmer,
+            wizard,
+            scheduler_client.clone(),
+        )?;
     }
 
     scheduler_client
