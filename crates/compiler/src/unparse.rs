@@ -904,9 +904,9 @@ pub fn to_literal(v: &Var) -> String {
     }
 }
 
-/// Like `to_literal` but performs a tree walk assembling the string out of calls to a designated
-/// function as it recursively visits each element.
-pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
+/// Like `to_literal_objsub` but formats lists whose literal form would exceed 80 characters
+/// into multiple lines with indentation.
+pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth: usize) -> String {
     let f = |o: &Obj| {
         if let Some(name_sub) = name_subs.get(o) {
             name_sub.clone()
@@ -915,28 +915,85 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
         }
     };
     let mut result = String::new();
+    let indent_str = " ".repeat(indent_depth);
+    let inner_indent_str = " ".repeat(indent_depth + INDENT_LEVEL);
+
     match v.variant() {
         Variant::List(l) => {
-            result.push('{');
+            // First, try to format on one line
+            let mut single_line = String::new();
+            single_line.push('{');
             for (i, v) in l.iter().enumerate() {
                 if i > 0 {
-                    result.push_str(", ");
+                    single_line.push_str(", ");
                 }
-                result.push_str(to_literal_objsub(&v, name_subs).as_str());
+                single_line.push_str(
+                    to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
+                );
             }
-            result.push('}');
+            single_line.push('}');
+
+            // If single line exceeds 80 characters, format multiline
+            if single_line.len() > 80 {
+                result.push('{');
+                for (i, v) in l.iter().enumerate() {
+                    if i > 0 {
+                        result.push(',');
+                    }
+                    result.push('\n');
+                    result.push_str(&inner_indent_str);
+                    result.push_str(
+                        to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
+                    );
+                }
+                result.push('\n');
+                result.push_str(&indent_str);
+                result.push('}');
+            } else {
+                result = single_line;
+            }
         }
         Variant::Map(m) => {
-            result.push('[');
+            // First, try to format on one line
+            let mut single_line = String::new();
+            single_line.push('[');
             for (i, (k, v)) in m.iter().enumerate() {
                 if i > 0 {
-                    result.push_str(", ");
+                    single_line.push_str(", ");
                 }
-                result.push_str(to_literal_objsub(&k, name_subs).as_str());
-                result.push_str(" -> ");
-                result.push_str(to_literal_objsub(&v, name_subs).as_str());
+                single_line.push_str(
+                    to_literal_objsub(&k, name_subs, indent_depth + INDENT_LEVEL).as_str(),
+                );
+                single_line.push_str(" -> ");
+                single_line.push_str(
+                    to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
+                );
             }
-            result.push(']');
+            single_line.push(']');
+
+            // If single line exceeds 80 characters, format multiline
+            if single_line.len() > 80 {
+                result.push('[');
+                for (i, (k, v)) in m.iter().enumerate() {
+                    if i > 0 {
+                        result.push(',');
+                    }
+                    result.push('\n');
+                    result.push_str(&inner_indent_str);
+                    result.push_str(
+                        to_literal_objsub(&k, name_subs, indent_depth + INDENT_LEVEL).as_str(),
+                    );
+                    result.push_str(" -> ");
+                    result.push_str(
+                        to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
+                    );
+                }
+                result.push('\n');
+                result.push_str(&indent_str);
+                result.push(']');
+            } else {
+                result = single_line;
+            }
         }
         Variant::Flyweight(fl) => {
             // Syntax:
@@ -951,7 +1008,9 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
                     }
                     result.push_str(&k.as_arc_string());
                     result.push_str(" -> ");
-                    result.push_str(to_literal_objsub(v, name_subs).as_str());
+                    result.push_str(
+                        to_literal_objsub(v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
+                    );
                 }
                 result.push(']');
             }
@@ -962,7 +1021,9 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>) -> String {
                     if i > 0 {
                         result.push_str(", ");
                     }
-                    result.push_str(to_literal_objsub(&v, name_subs).as_str());
+                    result.push_str(
+                        to_literal_objsub(&v, name_subs, indent_depth + INDENT_LEVEL).as_str(),
+                    );
                 }
                 result.push('}');
             }

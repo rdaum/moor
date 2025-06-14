@@ -262,7 +262,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
 
             let mut base = format!("{indent}property {name} (owner: {owner}, flags: \"{flags}\")");
             if let Some(value) = &pd.value {
-                let value = to_literal_objsub(value, &index_names);
+                let value = to_literal_objsub(value, &index_names, 2);
                 base.push_str(&format!(" = {}", value));
             }
             base.push_str(";\n");
@@ -281,7 +281,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
                 base.push_str(&format!(" (owner: {owner}, flags: \"{flags}\")"));
             }
             if let Some(value) = &ps.value {
-                let value = to_literal_objsub(value, &index_names);
+                let value = to_literal_objsub(value, &index_names, 2);
                 base.push_str(&format!(" = {}", value));
             }
             base.push_str(";\n");
