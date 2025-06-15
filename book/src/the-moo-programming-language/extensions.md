@@ -88,7 +88,7 @@ Performance wise, construction and lookup are O(log n) operations, and iteration
 ### Custom errors and errors with attached messages
 
 LambdaMOO had a set of hardcoded builtin-in errors with numeric values. It also uses the same errors for exceptions,
-and allows optional messages an an optional value to be passed when raising them, but these are not part of the error
+and allows optional messages and an optional value to be passed when raising them, but these are not part of the error
 value itself.
 
 `mooR` adds support for custom errors, where any value that comes after `E_` is treated as an error identifier, though
