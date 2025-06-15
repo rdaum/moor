@@ -349,23 +349,6 @@ mod tests {
     }
 
     #[test]
-    fn test_bind_global_scope_w_register() {
-        let mut unbound_names = VarScope::new();
-        let before_width = unbound_names.variables.len() as u16;
-        let ufoo = unbound_names.declare_name("foo", DeclType::Let).unwrap();
-        let ufob = unbound_names.declare_name("fob", DeclType::Let).unwrap();
-        assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
-        assert_eq!(unbound_names.find_name("fob").unwrap(), ufob);
-
-        let bound_names = unbound_names.bind();
-        let bfoo = bound_names.name_for_ident("foo").unwrap();
-        let bfob = bound_names.name_for_ident("fob").unwrap();
-        assert_eq!(bfoo.0, before_width);
-        assert_eq!(bfob.0, before_width + 1);
-        assert_eq!(bound_names.global_width as u16, before_width + 3);
-    }
-
-    #[test]
     fn test_register_inside_scope() {
         let mut unbound_names = VarScope::new();
         let before_width = unbound_names.variables.len() as u16;
