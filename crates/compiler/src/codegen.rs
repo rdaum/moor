@@ -865,8 +865,7 @@ impl CodegenState {
                     self.make_jump_label(id.as_ref().map(|id| self.find_name(id)));
                 self.commit_jump_label(loop_start_label);
 
-                let loop_end_label =
-                    self.make_jump_label(id.as_ref().map(|id| self.find_name(id)));
+                let loop_end_label = self.make_jump_label(id.as_ref().map(|id| self.find_name(id)));
                 self.generate_expr(condition)?;
                 match id {
                     None => self.emit(Op::While {

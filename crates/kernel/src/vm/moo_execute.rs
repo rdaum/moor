@@ -19,7 +19,7 @@ use lazy_static::lazy_static;
 use moor_common::model::WorldState;
 use moor_compiler::{Op, ScatterLabel, to_literal};
 use moor_var::{
-    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_error,
+    E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_bool, v_error,
 };
 use moor_var::{
     Error, IndexMode, Obj, Sequence, TypeClass, Var, Variant, v_bool_int, v_empty_list,
@@ -74,9 +74,9 @@ pub fn moo_frame_execute(
     world_state: &mut dyn WorldState,
     features_config: &FeaturesConfig,
 ) -> ExecutionResult {
-    // Special case for empty opcodes set, just return v_none() immediately.
+    // Special case for empty opcodes set, just return immediately.
     if f.opcodes().is_empty() {
-        return ExecutionResult::Complete(v_none());
+        return ExecutionResult::Complete(v_bool(false));
     }
 
     // The per-execution slice count. This is used to limit the amount of work we do in a single
@@ -741,7 +741,7 @@ pub fn moo_frame_execute(
                 return ExecutionResult::Return(v_int(0));
             }
             Op::Done => {
-                return ExecutionResult::Return(v_none());
+                return ExecutionResult::Return(v_bool(false));
             }
             Op::FuncCall { id } => {
                 // Pop arguments, should be a list.

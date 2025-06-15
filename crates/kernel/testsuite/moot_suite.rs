@@ -33,7 +33,7 @@ use moor_kernel::{
 };
 use moor_moot::stylesheet::MOOT_STYLESHEET;
 use moor_moot::{MootOptions, MootRunner, execute_moot_test};
-use moor_var::{Obj, Var, v_none};
+use moor_var::{Obj, Var, v_bool};
 
 mod common;
 
@@ -108,7 +108,7 @@ impl MootRunner for SchedulerMootRunner {
     }
 
     fn none(&self) -> Var {
-        v_none()
+        v_bool(false)
     }
 
     fn read_line(&mut self, _player: &Obj) -> eyre::Result<Option<String>> {

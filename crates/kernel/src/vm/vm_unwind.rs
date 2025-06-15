@@ -21,7 +21,7 @@ use moor_common::model::Named;
 use moor_common::model::VerbFlag;
 use moor_common::tasks::Exception;
 use moor_compiler::{BUILTINS, Label, Offset, to_literal};
-use moor_var::{Error, NOTHING, v_arc_string, v_error, v_string};
+use moor_var::{Error, NOTHING, v_arc_string, v_bool, v_error, v_string};
 use moor_var::{Var, v_err, v_int, v_list, v_none, v_obj, v_str};
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
@@ -278,7 +278,7 @@ impl VMExecState {
 
         match why {
             FinallyReason::Return(r) => ExecutionResult::Complete(r),
-            FinallyReason::Fallthrough => ExecutionResult::Complete(v_none()),
+            FinallyReason::Fallthrough => ExecutionResult::Complete(v_bool(false)),
             _ => ExecutionResult::Exception(why),
         }
     }

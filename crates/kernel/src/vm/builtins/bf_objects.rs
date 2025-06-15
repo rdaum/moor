@@ -670,7 +670,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     //            then prepare :exitfunc on the original object source
     //            if :exitfunc doesn't exist, proceed to 3 (enterfunc)
     //    2    => set tramp to 3, call :enterfunc on the destination if it exists, result is ignored.
-    //    3    => return v_none
+    //    3    => return out (retnil)
 
     let bf_frame = bf_args.bf_frame_mut();
     let mut tramp = bf_frame
