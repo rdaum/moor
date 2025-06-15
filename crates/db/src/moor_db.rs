@@ -37,7 +37,8 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tracing::{error, warn};
 
-use crate::relation_defs::{CachePadded, define_relations};
+use crate::relation_defs::define_relations;
+use crate::utils::CachePadded;
 
 define_relations! {
     object_location: Obj => Obj,

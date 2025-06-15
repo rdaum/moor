@@ -40,6 +40,7 @@ pub use config::{DatabaseConfig, TableConfig};
 mod config;
 mod prop_cache;
 mod tx_management;
+mod utils;
 mod verb_cache;
 
 use crate::prop_cache::PropResolutionCache;
