@@ -159,43 +159,53 @@ fn propname(pname: Symbol) -> String {
     }
 }
 
-fn extract_system_object_references(object_defs: &[ObjectDefinition]) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
+fn extract_system_object_references(
+    object_defs: &[ObjectDefinition],
+) -> (HashMap<Obj, String>, HashMap<Obj, String>) {
     // Collect all potential constants from direct and nested properties
     let mut all_candidates = Vec::new();
     let mut visited = std::collections::HashSet::new();
-    
+
     if let Some(sysobj) = object_defs.iter().find(|od| od.oid == SYSTEM_OBJECT) {
         collect_nested_constants(object_defs, sysobj, &[], &mut all_candidates, &mut visited);
     }
-    
+
     // Group candidates by object to handle multiple constants pointing to same object
     let mut candidates_by_obj: HashMap<Obj, Vec<_>> = HashMap::new();
     for candidate in all_candidates {
-        candidates_by_obj.entry(candidate.obj).or_default().push(candidate);
+        candidates_by_obj
+            .entry(candidate.obj)
+            .or_default()
+            .push(candidate);
     }
-    
+
     // Pick the best candidate for each object and filter out ambiguous constant names
     let mut constant_name_counts = HashMap::new();
     let mut selected_candidates = Vec::new();
-    
+
     for (_obj, mut candidates) in candidates_by_obj {
         // Sort by preference: shorter paths first, then alphabetical
         candidates.sort_by(|a, b| {
-            a.path_depth.cmp(&b.path_depth)
+            a.path_depth
+                .cmp(&b.path_depth)
                 .then_with(|| a.constant_name.cmp(&b.constant_name))
         });
-        
+
         // Pick the best candidate
         if let Some(best) = candidates.into_iter().next() {
-            *constant_name_counts.entry(best.constant_name.clone()).or_insert(0) += 1;
+            *constant_name_counts
+                .entry(best.constant_name.clone())
+                .or_insert(0) += 1;
             selected_candidates.push(best);
         }
     }
-    
+
     // Add SYSOBJ for #0 if no constant already exists for it
     let sysobj_constant_name = "SYSOBJ".to_string();
     if !selected_candidates.iter().any(|c| c.obj == SYSTEM_OBJECT) {
-        *constant_name_counts.entry(sysobj_constant_name.clone()).or_insert(0) += 1;
+        *constant_name_counts
+            .entry(sysobj_constant_name.clone())
+            .or_insert(0) += 1;
         selected_candidates.push(ConstantCandidate {
             obj: SYSTEM_OBJECT,
             constant_name: sysobj_constant_name,
@@ -203,18 +213,22 @@ fn extract_system_object_references(object_defs: &[ObjectDefinition]) -> (HashMa
             path_depth: 0,
         });
     }
-    
+
     // Filter out ambiguous constant names and build final maps
     let mut index_names = HashMap::new();
     let mut file_names = HashMap::new();
-    
+
     for candidate in selected_candidates {
-        if *constant_name_counts.get(&candidate.constant_name).unwrap_or(&0) == 1 {
+        if *constant_name_counts
+            .get(&candidate.constant_name)
+            .unwrap_or(&0)
+            == 1
+        {
             index_names.insert(candidate.obj, candidate.constant_name);
             file_names.insert(candidate.obj, candidate.file_name);
         }
     }
-    
+
     (index_names, file_names)
 }
 
@@ -238,21 +252,21 @@ fn collect_nested_constants(
         return;
     }
     visited.insert(current_obj.oid);
-    
+
     for pd in current_obj.property_definitions.iter() {
         if let Some(value) = pd.value.as_ref() {
             if let Some(oid) = value.as_object() {
                 // Build the constant name from the path
                 let mut constant_parts = path.to_vec();
                 constant_parts.push(pd.name.to_string());
-                
+
                 let constant_name = constant_parts.join("_").to_ascii_uppercase();
                 let file_name = if path.is_empty() {
                     pd.name.to_string()
                 } else {
                     format!("{}_{}", path.join("_"), pd.name)
                 };
-                
+
                 // Add this candidate
                 candidates.push(ConstantCandidate {
                     obj: oid,
@@ -260,17 +274,23 @@ fn collect_nested_constants(
                     file_name,
                     path_depth: path.len(),
                 });
-                
+
                 // Recursively traverse nested object properties
                 if let Some(nested_obj) = object_defs.iter().find(|od| od.oid == oid) {
                     let mut new_path = path.to_vec();
                     new_path.push(pd.name.to_string());
-                    collect_nested_constants(object_defs, nested_obj, &new_path, candidates, visited);
+                    collect_nested_constants(
+                        object_defs,
+                        nested_obj,
+                        &new_path,
+                        candidates,
+                        visited,
+                    );
                 }
             }
         }
     }
-    
+
     // Remove from visited set when done to allow this object to be visited in different paths
     visited.remove(&current_obj.oid);
 }

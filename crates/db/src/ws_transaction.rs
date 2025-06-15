@@ -13,7 +13,7 @@
 
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
-use crate::moor_db::{WorkingSets, WorldStateTransaction, SEQUENCE_MAX_OBJECT};
+use crate::moor_db::{SEQUENCE_MAX_OBJECT, WorldStateTransaction};
 use crate::tx_management::{Relation, RelationTransaction};
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
@@ -36,7 +36,6 @@ type RTx<Domain, Codomain> = RelationTransaction<
     Codomain,
     Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>,
 >;
-
 
 fn upsert<Domain, Codomain>(
     table: &mut RTx<Domain, Codomain>,
@@ -1206,37 +1205,9 @@ impl WorldStateTransaction {
         // Pull out the working sets
         let _t = PerfTimerGuard::new(&counters.tx_commit_mk_working_set_phase);
 
-        let object_location = self.object_location.working_set()?;
-        let object_contents = self.object_contents.working_set()?;
-        let object_parent = self.object_parent.working_set()?;
-        let object_children = self.object_children.working_set()?;
-        let object_owner = self.object_owner.working_set()?;
-        let object_flags = self.object_flags.working_set()?;
-        let object_name = self.object_name.working_set()?;
-        let object_verbdefs = self.object_verbdefs.working_set()?;
-        let object_verbs = self.object_verbs.working_set()?;
-        let object_propdefs = self.object_propdefs.working_set()?;
-        let object_propvalues = self.object_propvalues.working_set()?;
-        let object_propflags = self.object_propflags.working_set()?;
-
-        let ws = Box::new(WorkingSets {
-            tx: self.tx,
-            object_location,
-            object_contents,
-            object_flags,
-            object_parent,
-            object_children,
-            object_owner,
-            object_name,
-            object_verbdefs,
-            object_verbs,
-            object_propdefs,
-            object_propvalues,
-            object_propflags,
-            verb_resolution_cache: self.verb_resolution_cache,
-            prop_resolution_cache: self.prop_resolution_cache,
-            ancestry_cache: self.ancestry_cache,
-        });
+        // Extract commit channel before consuming self
+        let commit_channel = self.commit_channel.clone();
+        let ws = self.into_working_sets()?;
 
         let tuple_count = ws.total_tuples();
 
@@ -1244,7 +1215,7 @@ impl WorldStateTransaction {
         drop(_t);
         let _t = PerfTimerGuard::new(&counters.tx_commit_send_working_set_phase);
         let (send, reply) = oneshot::channel();
-        self.commit_channel
+        commit_channel
             .send(CommitSet::CommitWrites(ws, send))
             .expect("Could not send commit request -- channel closed?");
 

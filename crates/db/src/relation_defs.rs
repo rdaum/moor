@@ -16,7 +16,6 @@
 //! This module contains the `define_relations!` macro that eliminates repetitive
 //! boilerplate code for defining database relations in MoorDB.
 
-
 /// Cache-padded wrapper to prevent false sharing between CPU cores.
 #[cfg_attr(
     any(
@@ -66,7 +65,6 @@ impl<T> std::ops::Deref for CachePadded<T> {
         &self.value
     }
 }
-
 
 /// Generates database relation boilerplate code.
 ///
@@ -129,7 +127,7 @@ impl<T> std::ops::Deref for CachePadded<T> {
 ///
 /// # Type Aliases
 ///
-/// The macro uses `R<Domain, Codomain>` as a type alias for 
+/// The macro uses `R<Domain, Codomain>` as a type alias for
 /// `Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>`.
 ///
 /// # Dependencies
@@ -225,13 +223,13 @@ macro_rules! define_relations {
                                     .partition_options(),
                             )
                             .unwrap();
-                        
+
                         // Create provider with field name as identifier
                         let [<$field _provider>] = FjallProvider::new(stringify!($field), [<$field _partition>]);
-                        
+
                         // Create relation with symbolized field name
                         let [<$field _relation>] = Relation::new(Symbol::mk(stringify!($field)), Arc::new([<$field _provider>]));
-                        
+
                         // Seed the relation by scanning all existing data
                         [<$field _relation>]
                             .scan(&|_, _| true)
@@ -329,7 +327,7 @@ macro_rules! define_relations {
                 /// A tuple containing:
                 /// - `RelationWorkingSets`: Working sets for all relations
                 /// - `Box<VerbResolutionCache>`: Verb resolution cache
-                /// - `Box<PropResolutionCache>`: Property resolution cache  
+                /// - `Box<PropResolutionCache>`: Property resolution cache
                 /// - `Box<AncestryCache>`: Ancestry cache
                 fn extract_relation_working_sets(self) -> (RelationWorkingSets, Box<VerbResolutionCache>, Box<PropResolutionCache>, Box<AncestryCache>) {
                     let ws = RelationWorkingSets {
@@ -371,6 +369,31 @@ macro_rules! define_relations {
                 pub(crate) ancestry_cache: Box<AncestryCache>,
                 /// Whether this transaction has performed any mutations
                 pub(crate) has_mutations: bool,
+            }
+
+            impl WorldStateTransaction {
+                /// Extract working sets from all relation transactions.
+                ///
+                /// This method collects the working sets from all relation transactions
+                /// and packages them into a WorkingSets struct for commit processing.
+                ///
+                /// # Errors
+                /// Returns an error if any relation transaction fails to produce a working set.
+                pub(crate) fn into_working_sets(self) -> Result<Box<WorkingSets>, moor_common::model::WorldStateError> {
+                    $(
+                        let $field = self.$field.working_set()?;
+                    )*
+
+                    let ws = Box::new(WorkingSets {
+                        tx: self.tx,
+                        $( $field, )*
+                        verb_resolution_cache: self.verb_resolution_cache,
+                        prop_resolution_cache: self.prop_resolution_cache,
+                        ancestry_cache: self.ancestry_cache,
+                    });
+
+                    Ok(ws)
+                }
             }
 
             /// Sequence constant for maximum object ID tracking.
