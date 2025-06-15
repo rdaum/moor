@@ -310,7 +310,7 @@ impl VarScope {
             }
             let offset = current_offset;
             current_offset += 1;
-            let name = Name(offset as u16, vr.depth as u8);
+            let name = Name(offset as u16, current_scope as u8);
             bound.insert(name, vr.identifier);
             mapping.insert(vr.identifier, name);
             decls.insert(name, vr.clone());
