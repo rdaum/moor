@@ -552,7 +552,7 @@ pub fn moo_frame_execute(
             }
             Op::Push(ident) => {
                 let Some(v) = f.get_env(&ident) else {
-                    if let Some(var_name) = f.program.var_names().name_of(&ident) {
+                    if let Some(var_name) = f.program.var_names().ident_for_name(&ident) {
                         return ExecutionResult::PushError(
                             E_VARNF.with_msg(|| format!("Variable `{var_name}` not found")),
                         );

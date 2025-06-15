@@ -17,9 +17,9 @@ use crate::decompile::DecompileError;
 use crate::parse::Parse;
 use base64::{Engine, engine::general_purpose};
 use moor_common::program::DeclType;
-use moor_common::program::names::{Name, Variable};
+use moor_common::program::names::Variable;
 use moor_common::util::quote_str;
-use moor_var::{Obj, Sequence, Var, Variant};
+use moor_var::{Obj, Sequence, Symbol, Var, Variant};
 use std::collections::HashMap;
 
 /// This could probably be combined with the structure for Parse.
@@ -176,12 +176,7 @@ impl<'a> Unparse<'a> {
             }
             Expr::Value(var) => Ok(self.unparse_var(var, false)),
             Expr::TypeConstant(vt) => Ok(vt.to_literal().to_string()),
-            Expr::Id(id) => Ok(self
-                .tree
-                .names
-                .name_of(&self.unparse_name(id))
-                .unwrap()
-                .to_string()),
+            Expr::Id(id) => Ok(self.unparse_variable(id).to_string()),
             Expr::Binary(op, left_expr, right_expr) => Ok(format!(
                 "{} {} {}",
                 brace_if_lower(left_expr),
@@ -307,10 +302,7 @@ impl<'a> Unparse<'a> {
                 // If the vars are non-global scope depth, prefix with 'let' or 'const' as appropriate.
                 // Note the expectation is always that the vars exist at the same scope depth,
                 //   as the let scatter syntax does not have granularity per-var.
-                let is_local = vars.iter().any(|var| {
-                    let bound_name = self.tree.names_mapping[&var.id];
-                    bound_name.1 > 0
-                });
+                let is_local = vars.iter().any(|var| var.id.scope_id != 0);
                 let is_const = vars
                     .iter()
                     .any(|var| self.tree.variables.decl_for(&var.id).constant);
@@ -333,15 +325,8 @@ impl<'a> Unparse<'a> {
                             buffer.push('@');
                         }
                     }
-                    let name = self.unparse_name(&var.id);
-                    buffer.push_str(
-                        &self
-                            .tree
-                            .names
-                            .name_of(&name)
-                            .ok_or(DecompileError::NameNotFound(name))?
-                            .as_arc_string(),
-                    );
+                    let name = self.unparse_variable(&var.id);
+                    buffer.push_str(&name.as_arc_string());
                     if let Some(expr) = &var.expr {
                         buffer.push_str(" = ");
                         buffer.push_str(self.unparse_expr(expr)?.as_str());
@@ -391,11 +376,7 @@ impl<'a> Unparse<'a> {
                 buffer.push_str("{ ");
                 buffer.push_str(&self.unparse_expr(producer_expr)?);
                 buffer.push_str(" for ");
-                let name = self
-                    .tree
-                    .names
-                    .name_of(&self.unparse_name(variable))
-                    .unwrap();
+                let name = self.unparse_variable(variable);
                 buffer.push_str(&name.as_arc_string());
                 buffer.push_str(" in [");
                 buffer.push_str(&self.unparse_expr(from)?);
@@ -417,11 +398,7 @@ impl<'a> Unparse<'a> {
                 buffer.push_str("{ ");
                 buffer.push_str(&self.unparse_expr(producer_expr)?);
                 buffer.push_str(" for ");
-                let name = self
-                    .tree
-                    .names
-                    .name_of(&self.unparse_name(variable))
-                    .unwrap();
+                let name = self.unparse_variable(variable);
                 buffer.push_str(&name.as_arc_string());
                 buffer.push_str(" in (");
                 buffer.push_str(&self.unparse_expr(list)?);
@@ -470,21 +447,11 @@ impl<'a> Unparse<'a> {
                 let expr_frag = self.unparse_expr(expr)?;
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
 
-                let v_name = self.unparse_name(value_binding);
-                let v_sym = self
-                    .tree
-                    .names
-                    .name_of(&v_name)
-                    .ok_or(DecompileError::NameNotFound(v_name))?;
+                let v_sym = self.unparse_variable(value_binding);
                 let idx_clause = match key_binding {
                     None => v_sym.to_string(),
                     Some(key_binding) => {
-                        let k_name = self.unparse_name(key_binding);
-                        let k_sym = self
-                            .tree
-                            .names
-                            .name_of(&k_name)
-                            .ok_or(DecompileError::NameNotFound(v_name))?;
+                        let k_sym = self.unparse_variable(key_binding);
                         format!("{}, {}", v_sym, k_sym)
                     }
                 };
@@ -508,17 +475,11 @@ impl<'a> Unparse<'a> {
                 let from_frag = self.unparse_expr(from)?;
                 let to_frag = self.unparse_expr(to)?;
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
-                let name = self.unparse_name(id);
+                let name = self.unparse_variable(id);
 
                 stmt_lines.push(format!(
                     "{}for {} in [{}..{}]",
-                    indent_frag,
-                    self.tree
-                        .names
-                        .name_of(&name)
-                        .ok_or(DecompileError::NameNotFound(name))?,
-                    from_frag,
-                    to_frag
+                    indent_frag, name, from_frag, to_frag
                 ));
                 stmt_lines.append(&mut stmt_frag);
                 stmt_lines.push(format!("{}endfor", indent_frag));
@@ -537,16 +498,9 @@ impl<'a> Unparse<'a> {
 
                 let mut base_str = "while ".to_string();
                 if let Some(id) = id {
-                    let id = self.unparse_name(id);
+                    let id = self.unparse_variable(id);
 
-                    base_str.push_str(
-                        &self
-                            .tree
-                            .names
-                            .name_of(&id)
-                            .ok_or(DecompileError::NameNotFound(id))?
-                            .as_arc_string(),
-                    );
+                    base_str.push_str(&id.as_arc_string());
                 }
                 stmt_lines.push(format!("{}({})", base_str, cond_frag));
                 stmt_lines.append(&mut stmt_frag);
@@ -561,16 +515,9 @@ impl<'a> Unparse<'a> {
                 let mut base_str = format!("{}fork", indent_frag);
                 if let Some(id) = id {
                     base_str.push(' ');
-                    let id = self.unparse_name(id);
+                    let id = self.unparse_variable(id);
 
-                    base_str.push_str(
-                        &self
-                            .tree
-                            .names
-                            .name_of(&id)
-                            .ok_or(DecompileError::NameNotFound(id))?
-                            .as_arc_string(),
-                    );
+                    base_str.push_str(&id.as_arc_string());
                 }
                 stmt_lines.push(format!("{} ({})", base_str, delay_frag));
                 stmt_lines.append(&mut stmt_frag);
@@ -592,16 +539,8 @@ impl<'a> Unparse<'a> {
                         self.unparse_stmts(&except.statements, indent + INDENT_LEVEL)?;
                     let mut base_str = "except ".to_string();
                     if let Some(id) = &except.id {
-                        let id = self.unparse_name(id);
-
-                        base_str.push_str(
-                            &self
-                                .tree
-                                .names
-                                .name_of(&id)
-                                .ok_or(DecompileError::NameNotFound(id))?
-                                .as_arc_string(),
-                        );
+                        let id = self.unparse_variable(id);
+                        base_str.push_str(&id.as_arc_string());
                         base_str.push(' ');
                     }
                     let catch_codes = self.unparse_catch_codes(&except.codes)?.to_uppercase();
@@ -632,16 +571,8 @@ impl<'a> Unparse<'a> {
                 let mut base_str = format!("{}break", indent_frag);
                 if let Some(exit) = &exit {
                     base_str.push(' ');
-                    let exit = self.unparse_name(exit);
-
-                    base_str.push_str(
-                        &self
-                            .tree
-                            .names
-                            .name_of(&exit)
-                            .ok_or(DecompileError::NameNotFound(exit))?
-                            .as_arc_string(),
-                    );
+                    let exit = self.unparse_variable(exit);
+                    base_str.push_str(&exit.as_arc_string());
                 }
                 base_str.push(';');
                 Ok(vec![base_str])
@@ -650,16 +581,9 @@ impl<'a> Unparse<'a> {
                 let mut base_str = format!("{}continue", indent_frag);
                 if let Some(exit) = &exit {
                     base_str.push(' ');
-                    let exit = self.unparse_name(exit);
+                    let exit = self.unparse_variable(exit);
 
-                    base_str.push_str(
-                        &self
-                            .tree
-                            .names
-                            .name_of(&exit)
-                            .ok_or(DecompileError::NameNotFound(exit))?
-                            .as_arc_string(),
-                    );
+                    base_str.push_str(&exit.as_arc_string());
                 }
                 base_str.push(';');
                 Ok(vec![base_str])
@@ -674,7 +598,7 @@ impl<'a> Unparse<'a> {
                             DeclType::Global => "global ",
                             _ => "",
                         };
-                        let suffix = self.tree.names.name_of(&self.unparse_name(id)).unwrap();
+                        let suffix = self.unparse_variable(id);
                         format!("{}{}", prefix, suffix)
                     }
                     _ => self.unparse_expr(left)?,
@@ -717,8 +641,15 @@ impl<'a> Unparse<'a> {
         Ok(results)
     }
 
-    fn unparse_name(&self, name: &Variable) -> Name {
-        *self.tree.names_mapping.get(name).unwrap()
+    fn unparse_variable(&self, variable: &Variable) -> Symbol {
+        self.tree
+            .variables
+            .variables
+            .iter()
+            .find(|d| d.identifier.eq(variable))
+            .unwrap()
+            .identifier
+            .to_symbol()
     }
 }
 

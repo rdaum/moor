@@ -141,7 +141,7 @@ impl MooStackFrame {
             v.type_code(),
             TYPE_NONE,
             "Setting variable {:?} to TYPE_NONE",
-            self.program.var_names().name_of(id)
+            self.program.var_names().ident_for_name(id)
         );
         let offset = id.0 as usize;
         let scope = id.1 as usize;

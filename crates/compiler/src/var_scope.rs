@@ -35,9 +35,9 @@ use strum::IntoEnumIterator;
 pub struct VarScope {
     pub variables: Vec<Decl>,
     pub scopes: Vec<Vec<Variable>>,
-    pub scope_id_stack: Vec<usize>,
+    pub scope_id_stack: Vec<u16>,
     pub num_registers: u16,
-    pub scope_id_seq: usize,
+    pub scope_id_seq: u16,
 }
 
 /// Policy for binding a variable when new_bound is called.
@@ -292,15 +292,12 @@ impl VarScope {
 
     /// Turn all unbound variables into bound variables.
     /// Run at the end of compilation to produce valid offsets.
-    pub fn bind(&self) -> (Names, HashMap<Variable, Name>) {
-        let mut mapping = HashMap::new();
-
+    pub fn bind(&self) -> Names {
         let mut sorted_by_depth = self.variables.clone();
         sorted_by_depth.sort_by(|a, b| a.depth.cmp(&b.depth));
 
         let mut current_offset = 0;
         let mut current_scope = 0;
-        let mut bound = HashMap::new();
         let mut decls = HashMap::new();
         for vr in sorted_by_depth.iter() {
             if vr.identifier.scope_id != current_scope {
@@ -310,21 +307,20 @@ impl VarScope {
             }
             let offset = current_offset;
             current_offset += 1;
-            let name = Name(offset as u16, current_scope as u8);
-            bound.insert(name, vr.identifier);
-            mapping.insert(vr.identifier, name);
-            decls.insert(name, vr.clone());
+            let name = Name(offset as u16, vr.depth as u8, current_scope);
+            if decls.insert(name, vr.clone()).is_some() {
+                panic!(
+                    "Variable {:?} already declared in scope {}",
+                    name, current_scope
+                );
+            }
         }
 
         let global_width = self.scopes[0].len();
-        (
-            Names {
-                bound,
-                global_width,
-                decls,
-            },
-            mapping,
-        )
+        Names {
+            global_width,
+            decls,
+        }
     }
 }
 
@@ -342,9 +338,9 @@ mod tests {
         assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
         assert_eq!(unbound_names.find_name("fob").unwrap(), ufob);
 
-        let (bound_names, _) = unbound_names.bind();
-        let bfoo = bound_names.find_name("foo").unwrap();
-        let bfob = bound_names.find_name("fob").unwrap();
+        let bound_names = unbound_names.bind();
+        let bfoo = bound_names.name_for_ident("foo").unwrap();
+        let bfob = bound_names.name_for_ident("fob").unwrap();
         assert_eq!(bfoo.0, before_width);
         assert_eq!(bfob.0, before_width + 1);
         assert_eq!(bfoo.1, 0);
@@ -358,17 +354,14 @@ mod tests {
         let before_width = unbound_names.variables.len() as u16;
         let ufoo = unbound_names.declare_name("foo", DeclType::Let).unwrap();
         let ufob = unbound_names.declare_name("fob", DeclType::Let).unwrap();
-        let u_reg = unbound_names.declare_register().unwrap();
         assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
         assert_eq!(unbound_names.find_name("fob").unwrap(), ufob);
 
-        let (bound_names, mappings) = unbound_names.bind();
-        let bfoo = bound_names.find_name("foo").unwrap();
-        let bfob = bound_names.find_name("fob").unwrap();
-        let b_reg = mappings.get(&u_reg).unwrap();
+        let bound_names = unbound_names.bind();
+        let bfoo = bound_names.name_for_ident("foo").unwrap();
+        let bfob = bound_names.name_for_ident("fob").unwrap();
         assert_eq!(bfoo.0, before_width);
         assert_eq!(bfob.0, before_width + 1);
-        assert_eq!(b_reg.0, before_width + 2);
         assert_eq!(bound_names.global_width as u16, before_width + 3);
     }
 
@@ -379,7 +372,7 @@ mod tests {
 
         let x = unbound_names.declare_name("x", DeclType::Let).unwrap();
         unbound_names.enter_new_scope();
-        let v = unbound_names.declare_register().unwrap();
+        let _v = unbound_names.declare_register().unwrap();
         let y = unbound_names.declare_name("y", DeclType::Let).unwrap();
         assert_eq!(unbound_names.find_name("y").unwrap(), y);
         unbound_names.exit_scope();
@@ -388,16 +381,14 @@ mod tests {
         assert_eq!(unbound_names.find_name("x").unwrap(), x);
         assert_eq!(unbound_names.find_name("z").unwrap(), z);
 
-        let (bound_names, mappings) = unbound_names.bind();
-        let bx = bound_names.find_name("x").unwrap();
-        let by = bound_names.find_name("y").unwrap();
-        let bz = bound_names.find_name("z").unwrap();
-        let bv = mappings.get(&v).unwrap();
+        let bound_names = unbound_names.bind();
+        let bx = bound_names.name_for_ident("x").unwrap();
+        let by = bound_names.name_for_ident("y").unwrap();
+        let bz = bound_names.name_for_ident("z").unwrap();
 
         assert_eq!(bx.1, 0);
         assert_eq!(by.1, 1);
         assert_eq!(bz.1, 0);
-        assert_eq!(bv.1, 0);
 
         assert_eq!(bx.0, before_width);
         assert_eq!(bound_names.global_width as u16, before_width + 3);
@@ -416,9 +407,9 @@ mod tests {
         assert!(unbound_names.find_name("fob").is_none());
         assert_eq!(unbound_names.find_name("foo").unwrap(), ufoo);
 
-        let (bound_names, _) = unbound_names.bind();
-        let bfoo = bound_names.find_name("foo").unwrap();
-        let bfob = bound_names.find_name("fob").unwrap();
+        let bound_names = unbound_names.bind();
+        let bfoo = bound_names.name_for_ident("foo").unwrap();
+        let bfob = bound_names.name_for_ident("fob").unwrap();
         assert_eq!(bfoo.0, before_width);
         assert_eq!(bfob.0, 0);
         assert_eq!(bfob.1, 1);

@@ -84,7 +84,7 @@ impl Program {
         let v = Symbol::mk(v);
         self.0
             .var_names
-            .find_name(v)
+            .name_for_ident(v)
             .unwrap_or_else(|| panic!("variable not found: {}", v))
     }
 
@@ -200,7 +200,7 @@ impl Display for Program {
         for (i, l) in self.0.jump_labels.iter().enumerate() {
             write!(f, "J{}: {}", i, l.position.0)?;
             if let Some(name) = &l.name {
-                write!(f, " ({})", self.0.var_names.name_of(name).unwrap())?;
+                write!(f, " ({})", self.0.var_names.ident_for_name(name).unwrap())?;
             }
             writeln!(f)?;
         }

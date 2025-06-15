@@ -29,7 +29,7 @@ use moor_common::program::opcode::{
 use moor_common::program::program::Program;
 use moor_var::{Symbol, Var, v_int, v_none, v_obj};
 use moor_var::{Variant, v_float};
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {
@@ -56,7 +56,6 @@ struct Decompile {
     position: usize,
     expr_stack: VecDeque<Expr>,
     statements: Vec<Stmt>,
-    names_mapping: HashMap<Name, Variable>,
 }
 
 impl Decompile {
@@ -399,7 +398,6 @@ impl Decompile {
                     position: 0,
                     expr_stack: self.expr_stack.clone(),
                     statements: vec![],
-                    names_mapping: self.names_mapping.clone(),
                 };
                 let fv_len = self.program.fork_vector(fv_offset).len();
                 while fork_decompile.position < fv_len {
@@ -1013,9 +1011,11 @@ impl Decompile {
                             ));
                         };
 
+                        let variable = self.decompile_name(&position)?;
+                        let end_of_range_register = self.decompile_name(&end_of_range_register)?;
                         self.push_expr(ComprehendRange {
-                            variable: self.names_mapping[&position],
-                            end_of_range_register: self.names_mapping[&end_of_range_register],
+                            variable,
+                            end_of_range_register,
                             producer_expr: Box::new(producer_expr),
                             from: from.clone(),
                             to: to.clone(),
@@ -1051,10 +1051,13 @@ impl Decompile {
                             ));
                         };
 
+                        let variable = self.decompile_name(&item_variable)?;
+                        let list_register = self.decompile_name(&list_register)?;
+                        let position_register = self.decompile_name(&position_register)?;
                         self.push_expr(Expr::ComprehendList {
-                            variable: self.names_mapping[&item_variable],
-                            position_register: self.names_mapping[&position_register],
-                            list_register: self.names_mapping[&list_register],
+                            variable,
+                            position_register,
+                            list_register,
                             producer_expr: Box::new(producer_expr),
                             list: list.clone(),
                         })
@@ -1071,8 +1074,9 @@ impl Decompile {
     }
 
     fn decompile_name(&self, name: &Name) -> Result<Variable, DecompileError> {
-        self.names_mapping
-            .get(name)
+        self.program
+            .var_names()
+            .find_variable(name)
             .cloned()
             .ok_or(DecompileError::NameNotFound(*name))
     }
@@ -1080,13 +1084,6 @@ impl Decompile {
 
 /// Reconstruct a parse tree from opcodes.
 pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
-    let name_to_var = program.var_names().bound.clone();
-    let mut names_mapping = HashMap::new();
-
-    for (name, v) in name_to_var.iter() {
-        names_mapping.insert(*v, *name);
-    }
-
     let variables = VarScope {
         variables: program.var_names().decls.values().cloned().collect(),
         scopes: vec![],
@@ -1100,7 +1097,6 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
         position: 0,
         expr_stack: Default::default(),
         statements: vec![],
-        names_mapping: name_to_var,
     };
     let opcode_vector_len = decompile.opcode_vector().len();
     while decompile.position < opcode_vector_len {
@@ -1111,7 +1107,6 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
         stmts: decompile.statements,
         names: program.var_names().clone(),
         variables,
-        names_mapping,
     })
 }
 

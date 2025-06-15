@@ -64,5 +64,5 @@ pub struct Decl {
     pub constant: bool,
     /// The scope id of the variable.
     /// This is used to determine the scope of the variable when binding (or rebinding at decompile)
-    pub scope_id: usize,
+    pub scope_id: u16,
 }

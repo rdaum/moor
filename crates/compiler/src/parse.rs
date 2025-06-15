@@ -14,7 +14,6 @@
 /// Kicks off the Pest parser and converts it into our AST.
 /// This is the main entry point for parsing.
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -42,7 +41,7 @@ use base64::{Engine, engine::general_purpose};
 use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
 use moor_common::model::{CompileContext, CompileError};
 use moor_common::program::DeclType;
-use moor_common::program::names::{Name, Names, Variable};
+use moor_common::program::names::Names;
 
 pub mod moo {
     #[derive(Parser)]
@@ -1416,12 +1415,11 @@ impl TreeTransformer {
         let unbound_names = self.names.borrow_mut();
         // Annotate the "true" line numbers of the AST nodes.
         annotate_line_numbers(1, &mut program);
-        let (names, names_mapping) = unbound_names.bind();
+        let names = unbound_names.bind();
         Ok(Parse {
             stmts: program,
             variables: unbound_names.clone(),
             names,
-            names_mapping,
         })
     }
 
@@ -1445,7 +1443,6 @@ pub struct Parse {
     pub stmts: Vec<Stmt>,
     pub variables: VarScope,
     pub names: Names,
-    pub names_mapping: HashMap<Variable, Name>,
 }
 
 pub fn parse_program(program_text: &str, options: CompileOptions) -> Result<Parse, CompileError> {

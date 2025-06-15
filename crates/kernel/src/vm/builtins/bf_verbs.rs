@@ -606,7 +606,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             continue;
         }
         let name_of = match &l.name {
-            Some(name) => format!(" ({})", program.var_names().name_of(name).unwrap()),
+            Some(name) => format!(" ({})", program.var_names().ident_for_name(name).unwrap()),
             None => "".to_string(),
         };
         disassembly.push(v_string(format!("{: >3}: {}{}", i, l.position.0, name_of)));

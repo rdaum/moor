@@ -11,9 +11,9 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+//! Takes the AST and turns it into a list of opcodes.
+
 use pest::iterators::Pairs;
-/// Takes the AST and turns it into a list of opcodes.
-use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -53,7 +53,6 @@ pub struct CodegenState {
     pub(crate) ops: Vec<Op>,
     pub(crate) jumps: Vec<JumpLabel>,
     pub(crate) var_names: Names,
-    pub(crate) binding_mappings: HashMap<Variable, Name>,
     pub(crate) literals: Vec<Var>,
     pub(crate) loops: Vec<Loop>,
     pub(crate) saved_stack: Option<Offset>,
@@ -74,15 +73,10 @@ pub struct CodegenState {
 }
 
 impl CodegenState {
-    pub fn new(
-        compile_options: CompileOptions,
-        var_names: Names,
-        binding_mappings: HashMap<Variable, Name>,
-    ) -> Self {
+    pub fn new(compile_options: CompileOptions, var_names: Names) -> Self {
         Self {
             ops: vec![],
             jumps: vec![],
-            binding_mappings,
             var_names,
             literals: vec![],
             loops: vec![],
@@ -177,7 +171,7 @@ impl CodegenState {
             }
         }
         // If we don't find a loop with the given name, that's an error.as
-        let loop_name = self.var_names.name_of(loop_label).unwrap();
+        let loop_name = self.var_names.ident_for_name(loop_label).unwrap();
         Err(CompileError::UnknownLoopLabel(
             CompileContext::new(self.current_line_col),
             loop_name.to_string(),
@@ -254,7 +248,7 @@ impl CodegenState {
                     continue;
                 }
                 Expr::Id(name) => {
-                    self.emit(Op::Put(self.binding_mappings[name]));
+                    self.emit(Op::Put(self.find_name(name)));
                     break;
                 }
                 Expr::Prop {
@@ -278,6 +272,12 @@ impl CodegenState {
         Ok(())
     }
 
+    fn find_name(&self, var: &Variable) -> Name {
+        self.var_names
+            .name_for_var(var)
+            .expect("Variable not found")
+    }
+
     fn generate_scatter_assign(
         &mut self,
         scatter: &[ScatterItem],
@@ -288,16 +288,16 @@ impl CodegenState {
             .iter()
             .map(|s| {
                 let kind_label = match s.kind {
-                    ScatterKind::Required => ScatterLabel::Required(self.binding_mappings[&s.id]),
+                    ScatterKind::Required => ScatterLabel::Required(self.find_name(&s.id)),
                     ScatterKind::Optional => ScatterLabel::Optional(
-                        self.binding_mappings[&s.id],
+                        self.find_name(&s.id),
                         if s.expr.is_some() {
                             Some(self.make_jump_label(None))
                         } else {
                             None
                         },
                     ),
-                    ScatterKind::Rest => ScatterLabel::Rest(self.binding_mappings[&s.id]),
+                    ScatterKind::Rest => ScatterLabel::Rest(self.find_name(&s.id)),
                 };
                 (s, kind_label)
             })
@@ -313,7 +313,7 @@ impl CodegenState {
                 }
                 self.commit_jump_label(label);
                 self.generate_expr(s.expr.as_ref().unwrap())?;
-                self.emit(Op::Put(self.binding_mappings[&s.id]));
+                self.emit(Op::Put(self.find_name(&s.id)));
                 self.emit(Op::Pop);
                 self.pop_stack(1);
             }
@@ -343,7 +343,7 @@ impl CodegenState {
             }
             Expr::Id(id) => {
                 if indexed_above {
-                    self.emit(Op::Push(self.binding_mappings[id]));
+                    self.emit(Op::Push(self.find_name(id)));
                     self.push_stack(1);
                 }
             }
@@ -418,7 +418,7 @@ impl CodegenState {
                 self.push_stack(1);
             }
             Expr::Id(ident) => {
-                self.emit(Op::Push(self.binding_mappings[ident]));
+                self.emit(Op::Push(self.find_name(ident)));
                 self.push_stack(1);
             }
             Expr::And(left, right) => {
@@ -631,8 +631,8 @@ impl CodegenState {
                 let end_label = self.make_jump_label(None);
                 let loop_start_label = self.make_jump_label(None);
                 assert_ne!(end_label, loop_start_label);
-                let index_variable = self.binding_mappings[variable];
-                let end_of_range_register = self.binding_mappings[end_of_range_register];
+                let index_variable = self.find_name(variable);
+                let end_of_range_register = self.find_name(end_of_range_register);
 
                 self.emit(BeginComprehension(
                     ComprehensionType::Range,
@@ -673,9 +673,9 @@ impl CodegenState {
                 list,
             } => {
                 let end_label = self.make_jump_label(None);
-                let position_register = self.binding_mappings[position_register];
-                let list_register = self.binding_mappings[list_register];
-                let item_variable = self.binding_mappings[variable];
+                let position_register = self.find_name(position_register);
+                let list_register = self.find_name(list_register);
+                let item_variable = self.find_name(variable);
 
                 let loop_start_label = self.make_jump_label(None);
                 self.emit(BeginComprehension(
@@ -789,8 +789,8 @@ impl CodegenState {
                 // we use 0 here to make it easier to implement the ForList instruction.
                 self.emit(Op::ImmInt(0)); /* loop list index... */
                 self.push_stack(1);
-                let value_bind = self.binding_mappings[value_binding];
-                let key_bind = key_binding.map(|id| self.binding_mappings[&id]);
+                let value_bind = self.find_name(value_binding);
+                let key_bind = key_binding.map(|id| self.find_name(&id));
                 let loop_top = self.make_jump_label(Some(value_bind));
                 self.commit_jump_label(loop_top);
                 let end_label = self.make_jump_label(Some(value_bind));
@@ -829,16 +829,16 @@ impl CodegenState {
             } => {
                 self.generate_expr(from)?;
                 self.generate_expr(to)?;
-                let loop_top = self.make_jump_label(Some(self.binding_mappings[id]));
-                let end_label = self.make_jump_label(Some(self.binding_mappings[id]));
+                let loop_top = self.make_jump_label(Some(self.find_name(id)));
+                let end_label = self.make_jump_label(Some(self.find_name(id)));
                 self.commit_jump_label(loop_top);
                 self.emit(Op::ForRange {
-                    id: self.binding_mappings[id],
+                    id: self.find_name(id),
                     end_label,
                     environment_width: *environment_width as u16,
                 });
                 self.loops.push(Loop {
-                    loop_name: Some(self.binding_mappings[id]),
+                    loop_name: Some(self.find_name(id)),
                     top_label: loop_top,
                     top_stack: self.cur_stack.into(),
                     bottom_label: end_label,
@@ -862,11 +862,11 @@ impl CodegenState {
                 environment_width,
             } => {
                 let loop_start_label =
-                    self.make_jump_label(id.as_ref().map(|id| self.binding_mappings[id]));
+                    self.make_jump_label(id.as_ref().map(|id| self.find_name(id)));
                 self.commit_jump_label(loop_start_label);
 
                 let loop_end_label =
-                    self.make_jump_label(id.as_ref().map(|id| self.binding_mappings[id]));
+                    self.make_jump_label(id.as_ref().map(|id| self.find_name(id)));
                 self.generate_expr(condition)?;
                 match id {
                     None => self.emit(Op::While {
@@ -874,14 +874,14 @@ impl CodegenState {
                         environment_width: *environment_width as u16,
                     }),
                     Some(id) => self.emit(Op::WhileId {
-                        id: self.binding_mappings[id],
+                        id: self.find_name(id),
                         end_label: loop_end_label,
                         environment_width: *environment_width as u16,
                     }),
                 }
                 self.pop_stack(1);
                 self.loops.push(Loop {
-                    loop_name: id.as_ref().map(|id| self.binding_mappings[id]),
+                    loop_name: id.as_ref().map(|id| self.find_name(id)),
                     top_label: loop_start_label,
                     top_stack: self.cur_stack.into(),
                     bottom_label: loop_end_label,
@@ -922,7 +922,7 @@ impl CodegenState {
 
                 let fv_id = self.add_fork_vector(fork_main_position, forked_ops, fork_line_spans);
                 self.emit(Op::Fork {
-                    id: id.as_ref().map(|id| self.binding_mappings[id]),
+                    id: id.as_ref().map(|id| self.find_name(id)),
                     fv_offset: fv_id,
                 });
                 self.pop_stack(1);
@@ -956,7 +956,7 @@ impl CodegenState {
                     self.commit_jump_label(labels[i]);
                     self.push_stack(1);
                     if ex.id.is_some() {
-                        self.emit(Op::Put(self.binding_mappings[ex.id.as_ref().unwrap()]));
+                        self.emit(Op::Put(self.find_name(ex.id.as_ref().unwrap())));
                     }
                     self.emit(Op::Pop);
                     self.pop_stack(1);
@@ -1019,7 +1019,7 @@ impl CodegenState {
                 })
             }
             StmtNode::Break { exit: Some(l) } => {
-                let l = self.binding_mappings[l];
+                let l = self.find_name(l);
                 let l = self.find_loop(&l)?;
                 self.emit(Op::ExitId(l.bottom_label));
             }
@@ -1031,7 +1031,7 @@ impl CodegenState {
                 })
             }
             StmtNode::Continue { exit: Some(l) } => {
-                let l = self.binding_mappings[l];
+                let l = self.find_name(l);
                 let l = self.find_loop(&l).expect("invalid loop for break/continue");
                 self.emit(Op::ExitId(l.top_label));
             }
@@ -1080,7 +1080,7 @@ impl CodegenState {
 
 fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, CompileError> {
     // Generate the code into 'cg_state'.
-    let mut cg_state = CodegenState::new(compile_options, parse.names, parse.names_mapping);
+    let mut cg_state = CodegenState::new(compile_options, parse.names);
     for x in parse.stmts {
         cg_state.generate_stmt(&x)?;
     }
