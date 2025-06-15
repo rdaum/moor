@@ -48,6 +48,7 @@ pub(crate) const DEFAULT_FLUSH_COMMAND: &str = ".flush";
 
 // TODO: switch to djot
 const CONTENT_TYPE_MARKDOWN: &str = "text/markdown";
+const CONTENT_TYPE_DJOT: &str = "text/djot";
 
 pub(crate) struct TelnetConnection {
     pub(crate) peer_addr: SocketAddr,
@@ -547,12 +548,9 @@ impl TelnetConnection {
                 let msg = event.event();
                 match &msg {
                     Event::Notify(msg, content_type) => {
-                        let Some(msg) = msg.as_string() else {
-                            warn!("Non-string message in Notify event");
-                            return Ok(None);
-                        };
+                        let output_str = output_format(msg, *content_type)?;
                         self.write
-                            .send(output_str_format(msg, *content_type)?)
+                            .send(output_str_format(&output_str, *content_type)?)
                             .await
                             .expect("Unable to send message to client");
                     }
@@ -818,7 +816,7 @@ fn markdown_to_ansi(markdown: &str) -> String {
     let skin = MadSkin::default_dark();
     // TODO: permit different text stylings here. e.g. user themes for colours, styling, etc.
     //   will require custom host-side commands to set these.
-    skin.inline(markdown).to_string()
+    skin.text(markdown, None).to_string()
 }
 
 /// Produce the right kind of "telnet" compatible output for the given content.
@@ -851,6 +849,12 @@ fn output_str_format(content: &str, content_type: Option<Symbol>) -> Result<Stri
     let content_type = content_type.as_arc_string();
     Ok(match content_type.as_str() {
         CONTENT_TYPE_MARKDOWN => markdown_to_ansi(content),
+        CONTENT_TYPE_DJOT => {
+            // For now, we treat Djot as markdown.
+            // In the future, we might want to support Djot specifically, but in realiy, djot
+            // is mainly a (safer) subset of markdown.
+            markdown_to_ansi(content)
+        }
         // text/plain, None, or unknown
         _ => content.to_string(),
     })

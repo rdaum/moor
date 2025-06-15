@@ -211,6 +211,7 @@ impl Listener {
                         acceptable_content_types: Some(vec![
                             Symbol::mk("text/plain"),
                             Symbol::mk("text/markdown"),
+                            Symbol::mk("text/djot"),
                         ]),
                     },
                 )
