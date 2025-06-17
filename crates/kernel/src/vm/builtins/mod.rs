@@ -19,6 +19,7 @@ use crate::config::FeaturesConfig;
 use crate::tasks::task_scheduler_client::TaskSchedulerClient;
 use crate::vm::activation::{BfFrame, Frame};
 use crate::vm::builtins::bf_age_crypto::register_bf_age_crypto;
+use crate::vm::builtins::bf_documents::register_bf_documents;
 use crate::vm::builtins::bf_flyweights::register_bf_flyweights;
 use crate::vm::builtins::bf_list_sets::register_bf_list_sets;
 use crate::vm::builtins::bf_maps::register_bf_maps;
@@ -43,6 +44,7 @@ use moor_var::{ErrorCode, Symbol};
 use moor_var::{Obj, v_bool_int};
 
 mod bf_age_crypto;
+mod bf_documents;
 mod bf_flyweights;
 mod bf_list_sets;
 mod bf_maps;
@@ -117,6 +119,7 @@ impl BuiltinRegistry {
         register_bf_verbs(&mut builtins);
         register_bf_properties(&mut builtins);
         register_bf_flyweights(&mut builtins);
+        register_bf_documents(&mut builtins);
         register_bf_age_crypto(builtins.as_mut());
 
         BuiltinRegistry {

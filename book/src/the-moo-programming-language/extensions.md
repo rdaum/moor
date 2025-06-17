@@ -240,3 +240,44 @@ becomes, on the websocket:
 
 The `telnet` host will still output the text value of the second argument as before, and ignore anything which
 is not a string.
+
+### XML Document Processing
+
+`mooR` can generate XML and HTML documents from MOO data structures, and parse XML or well-formed HTML document strings
+into structured data.
+
+The `xml_parse` builtin can produce XML data in three different formats:
+
+**Flyweight format (original):** `xml_parse(xml_string, FLYWEIGHT, [tag_map])`
+
+```moo
+// Returns flyweight objects representing XML structure
+let result = xml_parse("<div class='test'>Hello</div>", 15);
+```
+
+**List format:** `xml_parse(xml_string, 4)`
+
+```moo
+// Returns nested lists: {"tag", {"attr", "value"}, ...contents...}
+let result = xml_parse("<div class='test'>Hello</div>", LIST);
+// result = {{"div", {"class", "test"}, "Hello"}}
+```
+
+**Attributes-as-Map format:** `xml_parse(xml_string, 10)`
+
+```moo
+// Returns list of maps with structured data
+let result = xml_parse("<div class='test'>Hello</div>", MAP);
+// result = {["tag" -> "div", "attributes" -> ["class" -> "test"], "content" -> {"Hello"}]}
+```
+
+The `to_xml` builtin can generate XML from both flyweights and list formats:
+
+```moo
+// Generate XML from list format
+let html_structure = {"div", {"class", "container"}, "Hello World"};
+let xml_string = to_xml(html_structure);
+// Returns: "<div class='container'>Hello World</div>"
+```
+
+This makes it easy to work with XML data in web applications and API integrations without requiring flyweight objects.

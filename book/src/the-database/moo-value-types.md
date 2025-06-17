@@ -600,7 +600,7 @@ weapon_name = sword.name;       // Gets "iron sword"
 
 ### Working with XML and web interfaces:
 
-Flyweights are especially useful for building web pages because they can be easily converted to and from XML:
+Flyweights are especially useful for building web pages because they can be easily converted to and from XML. However, mooR also supports working with XML using regular lists and maps, which can be more convenient for simple cases:
 
 ```moo
 // A flyweight representing HTML structure:
@@ -610,7 +610,22 @@ div_element = < $html_div,
 
 // Convert to XML string:
 html_string = to_xml(div_element);
+
+// Alternative: Use list format (works without flyweights enabled)
+list_element = {"div", {"class", "player-info"}, "Player: Alice", "Score: 1500"};
+html_string = to_xml(list_element);
+
+// Parse XML into different formats:
+xml_as_flyweights = xml_parse(html_string, 15);  // Returns flyweights
+xml_as_lists = xml_parse(html_string, 4);        // Returns nested lists
+xml_as_maps = xml_parse(html_string, 10);        // Returns structured maps
 ```
+
+**List format** uses the pattern: `{"tag_name", {"attr", "value"}, ...content...}`
+
+**Map format** uses: `["tag" -> "tag_name", "attributes" -> ["attr" -> "value"], "content" -> {...}]`
+
+Both list and map formats work regardless of whether flyweights are enabled, making them useful for systems that prefer simpler data structures.
 
 ### Important notes:
 

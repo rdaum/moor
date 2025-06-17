@@ -19,10 +19,9 @@ use md5::Digest;
 use moor_compiler::offset_for_builtin;
 use moor_var::{E_ARGS, E_INVARG, E_TYPE};
 use moor_var::{Sequence, Variant};
-use moor_var::{v_int, v_map, v_str, v_string};
+use moor_var::{v_int, v_str, v_string};
 use rand::distributions::Alphanumeric;
 use rand::{Rng, thread_rng};
-use serde_json::{self, Value as JsonValue};
 use tracing::warn;
 
 use crate::vm::builtins::BfRet::Ret;
@@ -382,107 +381,6 @@ fn bf_decode_base64(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_binary(decoded_bytes)))
 }
 
-/// Convert a MOO value to a JSON string
-fn bf_generate_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
-    }
-
-    let value = &bf_args.args[0];
-    let json_value = moo_value_to_json(value)?;
-
-    match serde_json::to_string(&json_value) {
-        Ok(json_str) => Ok(Ret(v_string(json_str))),
-        Err(_) => Err(BfErr::Code(E_INVARG)),
-    }
-}
-
-/// Convert a MOO value to a JSON value
-fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
-    match value.variant() {
-        Variant::Int(i) => Ok(JsonValue::Number((*i).into())),
-        Variant::Float(f) => {
-            let num = serde_json::Number::from_f64(*f).ok_or_else(|| BfErr::Code(E_INVARG))?;
-            Ok(JsonValue::Number(num))
-        }
-        Variant::Str(s) => Ok(JsonValue::String(s.as_str().to_string())),
-        Variant::Obj(o) => Ok(JsonValue::String(format!("#{}", o))),
-        Variant::List(list) => {
-            let mut json_array = Vec::new();
-            for item in list.iter() {
-                json_array.push(moo_value_to_json(&item)?);
-            }
-            Ok(JsonValue::Array(json_array))
-        }
-        Variant::Map(map) => {
-            let mut json_obj = serde_json::Map::new();
-            for (k, v) in map.iter() {
-                // JSON only allows string keys
-                let key = match k.variant() {
-                    Variant::Str(s) => s.as_str().to_string(),
-                    Variant::Int(i) => i.to_string(),
-                    Variant::Float(f) => f.to_string(),
-                    Variant::Obj(o) => format!("#{}", o),
-                    _ => return Err(BfErr::Code(E_TYPE)), // Complex keys not supported
-                };
-                json_obj.insert(key, moo_value_to_json(&v)?);
-            }
-            Ok(JsonValue::Object(json_obj))
-        }
-        _ => Err(BfErr::Code(E_TYPE)), // Other types not supported
-    }
-}
-
-/// Convert a JSON value to a MOO value
-fn json_value_to_moo(json_value: &JsonValue) -> Result<moor_var::Var, BfErr> {
-    match json_value {
-        JsonValue::Null => Ok(moor_var::v_none()),
-        JsonValue::Bool(b) => Ok(v_int(if *b { 1 } else { 0 })),
-        JsonValue::Number(n) => {
-            if n.is_i64() {
-                Ok(v_int(n.as_i64().unwrap()))
-            } else {
-                Ok(moor_var::v_float(n.as_f64().unwrap()))
-            }
-        }
-        JsonValue::String(s) => Ok(v_str(s)),
-        JsonValue::Array(arr) => {
-            let mut list_items = Vec::new();
-            for item in arr {
-                list_items.push(json_value_to_moo(item)?);
-            }
-            Ok(moor_var::v_list(&list_items))
-        }
-        JsonValue::Object(obj) => {
-            let mut map_items = Vec::new();
-            for (k, v) in obj {
-                let key = v_str(k);
-                let value = json_value_to_moo(v)?;
-                map_items.push((key, value));
-            }
-            Ok(v_map(&map_items))
-        }
-    }
-}
-/// Parse a JSON string into a MOO value
-fn bf_parse_json(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::Code(E_ARGS));
-    }
-
-    let Some(json_str) = bf_args.args[0].as_string() else {
-        return Err(BfErr::Code(E_TYPE));
-    };
-
-    match serde_json::from_str::<JsonValue>(json_str) {
-        Ok(json_value) => {
-            let moo_value = json_value_to_moo(&json_value)?;
-            Ok(Ret(moo_value))
-        }
-        Err(_) => Err(BfErr::Code(E_INVARG)),
-    }
-}
-
 // str string_hmac(str text, str key [, str algo [, binary]])
 fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let arg_count = bf_args.args.len();
@@ -562,15 +460,11 @@ pub(crate) fn register_bf_strings(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("salt")] = Box::new(bf_salt);
     builtins[offset_for_builtin("encode_base64")] = Box::new(bf_encode_base64);
     builtins[offset_for_builtin("decode_base64")] = Box::new(bf_decode_base64);
-    builtins[offset_for_builtin("generate_json")] = Box::new(bf_generate_json);
-    builtins[offset_for_builtin("parse_json")] = Box::new(bf_parse_json);
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::vm::builtins::bf_strings::{json_value_to_moo, moo_value_to_json, strsub};
-    use moor_var::{Associative, v_int, v_list, v_map, v_str};
-    use serde_json::json;
+    use crate::vm::builtins::bf_strings::strsub;
 
     #[test]
     fn test_strsub_remove_piece() {
@@ -621,83 +515,5 @@ mod tests {
         let subject = "foo bar baz";
         let expected = "foo bar baz";
         assert_eq!(strsub(subject, "fizz", "buzz", false), expected);
-    }
-
-    #[test]
-    fn test_moo_to_json_primitives() {
-        // Test integer
-        let int_val = v_int(42);
-        assert_eq!(moo_value_to_json(&int_val).unwrap(), json!(42));
-
-        // Test string
-        let str_val = v_str("hello");
-        assert_eq!(moo_value_to_json(&str_val).unwrap(), json!("hello"));
-    }
-
-    #[test]
-    fn test_moo_to_json_complex() {
-        // Test list
-        let list_val = v_list(&[v_int(1), v_int(2), v_str("three")]);
-        assert_eq!(
-            moo_value_to_json(&list_val).unwrap(),
-            json!([1, 2, "three"])
-        );
-
-        // Test map
-        let map_val = v_map(&[(v_str("key1"), v_int(1)), (v_str("key2"), v_str("value"))]);
-        assert_eq!(
-            moo_value_to_json(&map_val).unwrap(),
-            json!({"key1": 1, "key2": "value"})
-        );
-    }
-
-    #[test]
-    fn test_json_to_moo_primitives() {
-        // Test null
-        let null_json = json!(null);
-        assert!(matches!(
-            json_value_to_moo(&null_json).unwrap().variant(),
-            moor_var::Variant::None
-        ));
-
-        // Test boolean
-        let bool_json = json!(true);
-        assert_eq!(json_value_to_moo(&bool_json).unwrap(), v_int(1));
-
-        // Test number
-        let num_json = json!(42);
-        assert_eq!(json_value_to_moo(&num_json).unwrap(), v_int(42));
-
-        // Test string
-        let str_json = json!("hello");
-        assert_eq!(json_value_to_moo(&str_json).unwrap(), v_str("hello"));
-    }
-
-    #[test]
-    fn test_json_to_moo_complex() {
-        // Test array
-        let array_json = json!([1, "two", true]);
-        let array_moo = json_value_to_moo(&array_json).unwrap();
-        let list_items = match array_moo.variant() {
-            moor_var::Variant::List(list) => list.iter().collect::<Vec<_>>(),
-            _ => panic!("Expected list"),
-        };
-        assert_eq!(list_items.len(), 3);
-        assert_eq!(list_items[0], v_int(1));
-        assert_eq!(list_items[1], v_str("two"));
-        assert_eq!(list_items[2], v_int(1)); // true becomes 1
-
-        // Test object
-        let obj_json = json!({"key1": 1, "key2": "value"});
-        let obj_moo = json_value_to_moo(&obj_json).unwrap();
-        match obj_moo.variant() {
-            moor_var::Variant::Map(map) => {
-                assert_eq!(map.len(), 2);
-                // Check keys and values exist
-                assert_eq!(map.get(&v_str("key1")).unwrap(), v_int(1));
-                assert_eq!(map.get(&v_str("key2")).unwrap(), v_str("value"));
-            }
-            _ => panic!("Expected map"),
-        };
     }
 }
