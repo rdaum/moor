@@ -1025,7 +1025,7 @@ mod tests {
             author: v_str("test"),
             event: Event::Present(Presentation {
                 id: id.to_string(),
-                content_type: "text/plain".to_string(),
+                content_type: "text_plain".to_string(),
                 content: content.to_string(),
                 target: "main".to_string(),
                 attributes: vec![],

@@ -251,11 +251,13 @@ function displayHistoricalEvent(
     event: HistoricalEvent,
     insertMode: "append" | "prepend" = "append",
 ): void {
-    // Convert historical event to narrative event format
+    // Convert historical event to narrative event format -- server sends us with _ instead of /
+    const contentType = event.message.content_type?.replace("_", "/") || "text/plain";
+
     const narrativeEvent: NarrativeEvent = {
         kind: "narrative_message" as any, // Use string to match enum value
         message: convertEventMessage(event.message),
-        content_type: event.message.content_type || "text/plain",
+        content_type: contentType,
         author: event.author,
         is_historical: true, // Mark as historical for visual distinction
         timestamp: new Date(event.timestamp).getTime(),
@@ -618,7 +620,7 @@ function processNarrativeMessage(
     insertMode: "append" | "prepend" = "append",
 ): void {
     // Determine content type, defaulting to plain text
-    const contentType = msg.content_type || CONTENT_TYPES.PLAIN;
+    const contentType = msg.content_type?.replace("_", "/") || CONTENT_TYPES.PLAIN;
 
     // Handle MCP-style edit commands
     // Format: #$# edit name: Object:verb upload: @program #object:verb permissions
@@ -769,12 +771,23 @@ function processMessageContent(
         }
     } else if (contentType === CONTENT_TYPES.HTML) {
         // Sanitize and render HTML content
+        console.log("Sanitizing HTML content for author:", msg.author, " content:", content);
         const html = htmlSanitize(msg.author, content);
         const elements = generateElements(html);
+        console.log("Generated HTML elements:", elements);
 
-        // Add all elements to the content node with appropriate styling
-        for (let i = 0; i < elements.length; i++) {
-            contentNode.append(div({ class: `text_html ${baseClass}_html` }, elements[i]));
+        // If no HTML elements were generated from sanitized content (plain text), wrap in a paragraph
+        if (elements.length === 0 && html.trim()) {
+            // Use sanitized content wrapped in a <p> tag
+            const wrappedElements = generateElements(`<p>${html}</p>`);
+            for (let i = 0; i < wrappedElements.length; i++) {
+                contentNode.append(div({ class: `text_html ${baseClass}_html` }, wrappedElements[i]));
+            }
+        } else {
+            // Add all elements to the content node with appropriate styling
+            for (let i = 0; i < elements.length; i++) {
+                contentNode.append(div({ class: `text_html ${baseClass}_html` }, elements[i]));
+            }
         }
     } else {
         // Default case: plain text
@@ -782,6 +795,7 @@ function processMessageContent(
     }
 
     // Add the content to the narrative display
+    console.log("Inserting narrative content:", contentNode);
     narrativeInsert(contentNode, insertMode);
 }
 

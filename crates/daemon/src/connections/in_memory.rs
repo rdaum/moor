@@ -165,7 +165,7 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
             last_ping: now,
             hostname,
             acceptable_content_types: acceptable_content_types
-                .unwrap_or_else(|| vec![Symbol::mk("text/plain")]),
+                .unwrap_or_else(|| vec![Symbol::mk("text_plain")]),
         };
 
         // Add to connection records
@@ -526,7 +526,7 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
                 Ok(record.acceptable_content_types.clone())
             } else {
                 // Default to text/plain if no records
-                Ok(vec![Symbol::mk("text/plain")])
+                Ok(vec![Symbol::mk("text_plain")])
             }
         } else {
             Err(SessionError::NoConnectionForPlayer(connection))

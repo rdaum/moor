@@ -121,9 +121,9 @@ impl WebHost {
                     handler_object: self.handler_object,
                     peer_addr: peer_addr.to_string(),
                     acceptable_content_types: Some(vec![
-                        Symbol::mk("text/plain"),
-                        Symbol::mk("text/html"),
-                        Symbol::mk("text/djot"),
+                        Symbol::mk("text_html"),
+                        Symbol::mk("text_djot"),
+                        Symbol::mk("text_plain"),
                     ]),
                 },
             )
@@ -225,9 +225,9 @@ impl WebHost {
                 ConnectionEstablish {
                     peer_addr: addr.to_string(),
                     acceptable_content_types: Some(vec![
-                        Symbol::mk("text/plain"),
-                        Symbol::mk("text/html"),
-                        Symbol::mk("text/djot"),
+                        Symbol::mk("text_plain"),
+                        Symbol::mk("text_html"),
+                        Symbol::mk("text_djot"),
                     ]),
                 },
             )

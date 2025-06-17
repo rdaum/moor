@@ -47,8 +47,8 @@ const OUT_OF_BAND_PREFIX: &str = "#$#";
 pub(crate) const DEFAULT_FLUSH_COMMAND: &str = ".flush";
 
 // TODO: switch to djot
-const CONTENT_TYPE_MARKDOWN: &str = "text/markdown";
-const CONTENT_TYPE_DJOT: &str = "text/djot";
+const CONTENT_TYPE_MARKDOWN: &str = "text_markdown";
+const CONTENT_TYPE_DJOT: &str = "text_djot";
 
 pub(crate) struct TelnetConnection {
     pub(crate) peer_addr: SocketAddr,

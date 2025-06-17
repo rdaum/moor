@@ -299,9 +299,8 @@ impl<'a> Unparse<'a> {
             }
             Expr::Scatter(vars, expr) => {
                 let mut buffer = String::new();
-                // If the vars are non-global scope depth, prefix with 'let' or 'const' as appropriate.
-                // Note the expectation is always that the vars exist at the same scope depth,
-                //   as the let scatter syntax does not have granularity per-var.
+                // TODO: this is currently broken and will unparse all locals as lets, even when
+                //   they are re-assigning to an existing declared variable.
                 let is_local = vars.iter().any(|var| var.id.scope_id != 0);
                 let is_const = vars
                     .iter()
@@ -591,7 +590,8 @@ impl<'a> Unparse<'a> {
             StmtNode::Expr(Expr::Assign { left, right }) => {
                 let left_frag = match left.as_ref() {
                     Expr::Id(id) => {
-                        // If this Id is in non-zero scope, we need to prefix with "let"
+                        // TODO: this is currently broken and will unparse all locals as lets, even when
+                        //   they are re-assigning to an existing declared variable.
                         let decl = self.tree.variables.find_decl(id).unwrap();
                         let prefix = match decl.decl_type {
                             DeclType::Let => "let ",

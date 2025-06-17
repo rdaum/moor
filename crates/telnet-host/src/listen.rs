@@ -209,9 +209,9 @@ impl Listener {
                     ConnectionEstablish {
                         peer_addr: peer_addr.to_string(),
                         acceptable_content_types: Some(vec![
-                            Symbol::mk("text/plain"),
-                            Symbol::mk("text/markdown"),
-                            Symbol::mk("text/djot"),
+                            Symbol::mk("text_djot"),
+                            Symbol::mk("text_markdown"),
+                            Symbol::mk("text_plain"),
                         ]),
                     },
                 )

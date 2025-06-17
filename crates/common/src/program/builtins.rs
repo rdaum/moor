@@ -1008,16 +1008,16 @@ fn mk_builtin_table() -> Vec<Builtin> {
         },
         Builtin {
             name: Symbol::mk("xml_parse"),
-            min_args: Q(1),
-            max_args: Q(2),
-            types: vec![Typed(TYPE_STR), Typed(TYPE_MAP)],
+            min_args: Q(2),
+            max_args: Q(3),
+            types: vec![Typed(TYPE_STR), Typed(TYPE_INT), Typed(TYPE_MAP)],
             implemented: true,
         },
         Builtin {
             name: Symbol::mk("to_xml"),
             min_args: Q(1),
             max_args: Q(2),
-            types: vec![Typed(TYPE_FLYWEIGHT), Typed(TYPE_MAP)],
+            types: vec![Any, Typed(TYPE_MAP)],
             implemented: true,
         },
         Builtin {
