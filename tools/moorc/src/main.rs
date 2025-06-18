@@ -385,8 +385,7 @@ fn main() -> Result<(), eyre::Report> {
             let session = test_session_factory
                 .clone()
                 .mk_background_session(&wizard)
-                .unwrap();
-            info!("Running test {}:{}", o, verb);
+                .expect("Failed to create session");
             let handle = scheduler_client
                 .submit_verb_task(
                     &wizard,
@@ -397,7 +396,7 @@ fn main() -> Result<(), eyre::Report> {
                     &wizard,
                     session,
                 )
-                .unwrap();
+                .expect("Failed to submit task");
             let result = handle
                 .receiver()
                 .recv_timeout(Duration::from_secs(4))
@@ -413,20 +412,24 @@ fn main() -> Result<(), eyre::Report> {
                             };
                             error!("{s}");
                         }
-                        return Ok(());
+                        continue;
                     }
                     _ => {
-                        panic!("Test {}:{} failed: {:?}", o, verb, e);
+                        error!("Test {}:{} failed: {:?}", o, verb, e);
+                        continue;
                     }
                 },
             };
             let TaskResult::Result(result_value) = result_value else {
-                panic!("Test failed to return a result");
+                error!("Test failed to return a result");
+                continue;
             };
             // Result must be non-Error
             if let Some(e) = result_value.as_error() {
-                panic!("Test {}:{} failed: {:?}", o, verb, e);
+                error!("Test {}:{} failed: {:?}", o, verb, e);
+                continue;
             }
+            info!("Test {}:{} passed", o, verb);
         }
     }
 
