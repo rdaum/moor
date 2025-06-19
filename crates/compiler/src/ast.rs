@@ -182,6 +182,11 @@ pub enum Expr {
         from: Box<Expr>,
         to: Box<Expr>,
     },
+    Decl {
+        id: Variable,
+        is_const: bool,
+        expr: Option<Box<Expr>>,
+    },
     Return(Option<Box<Expr>>),
 }
 

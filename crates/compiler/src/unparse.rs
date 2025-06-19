@@ -16,7 +16,6 @@ use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
 use base64::{Engine, engine::general_purpose};
-use moor_common::program::DeclType;
 use moor_common::program::names::Variable;
 use moor_common::util::quote_str;
 use moor_var::{Obj, Sequence, Symbol, Var, Variant};
@@ -79,6 +78,7 @@ impl Expr {
             Expr::Pass { .. } => 1,
             Expr::Call { .. } => 1,
             Expr::Length => 1,
+            Expr::Decl { .. } => 1,
             Expr::Return(_) => 1,
             Expr::TryCatch { .. } => 1,
         };
@@ -339,6 +339,19 @@ impl<'a> Unparse<'a> {
                 Ok(buffer)
             }
             Expr::Length => Ok(String::from("$")),
+            Expr::Decl { id, is_const, expr } => {
+                let prefix = if *is_const { "const " } else { "let " };
+                let var_name = self.unparse_variable(id);
+                match expr {
+                    Some(e) => Ok(format!(
+                        "{}{} = {}",
+                        prefix,
+                        var_name,
+                        self.unparse_expr(e)?
+                    )),
+                    None => Ok(format!("{}{}", prefix, var_name)),
+                }
+            }
             Expr::Flyweight(delegate, slots, contents) => {
                 // "< #1, [ slot -> value, ...], {1, 2, 3} >"
                 let mut buffer = String::new();
@@ -590,16 +603,8 @@ impl<'a> Unparse<'a> {
             StmtNode::Expr(Expr::Assign { left, right }) => {
                 let left_frag = match left.as_ref() {
                     Expr::Id(id) => {
-                        // TODO: this is currently broken and will unparse all locals as lets, even when
-                        //   they are re-assigning to an existing declared variable.
-                        let decl = self.tree.variables.find_decl(id).unwrap();
-                        let prefix = match decl.decl_type {
-                            DeclType::Let => "let ",
-                            DeclType::Global => "global ",
-                            _ => "",
-                        };
                         let suffix = self.unparse_variable(id);
-                        format!("{}{}", prefix, suffix)
+                        suffix.to_string()
                     }
                     _ => self.unparse_expr(left)?,
                 };
@@ -608,6 +613,20 @@ impl<'a> Unparse<'a> {
                     "{}{} = {};",
                     indent_frag, left_frag, right_frag
                 )])
+            }
+            StmtNode::Expr(Expr::Decl { id, is_const, expr }) => {
+                let prefix = if *is_const { "const " } else { "let " };
+                let var_name = self.unparse_variable(id);
+                match expr {
+                    Some(e) => Ok(vec![format!(
+                        "{}{}{} = {};",
+                        indent_frag,
+                        prefix,
+                        var_name,
+                        self.unparse_expr(e)?
+                    )]),
+                    None => Ok(vec![format!("{}{}{};", indent_frag, prefix, var_name)]),
+                }
             }
             StmtNode::Expr(expr) => Ok(vec![format!(
                 "{}{};",
@@ -1058,6 +1077,20 @@ mod tests {
     #[test_case(r#"verb[1..5 - 1];"#; "range precedence")]
     #[test_case(r#"1 && ((a = 5) && 3);"#; "and/or precedence")]
     #[test_case(r#"n + 10 in a;"#; "in precedence")]
+    #[test_case(r#"begin
+  let a = 5;
+  a = a + 3;
+end"#; "variable declaration and reassignment")]
+    #[test_case(r#"begin
+  let {a, b} = {1, 2};
+  a = 5;
+  b = 2;
+end"#; "scatter declaration and reassignment")]
+    #[test_case(r#"begin
+  let {a, ?b = 5, @c} = {1, 2, 3};
+  b = 2;
+  c = 1;
+end"#; "complex scatter declaration with optional and rest")]
     pub fn compare_parse_roundtrip(original: &str) {
         let stripped = unindent(original);
         let result = parse_and_unparse(&stripped).unwrap();

@@ -20,6 +20,7 @@ use crate::ast::{
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::parse::Parse;
 use crate::var_scope::VarScope;
+use moor_common::program::DeclType;
 use moor_common::program::builtins::BuiltinId;
 use moor_common::program::labels::{JumpLabel, Label, Offset};
 use moor_common::program::names::{Name, Variable};
@@ -29,7 +30,7 @@ use moor_common::program::opcode::{
 use moor_common::program::program::Program;
 use moor_var::{Symbol, Var, v_int, v_none, v_obj};
 use moor_var::{Variant, v_float};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {
@@ -56,6 +57,8 @@ struct Decompile {
     position: usize,
     expr_stack: VecDeque<Expr>,
     statements: Vec<Stmt>,
+    /// Track which variables have been assigned to in each scope to detect first assignments
+    assigned_vars: HashSet<(u16, u16)>, // (variable_id, scope_id)
 }
 
 impl Decompile {
@@ -398,6 +401,7 @@ impl Decompile {
                     position: 0,
                     expr_stack: self.expr_stack.clone(),
                     statements: vec![],
+                    assigned_vars: self.assigned_vars.clone(),
                 };
                 let fv_len = self.program.fork_vector(fv_offset).len();
                 while fork_decompile.position < fv_len {
@@ -441,10 +445,45 @@ impl Decompile {
             Op::Put(varname) => {
                 let expr = self.pop_expr()?;
                 let varname = self.decompile_name(&varname)?;
-                self.push_expr(Expr::Assign {
-                    left: Box::new(Expr::Id(varname)),
-                    right: Box::new(expr),
-                });
+
+                // Check if this is the first assignment to this variable in this scope
+                let var_key = (varname.id, varname.scope_id);
+                let is_first_assignment = !self.assigned_vars.contains(&var_key);
+
+                // Look up the declaration info
+                let name = self.program.var_names().name_for_var(&varname);
+                let decl_info = name.and_then(|n| self.program.var_names().decls.get(&n));
+
+                // Check if this should be treated as a declaration:
+                // 1. It's the first assignment to this variable in this scope
+                // 2. The variable was declared with DeclType::Let (not a global or assignment)
+                // 3. It's a local variable (scope_id != 0)
+                let should_be_declaration = is_first_assignment
+                    && varname.scope_id != 0
+                    && decl_info
+                        .map(|d| d.decl_type == DeclType::Let)
+                        .unwrap_or(false);
+
+                if should_be_declaration {
+                    // Mark as assigned
+                    self.assigned_vars.insert(var_key);
+
+                    let is_const = decl_info.map(|d| d.constant).unwrap_or(false);
+
+                    self.push_expr(Expr::Decl {
+                        id: varname,
+                        is_const,
+                        expr: Some(Box::new(expr)),
+                    });
+                } else {
+                    // Mark as assigned even for subsequent assignments
+                    self.assigned_vars.insert(var_key);
+
+                    self.push_expr(Expr::Assign {
+                        left: Box::new(Expr::Id(varname)),
+                        right: Box::new(expr),
+                    });
+                }
             }
             Op::And(label) => {
                 let left = self.pop_expr()?;
@@ -1097,6 +1136,7 @@ pub fn program_to_tree(program: &Program) -> Result<Parse, DecompileError> {
         position: 0,
         expr_stack: Default::default(),
         statements: vec![],
+        assigned_vars: HashSet::new(),
     };
     let opcode_vector_len = decompile.opcode_vector().len();
     while decompile.position < opcode_vector_len {
@@ -1326,7 +1366,7 @@ return 0 && "Automatically Added Return";
 
     #[test]
     fn test_flyweight() {
-        let program = r#"let flywt = < #1, [ colour -> "orange", z -> 5 ], {#2, #4, "a"}>;"#;
+        let program = r#"flywt = < #1, [ colour -> "orange", z -> 5 ], {#2, #4, "a"}>;"#;
         let (parse, decompiled) = parse_decompile(program);
         assert_trees_match_recursive(&parse.stmts, &decompiled.stmts);
     }

@@ -1279,13 +1279,11 @@ impl TreeTransformer {
             .next()
             .map(|e| self.parse_expr(e.into_inner()).unwrap());
 
-        // Just becomes an assignment expression.
-        // But that means the decompiler will need to know what to do with it.
-        // Which is: if assignment is on its own in statement, and variable assigned to is
-        //   restricted to the scope of the block, then it's a let.
-        Ok(StmtNode::Expr(Expr::Assign {
-            left: Box::new(Expr::Id(id)),
-            right: Box::new(expr.unwrap_or(Expr::Value(v_none()))),
+        // Create a proper Decl expression for let/const declarations
+        Ok(StmtNode::Expr(Expr::Decl {
+            id,
+            is_const,
+            expr: expr.map(Box::new),
         }))
     }
 
@@ -1511,7 +1509,7 @@ pub fn unquote_str(s: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use moor_var::{E_INVARG, E_PROPNF, E_VARNF, ErrCustom, Symbol, v_none};
+    use moor_var::{E_INVARG, E_PROPNF, E_VARNF, ErrCustom, Symbol};
     use moor_var::{Var, v_binary, v_float, v_int, v_objid, v_str};
 
     use crate::CompileOptions;
@@ -2799,18 +2797,20 @@ mod tests {
                     body: vec![
                         // Declaration of X
                         Stmt {
-                            node: StmtNode::Expr(Expr::Assign {
-                                left: Box::new(Id(inner_x)),
-                                right: Box::new(Value(v_int(5))),
+                            node: StmtNode::Expr(Expr::Decl {
+                                id: inner_x,
+                                is_const: false,
+                                expr: Some(Box::new(Value(v_int(5)))),
                             }),
                             line_col: (2, 0),
                             tree_line_no: 2,
                         },
                         // Declaration of y
                         Stmt {
-                            node: StmtNode::Expr(Expr::Assign {
-                                left: Box::new(Id(inner_y)),
-                                right: Box::new(Value(v_int(6))),
+                            node: StmtNode::Expr(Expr::Decl {
+                                id: inner_y,
+                                is_const: false,
+                                expr: Some(Box::new(Value(v_int(6)))),
                             }),
                             line_col: (3, 0),
                             tree_line_no: 3,
@@ -2827,20 +2827,22 @@ mod tests {
                             line_col: (4, 0),
                             tree_line_no: 4,
                         },
-                        // Asssignment to z.
+                        // Declaration of z.
                         Stmt {
-                            node: StmtNode::Expr(Expr::Assign {
-                                left: Box::new(Id(inner_z)),
-                                right: Box::new(Value(v_int(7))),
+                            node: StmtNode::Expr(Expr::Decl {
+                                id: inner_z,
+                                is_const: false,
+                                expr: Some(Box::new(Value(v_int(7)))),
                             }),
                             line_col: (5, 0),
                             tree_line_no: 5,
                         },
-                        // Declaration of o (o = v_none)
+                        // Declaration of o
                         Stmt {
-                            node: StmtNode::Expr(Expr::Assign {
-                                left: Box::new(Id(inner_o)),
-                                right: Box::new(Value(v_none())),
+                            node: StmtNode::Expr(Expr::Decl {
+                                id: inner_o,
+                                is_const: false,
+                                expr: None,
                             }),
                             line_col: (6, 0),
                             tree_line_no: 6,
@@ -2934,7 +2936,7 @@ mod tests {
     #[test]
     fn test_local_scatter_assign() {
         let program = r#"begin
-            let a = 3;
+            a = 3;
             begin
                 let {a, b} = {1, 2};
             end
@@ -2949,7 +2951,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Scope {
-                num_bindings: 1,
+                num_bindings: 0,
                 body: vec![
                     Stmt {
                         node: StmtNode::Expr(Expr::Assign {

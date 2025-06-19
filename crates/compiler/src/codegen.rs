@@ -17,7 +17,7 @@ use pest::iterators::Pairs;
 use std::sync::Arc;
 use tracing::warn;
 
-use moor_var::{ErrorCode, Var, v_arc_string};
+use moor_var::{ErrorCode, Var, v_arc_string, v_int};
 use moor_var::{Variant, v_sym};
 
 use crate::Op::{
@@ -621,6 +621,18 @@ impl CodegenState {
             }
             Expr::Scatter(scatter, right) => self.generate_scatter_assign(scatter, right)?,
             Expr::Assign { left, right } => self.generate_assign(left, right)?,
+            Expr::Decl { id, is_const: _, expr } => {
+                // For code generation, a declaration with assignment is the same as a regular assignment
+                match expr {
+                    Some(rhs) => {
+                        self.generate_assign(&Expr::Id(*id), rhs)?;
+                    }
+                    None => {
+                        // Declaration without assignment - assign 0 as default
+                        self.generate_assign(&Expr::Id(*id), &Expr::Value(v_int(0)))?;
+                    }
+                }
+            },
             Expr::ComprehendRange {
                 variable,
                 end_of_range_register,
