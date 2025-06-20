@@ -92,7 +92,6 @@ impl VarScope {
         // These types of variables are always mutable, and always re-use a variable name, to
         // maintain existing MOO language semantics.
         let unbound_name = self.new_unbound_variable(name, 0, false, BindMode::Reuse, decl_type)?;
-        self.scopes[0].push(unbound_name);
         Some(unbound_name)
     }
 
@@ -132,17 +131,14 @@ impl VarScope {
 
     pub fn declare_or_use_name(&mut self, name: &str, decl_type: DeclType) -> Variable {
         let name = Symbol::mk(name);
-        let unbound_name = self
-            .new_unbound_variable(
-                name,
-                self.scopes.len() - 1,
-                false,
-                BindMode::Reuse,
-                decl_type,
-            )
-            .unwrap();
-        self.scopes.last_mut().unwrap().push(unbound_name);
-        unbound_name
+        self.new_unbound_variable(
+            name,
+            self.scopes.len() - 1,
+            false,
+            BindMode::Reuse,
+            decl_type,
+        )
+        .unwrap()
     }
 
     /// Declare a (mutable) name in the current lexical scope.
@@ -155,7 +151,6 @@ impl VarScope {
             BindMode::New,
             decl_type,
         )?;
-        self.scopes.last_mut().unwrap().push(unbound_name);
         Some(unbound_name)
     }
 
@@ -164,7 +159,6 @@ impl VarScope {
         let name = Symbol::mk(name);
         let unbound_name =
             self.new_unbound_variable(name, self.scopes.len() - 1, true, BindMode::New, decl_type)?;
-        self.scopes.last_mut().unwrap().push(unbound_name);
         Some(unbound_name)
     }
 
@@ -223,7 +217,6 @@ impl VarScope {
         decl_type: DeclType,
     ) -> Option<Variable> {
         // If the variable already exists in this scope && we're New, return None
-
         let scope = &self.scopes[scope_depth];
         for n in scope.iter() {
             if n.nr == Named(name) {
@@ -249,6 +242,7 @@ impl VarScope {
             decl_type,
             scope_id,
         });
+        self.scopes[scope_depth].push(vr);
         Some(vr)
     }
 
