@@ -621,7 +621,11 @@ impl CodegenState {
             }
             Expr::Scatter(scatter, right) => self.generate_scatter_assign(scatter, right)?,
             Expr::Assign { left, right } => self.generate_assign(left, right)?,
-            Expr::Decl { id, is_const: _, expr } => {
+            Expr::Decl {
+                id,
+                is_const: _,
+                expr,
+            } => {
                 // For code generation, a declaration with assignment is the same as a regular assignment
                 match expr {
                     Some(rhs) => {
@@ -632,7 +636,7 @@ impl CodegenState {
                         self.generate_assign(&Expr::Id(*id), &Expr::Value(v_int(0)))?;
                     }
                 }
-            },
+            }
             Expr::ComprehendRange {
                 variable,
                 end_of_range_register,
@@ -901,11 +905,11 @@ impl CodegenState {
                 for s in body {
                     self.generate_stmt(s)?;
                 }
-                self.emit(Jump {
-                    label: loop_start_label,
-                });
                 self.emit(Op::EndScope {
                     num_bindings: *environment_width as u16,
+                });
+                self.emit(Jump {
+                    label: loop_start_label,
                 });
                 self.commit_jump_label(loop_end_label);
                 self.loops.pop();

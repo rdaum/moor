@@ -108,8 +108,8 @@ mod tests {
                 Add,
                 Put(x),
                 Pop,
-                Jump { label: 0.into() },
                 EndScope { num_bindings: 0 },
+                Jump { label: 0.into() },
                 Done
             ]
         );
