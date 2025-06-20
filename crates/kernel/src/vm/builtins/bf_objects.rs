@@ -356,9 +356,9 @@ const BF_CREATE_OBJECT_TRAMPOLINE_START_CALL_INITIALIZE: usize = 0;
 const BF_CREATE_OBJECT_TRAMPOLINE_DONE: usize = 1;
 
 fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.is_empty() || bf_args.args.len() > 2 {
+    if bf_args.args.is_empty() || bf_args.args.len() > 4 {
         return Err(BfErr::ErrValue(
-            E_ARGS.msg("create() takes 1 or 2 arguments"),
+            E_ARGS.msg("create() takes 1 to 4 arguments"),
         ));
     }
     let Some(parent) = bf_args.args[0].as_object() else {
@@ -366,7 +366,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_TYPE.msg("create() first argument must be an object"),
         ));
     };
-    let owner = if bf_args.args.len() == 2 {
+    let owner = if bf_args.args.len() >= 2 {
         let Some(owner) = bf_args.args[1].as_object() else {
             return Err(BfErr::ErrValue(
                 E_TYPE.msg("create() second argument must be an object"),
@@ -375,6 +375,23 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         owner
     } else {
         bf_args.task_perms_who()
+    };
+
+    // Third argument is "is-anon" - we ignore it but validate it exists
+    if bf_args.args.len() >= 3 {
+        // is-anon argument exists but is ignored
+    }
+
+    // Fourth argument is "init-args" - must be a list if provided
+    let init_args = if bf_args.args.len() == 4 {
+        let Some(init_args) = bf_args.args[3].as_list() else {
+            return Err(BfErr::ErrValue(
+                E_TYPE.msg("create() fourth argument must be a list"),
+            ));
+        };
+        Some(init_args)
+    } else {
+        None
     };
 
     let tramp = bf_args
@@ -405,6 +422,12 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             bf_frame.bf_trampoline = Some(BF_CREATE_OBJECT_TRAMPOLINE_DONE);
             bf_frame.bf_trampoline_arg = Some(v_obj(new_obj));
 
+            let initialize_args = if let Some(init_args) = init_args {
+                init_args.clone()
+            } else {
+                List::mk_list(&[])
+            };
+
             let ve = VerbExecutionRequest {
                 permissions: bf_args.task_perms_who(),
                 resolved_verb,
@@ -414,7 +437,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                     location: v_obj(new_obj),
                     this: v_obj(new_obj),
                     player: bf_args.exec_state.top().player,
-                    args: List::mk_list(&[]),
+                    args: initialize_args,
                     argstr: "".to_string(),
                     caller: bf_args.exec_state.top().this.clone(),
                 }),
