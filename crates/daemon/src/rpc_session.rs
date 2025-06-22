@@ -62,6 +62,7 @@ pub(crate) enum SessionActions {
         Option<Obj>,
         oneshot::Sender<Result<Vec<ConnectionDetails>, SessionError>>,
     ),
+    PublishTaskCompletion(Uuid, rpc_common::ClientEvent),
 }
 
 impl RpcSession {
@@ -247,7 +248,7 @@ impl SessionFactory for RpcServer {
         let session = RpcSession::new(
             client_id,
             *player,
-            self.event_log.clone(),
+            self.event_log().clone(),
             self.mailbox_sender.clone(),
         );
         let session = Arc::new(session);

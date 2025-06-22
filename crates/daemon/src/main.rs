@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 // Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
 // software: you can redistribute it and/or modify it under the terms of the GNU
 // General Public License as published by the Free Software Foundation, version
@@ -41,10 +42,13 @@ mod args;
 mod connections;
 mod event_log;
 mod feature_args;
+mod message_handler;
 mod rpc_hosts;
 mod rpc_server;
 mod rpc_session;
-mod sys_ctrl;
+mod rpc_transport;
+mod system_control;
+mod task_monitor;
 mod tasks_fjall;
 mod workers_server;
 
@@ -264,7 +268,7 @@ fn main() -> Result<(), Report> {
     };
 
     let resolved_events_db_path = args.resolved_events_db_path();
-    let rpc_server = Arc::new(RpcServer::new(
+    let (rpc_server, task_monitor, system_control) = RpcServer::new(
         public_key.clone(),
         private_key.clone(),
         connections,
@@ -272,7 +276,8 @@ fn main() -> Result<(), Report> {
         args.events_listen.as_str(),
         config.clone(),
         &resolved_events_db_path,
-    ));
+    );
+    let rpc_server = Arc::new(rpc_server);
     let kill_switch = rpc_server.kill_switch.clone();
 
     let (worker_scheduler_send, worker_scheduler_recv) = flume::unbounded();
@@ -313,7 +318,7 @@ fn main() -> Result<(), Report> {
         database,
         tasks_db,
         config.clone(),
-        rpc_server.clone(),
+        Arc::new(system_control),
         Some(workers_sender),
         Some(worker_scheduler_recv),
     );
@@ -362,7 +367,7 @@ fn main() -> Result<(), Report> {
     let rpc_loop_thread = std::thread::Builder::new()
         .name("moor-rpc".to_string())
         .spawn(move || {
-            if let Err(e) = rpc_server.request_loop(rpc_listen.clone(), rpc_loop_scheduler_client) {
+            if let Err(e) = rpc_server.request_loop(rpc_listen.clone(), rpc_loop_scheduler_client, task_monitor) {
                 error!("RPC server failed on {}: {}", rpc_listen, e);
             }
         })?;

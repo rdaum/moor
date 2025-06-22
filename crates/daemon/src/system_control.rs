@@ -11,15 +11,43 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::rpc_server::RpcServer;
+//! SystemControl handle for the scheduler - minimal interface for system operations
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+
 use moor_common::tasks::SessionError::DeliveryError;
 use moor_common::tasks::SystemControl;
 use moor_var::Obj;
 use rpc_common::{HOST_BROADCAST_TOPIC, HostBroadcastEvent, HostType};
-use std::sync::atomic::Ordering;
 use tracing::{error, warn};
+use zmq::Socket;
 
-impl SystemControl for RpcServer {
+use crate::rpc_hosts::Hosts;
+
+/// Handle for system control operations - just what the scheduler needs
+#[derive(Clone)]
+pub struct SystemControlHandle {
+    kill_switch: Arc<AtomicBool>,
+    events_publish: Arc<Mutex<Socket>>,
+    hosts: Arc<RwLock<Hosts>>,
+}
+
+impl SystemControlHandle {
+    pub fn new(
+        kill_switch: Arc<AtomicBool>,
+        events_publish: Arc<Mutex<Socket>>,
+        hosts: Arc<RwLock<Hosts>>,
+    ) -> Self {
+        Self {
+            kill_switch,
+            events_publish,
+            hosts,
+        }
+    }
+}
+
+impl SystemControl for SystemControlHandle {
     fn shutdown(&self, msg: Option<String>) -> Result<(), moor_var::Error> {
         warn!("Shutting down server: {}", msg.unwrap_or_default());
         self.kill_switch.store(true, Ordering::SeqCst);
@@ -95,6 +123,7 @@ impl SystemControl for RpcServer {
                     moor_var::E_INVARG.msg("Unable to send Unlisten event")
                 })?;
         }
+
         Ok(())
     }
 
