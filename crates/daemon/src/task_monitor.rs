@@ -23,7 +23,7 @@ use moor_kernel::tasks::TaskHandle;
 use rpc_common::ClientEvent;
 use tracing::info;
 
-use crate::rpc_session::SessionActions;
+use crate::rpc::SessionActions;
 
 /// Commands that can be sent to the TaskMonitor
 enum TaskCommand {

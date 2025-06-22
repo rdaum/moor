@@ -14,35 +14,30 @@
 //! SystemControl handle for the scheduler - minimal interface for system operations
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 
-use moor_common::tasks::SessionError::DeliveryError;
 use moor_common::tasks::SystemControl;
 use moor_var::Obj;
-use rpc_common::{HOST_BROADCAST_TOPIC, HostBroadcastEvent, HostType};
-use tracing::{error, warn};
-use zmq::Socket;
+use rpc_common::HostType;
+use tracing::warn;
 
-use crate::rpc_hosts::Hosts;
+use crate::rpc::MessageHandler;
 
 /// Handle for system control operations - just what the scheduler needs
 #[derive(Clone)]
 pub struct SystemControlHandle {
     kill_switch: Arc<AtomicBool>,
-    events_publish: Arc<Mutex<Socket>>,
-    hosts: Arc<RwLock<Hosts>>,
+    message_handler: Arc<dyn MessageHandler>,
 }
 
 impl SystemControlHandle {
     pub fn new(
         kill_switch: Arc<AtomicBool>,
-        events_publish: Arc<Mutex<Socket>>,
-        hosts: Arc<RwLock<Hosts>>,
+        message_handler: Arc<dyn MessageHandler>,
     ) -> Self {
         Self {
             kill_switch,
-            events_publish,
-            hosts,
+            message_handler,
         }
     }
 }
@@ -70,32 +65,9 @@ impl SystemControl for SystemControlHandle {
             }
         };
 
-        let event = HostBroadcastEvent::Listen {
-            handler_object,
-            host_type,
-            port,
-            print_messages,
-        };
-
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
-
-        // We want responses from all clients, so send on this broadcast "topic"
-        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish
-                .send_multipart(payload, 0)
-                .map_err(|e| {
-                    error!(error = ?e, "Unable to send Listen to client");
-                    DeliveryError
-                })
-                .map_err(|e| {
-                    error!("Could not send Listen event: {}", e);
-                    moor_var::E_INVARG.msg("Unable to send Listen event")
-                })?;
-        }
-
-        Ok(())
+        self.message_handler
+            .broadcast_listen(handler_object, host_type, port, print_messages)
+            .map_err(|_| moor_var::E_INVARG.msg("Unable to send Listen event"))
     }
 
     fn unlisten(&self, port: u16, host_type: &str) -> Result<(), moor_var::Error> {
@@ -104,35 +76,16 @@ impl SystemControl for SystemControlHandle {
             _ => return Err(moor_var::E_INVARG.msg("Invalid host type")),
         };
 
-        let event = HostBroadcastEvent::Unlisten { host_type, port };
-
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
-
-        // We want responses from all clients, so send on this broadcast "topic"
-        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish
-                .send_multipart(payload, 0)
-                .map_err(|e| {
-                    error!(error = ?e, "Unable to send Unlisten to client");
-                    DeliveryError
-                })
-                .map_err(|e| {
-                    error!("Could not send Unlisten event: {}", e);
-                    moor_var::E_INVARG.msg("Unable to send Unlisten event")
-                })?;
-        }
-
-        Ok(())
+        self.message_handler
+            .broadcast_unlisten(host_type, port)
+            .map_err(|_| moor_var::E_INVARG.msg("Unable to send Unlisten event"))
     }
 
     fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, moor_var::Error> {
-        let hosts = self.hosts.read().unwrap();
-        let listeners = hosts
-            .listeners()
+        let listeners = self.message_handler
+            .get_listeners()
             .iter()
-            .map(|(o, t, h)| (*o, t.id_str().to_string(), h.port(), true))
+            .map(|(o, t, port)| (*o, t.id_str().to_string(), *port, true))
             .collect();
         Ok(listeners)
     }

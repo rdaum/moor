@@ -25,8 +25,8 @@ use uuid::Uuid;
 
 use crate::connections::ConnectionRegistry;
 use crate::event_log::EventLog;
-use crate::rpc_hosts::Hosts;
-use crate::rpc_session::{RpcSession, SessionActions};
+use super::hosts::Hosts;
+use super::session::{RpcSession, SessionActions};
 use crate::task_monitor::TaskMonitorHandle;
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, preposition_to_string};
 use moor_common::tasks::NarrativeEvent;
@@ -88,6 +88,25 @@ pub trait MessageHandler: Send + Sync {
         token: ClientToken,
         client_id: Uuid,
     ) -> Result<(), RpcMessageError>;
+    
+    /// Broadcast a listen event to hosts
+    fn broadcast_listen(
+        &self,
+        handler_object: Obj,
+        host_type: HostType,
+        port: u16,
+        print_messages: bool,
+    ) -> Result<(), moor_common::tasks::SessionError>;
+    
+    /// Broadcast an unlisten event to hosts
+    fn broadcast_unlisten(
+        &self,
+        host_type: HostType,
+        port: u16,
+    ) -> Result<(), moor_common::tasks::SessionError>;
+    
+    /// Get current listeners
+    fn get_listeners(&self) -> Vec<(Obj, HostType, u16)>;
 }
 
 /// Implementation of message handler that contains the actual business logic
@@ -150,10 +169,6 @@ impl RpcMessageHandler {
         })
     }
     
-    /// Get the events publish socket for system control handle
-    pub fn events_publish(&self) -> Arc<Mutex<Socket>> {
-        self.events_publish.clone()
-    }
 }
 
 impl MessageHandler for RpcMessageHandler {
@@ -268,6 +283,64 @@ impl MessageHandler for RpcMessageHandler {
         guard.insert(token.clone(), Instant::now());
 
         Ok(())
+    }
+    
+    fn broadcast_listen(
+        &self,
+        handler_object: Obj,
+        host_type: HostType,
+        port: u16,
+        print_messages: bool,
+    ) -> Result<(), moor_common::tasks::SessionError> {
+        let event = HostBroadcastEvent::Listen {
+            handler_object,
+            host_type,
+            port,
+            print_messages,
+        };
+
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
+        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
+        
+        let publish = self.events_publish.lock().unwrap();
+        publish
+            .send_multipart(payload, 0)
+            .map_err(|e| {
+                error!(error = ?e, "Unable to send Listen to hosts");
+                moor_common::tasks::SessionError::DeliveryError
+            })?;
+        
+        Ok(())
+    }
+    
+    fn broadcast_unlisten(
+        &self,
+        host_type: HostType,
+        port: u16,
+    ) -> Result<(), moor_common::tasks::SessionError> {
+        let event = HostBroadcastEvent::Unlisten { host_type, port };
+
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
+        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
+        
+        let publish = self.events_publish.lock().unwrap();
+        publish
+            .send_multipart(payload, 0)
+            .map_err(|e| {
+                error!(error = ?e, "Unable to send Unlisten to hosts");
+                moor_common::tasks::SessionError::DeliveryError
+            })?;
+        
+        Ok(())
+    }
+    
+    fn get_listeners(&self) -> Vec<(Obj, HostType, u16)> {
+        let hosts = self.hosts.read().unwrap();
+        hosts
+            .listeners()
+            .iter()
+            .map(|(o, t, h)| (*o, *t, h.port()))
+            .collect()
     }
 }
 

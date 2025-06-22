@@ -21,7 +21,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 use zmq::Socket;
 
-use crate::message_handler::MessageHandler;
+use super::message_handler::MessageHandler;
 use moor_kernel::SchedulerClient;
 use rpc_common::{
     DaemonToClientReply, DaemonToHostReply, HostToDaemonMessage, 
@@ -196,10 +196,16 @@ impl RpcTransport {
 
                 // Process
                 let response = message_handler.handle_host_message(host_token, host_message);
-                let response = Self::pack_host_response(response);
-
-                // Reply
-                rpc_socket.send_multipart(vec![response], 0)?;
+                match Self::pack_host_response(response) {
+                    Ok(response) => {
+                        // Reply
+                        rpc_socket.send_multipart(vec![response], 0)?;
+                    }
+                    Err(e) => {
+                        error!(error = ?e, "Failed to encode host response");
+                        // Skip sending response if encoding failed
+                    }
+                }
             }
             MessageType::HostClientToDaemon(client_id) => {
                 // Parse the client_id as a uuid
@@ -229,8 +235,15 @@ impl RpcTransport {
                     client_id,
                     request,
                 );
-                let response = Self::pack_client_response(response);
-                rpc_socket.send_multipart(vec![response], 0)?;
+                match Self::pack_client_response(response) {
+                    Ok(response) => {
+                        rpc_socket.send_multipart(vec![response], 0)?;
+                    }
+                    Err(e) => {
+                        error!(error = ?e, "Failed to encode client response");
+                        // Skip sending response if encoding failed
+                    }
+                }
             }
         }
 
@@ -239,28 +252,28 @@ impl RpcTransport {
 
     fn reply_invalid_request(socket: &Socket, reason: &str) -> eyre::Result<()> {
         warn!("Invalid request received, replying with error: {reason}");
-        socket.send_multipart(
-            vec![Self::pack_client_response(Err(RpcMessageError::InvalidRequest(
-                reason.to_string(),
-            )))],
-            0,
-        )?;
+        let response = Self::pack_client_response(Err(RpcMessageError::InvalidRequest(
+            reason.to_string(),
+        )))?;
+        socket.send_multipart(vec![response], 0)?;
         Ok(())
     }
 
-    fn pack_client_response(result: Result<DaemonToClientReply, RpcMessageError>) -> Vec<u8> {
+    fn pack_client_response(result: Result<DaemonToClientReply, RpcMessageError>) -> Result<Vec<u8>, eyre::Error> {
         let rpc_result = match result {
             Ok(r) => ReplyResult::ClientSuccess(r),
             Err(e) => ReplyResult::Failure(e),
         };
-        bincode::encode_to_vec(&rpc_result, bincode::config::standard()).unwrap()
+        bincode::encode_to_vec(&rpc_result, bincode::config::standard())
+            .context("Failed to encode client response")
     }
 
-    fn pack_host_response(result: Result<DaemonToHostReply, RpcMessageError>) -> Vec<u8> {
+    fn pack_host_response(result: Result<DaemonToHostReply, RpcMessageError>) -> Result<Vec<u8>, eyre::Error> {
         let rpc_result = match result {
             Ok(r) => ReplyResult::HostSuccess(r),
             Err(e) => ReplyResult::Failure(e),
         };
-        bincode::encode_to_vec(&rpc_result, bincode::config::standard()).unwrap()
+        bincode::encode_to_vec(&rpc_result, bincode::config::standard())
+            .context("Failed to encode host response")
     }
 }

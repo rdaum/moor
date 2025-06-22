@@ -22,8 +22,8 @@ use eyre::{bail, eyre};
 use fs2::FileExt;
 
 use crate::connections::ConnectionRegistryFactory;
-use crate::rpc_server::RpcServer;
-use crate::workers_server::WorkersServer;
+use crate::rpc::RpcServer;
+use crate::workers::WorkersServer;
 use clap::Parser;
 use eyre::Report;
 use mimalloc::MiMalloc;
@@ -42,15 +42,11 @@ mod args;
 mod connections;
 mod event_log;
 mod feature_args;
-mod message_handler;
-mod rpc_hosts;
-mod rpc_server;
-mod rpc_session;
-mod rpc_transport;
+mod rpc;
 mod system_control;
 mod task_monitor;
 mod tasks_fjall;
-mod workers_server;
+mod workers;
 
 // main.rs
 use moor_common::model::CommitResult;
@@ -288,10 +284,11 @@ fn main() -> Result<(), Report> {
         public_key,
         private_key,
         zmq_ctx.clone(),
+        &args.workers_request_listen,
         worker_scheduler_send,
-    );
+    ).map_err(|e| eyre!("Failed to create workers server: {}", e))?;
     let workers_sender = workers_server
-        .start(&args.workers_request_listen)
+        .start()
         .map_err(|e| {
             eyre!(
                 "Failed to start workers server on {}: {}",

@@ -20,9 +20,9 @@ use std::time::Duration;
 
 use crate::connections::ConnectionRegistry;
 use crate::event_log::EventLog;
-use crate::message_handler::RpcMessageHandler;
-use crate::rpc_session::SessionActions;
-use crate::rpc_transport::RpcTransport;
+use super::message_handler::RpcMessageHandler;
+use super::session::SessionActions;
+use super::transport::RpcTransport;
 use crate::system_control::SystemControlHandle;
 use crate::task_monitor::TaskMonitor;
 use moor_kernel::SchedulerClient;
@@ -96,7 +96,7 @@ impl RpcServer {
 
         // Create the system control handle for the scheduler
         let system_control =
-            SystemControlHandle::new(kill_switch.clone(), message_handler.events_publish(), hosts);
+            SystemControlHandle::new(kill_switch.clone(), message_handler.clone());
 
         let server = Self {
             zmq_context,
