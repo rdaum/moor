@@ -1606,34 +1606,24 @@ mod tests {
         let db_path = tmpdir.path();
         let player = SYSTEM_OBJECT;
 
-        println!("Creating EventLog with path: {:?}", db_path);
         let log = EventLog::with_config(create_test_config(), Some(db_path));
 
-        println!("Appending event...");
-        let event_id = log.append(player, create_test_notify_event(player, "test_event"));
-        println!("Appended event with ID: {}", event_id);
+        let _event_id = log.append(player, create_test_notify_event(player, "test_event"));
 
         // Check cache immediately
-        println!("Cache length: {}", log.len());
-        let cache_events = log.events_for_player_since_seconds(player, 60);
-        println!("Events from cache: {}", cache_events.len());
+        let _cache_events = log.events_for_player_since_seconds(player, 60);
 
         // Wait for background processing
         thread::sleep(Duration::from_millis(500));
-        println!("After background processing - cache length: {}", log.len());
 
         // Try to query again
-        let after_events = log.events_for_player_since_seconds(player, 60);
-        println!("Events after background processing: {}", after_events.len());
+        let _after_events = log.events_for_player_since_seconds(player, 60);
 
         // Create new log instance to test persistence
-        println!("Creating new EventLog instance...");
         let new_log = EventLog::with_config(create_test_config(), Some(db_path));
-        println!("New log cache length: {}", new_log.len());
 
         // Should be able to load from disk
         let disk_events = new_log.events_for_player_since_seconds(player, 60);
-        println!("Events loaded from disk: {}", disk_events.len());
 
         assert_eq!(disk_events.len(), 1, "Should have 1 event from disk");
     }
@@ -1802,11 +1792,8 @@ mod tests {
         let db_path = tmpdir.path();
         let player = SYSTEM_OBJECT;
 
-        println!("=== Testing Web Client Pagination Sequence ===");
-
         // Step 1: Create lots of events to test pagination
         let _all_event_ids = {
-            println!("1. Creating EventLog and logging 20 events...");
             let log = EventLog::with_config(create_test_config(), Some(db_path));
 
             let mut event_ids = Vec::new();
@@ -1825,20 +1812,15 @@ mod tests {
 
             // Wait for background persistence
             thread::sleep(Duration::from_millis(500));
-            println!("   Logged {} events in cache", log.len());
 
             drop(log);
             event_ids
         };
 
-        println!("2. Creating fresh EventLog (simulating daemon restart)...");
         let log = EventLog::with_config(create_test_config(), Some(db_path));
-        println!("   Fresh EventLog created, cache size: {}", log.len());
 
         // Step 2: Initial load - get most recent 5 events (like web client initial load)
-        println!("3. Initial load: getting most recent 5 events...");
         let initial_events = log.events_for_player_since_seconds(player, 3600);
-        println!("   Found {} total events", initial_events.len());
 
         // Simulate taking the most recent 5 (what the server would return with limit)
         let len = initial_events.len();
@@ -1847,37 +1829,12 @@ mod tests {
         } else {
             initial_events
         };
-        println!("   Taking most recent 5 events:");
-        for (i, event) in recent_5.iter().enumerate() {
-            println!("     {}. Event ID: {}", i + 1, event.event.event_id());
-        }
 
         assert_eq!(recent_5.len(), 5, "Should have 5 recent events");
         let earliest_from_initial = recent_5[0].event.event_id();
-        println!(
-            "   Earliest event ID from initial load: {}",
-            earliest_from_initial
-        );
 
         // Step 3: First back-scroll - get events until the earliest from initial load
-        println!(
-            "4. First back-scroll: getting events until {}...",
-            earliest_from_initial
-        );
         let first_backscroll = log.events_for_player_until(player, Some(earliest_from_initial));
-        println!(
-            "   Found {} events in first back-scroll",
-            first_backscroll.len()
-        );
-
-        if first_backscroll.is_empty() {
-            println!("   ERROR: First back-scroll returned no events!");
-        } else {
-            println!("   First back-scroll events:");
-            for (i, event) in first_backscroll.iter().enumerate() {
-                println!("     {}. Event ID: {}", i + 1, event.event.event_id());
-            }
-        }
 
         // Take the last 5 from first backscroll (most recent 5 before the boundary)
         let len = first_backscroll.len();
@@ -1889,31 +1846,10 @@ mod tests {
 
         if !first_batch.is_empty() {
             let earliest_from_first_batch = first_batch[0].event.event_id();
-            println!(
-                "   Earliest event ID from first batch: {}",
-                earliest_from_first_batch
-            );
 
             // Step 4: Second back-scroll - get events until the earliest from first batch
-            println!(
-                "5. Second back-scroll: getting events until {}...",
-                earliest_from_first_batch
-            );
             let second_backscroll =
                 log.events_for_player_until(player, Some(earliest_from_first_batch));
-            println!(
-                "   Found {} events in second back-scroll",
-                second_backscroll.len()
-            );
-
-            if second_backscroll.is_empty() {
-                println!("   ERROR: Second back-scroll returned no events!");
-            } else {
-                println!("   Second back-scroll events:");
-                for (i, event) in second_backscroll.iter().enumerate() {
-                    println!("     {}. Event ID: {}", i + 1, event.event.event_id());
-                }
-            }
 
             // Verify we're getting different events each time
             let initial_ids: Vec<_> = recent_5.iter().map(|e| e.event.event_id()).collect();
@@ -1922,11 +1858,6 @@ mod tests {
                 .iter()
                 .map(|e| e.event.event_id())
                 .collect();
-
-            println!("6. Verifying pagination correctness...");
-            println!("   Initial load IDs: {:?}", initial_ids);
-            println!("   First batch IDs: {:?}", first_ids);
-            println!("   Second batch IDs: {:?}", second_ids);
 
             // Verify no overlap between batches
             for id in &initial_ids {
@@ -1958,10 +1889,7 @@ mod tests {
                     "Latest from first batch should be older than earliest from initial"
                 );
             }
-
-            println!("=== SUCCESS: Pagination working correctly ===");
         } else {
-            println!("=== FAILURE: First back-scroll returned no events ===");
             assert!(
                 !first_batch.is_empty(),
                 "First back-scroll should return events"
@@ -1975,11 +1903,8 @@ mod tests {
         let db_path = tmpdir.path();
         let player = SYSTEM_OBJECT;
 
-        println!("=== Simulating Web Client History Bug ===");
-
         // Step 1: Simulate events being logged during normal operation
         let logged_events = {
-            println!("1. Creating EventLog and logging some events...");
             let log = EventLog::with_config(create_test_config(), Some(db_path));
 
             let event1 = log.append(
@@ -1998,44 +1923,18 @@ mod tests {
             // Wait for background persistence
             thread::sleep(Duration::from_millis(500));
 
-            println!("   Logged {} events in cache", log.len());
-
             // Verify cache works
-            let cache_events = log.events_for_player_since_seconds(player, 3600); // Last hour
-            println!("   Cache query found {} events", cache_events.len());
+            let _cache_events = log.events_for_player_since_seconds(player, 3600); // Last hour
 
             drop(log); // Explicit drop to simulate shutdown
             vec![event1, event2, event3]
         };
 
-        println!("2. Simulating daemon restart / client reconnection...");
-
         // Step 2: Simulate EventLog creation on daemon restart (fresh cache)
         let new_log = EventLog::with_config(create_test_config(), Some(db_path));
-        println!("   Fresh EventLog created, cache size: {}", new_log.len());
 
         // Step 3: Simulate web client requesting history with "since_seconds: 3600"
-        println!("3. Simulating web client history request (since_seconds: 3600)...");
         let history_events = new_log.events_for_player_since_seconds(player, 3600);
-
-        println!("   History query returned {} events", history_events.len());
-
-        if history_events.is_empty() {
-            println!("   ERROR: No events found! This reproduces the bug.");
-        } else {
-            println!("   SUCCESS: Found historical events:");
-            for (i, event) in history_events.iter().enumerate() {
-                println!(
-                    "     {}. {} ({})",
-                    i + 1,
-                    event.player,
-                    match &event.event.event {
-                        moor_common::tasks::Event::Notify(msg, _) => format!("{:?}", msg),
-                        _ => "other event".to_string(),
-                    }
-                );
-            }
-        }
 
         // This should NOT fail if our cache miss handling is working
         assert_eq!(
@@ -2052,24 +1951,12 @@ mod tests {
             "Event IDs should match original logged events"
         );
 
-        println!("4. Testing other history query methods used by build_history_response...");
-
         // Test events_for_player_since
         let since_events = new_log.events_for_player_since(player, Some(logged_events[0]));
-        println!(
-            "   events_for_player_since returned {} events",
-            since_events.len()
-        );
         assert_eq!(since_events.len(), 2, "Should get 2 events since first");
 
         // Test events_for_player_until
         let until_events = new_log.events_for_player_until(player, Some(logged_events[2]));
-        println!(
-            "   events_for_player_until returned {} events",
-            until_events.len()
-        );
         assert_eq!(until_events.len(), 2, "Should get 2 events until third");
-
-        println!("=== SUCCESS: All history queries working correctly ===");
     }
 }
