@@ -168,19 +168,8 @@ where
     /// This is the final phase of the transaction commit process, and mutates the cache and
     /// requests mutation into the Source.
     pub fn apply(&mut self, working_set: WorkingSet<Domain, Codomain>) -> Result<(), Error> {
-        let start_time = Instant::now();
-        let mut last_check_time = start_time;
-        let total_ops = working_set.len();
         // Apply phase.
-        for (n, (domain, op)) in working_set.tuples().into_iter().enumerate() {
-            if last_check_time.elapsed() > Duration::from_secs(5) {
-                warn!(
-                    "Long apply time for {}; running for {}s; {n}/{total_ops} checked",
-                    self.relation_name,
-                    start_time.elapsed().as_secs_f32()
-                );
-                last_check_time = Instant::now();
-            }
+        for (domain, op) in working_set.tuples().into_iter() {
             match op.operation {
                 OpType::Insert(codomain) | OpType::Update(codomain) => {
                     self.source.put(op.write_ts, &domain, &codomain).ok();
