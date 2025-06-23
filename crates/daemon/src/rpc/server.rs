@@ -18,11 +18,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use crate::connections::ConnectionRegistry;
-use crate::event_log::EventLog;
 use super::message_handler::RpcMessageHandler;
 use super::session::SessionActions;
 use super::transport::RpcTransport;
+use crate::connections::ConnectionRegistry;
+use crate::event_log::EventLog;
 use crate::system_control::SystemControlHandle;
 use crate::task_monitor::TaskMonitor;
 use moor_kernel::SchedulerClient;
@@ -55,7 +55,7 @@ impl RpcServer {
         narrative_endpoint: &str,
         config: Arc<Config>,
         events_db_path: &std::path::Path,
-    ) -> (Self, TaskMonitor, SystemControlHandle) {
+    ) -> (Self, Arc<TaskMonitor>, SystemControlHandle) {
         info!(
             "Creating new RPC server; with {} ZMQ IO threads...",
             zmq_context.get_io_threads().unwrap()
@@ -75,28 +75,30 @@ impl RpcServer {
         ));
 
         // Create the task monitor with mailbox sender
-        let (task_monitor, task_monitor_handle) = TaskMonitor::new(mailbox_sender.clone());
+        let task_monitor = TaskMonitor::new(mailbox_sender.clone());
 
         // Create hosts as Arc<RwLock> so it can be shared
         let hosts = Arc::new(RwLock::new(Default::default()));
 
         // Create the business logic handler
-        let message_handler = Arc::new(RpcMessageHandler::new(
-            zmq_context.clone(),
-            narrative_endpoint,
-            config,
-            public_key,
-            private_key,
-            connections,
-            hosts.clone(),
-            mailbox_sender.clone(),
-            event_log.clone(),
-            task_monitor_handle,
-        ).expect("Failed to create RpcMessageHandler"));
+        let message_handler = Arc::new(
+            RpcMessageHandler::new(
+                zmq_context.clone(),
+                narrative_endpoint,
+                config,
+                public_key,
+                private_key,
+                connections,
+                hosts.clone(),
+                mailbox_sender.clone(),
+                event_log.clone(),
+                task_monitor.clone(),
+            )
+            .expect("Failed to create RpcMessageHandler"),
+        );
 
         // Create the system control handle for the scheduler
-        let system_control =
-            SystemControlHandle::new(kill_switch.clone(), message_handler.clone());
+        let system_control = SystemControlHandle::new(kill_switch.clone(), message_handler.clone());
 
         let server = Self {
             zmq_context,
@@ -111,10 +113,10 @@ impl RpcServer {
     }
 
     pub fn request_loop(
-        self: Arc<Self>,
+        &self,
         rpc_endpoint: String,
         scheduler_client: SchedulerClient,
-        mut task_monitor: TaskMonitor,
+        task_monitor: Arc<TaskMonitor>,
     ) -> eyre::Result<()> {
         // Move out parts we need for threads before consuming self
         let ping_pong_handler = self.message_handler.clone();

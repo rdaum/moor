@@ -15,19 +15,19 @@
 
 use ahash::AHasher;
 use eyre::{Context, Error};
-use zmq::{Socket, SocketType};
 use flume::Sender;
 use papaya::HashMap as PapayaHashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
+use zmq::{Socket, SocketType};
 
-use crate::connections::ConnectionRegistry;
-use crate::event_log::EventLog;
 use super::hosts::Hosts;
 use super::session::{RpcSession, SessionActions};
-use crate::task_monitor::TaskMonitorHandle;
+use crate::connections::ConnectionRegistry;
+use crate::event_log::EventLog;
+use crate::task_monitor::TaskMonitor;
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, preposition_to_string};
 use moor_common::tasks::NarrativeEvent;
 use moor_common::tasks::SchedulerError::CommandExecutionError;
@@ -88,7 +88,7 @@ pub trait MessageHandler: Send + Sync {
         token: ClientToken,
         client_id: Uuid,
     ) -> Result<(), RpcMessageError>;
-    
+
     /// Broadcast a listen event to hosts
     fn broadcast_listen(
         &self,
@@ -97,14 +97,14 @@ pub trait MessageHandler: Send + Sync {
         port: u16,
         print_messages: bool,
     ) -> Result<(), moor_common::tasks::SessionError>;
-    
+
     /// Broadcast an unlisten event to hosts
     fn broadcast_unlisten(
         &self,
         host_type: HostType,
         port: u16,
     ) -> Result<(), moor_common::tasks::SessionError>;
-    
+
     /// Get current listeners
     fn get_listeners(&self) -> Vec<(Obj, HostType, u16)>;
 }
@@ -116,7 +116,7 @@ pub struct RpcMessageHandler {
     private_key: Key<64>,
 
     connections: Box<dyn ConnectionRegistry + Send + Sync>,
-    task_monitor: TaskMonitorHandle,
+    task_monitor: Arc<TaskMonitor>,
 
     hosts: Arc<RwLock<Hosts>>,
 
@@ -141,7 +141,7 @@ impl RpcMessageHandler {
         hosts: Arc<RwLock<Hosts>>,
         mailbox_sender: Sender<SessionActions>,
         event_log: Arc<EventLog>,
-        task_monitor: TaskMonitorHandle,
+        task_monitor: Arc<TaskMonitor>,
     ) -> Result<Self, eyre::Error> {
         // Create the socket for publishing narrative events
         let publish = zmq_context
@@ -150,9 +150,9 @@ impl RpcMessageHandler {
         publish
             .bind(narrative_endpoint)
             .context("Unable to bind ZMQ PUB socket")?;
-        
+
         let events_publish = Arc::new(Mutex::new(publish));
-        
+
         Ok(Self {
             config,
             public_key,
@@ -168,7 +168,6 @@ impl RpcMessageHandler {
             events_publish,
         })
     }
-    
 }
 
 impl MessageHandler for RpcMessageHandler {
@@ -284,7 +283,7 @@ impl MessageHandler for RpcMessageHandler {
 
         Ok(())
     }
-    
+
     fn broadcast_listen(
         &self,
         handler_object: Obj,
@@ -301,18 +300,16 @@ impl MessageHandler for RpcMessageHandler {
 
         let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
         let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
-        
+
         let publish = self.events_publish.lock().unwrap();
-        publish
-            .send_multipart(payload, 0)
-            .map_err(|e| {
-                error!(error = ?e, "Unable to send Listen to hosts");
-                moor_common::tasks::SessionError::DeliveryError
-            })?;
-        
+        publish.send_multipart(payload, 0).map_err(|e| {
+            error!(error = ?e, "Unable to send Listen to hosts");
+            moor_common::tasks::SessionError::DeliveryError
+        })?;
+
         Ok(())
     }
-    
+
     fn broadcast_unlisten(
         &self,
         host_type: HostType,
@@ -322,18 +319,16 @@ impl MessageHandler for RpcMessageHandler {
 
         let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
         let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
-        
+
         let publish = self.events_publish.lock().unwrap();
-        publish
-            .send_multipart(payload, 0)
-            .map_err(|e| {
-                error!(error = ?e, "Unable to send Unlisten to hosts");
-                moor_common::tasks::SessionError::DeliveryError
-            })?;
-        
+        publish.send_multipart(payload, 0).map_err(|e| {
+            error!(error = ?e, "Unable to send Unlisten to hosts");
+            moor_common::tasks::SessionError::DeliveryError
+        })?;
+
         Ok(())
     }
-    
+
     fn get_listeners(&self) -> Vec<(Obj, HostType, u16)> {
         let hosts = self.hosts.read().unwrap();
         hosts
@@ -1560,8 +1555,12 @@ impl RpcMessageHandler {
         };
 
         let task_id = parse_command_task_handle.task_id();
-        self.task_monitor
-            .add_task(task_id, client_id, parse_command_task_handle);
+        if let Err(e) = self
+            .task_monitor
+            .add_task(task_id, client_id, parse_command_task_handle)
+        {
+            error!(error = ?e, "Error adding task to monitor");
+        }
         Ok(DaemonToClientReply::TaskSubmitted(task_id))
     }
 
@@ -1736,7 +1735,10 @@ impl RpcMessageHandler {
         };
 
         let task_id = task_handle.task_id();
-        self.task_monitor.add_task(task_id, client_id, task_handle);
+        if let Err(e) = self.task_monitor.add_task(task_id, client_id, task_handle) {
+            error!(error = ?e, "Error adding task to monitor");
+            return Err(RpcMessageError::InternalError(e.to_string()));
+        }
         Ok(DaemonToClientReply::TaskSubmitted(task_id))
     }
 
