@@ -15,6 +15,7 @@
 use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
 use std::process::exit;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use crate::args::Args;
@@ -263,8 +264,12 @@ fn main() -> Result<(), Report> {
         }
     };
 
+    // Create the kill switch that will be shared across components
+    let kill_switch = Arc::new(AtomicBool::new(false));
+
     let resolved_events_db_path = args.resolved_events_db_path();
     let (rpc_server, task_monitor, system_control) = RpcServer::new(
+        kill_switch.clone(),
         public_key.clone(),
         private_key.clone(),
         connections,
@@ -274,7 +279,6 @@ fn main() -> Result<(), Report> {
         &resolved_events_db_path,
     );
     let rpc_server = Arc::new(rpc_server);
-    let kill_switch = rpc_server.kill_switch.clone();
 
     let (worker_scheduler_send, worker_scheduler_recv) = flume::unbounded();
 

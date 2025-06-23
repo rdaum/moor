@@ -32,11 +32,13 @@ use tracing::{error, info};
 
 /// RPC coordinator that delegates business logic to message handler
 pub struct RpcServer {
-    zmq_context: zmq::Context,
-    pub(crate) kill_switch: Arc<AtomicBool>,
+    kill_switch: Arc<AtomicBool>,
 
     // Core business logic handler
     message_handler: Arc<RpcMessageHandler>,
+
+    // Transport layer
+    transport: Arc<RpcTransport>,
 
     mailbox_receive: Receiver<SessionActions>,
 
@@ -48,6 +50,7 @@ pub struct RpcServer {
 
 impl RpcServer {
     pub fn new(
+        kill_switch: Arc<AtomicBool>,
         public_key: Key<32>,
         private_key: Key<64>,
         connections: Box<dyn ConnectionRegistry + Send + Sync>,
@@ -65,7 +68,6 @@ impl RpcServer {
             "Created connections list, with {} initial known connections",
             connections.connections().len()
         );
-        let kill_switch = Arc::new(AtomicBool::new(false));
         let (mailbox_sender, mailbox_receive) = flume::unbounded();
 
         // Create the event log
@@ -80,30 +82,32 @@ impl RpcServer {
         // Create hosts as Arc<RwLock> so it can be shared
         let hosts = Arc::new(RwLock::new(Default::default()));
 
-        // Create the business logic handler
-        let message_handler = Arc::new(
-            RpcMessageHandler::new(
-                zmq_context.clone(),
-                narrative_endpoint,
-                config,
-                public_key,
-                private_key,
-                connections,
-                hosts.clone(),
-                mailbox_sender.clone(),
-                event_log.clone(),
-                task_monitor.clone(),
-            )
-            .expect("Failed to create RpcMessageHandler"),
+        // Create the transport layer first
+        let transport = Arc::new(
+            RpcTransport::new(zmq_context.clone(), kill_switch.clone(), narrative_endpoint)
+                .expect("Failed to create RpcTransport"),
         );
+
+        // Create the business logic handler
+        let message_handler = Arc::new(RpcMessageHandler::new(
+            config,
+            public_key,
+            private_key,
+            connections,
+            hosts.clone(),
+            mailbox_sender.clone(),
+            event_log.clone(),
+            task_monitor.clone(),
+            transport.clone(),
+        ));
 
         // Create the system control handle for the scheduler
         let system_control = SystemControlHandle::new(kill_switch.clone(), message_handler.clone());
 
         let server = Self {
-            zmq_context,
             kill_switch,
             message_handler,
+            transport,
             mailbox_sender,
             mailbox_receive,
             event_log,
@@ -134,13 +138,9 @@ impl RpcServer {
             })?;
 
         // Clone what we need before consuming self
-        let transport_zmq_context = self.zmq_context.clone();
-        let transport_kill_switch = self.kill_switch.clone();
+        let transport = self.transport.clone();
         let transport_message_handler = self.message_handler.clone();
         let task_completion_kill_switch = self.kill_switch.clone();
-
-        // Use the separated transport layer for message handling
-        let transport = RpcTransport::new(transport_zmq_context, transport_kill_switch.clone());
 
         // Start the transport in a background thread
         let transport_scheduler = scheduler_client.clone();
@@ -160,13 +160,7 @@ impl RpcServer {
         std::thread::Builder::new()
             .name("moor-tc".to_string())
             .spawn(move || {
-                loop {
-                    if task_completion_kill_switch.load(Ordering::Relaxed) {
-                        return;
-                    }
-                    // Process commands and check for task completions
-                    task_monitor.run_loop(Duration::from_millis(5));
-                }
+                task_monitor.wait_for_completions(task_completion_kill_switch);
             })?;
 
         // Main loop processes session events and monitors kill switch

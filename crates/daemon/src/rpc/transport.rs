@@ -15,7 +15,7 @@
 
 use eyre::Context;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -23,24 +23,44 @@ use zmq::Socket;
 
 use super::message_handler::MessageHandler;
 use moor_kernel::SchedulerClient;
+use moor_common::tasks::NarrativeEvent;
+use moor_var::Obj;
 use rpc_common::{
-    DaemonToClientReply, DaemonToHostReply, HostToDaemonMessage, 
-    MessageType, ReplyResult, RpcMessageError,
+    ClientEvent, ClientsBroadcastEvent, DaemonToClientReply, DaemonToHostReply, 
+    HostBroadcastEvent, HostToDaemonMessage, MessageType, ReplyResult, 
+    RpcMessageError, CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC,
 };
 
 /// ZMQ transport layer that handles socket management and message routing
 pub struct RpcTransport {
     zmq_context: zmq::Context,
     kill_switch: Arc<AtomicBool>,
+    events_publish: Arc<Mutex<Socket>>,
 }
 
 impl RpcTransport {
-    pub fn new(zmq_context: zmq::Context, kill_switch: Arc<AtomicBool>) -> Self {
-        Self {
+    pub fn new(
+        zmq_context: zmq::Context, 
+        kill_switch: Arc<AtomicBool>,
+        narrative_endpoint: &str,
+    ) -> Result<Self, eyre::Error> {
+        // Create the socket for publishing narrative events
+        let publish = zmq_context
+            .socket(zmq::SocketType::PUB)
+            .context("Unable to create ZMQ PUB socket")?;
+        publish
+            .bind(narrative_endpoint)
+            .context("Unable to bind ZMQ PUB socket")?;
+
+        let events_publish = Arc::new(Mutex::new(publish));
+
+        Ok(Self {
             zmq_context,
             kill_switch,
-        }
+            events_publish,
+        })
     }
+
 
     /// Start the request processing loop with ZMQ proxy architecture
     pub fn start_request_loop<H: MessageHandler + 'static>(
@@ -275,5 +295,70 @@ impl RpcTransport {
         };
         bincode::encode_to_vec(&rpc_result, bincode::config::standard())
             .context("Failed to encode host response")
+    }
+
+    /// Publish narrative events to clients
+    pub fn publish_narrative_events(
+        &self,
+        events: &[(Obj, Box<NarrativeEvent>)],
+        connections: &dyn crate::connections::ConnectionRegistry,
+    ) -> Result<(), eyre::Error> {
+        let publish = self.events_publish.lock().unwrap();
+        for (player, event) in events {
+            let client_ids = connections.client_ids_for(*player)?;
+            let event = ClientEvent::Narrative(*player, event.as_ref().clone());
+            let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
+            for client_id in &client_ids {
+                let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
+                publish.send_multipart(payload, 0).map_err(|e| {
+                    error!(error = ?e, "Unable to send narrative event");
+                    eyre::eyre!("Delivery error")
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Broadcast events to hosts
+    pub fn broadcast_host_event(&self, event: HostBroadcastEvent) -> Result<(), eyre::Error> {
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
+        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
+
+        let publish = self.events_publish.lock().unwrap();
+        publish.send_multipart(payload, 0).map_err(|e| {
+            error!(error = ?e, "Unable to send host broadcast event");
+            eyre::eyre!("Delivery error")
+        })?;
+
+        Ok(())
+    }
+
+    /// Publish event to specific client
+    pub fn publish_client_event(&self, client_id: Uuid, event: ClientEvent) -> Result<(), eyre::Error> {
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
+            .context("Unable to serialize client event")?;
+        let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
+        
+        let publish = self.events_publish.lock().unwrap();
+        publish.send_multipart(payload, 0).map_err(|e| {
+            error!(error = ?e, "Unable to send client event");
+            eyre::eyre!("Delivery error")
+        })?;
+
+        Ok(())
+    }
+
+    /// Broadcast events to all clients
+    pub fn broadcast_client_event(&self, event: ClientsBroadcastEvent) -> Result<(), eyre::Error> {
+        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
+        let payload = vec![CLIENT_BROADCAST_TOPIC.to_vec(), event_bytes];
+
+        let publish = self.events_publish.lock().unwrap();
+        publish.send_multipart(payload, 0).map_err(|e| {
+            error!(error = ?e, "Unable to send client broadcast event");
+            eyre::eyre!("Delivery error")
+        })?;
+
+        Ok(())
     }
 }

@@ -18,13 +18,13 @@ use eyre::{Context, Error};
 use flume::Sender;
 use papaya::HashMap as PapayaHashMap;
 use std::hash::BuildHasherDefault;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
-use zmq::{Socket, SocketType};
 
 use super::hosts::Hosts;
 use super::session::{RpcSession, SessionActions};
+use super::transport::RpcTransport;
 use crate::connections::ConnectionRegistry;
 use crate::event_log::EventLog;
 use crate::task_monitor::TaskMonitor;
@@ -45,8 +45,8 @@ use moor_var::{Symbol, v_obj, v_str};
 use rpc_common::ClientEvent;
 use rpc_common::DaemonToClientReply::{LoginResult, NewConnection};
 use rpc_common::{
-    AuthToken, CLIENT_BROADCAST_TOPIC, ClientToken, ClientsBroadcastEvent, ConnectType,
-    DaemonToClientReply, DaemonToHostReply, EntityType, HOST_BROADCAST_TOPIC,
+    AuthToken, ClientToken, ClientsBroadcastEvent, ConnectType,
+    DaemonToClientReply, DaemonToHostReply, EntityType,
     HistoricalNarrativeEvent, HistoryRecall, HistoryResponse, HostBroadcastEvent,
     HostClientToDaemonMessage, HostToDaemonMessage, HostToken, HostType, MOOR_AUTH_TOKEN_FOOTER,
     MOOR_HOST_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, PropInfo, RpcMessageError, VerbInfo,
@@ -125,15 +125,13 @@ pub struct RpcMessageHandler {
     client_token_cache: PapayaHashMap<ClientToken, Instant, BuildHasherDefault<AHasher>>,
 
     mailbox_sender: Sender<SessionActions>,
-    pub event_log: Arc<EventLog>,
-    events_publish: Arc<Mutex<Socket>>,
+    event_log: Arc<EventLog>,
+    transport: Arc<RpcTransport>,
 }
 
 impl RpcMessageHandler {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        zmq_context: zmq::Context,
-        narrative_endpoint: &str,
         config: Arc<Config>,
         public_key: Key<32>,
         private_key: Key<64>,
@@ -142,18 +140,9 @@ impl RpcMessageHandler {
         mailbox_sender: Sender<SessionActions>,
         event_log: Arc<EventLog>,
         task_monitor: Arc<TaskMonitor>,
-    ) -> Result<Self, eyre::Error> {
-        // Create the socket for publishing narrative events
-        let publish = zmq_context
-            .socket(SocketType::PUB)
-            .context("Unable to create ZMQ PUB socket")?;
-        publish
-            .bind(narrative_endpoint)
-            .context("Unable to bind ZMQ PUB socket")?;
-
-        let events_publish = Arc::new(Mutex::new(publish));
-
-        Ok(Self {
+        transport: Arc<RpcTransport>,
+    ) -> Self {
+        Self {
             config,
             public_key,
             private_key,
@@ -165,8 +154,8 @@ impl RpcMessageHandler {
             client_token_cache: Default::default(),
             mailbox_sender,
             event_log,
-            events_publish,
-        })
+            transport,
+        }
     }
 }
 
@@ -298,16 +287,9 @@ impl MessageHandler for RpcMessageHandler {
             print_messages,
         };
 
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
-        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
-
-        let publish = self.events_publish.lock().unwrap();
-        publish.send_multipart(payload, 0).map_err(|e| {
-            error!(error = ?e, "Unable to send Listen to hosts");
+        self.transport.broadcast_host_event(event).map_err(|_| {
             moor_common::tasks::SessionError::DeliveryError
-        })?;
-
-        Ok(())
+        })
     }
 
     fn broadcast_unlisten(
@@ -317,16 +299,9 @@ impl MessageHandler for RpcMessageHandler {
     ) -> Result<(), moor_common::tasks::SessionError> {
         let event = HostBroadcastEvent::Unlisten { host_type, port };
 
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
-        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
-
-        let publish = self.events_publish.lock().unwrap();
-        publish.send_multipart(payload, 0).map_err(|e| {
-            error!(error = ?e, "Unable to send Unlisten to hosts");
+        self.transport.broadcast_host_event(event).map_err(|_| {
             moor_common::tasks::SessionError::DeliveryError
-        })?;
-
-        Ok(())
+        })
     }
 
     fn get_listeners(&self) -> Vec<(Obj, HostType, u16)> {
@@ -344,20 +319,7 @@ impl RpcMessageHandler {
         &self,
         events: &[(Obj, Box<NarrativeEvent>)],
     ) -> Result<(), eyre::Error> {
-        let publish = self.events_publish.lock().unwrap();
-        for (player, event) in events {
-            let client_ids = self.connections.client_ids_for(*player)?;
-            let event = ClientEvent::Narrative(*player, event.as_ref().clone());
-            let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())?;
-            for client_id in &client_ids {
-                let payload = vec![client_id.as_bytes().to_vec(), event_bytes.clone()];
-                publish.send_multipart(payload, 0).map_err(|e| {
-                    error!(error = ?e, "Unable to send narrative event");
-                    eyre::eyre!("Delivery error")
-                })?;
-            }
-        }
-        Ok(())
+        self.transport.publish_narrative_events(events, self.connections.as_ref())
     }
 
     // Helper methods that delegate to connections
@@ -401,9 +363,6 @@ impl RpcMessageHandler {
         player: Obj,
         input_request_id: Uuid,
     ) -> Result<(), eyre::Error> {
-        // Mark this client as in `input mode`, which means that instead of dispatching its next
-        // line to the scheduler as a command, it should instead dispatch it as an input event.
-
         // Validate first - check that the player matches the logged-in player for this client
         let Some(logged_in_player) = self.connections.player_object_for_client(client_id) else {
             return Err(eyre::eyre!("No connection for player"));
@@ -413,17 +372,7 @@ impl RpcMessageHandler {
         }
 
         let event = ClientEvent::RequestInput(input_request_id);
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
-            .expect("Unable to serialize input request");
-        let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish.send_multipart(payload, 0).map_err(|e| {
-                error!(error = ?e, "Unable to send input request");
-                eyre::eyre!("Delivery error")
-            })?;
-        }
-        Ok(())
+        self.transport.publish_client_event(client_id, event)
     }
 
     pub fn send_system_message(
@@ -433,17 +382,7 @@ impl RpcMessageHandler {
         message: String,
     ) -> Result<(), eyre::Error> {
         let event = ClientEvent::SystemMessage(player, message);
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
-            .expect("Unable to serialize system message");
-        let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish.send_multipart(payload, 0).map_err(|e| {
-                error!(error = ?e, "Unable to send system message");
-                eyre::eyre!("Delivery error")
-            })?;
-        }
-        Ok(())
+        self.transport.publish_client_event(client_id, event)
     }
 
     pub fn connected_players(&self) -> Result<Vec<Obj>, moor_common::tasks::SessionError> {
@@ -579,33 +518,20 @@ impl RpcMessageHandler {
         }
     }
 
-    pub fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError> {
-        let event = ClientsBroadcastEvent::PingPong(SystemTime::now());
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
 
-        // We want responses from all clients, so send on this broadcast "topic"
-        let payload = vec![CLIENT_BROADCAST_TOPIC.to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish.send_multipart(payload, 0).map_err(|e| {
-                error!(error = ?e, "Unable to send PingPong to client");
-                moor_common::tasks::SessionError::DeliveryError
-            })?;
-        }
+    pub fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError> {
+        // Send ping to all clients
+        let client_event = ClientsBroadcastEvent::PingPong(SystemTime::now());
+        self.transport.broadcast_client_event(client_event).map_err(|_| {
+            moor_common::tasks::SessionError::DeliveryError
+        })?;
         self.connections.ping_check();
 
-        // while we're here we're also sending HostPings, requesting their list of listeners,
-        // and their liveness.
-        let event = HostBroadcastEvent::PingPong(SystemTime::now());
-        let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
-        let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
-        {
-            let publish = self.events_publish.lock().unwrap();
-            publish.send_multipart(payload, 0).map_err(|e| {
-                error!(error = ?e, "Unable to send PingPong to host");
-                moor_common::tasks::SessionError::DeliveryError
-            })?;
-        }
+        // Send ping to all hosts
+        let host_event = HostBroadcastEvent::PingPong(SystemTime::now());
+        self.transport.broadcast_host_event(host_event).map_err(|_| {
+            moor_common::tasks::SessionError::DeliveryError
+        })?;
 
         let mut hosts = self.hosts.write().unwrap();
         hosts.ping_check(HOST_TIMEOUT);
@@ -729,17 +655,7 @@ impl RpcMessageHandler {
         client_id: Uuid,
         task_event: rpc_common::ClientEvent,
     ) -> Result<(), eyre::Error> {
-        let event_bytes = bincode::encode_to_vec(&task_event, bincode::config::standard())
-            .context("Unable to serialize task completion event")?;
-
-        let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
-
-        let events_publish = self.events_publish.lock().unwrap();
-        events_publish
-            .send_multipart(payload, 0)
-            .context("Unable to publish task completion event")?;
-
-        Ok(())
+        self.transport.publish_client_event(client_id, task_event)
     }
 
     pub fn client_auth(&self, token: ClientToken, client_id: Uuid) -> Result<Obj, RpcMessageError> {
