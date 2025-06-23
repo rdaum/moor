@@ -30,7 +30,7 @@ use moor_kernel::config::Config;
 use rusty_paseto::prelude::Key;
 use tracing::{error, info};
 
-/// RPCcoordinator that delegates business logic to message handler
+/// RPC coordinator that delegates business logic to message handler
 pub struct RpcServer {
     zmq_context: zmq::Context,
     pub(crate) kill_switch: Arc<AtomicBool>,
