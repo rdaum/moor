@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 use super::hosts::Hosts;
 use super::session::{RpcSession, SessionActions};
-use super::transport::RpcTransport;
+use super::transport::{RpcTransport, Transport};
 use crate::connections::ConnectionRegistry;
 use crate::event_log::EventLog;
 use crate::task_monitor::TaskMonitor;
@@ -106,6 +106,10 @@ pub trait MessageHandler: Send + Sync {
 
     /// Get current listeners
     fn get_listeners(&self) -> Vec<(Obj, HostType, u16)>;
+
+    fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError>;
+
+    fn handle_session_event(&self, session_event: SessionActions) -> Result<(), eyre::Error>;
 }
 
 /// Implementation of message handler that contains the actual business logic
@@ -310,6 +314,137 @@ impl MessageHandler for RpcMessageHandler {
             .iter()
             .map(|(o, t, h)| (*o, *t, h.port()))
             .collect()
+    }
+
+    fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError> {
+        // Send ping to all clients
+        let client_event = ClientsBroadcastEvent::PingPong(SystemTime::now());
+        self.transport
+            .broadcast_client_event(client_event)
+            .map_err(|_| moor_common::tasks::SessionError::DeliveryError)?;
+        self.connections.ping_check();
+
+        // Send ping to all hosts
+        let host_event = HostBroadcastEvent::PingPong(SystemTime::now());
+        self.transport
+            .broadcast_host_event(host_event)
+            .map_err(|_| moor_common::tasks::SessionError::DeliveryError)?;
+
+        let mut hosts = self.hosts.write().unwrap();
+        hosts.ping_check(HOST_TIMEOUT);
+        Ok(())
+    }
+
+    fn handle_session_event(&self, session_event: SessionActions) -> Result<(), eyre::Error> {
+        match session_event {
+            SessionActions::PublishNarrativeEvents(events) => {
+                if let Err(e) = self.publish_narrative_events(&events) {
+                    error!(error = ?e, "Unable to publish narrative events");
+                }
+            }
+            SessionActions::RequestClientInput {
+                client_id,
+                connection,
+                request_id: input_request_id,
+            } => {
+                if let Err(e) = self.request_client_input(client_id, connection, input_request_id) {
+                    error!(error = ?e, "Unable to request client input");
+                }
+            }
+            SessionActions::SendSystemMessage {
+                client_id,
+                connection,
+                system_message: message,
+            } => {
+                if let Err(e) = self.send_system_message(client_id, connection, message) {
+                    error!(error = ?e, "Unable to send system message");
+                }
+            }
+            SessionActions::RequestConnectionName(_client_id, connection, reply) => {
+                let connection_send_result = match self.connection_name_for(connection) {
+                    Ok(c) => reply.send(Ok(c)),
+                    Err(e) => {
+                        error!(error = ?e, "Unable to get connection name");
+                        reply.send(Err(e))
+                    }
+                };
+                if let Err(e) = connection_send_result {
+                    error!(error = ?e, "Unable to send connection name");
+                }
+            }
+            SessionActions::Disconnect(_client_id, connection) => {
+                if let Err(e) = self.disconnect(connection) {
+                    error!(error = ?e, "Unable to disconnect client");
+                }
+            }
+            SessionActions::RequestConnectedPlayers(_client_id, reply) => {
+                let connected_players_send_result = match self.connected_players() {
+                    Ok(c) => reply.send(Ok(c)),
+                    Err(e) => {
+                        error!(error = ?e, "Unable to get connected players");
+                        reply.send(Err(e))
+                    }
+                };
+                if let Err(e) = connected_players_send_result {
+                    error!(error = ?e, "Unable to send connected players");
+                }
+            }
+            SessionActions::RequestConnectedSeconds(_client_id, connection, reply) => {
+                let connected_seconds_send_result = match self.connected_seconds_for(connection) {
+                    Ok(c) => reply.send(Ok(c)),
+                    Err(e) => {
+                        error!(error = ?e, "Unable to get connected seconds");
+                        reply.send(Err(e))
+                    }
+                };
+                if let Err(e) = connected_seconds_send_result {
+                    error!(error = ?e, "Unable to send connected seconds");
+                }
+            }
+            SessionActions::RequestIdleSeconds(_client_id, connection, reply) => {
+                let idle_seconds_send_result = match self.idle_seconds_for(connection) {
+                    Ok(c) => reply.send(Ok(c)),
+                    Err(e) => {
+                        error!(error = ?e, "Unable to get idle seconds");
+                        reply.send(Err(e))
+                    }
+                };
+                if let Err(e) = idle_seconds_send_result {
+                    error!(error = ?e, "Unable to send idle seconds");
+                }
+            }
+            SessionActions::RequestConnections(client_id, player, reply) => {
+                let connections_send_result = match self.connections_for(client_id, player) {
+                    Ok(c) => reply.send(Ok(c)),
+                    Err(e) => {
+                        error!(error = ?e, "Unable to get connections");
+                        reply.send(Err(e))
+                    }
+                };
+                if let Err(e) = connections_send_result {
+                    error!(error = ?e, "Unable to send connections");
+                }
+            }
+            SessionActions::RequestConnectionDetails(client_id, player, reply) => {
+                let connection_details_send_result =
+                    match self.connection_details_for(client_id, player) {
+                        Ok(details) => reply.send(Ok(details)),
+                        Err(e) => {
+                            error!(error = ?e, "Unable to get connection details");
+                            reply.send(Err(e))
+                        }
+                    };
+                if let Err(e) = connection_details_send_result {
+                    error!(error = ?e, "Unable to send connection details");
+                }
+            }
+            SessionActions::PublishTaskCompletion(client_id, task_event) => {
+                if let Err(e) = self.publish_task_completion(client_id, task_event) {
+                    error!(error = ?e, client_id = ?client_id, "Unable to publish task completion");
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -516,137 +651,6 @@ impl RpcMessageHandler {
             }
             Ok(details)
         }
-    }
-
-    pub fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError> {
-        // Send ping to all clients
-        let client_event = ClientsBroadcastEvent::PingPong(SystemTime::now());
-        self.transport
-            .broadcast_client_event(client_event)
-            .map_err(|_| moor_common::tasks::SessionError::DeliveryError)?;
-        self.connections.ping_check();
-
-        // Send ping to all hosts
-        let host_event = HostBroadcastEvent::PingPong(SystemTime::now());
-        self.transport
-            .broadcast_host_event(host_event)
-            .map_err(|_| moor_common::tasks::SessionError::DeliveryError)?;
-
-        let mut hosts = self.hosts.write().unwrap();
-        hosts.ping_check(HOST_TIMEOUT);
-        Ok(())
-    }
-
-    pub fn handle_session_event(&self, session_event: SessionActions) -> Result<(), eyre::Error> {
-        match session_event {
-            SessionActions::PublishNarrativeEvents(events) => {
-                if let Err(e) = self.publish_narrative_events(&events) {
-                    error!(error = ?e, "Unable to publish narrative events");
-                }
-            }
-            SessionActions::RequestClientInput {
-                client_id,
-                connection,
-                request_id: input_request_id,
-            } => {
-                if let Err(e) = self.request_client_input(client_id, connection, input_request_id) {
-                    error!(error = ?e, "Unable to request client input");
-                }
-            }
-            SessionActions::SendSystemMessage {
-                client_id,
-                connection,
-                system_message: message,
-            } => {
-                if let Err(e) = self.send_system_message(client_id, connection, message) {
-                    error!(error = ?e, "Unable to send system message");
-                }
-            }
-            SessionActions::RequestConnectionName(_client_id, connection, reply) => {
-                let connection_send_result = match self.connection_name_for(connection) {
-                    Ok(c) => reply.send(Ok(c)),
-                    Err(e) => {
-                        error!(error = ?e, "Unable to get connection name");
-                        reply.send(Err(e))
-                    }
-                };
-                if let Err(e) = connection_send_result {
-                    error!(error = ?e, "Unable to send connection name");
-                }
-            }
-            SessionActions::Disconnect(_client_id, connection) => {
-                if let Err(e) = self.disconnect(connection) {
-                    error!(error = ?e, "Unable to disconnect client");
-                }
-            }
-            SessionActions::RequestConnectedPlayers(_client_id, reply) => {
-                let connected_players_send_result = match self.connected_players() {
-                    Ok(c) => reply.send(Ok(c)),
-                    Err(e) => {
-                        error!(error = ?e, "Unable to get connected players");
-                        reply.send(Err(e))
-                    }
-                };
-                if let Err(e) = connected_players_send_result {
-                    error!(error = ?e, "Unable to send connected players");
-                }
-            }
-            SessionActions::RequestConnectedSeconds(_client_id, connection, reply) => {
-                let connected_seconds_send_result = match self.connected_seconds_for(connection) {
-                    Ok(c) => reply.send(Ok(c)),
-                    Err(e) => {
-                        error!(error = ?e, "Unable to get connected seconds");
-                        reply.send(Err(e))
-                    }
-                };
-                if let Err(e) = connected_seconds_send_result {
-                    error!(error = ?e, "Unable to send connected seconds");
-                }
-            }
-            SessionActions::RequestIdleSeconds(_client_id, connection, reply) => {
-                let idle_seconds_send_result = match self.idle_seconds_for(connection) {
-                    Ok(c) => reply.send(Ok(c)),
-                    Err(e) => {
-                        error!(error = ?e, "Unable to get idle seconds");
-                        reply.send(Err(e))
-                    }
-                };
-                if let Err(e) = idle_seconds_send_result {
-                    error!(error = ?e, "Unable to send idle seconds");
-                }
-            }
-            SessionActions::RequestConnections(client_id, player, reply) => {
-                let connections_send_result = match self.connections_for(client_id, player) {
-                    Ok(c) => reply.send(Ok(c)),
-                    Err(e) => {
-                        error!(error = ?e, "Unable to get connections");
-                        reply.send(Err(e))
-                    }
-                };
-                if let Err(e) = connections_send_result {
-                    error!(error = ?e, "Unable to send connections");
-                }
-            }
-            SessionActions::RequestConnectionDetails(client_id, player, reply) => {
-                let connection_details_send_result =
-                    match self.connection_details_for(client_id, player) {
-                        Ok(details) => reply.send(Ok(details)),
-                        Err(e) => {
-                            error!(error = ?e, "Unable to get connection details");
-                            reply.send(Err(e))
-                        }
-                    };
-                if let Err(e) = connection_details_send_result {
-                    error!(error = ?e, "Unable to send connection details");
-                }
-            }
-            SessionActions::PublishTaskCompletion(client_id, task_event) => {
-                if let Err(e) = self.publish_task_completion(client_id, task_event) {
-                    error!(error = ?e, client_id = ?client_id, "Unable to publish task completion");
-                }
-            }
-        }
-        Ok(())
     }
 
     fn publish_task_completion(

@@ -31,7 +31,30 @@ use rpc_common::{
     ReplyResult, RpcMessageError,
 };
 
-/// ZMQ transport layer that handles socket management and message routing
+/// Trait for the transport layer that handles communication between hosts and the daemon
+pub trait Transport: Send + Sync {
+    /// Start the request processing loop with ZMQ proxy architecture
+    fn start_request_loop(
+        &self,
+        rpc_endpoint: String,
+        scheduler_client: SchedulerClient,
+        message_handler: Arc<dyn MessageHandler>,
+    ) -> eyre::Result<()>;
+    /// Publish narrative events to clients
+    fn publish_narrative_events(
+        &self,
+        events: &[(Obj, Box<NarrativeEvent>)],
+        connections: &dyn crate::connections::ConnectionRegistry,
+    ) -> Result<(), eyre::Error>;
+    /// Broadcast events to hosts
+    fn broadcast_host_event(&self, event: HostBroadcastEvent) -> Result<(), eyre::Error>;
+    /// Publish event to specific client
+    fn publish_client_event(&self, client_id: Uuid, event: ClientEvent) -> Result<(), eyre::Error>;
+    /// Broadcast events to all clients
+    fn broadcast_client_event(&self, event: ClientsBroadcastEvent) -> Result<(), eyre::Error>;
+}
+
+/// ZMQ + bincoded structs transport layer that handles socket management and message routing
 pub struct RpcTransport {
     zmq_context: zmq::Context,
     kill_switch: Arc<AtomicBool>,
@@ -61,72 +84,12 @@ impl RpcTransport {
         })
     }
 
-    /// Start the request processing loop with ZMQ proxy architecture
-    pub fn start_request_loop<H: MessageHandler + 'static>(
-        &self,
-        rpc_endpoint: String,
-        scheduler_client: SchedulerClient,
-        message_handler: Arc<H>,
-    ) -> eyre::Result<()> {
-        let num_io_threads = self.zmq_context.get_io_threads()?;
-        info!("0mq server listening on {rpc_endpoint} with {num_io_threads} IO threads");
-
-        let mut clients = self.zmq_context.socket(zmq::ROUTER)?;
-        let mut workers = self.zmq_context.socket(zmq::DEALER)?;
-
-        clients.bind(&rpc_endpoint)?;
-        workers.bind("inproc://rpc-workers")?;
-
-        // Start N RPC servers in a background thread. We match the # of IO threads, minus 1
-        // which we use for the proxy.
-        for i in 0..num_io_threads - 1 {
-            let handler = message_handler.clone();
-            let sched_client = scheduler_client.clone();
-            let kill_switch = self.kill_switch.clone();
-            let zmq_context = self.zmq_context.clone();
-
-            std::thread::Builder::new()
-                .name(format!("moor-rpc-srv{i}"))
-                .spawn(move || {
-                    if let Err(e) =
-                        Self::rpc_process_loop(zmq_context, kill_switch, sched_client, handler)
-                    {
-                        error!(error = ?e, "RPC process loop failed");
-                    }
-                })?;
-        }
-
-        // Start the proxy in a background thread, which will route messages between
-        // clients and workers.
-        let mut control_socket = self.zmq_context.socket(zmq::REP)?;
-        control_socket.bind("inproc://rpc-proxy-steer")?;
-        std::thread::Builder::new()
-            .name("moor-rpc-proxy".to_string())
-            .spawn(move || {
-                zmq::proxy_steerable(&mut clients, &mut workers, &mut control_socket)
-                    .expect("Unable to start proxy");
-            })?;
-
-        // Control the proxy
-        let control_socket = self.zmq_context.socket(zmq::REQ)?;
-        control_socket.connect("inproc://rpc-proxy-steer")?;
-        loop {
-            if self.kill_switch.load(Ordering::Relaxed) {
-                info!("Kill switch activated, exiting");
-                control_socket.send("TERMINATE", 0)?;
-                return Ok(());
-            }
-
-            std::thread::sleep(Duration::from_millis(10));
-        }
-    }
-
     /// Individual RPC process loop that runs in worker threads
-    fn rpc_process_loop<H: MessageHandler>(
+    fn rpc_process_loop(
         zmq_context: zmq::Context,
         kill_switch: Arc<AtomicBool>,
         scheduler_client: SchedulerClient,
-        message_handler: Arc<H>,
+        message_handler: Arc<dyn MessageHandler>,
     ) -> eyre::Result<()> {
         let rpc_socket = zmq_context.socket(zmq::REP)?;
         rpc_socket.connect("inproc://rpc-workers")?;
@@ -153,7 +116,7 @@ impl RpcTransport {
                         &rpc_socket,
                         request,
                         &scheduler_client,
-                        &message_handler,
+                        message_handler.as_ref(),
                     ) {
                         error!(error = ?e, "Error processing request");
                     }
@@ -163,11 +126,11 @@ impl RpcTransport {
     }
 
     /// Process a single request message
-    fn process_request<H: MessageHandler>(
+    fn process_request(
         rpc_socket: &Socket,
         request: Vec<Vec<u8>>,
         scheduler_client: &SchedulerClient,
-        message_handler: &Arc<H>,
+        message_handler: &dyn MessageHandler,
     ) -> eyre::Result<()> {
         // Components are: [msg_type, request_body]
         if request.len() != 2 {
@@ -297,9 +260,70 @@ impl RpcTransport {
         bincode::encode_to_vec(&rpc_result, bincode::config::standard())
             .context("Failed to encode host response")
     }
+}
 
+impl Transport for RpcTransport {
+    /// Start the request processing loop with ZMQ proxy architecture
+    fn start_request_loop(
+        &self,
+        rpc_endpoint: String,
+        scheduler_client: SchedulerClient,
+        message_handler: Arc<dyn MessageHandler>,
+    ) -> eyre::Result<()> {
+        let num_io_threads = self.zmq_context.get_io_threads()?;
+        info!("0mq server listening on {rpc_endpoint} with {num_io_threads} IO threads");
+
+        let mut clients = self.zmq_context.socket(zmq::ROUTER)?;
+        let mut workers = self.zmq_context.socket(zmq::DEALER)?;
+
+        clients.bind(&rpc_endpoint)?;
+        workers.bind("inproc://rpc-workers")?;
+
+        // Start N RPC servers in a background thread. We match the # of IO threads, minus 1
+        // which we use for the proxy.
+        for i in 0..num_io_threads - 1 {
+            let handler = message_handler.clone();
+            let sched_client = scheduler_client.clone();
+            let kill_switch = self.kill_switch.clone();
+            let zmq_context = self.zmq_context.clone();
+
+            std::thread::Builder::new()
+                .name(format!("moor-rpc-srv{i}"))
+                .spawn(move || {
+                    if let Err(e) =
+                        Self::rpc_process_loop(zmq_context, kill_switch, sched_client, handler)
+                    {
+                        error!(error = ?e, "RPC process loop failed");
+                    }
+                })?;
+        }
+
+        // Start the proxy in a background thread, which will route messages between
+        // clients and workers.
+        let mut control_socket = self.zmq_context.socket(zmq::REP)?;
+        control_socket.bind("inproc://rpc-proxy-steer")?;
+        std::thread::Builder::new()
+            .name("moor-rpc-proxy".to_string())
+            .spawn(move || {
+                zmq::proxy_steerable(&mut clients, &mut workers, &mut control_socket)
+                    .expect("Unable to start proxy");
+            })?;
+
+        // Control the proxy
+        let control_socket = self.zmq_context.socket(zmq::REQ)?;
+        control_socket.connect("inproc://rpc-proxy-steer")?;
+        loop {
+            if self.kill_switch.load(Ordering::Relaxed) {
+                info!("Kill switch activated, exiting");
+                control_socket.send("TERMINATE", 0)?;
+                return Ok(());
+            }
+
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
     /// Publish narrative events to clients
-    pub fn publish_narrative_events(
+    fn publish_narrative_events(
         &self,
         events: &[(Obj, Box<NarrativeEvent>)],
         connections: &dyn crate::connections::ConnectionRegistry,
@@ -319,9 +343,8 @@ impl RpcTransport {
         }
         Ok(())
     }
-
     /// Broadcast events to hosts
-    pub fn broadcast_host_event(&self, event: HostBroadcastEvent) -> Result<(), eyre::Error> {
+    fn broadcast_host_event(&self, event: HostBroadcastEvent) -> Result<(), eyre::Error> {
         let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
         let payload = vec![HOST_BROADCAST_TOPIC.to_vec(), event_bytes];
 
@@ -333,13 +356,8 @@ impl RpcTransport {
 
         Ok(())
     }
-
     /// Publish event to specific client
-    pub fn publish_client_event(
-        &self,
-        client_id: Uuid,
-        event: ClientEvent,
-    ) -> Result<(), eyre::Error> {
+    fn publish_client_event(&self, client_id: Uuid, event: ClientEvent) -> Result<(), eyre::Error> {
         let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
             .context("Unable to serialize client event")?;
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
@@ -352,9 +370,8 @@ impl RpcTransport {
 
         Ok(())
     }
-
     /// Broadcast events to all clients
-    pub fn broadcast_client_event(&self, event: ClientsBroadcastEvent) -> Result<(), eyre::Error> {
+    fn broadcast_client_event(&self, event: ClientsBroadcastEvent) -> Result<(), eyre::Error> {
         let event_bytes = bincode::encode_to_vec(event, bincode::config::standard()).unwrap();
         let payload = vec![CLIENT_BROADCAST_TOPIC.to_vec(), event_bytes];
 

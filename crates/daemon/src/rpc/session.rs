@@ -18,10 +18,9 @@ use std::sync::Mutex;
 use uuid::Uuid;
 
 use moor_common::tasks::NarrativeEvent;
-use moor_common::tasks::{ConnectionDetails, Session, SessionError, SessionFactory};
+use moor_common::tasks::{ConnectionDetails, Session, SessionError};
 use moor_var::Obj;
 
-use super::server::RpcServer;
 use crate::event_log::EventLog;
 
 /// A "session" that runs over the RPC system.
@@ -236,22 +235,5 @@ impl Session for RpcSession {
             ))
             .map_err(|_e| SessionError::DeliveryError)?;
         rx.recv().map_err(|_e| SessionError::DeliveryError)?
-    }
-}
-
-impl SessionFactory for RpcServer {
-    fn mk_background_session(
-        self: Arc<Self>,
-        player: &Obj,
-    ) -> Result<Arc<dyn Session>, SessionError> {
-        let client_id = Uuid::new_v4();
-        let session = RpcSession::new(
-            client_id,
-            *player,
-            self.event_log().clone(),
-            self.mailbox_sender.clone(),
-        );
-        let session = Arc::new(session);
-        Ok(session)
     }
 }

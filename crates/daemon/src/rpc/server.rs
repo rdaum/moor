@@ -19,36 +19,40 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use super::message_handler::RpcMessageHandler;
-use super::session::SessionActions;
-use super::transport::RpcTransport;
+use super::session::{RpcSession, SessionActions};
+use super::transport::{RpcTransport, Transport};
 use crate::connections::ConnectionRegistry;
 use crate::event_log::EventLog;
+use crate::rpc::MessageHandler;
 use crate::system_control::SystemControlHandle;
 use crate::task_monitor::TaskMonitor;
+use moor_common::tasks::{Session, SessionError, SessionFactory};
 use moor_kernel::SchedulerClient;
 use moor_kernel::config::Config;
+use moor_var::Obj;
 use rusty_paseto::prelude::Key;
 use tracing::{error, info};
+use uuid::Uuid;
 
 /// RPC coordinator that delegates business logic to message handler
 pub struct RpcServer {
     kill_switch: Arc<AtomicBool>,
 
     // Core business logic handler
-    message_handler: Arc<RpcMessageHandler>,
+    message_handler: Arc<dyn MessageHandler>,
 
     // Transport layer
-    transport: Arc<RpcTransport>,
+    transport: Arc<dyn Transport>,
 
     mailbox_receive: Receiver<SessionActions>,
-
-    pub(crate) mailbox_sender: Sender<SessionActions>,
+    mailbox_sender: Sender<SessionActions>,
 
     // Core server resources
     event_log: Arc<EventLog>,
 }
 
 impl RpcServer {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         kill_switch: Arc<AtomicBool>,
         public_key: Key<32>,
@@ -183,5 +187,22 @@ impl RpcServer {
     // Clean interface methods for external modules that need limited access
     pub fn event_log(&self) -> &Arc<EventLog> {
         &self.event_log
+    }
+}
+
+impl SessionFactory for RpcServer {
+    fn mk_background_session(
+        self: Arc<Self>,
+        player: &Obj,
+    ) -> Result<Arc<dyn Session>, SessionError> {
+        let client_id = Uuid::new_v4();
+        let session = RpcSession::new(
+            client_id,
+            *player,
+            self.event_log().clone(),
+            self.mailbox_sender.clone(),
+        );
+        let session = Arc::new(session);
+        Ok(session)
     }
 }
