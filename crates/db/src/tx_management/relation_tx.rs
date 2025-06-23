@@ -42,7 +42,7 @@ where
     Domain: Clone + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
-    local_operations: IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>,
+    local_operations: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
     master_entries: Box<dyn RelationIndex<Domain, Codomain>>,
 }
 
@@ -91,7 +91,7 @@ where
     Domain: Clone + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
-    tuples: Vec<(Domain, Op<Codomain>)>,
+    tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
 }
 
 impl<Domain, Codomain> WorkingSet<Domain, Codomain>
@@ -99,7 +99,9 @@ where
     Domain: Clone + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
-    pub fn new(tuples: Vec<(Domain, Op<Codomain>)>) -> WorkingSet<Domain, Codomain> {
+    pub fn new(
+        tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
+    ) -> WorkingSet<Domain, Codomain> {
         WorkingSet { tuples }
     }
 
@@ -111,11 +113,11 @@ where
         self.tuples.is_empty()
     }
 
-    pub fn tuples(self) -> Vec<(Domain, Op<Codomain>)> {
+    pub fn tuples(self) -> Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>> {
         self.tuples
     }
 
-    pub fn tuples_ref(&self) -> &Vec<(Domain, Op<Codomain>)> {
+    pub fn tuples_ref(&self) -> &IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>> {
         &self.tuples
     }
 }
@@ -133,7 +135,7 @@ where
         backing_source: Source,
     ) -> RelationTransaction<Domain, Codomain, Source> {
         let inner = Inner {
-            local_operations: IndexMap::default(),
+            local_operations: Box::new(IndexMap::default()),
             master_entries: canonical,
         };
         RelationTransaction {
@@ -489,10 +491,6 @@ where
     }
 
     pub fn working_set(self) -> Result<WorkingSet<Domain, Codomain>, WorldStateError> {
-        let mut working_set = Vec::new();
-        for (domain, op) in self.index.local_operations {
-            working_set.push((domain, op));
-        }
-        Ok(WorkingSet::new(working_set))
+        Ok(WorkingSet::new(self.index.local_operations))
     }
 }

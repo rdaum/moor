@@ -47,12 +47,9 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistryMemory<P> {
     pub fn new(persistence: P) -> Result<Self, Error> {
         let initial_state = persistence.load_initial_state()?;
 
-        // Convert old format to new format
         let mut client_objects = HashMap::new();
         let mut connection_records = HashMap::new();
         let mut player_connections = HashMap::new();
-
-        // For now, treat existing data as player objects (backwards compatibility)
         for (client_id, obj) in initial_state.client_players {
             client_objects.insert(client_id, (obj, Some(obj)));
         }

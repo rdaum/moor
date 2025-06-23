@@ -343,6 +343,32 @@ async fn load_test_workload(
 
     let mut results = vec![];
 
+    // Do one throw-awy workload run to warm up the system.
+    info!("Running warm-up workload run...");
+    let warmup_start = Instant::now();
+    for _ in 0..5 {
+        workload(
+            args.clone(),
+            zmq_ctx.clone(),
+            args.client_args.rpc_address.clone(),
+            1,
+            connection_oid,
+            auth_token.clone(),
+            client_token.clone(),
+            client_id,
+            task_results.clone(),
+        )
+        .await?;
+    }
+    info!(
+        "Warm-up workload run completed in {:?}",
+        warmup_start.elapsed()
+    );
+
+    // Cool down for a couple seconds before starting the actual load test.
+    info!("Cooling down for 2 seconds before starting the load test...");
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
     let mut concurrency = args.min_concurrent_workload as f32;
     loop {
         if concurrency > args.max_concurrent_workload as f32 {

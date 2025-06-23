@@ -1,4 +1,3 @@
-#![recursion_limit = "256"]
 // Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
 // software: you can redistribute it and/or modify it under the terms of the GNU
 // General Public License as published by the Free Software Foundation, version
@@ -12,7 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub mod connections;
-pub mod feature_args;
+//! Workers server module for handling external worker processes
 
-pub use feature_args::FeatureArgs;
+mod message_handler;
+mod server;
+mod transport;
+
+pub use server::WorkersServer;

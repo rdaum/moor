@@ -22,7 +22,7 @@ use moor_common::tasks::{ConnectionDetails, Session, SessionError, SessionFactor
 use moor_var::Obj;
 
 use crate::event_log::EventLog;
-use crate::rpc_server::RpcServer;
+use super::server::RpcServer;
 
 /// A "session" that runs over the RPC system.
 pub struct RpcSession {
@@ -35,7 +35,7 @@ pub struct RpcSession {
     send: Sender<SessionActions>,
 }
 
-pub(crate) enum SessionActions {
+pub enum SessionActions {
     PublishNarrativeEvents(Vec<(Obj, Box<NarrativeEvent>)>),
     RequestClientInput {
         client_id: Uuid,
@@ -62,6 +62,7 @@ pub(crate) enum SessionActions {
         Option<Obj>,
         oneshot::Sender<Result<Vec<ConnectionDetails>, SessionError>>,
     ),
+    PublishTaskCompletion(Uuid, rpc_common::ClientEvent),
 }
 
 impl RpcSession {
@@ -247,7 +248,7 @@ impl SessionFactory for RpcServer {
         let session = RpcSession::new(
             client_id,
             *player,
-            self.event_log.clone(),
+            self.event_log().clone(),
             self.mailbox_sender.clone(),
         );
         let session = Arc::new(session);

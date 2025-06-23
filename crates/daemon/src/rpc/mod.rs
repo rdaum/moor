@@ -1,4 +1,3 @@
-#![recursion_limit = "256"]
 // Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
 // software: you can redistribute it and/or modify it under the terms of the GNU
 // General Public License as published by the Free Software Foundation, version
@@ -12,7 +11,22 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub mod connections;
-pub mod feature_args;
+//! RPC server module for client and host connections
+//! 
+//! Despite the name "RPC", this module actually handles:
+//! - Client connections and session management
+//! - Host connections and listener registration  
+//! - Narrative event publishing (pub/sub)
+//! - Task completion delivery
+//! - System messages and input requests
 
-pub use feature_args::FeatureArgs;
+mod hosts;
+mod message_handler;
+mod server;
+mod session;
+mod transport;
+
+pub use server::RpcServer;
+pub use session::SessionActions;
+pub use message_handler::MessageHandler;
+
