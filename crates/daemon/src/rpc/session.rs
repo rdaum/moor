@@ -21,8 +21,8 @@ use moor_common::tasks::NarrativeEvent;
 use moor_common::tasks::{ConnectionDetails, Session, SessionError, SessionFactory};
 use moor_var::Obj;
 
-use crate::event_log::EventLog;
 use super::server::RpcServer;
+use crate::event_log::EventLog;
 
 /// A "session" that runs over the RPC system.
 pub struct RpcSession {

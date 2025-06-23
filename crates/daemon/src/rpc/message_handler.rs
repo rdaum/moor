@@ -45,12 +45,11 @@ use moor_var::{Symbol, v_obj, v_str};
 use rpc_common::ClientEvent;
 use rpc_common::DaemonToClientReply::{LoginResult, NewConnection};
 use rpc_common::{
-    AuthToken, ClientToken, ClientsBroadcastEvent, ConnectType,
-    DaemonToClientReply, DaemonToHostReply, EntityType,
-    HistoricalNarrativeEvent, HistoryRecall, HistoryResponse, HostBroadcastEvent,
-    HostClientToDaemonMessage, HostToDaemonMessage, HostToken, HostType, MOOR_AUTH_TOKEN_FOOTER,
-    MOOR_HOST_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, PropInfo, RpcMessageError, VerbInfo,
-    VerbProgramResponse,
+    AuthToken, ClientToken, ClientsBroadcastEvent, ConnectType, DaemonToClientReply,
+    DaemonToHostReply, EntityType, HistoricalNarrativeEvent, HistoryRecall, HistoryResponse,
+    HostBroadcastEvent, HostClientToDaemonMessage, HostToDaemonMessage, HostToken, HostType,
+    MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER, MOOR_SESSION_TOKEN_FOOTER, PropInfo,
+    RpcMessageError, VerbInfo, VerbProgramResponse,
 };
 use rusty_paseto::core::{
     Footer, Paseto, PasetoAsymmetricPrivateKey, PasetoAsymmetricPublicKey, Payload, Public, V4,
@@ -287,9 +286,9 @@ impl MessageHandler for RpcMessageHandler {
             print_messages,
         };
 
-        self.transport.broadcast_host_event(event).map_err(|_| {
-            moor_common::tasks::SessionError::DeliveryError
-        })
+        self.transport
+            .broadcast_host_event(event)
+            .map_err(|_| moor_common::tasks::SessionError::DeliveryError)
     }
 
     fn broadcast_unlisten(
@@ -299,9 +298,9 @@ impl MessageHandler for RpcMessageHandler {
     ) -> Result<(), moor_common::tasks::SessionError> {
         let event = HostBroadcastEvent::Unlisten { host_type, port };
 
-        self.transport.broadcast_host_event(event).map_err(|_| {
-            moor_common::tasks::SessionError::DeliveryError
-        })
+        self.transport
+            .broadcast_host_event(event)
+            .map_err(|_| moor_common::tasks::SessionError::DeliveryError)
     }
 
     fn get_listeners(&self) -> Vec<(Obj, HostType, u16)> {
@@ -319,7 +318,8 @@ impl RpcMessageHandler {
         &self,
         events: &[(Obj, Box<NarrativeEvent>)],
     ) -> Result<(), eyre::Error> {
-        self.transport.publish_narrative_events(events, self.connections.as_ref())
+        self.transport
+            .publish_narrative_events(events, self.connections.as_ref())
     }
 
     // Helper methods that delegate to connections
@@ -518,20 +518,19 @@ impl RpcMessageHandler {
         }
     }
 
-
     pub fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError> {
         // Send ping to all clients
         let client_event = ClientsBroadcastEvent::PingPong(SystemTime::now());
-        self.transport.broadcast_client_event(client_event).map_err(|_| {
-            moor_common::tasks::SessionError::DeliveryError
-        })?;
+        self.transport
+            .broadcast_client_event(client_event)
+            .map_err(|_| moor_common::tasks::SessionError::DeliveryError)?;
         self.connections.ping_check();
 
         // Send ping to all hosts
         let host_event = HostBroadcastEvent::PingPong(SystemTime::now());
-        self.transport.broadcast_host_event(host_event).map_err(|_| {
-            moor_common::tasks::SessionError::DeliveryError
-        })?;
+        self.transport
+            .broadcast_host_event(host_event)
+            .map_err(|_| moor_common::tasks::SessionError::DeliveryError)?;
 
         let mut hosts = self.hosts.write().unwrap();
         hosts.ping_check(HOST_TIMEOUT);

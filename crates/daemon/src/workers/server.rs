@@ -15,27 +15,26 @@
 
 use moor_kernel::tasks::workers::{WorkerRequest, WorkerResponse};
 use rusty_paseto::core::Key;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tracing::{error, info};
 
-use super::message_handler::{WorkersMessageHandler, WorkersMessageHandlerImpl, PING_FREQUENCY};
+use super::message_handler::{PING_FREQUENCY, WorkersMessageHandler, WorkersMessageHandlerImpl};
 use super::transport::WorkersTransport;
 
 /// Coordinator for workers server that delegates business logic to message handler
 pub struct WorkersServer {
     zmq_context: zmq::Context,
     kill_switch: Arc<AtomicBool>,
-    
+
     // Core business logic handler
     message_handler: Arc<WorkersMessageHandlerImpl>,
-    
+
     // Thread handles
     request_processor_jh: Option<std::thread::JoinHandle<()>>,
     transport_jh: Option<std::thread::JoinHandle<()>>,
 }
-
 
 impl WorkersServer {
     /// Create a new workers server coordinator
@@ -55,7 +54,7 @@ impl WorkersServer {
             private_key,
             scheduler_send,
         )?);
-        
+
         Ok(Self {
             zmq_context,
             kill_switch,
@@ -68,16 +67,14 @@ impl WorkersServer {
     /// Start the request processor thread that handles scheduler requests
     pub fn start(&mut self) -> eyre::Result<flume::Sender<WorkerRequest>> {
         let (send, recv) = flume::unbounded::<WorkerRequest>();
-        
+
         let message_handler = self.message_handler.clone();
         let kill_switch = self.kill_switch.clone();
-        
+
         let jh = std::thread::Builder::new()
             .name("moor-workers-proc".into())
-            .spawn(move || {
-                Self::process_requests(kill_switch, recv, message_handler)
-            })?;
-        
+            .spawn(move || Self::process_requests(kill_switch, recv, message_handler))?;
+
         self.request_processor_jh = Some(jh);
         Ok(send)
     }
@@ -87,7 +84,7 @@ impl WorkersServer {
         let transport = WorkersTransport::new(self.zmq_context.clone(), self.kill_switch.clone());
         let message_handler = self.message_handler.clone();
         let workers_endpoint = workers_endpoint.to_string();
-        
+
         let jh = std::thread::Builder::new()
             .name("moor-workers-transport".into())
             .spawn(move || {
@@ -95,7 +92,7 @@ impl WorkersServer {
                     error!(error = ?e, "Workers transport failed");
                 }
             })?;
-        
+
         self.transport_jh = Some(jh);
         Ok(())
     }

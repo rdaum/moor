@@ -13,8 +13,8 @@
 
 //! SystemControl handle for the scheduler - minimal interface for system operations
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use moor_common::tasks::SystemControl;
 use moor_var::Obj;
@@ -31,10 +31,7 @@ pub struct SystemControlHandle {
 }
 
 impl SystemControlHandle {
-    pub fn new(
-        kill_switch: Arc<AtomicBool>,
-        message_handler: Arc<dyn MessageHandler>,
-    ) -> Self {
+    pub fn new(kill_switch: Arc<AtomicBool>, message_handler: Arc<dyn MessageHandler>) -> Self {
         Self {
             kill_switch,
             message_handler,
@@ -82,7 +79,8 @@ impl SystemControl for SystemControlHandle {
     }
 
     fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, moor_var::Error> {
-        let listeners = self.message_handler
+        let listeners = self
+            .message_handler
             .get_listeners()
             .iter()
             .map(|(o, t, port)| (*o, t.id_str().to_string(), *port, true))

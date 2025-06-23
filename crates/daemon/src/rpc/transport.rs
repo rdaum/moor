@@ -22,13 +22,13 @@ use uuid::Uuid;
 use zmq::Socket;
 
 use super::message_handler::MessageHandler;
-use moor_kernel::SchedulerClient;
 use moor_common::tasks::NarrativeEvent;
+use moor_kernel::SchedulerClient;
 use moor_var::Obj;
 use rpc_common::{
-    ClientEvent, ClientsBroadcastEvent, DaemonToClientReply, DaemonToHostReply, 
-    HostBroadcastEvent, HostToDaemonMessage, MessageType, ReplyResult, 
-    RpcMessageError, CLIENT_BROADCAST_TOPIC, HOST_BROADCAST_TOPIC,
+    CLIENT_BROADCAST_TOPIC, ClientEvent, ClientsBroadcastEvent, DaemonToClientReply,
+    DaemonToHostReply, HOST_BROADCAST_TOPIC, HostBroadcastEvent, HostToDaemonMessage, MessageType,
+    ReplyResult, RpcMessageError,
 };
 
 /// ZMQ transport layer that handles socket management and message routing
@@ -40,7 +40,7 @@ pub struct RpcTransport {
 
 impl RpcTransport {
     pub fn new(
-        zmq_context: zmq::Context, 
+        zmq_context: zmq::Context,
         kill_switch: Arc<AtomicBool>,
         narrative_endpoint: &str,
     ) -> Result<Self, eyre::Error> {
@@ -60,7 +60,6 @@ impl RpcTransport {
             events_publish,
         })
     }
-
 
     /// Start the request processing loop with ZMQ proxy architecture
     pub fn start_request_loop<H: MessageHandler + 'static>(
@@ -85,16 +84,13 @@ impl RpcTransport {
             let sched_client = scheduler_client.clone();
             let kill_switch = self.kill_switch.clone();
             let zmq_context = self.zmq_context.clone();
-            
+
             std::thread::Builder::new()
                 .name(format!("moor-rpc-srv{i}"))
                 .spawn(move || {
-                    if let Err(e) = Self::rpc_process_loop(
-                        zmq_context,
-                        kill_switch,
-                        sched_client,
-                        handler,
-                    ) {
+                    if let Err(e) =
+                        Self::rpc_process_loop(zmq_context, kill_switch, sched_client, handler)
+                    {
                         error!(error = ?e, "RPC process loop failed");
                     }
                 })?;
@@ -134,7 +130,7 @@ impl RpcTransport {
     ) -> eyre::Result<()> {
         let rpc_socket = zmq_context.socket(zmq::REP)?;
         rpc_socket.connect("inproc://rpc-workers")?;
-        
+
         loop {
             if kill_switch.load(Ordering::Relaxed) {
                 return Ok(());
@@ -146,7 +142,7 @@ impl RpcTransport {
             if poll_result == 0 {
                 continue;
             }
-            
+
             match rpc_socket.recv_multipart(0) {
                 Err(_) => {
                     info!("ZMQ socket closed, exiting");
@@ -203,16 +199,17 @@ impl RpcTransport {
                 }
 
                 // Decode
-                let host_message: HostToDaemonMessage = match bincode::decode_from_slice(
-                    request_body,
-                    bincode::config::standard(),
-                ) {
-                    Ok((host_message, _)) => host_message,
-                    Err(_) => {
-                        Self::reply_invalid_request(rpc_socket, "Could not decode host message")?;
-                        return Ok(());
-                    }
-                };
+                let host_message: HostToDaemonMessage =
+                    match bincode::decode_from_slice(request_body, bincode::config::standard()) {
+                        Ok((host_message, _)) => host_message,
+                        Err(_) => {
+                            Self::reply_invalid_request(
+                                rpc_socket,
+                                "Could not decode host message",
+                            )?;
+                            return Ok(());
+                        }
+                    };
 
                 // Process
                 let response = message_handler.handle_host_message(host_token, host_message);
@@ -238,16 +235,17 @@ impl RpcTransport {
                 };
 
                 // Decode 'request_body' as a bincode'd ClientEvent
-                let request = match bincode::decode_from_slice(
-                    request_body,
-                    bincode::config::standard(),
-                ) {
-                    Ok((request, _)) => request,
-                    Err(_) => {
-                        Self::reply_invalid_request(rpc_socket, "Could not decode request body")?;
-                        return Ok(());
-                    }
-                };
+                let request =
+                    match bincode::decode_from_slice(request_body, bincode::config::standard()) {
+                        Ok((request, _)) => request,
+                        Err(_) => {
+                            Self::reply_invalid_request(
+                                rpc_socket,
+                                "Could not decode request body",
+                            )?;
+                            return Ok(());
+                        }
+                    };
 
                 // Process the request
                 let response = message_handler.handle_client_message(
@@ -272,14 +270,15 @@ impl RpcTransport {
 
     fn reply_invalid_request(socket: &Socket, reason: &str) -> eyre::Result<()> {
         warn!("Invalid request received, replying with error: {reason}");
-        let response = Self::pack_client_response(Err(RpcMessageError::InvalidRequest(
-            reason.to_string(),
-        )))?;
+        let response =
+            Self::pack_client_response(Err(RpcMessageError::InvalidRequest(reason.to_string())))?;
         socket.send_multipart(vec![response], 0)?;
         Ok(())
     }
 
-    fn pack_client_response(result: Result<DaemonToClientReply, RpcMessageError>) -> Result<Vec<u8>, eyre::Error> {
+    fn pack_client_response(
+        result: Result<DaemonToClientReply, RpcMessageError>,
+    ) -> Result<Vec<u8>, eyre::Error> {
         let rpc_result = match result {
             Ok(r) => ReplyResult::ClientSuccess(r),
             Err(e) => ReplyResult::Failure(e),
@@ -288,7 +287,9 @@ impl RpcTransport {
             .context("Failed to encode client response")
     }
 
-    fn pack_host_response(result: Result<DaemonToHostReply, RpcMessageError>) -> Result<Vec<u8>, eyre::Error> {
+    fn pack_host_response(
+        result: Result<DaemonToHostReply, RpcMessageError>,
+    ) -> Result<Vec<u8>, eyre::Error> {
         let rpc_result = match result {
             Ok(r) => ReplyResult::HostSuccess(r),
             Err(e) => ReplyResult::Failure(e),
@@ -334,11 +335,15 @@ impl RpcTransport {
     }
 
     /// Publish event to specific client
-    pub fn publish_client_event(&self, client_id: Uuid, event: ClientEvent) -> Result<(), eyre::Error> {
+    pub fn publish_client_event(
+        &self,
+        client_id: Uuid,
+        event: ClientEvent,
+    ) -> Result<(), eyre::Error> {
         let event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
             .context("Unable to serialize client event")?;
         let payload = vec![client_id.as_bytes().to_vec(), event_bytes];
-        
+
         let publish = self.events_publish.lock().unwrap();
         publish.send_multipart(payload, 0).map_err(|e| {
             error!(error = ?e, "Unable to send client event");

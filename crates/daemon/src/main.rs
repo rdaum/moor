@@ -15,8 +15,8 @@
 use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
 use std::process::exit;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use crate::args::Args;
 use eyre::{bail, eyre};
@@ -290,16 +290,15 @@ fn main() -> Result<(), Report> {
         zmq_ctx.clone(),
         &args.workers_request_listen,
         worker_scheduler_send,
-    ).map_err(|e| eyre!("Failed to create workers server: {}", e))?;
-    let workers_sender = workers_server
-        .start()
-        .map_err(|e| {
-            eyre!(
-                "Failed to start workers server on {}: {}",
-                args.workers_request_listen,
-                e
-            )
-        })?;
+    )
+    .map_err(|e| eyre!("Failed to create workers server: {}", e))?;
+    let workers_sender = workers_server.start().map_err(|e| {
+        eyre!(
+            "Failed to start workers server on {}: {}",
+            args.workers_request_listen,
+            e
+        )
+    })?;
 
     let workers_listen_addr = args.workers_response_listen.clone();
     std::thread::spawn(move || {
@@ -368,7 +367,9 @@ fn main() -> Result<(), Report> {
     let rpc_loop_thread = std::thread::Builder::new()
         .name("moor-rpc".to_string())
         .spawn(move || {
-            if let Err(e) = rpc_server.request_loop(rpc_listen.clone(), rpc_loop_scheduler_client, task_monitor) {
+            if let Err(e) =
+                rpc_server.request_loop(rpc_listen.clone(), rpc_loop_scheduler_client, task_monitor)
+            {
                 error!("RPC server failed on {}: {}", rpc_listen, e);
             }
         })?;

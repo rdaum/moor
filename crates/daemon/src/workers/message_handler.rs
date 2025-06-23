@@ -58,10 +58,7 @@ pub trait WorkersMessageHandler: Send + Sync {
     fn ping_workers(&self) -> Result<(), eyre::Error>;
 
     /// Process a worker request from the scheduler
-    fn process_worker_request(
-        &self,
-        request: WorkerRequest,
-    ) -> Result<(), eyre::Error>;
+    fn process_worker_request(&self, request: WorkerRequest) -> Result<(), eyre::Error>;
 }
 
 /// Implementation of message handler that contains the actual business logic
@@ -90,9 +87,9 @@ impl WorkersMessageHandlerImpl {
         publish
             .bind(workers_broadcast)
             .context("Unable to bind ZMQ PUB socket")?;
-        
+
         let workers_publish = Arc::new(Mutex::new(publish));
-        
+
         Ok(Self {
             public_key,
             private_key,
@@ -346,9 +343,10 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
         let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())
             .context("Unable to encode ping event")?;
         let payload = vec![WORKER_BROADCAST_TOPIC.to_vec(), event_bytes];
-        
+
         let publish = self.workers_publish.lock().unwrap();
-        publish.send_multipart(payload, 0)
+        publish
+            .send_multipart(payload, 0)
             .context("Unable to send ping to workers")?;
         Ok(())
     }
@@ -373,7 +371,7 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                         found_worker = Some((worker_id, worker));
                     }
                 }
-                
+
                 let Some((_, worker)) = found_worker else {
                     error!("No workers available for request type {}", request_type);
                     self.scheduler_send
@@ -397,10 +395,11 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                 let event_bytes = bincode::encode_to_vec(&event, bincode::config::standard())
                     .context("Unable to encode worker request")?;
                 let payload = vec![WORKER_BROADCAST_TOPIC.to_vec(), event_bytes];
-                
+
                 {
                     let publish = self.workers_publish.lock().unwrap();
-                    publish.send_multipart(payload, 0)
+                    publish
+                        .send_multipart(payload, 0)
                         .context("Unable to send request to worker")?;
                 }
 
@@ -408,7 +407,7 @@ impl WorkersMessageHandler for WorkersMessageHandlerImpl {
                     "Sending request to worker {} of type {}",
                     worker.id, worker.worker_type
                 );
-                
+
                 // Then shove it into the queue for the given worker
                 worker.requests.push((request_id, perms, request));
                 Ok(())

@@ -12,7 +12,7 @@
 //
 
 //! RPC server module for client and host connections
-//! 
+//!
 //! Despite the name "RPC", this module actually handles:
 //! - Client connections and session management
 //! - Host connections and listener registration  
@@ -26,7 +26,6 @@ mod server;
 mod session;
 mod transport;
 
+pub use message_handler::MessageHandler;
 pub use server::RpcServer;
 pub use session::SessionActions;
-pub use message_handler::MessageHandler;
-

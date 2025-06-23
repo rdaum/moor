@@ -13,8 +13,8 @@
 
 //! Task completion monitoring and lifecycle management
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -66,7 +66,6 @@ impl TaskMonitor {
         }
     }
 
-
     /// Block indefinitely waiting for task completions until kill switch is activated
     pub fn wait_for_completions(&self, kill_switch: Arc<AtomicBool>) {
         loop {
@@ -89,7 +88,7 @@ impl TaskMonitor {
             // If no tasks, wait for wake signal or timeout
             if receives.is_empty() {
                 match self.wake_signal.1.recv_timeout(Duration::from_millis(1000)) {
-                    Ok(_) => continue, // Woken up by new task, restart loop
+                    Ok(_) => continue,  // Woken up by new task, restart loop
                     Err(_) => continue, // Timeout, check kill switch
                 }
             }
@@ -107,7 +106,6 @@ impl TaskMonitor {
 
             match selector.wait_timeout(Duration::from_millis(1000)) {
                 Ok((index, result)) => {
-
                     let client_id = task_client_ids[index].1;
                     let task_id = task_client_ids[index].0;
                     let guard = self.task_handles.guard();
