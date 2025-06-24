@@ -197,21 +197,29 @@ impl SchedulerClient {
         verb_name: Symbol,
         code: Vec<String>,
     ) -> Result<(Obj, Symbol), SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::SubmitProgramVerb {
-                player: *player,
-                perms: *perms,
-                obj: obj.clone(),
-                verb_name,
-                code,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
 
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        let action = WorldStateAction::ProgramVerb {
+            player: *player,
+            perms: *perms,
+            obj: obj.clone(),
+            verb_name,
+            code,
+        };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result:
+                    crate::tasks::world_state_action::WorldStateResult::VerbProgrammed { object, verb },
+                ..
+            }) => Ok((object, verb)),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
     }
 
     pub fn request_system_property(
@@ -220,19 +228,26 @@ impl SchedulerClient {
         obj: &ObjectRef,
         property: Symbol,
     ) -> Result<Var, SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::RequestSystemProperty {
-                player: *player,
-                obj: obj.clone(),
-                property,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
 
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        let action = WorldStateAction::RequestSystemProperty {
+            player: *player,
+            obj: obj.clone(),
+            property,
+        };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result: crate::tasks::world_state_action::WorldStateResult::SystemProperty(value),
+                ..
+            }) => Ok(value),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
     }
 
     pub fn request_checkpoint(&self) -> Result<(), SchedulerError> {
@@ -252,19 +267,26 @@ impl SchedulerClient {
         perms: &Obj,
         obj: &ObjectRef,
     ) -> Result<VerbDefs, SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::RequestVerbs {
-                player: *player,
-                perms: *perms,
-                obj: obj.clone(),
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
 
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        let action = WorldStateAction::RequestVerbs {
+            player: *player,
+            perms: *perms,
+            obj: obj.clone(),
+        };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result: crate::tasks::world_state_action::WorldStateResult::Verbs(verbs),
+                ..
+            }) => Ok(verbs),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
     }
 
     pub fn request_verb(
@@ -274,20 +296,27 @@ impl SchedulerClient {
         obj: &ObjectRef,
         verb: Symbol,
     ) -> Result<(VerbDef, Vec<String>), SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::RequestVerbCode {
-                player: *player,
-                perms: *perms,
-                obj: obj.clone(),
-                verb,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
 
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        let action = WorldStateAction::RequestVerbCode {
+            player: *player,
+            perms: *perms,
+            obj: obj.clone(),
+            verb,
+        };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result: crate::tasks::world_state_action::WorldStateResult::VerbCode(verbdef, code),
+                ..
+            }) => Ok((verbdef, code)),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
     }
 
     pub fn request_properties(
@@ -296,19 +325,26 @@ impl SchedulerClient {
         perms: &Obj,
         obj: &ObjectRef,
     ) -> Result<Vec<(PropDef, PropPerms)>, SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::RequestProperties {
-                player: *player,
-                perms: *perms,
-                obj: obj.clone(),
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
 
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        let action = WorldStateAction::RequestProperties {
+            player: *player,
+            perms: *perms,
+            obj: obj.clone(),
+        };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result: crate::tasks::world_state_action::WorldStateResult::Properties(props),
+                ..
+            }) => Ok(props),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
     }
 
     pub fn request_property(
@@ -318,26 +354,62 @@ impl SchedulerClient {
         obj: &ObjectRef,
         property: Symbol,
     ) -> Result<(PropDef, PropPerms, Var), SchedulerError> {
-        let (reply, receive) = oneshot::channel();
-        self.scheduler_sender
-            .send(SchedulerClientMsg::RequestProperty {
-                player: *player,
-                perms: *perms,
-                obj: obj.clone(),
-                property,
-                reply,
-            })
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
 
-        receive
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        let action = WorldStateAction::RequestProperty {
+            player: *player,
+            perms: *perms,
+            obj: obj.clone(),
+            property,
+        };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result:
+                    crate::tasks::world_state_action::WorldStateResult::Property(info, perms, value),
+                ..
+            }) => Ok((info, perms, value)),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
     }
 
     pub fn resolve_object(&self, player: Obj, obj: ObjectRef) -> Result<Var, SchedulerError> {
+        use crate::tasks::world_state_action::{WorldStateAction, WorldStateRequest};
+
+        let action = WorldStateAction::ResolveObject { player, obj };
+        let request = WorldStateRequest::new(action);
+        let responses = self.execute_world_state_actions(vec![request], false)?;
+
+        match responses.into_iter().next() {
+            Some(crate::tasks::world_state_action::WorldStateResponse::Success {
+                result: crate::tasks::world_state_action::WorldStateResult::ResolvedObject(value),
+                ..
+            }) => Ok(value),
+            Some(crate::tasks::world_state_action::WorldStateResponse::Error { error, .. }) => {
+                Err(error)
+            }
+            _ => Err(SchedulerError::SchedulerNotResponding),
+        }
+    }
+
+    /// Execute a batch of WorldStateActions.
+    pub fn execute_world_state_actions(
+        &self,
+        actions: Vec<crate::tasks::world_state_action::WorldStateRequest>,
+        rollback: bool,
+    ) -> Result<Vec<crate::tasks::world_state_action::WorldStateResponse>, SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
-            .send(SchedulerClientMsg::ResolveObject { player, obj, reply })
+            .send(SchedulerClientMsg::ExecuteWorldStateActions {
+                actions,
+                rollback,
+                reply,
+            })
             .map_err(|_| SchedulerError::SchedulerNotResponding)?;
 
         receive
@@ -390,61 +462,18 @@ pub enum SchedulerClientMsg {
         sessions: Arc<dyn Session>,
         reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },
-    /// Submit a request to program a verb
-    SubmitProgramVerb {
-        player: Obj,
-        perms: Obj,
-        obj: ObjectRef,
-        verb_name: Symbol,
-        code: Vec<String>,
-        reply: oneshot::Sender<Result<(Obj, Symbol), SchedulerError>>,
-    },
-    /// Request the value of a $property.
-    /// (Used by the login process, unauthenticated)
-    RequestSystemProperty {
-        player: Obj,
-        obj: ObjectRef,
-        property: Symbol,
-        reply: oneshot::Sender<Result<Var, SchedulerError>>,
-    },
-    /// Request the list of visible verbs on an object.
-    RequestVerbs {
-        player: Obj,
-        perms: Obj,
-        obj: ObjectRef,
-        reply: oneshot::Sender<Result<VerbDefs, SchedulerError>>,
-    },
-    /// Request the decompiled code of a verb along with its definition.
-    RequestVerbCode {
-        player: Obj,
-        perms: Obj,
-        obj: ObjectRef,
-        verb: Symbol,
-        reply: oneshot::Sender<Result<(VerbDef, Vec<String>), SchedulerError>>,
-    },
-    /// Request the list of visible properties on an object.
-    RequestProperties {
-        player: Obj,
-        perms: Obj,
-        obj: ObjectRef,
-        reply: oneshot::Sender<Result<Vec<(PropDef, PropPerms)>, SchedulerError>>,
-    },
-    /// Request the description and contents of a property.
-    RequestProperty {
-        player: Obj,
-        perms: Obj,
-        obj: ObjectRef,
-        property: Symbol,
-        reply: oneshot::Sender<Result<(PropDef, PropPerms, Var), SchedulerError>>,
-    },
-    /// Resolve an ObjectRef into a Var
-    ResolveObject {
-        player: Obj,
-        obj: ObjectRef,
-        reply: oneshot::Sender<Result<Var, SchedulerError>>,
-    },
     /// Submit a request to checkpoint the database.
     Checkpoint(oneshot::Sender<Result<(), SchedulerError>>),
     /// Submit a (non-task specific) request to shutdown the scheduler
     Shutdown(String, oneshot::Sender<Result<(), SchedulerError>>),
+    /// Execute a batch of WorldStateActions
+    ExecuteWorldStateActions {
+        actions: Vec<crate::tasks::world_state_action::WorldStateRequest>,
+        /// Rollback after performing the operations, leaving the world in the state it was before
+        /// we ran. (For exploratory actions)
+        rollback: bool,
+        reply: oneshot::Sender<
+            Result<Vec<crate::tasks::world_state_action::WorldStateResponse>, SchedulerError>,
+        >,
+    },
 }

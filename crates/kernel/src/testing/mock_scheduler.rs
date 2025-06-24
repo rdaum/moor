@@ -443,30 +443,41 @@ impl MockScheduler {
                 reply.send(Ok(task_handle)).ok();
             }
 
-            SchedulerClientMsg::RequestSystemProperty {
-                player: _,
-                obj: _,
-                property,
+            SchedulerClientMsg::ExecuteWorldStateActions {
+                actions,
+                rollback: _,
                 reply,
             } => {
-                if !self.should_succeed(config.property_lookup_success_rate) {
-                    reply
-                        .send(Err(SchedulerError::CommandExecutionError(
-                            moor_common::tasks::CommandError::PermissionDenied,
-                        )))
-                        .ok();
-                    return;
+                use crate::tasks::world_state_action::{WorldStateResponse, WorldStateResult};
+
+                let mut responses = Vec::new();
+
+                for request in actions {
+                    // For now, simulate simple success responses for the mock
+                    let result = match &request.action {
+                        crate::tasks::world_state_action::WorldStateAction::RequestSystemProperty { property, .. } => {
+                            let value = self
+                                .custom_responses
+                                .read()
+                                .unwrap()
+                                .get(&format!("sysprop_{}", property))
+                                .cloned()
+                                .unwrap_or(v_str(&format!("system_prop_{}", property)));
+                            WorldStateResult::SystemProperty(value)
+                        }
+                        _ => {
+                            // For other actions, return a simple success
+                            WorldStateResult::SystemProperty(v_str("mock_response"))
+                        }
+                    };
+
+                    responses.push(WorldStateResponse::Success {
+                        id: request.id,
+                        result,
+                    });
                 }
 
-                let value = self
-                    .custom_responses
-                    .read()
-                    .unwrap()
-                    .get(&format!("sysprop_{}", property))
-                    .cloned()
-                    .unwrap_or(v_str(&format!("system_prop_{}", property)));
-
-                reply.send(Ok(value)).ok();
+                reply.send(Ok(responses)).ok();
             }
 
             SchedulerClientMsg::Checkpoint(reply) => {

@@ -23,9 +23,8 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use moor_common::model::{CommitResult, Perms};
-use moor_common::model::{HasUuid, ObjectRef, ValSet, VerbAttrs};
-use moor_common::model::{WorldState, WorldStateError};
-use moor_compiler::{compile, program_to_tree, to_literal, unparse};
+use moor_common::model::{ObjectRef, WorldState, WorldStateError};
+use moor_compiler::to_literal;
 use moor_db::Database;
 
 use crate::config::{Config, ImportExportFormat};
@@ -35,23 +34,20 @@ use crate::tasks::task_q::{RunningTask, SuspensionQ, TaskQ, WakeCondition};
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::workers::{WorkerRequest, WorkerResponse};
+use crate::tasks::world_state_action::WorldStateResponse;
+use crate::tasks::world_state_executor::{WorldStateActionExecutor, match_object_ref};
 use crate::tasks::{
     DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
     DEFAULT_MAX_STACK_DEPTH, ServerOptions, TaskHandle, TaskResult, TaskStart, sched_counters,
 };
 use crate::vm::builtins::BuiltinRegistry;
 use crate::vm::{Fork, TaskSuspend};
-use moor_common::matching::ObjectNameMatcher;
-use moor_common::matching::match_env::DefaultObjectNameMatcher;
-use moor_common::matching::ws_match_env::WsMatchEnv;
-use moor_common::program::ProgramType;
 use moor_common::tasks::SchedulerError::{
     CommandExecutionError, InputRequestNotFound, TaskAbortedCancelled, TaskAbortedError,
-    TaskAbortedException, TaskAbortedLimit, VerbProgramFailed,
+    TaskAbortedException, TaskAbortedLimit,
 };
 use moor_common::tasks::{
-    AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError, TaskId,
-    VerbProgramError, WorkerError,
+    AbortLimitReason, CommandError, Event, NarrativeEvent, SchedulerError, TaskId, WorkerError,
 };
 use moor_common::tasks::{Session, SessionFactory, SystemControl};
 use moor_common::util::PerfTimerGuard;
@@ -64,9 +60,6 @@ use moor_var::{SYSTEM_OBJECT, v_list};
 
 // How often to check for suspended tasks that need to be woken up based on their wake condition.
 const SCHEDULER_WAKE_TASKS_INTERVAL: Duration = Duration::from_micros(50);
-
-/// Number of times to retry a program compilation transaction in case of conflict, before giving up.
-const NUM_VERB_PROGRAM_ATTEMPTS: usize = 5;
 
 /// If a task is retried more than N number of times (due to commit conflict) we choose to abort.
 // TODO: we could also look into some exponential-ish backoff
@@ -315,63 +308,6 @@ impl Scheduler {
     pub fn client(&self) -> Result<SchedulerClient, SchedulerError> {
         Ok(SchedulerClient::new(self.scheduler_sender.clone()))
     }
-
-    /// Start a transaction, match the object name and verb name, and if it exists and the
-    /// permissions are correct, program the verb with the given code.
-    // TODO: this probably doesn't belong on scheduler
-    fn program_verb(
-        &self,
-        player: &Obj,
-        perms: &Obj,
-        obj: &ObjectRef,
-        verb_name: Symbol,
-        code: Vec<String>,
-    ) -> Result<(Obj, Symbol), SchedulerError> {
-        // TODO: User must be a programmer...
-
-        for _ in 0..NUM_VERB_PROGRAM_ATTEMPTS {
-            let mut tx = self.database.new_world_state().unwrap();
-
-            let Ok(o) = match_object_ref(player, perms, obj, tx.as_mut()) else {
-                return Err(CommandExecutionError(CommandError::NoObjectMatch));
-            };
-
-            let (_, verbdef) = tx
-                .find_method_verb_on(perms, &o, verb_name)
-                .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
-
-            if verbdef.location() != o {
-                let _ = tx.rollback();
-                return Err(VerbProgramFailed(VerbProgramError::NoVerbToProgram));
-            }
-
-            let program = compile(
-                code.join("\n").as_str(),
-                self.config.features.compile_options(),
-            )
-            .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?;
-
-            // Now we can update the verb.
-            let update_attrs = VerbAttrs {
-                definer: None,
-                owner: None,
-                names: None,
-                flags: None,
-                args_spec: None,
-                program: Some(ProgramType::MooR(program)),
-            };
-            tx.update_verb_with_id(perms, &o, verbdef.uuid(), update_attrs)
-                .map_err(|_| VerbProgramFailed(VerbProgramError::NoVerbToProgram))?;
-
-            let commit_result = tx.commit().unwrap();
-            if commit_result == CommitResult::Success {
-                return Ok((o, verb_name));
-            }
-            std::thread::sleep(Duration::from_millis(500));
-        }
-        error!("Could not commit transaction after {NUM_VERB_PROGRAM_ATTEMPTS} tries.");
-        Err(VerbProgramFailed(VerbProgramError::DatabaseError))
-    }
 }
 
 impl Scheduler {
@@ -572,331 +508,73 @@ impl Scheduler {
                 let result = self.stop(Some(msg));
                 reply.send(result).expect("Could not send shutdown reply");
             }
-            SchedulerClientMsg::SubmitProgramVerb {
-                player,
-                perms,
-                obj,
-                verb_name,
-                code,
-                reply,
-            } => {
-                let result = self.program_verb(&player, &perms, &obj, verb_name, code);
-                reply
-                    .send(result)
-                    .expect("Could not send program verb reply");
-            }
-            SchedulerClientMsg::RequestSystemProperty {
-                player: _,
-                obj,
-                property,
-                reply,
-            } => {
-                // TODO: check perms here
-
-                let mut world_state = match self.database.new_world_state() {
-                    Ok(ws) => ws,
-                    Err(e) => {
-                        reply
-                            .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
-                            .expect("Could not send system property reply");
-                        return;
-                    }
-                };
-
-                let Ok(object) =
-                    match_object_ref(&SYSTEM_OBJECT, &SYSTEM_OBJECT, &obj, world_state.as_mut())
-                else {
-                    reply
-                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
-                        .expect("Could not send system property reply");
-                    return;
-                };
-                let Ok(property_value) =
-                    world_state.retrieve_property(&SYSTEM_OBJECT, &object, property)
-                else {
-                    reply
-                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
-                        .expect("Could not send system property reply");
-                    return;
-                };
-
-                reply
-                    .send(Ok(property_value))
-                    .expect("Could not send system property reply");
-            }
             SchedulerClientMsg::Checkpoint(reply) => {
                 let result = self.checkpoint();
                 reply.send(result).expect("Could not send checkpoint reply");
             }
-            SchedulerClientMsg::RequestProperties {
-                player,
-                perms,
-                obj,
+            SchedulerClientMsg::ExecuteWorldStateActions {
+                actions,
+                rollback,
                 reply,
             } => {
-                // TODO: check programmer perms here
-                let mut world_state = match self.database.new_world_state() {
+                let mut responses = Vec::new();
+                let mut tx = match self.database.new_world_state() {
                     Ok(ws) => ws,
                     Err(e) => {
                         reply
                             .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
-                            .expect("Could not send properties reply");
+                            .expect("Could not send batch execution reply");
                         return;
                     }
                 };
 
-                let Ok(object) = match_object_ref(&player, &perms, &obj, world_state.as_mut())
-                else {
-                    reply
-                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
-                        .expect("Could not send properties reply");
-                    return;
-                };
-
-                let properties = match world_state.properties(&perms, &object) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        reply
-                            .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
-                            .expect("Could not send properties reply");
-                        return;
-                    }
-                };
-
-                let mut props = Vec::new();
-                for prop in properties.iter() {
-                    let (info, perms) =
-                        match world_state.get_property_info(&perms, &object, prop.name()) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                reply
-                                    .send(Err(CommandExecutionError(CommandError::DatabaseError(
-                                        e,
-                                    ))))
-                                    .expect("Could not send properties reply");
-                                return;
+                // Process each action within the same transaction using the executor
+                let mut executor = WorldStateActionExecutor::new(tx.as_mut(), &self.config);
+                for request in actions {
+                    let response = match executor.execute(request.action) {
+                        Ok(result) => WorldStateResponse::Success {
+                            id: request.id,
+                            result,
+                        },
+                        Err(error) => {
+                            // On error, always continue (collect all errors)
+                            WorldStateResponse::Error {
+                                id: request.id,
+                                error,
                             }
-                        };
-                    props.push((info, perms));
+                        }
+                    };
+                    responses.push(response);
+                }
+
+                // Commit or rollback the transaction
+                if rollback {
+                    tx.rollback().ok();
+                } else {
+                    match tx.commit() {
+                        Ok(CommitResult::Success) => {}
+                        Ok(CommitResult::ConflictRetry) => {
+                            reply
+                                .send(Err(CommandExecutionError(CommandError::DatabaseError(
+                                    WorldStateError::DatabaseError(
+                                        "Transaction conflict".to_string(),
+                                    ),
+                                ))))
+                                .expect("Could not send batch execution reply");
+                            return;
+                        }
+                        Err(e) => {
+                            reply
+                                .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
+                                .expect("Could not send batch execution reply");
+                            return;
+                        }
+                    }
                 }
 
                 reply
-                    .send(Ok(props))
-                    .expect("Could not send properties reply");
-
-                world_state.commit().expect("Could not commit transaction");
-            }
-            SchedulerClientMsg::RequestProperty {
-                player,
-                perms,
-                obj,
-                property,
-                reply,
-            } => {
-                let mut world_state = match self.database.new_world_state() {
-                    Ok(ws) => ws,
-                    Err(e) => {
-                        reply
-                            .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
-                            .expect("Could not send property reply");
-                        return;
-                    }
-                };
-
-                // TODO: User must be a programmer...
-
-                let Ok(object) = match_object_ref(&player, &perms, &obj, world_state.as_mut())
-                else {
-                    reply
-                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
-                        .expect("Could not send property reply");
-                    return;
-                };
-
-                let property_value = match world_state.retrieve_property(&player, &object, property)
-                {
-                    Ok(v) => v,
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::PropertyRetrievalFailed(e)))
-                            .expect("Could not send property reply");
-                        return;
-                    }
-                };
-
-                let (property_info, property_perms) =
-                    match world_state.get_property_info(&perms, &object, property) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            reply
-                                .send(Err(SchedulerError::PropertyRetrievalFailed(e)))
-                                .expect("Could not send property reply");
-                            return;
-                        }
-                    };
-
-                world_state.commit().expect("Could not commit transaction");
-                reply
-                    .send(Ok((property_info, property_perms, property_value)))
-                    .expect("Could not send property reply");
-            }
-            SchedulerClientMsg::RequestVerbs {
-                player: _,
-                perms,
-                obj,
-                reply,
-            } => {
-                // TODO: User must be a programmer...
-
-                let mut world_state = match self.database.new_world_state() {
-                    Ok(ws) => ws,
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
-                            .expect("Could not send verbs reply");
-                        return;
-                    }
-                };
-
-                let Ok(object) = match_object_ref(&perms, &perms, &obj, world_state.as_mut())
-                else {
-                    reply
-                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
-                        .expect("Could not send verbs reply");
-                    return;
-                };
-
-                let verbdefs = match world_state.verbs(&perms, &object) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
-                            .expect("Could not send verbs reply");
-                        return;
-                    }
-                };
-
-                reply
-                    .send(Ok(verbdefs))
-                    .expect("Could not send verbs reply");
-            }
-            SchedulerClientMsg::RequestVerbCode {
-                player: _,
-                perms,
-                obj,
-                verb,
-                reply,
-            } => {
-                let mut world_state = match self.database.new_world_state() {
-                    Ok(ws) => ws,
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::VerbRetrievalFailed(e)))
-                            .expect("Could not send verb code reply");
-                        return;
-                    }
-                };
-
-                // TODO: User must be a programmer...
-                let Ok(object) = match_object_ref(&perms, &perms, &obj, world_state.as_mut())
-                else {
-                    reply
-                        .send(Err(CommandExecutionError(CommandError::NoObjectMatch)))
-                        .expect("Could not send verb code reply");
-                    return;
-                };
-
-                let (program, verbdef) =
-                    match world_state.find_method_verb_on(&perms, &object, verb) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            reply
-                                .send(Err(SchedulerError::VerbRetrievalFailed(e)))
-                                .expect("Could not send verb code reply");
-                            return;
-                        }
-                    };
-
-                // If the binary is empty, just return empty rather than try to decode it.
-                if program.is_empty() {
-                    reply
-                        .send(Ok((verbdef, Vec::new())))
-                        .expect("Could not send verb code reply");
-                    return;
-                }
-
-                #[allow(irrefutable_let_patterns)]
-                let ProgramType::MooR(program) = program else {
-                    reply
-                        .send(Err(SchedulerError::VerbRetrievalFailed(
-                            WorldStateError::DatabaseError(format!(
-                                "Could not decompile verb binary, expected Moo program, got {:?}",
-                                program
-                            )),
-                        )))
-                        .expect("Could not send verb code reply");
-                    return;
-                };
-                let decompiled = match program_to_tree(&program) {
-                    Ok(decompiled) => decompiled,
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::VerbRetrievalFailed(
-                                WorldStateError::DatabaseError(format!(
-                                    "Could not decompile verb binary: {:?}",
-                                    e
-                                )),
-                            )))
-                            .expect("Could not send verb code reply");
-                        return;
-                    }
-                };
-
-                let unparsed = match unparse(&decompiled) {
-                    Ok(unparsed) => unparsed,
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::VerbRetrievalFailed(
-                                WorldStateError::DatabaseError(format!(
-                                    "Could not unparse decompiled verb: {:?}",
-                                    e
-                                )),
-                            )))
-                            .expect("Could not send verb code reply");
-                        return;
-                    }
-                };
-
-                reply
-                    .send(Ok((verbdef, unparsed)))
-                    .expect("Could not send verb code reply");
-            }
-            SchedulerClientMsg::ResolveObject { player, obj, reply } => {
-                let mut world_state = match self.database.new_world_state() {
-                    Ok(ws) => ws,
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::ObjectResolutionFailed(e)))
-                            .expect("Could not send object resolution reply");
-                        return;
-                    }
-                };
-
-                // Value is the resolved object or E_INVIND
-                let omatch = match match_object_ref(&player, &player, &obj, world_state.as_mut()) {
-                    Ok(oid) => v_obj(oid),
-                    Err(WorldStateError::ObjectNotFound(_)) => v_err(E_INVIND),
-                    Err(e) => {
-                        reply
-                            .send(Err(SchedulerError::ObjectResolutionFailed(e)))
-                            .expect("Could not send object resolution reply");
-                        return;
-                    }
-                };
-
-                reply
-                    .send(Ok(omatch))
-                    .expect("Could not send object resolution reply");
+                    .send(Ok(responses))
+                    .expect("Could not send batch execution reply");
             }
         }
     }
@@ -1926,53 +1604,5 @@ impl TaskQ {
         }
         // Prune out non-background tasks for the player.
         self.suspended.prune_foreground_tasks(player);
-    }
-}
-
-fn match_object_ref(
-    player: &Obj,
-    perms: &Obj,
-    obj_ref: &ObjectRef,
-    tx: &mut dyn WorldState,
-) -> Result<Obj, WorldStateError> {
-    match &obj_ref {
-        ObjectRef::Id(obj) => {
-            if !tx.valid(obj)? {
-                return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
-            }
-            Ok(*obj)
-        }
-        ObjectRef::SysObj(names) => {
-            // Follow the chain of properties from #0 to the actual object.
-            // The final value has to be an object, or this is an error.
-            let mut obj = SYSTEM_OBJECT;
-            for name in names {
-                let Ok(value) = tx.retrieve_property(perms, &obj, *name) else {
-                    return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
-                };
-                let Some(o) = value.as_object() else {
-                    return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
-                };
-                obj = o;
-            }
-            if !tx.valid(&obj)? {
-                return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
-            }
-            Ok(obj)
-        }
-        ObjectRef::Match(object_name) => {
-            let match_env = WsMatchEnv::new(tx, *perms);
-            let matcher = DefaultObjectNameMatcher {
-                env: match_env,
-                player: *player,
-            };
-            let Ok(Some(o)) = matcher.match_object(object_name) else {
-                return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
-            };
-            if !tx.valid(&o)? {
-                return Err(WorldStateError::ObjectNotFound(obj_ref.clone()));
-            }
-            Ok(o)
-        }
     }
 }

@@ -34,6 +34,8 @@ pub(crate) mod task_q;
 pub mod task_scheduler_client;
 mod tasks_db;
 pub mod workers;
+pub(crate) mod world_state_action;
+pub(crate) mod world_state_executor;
 
 pub const DEFAULT_FG_TICKS: usize = 60_000;
 pub const DEFAULT_BG_TICKS: usize = 30_000;
