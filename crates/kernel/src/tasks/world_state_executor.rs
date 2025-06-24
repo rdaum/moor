@@ -14,30 +14,65 @@
 use moor_common::matching::ObjectNameMatcher;
 use moor_common::matching::match_env::DefaultObjectNameMatcher;
 use moor_common::matching::ws_match_env::WsMatchEnv;
-use moor_common::model::{HasUuid, ObjectRef, ValSet, VerbAttrs, WorldState, WorldStateError};
+use moor_common::model::{
+    CommitResult, HasUuid, ObjectRef, ValSet, VerbAttrs, WorldState, WorldStateError,
+};
 use moor_common::program::ProgramType;
 use moor_common::tasks::SchedulerError::{CommandExecutionError, VerbProgramFailed};
 use moor_common::tasks::{CommandError, SchedulerError, VerbProgramError};
 use moor_compiler::{compile, program_to_tree, unparse};
 use moor_var::{E_INVIND, Obj, SYSTEM_OBJECT, v_err, v_obj};
+use std::sync::Arc;
 
 use crate::config::Config;
 use crate::tasks::world_state_action::{WorldStateAction, WorldStateResult};
 
-/// Executes WorldStateActions within a single transaction.
-/// This is instantiated per transaction to handle batch operations.
-pub struct WorldStateActionExecutor<'a> {
-    tx: &'a mut dyn WorldState,
-    config: &'a Config,
+/// Executes WorldStateActions within a transaction.
+/// Takes ownership of a transaction and executes actions within it.
+pub struct WorldStateActionExecutor {
+    tx: Box<dyn WorldState>,
+    config: Arc<Config>,
 }
 
-impl<'a> WorldStateActionExecutor<'a> {
-    pub fn new(tx: &'a mut dyn WorldState, config: &'a Config) -> Self {
+impl WorldStateActionExecutor {
+    pub fn new(tx: Box<dyn WorldState>, config: Arc<Config>) -> Self {
         Self { tx, config }
     }
 
-    /// Execute a single WorldStateAction within the transaction.
-    pub fn execute(
+    /// Execute a batch of WorldStateActions within the transaction.
+    pub fn execute_batch(
+        mut self,
+        actions: Vec<WorldStateAction>,
+        rollback: bool,
+    ) -> Result<Vec<WorldStateResult>, SchedulerError> {
+        let mut results = Vec::new();
+        for action in actions {
+            let result = self.execute_action(action)?;
+            results.push(result);
+        }
+
+        // Commit or rollback the transaction
+        if rollback {
+            self.tx.rollback().ok();
+        } else {
+            match self.tx.commit() {
+                Ok(CommitResult::Success) => {}
+                Ok(CommitResult::ConflictRetry) => {
+                    return Err(CommandExecutionError(CommandError::DatabaseError(
+                        WorldStateError::DatabaseError("Transaction conflict".to_string()),
+                    )));
+                }
+                Err(e) => {
+                    return Err(CommandExecutionError(CommandError::DatabaseError(e)));
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Execute a single action within the transaction.
+    fn execute_action(
         &mut self,
         action: WorldStateAction,
     ) -> Result<WorldStateResult, SchedulerError> {
@@ -49,7 +84,7 @@ impl<'a> WorldStateActionExecutor<'a> {
                 verb_name,
                 code,
             } => {
-                let object = match_object_ref(&player, &perms, &obj, self.tx)
+                let object = match_object_ref(&player, &perms, &obj, self.tx.as_mut())
                     .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
                 let (_, verbdef) = self
@@ -91,8 +126,9 @@ impl<'a> WorldStateActionExecutor<'a> {
                 obj,
                 property,
             } => {
-                let object = match_object_ref(&SYSTEM_OBJECT, &SYSTEM_OBJECT, &obj, self.tx)
-                    .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
+                let object =
+                    match_object_ref(&SYSTEM_OBJECT, &SYSTEM_OBJECT, &obj, self.tx.as_mut())
+                        .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
                 let value = self
                     .tx
@@ -107,7 +143,7 @@ impl<'a> WorldStateActionExecutor<'a> {
                 perms,
                 obj,
             } => {
-                let object = match_object_ref(&perms, &perms, &obj, self.tx)
+                let object = match_object_ref(&perms, &perms, &obj, self.tx.as_mut())
                     .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
                 let properties = self
@@ -133,7 +169,7 @@ impl<'a> WorldStateActionExecutor<'a> {
                 obj,
                 property,
             } => {
-                let object = match_object_ref(&player, &perms, &obj, self.tx)
+                let object = match_object_ref(&player, &perms, &obj, self.tx.as_mut())
                     .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
                 let value = self
@@ -154,7 +190,7 @@ impl<'a> WorldStateActionExecutor<'a> {
                 perms,
                 obj,
             } => {
-                let object = match_object_ref(&perms, &perms, &obj, self.tx)
+                let object = match_object_ref(&perms, &perms, &obj, self.tx.as_mut())
                     .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
                 let verbs = self
@@ -171,7 +207,7 @@ impl<'a> WorldStateActionExecutor<'a> {
                 obj,
                 verb,
             } => {
-                let object = match_object_ref(&perms, &perms, &obj, self.tx)
+                let object = match_object_ref(&perms, &perms, &obj, self.tx.as_mut())
                     .map_err(|_| CommandExecutionError(CommandError::NoObjectMatch))?;
 
                 let (program, verbdef) = self
@@ -212,7 +248,7 @@ impl<'a> WorldStateActionExecutor<'a> {
             }
 
             WorldStateAction::ResolveObject { player, obj } => {
-                let omatch = match match_object_ref(&player, &player, &obj, self.tx) {
+                let omatch = match match_object_ref(&player, &player, &obj, self.tx.as_mut()) {
                     Ok(oid) => v_obj(oid),
                     Err(WorldStateError::ObjectNotFound(_)) => v_err(E_INVIND),
                     Err(e) => return Err(SchedulerError::ObjectResolutionFailed(e)),

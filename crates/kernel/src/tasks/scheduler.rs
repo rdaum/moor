@@ -23,7 +23,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use moor_common::model::{CommitResult, Perms};
-use moor_common::model::{ObjectRef, WorldState, WorldStateError};
+use moor_common::model::{ObjectRef, WorldState};
 use moor_compiler::to_literal;
 use moor_db::Database;
 
@@ -34,7 +34,7 @@ use crate::tasks::task_q::{RunningTask, SuspensionQ, TaskQ, WakeCondition};
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::tasks_db::TasksDb;
 use crate::tasks::workers::{WorkerRequest, WorkerResponse};
-use crate::tasks::world_state_action::WorldStateResponse;
+use crate::tasks::world_state_action::{WorldStateAction, WorldStateResponse};
 use crate::tasks::world_state_executor::{WorldStateActionExecutor, match_object_ref};
 use crate::tasks::{
     DEFAULT_BG_SECONDS, DEFAULT_BG_TICKS, DEFAULT_FG_SECONDS, DEFAULT_FG_TICKS,
@@ -517,9 +517,9 @@ impl Scheduler {
                 rollback,
                 reply,
             } => {
-                let mut responses = Vec::new();
-                let mut tx = match self.database.new_world_state() {
-                    Ok(ws) => ws,
+                // Create transaction in scheduler thread
+                let tx = match self.database.new_world_state() {
+                    Ok(tx) => tx,
                     Err(e) => {
                         reply
                             .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
@@ -528,53 +528,41 @@ impl Scheduler {
                     }
                 };
 
-                // Process each action within the same transaction using the executor
-                let mut executor = WorldStateActionExecutor::new(tx.as_mut(), &self.config);
-                for request in actions {
-                    let response = match executor.execute(request.action) {
-                        Ok(result) => WorldStateResponse::Success {
-                            id: request.id,
-                            result,
-                        },
-                        Err(error) => {
-                            // On error, always continue (collect all errors)
-                            WorldStateResponse::Error {
-                                id: request.id,
-                                error,
+                // Extract just the actions from the requests
+                let action_vec: Vec<WorldStateAction> =
+                    actions.iter().map(|req| req.action.clone()).collect();
+                let config = self.config.clone();
+
+                // Spawn thread to execute actions, moving transaction into the thread
+                std::thread::Builder::new()
+                    .name("ws-actions".to_string())
+                    .spawn(move || {
+                        let executor = WorldStateActionExecutor::new(tx, config);
+
+                        match executor.execute_batch(action_vec, rollback) {
+                            Ok(results) => {
+                                // Build responses with the original request IDs
+                                let responses: Vec<WorldStateResponse> = actions
+                                    .into_iter()
+                                    .zip(results.into_iter())
+                                    .map(|(request, result)| WorldStateResponse::Success {
+                                        id: request.id,
+                                        result,
+                                    })
+                                    .collect();
+
+                                reply
+                                    .send(Ok(responses))
+                                    .expect("Could not send batch execution reply");
+                            }
+                            Err(error) => {
+                                reply
+                                    .send(Err(error))
+                                    .expect("Could not send batch execution reply");
                             }
                         }
-                    };
-                    responses.push(response);
-                }
-
-                // Commit or rollback the transaction
-                if rollback {
-                    tx.rollback().ok();
-                } else {
-                    match tx.commit() {
-                        Ok(CommitResult::Success) => {}
-                        Ok(CommitResult::ConflictRetry) => {
-                            reply
-                                .send(Err(CommandExecutionError(CommandError::DatabaseError(
-                                    WorldStateError::DatabaseError(
-                                        "Transaction conflict".to_string(),
-                                    ),
-                                ))))
-                                .expect("Could not send batch execution reply");
-                            return;
-                        }
-                        Err(e) => {
-                            reply
-                                .send(Err(CommandExecutionError(CommandError::DatabaseError(e))))
-                                .expect("Could not send batch execution reply");
-                            return;
-                        }
-                    }
-                }
-
-                reply
-                    .send(Ok(responses))
-                    .expect("Could not send batch execution reply");
+                    })
+                    .expect("Could not spawn WorldStateAction execution thread");
             }
         }
     }
