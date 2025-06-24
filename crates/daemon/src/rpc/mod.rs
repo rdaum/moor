@@ -20,7 +20,13 @@
 //! - Task completion delivery
 //! - System messages and input requests
 
+#[cfg(test)]
+pub mod hosts;
+#[cfg(not(test))]
 mod hosts;
+#[cfg(test)]
+pub mod message_handler;
+#[cfg(not(test))]
 mod message_handler;
 mod server;
 mod session;
@@ -29,3 +35,7 @@ mod transport;
 pub use message_handler::MessageHandler;
 pub use server::RpcServer;
 pub use session::SessionActions;
+
+#[cfg(test)]
+#[allow(unused_imports)]
+pub use transport::Transport;

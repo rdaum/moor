@@ -24,9 +24,9 @@ use uuid::Uuid;
 
 use super::hosts::Hosts;
 use super::session::{RpcSession, SessionActions};
-use super::transport::{RpcTransport, Transport};
+use super::transport::Transport;
 use crate::connections::ConnectionRegistry;
-use crate::event_log::EventLog;
+use crate::event_log::EventLogOps;
 use crate::task_monitor::TaskMonitor;
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, preposition_to_string};
 use moor_common::tasks::NarrativeEvent;
@@ -107,6 +107,10 @@ pub trait MessageHandler: Send + Sync {
     /// Get current listeners
     fn get_listeners(&self) -> Vec<(Obj, HostType, u16)>;
 
+    /// Get current connections
+    #[allow(dead_code)]
+    fn get_connections(&self) -> Vec<Obj>;
+
     fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError>;
 
     fn handle_session_event(&self, session_event: SessionActions) -> Result<(), eyre::Error>;
@@ -128,8 +132,8 @@ pub struct RpcMessageHandler {
     client_token_cache: PapayaHashMap<ClientToken, Instant, BuildHasherDefault<AHasher>>,
 
     mailbox_sender: Sender<SessionActions>,
-    event_log: Arc<EventLog>,
-    transport: Arc<RpcTransport>,
+    event_log: Arc<dyn EventLogOps>,
+    transport: Arc<dyn Transport>,
 }
 
 impl RpcMessageHandler {
@@ -141,9 +145,9 @@ impl RpcMessageHandler {
         connections: Box<dyn ConnectionRegistry + Send + Sync>,
         hosts: Arc<RwLock<Hosts>>,
         mailbox_sender: Sender<SessionActions>,
-        event_log: Arc<EventLog>,
+        event_log: Arc<dyn EventLogOps>,
         task_monitor: Arc<TaskMonitor>,
-        transport: Arc<RpcTransport>,
+        transport: Arc<dyn Transport>,
     ) -> Self {
         Self {
             config,
@@ -314,6 +318,10 @@ impl MessageHandler for RpcMessageHandler {
             .iter()
             .map(|(o, t, h)| (*o, *t, h.port()))
             .collect()
+    }
+
+    fn get_connections(&self) -> Vec<Obj> {
+        self.connections.connections()
     }
 
     fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError> {

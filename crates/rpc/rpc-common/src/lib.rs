@@ -25,7 +25,8 @@ pub use worker::{DaemonToWorkerMessage, DaemonToWorkerReply, WorkerToDaemonMessa
 
 pub use tokens::{
     AuthToken, ClientToken, HostToken, KeyError, MOOR_AUTH_TOKEN_FOOTER, MOOR_HOST_TOKEN_FOOTER,
-    MOOR_SESSION_TOKEN_FOOTER, MOOR_WORKER_TOKEN_FOOTER, WorkerToken, load_keypair, parse_keypair,
+    MOOR_SESSION_TOKEN_FOOTER, MOOR_WORKER_TOKEN_FOOTER, WorkerToken, load_keypair,
+    make_host_token, parse_keypair,
 };
 mod client;
 pub mod client_args;

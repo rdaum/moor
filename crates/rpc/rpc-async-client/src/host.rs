@@ -16,28 +16,14 @@ use crate::pubsub_client::hosts_events_recv;
 use crate::rpc_client::RpcSendClient;
 use rpc_common::{
     DaemonToHostReply, HOST_BROADCAST_TOPIC, HostBroadcastEvent, HostToDaemonMessage, HostToken,
-    HostType, MOOR_HOST_TOKEN_FOOTER, ReplyResult, RpcError,
+    HostType, ReplyResult, RpcError,
 };
-use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPrivateKey, Payload, Public, V4};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 use tmq::request;
 use tracing::{error, info, warn};
-
-/// Construct a PASETO token for this host, to authenticate the host itself to the daemon.
-pub fn make_host_token(private_key: &Key<64>, host_type: HostType) -> HostToken {
-    let privkey: PasetoAsymmetricPrivateKey<V4, Public> =
-        PasetoAsymmetricPrivateKey::from(private_key.as_ref());
-    let token = Paseto::<V4, Public>::default()
-        .set_footer(Footer::from(MOOR_HOST_TOKEN_FOOTER))
-        .set_payload(Payload::from(host_type.id_str()))
-        .try_sign(&privkey)
-        .expect("Unable to build Paseto host token");
-
-    HostToken(token)
-}
 
 pub async fn send_host_to_daemon_msg(
     rpc_client: &mut RpcSendClient,
