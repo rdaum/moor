@@ -2,46 +2,49 @@
 
 ## Introduction
 
-The mooR RPC/IPC messaging layer is a critical component of the mooR system, providing the communication infrastructure
-that
-connects different parts of the application architecture. It enables the flow of messages between daemon, hosts,
-workers, and clients, forming the backbone of the distributed system that powers mooR's virtual social spaces.
+The mooR RPC/IPC messaging layer is a critical component of the mooR system, providing the
+communication infrastructure that connects different parts of the application architecture. It
+enables the flow of messages between daemon, hosts, workers, and clients, forming the backbone of
+the distributed system that powers mooR's virtual social spaces.
 
-The messaging layer uses ZeroMQ (zmq/0mq) for inter-process communication, allowing for efficient and flexible message
-passing between
-the various components of the system. 0mq supports multiple messaging patterns, including request-reply and
-publish-subscribe.
+The messaging layer uses ZeroMQ (zmq/0mq) for inter-process communication, allowing for efficient
+and flexible message passing between the various components of the system. 0mq supports multiple
+messaging patterns, including request-reply and publish-subscribe.
 
-When running purely on a single host, the IPC (Inter-Process Communication) transport can be used for fast local
-communication.
+When running purely on a single host, the IPC (Inter-Process Communication) transport can be used
+for fast local communication.
 
-When running in a distributed environment, TCP transport is used to communicate over the network. In this manner,
-the daemon can run on one machine while the hosts and workers can run on different machines, allowing for a scalable,
-flexible,
-and resilient architecture.
+When running in a distributed environment, TCP transport is used to communicate over the network. In
+this manner, the daemon can run on one machine while the hosts and workers can run on different
+machines, allowing for a scalable, flexible, and resilient architecture.
 
 ## Purpose
 
 The messaging layer serves several key purposes:
 
-1. **Process Isolation**: Separates the daemon (core server) from host processes that handle client connections
+1. **Process Isolation**: Separates the daemon (core server) from host processes that handle client
+   connections
 2. **Distributed Operation**: Allows hosts and workers to run on different machines from the daemon
-3. **Protocol Management**: Handles the serialization and deserialization of messages between components
+3. **Protocol Management**: Handles the serialization and deserialization of messages between
+   components
 4. **Authentication**: Provides secure token-based authentication between system components
-5. **Event Broadcasting**: Enables publishing events to multiple subscribers (hosts, clients, workers)
+5. **Event Broadcasting**: Enables publishing events to multiple subscribers (hosts, clients,
+   workers)
 
 ## Architecture Components
 
 The mooR messaging layer follows a multi-process architecture with the following major components:
 
-- **Daemon**: The core server process that manages the database, virtual machine, and task scheduling.
+- **Daemon**: The core server process that manages the database, virtual machine, and task
+  scheduling.
 - **Hosts**: Processes that handle client connections, such as Telnet and WebSocket hosts.
-- **Workers**: Background processes that perform specific tasks and communicate with the daemon, notably for executing
-  outbound network (e.g. HTTP or even external database connections) requests initiated by the `daemon`.
+- **Workers**: Background processes that perform specific tasks and communicate with the daemon,
+  notably for executing outbound network (e.g. HTTP or even external database connections) requests
+  initiated by the `daemon`.
 
-Each of these components communicates with the others using 0MQ, and they can be independently stopped and restarted,
-without shutting down the whole system. This allows for e.g. rolling updates to the daemon or adding new hosts or
-workers without interrupting the service.
+Each of these components communicates with the others using 0MQ, and they can be independently
+stopped and restarted, without shutting down the whole system. This allows for e.g. rolling updates
+to the daemon or adding new hosts or workers without interrupting the service.
 
 ```mermaid
 flowchart TB
@@ -89,10 +92,9 @@ The daemon is the central process that:
 - Schedules and runs tasks
 - Processes RPC requests from hosts and workers
 
-The daemon is responsible for the core functionality of the system and acts as the main server, playing the role that
-a traditional "MOO" server would play back in the day, but without the `telnet` listen loop, which is handled by the
-host
-processes.
+The daemon is responsible for the core functionality of the system and acts as the main server,
+playing the role that a traditional "MOO" server would play back in the day, but without the
+`telnet` listen loop, which is handled by the host processes.
 
 ### 2. Hosts
 
@@ -187,7 +189,8 @@ Each token has a specific footer marker:
 - `MOOR_HOST_TOKEN_FOOTER`
 - `MOOR_WORKER_TOKEN_FOOTER`
 
-Tokens are created using asymmetric cryptography and have an expiration time, requiring periodic renewal.
+Tokens are created using asymmetric cryptography and have an expiration time, requiring periodic
+renewal.
 
 ## Message Types
 

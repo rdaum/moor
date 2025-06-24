@@ -2,9 +2,13 @@
 
 # mooR
 
-**mooR** is a network-accessible, multi-user, programmable system for building online social environments, games, and collaborative spaces. Think of it as a virtual world where participants can not only interact with each other, but also program and modify the environment itself.
+**mooR** is a network-accessible, multi-user, programmable system for building online social
+environments, games, and collaborative spaces. Think of it as a virtual world where participants can
+not only interact with each other, but also program and modify the environment itself.
 
-mooR is a modern, from-scratch rewrite of [LambdaMOO](https://en.wikipedia.org/wiki/MOO), maintaining full compatibility with existing LambdaMOO 1.8.x databases while adding significant enhancements.
+mooR is a modern, from-scratch rewrite of [LambdaMOO](https://en.wikipedia.org/wiki/MOO),
+maintaining full compatibility with existing LambdaMOO 1.8.x databases while adding significant
+enhancements.
 
 📖 **For comprehensive documentation, see our [mooR Book](https://rdaum.github.io/moor/).**
 
@@ -15,18 +19,29 @@ MOOs offer a unique digital experience through:
 - **Collaborative storytelling** where participants build a shared narrative
 - **Live programming** - modify the world while you're in it
 - **Community-driven development** through persistent interactions and relationships
-- **Rich interaction** that engages users through both traditional command-line and modern web interfaces
+- **Rich interaction** that engages users through both traditional command-line and modern web
+  interfaces
 - **Complete customizability** - everything from objects to commands can be programmed
 
-mooR builds on the foundation of MUDs (Multi-User Dungeons) and similar multiplayer online environments that have fostered creative communities for decades. Like modern sandbox games, MMORPGs, and social platforms, MOOs provide persistent worlds where players can build, create, and collaborate. What sets MOOs apart is their emphasis on live programming and community-driven content creation - imagine if Minecraft's creative mode, Discord's community features, and a code editor all lived in the same space.
+mooR builds on the foundation of MUDs (Multi-User Dungeons) and similar multiplayer online
+environments that have fostered creative communities for decades. Like modern sandbox games,
+MMORPGs, and social platforms, MOOs provide persistent worlds where players can build, create, and
+collaborate. What sets MOOs apart is their emphasis on live programming and community-driven content
+creation - imagine if Minecraft's creative mode, Discord's community features, and a code editor all
+lived in the same space.
 
-In a world of throwaway apps and walled gardens, mooR is cheerfully dragging the future into the past - taking the best ideas from decades of online community building and rebuilding them with modern technology.
+In a world of throwaway apps and walled gardens, mooR is cheerfully dragging the future into the
+past - taking the best ideas from decades of online community building and rebuilding them with
+modern technology.
 
 ## Status
 
-mooR is approaching its 1.0 release and is currently in late alpha, with a focus on documentation, testing and performance tuning. It successfully runs databases imported from LambdaMOO, with real world workloads, and lives through our cruel stress and performance testing regimen.
+mooR is approaching its 1.0 release and is currently in late alpha, with a focus on documentation,
+testing and performance tuning. It successfully runs databases imported from LambdaMOO, with real
+world workloads, and lives through our cruel stress and performance testing regimen.
 
-Database formats and APIs may still change before the stable release, and we reserve the right to keep adding features right up until the last minute.
+Database formats and APIs may still change before the stable release, and we reserve the right to
+keep adding features right up until the last minute.
 
 ## Key Features & Enhancements
 
@@ -74,7 +89,9 @@ Connect via:
 
 The server comes pre-loaded with JaysHouseCore, providing a ready-to-explore virtual world.
 
-For more detailed setup instructions, see the [Docker Compose Setup](https://rdaum.github.io/moor/the-system/docker-compose-setup.html) section in the mooR Book.
+For more detailed setup instructions, see the
+[Docker Compose Setup](https://rdaum.github.io/moor/the-system/docker-compose-setup.html) section in
+the mooR Book.
 
 ## For Developers & Contributors
 
@@ -108,9 +125,13 @@ mooR offers several opportunities for contribution:
 ## Resources
 
 - 📖 **[Complete Documentation](https://rdaum.github.io/moor/)** - The comprehensive mooR Book
-- 🏗️ **[Server Architecture](https://rdaum.github.io/moor/moor-architecture.html)** - Technical overview
-- 💻 **[MOO Programming Language](https://rdaum.github.io/moor/the-moo-programming-language.html)** - Language reference
-- 🚀 **[Running a Server](https://rdaum.github.io/moor/the-system/running-the-server.html)** - Deployment guide
+- 🏗️ **[Server Architecture](https://rdaum.github.io/moor/moor-architecture.html)** - Technical
+  overview
+- 💻
+  **[MOO Programming Language](https://rdaum.github.io/moor/the-moo-programming-language.html)** -
+  Language reference
+- 🚀 **[Running a Server](https://rdaum.github.io/moor/the-system/running-the-server.html)** -
+  Deployment guide
 
 ## License
 
