@@ -15,7 +15,7 @@ use eyre::Context;
 use moor_common::tasks::{NoopClientSession, Session, SessionError, SessionFactory};
 use moor_compiler::to_literal;
 use moor_kernel::SchedulerClient;
-use moor_kernel::tasks::scheduler_test_utils;
+use moor_kernel::testing::scheduler_test_utils;
 use moor_moot::{MootOptions, MootRunner, execute_moot_test};
 use moor_var::{Obj, Var, v_bool};
 use std::path::Path;

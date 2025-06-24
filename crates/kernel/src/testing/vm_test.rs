@@ -29,7 +29,7 @@ mod tests {
     use moor_var::SYSTEM_OBJECT;
     use moor_var::*;
 
-    use crate::tasks::vm_test_utils::call_verb;
+    use crate::testing::vm_test_utils::call_verb;
     use crate::vm::builtins::BuiltinRegistry;
     use moor_common::program::ProgramType;
     use moor_common::program::program::PrgInner;

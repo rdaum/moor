@@ -33,8 +33,6 @@ pub(crate) mod vm_unwind;
 pub mod builtins;
 mod moo_frame;
 pub mod vm_host;
-#[cfg(test)]
-mod vm_test;
 
 /// The set of parameters for a VM-requested fork.
 #[derive(Debug, Clone, Encode, Decode)]
