@@ -27,10 +27,7 @@ use moor_compiler::to_literal;
 use moor_db::Database;
 use moor_kernel::config::Config;
 use moor_kernel::tasks::NoopTasksDb;
-use moor_kernel::{
-    SchedulerClient,
-    tasks::{scheduler::Scheduler, scheduler_test_utils},
-};
+use moor_kernel::{SchedulerClient, tasks::scheduler::Scheduler, testing::scheduler_test_utils};
 use moor_moot::stylesheet::MOOT_STYLESHEET;
 use moor_moot::{MootOptions, MootRunner, execute_moot_test};
 use moor_var::{Obj, Var, v_bool};

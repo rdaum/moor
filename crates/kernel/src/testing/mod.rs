@@ -11,20 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-pub use crate::tasks::ServerOptions;
-pub use crate::tasks::scheduler_client::SchedulerClient;
-pub use crate::tasks::task::Task;
-pub use crate::tasks::task_q::{SuspendedTask, WakeCondition};
-pub use moor_common::tasks::TaskId;
+//! Testing utilities and mocks for the kernel crate
 
-use std::cell::Cell;
-use std::marker::PhantomData;
+pub mod mock_scheduler;
+pub mod scheduler_test_utils;
+pub mod vm_test;
+pub mod vm_test_utils;
 
-pub mod config;
-pub mod tasks;
-pub mod vm;
-
-pub mod testing;
-
-/// A phantom type for explicitly marking types as !Sync
-type PhantomUnsync = PhantomData<Cell<()>>;
+pub use mock_scheduler::{MockScenario, MockScheduler};
+pub use scheduler_test_utils::{ExecResult as SchedulerExecResult, call_command, call_eval};
+pub use vm_test_utils::{ExecResult as VmExecResult, call_eval_builtin, call_fork, call_verb};
