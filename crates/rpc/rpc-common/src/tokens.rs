@@ -11,10 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::HostType;
 use bincode::{Decode, Encode};
 use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey};
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use rusty_paseto::core::Key;
+use rusty_paseto::core::{Footer, Key, Paseto, PasetoAsymmetricPrivateKey, Payload, Public, V4};
 use std::path::Path;
 use thiserror::Error;
 
@@ -75,4 +76,17 @@ pub fn load_keypair(public_key: &Path, private_key: &Path) -> Result<(Key<64>, K
     };
 
     parse_keypair(&pubkey_pem, &privkey_pem)
+}
+
+/// Construct a PASETO token for this host, to authenticate the host itself to the daemon.
+pub fn make_host_token(private_key: &Key<64>, host_type: HostType) -> HostToken {
+    let privkey: PasetoAsymmetricPrivateKey<V4, Public> =
+        PasetoAsymmetricPrivateKey::from(private_key.as_ref());
+    let token = Paseto::<V4, Public>::default()
+        .set_footer(Footer::from(MOOR_HOST_TOKEN_FOOTER))
+        .set_payload(Payload::from(host_type.id_str()))
+        .try_sign(&privkey)
+        .expect("Unable to build Paseto host token");
+
+    HostToken(token)
 }

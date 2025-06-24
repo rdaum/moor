@@ -22,7 +22,7 @@ use super::message_handler::RpcMessageHandler;
 use super::session::{RpcSession, SessionActions};
 use super::transport::{RpcTransport, Transport};
 use crate::connections::ConnectionRegistry;
-use crate::event_log::EventLog;
+use crate::event_log::{EventLog, EventLogOps};
 use crate::rpc::MessageHandler;
 use crate::system_control::SystemControlHandle;
 use crate::task_monitor::TaskMonitor;
@@ -100,9 +100,9 @@ impl RpcServer {
             connections,
             hosts.clone(),
             mailbox_sender.clone(),
-            event_log.clone(),
+            event_log.clone() as Arc<dyn EventLogOps>,
             task_monitor.clone(),
-            transport.clone(),
+            transport.clone() as Arc<dyn Transport>,
         ));
 
         // Create the system control handle for the scheduler
@@ -199,7 +199,7 @@ impl SessionFactory for RpcServer {
         let session = RpcSession::new(
             client_id,
             *player,
-            self.event_log().clone(),
+            self.event_log().clone() as Arc<dyn EventLogOps>,
             self.mailbox_sender.clone(),
         );
         let session = Arc::new(session);

@@ -28,9 +28,10 @@ use futures::stream::FuturesUnordered;
 use moor_common::model::ObjectRef;
 use moor_var::{Obj, Symbol, Var, v_int};
 use rpc_async_client::rpc_client::RpcSendClient;
-use rpc_async_client::{make_host_token, start_host_session};
+use rpc_async_client::start_host_session;
 use rpc_common::DaemonToClientReply::TaskSubmitted;
 use rpc_common::client_args::RpcClientArgs;
+use rpc_common::make_host_token;
 use rpc_common::{
     AuthToken, ClientToken, DaemonToHostReply, HostClientToDaemonMessage, HostToDaemonMessage,
     HostToken, HostType, ReplyResult, load_keypair,

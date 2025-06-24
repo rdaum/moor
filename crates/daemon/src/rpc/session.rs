@@ -21,14 +21,14 @@ use moor_common::tasks::NarrativeEvent;
 use moor_common::tasks::{ConnectionDetails, Session, SessionError};
 use moor_var::Obj;
 
-use crate::event_log::EventLog;
+use crate::event_log::EventLogOps;
 
 /// A "session" that runs over the RPC system.
 pub struct RpcSession {
     client_id: Uuid,
     player: Obj,
     /// Shared event log for persistent storage across all sessions
-    event_log: Arc<EventLog>,
+    event_log: Arc<dyn EventLogOps>,
     /// Transaction-local buffer for events pending commit
     transaction_buffer: Mutex<Vec<(Obj, Box<NarrativeEvent>)>>,
     send: Sender<SessionActions>,
@@ -68,7 +68,7 @@ impl RpcSession {
     pub fn new(
         client_id: Uuid,
         player: Obj,
-        event_log: Arc<EventLog>,
+        event_log: Arc<dyn EventLogOps>,
         sender: Sender<SessionActions>,
     ) -> Self {
         Self {

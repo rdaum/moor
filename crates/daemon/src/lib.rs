@@ -13,6 +13,13 @@
 //
 
 pub mod connections;
+pub mod event_log;
 pub mod feature_args;
+pub mod rpc;
+pub mod system_control;
+pub mod task_monitor;
+
+#[cfg(test)]
+pub mod testing;
 
 pub use feature_args::FeatureArgs;
