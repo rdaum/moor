@@ -45,11 +45,11 @@ mod event_log;
 mod feature_args;
 mod rpc;
 mod system_control;
-mod task_monitor;
-mod tasks_fjall;
+mod tasks;
 mod workers;
 
 // main.rs
+use crate::tasks::tasks_db_fjall::FjallTasksDB;
 use moor_common::model::CommitResult;
 use moor_common::model::loader::LoaderInterface;
 
@@ -233,7 +233,7 @@ fn main() -> Result<(), Report> {
 
     let resolved_tasks_db_path = args.resolved_tasks_db_path();
     let tasks_db: Box<dyn TasksDb> = if config.features.persistent_tasks {
-        Box::new(tasks_fjall::FjallTasksDB::open(&resolved_tasks_db_path).0)
+        Box::new(FjallTasksDB::open(&resolved_tasks_db_path).0)
     } else {
         Box::new(NoopTasksDb {})
     };

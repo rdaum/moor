@@ -17,8 +17,8 @@ pub mod event_log;
 pub mod feature_args;
 pub mod rpc;
 pub mod system_control;
-pub mod task_monitor;
 
+pub mod tasks;
 #[cfg(test)]
 pub mod testing;
 

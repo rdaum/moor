@@ -25,6 +25,7 @@ mod tests {
     use crate::connections::ConnectionRegistryFactory;
     use crate::event_log::EventLogOps;
     use crate::rpc::{MessageHandler, hosts::Hosts, message_handler::RpcMessageHandler};
+    use crate::tasks::task_monitor::TaskMonitor;
     use crate::testing::{MockEventLog, MockTransport};
     use moor_var::{Obj, SYSTEM_OBJECT};
     use rpc_common::{HostToDaemonMessage, HostToken, HostType, make_host_token};
@@ -70,7 +71,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let hosts = Arc::new(RwLock::new(Hosts::default()));
         let (mailbox_sender, _mailbox_receiver) = flume::unbounded();
         let event_log = Arc::new(MockEventLog::new());
-        let task_monitor = crate::task_monitor::TaskMonitor::new(mailbox_sender.clone());
+        let task_monitor = TaskMonitor::new(mailbox_sender.clone());
         let transport = Arc::new(MockTransport::new());
 
         // Create scheduler and start it in background

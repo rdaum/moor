@@ -25,7 +25,7 @@ use crate::connections::ConnectionRegistry;
 use crate::event_log::{EventLog, EventLogOps};
 use crate::rpc::MessageHandler;
 use crate::system_control::SystemControlHandle;
-use crate::task_monitor::TaskMonitor;
+use crate::tasks::task_monitor::TaskMonitor;
 use moor_common::tasks::{Session, SessionError, SessionFactory};
 use moor_kernel::SchedulerClient;
 use moor_kernel::config::Config;

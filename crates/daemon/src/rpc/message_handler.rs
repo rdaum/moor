@@ -27,7 +27,7 @@ use super::session::{RpcSession, SessionActions};
 use super::transport::Transport;
 use crate::connections::ConnectionRegistry;
 use crate::event_log::EventLogOps;
-use crate::task_monitor::TaskMonitor;
+use crate::tasks::task_monitor::TaskMonitor;
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, preposition_to_string};
 use moor_common::tasks::NarrativeEvent;
 use moor_common::tasks::SchedulerError::CommandExecutionError;
@@ -457,10 +457,7 @@ impl MessageHandler for RpcMessageHandler {
 }
 
 impl RpcMessageHandler {
-    fn publish_narrative_events(
-        &self,
-        events: &[(Obj, Box<NarrativeEvent>)],
-    ) -> Result<(), Error> {
+    fn publish_narrative_events(&self, events: &[(Obj, Box<NarrativeEvent>)]) -> Result<(), Error> {
         self.transport
             .publish_narrative_events(events, self.connections.as_ref())
     }
