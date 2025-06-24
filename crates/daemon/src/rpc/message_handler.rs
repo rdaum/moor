@@ -24,9 +24,9 @@ use uuid::Uuid;
 
 use super::hosts::Hosts;
 use super::session::{RpcSession, SessionActions};
-use super::transport::{RpcTransport, Transport};
+use super::transport::Transport;
 use crate::connections::ConnectionRegistry;
-use crate::event_log::EventLog;
+use crate::event_log::EventLogOps;
 use crate::task_monitor::TaskMonitor;
 use moor_common::model::{Named, ObjectRef, PropFlag, ValSet, VerbFlag, preposition_to_string};
 use moor_common::tasks::NarrativeEvent;
@@ -107,9 +107,13 @@ pub trait MessageHandler: Send + Sync {
     /// Get current listeners
     fn get_listeners(&self) -> Vec<(Obj, HostType, u16)>;
 
+    /// Get current connections
+    #[allow(dead_code)]
+    fn get_connections(&self) -> Vec<Obj>;
+
     fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError>;
 
-    fn handle_session_event(&self, session_event: SessionActions) -> Result<(), eyre::Error>;
+    fn handle_session_event(&self, session_event: SessionActions) -> Result<(), Error>;
 }
 
 /// Implementation of message handler that contains the actual business logic
@@ -128,8 +132,8 @@ pub struct RpcMessageHandler {
     client_token_cache: PapayaHashMap<ClientToken, Instant, BuildHasherDefault<AHasher>>,
 
     mailbox_sender: Sender<SessionActions>,
-    event_log: Arc<EventLog>,
-    transport: Arc<RpcTransport>,
+    event_log: Arc<dyn EventLogOps>,
+    transport: Arc<dyn Transport>,
 }
 
 impl RpcMessageHandler {
@@ -141,9 +145,9 @@ impl RpcMessageHandler {
         connections: Box<dyn ConnectionRegistry + Send + Sync>,
         hosts: Arc<RwLock<Hosts>>,
         mailbox_sender: Sender<SessionActions>,
-        event_log: Arc<EventLog>,
+        event_log: Arc<dyn EventLogOps>,
         task_monitor: Arc<TaskMonitor>,
-        transport: Arc<RpcTransport>,
+        transport: Arc<dyn Transport>,
     ) -> Self {
         Self {
             config,
@@ -316,6 +320,10 @@ impl MessageHandler for RpcMessageHandler {
             .collect()
     }
 
+    fn get_connections(&self) -> Vec<Obj> {
+        self.connections.connections()
+    }
+
     fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError> {
         // Send ping to all clients
         let client_event = ClientsBroadcastEvent::PingPong(SystemTime::now());
@@ -335,7 +343,7 @@ impl MessageHandler for RpcMessageHandler {
         Ok(())
     }
 
-    fn handle_session_event(&self, session_event: SessionActions) -> Result<(), eyre::Error> {
+    fn handle_session_event(&self, session_event: SessionActions) -> Result<(), Error> {
         match session_event {
             SessionActions::PublishNarrativeEvents(events) => {
                 if let Err(e) = self.publish_narrative_events(&events) {
@@ -452,7 +460,7 @@ impl RpcMessageHandler {
     fn publish_narrative_events(
         &self,
         events: &[(Obj, Box<NarrativeEvent>)],
-    ) -> Result<(), eyre::Error> {
+    ) -> Result<(), Error> {
         self.transport
             .publish_narrative_events(events, self.connections.as_ref())
     }
@@ -477,7 +485,7 @@ impl RpcMessageHandler {
         let all_client_ids = self.connections.client_ids_for(player)?;
 
         // Send disconnect event to all client connections for this player
-        let event = rpc_common::ClientEvent::Disconnect();
+        let event = ClientEvent::Disconnect();
         let _event_bytes = bincode::encode_to_vec(event, bincode::config::standard())
             .expect("Unable to serialize disconnection event");
 
@@ -491,13 +499,12 @@ impl RpcMessageHandler {
         Ok(())
     }
 
-    // Placeholder methods - need proper implementation
     pub fn request_client_input(
         &self,
         client_id: Uuid,
         player: Obj,
         input_request_id: Uuid,
-    ) -> Result<(), eyre::Error> {
+    ) -> Result<(), Error> {
         // Validate first - check that the player matches the logged-in player for this client
         let Some(logged_in_player) = self.connections.player_object_for_client(client_id) else {
             return Err(eyre::eyre!("No connection for player"));
@@ -515,7 +522,7 @@ impl RpcMessageHandler {
         client_id: Uuid,
         player: Obj,
         message: String,
-    ) -> Result<(), eyre::Error> {
+    ) -> Result<(), Error> {
         let event = ClientEvent::SystemMessage(player, message);
         self.transport.publish_client_event(client_id, event)
     }
@@ -581,7 +588,7 @@ impl RpcMessageHandler {
         &self,
         client_id: Uuid,
         player: Option<Obj>,
-    ) -> Result<Vec<moor_common::tasks::ConnectionDetails>, moor_common::tasks::SessionError> {
+    ) -> Result<Vec<ConnectionDetails>, moor_common::tasks::SessionError> {
         if let Some(target_player) = player {
             // Get connection details for the specified player
             let client_ids = self.connections.client_ids_for(target_player)?;
@@ -656,8 +663,8 @@ impl RpcMessageHandler {
     fn publish_task_completion(
         &self,
         client_id: Uuid,
-        task_event: rpc_common::ClientEvent,
-    ) -> Result<(), eyre::Error> {
+        task_event: ClientEvent,
+    ) -> Result<(), Error> {
         self.transport.publish_client_event(client_id, task_event)
     }
 

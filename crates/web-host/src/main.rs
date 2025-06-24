@@ -34,9 +34,10 @@ use rolldown::{
     RawMinifyOptions, SourceMapType, Watcher,
 };
 use rpc_async_client::{
-    ListenersClient, ListenersMessage, make_host_token, process_hosts_events, start_host_session,
+    ListenersClient, ListenersMessage, process_hosts_events, start_host_session,
 };
 use rpc_common::client_args::RpcClientArgs;
+use rpc_common::make_host_token;
 use rpc_common::{HostType, load_keypair};
 use serde_derive::{Deserialize, Serialize};
 use std::net::SocketAddr;

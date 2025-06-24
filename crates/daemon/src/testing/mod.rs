@@ -11,18 +11,14 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#![allow(clippy::too_many_arguments)]
+//! Testing utilities for the daemon
 
-pub use host::{process_hosts_events, send_host_to_daemon_msg, start_host_session};
-pub use listeners::{ListenersClient, ListenersError, ListenersMessage};
-pub use rpc_common::make_host_token;
-pub use worker::{attach_worker, make_worker_token};
-pub use worker_loop::{WorkerRpcError, worker_loop};
-pub use worker_rpc_client::WorkerRpcSendClient;
-mod host;
-mod listeners;
-pub mod pubsub_client;
-pub mod rpc_client;
-mod worker;
-mod worker_loop;
-mod worker_rpc_client;
+pub mod mock_event_log;
+pub mod mock_transport;
+
+#[cfg(test)]
+mod integration_test;
+
+pub use crate::event_log::EventLogOps;
+pub use mock_event_log::MockEventLog;
+pub use mock_transport::MockTransport;

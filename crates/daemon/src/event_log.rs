@@ -25,6 +25,39 @@ use moor_common::tasks::{Event, NarrativeEvent, Presentation};
 use moor_var::{BINCODE_CONFIG, Obj};
 use tracing::{debug, error, info};
 
+/// Trait abstracting event log operations for testing
+pub trait EventLogOps: Send + Sync {
+    /// Add a new event to the log, returns the event's UUID
+    fn append(&self, player: Obj, event: Box<NarrativeEvent>) -> Uuid;
+
+    /// Get current presentations for a player
+    fn current_presentations(&self, player: Obj) -> HashMap<String, Presentation>;
+
+    /// Dismiss a presentation by ID
+    fn dismiss_presentation(&self, player: Obj, presentation_id: String);
+
+    /// Get narrative events for a specific player since the given UUID
+    fn events_for_player_since(
+        &self,
+        player: Obj,
+        since: Option<Uuid>,
+    ) -> Vec<LoggedNarrativeEvent>;
+
+    /// Get narrative events for a specific player until the given UUID
+    fn events_for_player_until(
+        &self,
+        player: Obj,
+        until: Option<Uuid>,
+    ) -> Vec<LoggedNarrativeEvent>;
+
+    /// Get narrative events for a specific player since N seconds ago
+    fn events_for_player_since_seconds(
+        &self,
+        player: Obj,
+        seconds_ago: u64,
+    ) -> Vec<LoggedNarrativeEvent>;
+}
+
 /// An immutable narrative event record in the chronological log
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct LoggedNarrativeEvent {
@@ -997,6 +1030,44 @@ impl Drop for EventLog {
 impl Default for EventLog {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl EventLogOps for EventLog {
+    fn append(&self, player: Obj, event: Box<NarrativeEvent>) -> Uuid {
+        self.append(player, event)
+    }
+
+    fn current_presentations(&self, player: Obj) -> HashMap<String, Presentation> {
+        self.current_presentations(player)
+    }
+
+    fn dismiss_presentation(&self, player: Obj, presentation_id: String) {
+        self.dismiss_presentation(player, presentation_id)
+    }
+
+    fn events_for_player_since(
+        &self,
+        player: Obj,
+        since: Option<Uuid>,
+    ) -> Vec<LoggedNarrativeEvent> {
+        self.events_for_player_since(player, since)
+    }
+
+    fn events_for_player_until(
+        &self,
+        player: Obj,
+        until: Option<Uuid>,
+    ) -> Vec<LoggedNarrativeEvent> {
+        self.events_for_player_until(player, until)
+    }
+
+    fn events_for_player_since_seconds(
+        &self,
+        player: Obj,
+        seconds_ago: u64,
+    ) -> Vec<LoggedNarrativeEvent> {
+        self.events_for_player_since_seconds(player, seconds_ago)
     }
 }
 
