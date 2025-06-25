@@ -241,6 +241,69 @@ impl MockTransport {
     pub fn send_client_broadcast_event(&self, event: ClientsBroadcastEvent) {
         self.client_broadcast_events.lock().unwrap().push(event);
     }
+
+    /// Wait for at least the specified number of narrative events to be captured
+    /// Returns true if the condition is met within the timeout, false otherwise
+    pub fn wait_for_narrative_events(&self, min_count: usize, timeout_ms: u64) -> bool {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(timeout_ms);
+
+        while start.elapsed() < timeout {
+            if self.narrative_event_count() >= min_count {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        false
+    }
+
+    /// Wait for at least the specified number of client events to be captured
+    /// Returns true if the condition is met within the timeout, false otherwise
+    pub fn wait_for_client_events(&self, min_count: usize, timeout_ms: u64) -> bool {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(timeout_ms);
+
+        while start.elapsed() < timeout {
+            if self.client_event_count() >= min_count {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        false
+    }
+
+    /// Wait for at least the specified number of client replies to be captured
+    /// Returns true if the condition is met within the timeout, false otherwise
+    pub fn wait_for_client_replies(&self, min_count: usize, timeout_ms: u64) -> bool {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(timeout_ms);
+
+        while start.elapsed() < timeout {
+            if self.client_replies.lock().unwrap().len() >= min_count {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        false
+    }
+
+    /// Wait for a specific condition to be met with a custom predicate
+    /// Returns true if the condition is met within the timeout, false otherwise
+    pub fn wait_for_condition<F>(&self, predicate: F, timeout_ms: u64) -> bool
+    where
+        F: Fn(&MockTransport) -> bool,
+    {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(timeout_ms);
+
+        while start.elapsed() < timeout {
+            if predicate(self) {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        false
+    }
 }
 
 impl Default for MockTransport {

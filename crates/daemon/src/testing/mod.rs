@@ -17,7 +17,10 @@ pub mod mock_event_log;
 pub mod mock_transport;
 
 #[cfg(test)]
-mod integration_test;
+mod rpc_integration_test;
+
+#[cfg(test)]
+mod scheduler_integration_test;
 
 pub use crate::event_log::EventLogOps;
 pub use mock_event_log::MockEventLog;

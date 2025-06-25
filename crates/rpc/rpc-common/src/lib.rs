@@ -85,8 +85,8 @@ pub enum RpcMessageError {
     NoConnection,
     #[error("Could not retrieve system property")]
     ErrorCouldNotRetrieveSysProp(String),
-    #[error("Could not login")]
-    LoginTaskFailed,
+    #[error("Could not login: {0}")]
+    LoginTaskFailed(String),
     #[error("Could not create session")]
     CreateSessionFailed,
     #[error("Permission denied")]

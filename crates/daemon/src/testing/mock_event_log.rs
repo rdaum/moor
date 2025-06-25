@@ -58,6 +58,69 @@ impl MockEventLog {
         self.narrative_events.lock().unwrap().clear();
         self.presentations.lock().unwrap().clear();
     }
+
+    /// Get count of narrative events
+    pub fn narrative_event_count(&self) -> usize {
+        self.narrative_events.lock().unwrap().len()
+    }
+
+    /// Get count of events for a specific player
+    pub fn event_count_for_player(&self, player: Obj) -> usize {
+        self.narrative_events
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|event| event.player == player)
+            .count()
+    }
+
+    /// Wait for at least the specified number of narrative events to be logged
+    /// Returns true if the condition is met within the timeout, false otherwise
+    pub fn wait_for_narrative_events(&self, min_count: usize, timeout_ms: u64) -> bool {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(timeout_ms);
+
+        while start.elapsed() < timeout {
+            if self.narrative_event_count() >= min_count {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        false
+    }
+
+    /// Wait for at least the specified number of events for a specific player
+    /// Returns true if the condition is met within the timeout, false otherwise
+    pub fn wait_for_player_events(&self, player: Obj, min_count: usize, timeout_ms: u64) -> bool {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(timeout_ms);
+
+        while start.elapsed() < timeout {
+            if self.event_count_for_player(player) >= min_count {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        false
+    }
+
+    /// Wait for a specific condition to be met with a custom predicate
+    /// Returns true if the condition is met within the timeout, false otherwise
+    pub fn wait_for_condition<F>(&self, predicate: F, timeout_ms: u64) -> bool
+    where
+        F: Fn(&MockEventLog) -> bool,
+    {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(timeout_ms);
+
+        while start.elapsed() < timeout {
+            if predicate(self) {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        false
+    }
 }
 
 impl Default for MockEventLog {

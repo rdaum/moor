@@ -1335,7 +1335,7 @@ impl RpcMessageHandler {
                 Ok((_, Err(e))) => {
                     error!(error = ?e, "Error waiting for login results");
 
-                    return Err(RpcMessageError::LoginTaskFailed);
+                    return Err(RpcMessageError::LoginTaskFailed(e.to_string()));
                 }
                 Err(e) => {
                     error!(error = ?e, "Error waiting for login results");

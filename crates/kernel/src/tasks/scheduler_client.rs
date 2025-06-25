@@ -261,6 +261,18 @@ impl SchedulerClient {
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
+    /// Check if the scheduler is alive and responding (lightweight operation)
+    pub fn check_status(&self) -> Result<(), SchedulerError> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send(SchedulerClientMsg::CheckStatus(reply))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?;
+
+        receive
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| SchedulerError::SchedulerNotResponding)?
+    }
+
     pub fn request_verbs(
         &self,
         player: &Obj,
@@ -466,6 +478,8 @@ pub enum SchedulerClientMsg {
     Checkpoint(oneshot::Sender<Result<(), SchedulerError>>),
     /// Submit a (non-task specific) request to shutdown the scheduler
     Shutdown(String, oneshot::Sender<Result<(), SchedulerError>>),
+    /// Check if the scheduler is alive and responding (lightweight operation)
+    CheckStatus(oneshot::Sender<Result<(), SchedulerError>>),
     /// Execute a batch of WorldStateActions
     ExecuteWorldStateActions {
         actions: Vec<crate::tasks::world_state_action::WorldStateRequest>,

@@ -488,6 +488,10 @@ impl MockScheduler {
                 reply.send(Ok(())).ok();
             }
 
+            SchedulerClientMsg::CheckStatus(reply) => {
+                reply.send(Ok(())).ok();
+            }
+
             // For simplicity, handle remaining message types with basic success responses
             _ => {
                 // Most other operations just succeed in this simplified mock

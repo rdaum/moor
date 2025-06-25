@@ -512,6 +512,10 @@ impl Scheduler {
                 let result = self.checkpoint();
                 reply.send(result).expect("Could not send checkpoint reply");
             }
+            SchedulerClientMsg::CheckStatus(reply) => {
+                // Lightweight status check - just confirm we're alive and responding
+                reply.send(Ok(())).expect("Could not send status reply");
+            }
             SchedulerClientMsg::ExecuteWorldStateActions {
                 actions,
                 rollback,

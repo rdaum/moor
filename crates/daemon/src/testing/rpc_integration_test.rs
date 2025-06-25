@@ -1101,7 +1101,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let login_failed = matches!(
             &login_result,
             Ok(rpc_common::DaemonToClientReply::LoginResult(None)) // Failed login
-                | Err(rpc_common::RpcMessageError::LoginTaskFailed)
+                | Err(rpc_common::RpcMessageError::LoginTaskFailed(_))
         );
         // Note: Due to 20% success rate, we might occasionally get success, but failure is expected
         if !login_failed && login_result.is_err() {

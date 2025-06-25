@@ -23,7 +23,7 @@ use eyre::{bail, eyre};
 use fs2::FileExt;
 
 use crate::connections::ConnectionRegistryFactory;
-use crate::rpc::RpcServer;
+use crate::rpc::{RpcServer, Transport, transport::RpcTransport};
 use crate::workers::WorkersServer;
 use clap::Parser;
 use eyre::Report;
@@ -121,6 +121,19 @@ fn perform_import(
         bail!("Import failed");
     }
     Ok(())
+}
+
+/// Create the RPC transport layer for production use
+fn create_rpc_transport(
+    zmq_context: zmq::Context,
+    kill_switch: Arc<AtomicBool>,
+    events_listen: &str,
+) -> Result<Arc<dyn Transport>, Report> {
+    let transport = Arc::new(
+        RpcTransport::new(zmq_context, kill_switch, events_listen)
+            .map_err(|e| eyre!("Failed to create RPC transport: {}", e))?,
+    ) as Arc<dyn Transport>;
+    Ok(transport)
 }
 
 /// Host for the moor runtime.
@@ -268,13 +281,20 @@ fn main() -> Result<(), Report> {
     let kill_switch = Arc::new(AtomicBool::new(false));
 
     let resolved_events_db_path = args.resolved_events_db_path();
+
+    // Create the RPC transport
+    let rpc_transport = create_rpc_transport(
+        zmq_ctx.clone(),
+        kill_switch.clone(),
+        args.events_listen.as_str(),
+    )?;
+
     let (rpc_server, task_monitor, system_control) = RpcServer::new(
         kill_switch.clone(),
         public_key.clone(),
         private_key.clone(),
         connections,
-        zmq_ctx.clone(),
-        args.events_listen.as_str(),
+        rpc_transport,
         config.clone(),
         &resolved_events_db_path,
     );

@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use super::message_handler::RpcMessageHandler;
 use super::session::{RpcSession, SessionActions};
-use super::transport::{RpcTransport, Transport};
+use super::transport::Transport;
 use crate::connections::ConnectionRegistry;
 use crate::event_log::{EventLog, EventLogOps};
 use crate::rpc::MessageHandler;
@@ -58,15 +58,11 @@ impl RpcServer {
         public_key: Key<32>,
         private_key: Key<64>,
         connections: Box<dyn ConnectionRegistry + Send + Sync>,
-        zmq_context: zmq::Context,
-        narrative_endpoint: &str,
+        transport: Arc<dyn Transport>,
         config: Arc<Config>,
         events_db_path: &std::path::Path,
     ) -> (Self, Arc<TaskMonitor>, SystemControlHandle) {
-        info!(
-            "Creating new RPC server; with {} ZMQ IO threads...",
-            zmq_context.get_io_threads().unwrap()
-        );
+        info!("Creating new RPC server...");
 
         info!(
             "Created connections list, with {} initial known connections",
@@ -86,12 +82,6 @@ impl RpcServer {
         // Create hosts as Arc<RwLock> so it can be shared
         let hosts = Arc::new(RwLock::new(Default::default()));
 
-        // Create the transport layer first
-        let transport = Arc::new(
-            RpcTransport::new(zmq_context.clone(), kill_switch.clone(), narrative_endpoint)
-                .expect("Failed to create RpcTransport"),
-        );
-
         // Create the business logic handler
         let message_handler = Arc::new(RpcMessageHandler::new(
             config,
@@ -102,7 +92,7 @@ impl RpcServer {
             mailbox_sender.clone(),
             event_log.clone() as Arc<dyn EventLogOps>,
             task_monitor.clone(),
-            transport.clone() as Arc<dyn Transport>,
+            transport.clone(),
         ));
 
         // Create the system control handle for the scheduler
@@ -187,6 +177,11 @@ impl RpcServer {
     // Clean interface methods for external modules that need limited access
     pub fn event_log(&self) -> &Arc<EventLog> {
         &self.event_log
+    }
+
+    #[allow(dead_code)]
+    pub fn message_handler(&self) -> &Arc<dyn MessageHandler> {
+        &self.message_handler
     }
 }
 
