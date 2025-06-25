@@ -53,7 +53,7 @@ use moor_common::tasks::{Session, SessionFactory, SystemControl};
 use moor_common::util::PerfTimerGuard;
 use moor_objdef::{collect_object_definitions, dump_object_definitions};
 use moor_textdump::{TextdumpWriter, make_textdump};
-use moor_var::{E_INVARG, E_INVIND, E_PERM, E_TYPE, v_bool_int};
+use moor_var::{E_INVARG, E_INVIND, E_PERM, E_TYPE, v_bool_int, v_error};
 use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
 use moor_var::{Obj, Variant};
 use moor_var::{SYSTEM_OBJECT, v_list};
@@ -956,16 +956,12 @@ impl Scheduler {
     fn handle_worker_response(&mut self, worker_response: WorkerResponse) {
         let (request_id, response_value) = match worker_response {
             WorkerResponse::Error { request_id, error } => {
-                // TODO: these should be returning full ErrorPack stuff, not these amputated codes
-                //  which tell you almost nothing
-                //  Custom errors could also be used here, but are not turned on for all servers.
-                //  So some intelligence will be required to figure out what to do with this.
                 let err = match error {
-                    WorkerError::PermissionDenied(_) => E_PERM,
-                    WorkerError::NoWorkerAvailable(_) => E_TYPE,
-                    _ => E_INVARG,
+                    WorkerError::PermissionDenied(e) => E_PERM.with_msg(|| e),
+                    WorkerError::NoWorkerAvailable(e) => E_TYPE.with_msg(|| e.to_string()),
+                    _ => E_INVARG.with_msg(|| "Invalid worker response".to_string()),
                 };
-                (request_id, v_err(err))
+                (request_id, v_error(err))
             }
             WorkerResponse::Response {
                 request_id,
