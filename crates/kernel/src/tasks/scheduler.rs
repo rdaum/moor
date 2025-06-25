@@ -544,7 +544,7 @@ impl Scheduler {
                                 // Build responses with the original request IDs
                                 let responses: Vec<WorldStateResponse> = actions
                                     .into_iter()
-                                    .zip(results.into_iter())
+                                    .zip(results)
                                     .map(|(request, result)| WorldStateResponse::Success {
                                         id: request.id,
                                         result,
