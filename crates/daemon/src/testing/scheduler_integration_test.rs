@@ -400,13 +400,26 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             );
         }
 
-        // Check that we got some kind of response (TaskSubmitted at minimum)
+        // Should be LoginResult(Some(  with a ComnnectType Connected, and a objid 2
         match login_result.unwrap() {
-            rpc_common::DaemonToClientReply::TaskSubmitted(_) => {
-                // This is expected - task was submitted to scheduler
-            }
-            rpc_common::DaemonToClientReply::LoginResult(Some(_)) => {
-                // This would be ideal - login completed synchronously
+            rpc_common::DaemonToClientReply::LoginResult(Some((
+                _auth_token,
+                connect_type,
+                player_obj,
+            ))) => {
+                assert_eq!(
+                    connect_type,
+                    rpc_common::ConnectType::Connected,
+                    "Expected connected type"
+                );
+                assert!(player_obj.id().0 > 0, "Expected valid player object ID");
+
+                // Verify player object is tracked in connections
+                let connections = env.message_handler.get_connections();
+                assert!(
+                    connections.contains(&player_obj),
+                    "Player object should be tracked in connections"
+                );
             }
             other => {
                 // Get debugging information for unexpected results too
