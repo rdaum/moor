@@ -138,17 +138,17 @@ impl WebSocketConnection {
             // previous.
             //
             let input_future = async {
-                if self.pending_task.is_some() && expecting_input.is_empty() {
-                    let pt = self.pending_task.as_ref().unwrap();
-                    if pt.start_time.elapsed() > TASK_TIMEOUT {
-                        error!(
-                            "Task {} stuck without response for more than {TASK_TIMEOUT:?}",
-                            pt.task_id
-                        );
-                        self.pending_task = None;
-                    } else {
-                        return ReadEvent::PendingEvent;
-                    }
+                if let Some(pt) = &self.pending_task
+                    && expecting_input.is_empty()
+                    && pt.start_time.elapsed() > TASK_TIMEOUT
+                {
+                    error!(
+                        "Task {} stuck without response for more than {TASK_TIMEOUT:?}",
+                        pt.task_id
+                    );
+                    self.pending_task = None;
+                } else if self.pending_task.is_some() && expecting_input.is_empty() {
+                    return ReadEvent::PendingEvent;
                 }
 
                 let Some(Ok(line)) = ws_receiver.next().await else {
@@ -269,24 +269,24 @@ impl WebSocketConnection {
                 ws_sender.close().await.expect("Unable to close connection");
             }
             ClientEvent::TaskError(ti, te) => {
-                if let Some(pending_event) = self.pending_task.take() {
-                    if pending_event.task_id != ti {
-                        error!(
-                            "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
-                        );
-                    }
+                if let Some(pending_event) = self.pending_task.take()
+                    && pending_event.task_id != ti
+                {
+                    error!(
+                        "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
+                    );
                 }
                 self.handle_task_error(ws_sender, te)
                     .await
                     .expect("Unable to handle task error");
             }
             ClientEvent::TaskSuccess(ti, s) => {
-                if let Some(pending_event) = self.pending_task.take() {
-                    if pending_event.task_id != ti {
-                        error!(
-                            "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
-                        );
-                    }
+                if let Some(pending_event) = self.pending_task.take()
+                    && pending_event.task_id != ti
+                {
+                    error!(
+                        "Inbound task response {ti} does not belong to the event we submitted and are expecting {pending_event:?}"
+                    );
                 }
                 Self::emit_value(ws_sender, ValueResult(s)).await;
             }

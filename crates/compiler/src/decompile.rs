@@ -815,8 +815,9 @@ impl Decompile {
                 // So first look for the Put
                 for arm in &mut except_arms {
                     let mut next_opcode = self.next()?;
-                    if let Op::Put(varname) = next_opcode {
-                        let varname = self.decompile_name(&varname)?;
+                    if let Op::Put(varname) = next_opcode
+                        && let Ok(varname) = self.decompile_name(&varname)
+                    {
                         arm.id = Some(varname);
                         next_opcode = self.next()?;
                     }

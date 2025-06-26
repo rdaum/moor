@@ -305,12 +305,10 @@ impl<'a> Unparse<'a> {
                 let is_const = vars
                     .iter()
                     .any(|var| self.tree.variables.decl_for(&var.id).constant);
-                if is_local {
-                    if is_const {
-                        buffer.push_str("const ");
-                    } else {
-                        buffer.push_str("let ");
-                    }
+                if is_local && is_const {
+                    buffer.push_str("const ");
+                } else if is_local {
+                    buffer.push_str("let ");
                 }
                 buffer.push('{');
                 let len = vars.len();

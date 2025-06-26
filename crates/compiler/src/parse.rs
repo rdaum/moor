@@ -214,13 +214,13 @@ impl TreeTransformer {
                 let Some(e) = ErrorCode::parse_str(e) else {
                     panic!("invalid error value: {e}");
                 };
-                if let ErrorCode::ErrCustom(_) = &e {
-                    if !self.options.custom_errors {
-                        return Err(CompileError::DisabledFeature(
-                            self.compile_context(&pair),
-                            "CustomErrors".to_string(),
-                        ));
-                    }
+                if let ErrorCode::ErrCustom(_) = &e
+                    && !self.options.custom_errors
+                {
+                    return Err(CompileError::DisabledFeature(
+                        self.compile_context(&pair),
+                        "CustomErrors".to_string(),
+                    ));
                 }
                 let mut msg_part = None;
                 if let Some(msg) = inner.next() {
@@ -3185,20 +3185,15 @@ mod tests {
         assert_eq!(parsed.stmts.len(), 1);
 
         // Extract the binary value and verify it decoded correctly
-        if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node {
-            if let Expr::Value(val) = expr.as_ref() {
-                if let Some(binary) = val.as_binary() {
-                    // "SGVsbG8gV29ybGQ=" is base64 for "Hello World"
-                    assert_eq!(binary.as_bytes(), b"Hello World");
-                } else {
-                    panic!("Expected binary value, got: {:?}", val.variant());
-                }
-            } else {
-                panic!("Expected Value expression, got: {expr:?}");
-            }
+        if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node
+            && let Expr::Value(val) = expr.as_ref()
+            && let Some(binary) = val.as_binary()
+        {
+            // "SGVsbG8gV29ybGQ=" is base64 for "Hello World"
+            assert_eq!(binary.as_bytes(), b"Hello World");
         } else {
             panic!(
-                "Expected return statement with value, got: {:?}",
+                "Expected return statement with binary value, got: {:?}",
                 parsed.stmts[0].node
             );
         }
@@ -3211,14 +3206,13 @@ mod tests {
         let parsed = parse_program(program, CompileOptions::default()).unwrap();
         assert_eq!(parsed.stmts.len(), 1);
 
-        if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node {
-            if let Expr::Value(val) = expr.as_ref() {
-                if let Some(binary) = val.as_binary() {
-                    assert_eq!(binary.as_bytes(), b"");
-                } else {
-                    panic!("Expected binary value, got: {:?}", val.variant());
-                }
-            }
+        if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node
+            && let Expr::Value(val) = expr.as_ref()
+            && let Some(binary) = val.as_binary()
+        {
+            assert_eq!(binary.as_bytes(), b"");
+        } else {
+            panic!("Expected return statement with binary value");
         }
     }
 
@@ -3253,14 +3247,13 @@ mod tests {
         let parsed = parse_program(&program, CompileOptions::default()).unwrap();
 
         // Extract the parsed value
-        if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node {
-            if let Expr::Value(val) = expr.as_ref() {
-                if let Some(binary) = val.as_binary() {
-                    assert_eq!(binary.as_bytes(), original_data);
-                } else {
-                    panic!("Expected binary value, got: {:?}", val.variant());
-                }
-            }
+        if let StmtNode::Expr(Expr::Return(Some(expr))) = &parsed.stmts[0].node
+            && let Expr::Value(val) = expr.as_ref()
+            && let Some(binary) = val.as_binary()
+        {
+            assert_eq!(binary.as_bytes(), original_data);
+        } else {
+            panic!("Expected return statement with binary value");
         }
     }
 }
