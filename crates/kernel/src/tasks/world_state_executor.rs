@@ -224,23 +224,20 @@ impl WorldStateActionExecutor {
                 let ProgramType::MooR(program) = program else {
                     return Err(SchedulerError::VerbRetrievalFailed(
                         WorldStateError::DatabaseError(format!(
-                            "Could not decompile verb binary, expected Moo program, got {:?}",
-                            program
+                            "Could not decompile verb binary, expected Moo program, got {program:?}"
                         )),
                     ));
                 };
 
                 let decompiled = program_to_tree(&program).map_err(|e| {
                     SchedulerError::VerbRetrievalFailed(WorldStateError::DatabaseError(format!(
-                        "Could not decompile verb binary: {:?}",
-                        e
+                        "Could not decompile verb binary: {e:?}"
                     )))
                 })?;
 
                 let unparsed = unparse(&decompiled).map_err(|e| {
                     SchedulerError::VerbRetrievalFailed(WorldStateError::DatabaseError(format!(
-                        "Could not unparse decompiled verb: {:?}",
-                        e
+                        "Could not unparse decompiled verb: {e:?}"
                     )))
                 })?;
 

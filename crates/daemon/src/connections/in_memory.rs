@@ -664,13 +664,13 @@ mod tests {
                 let mut created_clients = vec![];
                 for j in 0..connections_per_thread {
                     let client_id = Uuid::new_v4();
-                    let hostname = format!("host-{}-{}.test", i, j);
+                    let hostname = format!("host-{i}-{j}.test");
 
                     match db.new_connection(client_id, hostname, None, None) {
                         Ok(connection_obj) => {
                             created_clients.push((client_id, connection_obj));
                         }
-                        Err(e) => panic!("Failed to create connection: {:?}", e),
+                        Err(e) => panic!("Failed to create connection: {e:?}"),
                     }
                 }
                 created_clients
@@ -711,7 +711,7 @@ mod tests {
         for i in 0..5 {
             let client_id = Uuid::new_v4();
             let connection_obj = db
-                .new_connection(client_id, format!("host-{}.test", i), None, None)
+                .new_connection(client_id, format!("host-{i}.test"), None, None)
                 .unwrap();
             client_connections.push((client_id, connection_obj));
         }
@@ -783,7 +783,7 @@ mod tests {
                 for i in 0..operations_per_thread {
                     // Create connections
                     let client_id = Uuid::new_v4();
-                    let hostname = format!("host-{}-{}.test", thread_id, i);
+                    let hostname = format!("host-{thread_id}-{i}.test");
 
                     if let Ok(connection_obj) = db.new_connection(client_id, hostname, None, None) {
                         creation_count.fetch_add(1, Ordering::SeqCst);
@@ -843,7 +843,7 @@ mod tests {
         for i in 0..3 {
             let client_id = Uuid::new_v4();
             let connection_obj = db
-                .new_connection(client_id, format!("old-host-{}.test", i), None, None)
+                .new_connection(client_id, format!("old-host-{i}.test"), None, None)
                 .unwrap();
             old_connections.push((client_id, connection_obj));
         }
@@ -878,7 +878,7 @@ mod tests {
 
                 for j in 0..30 {
                     let client_id = Uuid::new_v4();
-                    let hostname = format!("new-host-{}-{}.test", i, j);
+                    let hostname = format!("new-host-{i}-{j}.test");
 
                     if let Ok(connection_obj) = db.new_connection(client_id, hostname, None, None) {
                         // Keep these connections alive
@@ -990,7 +990,7 @@ mod tests {
 
                 for i in 0..operations_per_thread {
                     let client_id = Uuid::new_v4();
-                    let hostname = format!("persist-host-{}-{}.test", thread_id, i);
+                    let hostname = format!("persist-host-{thread_id}-{i}.test");
 
                     if let Ok(connection_obj) = db.new_connection(client_id, hostname, None, None) {
                         connections.push((client_id, connection_obj));

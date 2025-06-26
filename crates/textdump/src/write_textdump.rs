@@ -174,7 +174,7 @@ pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
 
             #[allow(irrefutable_let_patterns)]
             let ProgramType::MooR(program) = program else {
-                panic!("Expected Moo program, got {:?}", program);
+                panic!("Expected Moo program, got {program:?}");
             };
             let prgstr = if !program.main_vector().is_empty() {
                 let ast = moor_compiler::program_to_tree(&program)

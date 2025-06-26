@@ -101,7 +101,7 @@ impl Associative for Map {
                 let entry = &self.0[pos];
                 Ok(entry.1.clone())
             }
-            Err(_) => Err(E_RANGE.with_msg(|| format!("Key not found: {:?}", key))),
+            Err(_) => Err(E_RANGE.with_msg(|| format!("Key not found: {key:?}"))),
         }
     }
 
@@ -150,7 +150,7 @@ impl Associative for Map {
         // Find start with binary search.
         let start = match self.0.binary_search_by(|(k, _)| k.cmp(from)) {
             Ok(pos) => pos,
-            Err(_) => return Err(E_RANGE.with_msg(|| format!("Key not found: {:?}", from))),
+            Err(_) => return Err(E_RANGE.with_msg(|| format!("Key not found: {from:?}"))),
         };
 
         // Now scan forward to find the end.
@@ -412,10 +412,10 @@ mod tests {
                 let r = m.get(&Var::mk_str("b")).unwrap();
                 match r.variant() {
                     Variant::Int(i) => assert_eq!(*i, 42),
-                    _ => panic!("Expected integer, got {:?}", r),
+                    _ => panic!("Expected integer, got {r:?}"),
                 }
             }
-            _ => panic!("Expected map, got {:?}", r),
+            _ => panic!("Expected map, got {r:?}"),
         }
 
         // Insert new item
@@ -428,10 +428,10 @@ mod tests {
                 let r = m.get(&Var::mk_str("d")).unwrap();
                 match r.variant() {
                     Variant::Int(i) => assert_eq!(*i, 42),
-                    _ => panic!("Expected integer, got {:?}", r),
+                    _ => panic!("Expected integer, got {r:?}"),
                 }
             }
-            _ => panic!("Expected map, got {:?}", r),
+            _ => panic!("Expected map, got {r:?}"),
         }
     }
 

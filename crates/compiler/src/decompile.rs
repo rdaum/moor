@@ -595,7 +595,7 @@ impl Decompile {
                 // Have to reconstruct arg list ...
                 let Expr::List(args) = args else {
                     return Err(MalformedProgram(
-                        format!("expected list of args, got {:?} instead", args).to_string(),
+                        format!("expected list of args, got {args:?} instead").to_string(),
                     ));
                 };
                 self.push_expr(Expr::Call { function, args })
@@ -737,8 +737,7 @@ impl Decompile {
                             let Expr::Assign { left: _, right } = assign_expr else {
                                 return Err(MalformedProgram(
                                     format!(
-                                        "expected assign for optional scatter assignment; got {:?}",
-                                        assign_expr
+                                        "expected assign for optional scatter assignment; got {assign_expr:?}"
                                     )
                                     .to_string(),
                                 ));
@@ -911,11 +910,8 @@ impl Decompile {
                     }
                     _ => {
                         return Err(MalformedProgram(
-                            format!(
-                                "bad end to catch expr (expected Pop or Val/Ref, got {:?}",
-                                next
-                            )
-                            .to_string(),
+                            format!("bad end to catch expr (expected Pop or Val/Ref, got {next:?}")
+                                .to_string(),
                         ));
                     }
                 };

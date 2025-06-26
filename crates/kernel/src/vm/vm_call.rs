@@ -195,7 +195,7 @@ impl VMExecState {
                     }));
                 }
                 Err(e) => {
-                    panic!("Unexpected error from find_method_verb_on: {:?}", e)
+                    panic!("Unexpected error from find_method_verb_on: {e:?}")
                 }
             };
 
@@ -323,7 +323,7 @@ impl VMExecState {
             return None;
         }
 
-        let bf_override_name = Symbol::mk(&format!("bf_{}", bf_name));
+        let bf_override_name = Symbol::mk(&format!("bf_{bf_name}"));
 
         // Look for it...
         let (program, resolved_verb) = world_state
@@ -405,8 +405,7 @@ impl VMExecState {
                 assert_ne!(
                     result.type_code(),
                     TYPE_NONE,
-                    "Builtin {} returned TYPE_NONE",
-                    bf_name
+                    "Builtin {bf_name} returned TYPE_NONE"
                 );
                 self.unwind_stack(FinallyReason::Return(result))
             }

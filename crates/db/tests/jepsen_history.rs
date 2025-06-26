@@ -52,18 +52,18 @@ pub fn parse_edn(path: &Path) -> Vec<Entry> {
     for x in parser {
         let x = x.unwrap();
         let Value::Map(m) = x else {
-            panic!("expected value: {:?}", x);
+            panic!("expected value: {x:?}");
         };
 
         let index = m.get(&Value::Keyword(Keyword::from_name("index"))).unwrap();
         let Value::Integer(index) = index else {
-            panic!("expected integer: {:?}", index);
+            panic!("expected integer: {index:?}");
         };
         let index = *index as usize;
 
         let time = m.get(&Value::Keyword(Keyword::from_name("time"))).unwrap();
         let Value::Integer(time) = time else {
-            panic!("expected integer: {:?}", time);
+            panic!("expected integer: {time:?}");
         };
         let time = *time as i32;
 
@@ -73,28 +73,28 @@ pub fn parse_edn(path: &Path) -> Vec<Entry> {
                 "invoke" => Type::Invoke,
                 "ok" => Type::Ok,
                 "fail" => Type::Fail,
-                _ => panic!("unexpected type: {:?}", k),
+                _ => panic!("unexpected type: {k:?}"),
             },
-            _ => panic!("expected keyword: {:?}", r#type),
+            _ => panic!("expected keyword: {type:?}"),
         };
 
         let process = m
             .get(&Value::Keyword(Keyword::from_name("process")))
             .unwrap();
         let Value::Integer(process) = process else {
-            panic!("expected integer: {:?}", process);
+            panic!("expected integer: {process:?}");
         };
         let process = *process as usize;
 
         let value = m.get(&Value::Keyword(Keyword::from_name("value"))).unwrap();
         let Value::Vector(value) = value else {
-            panic!("expected vector: {:?}", value);
+            panic!("expected vector: {value:?}");
         };
         let mut operations = Vec::with_capacity(value.len());
         for op in value {
             let op = match op {
                 Value::Vector(v) => v,
-                _ => panic!("expected vector: {:?}", op),
+                _ => panic!("expected vector: {op:?}"),
             };
             let op = match &op[..] {
                 [Value::Keyword(k), Value::Integer(i), Value::Integer(j)]
@@ -110,12 +110,12 @@ pub fn parse_edn(path: &Path) -> Vec<Entry> {
                         .iter()
                         .map(|x| match x {
                             Value::Integer(i) => *i as i32,
-                            _ => panic!("expected integer: {:?}", x),
+                            _ => panic!("expected integer: {x:?}"),
                         })
                         .collect();
                     Operation::Read(*i as usize, Some(v))
                 }
-                _ => panic!("unexpected operation: {:?}", op),
+                _ => panic!("unexpected operation: {op:?}"),
             };
             operations.push(op);
         }
@@ -307,7 +307,7 @@ mod tests {
                                 return Ok(());
                             }
                             Err(e) => {
-                                panic!("unexpected error in working set: {:?}", e);
+                                panic!("unexpected error in working set: {e:?}");
                             }
                         };
                         let mut cr = backing_store.begin_check();
@@ -316,13 +316,13 @@ mod tests {
                             Err(Error::Conflict) => {
                                 return Ok(());
                             }
-                            Err(e) => panic!("unexpected error: {:?}", e),
+                            Err(e) => panic!("unexpected error: {e:?}"),
                             Ok(lock) => lock,
                         };
                         match cr.apply(ws) {
                             Ok(_) => bail!("Expected conflict, got none in {entry:?}"),
                             Err(Error::Conflict) => {}
-                            Err(e) => panic!("unexpected error: {:?}", e),
+                            Err(e) => panic!("unexpected error: {e:?}"),
                         }
                         let w = backing_store.write_lock();
                         cr.commit(Some(w));

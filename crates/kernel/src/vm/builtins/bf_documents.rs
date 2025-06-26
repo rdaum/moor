@@ -131,19 +131,20 @@ fn parse_xml_to_flyweights(
                         let key = tag.to_string();
                         let key = v_str(key.as_str());
                         let Ok(obj) = m.get(&key) else {
-                            return Err(BfErr::ErrValue(E_INVARG.with_msg(|| {
-                                format!("xml_parse() tag {} not found in map", tag)
-                            })));
+                            return Err(BfErr::ErrValue(
+                                E_INVARG
+                                    .with_msg(|| format!("xml_parse() tag {tag} not found in map")),
+                            ));
                         };
                         let Some(o) = obj.as_object() else {
                             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-                                format!("xml_parse() tag {} in map is not an object", tag)
+                                format!("xml_parse() tag {tag} in map is not an object")
                             })));
                         };
                         o
                     }
                     None => {
-                        let key = format!("tag_{}", tag);
+                        let key = format!("tag_{tag}");
                         let key = Symbol::mk(&key);
 
                         // resolve via system object
@@ -154,7 +155,7 @@ fn parse_xml_to_flyweights(
 
                         let Some(o) = prop_value.as_object() else {
                             return Err(BfErr::ErrValue(E_TYPE.with_msg(|| {
-                                format!("xml_parse() tag {} not found in system object", tag)
+                                format!("xml_parse() tag {tag} not found in system object")
                             })));
                         };
 
@@ -200,7 +201,7 @@ fn parse_xml_to_flyweights(
             }
             Err(e) => {
                 return Err(BfErr::ErrValue(
-                    E_INVARG.with_msg(|| format!("xml_parse() error parsing XML: {}", e)),
+                    E_INVARG.with_msg(|| format!("xml_parse() error parsing XML: {e}")),
                 ));
             }
         }
@@ -267,7 +268,7 @@ fn parse_xml_to_lists(xml: &str) -> Result<BfRet, BfErr> {
             }
             Err(e) => {
                 return Err(BfErr::ErrValue(
-                    E_INVARG.with_msg(|| format!("xml_parse() error parsing XML: {}", e)),
+                    E_INVARG.with_msg(|| format!("xml_parse() error parsing XML: {e}")),
                 ));
             }
         }
@@ -347,7 +348,7 @@ fn parse_xml_to_maps(xml: &str) -> Result<BfRet, BfErr> {
             }
             Err(e) => {
                 return Err(BfErr::ErrValue(
-                    E_INVARG.with_msg(|| format!("xml_parse() error parsing XML: {}", e)),
+                    E_INVARG.with_msg(|| format!("xml_parse() error parsing XML: {e}")),
                 ));
             }
         }
@@ -678,7 +679,7 @@ fn generate_xml_from_tags(tags: &[Tag]) -> Result<String, BfErr> {
                         });
                     writer.write(element_builder).map_err(|e| {
                         BfErr::ErrValue(
-                            E_INVIND.with_msg(|| format!("to_xml() error writing XML: {}", e)),
+                            E_INVIND.with_msg(|| format!("to_xml() error writing XML: {e}")),
                         )
                     })?;
                 }
@@ -687,7 +688,7 @@ fn generate_xml_from_tags(tags: &[Tag]) -> Result<String, BfErr> {
                         .write(xml::writer::XmlEvent::characters(text.as_str()))
                         .map_err(|e| {
                             BfErr::ErrValue(
-                                E_INVIND.with_msg(|| format!("to_xml() error writing XML: {}", e)),
+                                E_INVIND.with_msg(|| format!("to_xml() error writing XML: {e}")),
                             )
                         })?;
                 }
@@ -696,7 +697,7 @@ fn generate_xml_from_tags(tags: &[Tag]) -> Result<String, BfErr> {
                         .write(xml::writer::XmlEvent::end_element())
                         .map_err(|e| {
                             BfErr::ErrValue(
-                                E_INVIND.with_msg(|| format!("to_xml() error writing XML: {}", e)),
+                                E_INVIND.with_msg(|| format!("to_xml() error writing XML: {e}")),
                             )
                         })?;
                 }
@@ -705,7 +706,7 @@ fn generate_xml_from_tags(tags: &[Tag]) -> Result<String, BfErr> {
     }
     let output_as_string = String::from_utf8(output).map_err(|e| {
         BfErr::ErrValue(
-            E_INVIND.with_msg(|| format!("to_xml() error converting XML to string: {}", e)),
+            E_INVIND.with_msg(|| format!("to_xml() error converting XML to string: {e}")),
         )
     })?;
     Ok(output_as_string)
@@ -735,7 +736,7 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
             Ok(JsonValue::Number(num))
         }
         Variant::Str(s) => Ok(JsonValue::String(s.as_str().to_string())),
-        Variant::Obj(o) => Ok(JsonValue::String(format!("#{}", o))),
+        Variant::Obj(o) => Ok(JsonValue::String(format!("#{o}"))),
         Variant::List(list) => {
             let mut json_array = Vec::new();
             for item in list.iter() {
@@ -751,7 +752,7 @@ fn moo_value_to_json(value: &moor_var::Var) -> Result<JsonValue, BfErr> {
                     Variant::Str(s) => s.as_str().to_string(),
                     Variant::Int(i) => i.to_string(),
                     Variant::Float(f) => f.to_string(),
-                    Variant::Obj(o) => format!("#{}", o),
+                    Variant::Obj(o) => format!("#{o}"),
                     _ => return Err(BfErr::Code(E_TYPE)), // Complex keys not supported
                 };
                 json_obj.insert(key, moo_value_to_json(&v)?);
@@ -955,7 +956,7 @@ mod tests {
                     _ => panic!("Expected EndElement, got {:?}", tags[4]),
                 }
             }
-            Err(e) => panic!("Failed to process nested elements: {:?}", e),
+            Err(e) => panic!("Failed to process nested elements: {e:?}"),
         }
     }
 

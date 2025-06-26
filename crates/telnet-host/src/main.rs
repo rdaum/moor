@@ -89,7 +89,7 @@ async fn main() -> Result<(), eyre::Error> {
         })
         .finish();
     tracing::subscriber::set_global_default(main_subscriber).unwrap_or_else(|e| {
-        eprintln!("Unable to set configure logging: {}", e);
+        eprintln!("Unable to set configure logging: {e}");
         std::process::exit(1);
     });
 

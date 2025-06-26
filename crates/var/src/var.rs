@@ -284,7 +284,7 @@ impl Var {
                 let i = index_mode.adjust_i64(*i);
                 if i < 0 {
                     return Err(E_RANGE.with_msg(|| {
-                        format!("Cannot index into sequence with negative index {}", i)
+                        format!("Cannot index into sequence with negative index {i}")
                     }));
                 }
                 i as usize
@@ -366,7 +366,7 @@ impl Var {
 
                         if i < 0 {
                             return Err(E_RANGE.with_msg(|| {
-                                format!("Cannot index into sequence with negative index {}", i)
+                                format!("Cannot index into sequence with negative index {i}")
                             }));
                         }
                         i as usize
@@ -595,7 +595,7 @@ impl Var {
 
                 if index < 0 {
                     return Err(E_RANGE.with_msg(|| {
-                        format!("Cannot index into sequence with negative index {}", index)
+                        format!("Cannot index into sequence with negative index {index}")
                     }));
                 }
 

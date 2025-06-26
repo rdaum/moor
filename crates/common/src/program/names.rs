@@ -62,7 +62,7 @@ impl Variable {
     pub fn to_symbol(&self) -> Symbol {
         match self.nr {
             Named(sym) => sym,
-            Register(r) => Symbol::mk(&format!("<register_{}>", r)),
+            Register(r) => Symbol::mk(&format!("<register_{r}>")),
         }
     }
 }

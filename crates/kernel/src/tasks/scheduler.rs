@@ -649,7 +649,7 @@ impl Scheduler {
                     }
                     AbortLimitReason::Time(t) => {
                         warn!(?task_id, time = ?t, "Task aborted, time exceeded");
-                        format!("Abort: Task exceeded time limit of {:?}", t)
+                        format!("Abort: Task exceeded time limit of {t:?}")
                     }
                 };
 
@@ -1247,7 +1247,7 @@ impl TaskQ {
         // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
         self.active.insert(task_id, task_control);
 
-        let thread_name = format!("moor-task-{}-player-{}", task_id, player);
+        let thread_name = format!("moor-task-{task_id}-player-{player}");
         let control_sender = control_sender.clone();
 
         let mut world_state = match database.new_world_state() {
@@ -1329,7 +1329,7 @@ impl TaskQ {
 
         self.active.insert(task_id, task_control);
         task.vm_host.resume_execution(resume_val);
-        let thread_name = format!("moor-task-{}-player-{}", task_id, player);
+        let thread_name = format!("moor-task-{task_id}-player-{player}");
         let control_sender = control_sender.clone();
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
         std::thread::Builder::new()

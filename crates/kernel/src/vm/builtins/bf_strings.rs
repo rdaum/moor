@@ -217,7 +217,7 @@ fn bf_string_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         Variant::Str(s) => {
             let hash_digest = md5::Md5::digest(s.as_str().as_bytes());
             Ok(Ret(v_str(
-                format!("{:x}", hash_digest).to_uppercase().as_str(),
+                format!("{hash_digest:x}").to_uppercase().as_str(),
             )))
         }
         _ => Err(BfErr::Code(E_INVARG)),
@@ -440,7 +440,7 @@ fn bf_string_hmac(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     } else {
         let hex_string = result_bytes
             .iter()
-            .map(|byte| format!("{:02x}", byte))
+            .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
         Ok(Ret(v_str(&hex_string)))
     }

@@ -90,7 +90,7 @@ enum LineMode {
 fn describe_compile_error(compile_error: CompileError) -> String {
     match compile_error {
         CompileError::StringLexError(_, le) => {
-            format!("String format error: {}", le)
+            format!("String format error: {le}")
         }
         CompileError::ParseError {
             error_position,
@@ -108,30 +108,30 @@ fn describe_compile_error(compile_error: CompileError) -> String {
                     end_line_col.0, end_line_col.1
                 ));
             }
-            err.push_str(format!(": {}", message).as_str());
+            err.push_str(format!(": {message}").as_str());
             err
         }
         CompileError::UnknownBuiltinFunction(_, bf) => {
-            format!("Unknown builtin function: {}", bf)
+            format!("Unknown builtin function: {bf}")
         }
         CompileError::UnknownLoopLabel(_, ll) => {
-            format!("Unknown break/loop label: {}", ll)
+            format!("Unknown break/loop label: {ll}")
         }
         CompileError::DuplicateVariable(_, dv) => {
-            format!("Duplicate variable: {}", dv)
+            format!("Duplicate variable: {dv}")
         }
         CompileError::AssignToConst(_, ac) => {
-            format!("Assignment to constant: {}", ac)
+            format!("Assignment to constant: {ac}")
         }
         CompileError::DisabledFeature(_, df) => {
-            format!("Disabled feature: {}", df)
+            format!("Disabled feature: {df}")
         }
         CompileError::BadSlotName(_, bs) => {
-            format!("Bad slot name in flyweight: {}", bs)
+            format!("Bad slot name in flyweight: {bs}")
         }
         CompileError::InvalidAssignemnt(_) => "Invalid l-value for assignment".to_string(),
         CompileError::UnknownTypeConstant(_, t) => {
-            format!("Unknown type constant: {}", t)
+            format!("Unknown type constant: {t}")
         }
     }
 }
@@ -223,7 +223,7 @@ impl TelnetConnection {
             }
             _ => {
                 self.write
-                    .send(format!("Unsupported event for telnet: {:?}", event))
+                    .send(format!("Unsupported event for telnet: {event:?}"))
                     .await
                     .with_context(|| "Unable to send message to client")?;
             }
@@ -365,8 +365,7 @@ impl TelnetConnection {
                                             VerbProgramResponse::Success(o, verb) => {
                                                 self.write
                                                     .send(format!(
-                                                        "0 error(s).\nVerb {} programmed on object {}",
-                                                        verb, o
+                                                        "0 error(s).\nVerb {verb} programmed on object {o}"
                                                     ))
                                                     .await?;
                                             }
@@ -783,7 +782,7 @@ impl TelnetConnection {
             }
             SchedulerError::TaskAbortedException(e) => {
                 // This should not really be happening here... but?
-                self.write.send(format!("Task exception: {}", e)).await?;
+                self.write.send(format!("Task exception: {e}")).await?;
             }
             SchedulerError::TaskAbortedCancelled => {
                 self.write.send("Task cancelled".to_string()).await?;

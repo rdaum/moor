@@ -229,8 +229,7 @@ fn main() -> Result<(), Report> {
                 // Just delete the created database file if the import fails.
                 if let Err(e) = std::fs::remove_file(&resolved_db_path) {
                     panic!(
-                        "Failed to remove database {:?} after import failure: {}",
-                        resolved_db_path, e
+                        "Failed to remove database {resolved_db_path:?} after import failure: {e}"
                     );
                 } else {
                     info!(

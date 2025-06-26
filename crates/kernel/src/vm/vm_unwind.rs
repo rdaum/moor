@@ -108,11 +108,11 @@ impl VMExecState {
                 pieces.push(format!(" (this == {})", to_literal(&a.this)));
             }
             if let Some(line_num) = a.frame.find_line_no() {
-                pieces.push(format!(" (line {})", line_num));
+                pieces.push(format!(" (line {line_num})"));
             }
             if i == 0 {
                 let raise_msg = format!("{} ({})", error.err_type, error.message());
-                pieces.push(format!(": {}", raise_msg));
+                pieces.push(format!(": {raise_msg}"));
             }
             let piece = pieces.join("");
             backtrace_list.push(v_str(&piece))

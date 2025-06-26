@@ -303,10 +303,7 @@ impl VarScope {
             current_offset += 1;
             let name = Name(offset as u16, vr.depth as u8, current_scope);
             if decls.insert(name, vr.clone()).is_some() {
-                panic!(
-                    "Variable {:?} already declared in scope {}",
-                    name, current_scope
-                );
+                panic!("Variable {name:?} already declared in scope {current_scope}");
             }
         }
 

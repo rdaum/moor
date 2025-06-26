@@ -124,7 +124,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             rpc_common::DaemonToHostReply::Ack => {
                 // Expected response
             }
-            other => panic!("Expected Ack, got {:?}", other),
+            other => panic!("Expected Ack, got {other:?}"),
         }
     }
 
@@ -163,7 +163,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             rpc_common::DaemonToHostReply::Ack => {
                 // Expected response for registration
             }
-            other => panic!("Expected Ack for registration, got {:?}", other),
+            other => panic!("Expected Ack for registration, got {other:?}"),
         }
 
         // Step 2: Verify host is registered by checking listeners
@@ -210,7 +210,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             rpc_common::DaemonToHostReply::Ack => {
                 // Expected response for detach
             }
-            other => panic!("Expected Ack for detach, got {:?}", other),
+            other => panic!("Expected Ack for detach, got {other:?}"),
         }
 
         // Step 3a: Verify reply was captured by mock transport
@@ -223,7 +223,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             Ok(rpc_common::DaemonToHostReply::Ack) => {
                 // Expected Ack reply captured correctly
             }
-            other => panic!("Transport captured wrong host reply: {:?}", other),
+            other => panic!("Transport captured wrong host reply: {other:?}"),
         }
 
         // Step 4: Verify host is no longer registered (no listeners)
@@ -326,7 +326,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 let diff = now.duration_since(timestamp).unwrap_or(Duration::ZERO);
                 assert!(diff < Duration::from_secs(1), "Timestamp should be recent");
             }
-            other => panic!("Expected PerfCounters, got {:?}", other),
+            other => panic!("Expected PerfCounters, got {other:?}"),
         }
     }
 
@@ -364,7 +364,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 );
                 (token, connection_obj)
             }
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 3: Verify connection is tracked in database
@@ -414,7 +414,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             rpc_common::DaemonToClientReply::Disconnected => {
                 // This is the expected reply for detach
             }
-            other => panic!("Expected Disconnected reply, got {:?}", other),
+            other => panic!("Expected Disconnected reply, got {other:?}"),
         }
 
         // Step 5b: Verify reply was captured by mock transport
@@ -427,7 +427,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             Ok(rpc_common::DaemonToClientReply::Disconnected) => {
                 // Expected reply captured correctly
             }
-            other => panic!("Transport captured wrong reply: {:?}", other),
+            other => panic!("Transport captured wrong reply: {other:?}"),
         }
     }
 
@@ -457,7 +457,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         let (_token_1, connection_obj_1) = match result_1.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Establish second connection
@@ -479,7 +479,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         let (token_2, connection_obj_2) = match result_2.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Verify both connections exist and are different
@@ -579,7 +579,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             rpc_common::DaemonToHostReply::PerfCounters(_, counters) => {
                 assert!(!counters.is_empty(), "Should have performance counters");
             }
-            other => panic!("Expected PerfCounters reply, got {:?}", other),
+            other => panic!("Expected PerfCounters reply, got {other:?}"),
         }
 
         // Test 3: Client connection establishment should reply with NewConnection
@@ -601,7 +601,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         let (client_token, connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection reply, got {:?}", other),
+            other => panic!("Expected NewConnection reply, got {other:?}"),
         };
 
         // Verify captured client reply
@@ -719,7 +719,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             Err(rpc_common::RpcMessageError::NoConnection) => {
                 // Expected error for invalid token
             }
-            other => panic!("Expected NoConnection error, got {:?}", other),
+            other => panic!("Expected NoConnection error, got {other:?}"),
         }
     }
 
@@ -752,7 +752,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             rpc_common::RpcMessageError::NoConnection => {
                 // Expected error - no connection for this client
             }
-            other => panic!("Expected NoConnection error, got {:?}", other),
+            other => panic!("Expected NoConnection error, got {other:?}"),
         }
     }
 
@@ -847,7 +847,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (_client_token, connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Simulate narrative events being sent to the client
@@ -1009,7 +1009,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         let (client_token, _connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Attempt login command
@@ -1030,8 +1030,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // With NormalOperation scenario, login should succeed
         assert!(
             login_result.is_ok(),
-            "Login should succeed with NormalOperation scenario: {:?}",
-            login_result
+            "Login should succeed with NormalOperation scenario: {login_result:?}"
         );
 
         // Verify the reply was captured
@@ -1050,8 +1049,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 login_reply,
                 Ok(rpc_common::DaemonToClientReply::LoginResult(Some(_)))
             ),
-            "Should have successful LoginResult with NormalOperation scenario: {:?}",
-            login_reply
+            "Should have successful LoginResult with NormalOperation scenario: {login_reply:?}"
         );
     }
 
@@ -1079,7 +1077,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (client_token, _connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Attempt login command - should fail due to LoginFailures scenario
@@ -1105,10 +1103,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         // Note: Due to 20% success rate, we might occasionally get success, but failure is expected
         if !login_failed && login_result.is_err() {
-            panic!(
-                "Unexpected login result with LoginFailures scenario: {:?}",
-                login_result
-            );
+            panic!("Unexpected login result with LoginFailures scenario: {login_result:?}");
         }
 
         // Verify scheduler scenario is working as expected
@@ -1140,7 +1135,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (client_token, _connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Request a system property
@@ -1160,8 +1155,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // With NormalOperation scenario, property request should succeed
         assert!(
             sysprop_result.is_ok(),
-            "System property request should succeed with NormalOperation scenario: {:?}",
-            sysprop_result
+            "System property request should succeed with NormalOperation scenario: {sysprop_result:?}"
         );
     }
 
@@ -1189,7 +1183,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (client_token, _connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Request a system property - should fail due to DatabaseIssues scenario
@@ -1214,8 +1208,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         assert!(
             is_valid_result,
-            "Property request should succeed or fail with property error in DatabaseIssues scenario: {:?}",
-            sysprop_result
+            "Property request should succeed or fail with property error in DatabaseIssues scenario: {sysprop_result:?}"
         );
 
         // Verify scenario is set correctly
@@ -1276,8 +1269,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // With NormalOperation scenario, pong should be acknowledged
         assert!(
             matches!(pong_result, Ok(rpc_common::DaemonToHostReply::Ack)),
-            "Host pong should be acknowledged with NormalOperation scenario: {:?}",
-            pong_result
+            "Host pong should be acknowledged with NormalOperation scenario: {pong_result:?}"
         );
 
         // Step 3: Test client ping-pong cycle
@@ -1298,7 +1290,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (client_token, _connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Send ClientPong message
@@ -1324,8 +1316,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 client_pong_result,
                 Ok(rpc_common::DaemonToClientReply::ThanksPong(_))
             ),
-            "Client pong should succeed with established connection: {:?}",
-            client_pong_result
+            "Client pong should succeed with established connection: {client_pong_result:?}"
         );
 
         // Step 4: Verify replies were captured correctly
@@ -1375,8 +1366,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Host token validation should succeed with valid test token
         assert!(
             host_validation.is_ok(),
-            "Host token validation should succeed: {:?}",
-            host_validation
+            "Host token validation should succeed: {host_validation:?}"
         );
 
         // Test client token validation with a real token
@@ -1432,7 +1422,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (client_token, _connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Perform login to get auth token
@@ -1452,8 +1442,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         assert!(
             login_result.is_ok(),
-            "Login should succeed for authenticated operations: {:?}",
-            login_result
+            "Login should succeed for authenticated operations: {login_result:?}"
         );
 
         // Extract auth token from login result
@@ -1461,7 +1450,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (_, _, login_reply) = &client_replies[1]; // Second reply should be LoginResult
         let auth_token = match login_reply {
             Ok(rpc_common::DaemonToClientReply::LoginResult(Some((token, _, _)))) => token.clone(),
-            other => panic!("Expected successful LoginResult, got {:?}", other),
+            other => panic!("Expected successful LoginResult, got {other:?}"),
         };
 
         // Test verb introspection
@@ -1485,8 +1474,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         assert!(
             verbs_processed,
-            "Verbs request should be processed (success or graceful failure): {:?}",
-            verbs_result
+            "Verbs request should be processed (success or graceful failure): {verbs_result:?}"
         );
 
         // Test property introspection
@@ -1510,8 +1498,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         assert!(
             props_processed,
-            "Properties request should be processed (success or graceful failure): {:?}",
-            props_result
+            "Properties request should be processed (success or graceful failure): {props_result:?}"
         );
     }
 
@@ -1536,7 +1523,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (client_token, _connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 2: Perform login to get auth token
@@ -1556,8 +1543,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         assert!(
             login_result.is_ok(),
-            "Login should succeed for authenticated operations: {:?}",
-            login_result
+            "Login should succeed for authenticated operations: {login_result:?}"
         );
 
         // Extract auth token from login result
@@ -1565,7 +1551,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (_, _, login_reply) = &client_replies[1]; // Second reply should be LoginResult
         let auth_token = match login_reply {
             Ok(rpc_common::DaemonToClientReply::LoginResult(Some((token, _, _)))) => token.clone(),
-            other => panic!("Expected successful LoginResult, got {:?}", other),
+            other => panic!("Expected successful LoginResult, got {other:?}"),
         };
 
         // Test command execution
@@ -1589,8 +1575,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                 command_result,
                 Ok(rpc_common::DaemonToClientReply::TaskSubmitted(_))
             ),
-            "Command should be submitted successfully with NormalOperation scenario: {:?}",
-            command_result
+            "Command should be submitted successfully with NormalOperation scenario: {command_result:?}"
         );
     }
 
@@ -1614,7 +1599,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (client_token, _connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Step 1.5: Perform login to get auth token
@@ -1634,8 +1619,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         assert!(
             login_result.is_ok(),
-            "Login should succeed for authenticated operations: {:?}",
-            login_result
+            "Login should succeed for authenticated operations: {login_result:?}"
         );
 
         // Extract auth token from login result
@@ -1643,7 +1627,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let (_, _, login_reply) = &client_replies[1]; // Second reply should be LoginResult
         let auth_token = match login_reply {
             Ok(rpc_common::DaemonToClientReply::LoginResult(Some((token, _, _)))) => token.clone(),
-            other => panic!("Expected successful LoginResult, got {:?}", other),
+            other => panic!("Expected successful LoginResult, got {other:?}"),
         };
 
         // Step 2: Create a scenario where the daemon would request input
@@ -1683,8 +1667,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
         assert!(
             input_processed,
-            "Input response should be processed or fail gracefully: {:?}",
-            response_result
+            "Input response should be processed or fail gracefully: {response_result:?}"
         );
 
         // Step 5: Verify the transport captured the events correctly
@@ -1704,7 +1687,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             rpc_common::ClientEvent::RequestInput(captured_request_id) => {
                 assert_eq!(*captured_request_id, request_id, "Request ID should match");
             }
-            other => panic!("Expected RequestInput event, got {:?}", other),
+            other => panic!("Expected RequestInput event, got {other:?}"),
         }
 
         // Step 6: Verify replies were captured

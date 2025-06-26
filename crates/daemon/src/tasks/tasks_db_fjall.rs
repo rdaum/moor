@@ -405,7 +405,7 @@ mod tests {
                 let loaded_task = loaded_tasks
                     .iter()
                     .find(|t| t.task.task_id == original_task.task.task_id)
-                    .unwrap_or_else(|| panic!("Could not find loaded task for {}", original_name));
+                    .unwrap_or_else(|| panic!("Could not find loaded task for {original_name}"));
 
                 match (&original_task.wake_condition, &loaded_task.wake_condition) {
                     (WakeCondition::Time(_), WakeCondition::Time(_)) => {
@@ -414,7 +414,7 @@ mod tests {
                     }
                     (WakeCondition::Never, WakeCondition::Never) => {}
                     (WakeCondition::Input(uuid1), WakeCondition::Input(uuid2)) => {
-                        assert_eq!(uuid1, uuid2, "Input UUID mismatch for {}", original_name);
+                        assert_eq!(uuid1, uuid2, "Input UUID mismatch for {original_name}");
                     }
                     (WakeCondition::Immedate, WakeCondition::Immedate) => {}
                     _ => panic!(
@@ -473,16 +473,16 @@ mod tests {
             };
 
             // Test save/load cycle for this edge case
-            let (db, _) = FjallTasksDB::open(&tmpdir.path().join(format!("edge_case_{}", i)));
+            let (db, _) = FjallTasksDB::open(&tmpdir.path().join(format!("edge_case_{i}")));
 
             // Should not panic during save
             db.save_task(&suspended)
-                .unwrap_or_else(|_| panic!("Failed to save edge case {}", i));
+                .unwrap_or_else(|_| panic!("Failed to save edge case {i}"));
 
             // Should not panic during load
             let loaded_tasks = db
                 .load_tasks()
-                .unwrap_or_else(|_| panic!("Failed to load edge case {}", i));
+                .unwrap_or_else(|_| panic!("Failed to load edge case {i}"));
             assert_eq!(loaded_tasks.len(), 1);
 
             // Should have correct wake condition type
@@ -490,7 +490,7 @@ mod tests {
                 WakeCondition::Time(_) => {
                     // Success - time was preserved as a time condition
                 }
-                other => panic!("Edge case {} changed wake condition type to {:?}", i, other),
+                other => panic!("Edge case {i} changed wake condition type to {other:?}"),
             }
         }
     }
@@ -550,7 +550,7 @@ mod tests {
                 WakeCondition::Time(_) => {
                     // Success - even with potential clock drift, we got a valid time back
                 }
-                other => panic!("Clock robustness test failed: got {:?}", other),
+                other => panic!("Clock robustness test failed: got {other:?}"),
             }
         }
     }

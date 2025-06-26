@@ -171,7 +171,7 @@ mod tests {
                     let mut ws = DbWorldState { tx };
 
                     for i in 0..10 {
-                        let verb_name = format!("test_verb_{}", i);
+                        let verb_name = format!("test_verb_{i}");
                         ws.add_verb(
                             &SYSTEM_OBJECT,
                             &obj,
@@ -202,7 +202,7 @@ mod tests {
                         thread::spawn(move || {
                             for iteration in 0..100 {
                                 let verb_idx = iteration % 10;
-                                let verb_name = Symbol::mk(&format!("test_verb_{}", verb_idx));
+                                let verb_name = Symbol::mk(&format!("test_verb_{verb_idx}"));
 
                                 let tx = db.start_transaction();
                                 let ws = DbWorldState { tx };
@@ -350,7 +350,7 @@ mod tests {
 
                         thread::spawn(move || {
                             for i in 0..10 {
-                                let prop_name = Symbol::mk(&format!("prop_{}_{}", thread_id, i));
+                                let prop_name = Symbol::mk(&format!("prop_{thread_id}_{i}"));
 
                                 loop {
                                     let tx = db.start_transaction();
@@ -363,7 +363,7 @@ mod tests {
                                         prop_name,
                                         &SYSTEM_OBJECT,
                                         BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
-                                        Some(v_str(&format!("value_{}_{}", thread_id, i))),
+                                        Some(v_str(&format!("value_{thread_id}_{i}"))),
                                     ) {
                                         Ok(_) => {}
                                         Err(_) => {
@@ -557,7 +557,7 @@ mod tests {
                                         &child_obj,
                                         verb_sym,
                                     );
-                                    let key = format!("{}_{}", verb_name, thread_id);
+                                    let key = format!("{verb_name}_{thread_id}");
 
                                     match result {
                                         Ok(_) => {
@@ -600,19 +600,19 @@ mod tests {
                     let total_found: usize = (0..6)
                         .map(|thread_id| {
                             results
-                                .get(&format!("{}_{}", verb, thread_id))
+                                .get(&format!("{verb}_{thread_id}"))
                                 .copied()
                                 .unwrap_or(0)
                         })
                         .sum();
-                    assert_eq!(total_found, 1200, "Verb {} resolution count mismatch", verb);
+                    assert_eq!(total_found, 1200, "Verb {verb} resolution count mismatch");
                 }
 
                 // nonexistent_verb should also be "found" (as not found) 1200 times total
                 let nonexistent_total: usize = (0..6)
                     .map(|thread_id| {
                         results
-                            .get(&format!("nonexistent_verb_{}", thread_id))
+                            .get(&format!("nonexistent_verb_{thread_id}"))
                             .copied()
                             .unwrap_or(0)
                     })

@@ -34,8 +34,7 @@ pub async fn send_host_to_daemon_msg(
         Ok(ReplyResult::HostSuccess(msg)) => Ok(msg),
         Ok(ReplyResult::Failure(f)) => Err(RpcError::CouldNotSend(f.to_string())),
         Ok(m) => Err(RpcError::UnexpectedReply(format!(
-            "Unexpected reply from daemon: {:?}",
-            m
+            "Unexpected reply from daemon: {m:?}"
         ))),
         Err(e) => {
             error!("Error communicating with daemon: {}", e);
@@ -85,8 +84,7 @@ pub async fn start_host_session(
                 error!("Daemon has rejected this host: {}. Shutting down.", reason);
                 kill_switch.store(true, std::sync::atomic::Ordering::SeqCst);
                 return Err(RpcError::AuthenticationError(format!(
-                    "Daemon rejected host token: {}",
-                    reason
+                    "Daemon rejected host token: {reason}"
                 )));
             }
             Err(e) => {
@@ -97,8 +95,7 @@ pub async fn start_host_session(
             _ => {
                 error!("Unexpected reply from daemon: {:?}", msg);
                 return Err(RpcError::UnexpectedReply(format!(
-                    "Unexpected reply from daemon: {:?}",
-                    msg
+                    "Unexpected reply from daemon: {msg:?}"
                 )));
             }
         }
@@ -158,8 +155,7 @@ pub async fn process_hosts_events(
                     _ => {
                         error!("Unexpected reply from daemon: {:?}", msg);
                         return Err(RpcError::UnexpectedReply(format!(
-                            "Unexpected reply from daemon: {:?}",
-                            msg
+                            "Unexpected reply from daemon: {msg:?}"
                         )));
                     }
                 }
@@ -171,7 +167,7 @@ pub async fn process_hosts_events(
                 print_messages: _,
             } => {
                 if host_type == our_host_type {
-                    let listen_addr = format!("{}:{}", listen_address, port);
+                    let listen_addr = format!("{listen_address}:{port}");
                     let sockaddr = listen_addr.parse::<SocketAddr>().unwrap();
                     info!(
                         "Starting listener for {} on {}",
@@ -182,7 +178,7 @@ pub async fn process_hosts_events(
                     tokio::spawn(async move {
                         let sockaddr_sockaddr = listen_addr
                             .parse::<SocketAddr>()
-                            .unwrap_or_else(|_| panic!("Unable to parse address: {}", listen_addr));
+                            .unwrap_or_else(|_| panic!("Unable to parse address: {listen_addr}"));
                         if let Err(e) = listeners
                             .add_listener(&handler_object, sockaddr_sockaddr)
                             .await
@@ -195,7 +191,7 @@ pub async fn process_hosts_events(
             HostBroadcastEvent::Unlisten { host_type, port } => {
                 if host_type == our_host_type {
                     // Stop listening on the given port, on `listen_address`.
-                    let listen_addr = format!("{}:{}", listen_address, port);
+                    let listen_addr = format!("{listen_address}:{port}");
                     let sockaddr = listen_addr.parse::<SocketAddr>().unwrap();
                     info!(
                         "Stopping listener for {} on {}",

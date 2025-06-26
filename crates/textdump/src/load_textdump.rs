@@ -130,8 +130,7 @@ pub fn read_textdump<T: io::Read>(
         TextdumpVersion::LambdaMOO(v) => {
             if (*v as u16) > 4 {
                 return Err(TextdumpReaderError::VersionError(format!(
-                    "Unsupported LambdaMOO DB version: {}",
-                    v
+                    "Unsupported LambdaMOO DB version: {v}"
                 )));
             }
         }
@@ -188,10 +187,10 @@ pub fn read_textdump<T: io::Read>(
     for (objid, o) in &td.objects {
         trace!(owner = ?o.owner, parent = ?o.parent, location = ?o.location, "Setting attributes");
         loader.set_object_owner(objid, &o.owner).map_err(|e| {
-            TextdumpReaderError::LoadError(format!("setting owner of {}", objid), e.clone())
+            TextdumpReaderError::LoadError(format!("setting owner of {objid}"), e.clone())
         })?;
         loader.set_object_parent(objid, &o.parent).map_err(|e| {
-            TextdumpReaderError::LoadError(format!("setting parent of {}", objid), e.clone())
+            TextdumpReaderError::LoadError(format!("setting parent of {objid}"), e.clone())
         })?;
         loader.set_object_location(objid, &o.location).unwrap();
     }
@@ -269,7 +268,7 @@ pub fn read_textdump<T: io::Read>(
                 )
                 .map_err(|e| {
                     TextdumpReaderError::VerbCompileError(
-                        format!("compiling verb #{}/{} ({:?})", objid, vn, names),
+                        format!("compiling verb #{objid}/{vn} ({names:?})"),
                         e.clone(),
                     )
                 })?,
@@ -289,7 +288,7 @@ pub fn read_textdump<T: io::Read>(
                 )
                 .map_err(|e| {
                     TextdumpReaderError::LoadError(
-                        format!("adding verb #{}/{} ({:?})", objid, vn, names),
+                        format!("adding verb #{objid}/{vn} ({names:?})"),
                         e.clone(),
                     )
                 })?;

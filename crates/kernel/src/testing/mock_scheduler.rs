@@ -391,8 +391,7 @@ impl MockScheduler {
                 let delay = self.get_delay();
                 let result = if self.should_succeed(config.task_completion_rate) {
                     Ok(TaskResult::Result(v_str(&format!(
-                        "Command '{}' executed",
-                        command
+                        "Command '{command}' executed"
                     ))))
                 } else {
                     Err(SchedulerError::CommandExecutionError(
@@ -436,8 +435,7 @@ impl MockScheduler {
                 }
 
                 let result = Ok(TaskResult::Result(v_str(&format!(
-                    "Verb '{}' executed",
-                    verb
+                    "Verb '{verb}' executed"
                 ))));
                 let task_handle = self.create_mock_task_handle(task_id, delay, result);
                 reply.send(Ok(task_handle)).ok();
@@ -460,9 +458,9 @@ impl MockScheduler {
                                 .custom_responses
                                 .read()
                                 .unwrap()
-                                .get(&format!("sysprop_{}", property))
+                                .get(&format!("sysprop_{property}"))
                                 .cloned()
-                                .unwrap_or(v_str(&format!("system_prop_{}", property)));
+                                .unwrap_or(v_str(&format!("system_prop_{property}")));
                             WorldStateResult::SystemProperty(value)
                         }
                         _ => {
@@ -683,8 +681,7 @@ mod tests {
         // Should succeed in normal operation
         assert!(
             result.is_ok(),
-            "Property request should succeed: {:?}",
-            result
+            "Property request should succeed: {result:?}"
         );
 
         handle.join().ok();

@@ -101,7 +101,7 @@ fn parse_boolean_literal(pair: Pair<Rule>) -> Result<bool, ObjDefParseError> {
         "true" => Ok(true),
         "false" => Ok(false),
         _ => {
-            panic!("Expected boolean literal, got {:?}", pair);
+            panic!("Expected boolean literal, got {pair:?}");
         }
     }
 }
@@ -164,7 +164,7 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
             let delegate =
                 parse_literal(context, parts.next().unwrap().into_inner().next().unwrap())?;
             let Some(delegate) = delegate.as_object() else {
-                panic!("Expected object literal, got {:?}", delegate);
+                panic!("Expected object literal, got {delegate:?}");
             };
             let mut slots = vec![];
             let mut contents = vec![];
@@ -208,7 +208,7 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
             Ok(v_flyweight(delegate, &slots, List::mk_list(&contents)))
         }
         _ => {
-            panic!("Unimplemented literal: {:?}", pair);
+            panic!("Unimplemented literal: {pair:?}");
         }
     }
 }
@@ -222,7 +222,7 @@ fn parse_object_literal(pair: Pair<Rule>) -> Result<Obj, ObjDefParseError> {
             Ok(objid)
         }
         _ => {
-            panic!("Unexpected object literal: {:?}", pair);
+            panic!("Unexpected object literal: {pair:?}");
         }
     }
 }
@@ -297,7 +297,7 @@ fn parse_literal_atom(
             Ok(v_bool(bool))
         }
         _ => {
-            panic!("Unimplemented atom: {:?}", pair);
+            panic!("Unimplemented atom: {pair:?}");
         }
     }
 }
@@ -328,7 +328,7 @@ pub fn compile_object_definitions(
     let pairs = match ofile.as_rule() {
         Rule::objects_file => ofile.into_inner(),
         _ => {
-            panic!("Expected object file, got {:?}", ofile);
+            panic!("Expected object file, got {ofile:?}");
         }
     };
 
@@ -349,7 +349,7 @@ pub fn compile_object_definitions(
                 break;
             }
             _ => {
-                panic!("Unexpected rule: {:?}", pair);
+                panic!("Unexpected rule: {pair:?}");
             }
         }
     }
@@ -470,13 +470,13 @@ fn compile_object_definition(
                         }
                     }
                     _ => {
-                        panic!("Unexpected object attribute: {:?}", attr_pair);
+                        panic!("Unexpected object attribute: {attr_pair:?}");
                     }
                 }
             }
         }
         _ => {
-            panic!("Expected object attributes, got {:?}", object_attrs);
+            panic!("Expected object attributes, got {object_attrs:?}");
         }
     }
 
@@ -502,7 +502,7 @@ fn compile_object_definition(
                 return Ok(objdef);
             }
             _ => {
-                panic!("Unexpected rule: {:?}", pair);
+                panic!("Unexpected rule: {pair:?}");
             }
         }
     }
@@ -516,7 +516,7 @@ fn parse_property_name(pair: Pair<Rule>) -> Result<Symbol, ObjDefParseError> {
         Rule::string => Ok(Symbol::mk(parse_string_literal(inner)?.as_str())),
         Rule::unquoted_propname => Ok(Symbol::mk(inner.as_str().trim())),
         _ => {
-            panic!("Unexpected property name: {:?}", inner);
+            panic!("Unexpected property name: {inner:?}");
         }
     }
 }
@@ -558,7 +558,7 @@ fn parse_prop_set(
                 Some(parse_literal(context, inner)?)
             }
             _ => {
-                panic!("Expected literal, got {:?}", next);
+                panic!("Expected literal, got {next:?}");
             }
         },
         None => None,
@@ -596,7 +596,7 @@ fn parse_prop_def(
             PropPerms::new(owner, flags)
         }
         _ => {
-            panic!("Expected propflags, got {:?}", propinfo);
+            panic!("Expected propflags, got {propinfo:?}");
         }
     };
 
@@ -608,7 +608,7 @@ fn parse_prop_def(
                 Some(parse_literal(context, inner)?)
             }
             _ => {
-                panic!("Expected literal, got {:?}", pair);
+                panic!("Expected literal, got {pair:?}");
             }
         },
     };
@@ -668,7 +668,7 @@ fn parse_verb_decl(
             vd.argspec = VerbArgsSpec { dobj, prep, iobj }
         }
         _ => {
-            panic!("Expected verb argspec, got {:?}", argspec_pair);
+            panic!("Expected verb argspec, got {argspec_pair:?}");
         }
     }
 
@@ -680,7 +680,7 @@ fn parse_verb_decl(
             vd.owner = parse_obj_attr(context, inner)?;
         }
         _ => {
-            panic!("Expected owner, got {:?}", owner_pair);
+            panic!("Expected owner, got {owner_pair:?}");
         }
     }
 
@@ -697,7 +697,7 @@ fn parse_verb_decl(
             vd.flags = flags;
         }
         _ => {
-            panic!("Expected flags, got {:?}", flags_pair);
+            panic!("Expected flags, got {flags_pair:?}");
         }
     }
 
@@ -710,7 +710,7 @@ fn parse_verb_decl(
             compile_tree(inner, compile_options.clone()).map_err(VerbCompileError)?
         }
         _ => {
-            panic!("Expected verb body, got {:?}", verb_body);
+            panic!("Expected verb body, got {verb_body:?}");
         }
     };
 

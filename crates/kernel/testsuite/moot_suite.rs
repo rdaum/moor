@@ -70,10 +70,7 @@ impl MootRunner for SchedulerMootRunner {
                 player,
                 command.clone(),
             )
-            .wrap_err(format!(
-                "SchedulerMootRunner::eval({player}, {:?})",
-                command
-            ))?,
+            .wrap_err(format!("SchedulerMootRunner::eval({player}, {command:?})"))?,
         );
         Ok(())
     }
@@ -97,8 +94,7 @@ impl MootRunner for SchedulerMootRunner {
                 command,
             )
             .wrap_err(format!(
-                "SchedulerMootRunner::command({player}, {:?})",
-                command
+                "SchedulerMootRunner::command({player}, {command:?})"
             ))?,
         );
         Ok(())

@@ -642,7 +642,7 @@ impl WebSocketConnection {
                 present: None,
                 unpresent: None,
                 traceback: Some(Traceback {
-                    error: format!("{}", exception),
+                    error: format!("{exception}"),
                     traceback,
                 }),
             },

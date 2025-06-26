@@ -148,7 +148,7 @@ async fn perform_http_request(
             .timeout(timeout)
             .build()
             .map_err(|e| {
-                WorkerError::RequestError(format!("Failed to build client with timeout: {}", e))
+                WorkerError::RequestError(format!("Failed to build client with timeout: {e}"))
             })?
     } else {
         reqwest::Client::new()
@@ -202,9 +202,9 @@ async fn perform_http_request(
             };
 
             let key = reqwest::header::HeaderName::from_str(key)
-                .map_err(|e| WorkerError::RequestError(format!("Invalid header key: {}", e)))?;
+                .map_err(|e| WorkerError::RequestError(format!("Invalid header key: {e}")))?;
             let value = reqwest::header::HeaderValue::from_str(value)
-                .map_err(|e| WorkerError::RequestError(format!("Invalid header value: {}", e)))?;
+                .map_err(|e| WorkerError::RequestError(format!("Invalid header value: {e}")))?;
             headers_map.insert(key, value);
         }
         Some(headers_map)
@@ -257,7 +257,7 @@ async fn perform_http_request(
                 client
             };
             client.send().await.map_err(|e| {
-                WorkerError::RequestError(format!("Failed to send GET request: {}", e))
+                WorkerError::RequestError(format!("Failed to send GET request: {e}"))
             })?
         }
         "post" => {
@@ -273,7 +273,7 @@ async fn perform_http_request(
                 client
             };
             client.send().await.map_err(|e| {
-                WorkerError::RequestError(format!("Failed to send POST request: {}", e))
+                WorkerError::RequestError(format!("Failed to send POST request: {e}"))
             })?
         }
         "put" => {
@@ -289,7 +289,7 @@ async fn perform_http_request(
                 client
             };
             client.send().await.map_err(|e| {
-                WorkerError::RequestError(format!("Failed to send PUT request: {}", e))
+                WorkerError::RequestError(format!("Failed to send PUT request: {e}"))
             })?
         }
         _ => {
@@ -310,7 +310,7 @@ async fn perform_http_request(
     let body = response
         .text()
         .await
-        .map_err(|e| WorkerError::RequestError(format!("Failed to read response body: {}", e)))?;
+        .map_err(|e| WorkerError::RequestError(format!("Failed to read response body: {e}")))?;
 
     let body = v_str(body.as_str());
 

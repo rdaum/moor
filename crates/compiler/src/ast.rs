@@ -71,7 +71,7 @@ impl BinaryOp {
             Op::Mul => Self::Mul,
             Op::Ne => Self::NEq,
             Op::Sub => Self::Sub,
-            _ => panic!("Invalid binary opcode: {:?}", opcode),
+            _ => panic!("Invalid binary opcode: {opcode:?}"),
         }
     }
 }
@@ -335,7 +335,7 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
                         assert_trees_match_recursive(statements, statements2);
                     }
                     (None, None) => {}
-                    _ => panic!("Mismatched otherwise: {:?} vs {:?}", otherwise1, otherwise2),
+                    _ => panic!("Mismatched otherwise: {otherwise1:?} vs {otherwise2:?}"),
                 }
                 for arms in arms1.iter().zip(arms2.iter()) {
                     assert_eq!(arms.0.condition, arms.1.condition);
@@ -369,10 +369,9 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
             _ => {
                 panic!(
                     "Mismatched statements:\n\
-                {:?}\n\
+                {left:?}\n\
                 vs\n\
-                {:?}",
-                    left, right
+                {right:?}"
                 );
             }
         }

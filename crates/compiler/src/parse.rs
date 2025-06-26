@@ -171,7 +171,7 @@ impl TreeTransformer {
                     Err(e) => {
                         return Err(CompileError::StringLexError(
                             self.compile_context(&pair),
-                            format!("invalid string literal '{}': {e}", string),
+                            format!("invalid string literal '{string}': {e}"),
                         ));
                     }
                 };
@@ -187,8 +187,7 @@ impl TreeTransformer {
                         CompileError::StringLexError(
                             self.compile_context(&pair),
                             format!(
-                                "invalid binary literal '{}': missing b\" prefix or \" suffix",
-                                binary_literal
+                                "invalid binary literal '{binary_literal}': missing b\" prefix or \" suffix"
                             ),
                         )
                     })?;
@@ -200,8 +199,7 @@ impl TreeTransformer {
                         return Err(CompileError::StringLexError(
                             self.compile_context(&pair),
                             format!(
-                                "invalid binary literal '{}': invalid base64: {e}",
-                                binary_literal
+                                "invalid binary literal '{binary_literal}': invalid base64: {e}"
                             ),
                         ));
                     }
@@ -232,7 +230,7 @@ impl TreeTransformer {
                 Ok(Expr::Error(e, msg_part))
             }
             _ => {
-                panic!("Unimplemented atom: {:?}", pair);
+                panic!("Unimplemented atom: {pair:?}");
             }
         }
     }
@@ -256,7 +254,7 @@ impl TreeTransformer {
                     args.push(arg);
                 }
                 _ => {
-                    panic!("Unimplemented exprlist: {:?}", pair);
+                    panic!("Unimplemented exprlist: {pair:?}");
                 }
             }
         }
@@ -269,7 +267,7 @@ impl TreeTransformer {
         };
 
         let Rule::exprlist = first.as_rule() else {
-            panic!("Unimplemented arglist: {:?}", first);
+            panic!("Unimplemented arglist: {first:?}");
         };
 
         self.parse_exprlist(first.into_inner())
@@ -280,7 +278,7 @@ impl TreeTransformer {
             Rule::anycode => Ok(CatchCodes::Any),
             Rule::exprlist => Ok(CatchCodes::Codes(self.parse_exprlist(pairs.into_inner())?)),
             _ => {
-                panic!("Unimplemented except_codes: {:?}", pairs);
+                panic!("Unimplemented except_codes: {pairs:?}");
             }
         }
     }
@@ -897,7 +895,7 @@ impl TreeTransformer {
                             };
                             otherwise = Some(otherwise_arm);
                         }
-                        _ => panic!("Unimplemented if clause: {:?}", remainder),
+                        _ => panic!("Unimplemented if clause: {remainder:?}"),
                     }
                 }
                 Ok(Some(Stmt::new(
@@ -975,7 +973,7 @@ impl TreeTransformer {
                             line_col,
                         )))
                     }
-                    _ => panic!("Unimplemented for clause: {:?}", clause),
+                    _ => panic!("Unimplemented for clause: {clause:?}"),
                 }
             }
             Rule::for_in_statement => {
@@ -1024,7 +1022,7 @@ impl TreeTransformer {
                             line_col,
                         )))
                     }
-                    _ => panic!("Unimplemented for clause: {:?}", clause),
+                    _ => panic!("Unimplemented for clause: {clause:?}"),
                 }
             }
             Rule::try_finally_statement => {
@@ -1080,7 +1078,7 @@ impl TreeTransformer {
                                     )?;
                                     (None, codes)
                                 }
-                                _ => panic!("Unimplemented except clause: {:?}", clause),
+                                _ => panic!("Unimplemented except clause: {clause:?}"),
                             };
                             let statements = self.clone().parse_statements(
                                 except_clause_parts.next().unwrap().into_inner(),
@@ -1091,7 +1089,7 @@ impl TreeTransformer {
                                 statements,
                             });
                         }
-                        _ => panic!("Unimplemented except clause: {:?}", except),
+                        _ => panic!("Unimplemented except clause: {except:?}"),
                     }
                 }
 
@@ -1355,7 +1353,7 @@ impl TreeTransformer {
                     });
                 }
                 _ => {
-                    panic!("Unimplemented scatter_item: {:?}", scatter_item);
+                    panic!("Unimplemented scatter_item: {scatter_item:?}");
                 }
             }
         }
@@ -3196,7 +3194,7 @@ mod tests {
                     panic!("Expected binary value, got: {:?}", val.variant());
                 }
             } else {
-                panic!("Expected Value expression, got: {:?}", expr);
+                panic!("Expected Value expression, got: {expr:?}");
             }
         } else {
             panic!(
@@ -3251,7 +3249,7 @@ mod tests {
         let literal_str = to_literal(&binary_var);
 
         // Parse it back
-        let program = format!("return {};", literal_str);
+        let program = format!("return {literal_str};");
         let parsed = parse_program(&program, CompileOptions::default()).unwrap();
 
         // Extract the parsed value

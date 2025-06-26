@@ -1336,6 +1336,6 @@ pub fn offset_for_builtin(bf_name: &str) -> usize {
     let bf_name = Symbol::mk(bf_name);
     let builtin = BUILTINS
         .find_builtin(bf_name)
-        .unwrap_or_else(|| panic!("Unknown builtin: {}", bf_name));
+        .unwrap_or_else(|| panic!("Unknown builtin: {bf_name}"));
     builtin.0 as usize
 }

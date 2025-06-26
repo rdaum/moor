@@ -47,7 +47,7 @@ impl<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> Display for De
             .map(|p| p.names().iter().map(|s| s.to_string()).join(":"))
             .collect::<Vec<_>>()
             .join(", ");
-        f.write_fmt(format_args!("{{{}}}", names))
+        f.write_fmt(format_args!("{{{names}}}"))
     }
 }
 

@@ -139,7 +139,7 @@ impl TextdumpVersion {
     pub fn to_version_string(&self) -> String {
         match self {
             TextdumpVersion::LambdaMOO(v) => {
-                format!("** LambdaMOO Database, Format Version {} **", v)
+                format!("** LambdaMOO Database, Format Version {v} **")
             }
             TextdumpVersion::ToastStunt(v) => {
                 unimplemented!("ToastStunt dump format ({v}) not supported for output");
@@ -149,10 +149,7 @@ impl TextdumpVersion {
                     "flyweight_type={} lexical_scopes={} map_type={}",
                     features.flyweight_type, features.lexical_scopes, features.map_type
                 );
-                format!(
-                    "Moor {}, features: \"{}\", encoding: {:?}",
-                    v, features, encoding
-                )
+                format!("Moor {v}, features: \"{features}\", encoding: {encoding:?}")
             }
         }
     }

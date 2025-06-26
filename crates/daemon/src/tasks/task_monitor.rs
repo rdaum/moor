@@ -58,7 +58,7 @@ impl TaskMonitor {
             .insert(task_id, (client_id, task_handle), &guard)
             .is_some()
         {
-            Err(format!("Task ID {} already exists", task_id))
+            Err(format!("Task ID {task_id} already exists"))
         } else {
             // Signal the waiting thread that a new task was added
             let _ = self.wake_signal.0.try_send(());

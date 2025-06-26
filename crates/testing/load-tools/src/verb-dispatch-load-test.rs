@@ -166,14 +166,14 @@ async fn workload(
 
         let task_id = match response {
             ReplyResult::HostSuccess(hs) => {
-                panic!("Unexpected host message: {:?}", hs);
+                panic!("Unexpected host message: {hs:?}");
             }
             ReplyResult::ClientSuccess(TaskSubmitted(submitted_task_id)) => submitted_task_id,
             ReplyResult::ClientSuccess(e) => {
-                panic!("Unexpected client result in call: {:?}", e);
+                panic!("Unexpected client result in call: {e:?}");
             }
             ReplyResult::Failure(e) => {
-                panic!("RPC failure in call: {}", e);
+                panic!("RPC failure in call: {e}");
             }
         };
 
@@ -194,7 +194,7 @@ async fn workload(
         .expect("Task results not found");
 
         let Some(result) = results.as_integer() else {
-            panic!("Unexpected task result: {:?}", results);
+            panic!("Unexpected task result: {results:?}");
         };
         if result != 1 {
             panic!("Load test failed");
@@ -220,7 +220,7 @@ async fn request_counters(
         .await
         .expect("Unable to send call request to RPC server");
     let ReplyResult::HostSuccess(DaemonToHostReply::PerfCounters(_, counters)) = response else {
-        panic!("Unexpected response from daemon: {:?}", response);
+        panic!("Unexpected response from daemon: {response:?}");
     };
 
     // Build a map of maps for the counters.
@@ -536,9 +536,9 @@ async fn main() -> Result<(), eyre::Error> {
             "per_dispatch_time_ns".to_string(),
         ];
         for x in first_row.counters.keys() {
-            header.push(format!("{}-avg_μs", x));
-            header.push(format!("{}-total_μs", x));
-            header.push(format!("{}-count", x));
+            header.push(format!("{x}-avg_μs"));
+            header.push(format!("{x}-total_μs"));
+            header.push(format!("{x}-count"));
         }
         writer.write_record(header)?;
         for r in results {

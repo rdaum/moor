@@ -134,13 +134,13 @@ fn execute(
                 panic!("Unexpected success");
             }
             VMHostResponse::AbortLimit(AbortLimitReason::Time(time)) => {
-                panic!("Unexpected abort: {:?}", time);
+                panic!("Unexpected abort: {time:?}");
             }
             VMHostResponse::DispatchFork(f) => {
-                panic!("Unexpected fork: {:?}", f);
+                panic!("Unexpected fork: {f:?}");
             }
             VMHostResponse::CompleteException(e) => {
-                panic!("Unexpected exception: {:?}", e)
+                panic!("Unexpected exception: {e:?}")
             }
             VMHostResponse::Suspend(_) => {
                 panic!("Unexpected suspend");

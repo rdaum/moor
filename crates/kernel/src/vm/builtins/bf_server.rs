@@ -629,7 +629,7 @@ fn bf_server_version(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             E_ARGS.msg("server_version() does not take any arguments"),
         ));
     }
-    let version_string = format!("{}+{}", PKG_VERSION, SHORT_COMMIT);
+    let version_string = format!("{PKG_VERSION}+{SHORT_COMMIT}");
     Ok(Ret(v_string(version_string)))
 }
 
@@ -1429,7 +1429,7 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Ok(Ret(v_list(&[bf_args.v_bool(true), value])))
         }
         _ => {
-            panic!("Invalid trampoline value for bf_eval: {}", tramp);
+            panic!("Invalid trampoline value for bf_eval: {tramp}");
         }
     }
 }

@@ -47,7 +47,7 @@ pub fn events_recv(client_id: Uuid, subscribe: &Socket) -> Result<ClientEvent, R
 
     let decode_result = bincode::decode_from_slice(event.as_ref(), bincode::config::standard());
     let (msg, _msg_size): (ClientEvent, usize) = decode_result.map_err(|e| {
-        RpcError::CouldNotDecode(format!("Unable to decode narrative message: {}", e))
+        RpcError::CouldNotDecode(format!("Unable to decode narrative message: {e}"))
     })?;
 
     Ok(msg)
@@ -72,14 +72,13 @@ pub fn broadcast_recv(subscribe: &mut Socket) -> Result<ClientsBroadcastEvent, R
 
     if &topic[..] != b"broadcast" {
         return Err(RpcError::CouldNotDecode(format!(
-            "Unexpected topic: {:?}",
-            topic
+            "Unexpected topic: {topic:?}"
         )));
     }
 
     let (msg, _msg_size): (ClientsBroadcastEvent, usize) =
         bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
-            RpcError::CouldNotDecode(format!("Unable to decode broadcast message: {}", e))
+            RpcError::CouldNotDecode(format!("Unable to decode broadcast message: {e}"))
         })?;
     Ok(msg)
 }

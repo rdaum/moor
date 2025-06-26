@@ -1404,8 +1404,7 @@ mod tests {
                 // The line number should be 5, which is where the error was raised in the fork block
                 assert_eq!(
                     line_no, 5,
-                    "Expected line number in the backtrace to be 5, but got {}",
-                    line_no
+                    "Expected line number in the backtrace to be 5, but got {line_no}"
                 );
             }
             Ok(_) => {
@@ -1453,8 +1452,7 @@ mod tests {
                     .expect("Expected line number to be an integer");
                 assert_eq!(
                     line_no, 4,
-                    "Expected line number in the first fork to be 4, but got {}",
-                    line_no
+                    "Expected line number in the first fork to be 4, but got {line_no}"
                 );
             }
             Ok(_) => {
@@ -1506,8 +1504,7 @@ mod tests {
                         .expect("Expected line number to be an integer");
                     assert_eq!(
                         line_no, 10,
-                        "Expected line number in the second fork to be 10, but got {}",
-                        line_no
+                        "Expected line number in the second fork to be 10, but got {line_no}"
                     );
                 }
             }
@@ -1553,8 +1550,7 @@ mod tests {
                     .expect("Expected line number to be an integer");
                 assert_eq!(
                     line_no, 6,
-                    "Expected line number in the nested fork to be 6, but got {}",
-                    line_no
+                    "Expected line number in the nested fork to be 6, but got {line_no}"
                 );
             }
             Ok(_) => {
@@ -1603,8 +1599,7 @@ mod tests {
                     .expect("Expected line number to be an integer");
                 assert_eq!(
                     line_no, 11,
-                    "Expected line number in the offset fork to be 11, but got {}",
-                    line_no
+                    "Expected line number in the offset fork to be 11, but got {line_no}"
                 );
             }
             Ok(_) => {

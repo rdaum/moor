@@ -48,7 +48,7 @@ impl<W: io::Write> TextdumpWriter<W> {
 
     fn write_var(&mut self, var: &Var, is_clear: bool) -> Result<(), io::Error> {
         if is_clear {
-            writeln!(self.writer, "{}", TYPE_CLEAR)?;
+            writeln!(self.writer, "{TYPE_CLEAR}")?;
             return Ok(());
         }
         match var.variant() {
@@ -127,7 +127,7 @@ impl<W: io::Write> TextdumpWriter<W> {
                 writeln!(self.writer, "{}", flyweight.delegate().id().0)?;
                 writeln!(self.writer, "{}", flyweight.slots().len())?;
                 for (k, v) in flyweight.slots().iter() {
-                    writeln!(self.writer, "{}", k)?;
+                    writeln!(self.writer, "{k}")?;
                     self.write_var(v, false)?;
                 }
                 writeln!(self.writer, "{}", flyweight.contents().len())?;
@@ -164,7 +164,7 @@ impl<W: io::Write> TextdumpWriter<W> {
         }
         writeln!(self.writer, "{}", object.propdefs.len())?;
         for propdef in &object.propdefs {
-            writeln!(self.writer, "{}", propdef)?;
+            writeln!(self.writer, "{propdef}")?;
         }
         writeln!(self.writer, "{}", object.propvals.len())?;
         for propval in &object.propvals {

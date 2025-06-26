@@ -299,7 +299,7 @@ pub async fn initialization_session(
             info!("Evaluated successfully: {:?}", cs);
         }
         ReplyResult::Failure(f) => {
-            panic!("RPC failure in eval: {}", f);
+            panic!("RPC failure in eval: {f}");
         }
     }
 
@@ -356,7 +356,7 @@ pub async fn listen_responses(
                 }
                 Ok(_) => {}
                 Err(e) => {
-                    panic!("Error in event recv: {}", e);
+                    panic!("Error in event recv: {e}");
                 }
             }
         }

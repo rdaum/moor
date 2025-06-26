@@ -131,7 +131,7 @@ impl Sequence for Binary {
             Variant::Int(i) => {
                 if *i < 0 || *i > 255 {
                     return Err(
-                        E_INVARG.with_msg(|| format!("Byte value {} out of range (0-255)", i))
+                        E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
                 }
                 let byte = *i as u8;
@@ -201,7 +201,7 @@ impl Sequence for Binary {
             Variant::Int(i) => {
                 if *i < 0 || *i > 255 {
                     return Err(
-                        E_INVARG.with_msg(|| format!("Byte value {} out of range (0-255)", i))
+                        E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
                 }
                 *i as u8
@@ -229,7 +229,7 @@ impl Sequence for Binary {
             Variant::Int(i) => {
                 if *i < 0 || *i > 255 {
                     return Err(
-                        E_INVARG.with_msg(|| format!("Byte value {} out of range (0-255)", i))
+                        E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
                 }
                 let mut new_bytes = self.as_bytes().to_vec();
@@ -260,7 +260,7 @@ impl Sequence for Binary {
             Variant::Int(i) => {
                 if *i < 0 || *i > 255 {
                     return Err(
-                        E_INVARG.with_msg(|| format!("Byte value {} out of range (0-255)", i))
+                        E_INVARG.with_msg(|| format!("Byte value {i} out of range (0-255)"))
                     );
                 }
                 *i as u8

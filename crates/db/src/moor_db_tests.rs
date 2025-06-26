@@ -193,8 +193,7 @@ mod tests {
             .expect("Could not retrieve descendants");
         assert!(
             desc.is_same(ObjSet::from_items(&[b, c, d])),
-            "Descendants doesn't match expected is {:?}",
-            desc
+            "Descendants doesn't match expected is {desc:?}"
         );
 
         assert_eq!(tx.descendants(&b, false).unwrap(), ObjSet::empty());
@@ -1136,8 +1135,7 @@ mod tests {
         let children = tx.get_object_children(&a).unwrap();
         assert!(
             children.is_empty(),
-            "Children list is not empty: {:?}",
-            children
+            "Children list is not empty: {children:?}"
         );
 
         // Create another one, add a property to the root, and then verify we can recycle the child.

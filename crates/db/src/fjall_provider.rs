@@ -78,7 +78,7 @@ where
 
         let fj = fjall_partition.clone();
         let ks = kill_switch.clone();
-        let thread_name = format!("moor-w-{}", relation_name);
+        let thread_name = format!("moor-w-{relation_name}");
         let tb = std::thread::Builder::new().name(thread_name);
         let jh = tb
             .spawn(move || {
@@ -159,8 +159,7 @@ where
             .send(WriteOp::Insert(timestamp, domain.clone(), codomain.clone()))
         {
             return Err(Error::StorageFailure(format!(
-                "failed to insert into database: {}",
-                e
+                "failed to insert into database: {e}"
             )));
         }
         Ok(())
@@ -169,8 +168,7 @@ where
     fn del(&self, _timestamp: Timestamp, domain: &Domain) -> Result<(), Error> {
         if let Err(e) = self.ops.send(WriteOp::Delete(domain.clone())) {
             return Err(Error::StorageFailure(format!(
-                "failed to delete from database: {}",
-                e
+                "failed to delete from database: {e}"
             )));
         };
         Ok(())

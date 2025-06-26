@@ -130,7 +130,7 @@ async fn auth_handler(
     Response::builder()
         .status(StatusCode::OK)
         .header("X-Moor-Auth-Token", auth_token.0)
-        .body(format!("{} {}", player, auth_verb))
+        .body(format!("{player} {auth_verb}"))
         .unwrap()
 }
 

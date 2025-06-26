@@ -114,9 +114,9 @@ impl Debug for Variant {
         match self {
             Variant::None => write!(f, "None"),
             Variant::Bool(b) => write!(f, "{}", *b),
-            Variant::Obj(o) => write!(f, "Object({})", o),
-            Variant::Int(i) => write!(f, "Integer({})", i),
-            Variant::Float(fl) => write!(f, "Float({})", fl),
+            Variant::Obj(o) => write!(f, "Object({o})"),
+            Variant::Int(i) => write!(f, "Integer({i})"),
+            Variant::Float(fl) => write!(f, "Float({fl})"),
             Variant::List(l) => {
                 // Items...
                 let r = l.iter();
@@ -130,9 +130,9 @@ impl Debug for Variant {
                 let i: Vec<_> = r.collect();
                 write!(f, "Map([size = {}, items = {:?}])", m.len(), i)
             }
-            Variant::Err(e) => write!(f, "Error({:?})", e),
-            Variant::Flyweight(fl) => write!(f, "Flyweight({:?})", fl),
-            Variant::Sym(s) => write!(f, "Symbol({})", s),
+            Variant::Err(e) => write!(f, "Error({e:?})"),
+            Variant::Flyweight(fl) => write!(f, "Flyweight({fl:?})"),
+            Variant::Sym(s) => write!(f, "Symbol({s})"),
             Variant::Binary(b) => write!(f, "Binary({} bytes)", b.len()),
         }
     }

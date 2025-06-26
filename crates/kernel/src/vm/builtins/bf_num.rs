@@ -116,9 +116,9 @@ fn bf_floatstr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     let scientific = bf_args.args.len() == 3 && bf_args.args[2].is_true();
 
-    let mut s = format!("{:.*}", precision, x);
+    let mut s = format!("{x:.precision$}");
     if scientific {
-        s = format!("{:e}", x);
+        s = format!("{x:e}");
     }
 
     Ok(Ret(v_str(s.as_str())))

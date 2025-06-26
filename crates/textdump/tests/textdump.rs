@@ -411,11 +411,11 @@ mod test {
                     .collect::<Vec<_>>()
                     .join(" ")
                     .to_string();
-                assert_eq!(v1.names(), v2.names(), "{}:{}, name mismatch", o, v1_name);
+                assert_eq!(v1.names(), v2.names(), "{o}:{v1_name}, name mismatch");
 
-                assert_eq!(v1.owner(), v2.owner(), "{}:{}, owner mismatch", o, v1_name);
-                assert_eq!(v1.flags(), v2.flags(), "{}:{}, flags mismatch", o, v1_name);
-                assert_eq!(v1.args(), v2.args(), "{}:{}, args mismatch", o, v1_name);
+                assert_eq!(v1.owner(), v2.owner(), "{o}:{v1_name}, owner mismatch");
+                assert_eq!(v1.flags(), v2.flags(), "{o}:{v1_name}, flags mismatch");
+                assert_eq!(v1.args(), v2.args(), "{o}:{v1_name}, args mismatch");
 
                 // We want to actually decode and compare the opcode streams rather than
                 // the binary, so that we can make meaningful error reports.
@@ -435,13 +435,11 @@ mod test {
 
                 assert_eq!(
                     program1.variables, program2.variables,
-                    "{}:{}, variable names mismatch",
-                    o, v1_name
+                    "{o}:{v1_name}, variable names mismatch"
                 );
                 assert_eq!(
                     program1.stmts, program2.stmts,
-                    "{}:{}, statements mismatch",
-                    o, v1_name
+                    "{o}:{v1_name}, statements mismatch"
                 );
             }
         }

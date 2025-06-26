@@ -74,7 +74,7 @@ fn execute_fork(
                 continue;
             }
             VMHostResponse::AbortLimit(a) => {
-                panic!("Fork task aborted: {:?}", a);
+                panic!("Fork task aborted: {a:?}");
             }
             VMHostResponse::CompleteException(e) => {
                 return Err(e.as_ref().clone());
@@ -138,7 +138,7 @@ where
                 continue;
             }
             VMHostResponse::AbortLimit(a) => {
-                panic!("Unexpected abort: {:?}", a);
+                panic!("Unexpected abort: {a:?}");
             }
             VMHostResponse::CompleteException(e) => {
                 return Err(e.as_ref().clone());

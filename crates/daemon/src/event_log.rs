@@ -1352,7 +1352,7 @@ mod tests {
         for i in 0..10 {
             log.append(
                 player,
-                create_test_notify_event(player, &format!("event{}", i)),
+                create_test_notify_event(player, &format!("event{i}")),
             );
         }
 
@@ -1383,7 +1383,7 @@ mod tests {
         for i in 0..10 {
             log.append(
                 player,
-                create_test_notify_event(player, &format!("batch_event{}", i)),
+                create_test_notify_event(player, &format!("batch_event{i}")),
             );
         }
 
@@ -1404,7 +1404,7 @@ mod tests {
         for i in 0..5 {
             log.append(
                 player,
-                create_test_notify_event(player, &format!("shutdown_test{}", i)),
+                create_test_notify_event(player, &format!("shutdown_test{i}")),
             );
         }
 
@@ -1460,10 +1460,7 @@ mod tests {
                 for i in 0..10 {
                     log_clone.append(
                         player,
-                        create_test_notify_event(
-                            player,
-                            &format!("thread{}_event{}", thread_id, i),
-                        ),
+                        create_test_notify_event(player, &format!("thread{thread_id}_event{i}")),
                     );
                 }
             });
@@ -1485,8 +1482,7 @@ mod tests {
             assert_eq!(
                 player_events.len(),
                 10,
-                "Player {} should have 10 events",
-                thread_id
+                "Player {thread_id} should have 10 events"
             );
         }
     }
@@ -1525,7 +1521,7 @@ mod tests {
             let player = if i % 2 == 0 { player1 } else { player2 };
             log.append(
                 player,
-                create_test_notify_event(player, &format!("large_batch_{}", i)),
+                create_test_notify_event(player, &format!("large_batch_{i}")),
             );
         }
 
@@ -1555,7 +1551,7 @@ mod tests {
             for i in 0..5 {
                 log.append(
                     player,
-                    create_test_notify_event(player, &format!("drop_test{}", i)),
+                    create_test_notify_event(player, &format!("drop_test{i}")),
                 );
             }
 
@@ -1581,7 +1577,7 @@ mod tests {
             for i in 0..5 {
                 log.append(
                     player,
-                    create_test_notify_event(player, &format!("persisted_event{}", i)),
+                    create_test_notify_event(player, &format!("persisted_event{i}")),
                 );
             }
 
@@ -1635,11 +1631,11 @@ mod tests {
             for i in 0..3 {
                 log.append(
                     player1,
-                    create_test_notify_event(player1, &format!("p1_event{}", i)),
+                    create_test_notify_event(player1, &format!("p1_event{i}")),
                 );
                 log.append(
                     player2,
-                    create_test_notify_event(player2, &format!("p2_event{}", i)),
+                    create_test_notify_event(player2, &format!("p2_event{i}")),
                 );
             }
 

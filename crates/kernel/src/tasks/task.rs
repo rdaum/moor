@@ -448,7 +448,7 @@ impl Task {
                         error!(task_id = ?self.task_id, this = ?verb_call.this,
                                verb = ?verb_call.verb_name,
                                "World state error while resolving verb: {:?}", e);
-                        panic!("Could not resolve verb: {:?}", e);
+                        panic!("Could not resolve verb: {e:?}");
                     }
                     Ok((program, verbdef)) => {
                         self.vm_host.start_call_method_verb(
@@ -901,7 +901,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {:?}", msg);
+            panic!("Expected TaskSuccess, got {msg:?}");
         };
         assert_eq!(result, v_int(2));
     }
@@ -926,7 +926,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskException(exception) = msg else {
-            panic!("Expected TaskException, got {:?}", msg);
+            panic!("Expected TaskException, got {msg:?}");
         };
         assert_eq!(exception.error.err_type, E_DIV);
     }
@@ -951,7 +951,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::Notify { player, event } = msg else {
-            panic!("Expected Notify, got {:?}", msg);
+            panic!("Expected Notify, got {msg:?}");
         };
         assert_eq!(player, SYSTEM_OBJECT);
         assert_eq!(event.author(), &v_obj(SYSTEM_OBJECT));
@@ -961,7 +961,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {:?}", msg);
+            panic!("Expected TaskSuccess, got {msg:?}");
         };
         assert_eq!(result, v_int(123));
     }
@@ -986,7 +986,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuspend(_, mut resume_task) = msg else {
-            panic!("Expected TaskSuspend, got {:?}", msg);
+            panic!("Expected TaskSuspend, got {msg:?}");
         };
         assert_eq!(resume_task.task_id, 1);
 
@@ -1005,7 +1005,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {:?}", msg);
+            panic!("Expected TaskSuccess, got {msg:?}");
         };
         assert_eq!(result, v_int(123));
     }
@@ -1030,7 +1030,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskRequestInput(mut resume_task) = msg else {
-            panic!("Expected TaskRequestInput, got {:?}", msg);
+            panic!("Expected TaskRequestInput, got {msg:?}");
         };
         assert_eq!(resume_task.task_id, 1);
 
@@ -1052,7 +1052,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {:?}", msg);
+            panic!("Expected TaskSuccess, got {msg:?}");
         };
         assert_eq!(result, v_str("hello, world!"));
     }
@@ -1089,7 +1089,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskRequestFork(fork_request, reply_channel) = msg else {
-            panic!("Expected TaskRequestFork, got {:?}", msg);
+            panic!("Expected TaskRequestFork, got {msg:?}");
         };
         assert_eq!(fork_request.task_id, None);
         assert_eq!(fork_request.parent_task_id, 1);
@@ -1112,7 +1112,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {:?}", msg);
+            panic!("Expected TaskSuccess, got {msg:?}");
         };
         assert_eq!(result, v_int(123));
     }
@@ -1137,7 +1137,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskCommandError(CommandError::NoCommandMatch) = msg else {
-            panic!("Expected NoCommandMatch, got {:?}", msg);
+            panic!("Expected NoCommandMatch, got {msg:?}");
         };
     }
 
@@ -1170,7 +1170,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {:?}", msg);
+            panic!("Expected TaskSuccess, got {msg:?}");
         };
         assert_eq!(result, v_int(1));
     }
@@ -1201,7 +1201,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {:?}", msg);
+            panic!("Expected TaskSuccess, got {msg:?}");
         };
         assert_eq!(result, v_int(1));
     }
@@ -1233,7 +1233,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskCommandError(CommandError::NoCommandMatch) = msg else {
-            panic!("Expected NoCommandMatch, got {:?}", msg);
+            panic!("Expected NoCommandMatch, got {msg:?}");
         };
     }
 
@@ -1273,7 +1273,7 @@ mod tests {
         let (task_id, msg) = control_receiver.recv().unwrap();
         assert_eq!(task_id, 1);
         let TaskControlMsg::TaskSuccess(result) = msg else {
-            panic!("Expected TaskSuccess, got {:?}", msg);
+            panic!("Expected TaskSuccess, got {msg:?}");
         };
         assert_eq!(result, v_int(1));
     }

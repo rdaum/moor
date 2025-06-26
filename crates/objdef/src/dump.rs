@@ -142,7 +142,7 @@ fn canon_name(oid: &Obj, index_names: &HashMap<Obj, String>) -> String {
         return name.clone();
     };
 
-    format!("{}", oid)
+    format!("{oid}")
 }
 
 fn propname(pname: Symbol) -> String {
@@ -333,7 +333,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
     for o in object_defs {
         // Pick a file name.
         let file_name = match file_names.get(&o.oid) {
-            Some(name) => format!("{}.moo", name),
+            Some(name) => format!("{name}.moo"),
             None => format!("object_{}.moo", o.oid.id().0),
         };
         let file_path = directory_path.join(file_name);
@@ -351,12 +351,12 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         objstr.push_str(&format!("object {}\n", canon_name(&o.oid, &index_names)));
         objstr.push_str(&format!("{indent}name: {}\n", to_literal(&name)));
         if o.parent != NOTHING {
-            objstr.push_str(&format!("{indent}parent: {}\n", parent));
+            objstr.push_str(&format!("{indent}parent: {parent}\n"));
         }
         if o.location != NOTHING {
-            objstr.push_str(&format!("{indent}location: {}\n", location));
+            objstr.push_str(&format!("{indent}location: {location}\n"));
         }
-        objstr.push_str(&format!("{indent}owner: {}\n", owner));
+        objstr.push_str(&format!("{indent}owner: {owner}\n"));
         if o.flags.contains(ObjFlag::User) {
             objstr.push_str(&format!("{indent}player: true\n"));
         }
@@ -389,7 +389,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
             let mut base = format!("{indent}property {name} (owner: {owner}, flags: \"{flags}\")");
             if let Some(value) = &pd.value {
                 let value = to_literal_objsub(value, &index_names, 2);
-                base.push_str(&format!(" = {}", value));
+                base.push_str(&format!(" = {value}"));
             }
             base.push_str(";\n");
             objstr.push_str(&base);
@@ -400,7 +400,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
         }
         for ps in &o.property_overrides {
             let name = propname(ps.name);
-            let mut base = format!("{indent}override {}", name);
+            let mut base = format!("{indent}override {name}");
             if let Some(perms) = &ps.perms_update {
                 let flags = prop_flags_string(perms.flags());
                 let owner = canon_name(&perms.owner(), &index_names);
@@ -408,7 +408,7 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
             }
             if let Some(value) = &ps.value {
                 let value = to_literal_objsub(value, &index_names, 2);
-                base.push_str(&format!(" = {}", value));
+                base.push_str(&format!(" = {value}"));
             }
             base.push_str(";\n");
             objstr.push_str(&base);

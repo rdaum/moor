@@ -389,7 +389,7 @@ mod tests {
         let r = r.variant();
         match r {
             Variant::Str(s) => assert_eq!(s.as_str(), "e"),
-            _ => panic!("Expected string, got {:?}", r),
+            _ => panic!("Expected string, got {r:?}"),
         }
     }
 
@@ -402,7 +402,7 @@ mod tests {
         let r = r.variant();
         match r {
             Variant::Str(s) => assert_eq!(s.as_str(), "hallo"),
-            _ => panic!("Expected string, got {:?}", r),
+            _ => panic!("Expected string, got {r:?}"),
         }
 
         let fail_bad_index = s.index_set(
@@ -484,7 +484,7 @@ mod tests {
         let r = r.variant();
         match r {
             Variant::Str(s) => assert_eq!(s.as_str(), "hello world"),
-            _ => panic!("Expected string, got {:?}", r),
+            _ => panic!("Expected string, got {r:?}"),
         }
     }
 
@@ -496,7 +496,7 @@ mod tests {
         let r = r.variant();
         match r {
             Variant::Str(s) => assert_eq!(s.as_str(), "hello world"),
-            _ => panic!("Expected string, got {:?}", r),
+            _ => panic!("Expected string, got {r:?}"),
         }
     }
 
@@ -509,7 +509,7 @@ mod tests {
         let r = r.variant();
         match r {
             Variant::Str(s) => assert_eq!(s.as_str(), "hllo"),
-            _ => panic!("Expected string, got {:?}", r),
+            _ => panic!("Expected string, got {r:?}"),
         }
 
         let fail_bad_index = s.remove_at(&Var::mk_integer(10), IndexMode::ZeroBased);

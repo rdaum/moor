@@ -454,7 +454,7 @@ fn bf_create(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Ok(Ret(new_obj))
         }
         _ => {
-            panic!("Invalid trampoline for bf_create {}", tramp)
+            panic!("Invalid trampoline for bf_create {tramp}")
         }
     }
 }
@@ -641,7 +641,7 @@ fn bf_recycle(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 return Ok(Ret(v_int(0)));
             }
             Some(unknown) => {
-                panic!("Invalid trampoline for bf_recycle {}", unknown)
+                panic!("Invalid trampoline for bf_recycle {unknown}")
             }
         }
     }
@@ -879,7 +879,7 @@ fn bf_move(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 return Ok(RetNil);
             }
             _ => {
-                panic!("Invalid trampoline state: {} in bf_move", tramp);
+                panic!("Invalid trampoline state: {tramp} in bf_move");
             }
         }
     }

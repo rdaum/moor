@@ -156,7 +156,7 @@ impl RpcTransport {
                 if let Err(e) = message_handler.validate_host_token(&host_token) {
                     Self::reply_invalid_request(
                         rpc_socket,
-                        &format!("Invalid host token received: {}", e),
+                        &format!("Invalid host token received: {e}"),
                     )?;
                     return Ok(());
                 }

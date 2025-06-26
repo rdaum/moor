@@ -56,7 +56,7 @@ impl Obj {
     const fn encode_as_objid(id: i32) -> Self {
         // Transmute to u64 and then mask on the type code
         // Doing "as u32" here would sign extend the i32 to u64, which is not what we want.
-        let as_u32 = unsafe { std::mem::transmute::<i32, u32>(id) };
+        let as_u32 = i32::cast_unsigned(id);
         let as_u64 = as_u32 as u64;
         Self((as_u64 & 0x0000_ffff_ffff) | ((OBJID_TYPE_CODE as u64) << 61))
     }
@@ -166,13 +166,12 @@ impl TryFrom<&str> for Obj {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         if let Some(value) = value.strip_prefix('#') {
             let value = value.parse::<i32>().map_err(|e| {
-                DecodingError::CouldNotDecode(format!("Could not parse Objid: {}", e))
+                DecodingError::CouldNotDecode(format!("Could not parse Objid: {e}"))
             })?;
             Ok(Self::mk_id(value))
         } else {
             Err(DecodingError::CouldNotDecode(format!(
-                "Expected Objid to start with '#', got {}",
-                value
+                "Expected Objid to start with '#', got {value}"
             )))
         }
     }

@@ -569,7 +569,7 @@ mod tests {
 
         // Create many unique symbols
         for i in 0..1000 {
-            let s = format!("symbol_{}", i);
+            let s = format!("symbol_{i}");
             strings.insert(s.clone());
             symbols.push(Symbol::mk(&s));
         }
@@ -582,7 +582,7 @@ mod tests {
 
         // All should convert back to original strings
         for (i, sym) in symbols.iter().enumerate() {
-            let expected = format!("symbol_{}", i);
+            let expected = format!("symbol_{i}");
             assert_eq!(sym.as_string(), expected);
         }
     }
@@ -597,7 +597,7 @@ mod tests {
                 thread::spawn(move || {
                     let mut symbols = Vec::new();
                     for i in 0..symbols_per_thread {
-                        let s = format!("thread_{}_{}", thread_id, i);
+                        let s = format!("thread_{thread_id}_{i}");
                         symbols.push(Symbol::mk(&s));
                     }
                     symbols
@@ -666,7 +666,7 @@ mod tests {
                         // Create various case combinations
                         symbols.push(Symbol::mk(base));
                         symbols.push(Symbol::mk(&base.to_uppercase()));
-                        symbols.push(Symbol::mk(&format!("{}_{}", base, thread_id)));
+                        symbols.push(Symbol::mk(&format!("{base}_{thread_id}")));
                     }
                     symbols
                 })
@@ -788,7 +788,7 @@ mod shuttle_tests {
                     thread::spawn(move || {
                         for _ in 0..5 {
                             let id = counter.fetch_add(1, shuttle::sync::atomic::Ordering::Relaxed);
-                            let sym = Symbol::mk(&format!("symbol_{}", id));
+                            let sym = Symbol::mk(&format!("symbol_{id}"));
                             symbols.lock().unwrap().push(sym);
                         }
                     })
@@ -848,8 +848,8 @@ mod shuttle_tests {
                                 // Create variations
                                 let variants = [
                                     base.to_string(),
-                                    format!("{}{}", base, i),
-                                    format!("{}_{}", base, thread_id),
+                                    format!("{base}{i}"),
+                                    format!("{base}_{thread_id}"),
                                 ];
 
                                 for variant in &variants {

@@ -199,10 +199,7 @@ impl Session for NoopClientSession {
     }
 
     fn request_input(&self, player: Obj, _input_request_id: Uuid) -> Result<(), SessionError> {
-        panic!(
-            "NoopClientSession::request_input called for player {}",
-            player
-        )
+        panic!("NoopClientSession::request_input called for player {player}")
     }
 
     fn send_event(&self, _player: Obj, _msg: Box<NarrativeEvent>) -> Result<(), SessionError> {
@@ -218,7 +215,7 @@ impl Session for NoopClientSession {
     }
 
     fn connection_name(&self, player: Obj) -> Result<String, SessionError> {
-        Ok(format!("player-{}", player))
+        Ok(format!("player-{player}"))
     }
     fn disconnect(&self, _player: Obj) -> Result<(), SessionError> {
         Ok(())
@@ -337,10 +334,7 @@ impl Session for MockClientSession {
     }
 
     fn request_input(&self, player: Obj, _input_request_id: Uuid) -> Result<(), SessionError> {
-        panic!(
-            "MockClientSession::request_input called for player {}",
-            player
-        )
+        panic!("MockClientSession::request_input called for player {player}")
     }
 
     fn send_event(&self, _player: Obj, msg: Box<NarrativeEvent>) -> Result<(), SessionError> {
@@ -352,14 +346,14 @@ impl Session for MockClientSession {
         self.system
             .write()
             .unwrap()
-            .push(format!("{}: {}", player, msg));
+            .push(format!("{player}: {msg}"));
         Ok(())
     }
 
     fn notify_shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
         let mut system = self.system.write().unwrap();
         if let Some(msg) = msg {
-            system.push(format!("shutdown: {}", msg));
+            system.push(format!("shutdown: {msg}"));
         } else {
             system.push(String::from("shutdown"));
         }
@@ -367,7 +361,7 @@ impl Session for MockClientSession {
     }
 
     fn connection_name(&self, player: Obj) -> Result<String, SessionError> {
-        Ok(format!("player-{}", player))
+        Ok(format!("player-{player}"))
     }
 
     fn disconnect(&self, _player: Obj) -> Result<(), SessionError> {
@@ -421,7 +415,7 @@ impl SystemControl for MockClientSession {
 
     fn unlisten(&self, port: u16, host_type: &str) -> Result<(), Error> {
         let mut system = self.system.write().unwrap();
-        system.push(format!("unlisten: {} {}", host_type, port));
+        system.push(format!("unlisten: {host_type} {port}"));
         Ok(())
     }
 

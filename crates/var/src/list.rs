@@ -171,8 +171,7 @@ impl Sequence for List {
         if from > len + 1 || to > len {
             return Err(E_RANGE.with_msg(|| {
                 format!(
-                    "attempt to access out of bounds range {}..{} in list of length {}",
-                    from, to, len
+                    "attempt to access out of bounds range {from}..{to} in list of length {len}"
                 )
             }));
         }
@@ -191,7 +190,7 @@ impl Sequence for List {
 
         if from < 0 {
             return Err(
-                E_RANGE.with_msg(|| format!("attempt to set range with negative index {}", from))
+                E_RANGE.with_msg(|| format!("attempt to set range with negative index {from}"))
             );
         }
 
@@ -208,10 +207,7 @@ impl Sequence for List {
         // E_RANGE if from is greater than the length of the list + 1
         if from > base_len + 1 {
             return Err(E_RANGE.with_msg(|| {
-                format!(
-                    "attempt to set range with index {} in list of length {}",
-                    from, base_len
-                )
+                format!("attempt to set range with index {from} in list of length {base_len}")
             }));
         }
 
@@ -407,7 +403,7 @@ mod tests {
         let r = r.variant();
         match r {
             Variant::Int(i) => assert_eq!(*i, 2),
-            _ => panic!("Expected integer, got {:?}", r),
+            _ => panic!("Expected integer, got {r:?}"),
         }
     }
 
@@ -456,7 +452,7 @@ mod tests {
         let r = r.variant();
         match r {
             Variant::Int(i) => assert_eq!(*i, 2),
-            _ => panic!("Expected integer, got {:?}", r),
+            _ => panic!("Expected integer, got {r:?}"),
         }
     }
 
@@ -477,10 +473,10 @@ mod tests {
                 let r = r.variant();
                 match r {
                     Variant::Int(i) => assert_eq!(*i, 42),
-                    _ => panic!("Expected integer, got {:?}", r),
+                    _ => panic!("Expected integer, got {r:?}"),
                 }
             }
-            _ => panic!("Expected list, got {:?}", r),
+            _ => panic!("Expected list, got {r:?}"),
         }
 
         let fail_bad_index = l.index_set(

@@ -615,7 +615,7 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     // Write variable names indexed by their offset
     disassembly.push(v_str("VARIABLES:"));
     for (i, v) in program.var_names().symbols().iter().enumerate() {
-        disassembly.push(v_string(format!("{: >3}: {}", i, v)));
+        disassembly.push(v_string(format!("{i: >3}: {v}")));
     }
 
     // TODO: dump fork vectors in program disassembly stream
@@ -627,12 +627,12 @@ fn bf_disassemble(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         let mut last_line_no = 0;
         for (pc, line_no) in program.line_number_spans().iter() {
             if *pc == i {
-                line_no_string = format!("\t\t(line {})", last_line_no);
+                line_no_string = format!("\t\t(line {last_line_no})");
                 break;
             }
             last_line_no = *line_no;
         }
-        disassembly.push(v_string(format!("{: >3}: {:?}{}", i, op, line_no_string)));
+        disassembly.push(v_string(format!("{i: >3}: {op:?}{line_no_string}")));
     }
 
     Ok(Ret(v_list(&disassembly)))

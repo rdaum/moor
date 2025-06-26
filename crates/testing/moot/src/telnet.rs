@@ -173,9 +173,7 @@ impl TelnetMootRunner {
             let start = Instant::now();
             loop {
                 if let Ok(mut client) = MootClient::new(self.port) {
-                    client
-                        .write_line(std::format!("connect {}", player))
-                        .unwrap();
+                    client.write_line(std::format!("connect {player}")).unwrap();
                     assert_eq!(
                         client.read_line().unwrap().as_deref(),
                         Some("*** Connected ***")
@@ -208,15 +206,15 @@ impl MootRunner for TelnetMootRunner {
     fn eval<S: Into<String>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command: String = command.into();
         self.client(player)
-            .write_line(format!("; {} \"TelnetMootRunner::eval\";", command))
-            .with_context(|| format!("TelnetMootRunner::eval({player}, {:?})", command))
+            .write_line(format!("; {command} \"TelnetMootRunner::eval\";"))
+            .with_context(|| format!("TelnetMootRunner::eval({player}, {command:?})"))
     }
 
     fn command<S: AsRef<str>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command: &str = command.as_ref();
         self.client(player)
             .write_line(command)
-            .with_context(|| format!("TelnetMootRunner::command({player}, {:?}", command))
+            .with_context(|| format!("TelnetMootRunner::command({player}, {command:?}"))
     }
 
     fn none(&self) -> Self::Value {

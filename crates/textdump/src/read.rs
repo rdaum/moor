@@ -51,7 +51,7 @@ impl<R: Read> TextdumpReader<R> {
         // Read the first line from the file to pull out the version information.
         let mut version_string = String::new();
         reader.read_line(&mut version_string).map_err(|e| {
-            TextdumpReaderError::VersionError(format!("could not read textdump version: {}", e))
+            TextdumpReaderError::VersionError(format!("could not read textdump version: {e}"))
         })?;
         // Strip linefeeds/carriage returns from the end of the version string.
         version_string.retain(|c| c != '\n' && c != '\r');
@@ -60,7 +60,7 @@ impl<R: Read> TextdumpReader<R> {
 
         // Parse the version, and we will use that to determine the encoding mode.
         let version = TextdumpVersion::parse(&version_string).ok_or_else(|| {
-            TextdumpReaderError::ParseError(format!("invalid version: {}", version_string), 1)
+            TextdumpReaderError::ParseError(format!("invalid version: {version_string}"), 1)
         })?;
 
         let encoding_mode = match version {
@@ -128,7 +128,7 @@ impl<R: Read> TextdumpReader<R> {
         let buf = self.read_next_line()?;
         let Ok(i) = buf.trim().parse() else {
             return Err(TextdumpReaderError::ParseError(
-                format!("invalid number: {}", buf),
+                format!("invalid number: {buf}"),
                 self.line_num,
             ));
         };
@@ -138,7 +138,7 @@ impl<R: Read> TextdumpReader<R> {
         let buf = self.read_next_line()?;
         let Ok(u) = buf.trim().parse() else {
             return Err(TextdumpReaderError::ParseError(
-                format!("invalid objid: {}", buf),
+                format!("invalid objid: {buf}"),
                 self.line_num,
             ));
         };
@@ -148,7 +148,7 @@ impl<R: Read> TextdumpReader<R> {
         let buf = self.read_next_line()?;
         let Ok(f) = buf.trim().parse() else {
             return Err(TextdumpReaderError::ParseError(
-                format!("invalid float: {}", buf),
+                format!("invalid float: {buf}"),
                 self.line_num,
             ));
         };
@@ -281,7 +281,7 @@ impl<R: Read> TextdumpReader<R> {
             }
             _ => {
                 return Err(TextdumpReaderError::ParseError(
-                    format!("invalid var type: {:?}", vtype),
+                    format!("invalid var type: {vtype:?}"),
                     self.line_num,
                 ));
             }
@@ -331,7 +331,7 @@ impl<R: Read> TextdumpReader<R> {
             Some('#') => {}
             _ => {
                 return Err(TextdumpReaderError::ParseError(
-                    format!("invalid object spec: {}", ospec),
+                    format!("invalid object spec: {ospec}"),
                     self.line_num,
                 ));
             }
@@ -340,7 +340,7 @@ impl<R: Read> TextdumpReader<R> {
         let oid_str = &ospec[1..];
         let Ok(oid) = oid_str.trim().parse() else {
             return Err(TextdumpReaderError::ParseError(
-                format!("invalid objid: {}", oid_str),
+                format!("invalid objid: {oid_str}"),
                 self.line_num,
             ));
         };
@@ -360,7 +360,7 @@ impl<R: Read> TextdumpReader<R> {
                 let location = self.read_var()?;
                 let Some(location) = location.as_object() else {
                     return Err(TextdumpReaderError::ParseError(
-                        format!("invalid location: {:?}", location),
+                        format!("invalid location: {location:?}"),
                         self.line_num,
                     ));
                 };
@@ -378,7 +378,7 @@ impl<R: Read> TextdumpReader<R> {
                 let _contents = self.read_var()?;
                 let Some(_contents) = _contents.as_list() else {
                     return Err(TextdumpReaderError::ParseError(
-                        format!("invalid contents list: {:?}", _contents),
+                        format!("invalid contents list: {_contents:?}"),
                         self.line_num,
                     ));
                 };
@@ -391,14 +391,14 @@ impl<R: Read> TextdumpReader<R> {
                         } else {
                             let Ok(first) = parents.index(0) else {
                                 return Err(TextdumpReaderError::ParseError(
-                                    format!("invalid parent: {:?}", parents),
+                                    format!("invalid parent: {parents:?}"),
                                     self.line_num,
                                 ));
                             };
 
                             let Some(parent) = first.as_object() else {
                                 return Err(TextdumpReaderError::ParseError(
-                                    format!("invalid parent: {:?}", parents),
+                                    format!("invalid parent: {parents:?}"),
                                     self.line_num,
                                 ));
                             };
@@ -408,7 +408,7 @@ impl<R: Read> TextdumpReader<R> {
                     }
                     _ => {
                         return Err(TextdumpReaderError::ParseError(
-                            format!("invalid parent: {:?}", parents),
+                            format!("invalid parent: {parents:?}"),
                             self.line_num,
                         ));
                     }
@@ -416,7 +416,7 @@ impl<R: Read> TextdumpReader<R> {
                 let _children = self.read_var()?;
                 let Some(_children) = _children.as_list() else {
                     return Err(TextdumpReaderError::ParseError(
-                        format!("invalid children list: {:?}", _children),
+                        format!("invalid children list: {_children:?}"),
                         self.line_num,
                     ));
                 };
@@ -482,13 +482,13 @@ impl<R: Read> TextdumpReader<R> {
             Some((oid_str, verbnum_str)) => {
                 let oid = oid_str.parse::<i32>().map_err(|e| {
                     TextdumpReaderError::ParseError(
-                        format!("invalid object id: {}", e),
+                        format!("invalid object id: {e}"),
                         self.line_num,
                     )
                 })?;
                 let verbnum = verbnum_str.parse::<usize>().map_err(|e| {
                     TextdumpReaderError::ParseError(
-                        format!("invalid verb number: {}", e),
+                        format!("invalid verb number: {e}"),
                         self.line_num,
                     )
                 })?;
@@ -496,7 +496,7 @@ impl<R: Read> TextdumpReader<R> {
             }
             None => {
                 return Err(TextdumpReaderError::ParseError(
-                    format!("invalid verb header format: {}", header),
+                    format!("invalid verb header format: {header}"),
                     self.line_num,
                 ));
             }
@@ -518,7 +518,7 @@ impl<R: Read> TextdumpReader<R> {
         let mut numbers = Vec::with_capacity(expected_count);
         for n in line.split_whitespace() {
             let n = n.parse::<i64>().map_err(|e| {
-                TextdumpReaderError::ParseError(format!("invalid number: {}", e), self.line_num)
+                TextdumpReaderError::ParseError(format!("invalid number: {e}"), self.line_num)
             })?;
             numbers.push(n);
         }
@@ -551,7 +551,7 @@ impl<R: Read> TextdumpReader<R> {
         let num_variables = num_variables_line.trim_end_matches(" variables");
         let num_variables = num_variables.parse::<usize>().map_err(|e| {
             TextdumpReaderError::ParseError(
-                format!("invalid number of variables: {}", e),
+                format!("invalid number of variables: {e}"),
                 self.line_num,
             )
         })?;
@@ -579,7 +579,7 @@ impl<R: Read> TextdumpReader<R> {
         let stack_in_use_str = stack_in_use_line.trim_end_matches(" rt_stack slots in use");
         let stack_in_use = stack_in_use_str.parse::<usize>().map_err(|e| {
             TextdumpReaderError::ParseError(
-                format!("invalid stack in use string: {}", e),
+                format!("invalid stack in use string: {e}"),
                 self.line_num,
             )
         })?;
@@ -621,7 +621,7 @@ impl<R: Read> TextdumpReader<R> {
         let clocks_line = self.read_string()?;
         let clocks_str = clocks_line.trim_end_matches(" clocks");
         let clocks = clocks_str.parse::<usize>().map_err(|e| {
-            TextdumpReaderError::ParseError(format!("invalid clocks string: {}", e), self.line_num)
+            TextdumpReaderError::ParseError(format!("invalid clocks string: {e}"), self.line_num)
         })?;
 
         for _ in 0..clocks {
@@ -632,7 +632,7 @@ impl<R: Read> TextdumpReader<R> {
         let queued_tasks_str = queued_tasks_line.trim_end_matches(" queued tasks");
         let num_queued_tasks = queued_tasks_str.parse::<usize>().map_err(|e| {
             TextdumpReaderError::ParseError(
-                format!("invalid queued tasks string: {}", e),
+                format!("invalid queued tasks string: {e}"),
                 self.line_num,
             )
         })?;
@@ -652,7 +652,7 @@ impl<R: Read> TextdumpReader<R> {
         let suspended_tasks_str = suspended_tasks_line.trim_end_matches(" suspended tasks");
         let num_suspended_tasks = suspended_tasks_str.parse::<usize>().map_err(|e| {
             TextdumpReaderError::ParseError(
-                format!("invalid suspended tasks string: {}", e),
+                format!("invalid suspended tasks string: {e}"),
                 self.line_num,
             )
         })?;
@@ -670,7 +670,7 @@ impl<R: Read> TextdumpReader<R> {
         let interrupted_tasks_str = interrupted_tasks_line.trim_end_matches(" interrupted tasks");
         let num_interrupted_tasks = interrupted_tasks_str.parse::<usize>().map_err(|e| {
             TextdumpReaderError::ParseError(
-                format!("invalid interrupted tasks string: {}", e),
+                format!("invalid interrupted tasks string: {e}"),
                 self.line_num,
             )
         })?;
@@ -691,10 +691,7 @@ impl<R: Read> TextdumpReader<R> {
         };
         let num_active_connections = active_connections_str.parse::<i64>().map_err(|e| {
             TextdumpReaderError::ParseError(
-                format!(
-                    "invalid active connections string ({}): {}",
-                    active_connections_str, e
-                ),
+                format!("invalid active connections string ({active_connections_str}): {e}"),
                 self.line_num,
             )
         })?;
@@ -724,10 +721,7 @@ impl<R: Read> TextdumpReader<R> {
                 let pending_finalization_str = self.read_string()?;
                 if !pending_finalization_str.ends_with("values pending finalization") {
                     return Err(TextdumpReaderError::ParseError(
-                        format!(
-                            "invalid pending finalization string: {}",
-                            pending_finalization_str
-                        ),
+                        format!("invalid pending finalization string: {pending_finalization_str}"),
                         self.line_num,
                     ));
                 }
@@ -741,7 +735,7 @@ impl<R: Read> TextdumpReader<R> {
                 };
                 let num_pending = pending_finalization.trim().parse::<usize>().map_err(|e| {
                     TextdumpReaderError::ParseError(
-                        format!("invalid pending finalization string: {}", e),
+                        format!("invalid pending finalization string: {e}"),
                         self.line_num,
                     )
                 })?;

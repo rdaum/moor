@@ -147,7 +147,7 @@ impl Session for RpcSession {
 
     fn notify_shutdown(&self, msg: Option<String>) -> Result<(), SessionError> {
         let shutdown_msg = match msg {
-            Some(msg) => format!("** Server is shutting down: {} **", msg),
+            Some(msg) => format!("** Server is shutting down: {msg} **"),
             None => "** Server is shutting down ** ".to_string(),
         };
         self.send

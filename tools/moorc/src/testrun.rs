@@ -50,17 +50,14 @@ impl MootRunner for SchedulerMootRunner {
                 player,
                 command.clone(),
             )
-            .wrap_err(format!(
-                "SchedulerMootRunner::eval({player}, {:?})",
-                command
-            ))?,
+            .wrap_err(format!("SchedulerMootRunner::eval({player}, {command:?})"))?,
         );
         Ok(())
     }
 
     fn command<S: AsRef<str>>(&mut self, player: &Obj, command: S) -> eyre::Result<()> {
         let command: &str = command.as_ref();
-        eprintln!("{player} >> {}", command);
+        eprintln!("{player} >> {command}");
         self.eval_result = Some(
             scheduler_test_utils::call_command(
                 self.scheduler.clone(),
@@ -69,8 +66,7 @@ impl MootRunner for SchedulerMootRunner {
                 command,
             )
             .wrap_err(format!(
-                "SchedulerMootRunner::command({player}, {:?})",
-                command
+                "SchedulerMootRunner::command({player}, {command:?})"
             ))?,
         );
         Ok(())

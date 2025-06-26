@@ -145,7 +145,7 @@ impl From<ErrorCode> for String {
 impl Display for ErrorCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s: String = (*self).into();
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
@@ -270,7 +270,7 @@ impl Error {
             E_FILE => "File error".into(),
             E_EXEC => "Execution error".into(),
             E_INTRPT => "Interruption".into(),
-            ErrCustom(sym) => format!("Custom error: {}", sym),
+            ErrCustom(sym) => format!("Custom error: {sym}"),
         }
     }
 

@@ -85,7 +85,7 @@ impl Program {
         self.0
             .var_names
             .name_for_ident(v)
-            .unwrap_or_else(|| panic!("variable not found: {}", v))
+            .unwrap_or_else(|| panic!("variable not found: {v}"))
     }
 
     pub fn find_label_for_literal(&self, l: Var) -> Label {
@@ -193,7 +193,7 @@ impl Display for Program {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write literals indexed by their offset #
         for (i, l) in self.0.literals.iter().enumerate() {
-            writeln!(f, "L{}: {:?}", i, l)?;
+            writeln!(f, "L{i}: {l:?}")?;
         }
 
         // Write jump labels indexed by their offset & showing position & optional name
@@ -207,14 +207,14 @@ impl Display for Program {
 
         // Write variable names indexed by their offset
         for (i, v) in self.0.var_names.symbols().iter().enumerate() {
-            writeln!(f, "V{}: {}", i, v)?;
+            writeln!(f, "V{i}: {v}")?;
         }
 
         // TODO: print fork vectors
 
         // Display main vector (program); opcodes are indexed by their offset
         for (i, op) in self.0.main_vector.iter().enumerate() {
-            writeln!(f, "{}: {:?}", i, op)?;
+            writeln!(f, "{i}: {op:?}")?;
         }
 
         Ok(())

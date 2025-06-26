@@ -54,9 +54,8 @@ pub async fn events_recv(
     }
 
     let decode_result = bincode::decode_from_slice(event.as_ref(), bincode::config::standard());
-    let (msg, _msg_size): (ClientEvent, usize) = decode_result.map_err(|e| {
-        RpcError::CouldNotDecode(format!("Unable to decode published event: {}", e))
-    })?;
+    let (msg, _msg_size): (ClientEvent, usize) = decode_result
+        .map_err(|e| RpcError::CouldNotDecode(format!("Unable to decode published event: {e}")))?;
 
     Ok(msg)
 }
@@ -83,8 +82,7 @@ pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<ClientsBroadcas
 
     if &topic[..] != b"broadcast" {
         return Err(RpcError::CouldNotDecode(format!(
-            "Unexpected topic: {:?}",
-            topic
+            "Unexpected topic: {topic:?}"
         )));
     }
 
@@ -96,7 +94,7 @@ pub async fn broadcast_recv(subscribe: &mut Subscribe) -> Result<ClientsBroadcas
 
     let (msg, _msg_size): (ClientsBroadcastEvent, usize) =
         bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
-            RpcError::CouldNotDecode(format!("Unable to decode broadcast message: {}", e))
+            RpcError::CouldNotDecode(format!("Unable to decode broadcast message: {e}"))
         })?;
     Ok(msg)
 }
@@ -123,8 +121,7 @@ pub async fn hosts_events_recv(subscribe: &mut Subscribe) -> Result<HostBroadcas
 
     if &topic[..] != b"hosts" {
         return Err(RpcError::CouldNotDecode(format!(
-            "Unexpected topic: {:?}",
-            topic
+            "Unexpected topic: {topic:?}"
         )));
     }
 
@@ -136,7 +133,7 @@ pub async fn hosts_events_recv(subscribe: &mut Subscribe) -> Result<HostBroadcas
 
     let (msg, _msg_size): (HostBroadcastEvent, usize) =
         bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
-            RpcError::CouldNotDecode(format!("Unable to decode host broadcast message: {}", e))
+            RpcError::CouldNotDecode(format!("Unable to decode host broadcast message: {e}"))
         })?;
     Ok(msg)
 }
@@ -165,8 +162,7 @@ pub async fn workers_events_recv(
 
     if &topic[..] != b"workers" {
         return Err(RpcError::CouldNotDecode(format!(
-            "Unexpected topic: {:?}",
-            topic
+            "Unexpected topic: {topic:?}"
         )));
     }
 
@@ -178,7 +174,7 @@ pub async fn workers_events_recv(
 
     let (msg, _msg_size): (DaemonToWorkerMessage, usize) =
         bincode::decode_from_slice(event.as_ref(), bincode::config::standard()).map_err(|e| {
-            RpcError::CouldNotDecode(format!("Unable to decode worker broadcast message: {}", e))
+            RpcError::CouldNotDecode(format!("Unable to decode worker broadcast message: {e}"))
         })?;
     Ok(msg)
 }

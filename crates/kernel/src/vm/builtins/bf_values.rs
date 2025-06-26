@@ -30,9 +30,9 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     for arg in bf_args.args.iter() {
         match arg.variant() {
             Variant::None => result.push_str("None"),
-            Variant::Bool(b) => result.push_str(format!("{}", b).as_str()),
+            Variant::Bool(b) => result.push_str(format!("{b}").as_str()),
             Variant::Int(i) => result.push_str(&i.to_string()),
-            Variant::Float(f) => result.push_str(format!("{:?}", f).as_str()),
+            Variant::Float(f) => result.push_str(format!("{f:?}").as_str()),
             Variant::Str(s) => result.push_str(s.as_str()),
             Variant::Binary(b) => result.push_str(&format!("<binary {} bytes>", b.len())),
             Variant::Obj(o) => result.push_str(&o.to_string()),
@@ -220,7 +220,7 @@ fn bf_value_hash(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     let s = to_literal(&bf_args.args[0]);
     let hash_digest = md5::Md5::digest(s.as_bytes());
     Ok(Ret(v_str(
-        format!("{:x}", hash_digest).to_uppercase().as_str(),
+        format!("{hash_digest:x}").to_uppercase().as_str(),
     )))
 }
 

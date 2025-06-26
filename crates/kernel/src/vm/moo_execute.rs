@@ -899,8 +899,7 @@ pub fn moo_frame_execute(
                     f.pop();
                     return ExecutionResult::PushError(E_ARGS.with_msg(|| {
                         format!(
-                            "Invalid number of arguments for scatter, expected {}, got {}",
-                            nreq, len
+                            "Invalid number of arguments for scatter, expected {nreq}, got {len}"
                         )
                     }));
                 }

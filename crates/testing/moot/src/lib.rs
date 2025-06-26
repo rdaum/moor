@@ -254,8 +254,7 @@ fn execute_test_prog<R: MootRunner, F: Fn() -> eyre::Result<()>>(
     test: &MootBlockTest,
     validate_state: F,
 ) -> Result<(), eyre::Error> {
-    validate_state()
-        .with_context(|| format!("Invalid state before processing line {}", line_no))?;
+    validate_state().with_context(|| format!("Invalid state before processing line {line_no}"))?;
 
     let prog = test.prog();
     match test.kind {

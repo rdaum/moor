@@ -200,7 +200,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
                     scheduler_client_for_rpc,
                     task_monitor,
                 ) {
-                    eprintln!("RPC server request loop error: {:?}", e);
+                    eprintln!("RPC server request loop error: {e:?}");
                 }
             })
             .expect("Failed to spawn RPC server thread");
@@ -257,7 +257,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (client_token, connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         assert!(
@@ -299,7 +299,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         let (client_token, _connection_obj) = match establish_result.unwrap() {
             rpc_common::DaemonToClientReply::NewConnection(token, obj) => (token, obj),
-            other => panic!("Expected NewConnection, got {:?}", other),
+            other => panic!("Expected NewConnection, got {other:?}"),
         };
 
         // Follow the proper telnet-host sequence:
@@ -324,8 +324,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Welcome call should succeed (it just triggers welcome message)
         assert!(
             welcome_result.is_ok(),
-            "Welcome message call should succeed: {:?}",
-            welcome_result
+            "Welcome message call should succeed: {welcome_result:?}"
         );
 
         // Wait for welcome message to be processed - check transport for narrative events

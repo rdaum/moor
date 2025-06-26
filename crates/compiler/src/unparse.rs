@@ -170,7 +170,7 @@ impl<'a> Unparse<'a> {
                 let mut buffer: String = (*code).into();
                 if let Some(value) = value {
                     let value = self.unparse_expr(value).unwrap();
-                    buffer.push_str(format!("({})", value).as_str());
+                    buffer.push_str(format!("({value})").as_str());
                 }
                 Ok(buffer)
             }
@@ -273,7 +273,7 @@ impl<'a> Unparse<'a> {
             Expr::Index(lvalue, index) => {
                 let left = brace_if_lower(lvalue);
                 let right = self.unparse_expr(index).unwrap();
-                Ok(format!("{}[{}]", left, right))
+                Ok(format!("{left}[{right}]"))
             }
             Expr::List(list) => {
                 let mut buffer = String::new();
@@ -349,7 +349,7 @@ impl<'a> Unparse<'a> {
                         var_name,
                         self.unparse_expr(e)?
                     )),
-                    None => Ok(format!("{}{}", prefix, var_name)),
+                    None => Ok(format!("{prefix}{var_name}")),
                 }
             }
             Expr::Flyweight(delegate, slots, contents) => {
@@ -429,22 +429,22 @@ impl<'a> Unparse<'a> {
                 let cond_frag = self.unparse_expr(&arms[0].condition)?;
                 let mut stmt_frag =
                     self.unparse_stmts(&arms[0].statements, indent + INDENT_LEVEL)?;
-                stmt_lines.push(format!("{}if ({})", indent_frag, cond_frag));
+                stmt_lines.push(format!("{indent_frag}if ({cond_frag})"));
                 stmt_lines.append(&mut stmt_frag);
                 for arm in arms.iter().skip(1) {
                     let cond_frag = self.unparse_expr(&arm.condition)?;
                     let mut stmt_frag =
                         self.unparse_stmts(&arm.statements, indent + INDENT_LEVEL)?;
-                    stmt_lines.push(format!("{}elseif ({})", indent_frag, cond_frag));
+                    stmt_lines.push(format!("{indent_frag}elseif ({cond_frag})"));
                     stmt_lines.append(&mut stmt_frag);
                 }
                 if let Some(otherwise) = otherwise {
                     let mut stmt_frag =
                         self.unparse_stmts(&otherwise.statements, indent + INDENT_LEVEL)?;
-                    stmt_lines.push(format!("{}else", indent_frag));
+                    stmt_lines.push(format!("{indent_frag}else"));
                     stmt_lines.append(&mut stmt_frag);
                 }
-                stmt_lines.push(format!("{}endif", indent_frag));
+                stmt_lines.push(format!("{indent_frag}endif"));
                 Ok(stmt_lines)
             }
             StmtNode::ForList {
@@ -464,15 +464,12 @@ impl<'a> Unparse<'a> {
                     None => v_sym.to_string(),
                     Some(key_binding) => {
                         let k_sym = self.unparse_variable(key_binding);
-                        format!("{}, {}", v_sym, k_sym)
+                        format!("{v_sym}, {k_sym}")
                     }
                 };
-                stmt_lines.push(format!(
-                    "{}for {idx_clause} in ({})",
-                    indent_frag, expr_frag
-                ));
+                stmt_lines.push(format!("{indent_frag}for {idx_clause} in ({expr_frag})"));
                 stmt_lines.append(&mut stmt_frag);
-                stmt_lines.push(format!("{}endfor", indent_frag));
+                stmt_lines.push(format!("{indent_frag}endfor"));
                 Ok(stmt_lines)
             }
             StmtNode::ForRange {
@@ -490,11 +487,10 @@ impl<'a> Unparse<'a> {
                 let name = self.unparse_variable(id);
 
                 stmt_lines.push(format!(
-                    "{}for {} in [{}..{}]",
-                    indent_frag, name, from_frag, to_frag
+                    "{indent_frag}for {name} in [{from_frag}..{to_frag}]"
                 ));
                 stmt_lines.append(&mut stmt_frag);
-                stmt_lines.push(format!("{}endfor", indent_frag));
+                stmt_lines.push(format!("{indent_frag}endfor"));
                 Ok(stmt_lines)
             }
             StmtNode::While {
@@ -514,9 +510,9 @@ impl<'a> Unparse<'a> {
 
                     base_str.push_str(&id.as_arc_string());
                 }
-                stmt_lines.push(format!("{}({})", base_str, cond_frag));
+                stmt_lines.push(format!("{base_str}({cond_frag})"));
                 stmt_lines.append(&mut stmt_frag);
-                stmt_lines.push(format!("{}endwhile", indent_frag));
+                stmt_lines.push(format!("{indent_frag}endwhile"));
                 Ok(stmt_lines)
             }
             StmtNode::Fork { id, time, body } => {
@@ -524,16 +520,16 @@ impl<'a> Unparse<'a> {
 
                 let delay_frag = self.unparse_expr(time)?;
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
-                let mut base_str = format!("{}fork", indent_frag);
+                let mut base_str = format!("{indent_frag}fork");
                 if let Some(id) = id {
                     base_str.push(' ');
                     let id = self.unparse_variable(id);
 
                     base_str.push_str(&id.as_arc_string());
                 }
-                stmt_lines.push(format!("{} ({})", base_str, delay_frag));
+                stmt_lines.push(format!("{base_str} ({delay_frag})"));
                 stmt_lines.append(&mut stmt_frag);
-                stmt_lines.push(format!("{}endfork", indent_frag));
+                stmt_lines.push(format!("{indent_frag}endfork"));
                 Ok(stmt_lines)
             }
             StmtNode::TryExcept {
@@ -544,7 +540,7 @@ impl<'a> Unparse<'a> {
                 let mut stmt_lines = Vec::with_capacity(body.len() + 3);
 
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
-                stmt_lines.push(format!("{}try", indent_frag));
+                stmt_lines.push(format!("{indent_frag}try"));
                 stmt_lines.append(&mut stmt_frag);
                 for except in excepts {
                     let mut stmt_frag =
@@ -560,7 +556,7 @@ impl<'a> Unparse<'a> {
                     stmt_lines.push(format!("{indent_frag}{base_str}"));
                     stmt_lines.append(&mut stmt_frag);
                 }
-                stmt_lines.push(format!("{}endtry", indent_frag));
+                stmt_lines.push(format!("{indent_frag}endtry"));
                 Ok(stmt_lines)
             }
             StmtNode::TryFinally {
@@ -576,11 +572,11 @@ impl<'a> Unparse<'a> {
                 stmt_lines.append(&mut stmt_frag);
                 stmt_lines.push("finally".to_string());
                 stmt_lines.append(&mut handler_frag);
-                stmt_lines.push(format!("{}endtry", indent_frag));
+                stmt_lines.push(format!("{indent_frag}endtry"));
                 Ok(stmt_lines)
             }
             StmtNode::Break { exit } => {
-                let mut base_str = format!("{}break", indent_frag);
+                let mut base_str = format!("{indent_frag}break");
                 if let Some(exit) = &exit {
                     base_str.push(' ');
                     let exit = self.unparse_variable(exit);
@@ -590,7 +586,7 @@ impl<'a> Unparse<'a> {
                 Ok(vec![base_str])
             }
             StmtNode::Continue { exit } => {
-                let mut base_str = format!("{}continue", indent_frag);
+                let mut base_str = format!("{indent_frag}continue");
                 if let Some(exit) = &exit {
                     base_str.push(' ');
                     let exit = self.unparse_variable(exit);
@@ -639,10 +635,10 @@ impl<'a> Unparse<'a> {
             } => {
                 // Begin/End
                 let mut stmt_lines = Vec::with_capacity(body.len() + 3);
-                stmt_lines.push(format!("{}begin", indent_frag));
+                stmt_lines.push(format!("{indent_frag}begin"));
                 let mut stmt_frag = self.unparse_stmts(body, indent + INDENT_LEVEL)?;
                 stmt_lines.append(&mut stmt_frag);
-                stmt_lines.push(format!("{}end", indent_frag));
+                stmt_lines.push(format!("{indent_frag}end"));
                 Ok(stmt_lines)
             }
         }
@@ -774,10 +770,10 @@ pub fn to_literal(v: &Var) -> String {
     match v.variant() {
         Variant::None => "None".to_string(),
         Variant::Obj(oid) => {
-            format!("{}", oid)
+            format!("{oid}")
         }
         Variant::Bool(b) => {
-            format!("{}", b)
+            format!("{b}")
         }
         Variant::Int(i) => i.to_string(),
         Variant::Float(f) => {
@@ -849,7 +845,7 @@ pub fn to_literal(v: &Var) -> String {
         }
         Variant::Binary(b) => {
             let encoded = general_purpose::URL_SAFE.encode(b.as_bytes());
-            format!("b\"{}\"", encoded)
+            format!("b\"{encoded}\"")
         }
     }
 }
@@ -861,7 +857,7 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
         if let Some(name_sub) = name_subs.get(o) {
             name_sub.clone()
         } else {
-            format!("{}", o)
+            format!("{o}")
         }
     };
     let mut result = String::new();

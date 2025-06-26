@@ -99,7 +99,7 @@ impl WorldStateError {
             | Self::ChparentPropertyNameConflict(_, _, _) => E_INVARG,
             Self::PropertyNotFound(_, _) | Self::PropertyDefinitionNotFound(_, _) => E_PROPNF,
             Self::PropertyTypeMismatch => E_TYPE,
-            _ => panic!("Unhandled error code: {:?}", self),
+            _ => panic!("Unhandled error code: {self:?}"),
         };
 
         err_code.msg(self.to_string())
