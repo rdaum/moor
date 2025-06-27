@@ -21,23 +21,23 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
+    use std::time::{Duration, Instant};
     use tempfile::TempDir;
     use uuid::Uuid;
 
-    use crate::event_log::EventLogOps;
+    use crate::connections::ConnectionRegistryFactory;
+    use crate::rpc::RpcServer;
+    use crate::testing::{MockEventLog, MockTransport};
     use moor_common::model::CommitResult;
+    use moor_common::tasks::Event;
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_kernel::config::Config;
     use moor_kernel::tasks::NoopTasksDb;
     use moor_kernel::tasks::scheduler::Scheduler;
     use moor_textdump::textdump_load;
-    use moor_var::SYSTEM_OBJECT;
+    use moor_var::{Obj, SYSTEM_OBJECT};
     use rusty_paseto::prelude::Key;
     use semver::Version;
-
-    use crate::connections::ConnectionRegistryFactory;
-    use crate::rpc::RpcServer;
-    use crate::testing::{MockEventLog, MockTransport};
 
     /// Wait for the scheduler to be ready by attempting simple operations
     fn wait_for_scheduler_ready(scheduler_client: &moor_kernel::SchedulerClient) {
@@ -53,6 +53,51 @@ mod tests {
         }
 
         panic!("Scheduler failed to become ready within timeout");
+    }
+
+    /// Wait for an event with content matching the given predicate
+    ///
+    /// Searches through events for the specified player and calls the predicate on each event.
+    /// Returns when the predicate returns true for any event, or panics on timeout.
+    fn wait_for_event_content<F>(
+        event_log: &MockEventLog,
+        player: Obj,
+        predicate: F,
+        timeout_secs: u64,
+        description: &str,
+    ) where
+        F: Fn(&moor_common::tasks::Event) -> bool,
+    {
+        let start_time = Instant::now();
+        loop {
+            if start_time.elapsed() > Duration::from_secs(timeout_secs) {
+                panic!(
+                    "No expected {} after {}s",
+                    description,
+                    start_time.elapsed().as_secs_f32()
+                );
+            }
+
+            let events = event_log.get_all_events();
+            for e in &events {
+                if e.player != player {
+                    continue;
+                }
+                match &e.event.event {
+                    Event::Traceback(e) => {
+                        panic!("Received exception during {description}: {e:?}");
+                    }
+                    _ => {
+                        if predicate(&e.event.event) {
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Small sleep to avoid busy polling
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 
     fn create_test_keys() -> (Key<32>, Key<64>) {
@@ -154,18 +199,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         let transport = Arc::new(MockTransport::new());
         let event_log = Arc::new(MockEventLog::new());
 
-        // Create the event log path for RpcServer
-        let events_db_path = temp_dir.path().join("events.db");
-
         // Create RpcServer with MockTransport - this will be the single source of truth!
         let (rpc_server, task_monitor, system_control) = RpcServer::new(
             kill_switch.clone(),
             public_key,
             private_key,
             connections,
+            event_log.clone(),
             transport.clone(),
             config.clone(),
-            &events_db_path,
         );
 
         // Get the message handler from the RpcServer for direct testing
@@ -350,7 +392,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         );
 
         // Wait for login task to be processed and events to be generated
-        let login_success = env.transport.wait_for_condition(
+        let _login_success = env.transport.wait_for_condition(
             |transport| {
                 // Look for completion events or specific narrative events indicating login success
                 let narrative_events = transport.get_narrative_events();
@@ -362,11 +404,6 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             5000,
         );
 
-        if !login_success {
-            // Give a bit more time for any late events
-            std::thread::sleep(std::time::Duration::from_millis(500));
-        }
-
         // Collect debugging information if login fails
         if login_result.is_err() {
             // Get all events from MockEventLog
@@ -376,10 +413,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             let client_events = env.transport.get_client_events();
             let host_events = env.transport.get_host_events();
 
-            // Also check for any recent events since the start of login
-            let recent_events = env
-                .event_log
-                .events_for_player_since_seconds(SYSTEM_OBJECT, 10);
+            let recent_events = env.event_log.get_all_events();
 
             panic!(
                 "Login failed: {:?}\n\nMockEventLog all events ({} total):\n{:#?}\n\nMockEventLog recent events for SYSTEM_OBJECT ({} total):\n{:#?}\n\nMockTransport narrative events ({} total):\n{:#?}\n\nMockTransport client events ({} total):\n{:#?}\n\nMockTransport host events ({} total):\n{:#?}\n\nMockTransport client replies ({} total):\n{:#?}",
@@ -400,43 +434,69 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         }
 
         // Should be LoginResult(Some(  with a ComnnectType Connected, and a objid 2
-        match login_result.unwrap() {
-            rpc_common::DaemonToClientReply::LoginResult(Some((
-                _auth_token,
-                connect_type,
-                player_obj,
-            ))) => {
-                assert_eq!(
-                    connect_type,
-                    rpc_common::ConnectType::Connected,
-                    "Expected connected type"
-                );
-                assert!(player_obj.id().0 > 0, "Expected valid player object ID");
+        let login_result = login_result.expect("Bad login result");
+        let rpc_common::DaemonToClientReply::LoginResult(Some((
+            _auth_token,
+            connect_type,
+            player_obj,
+        ))) = login_result
+        else {
+            // Get debugging information for unexpected results too
+            let all_events = env.event_log.get_all_events();
+            let narrative_events = env.transport.get_narrative_events();
+            let client_replies = env.transport.get_client_replies();
 
-                // Verify player object is tracked in connections
-                let connections = env.message_handler.get_connections();
-                assert!(
-                    connections.contains(&player_obj),
-                    "Player object should be tracked in connections"
-                );
-            }
-            other => {
-                // Get debugging information for unexpected results too
-                let all_events = env.event_log.get_all_events();
-                let narrative_events = env.transport.get_narrative_events();
-                let client_replies = env.transport.get_client_replies();
+            panic!(
+                "Unexpected login result: {:?}\n\nMockEventLog events ({} total):\n{:#?}\n\nMockTransport narrative events ({} total):\n{:#?}\n\nMockTransport client replies ({} total):\n{:#?}",
+                login_result,
+                all_events.len(),
+                all_events,
+                narrative_events.len(),
+                narrative_events,
+                client_replies.len(),
+                client_replies
+            );
+        };
+        assert_eq!(
+            connect_type,
+            rpc_common::ConnectType::Connected,
+            "Expected connected type"
+        );
+        assert!(player_obj.id().0 > 0, "Expected valid player object ID");
 
-                panic!(
-                    "Unexpected login result: {:?}\n\nMockEventLog events ({} total):\n{:#?}\n\nMockTransport narrative events ({} total):\n{:#?}\n\nMockTransport client replies ({} total):\n{:#?}",
-                    other,
-                    all_events.len(),
-                    all_events,
-                    narrative_events.len(),
-                    narrative_events,
-                    client_replies.len(),
-                    client_replies
-                );
-            }
-        }
+        // Verify player object is tracked in connections
+        let connections = env.message_handler.get_connections();
+        assert!(
+            connections.contains(&player_obj),
+            "Player object should be tracked in connections"
+        );
+
+        // Player should be #2
+        assert_eq!(player_obj, Obj::mk_id(2));
+
+        // Now we should keep polling received events until we see at lease part of:
+        // *** Connected ***
+        // Before going anywhere, you might want to describe yourself; type `help describe' for information.
+        // #$#mcp version: 2.1 to: 2.1
+        // The First Room
+        // This is all there is right now.
+        // Your previous connection was before we started keeping track.
+        wait_for_event_content(
+            &env.event_log,
+            player_obj,
+            |event| {
+                if let Event::Notify(content, _) = event {
+                    if let Some(str) = content.as_string() {
+                        str == "This is all there is right now."
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            },
+            5,
+            "connection events with room description",
+        );
     }
 }

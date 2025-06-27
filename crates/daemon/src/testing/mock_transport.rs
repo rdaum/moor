@@ -217,6 +217,7 @@ impl MockTransport {
     }
 
     /// Clear all captured replies
+    #[allow(dead_code)]
     pub fn clear_replies(&self) {
         self.host_replies.lock().unwrap().clear();
         self.client_replies.lock().unwrap().clear();
@@ -259,6 +260,7 @@ impl MockTransport {
 
     /// Wait for at least the specified number of client events to be captured
     /// Returns true if the condition is met within the timeout, false otherwise
+    #[allow(dead_code)]
     pub fn wait_for_client_events(&self, min_count: usize, timeout_ms: u64) -> bool {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_millis(timeout_ms);
@@ -274,6 +276,7 @@ impl MockTransport {
 
     /// Wait for at least the specified number of client replies to be captured
     /// Returns true if the condition is met within the timeout, false otherwise
+    #[allow(dead_code)]
     pub fn wait_for_client_replies(&self, min_count: usize, timeout_ms: u64) -> bool {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_millis(timeout_ms);

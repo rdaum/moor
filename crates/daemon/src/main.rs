@@ -23,6 +23,7 @@ use eyre::{bail, eyre};
 use fs2::FileExt;
 
 use crate::connections::ConnectionRegistryFactory;
+use crate::event_log::{EventLog, EventLogConfig};
 use crate::rpc::{RpcServer, Transport, transport::RpcTransport};
 use crate::workers::WorkersServer;
 use clap::Parser;
@@ -46,6 +47,8 @@ mod feature_args;
 mod rpc;
 mod system_control;
 mod tasks;
+#[cfg(test)]
+mod testing;
 mod workers;
 
 // main.rs
@@ -288,14 +291,20 @@ fn main() -> Result<(), Report> {
         args.events_listen.as_str(),
     )?;
 
+    // Create the event log
+    let event_log = Arc::new(EventLog::with_config(
+        EventLogConfig::default(),
+        Some(&resolved_events_db_path),
+    ));
+
     let (rpc_server, task_monitor, system_control) = RpcServer::new(
         kill_switch.clone(),
         public_key.clone(),
         private_key.clone(),
         connections,
+        event_log.clone(),
         rpc_transport,
         config.clone(),
-        &resolved_events_db_path,
     );
     let rpc_server = Arc::new(rpc_server);
 

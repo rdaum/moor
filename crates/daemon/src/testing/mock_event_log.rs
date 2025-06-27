@@ -49,22 +49,26 @@ impl MockEventLog {
     }
 
     /// Get all presentations for all players (for testing)
+    #[allow(dead_code)]
     pub fn get_all_presentations(&self) -> HashMap<Obj, HashMap<String, Presentation>> {
         self.presentations.lock().unwrap().clone()
     }
 
     /// Clear all stored data
+    #[allow(dead_code)]
     pub fn clear(&self) {
         self.narrative_events.lock().unwrap().clear();
         self.presentations.lock().unwrap().clear();
     }
 
     /// Get count of narrative events
+    #[allow(dead_code)]
     pub fn narrative_event_count(&self) -> usize {
         self.narrative_events.lock().unwrap().len()
     }
 
     /// Get count of events for a specific player
+    #[allow(dead_code)]
     pub fn event_count_for_player(&self, player: Obj) -> usize {
         self.narrative_events
             .lock()
@@ -76,6 +80,7 @@ impl MockEventLog {
 
     /// Wait for at least the specified number of narrative events to be logged
     /// Returns true if the condition is met within the timeout, false otherwise
+    #[allow(dead_code)]
     pub fn wait_for_narrative_events(&self, min_count: usize, timeout_ms: u64) -> bool {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_millis(timeout_ms);
@@ -91,6 +96,7 @@ impl MockEventLog {
 
     /// Wait for at least the specified number of events for a specific player
     /// Returns true if the condition is met within the timeout, false otherwise
+    #[allow(dead_code)]
     pub fn wait_for_player_events(&self, player: Obj, min_count: usize, timeout_ms: u64) -> bool {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_millis(timeout_ms);
@@ -106,6 +112,7 @@ impl MockEventLog {
 
     /// Wait for a specific condition to be met with a custom predicate
     /// Returns true if the condition is met within the timeout, false otherwise
+    #[allow(dead_code)]
     pub fn wait_for_condition<F>(&self, predicate: F, timeout_ms: u64) -> bool
     where
         F: Fn(&MockEventLog) -> bool,

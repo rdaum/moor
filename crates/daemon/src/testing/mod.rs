@@ -22,6 +22,5 @@ mod rpc_integration_test;
 #[cfg(test)]
 mod scheduler_integration_test;
 
-pub use crate::event_log::EventLogOps;
 pub use mock_event_log::MockEventLog;
 pub use mock_transport::MockTransport;

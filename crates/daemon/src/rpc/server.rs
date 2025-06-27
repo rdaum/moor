@@ -22,7 +22,7 @@ use super::message_handler::RpcMessageHandler;
 use super::session::{RpcSession, SessionActions};
 use super::transport::Transport;
 use crate::connections::ConnectionRegistry;
-use crate::event_log::{EventLog, EventLogOps};
+use crate::event_log::EventLogOps;
 use crate::rpc::MessageHandler;
 use crate::system_control::SystemControlHandle;
 use crate::tasks::task_monitor::TaskMonitor;
@@ -48,7 +48,7 @@ pub struct RpcServer {
     mailbox_sender: Sender<SessionActions>,
 
     // Core server resources
-    event_log: Arc<EventLog>,
+    event_log: Arc<dyn EventLogOps>,
 }
 
 impl RpcServer {
@@ -58,9 +58,9 @@ impl RpcServer {
         public_key: Key<32>,
         private_key: Key<64>,
         connections: Box<dyn ConnectionRegistry + Send + Sync>,
+        event_log: Arc<dyn EventLogOps>,
         transport: Arc<dyn Transport>,
         config: Arc<Config>,
-        events_db_path: &std::path::Path,
     ) -> (Self, Arc<TaskMonitor>, SystemControlHandle) {
         info!("Creating new RPC server...");
 
@@ -69,12 +69,6 @@ impl RpcServer {
             connections.connections().len()
         );
         let (mailbox_sender, mailbox_receive) = flume::unbounded();
-
-        // Create the event log
-        let event_log = Arc::new(EventLog::with_config(
-            crate::event_log::EventLogConfig::default(),
-            Some(events_db_path),
-        ));
 
         // Create the task monitor with mailbox sender
         let task_monitor = TaskMonitor::new(mailbox_sender.clone());
@@ -175,8 +169,8 @@ impl RpcServer {
     }
 
     // Clean interface methods for external modules that need limited access
-    pub fn event_log(&self) -> &Arc<EventLog> {
-        &self.event_log
+    pub fn event_log(&self) -> Arc<dyn EventLogOps> {
+        self.event_log.clone()
     }
 
     #[allow(dead_code)]

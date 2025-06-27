@@ -29,10 +29,6 @@ assets = [
 maintainer-scripts = "debian/scripts"
 systemd-units = { enable = false }
 
-[lib]
-name = "bincommon"
-path = "src/lib.rs"
-
 [[bin]]
 name = "moor-daemon"
 path = "src/main.rs"

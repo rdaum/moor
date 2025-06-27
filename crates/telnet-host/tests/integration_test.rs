@@ -49,7 +49,7 @@ fn daemon_host_bin() -> &'static PathBuf {
             .unwrap()
             .join(format!("moor-daemon{}", std::env::consts::EXE_SUFFIX));
         if moor_daemon_path.exists() {
-            eprintln!("Using existing moor-daemon binary: {:?}", moor_daemon_path);
+            eprintln!("Using existing moor-daemon binary: {moor_daemon_path:?}");
             return moor_daemon_path;
         }
 
@@ -77,9 +77,9 @@ fn start_daemon(workdir: &Path, uuid: Uuid) -> ManagedChild {
             .arg("--textdump")
             .arg(test_db_path())
             .arg("--events-listen")
-            .arg(format!("{}{}", NARRATIVE_PATH_ROOT, uuid))
+            .arg(format!("{NARRATIVE_PATH_ROOT}{uuid}"))
             .arg("--rpc-listen")
-            .arg(format!("{}{}", RPC_PATH_ROOT, uuid))
+            .arg(format!("{RPC_PATH_ROOT}{uuid}"))
             .arg("test.db")
             .current_dir(workdir)
             .stdout(Stdio::piped())
@@ -98,13 +98,13 @@ fn start_telnet_host(workdir: &Path, uuid: Uuid, port: u16) -> ManagedChild {
         "telnet-host",
         Command::new(telnet_host_bin())
             .arg("--events-address")
-            .arg(format!("{}{}", NARRATIVE_PATH_ROOT, uuid))
+            .arg(format!("{NARRATIVE_PATH_ROOT}{uuid}"))
             .arg("--rpc-address")
-            .arg(format!("{}{}", RPC_PATH_ROOT, uuid))
+            .arg(format!("{RPC_PATH_ROOT}{uuid}"))
             .arg("--telnet-address")
             .arg("0.0.0.0")
             .arg("--telnet-port")
-            .arg(format!("{}", port))
+            .arg(format!("{port}"))
             .arg("--debug")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

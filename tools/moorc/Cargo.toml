@@ -18,7 +18,6 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)
 # Internal Dependencies
 moor-common = { path = "../../crates/common" }
 moor-compiler = { path = "../../crates/compiler" }
-moor-daemon = { path = "../../crates/daemon" }
 moor-db = { path = "../../crates/db" }
 moor-kernel = { path = "../../crates/kernel" }
 moor-moot = { path = "../../crates/testing/moot" }

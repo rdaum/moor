@@ -87,11 +87,11 @@ mod bench_code {
     /// Benchmark for addition on integers
     #[cfg(target_os = "linux")]
     pub fn op_bench<F: Fn(&Var, usize, usize)>(name: &str, f: F, prepared: Var) {
-        eprintln!("Probing .... {}", name);
+        eprintln!("Probing .... {name}");
         let probed_iterations = probe(&f, &prepared, CHUNK_SIZE);
-        eprintln!("Probed iterations: {}", probed_iterations);
+        eprintln!("Probed iterations: {probed_iterations}");
 
-        eprintln!("Running .... {}", name);
+        eprintln!("Running .... {name}");
         let mut summed_results = Results {
             instructions: 0,
             branches: 0,
@@ -122,7 +122,7 @@ mod bench_code {
             iterations: summed_results.iterations / 10,
         };
 
-        eprintln!("Results for {}:", name);
+        eprintln!("Results for {name}:");
         eprintln!("  Iterations: {}", results.iterations);
         eprintln!("  Instructions: {}", results.instructions);
         eprintln!("  Branches: {}", results.branches);

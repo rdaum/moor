@@ -12,11 +12,12 @@
 //
 #![recursion_limit = "256"]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+mod feature_args;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod testrun;
 
+use crate::feature_args::FeatureArgs;
 use crate::testrun::run_test;
-use bincommon::FeatureArgs;
 use clap::Parser;
 use clap_derive::Parser;
 use moor_common::build;
