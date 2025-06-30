@@ -36,6 +36,7 @@ mod tests {
     use moor_kernel::tasks::scheduler::Scheduler;
     use moor_textdump::textdump_load;
     use moor_var::{Obj, SYSTEM_OBJECT};
+    use rpc_common::{AuthToken, ClientToken};
     use rusty_paseto::prelude::Key;
     use semver::Version;
 
@@ -98,6 +99,56 @@ mod tests {
             // Small sleep to avoid busy polling
             std::thread::sleep(Duration::from_millis(10));
         }
+    }
+
+    /// Send a command and wait for output containing the expected text
+    #[allow(clippy::too_many_arguments)]
+    fn send_command_and_wait_for_output(
+        env: &TestEnvironment,
+        client_id: Uuid,
+        client_token: &ClientToken,
+        auth_token: &AuthToken,
+        player_obj: Obj,
+        command: &str,
+        expected_output: &str,
+        description: &str,
+    ) {
+        let message = rpc_common::HostClientToDaemonMessage::Command(
+            client_token.clone(),
+            auth_token.clone(),
+            player_obj,
+            command.to_string(),
+        );
+
+        let result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            message,
+        );
+
+        assert!(
+            result.is_ok(),
+            "{command} command should succeed: {result:?}"
+        );
+
+        wait_for_event_content(
+            &env.event_log,
+            player_obj,
+            |event| {
+                if let Event::Notify(content, _) = event {
+                    if let Some(str) = content.as_string() {
+                        str.contains(expected_output)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            },
+            5,
+            description,
+        );
     }
 
     fn create_test_keys() -> (Key<32>, Key<64>) {
@@ -436,7 +487,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         // Should be LoginResult(Some(  with a ComnnectType Connected, and a objid 2
         let login_result = login_result.expect("Bad login result");
         let rpc_common::DaemonToClientReply::LoginResult(Some((
-            _auth_token,
+            auth_token,
             connect_type,
             player_obj,
         ))) = login_result
@@ -498,5 +549,97 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             5,
             "connection events with room description",
         );
+
+        // Send "@who" command to verify the logged-in player appears in the listing
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            "@who",
+            "Wizard",
+            "@who command output with wizard player listing",
+        );
+
+        // Send @create $thing named "my thing" command
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            "@create $thing named \"my thing\"",
+            "You now have my thing with object number",
+            "@create command output confirming object creation",
+        );
+
+        // Send "drop my thing" command
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            "drop my thing",
+            "You drop the my thing",
+            "drop command output",
+        );
+
+        // Send @describe my thing command
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            "@describe my thing as \"A thing that's thingly.\"",
+            "Description set",
+            "@describe command output",
+        );
+
+        // Send @audit command to verify object ownership
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            "@audit",
+            "my thing",
+            "@audit command output showing owned objects",
+        );
+
+        // Send MOO expression to verify max_object().name
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            ";max_object().name == \"my thing\"",
+            "=> 1",
+            "MOO expression verification",
+        );
+
+        // Send say command
+        send_command_and_wait_for_output(
+            &env,
+            client_id,
+            &client_token,
+            &auth_token,
+            player_obj,
+            "say Why hello there...",
+            "You say, \"Why hello there...\"",
+            "say command output",
+        );
+
+        // Verify no tracebacks in the event log
+        let events = env.event_log.get_all_events();
+        for event in events {
+            if let Event::Traceback(traceback) = event.event.event {
+                panic!("Unexpected traceback: {traceback:?}");
+            }
+        }
     }
 }
