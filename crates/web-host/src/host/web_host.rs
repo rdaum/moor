@@ -37,7 +37,6 @@ use rpc_common::{ClientToken, RpcMessageError};
 use serde_derive::Deserialize;
 use serde_json::json;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use tmq::{request, subscribe};
 use tracing::warn;
 use tracing::{debug, error, info};
@@ -55,8 +54,6 @@ pub struct WebHost {
     rpc_addr: String,
     pubsub_addr: String,
     pub(crate) handler_object: Obj,
-
-    pub(crate) root_path: PathBuf,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -70,15 +67,9 @@ pub enum WsHostError {
 }
 
 impl WebHost {
-    pub fn new(
-        source_dir: PathBuf,
-        rpc_addr: String,
-        narrative_addr: String,
-        handler_object: Obj,
-    ) -> Self {
+    pub fn new(rpc_addr: String, narrative_addr: String, handler_object: Obj) -> Self {
         let tmq_context = tmq::Context::new();
         Self {
-            root_path: source_dir,
             zmq_context: tmq_context,
             rpc_addr,
             pubsub_addr: narrative_addr,
@@ -293,10 +284,11 @@ pub(crate) async fn rpc_call(
     }
 }
 
-/// Stand-alone HTTP GET handler for getting the welcome message for the system.
-pub async fn welcome_message_handler(
+/// Stand-alone HTTP GET handler for getting system properties.
+pub async fn system_property_handler(
     State(host): State<WebHost>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Path(path): Path<String>,
 ) -> Response {
     let (client_id, mut rpc_client, client_token) =
         match host.establish_client_connection(addr).await {
@@ -308,13 +300,24 @@ pub async fn welcome_message_handler(
             }
         };
 
+    // Parse the path into object reference and property name
+    let path_parts: Vec<&str> = path.split('/').collect();
+    let (obj_path, property_name) = if path_parts.len() < 2 {
+        return StatusCode::BAD_REQUEST.into_response();
+    } else {
+        // Multiple parts: last is property, rest is object path
+        let obj_parts = &path_parts[..path_parts.len() - 1];
+        let prop = path_parts[path_parts.len() - 1];
+        (obj_parts.iter().map(|&s| Symbol::mk(s)).collect(), prop)
+    };
+
     let response = match rpc_call(
         client_id,
         &mut rpc_client,
         HostClientToDaemonMessage::RequestSysProp(
             client_token.clone(),
-            ObjectRef::SysObj(vec![Symbol::mk("login")]),
-            Symbol::mk("welcome_message"),
+            ObjectRef::SysObj(obj_path),
+            Symbol::mk(property_name),
         ),
     )
     .await

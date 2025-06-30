@@ -9,11 +9,11 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "A RESTful web front end for interacting with the mooR system"
+description = "WebSocket and REST API server for the mooR system"
 
 [package.metadata.deb]
 depends = "$auto, systemd, openssl"
-extended-description = "Process for listening for HTTP requests and forwarding them to a mooR daemon."
+extended-description = "WebSocket and REST API server for the mooR system."
 section = "net"
 license-file = ["../../LICENSE", "0"]
 priority = "optional"
@@ -25,7 +25,6 @@ assets = [
         "644",
     ],
     ["debian/web-host.yaml", "/etc/moor/web-host.yaml", "644"],
-    ["src/client/*", "/var/lib/moor-web-host/", "644"],
 ]
 maintainer-scripts = "debian/scripts"
 systemd-units = { enable = false }
@@ -51,7 +50,6 @@ serde_json.workspace = true
 # Networking & Communication
 axum.workspace = true
 tmq.workspace = true
-tower-http.workspace = true
 
 # Async Runtime & Concurrency
 futures-util.workspace = true
@@ -66,10 +64,3 @@ tracing-subscriber.workspace = true
 
 # Utilities & Helpers
 uuid.workspace = true
-
-#
-rolldown = { git = "https://github.com/rolldown/rolldown" }
-
-[build-dependencies]
-rolldown = { git = "https://github.com/rolldown/rolldown" }
-tokio = { workspace = true, features = ["rt", "macros", "sync", "rt-multi-thread"] }

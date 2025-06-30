@@ -218,11 +218,10 @@ The system is designed to be flexible in terms of front-end host processes.
 To maintain a classic LambdaMOO MUD-style interface, a `telnet` host process is provided. This is a simple TCP server
 which listens for telnet connections and dispatches them to the daemon process.
 
-To provide a more modern web-based interface, a `web` host process is provided. This is a simple HTTP server which
-provides a RESTful API for interacting with the system for login, verb execution, and property retrieval. The web host
-process additionally maintains a WebSockets connection to the daemon process for sending commands and receiving
-narrative events in the same style as the telnet interface. In the future, additional WebSockets modalities will be
-provided for receiving structured JSON events to provide a richer user interface.
+To provide a web-based interface, a `web-host` process provides RESTful endpoints and WebSocket connectivity
+for interacting with the system. The web frontend is a TypeScript/VanJS application that communicates with
+the web-host via these APIs. In development, Vite serves the frontend with API proxying. In production,
+nginx serves the frontend files and proxies API calls to the web-host service.
 
 In addition to these, a `console` host process is provided. This is a simple command-line interface which is used for
 attaching to the daemon process in a manner similar to the telnet interface, but with history, tab-completion, and

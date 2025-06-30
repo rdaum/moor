@@ -48,7 +48,7 @@ keep adding features right up until the last minute.
 **Runtime improvements:**
 
 - Fully multithreaded architecture for modern multicore systems
-- Native web front end with rich content presentation
+- Web frontend with TypeScript/VanJS client
 - Directory-based import/export format for version control integration
 - Modular architecture for easier extension
 
@@ -76,16 +76,27 @@ The easiest way to get started is with Docker Compose:
 docker compose up
 ```
 
-This starts three services:
+For faster builds during development, the default configuration uses debug builds. For production
+deployment with optimized performance, use:
+
+```bash
+BUILD_PROFILE=release docker compose up
+```
+
+**Note**: Debug builds compile significantly faster (especially on resource-constrained systems like
+Docker Desktop on macOS) while still providing good performance for development and testing.
+
+This starts four services:
 
 - **moor-daemon**: The backend MOO service
 - **moor-telnet-host**: Traditional telnet interface on port 8888
-- **moor-web-host**: Modern web interface on port 8080
+- **moor-web-host**: REST API and WebSocket server for web clients
+- **moor-frontend**: Web client served via nginx on port 8080
 
 Connect via:
 
-- **Web**: [http://localhost:8080](http://localhost:8080) (recommended for new users)
-- **Telnet**: `telnet localhost 8888` (classic experience)
+- **Web**: [http://localhost:8080](http://localhost:8080)
+- **Telnet**: `telnet localhost 8888`
 
 The server comes pre-loaded with JaysHouseCore, providing a ready-to-explore virtual world.
 
