@@ -1,3 +1,1 @@
-web_address: "0.0.0.0:8080"
-client_sources: "/var/lib/moor-web-host"
-dist_directory: "/var/spool/moor-web-host/dist"
+listen_address: "0.0.0.0:8080"

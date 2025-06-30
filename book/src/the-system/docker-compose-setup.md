@@ -30,7 +30,10 @@ The `docker-compose.yml` file in the mooR repository defines all the components 
 : Connected to the daemon using the same authentication keys, listening on port 8888 by default for traditional telnet connections.
 
 **moor-web-host**
-: Also connected to the daemon with matching authentication, providing both web browser access and WebSocket connections for real-time communication.
+: Connected to the daemon with matching authentication, providing RESTful API endpoints and WebSocket connections for web clients.
+
+**moor-frontend**
+: An nginx container serving the TypeScript/VanJS web application and proxying API calls to moor-web-host. Accessible via web browser on port 8080.
 
 **curl-worker**
 : Connected to the daemon to handle outbound HTTP requests from MOO code, enabling your MOO to interact with external web services.
@@ -71,6 +74,7 @@ docker compose logs -f
 # View logs from a specific service
 docker compose logs -f moor-daemon
 docker compose logs -f moor-telnet-host
+docker compose logs -f moor-frontend
 ```
 
 The `-f` flag "follows" the logs, showing new output as it appears.
@@ -87,7 +91,7 @@ This stops and removes the containers but preserves your data volumes.
 
 ## Current Configuration Notes
 
-The provided `docker-compose.yml` file is set up to build mooR from the source code in the repository. When you run `docker compose up`, Docker will compile the latest code and create images.
+The provided `docker-compose.yml` file is set up to build mooR from the source code in the repository. When you run `docker compose up`, Docker will compile the Rust backend code and build the TypeScript frontend, creating all necessary images.
 
 > **Future Plans**: The configuration may be updated in future releases to use pre-built tagged images, making it faster to run stable releases without building from source.
 
@@ -115,7 +119,7 @@ This information is invaluable if you ever need to set up a custom deployment or
 
 ### Common Issues
 
-**Port conflicts**: If port 8888 is already in use, modify the telnet host port mapping in the compose file.
+**Port conflicts**: If ports 8080 (web) or 8888 (telnet) are already in use, modify the port mappings in the compose file.
 
 **Build failures**: Ensure you have enough disk space and memory for the Rust compilation process.
 

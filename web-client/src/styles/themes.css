@@ -1,0 +1,81 @@
+/*
+ * Theme-specific styles and transitions
+ */
+
+/* Theme toggle button - hidden by default, appears on hover */
+.theme-toggle-area {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 80px;
+  height: 80px;
+  z-index: 1100;
+  cursor: pointer;
+}
+
+/* Subtle indicator in the corner */
+.theme-toggle-area::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  opacity: 0.7;
+  transition: all var(--transition-normal);
+  border: 1px solid var(--color-border-medium);
+}
+
+.theme-toggle-area:hover::after {
+  opacity: 0;
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 1100;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-pill);
+  padding: 0.5em 1em;
+  font-family: var(--font-sans);
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
+.theme-toggle-area:hover .theme-toggle,
+.theme-toggle:hover {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.theme-toggle:hover {
+  background-color: var(--color-bg-header);
+}
+
+/* Light theme specific adjustments */
+.light-theme .history_indicator {
+  background: color-mix(in srgb, var(--color-bg-primary) 80%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--color-border-light);
+}
+
+/* Prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
