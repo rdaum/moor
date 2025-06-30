@@ -1,5 +1,5 @@
 # Using official rust base image for building the project.
-FROM rust:1.86-bookworm AS build
+FROM rust:1.88-bookworm AS build
 WORKDIR /moor-build
 RUN apt update
 RUN apt -y install clang-16 libclang-16-dev swig python3-dev cmake libc6 git
