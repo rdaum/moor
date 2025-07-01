@@ -55,6 +55,37 @@ define_relations! {
     object_propflags: ObjAndUUIDHolder => PropPerms,
 }
 
+/// Combined cache structure to ensure atomic updates across all caches
+pub struct Caches {
+    pub verb_resolution_cache: Box<VerbResolutionCache>,
+    pub prop_resolution_cache: Box<PropResolutionCache>,
+    pub ancestry_cache: Box<AncestryCache>,
+}
+
+impl Caches {
+    pub fn new() -> Self {
+        Self {
+            verb_resolution_cache: Box::new(VerbResolutionCache::new()),
+            prop_resolution_cache: Box::new(PropResolutionCache::new()),
+            ancestry_cache: Box::new(AncestryCache::default()),
+        }
+    }
+
+    pub fn fork(&self) -> Self {
+        Self {
+            verb_resolution_cache: self.verb_resolution_cache.fork(),
+            prop_resolution_cache: self.prop_resolution_cache.fork(),
+            ancestry_cache: self.ancestry_cache.fork(),
+        }
+    }
+
+    pub fn has_changed(&self) -> bool {
+        self.verb_resolution_cache.has_changed()
+            || self.prop_resolution_cache.has_changed()
+            || self.ancestry_cache.has_changed()
+    }
+}
+
 pub struct MoorDB {
     monotonic: CachePadded<AtomicU64>,
     keyspace: fjall::Keyspace,
@@ -64,9 +95,7 @@ pub struct MoorDB {
     kill_switch: Arc<AtomicBool>,
     commit_channel: Sender<CommitSet>,
     usage_send: Sender<oneshot::Sender<usize>>,
-    verb_resolution_cache: ArcSwap<Box<VerbResolutionCache>>,
-    prop_resolution_cache: ArcSwap<Box<PropResolutionCache>>,
-    ancestry_cache: ArcSwap<Box<AncestryCache>>,
+    caches: ArcSwap<Caches>,
     jh: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -79,23 +108,17 @@ impl MoorDB {
             ),
         };
 
-        let vc = self.verb_resolution_cache.load();
-        let verb_resolution_cache = vc.fork();
-
-        let pc = self.prop_resolution_cache.load();
-        let prop_resolution_cache = pc.fork();
-
-        let ac = self.ancestry_cache.load();
-        let ancestry_cache = ac.fork();
+        let caches = self.caches.load();
+        let forked_caches = caches.fork();
 
         self.relations.start_transaction(
             tx,
             self.commit_channel.clone(),
             self.usage_send.clone(),
             self.sequences.clone(),
-            verb_resolution_cache,
-            prop_resolution_cache,
-            ancestry_cache,
+            forked_caches.verb_resolution_cache,
+            forked_caches.prop_resolution_cache,
+            forked_caches.ancestry_cache,
         )
     }
 
@@ -156,9 +179,7 @@ impl MoorDB {
         let (commit_channel, commit_receiver) = flume::unbounded();
         let (usage_send, usage_recv) = flume::unbounded();
         let kill_switch = Arc::new(AtomicBool::new(false));
-        let verb_resolution_cache = ArcSwap::new(Arc::new(Box::new(VerbResolutionCache::new())));
-        let prop_resolution_cache = ArcSwap::new(Arc::new(Box::new(PropResolutionCache::new())));
-        let ancestry_cache = ArcSwap::new(Arc::new(Box::new(AncestryCache::default())));
+        let caches = ArcSwap::new(Arc::new(Caches::new()));
         let s = Arc::new(Self {
             monotonic: CachePadded::new(AtomicU64::new(start_tx_num)),
             relations,
@@ -168,9 +189,7 @@ impl MoorDB {
             usage_send,
             kill_switch: kill_switch.clone(),
             keyspace,
-            verb_resolution_cache,
-            prop_resolution_cache,
-            ancestry_cache,
+            caches,
             jh: Mutex::new(None),
         });
 
@@ -215,15 +234,9 @@ impl MoorDB {
                         Ok(CommitSet::CommitWrites(ws, reply)) => {
                             (ws, reply)
                         }
-                        Ok(CommitSet::CommitReadOnly(vc, pc, ac)) => {
-                            if vc.has_changed() {
-                                this.verb_resolution_cache.store(Arc::new(vc));
-                            }
-                            if pc.has_changed() {
-                                this.prop_resolution_cache.store(Arc::new(pc));
-                            }
-                            if ac.has_changed() {
-                                this.ancestry_cache.store(Arc::new(ac));
+                        Ok(CommitSet::CommitReadOnly(combined_caches)) => {
+                            if combined_caches.has_changed() {
+                                this.caches.store(Arc::new(combined_caches));
                             }
                             continue;
                         }
@@ -257,14 +270,13 @@ impl MoorDB {
                         if checkers.all_clean() {
                             reply.send(CommitResult::Success).ok();
 
-                            if verb_cache.has_changed() {
-                                this.verb_resolution_cache.store(Arc::new(verb_cache));
-                            }
-                            if prop_cache.has_changed() {
-                                this.prop_resolution_cache.store(Arc::new(prop_cache));
-                            }
-                            if ancestry_cache.has_changed() {
-                                this.ancestry_cache.store(Arc::new(ancestry_cache));
+                            let combined_caches = Caches {
+                                verb_resolution_cache: verb_cache,
+                                prop_resolution_cache: prop_cache,
+                                ancestry_cache,
+                            };
+                            if combined_caches.has_changed() {
+                                this.caches.store(Arc::new(combined_caches));
                             }
                             continue;
                         }
@@ -314,14 +326,13 @@ impl MoorDB {
 
                     // Swap the commit set's cache with the main cache.
                     {
-                        if verb_cache.has_changed() {
-                            this.verb_resolution_cache.store(Arc::new(verb_cache));
-                        }
-                        if prop_cache.has_changed() {
-                            this.prop_resolution_cache.store(Arc::new(prop_cache));
-                        }
-                        if ancestry_cache.has_changed() {
-                            this.ancestry_cache.store(Arc::new(ancestry_cache));
+                        let combined_caches = Caches {
+                            verb_resolution_cache: verb_cache,
+                            prop_resolution_cache: prop_cache,
+                            ancestry_cache,
+                        };
+                        if combined_caches.has_changed() {
+                            this.caches.store(Arc::new(combined_caches));
                         }
                     }
 

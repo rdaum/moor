@@ -1468,4 +1468,287 @@ mod tests {
             v_str("tx2_value")
         );
     }
+
+    /// Regression test for cache corruption bug where get_verb_by_name records miss
+    /// for inherited verbs, corrupting cache entries that resolve_verb can use
+    #[test]
+    fn test_get_verb_by_name_cache_corruption() {
+        let db = test_db();
+
+        // Set up inheritance hierarchy: child -> parent
+        let (child_obj, parent_obj) = {
+            let mut tx = db.start_transaction();
+
+            let parent = tx
+                .create_object(
+                    None,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read) | ObjFlag::Write,
+                        "parent",
+                    ),
+                )
+                .unwrap();
+
+            let child = tx
+                .create_object(
+                    None,
+                    ObjAttrs::new(
+                        NOTHING,
+                        parent,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read) | ObjFlag::Write,
+                        "child",
+                    ),
+                )
+                .unwrap();
+
+            // Add verb to parent that child inherits
+            tx.add_object_verb(
+                &parent,
+                &parent,
+                &[Symbol::mk("test_verb")],
+                ProgramType::MooR(Program::new()),
+                BitEnum::new_with(VerbFlag::Read),
+                VerbArgsSpec::none_none_none(),
+            )
+            .unwrap();
+
+            tx.commit().unwrap();
+            (child, parent)
+        };
+
+        // Step 1: resolve_verb finds inherited verb, populates cache
+        {
+            let tx = db.start_transaction();
+            let result = tx.resolve_verb(&child_obj, Symbol::mk("test_verb"), None, None);
+
+            // Should succeed - verb found via inheritance
+            assert!(result.is_ok());
+            let verb = result.unwrap();
+            assert_eq!(verb.location(), parent_obj); // Verb is on parent
+        }
+
+        // Step 2: get_verb_by_name for same verb should NOT corrupt the cache
+        {
+            let tx = db.start_transaction();
+            let result = tx.get_verb_by_name(&child_obj, Symbol::mk("test_verb"));
+
+            // Should fail - get_verb_by_name only looks directly on object
+            assert!(matches!(result, Err(WorldStateError::VerbNotFound(_, _))));
+        }
+
+        // Step 3: resolve_verb should still work (cache shouldn't be corrupted)
+        {
+            let tx = db.start_transaction();
+            let result = tx.resolve_verb(&child_obj, Symbol::mk("test_verb"), None, None);
+
+            // This is the regression test - should still succeed
+            // If get_verb_by_name corrupted the cache by recording miss,
+            // this will fail with E_VERBNF
+            assert!(
+                result.is_ok(),
+                "resolve_verb failed after get_verb_by_name - cache corruption detected!"
+            );
+            let verb = result.unwrap();
+            assert_eq!(verb.location(), parent_obj);
+        }
+    }
+
+    #[test]
+    fn test_concurrent_verb_lookup_regression() {
+        // This test reproduces the exact scenario from the production logs:
+        // - Transaction 1 calls resolve_verb and finds inherited verb
+        // - Transaction 2 calls get_verb_by_name and should not corrupt cache
+        // - Both should see consistent results despite being concurrent
+
+        let db = test_db();
+
+        // Set up inheritance hierarchy with verb on parent
+        let (child_obj, parent_obj) = {
+            let mut tx = db.start_transaction();
+
+            let parent = tx
+                .create_object(
+                    None,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read) | ObjFlag::Write,
+                        "parent",
+                    ),
+                )
+                .unwrap();
+
+            let child = tx
+                .create_object(
+                    None,
+                    ObjAttrs::new(
+                        NOTHING,
+                        parent,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read) | ObjFlag::Write,
+                        "child",
+                    ),
+                )
+                .unwrap();
+
+            // Add "features" verb to parent (matching production logs)
+            tx.add_object_verb(
+                &parent,
+                &parent,
+                &[Symbol::mk("features")],
+                ProgramType::MooR(Program::new()),
+                BitEnum::new_with(VerbFlag::Read),
+                VerbArgsSpec::none_none_none(),
+            )
+            .unwrap();
+
+            tx.commit().unwrap();
+            (child, parent)
+        };
+
+        // Simulate the exact sequence from logs using multiple transactions
+
+        // Transaction 1: resolve_verb finds and caches inherited verb
+        let tx1 = db.start_transaction();
+        let resolve_result = tx1.resolve_verb(&child_obj, Symbol::mk("features"), None, None);
+        assert!(
+            resolve_result.is_ok(),
+            "resolve_verb should find inherited verb"
+        );
+        let verb1 = resolve_result.unwrap();
+        assert_eq!(verb1.location(), parent_obj);
+        // Don't commit tx1 yet - it's still active when tx2 starts
+
+        // Transaction 2: get_verb_by_name for same verb (concurrent with tx1)
+        let tx2 = db.start_transaction();
+        let get_result = tx2.get_verb_by_name(&child_obj, Symbol::mk("features"));
+        // get_verb_by_name should fail (verb not directly on child)
+        assert!(matches!(
+            get_result,
+            Err(WorldStateError::VerbNotFound(_, _))
+        ));
+
+        // Commit tx2 first (this is what happens in production logs)
+        tx2.commit().unwrap();
+
+        // Now commit tx1
+        tx1.commit().unwrap();
+
+        // Transaction 3: resolve_verb should still work after both commits
+        // This is the critical test - if cache was corrupted, this will fail
+        let tx3 = db.start_transaction();
+        let final_resolve = tx3.resolve_verb(&child_obj, Symbol::mk("features"), None, None);
+
+        assert!(
+            final_resolve.is_ok(),
+            "resolve_verb failed after concurrent get_verb_by_name - this reproduces the production bug!"
+        );
+        let verb3 = final_resolve.unwrap();
+        assert_eq!(verb3.location(), parent_obj);
+    }
+
+    #[test]
+    fn test_get_verb_by_name_cache_miss_after_flush_regression() {
+        // This test reproduces the exact bug from production logs:
+        // 1. Cache gets flushed (due to object creation/modification)
+        // 2. get_verb_by_name is called for an inherited verb
+        // 3. get_verb_by_name incorrectly records a miss (should not record anything)
+        // 4. Subsequent resolve_verb calls fail due to the false cached miss
+
+        let db = test_db();
+
+        // Set up inheritance hierarchy: child inherits from parent
+        let (child_obj, parent_obj) = {
+            let mut tx = db.start_transaction();
+
+            let parent = tx
+                .create_object(
+                    None,
+                    ObjAttrs::new(
+                        NOTHING,
+                        NOTHING,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read) | ObjFlag::Write,
+                        "parent",
+                    ),
+                )
+                .unwrap();
+
+            let child = tx
+                .create_object(
+                    None,
+                    ObjAttrs::new(
+                        NOTHING,
+                        parent,
+                        NOTHING,
+                        BitEnum::new_with(ObjFlag::Read) | ObjFlag::Write,
+                        "child",
+                    ),
+                )
+                .unwrap();
+
+            // Add "features" verb to parent (child inherits it)
+            tx.add_object_verb(
+                &parent,
+                &parent,
+                &[Symbol::mk("features")],
+                ProgramType::MooR(Program::new()),
+                BitEnum::new_with(VerbFlag::Read),
+                VerbArgsSpec::none_none_none(),
+            )
+            .unwrap();
+
+            tx.commit().unwrap();
+            (child, parent)
+        };
+
+        // Step 1: Verify the verb can be resolved via inheritance
+        {
+            let tx = db.start_transaction();
+            let result = tx.resolve_verb(&child_obj, Symbol::mk("features"), None, None);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().location(), parent_obj);
+        }
+
+        // Step 2: Simulate cache flush by creating a new object (triggers flush)
+        {
+            let mut tx = db.start_transaction();
+            tx.create_object(
+                None,
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "temp_object"),
+            )
+            .unwrap();
+            tx.commit().unwrap();
+            // This commit causes cache flush due to object creation
+        }
+
+        // Step 3: In SAME transaction: Call get_verb_by_name then resolve_verb
+        // This matches the production logs where both calls happen in tx 1643
+        {
+            let tx = db.start_transaction();
+
+            // First call: get_verb_by_name (should fail but not corrupt cache)
+            let get_result = tx.get_verb_by_name(&child_obj, Symbol::mk("features"));
+            assert!(matches!(
+                get_result,
+                Err(WorldStateError::VerbNotFound(_, _))
+            ));
+
+            // Second call in SAME transaction: resolve_verb (should still work)
+            let resolve_result = tx.resolve_verb(&child_obj, Symbol::mk("features"), None, None);
+
+            // This is the critical test - if get_verb_by_name corrupted the cache,
+            // resolve_verb will fail even within the same transaction
+            assert!(
+                resolve_result.is_ok(),
+                "resolve_verb failed after get_verb_by_name in same transaction - reproduces production bug!"
+            );
+            assert_eq!(resolve_result.unwrap().location(), parent_obj);
+        }
+    }
 }

@@ -75,7 +75,8 @@ impl VerbResolutionCache {
 
     pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
         let inner = self.inner.lock().unwrap();
-        inner.entries.get(&(*obj, *verb)).cloned()
+        let entry = inner.entries.get(&(*obj, *verb));
+        entry.cloned()
     }
 
     pub(crate) fn flush(&self) {

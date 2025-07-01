@@ -35,7 +35,7 @@ mod relation_defs;
 mod ws_transaction;
 
 use crate::db_worldstate::DbWorldState;
-use crate::moor_db::{MoorDB, WorkingSets};
+use crate::moor_db::{Caches, MoorDB, WorkingSets};
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
 mod prop_cache;
@@ -43,8 +43,6 @@ mod tx_management;
 mod utils;
 mod verb_cache;
 
-use crate::prop_cache::PropResolutionCache;
-use crate::verb_cache::{AncestryCache, VerbResolutionCache};
 pub use db_worldstate::db_counters;
 pub use tx_management::Provider;
 pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, WorkingSet};
@@ -287,11 +285,7 @@ enum CommitSet {
     CommitWrites(Box<WorkingSets>, oneshot::Sender<CommitResult>),
     /// This is a read only commit, we didn't do any mutations. We can just fire and forget,
     /// just (maybe) updating the caches on the DB side, no need for locks, flushes, anything.
-    CommitReadOnly(
-        Box<VerbResolutionCache>,
-        Box<PropResolutionCache>,
-        Box<AncestryCache>,
-    ),
+    CommitReadOnly(Caches),
 }
 
 #[cfg(test)]

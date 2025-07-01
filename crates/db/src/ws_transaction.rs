@@ -13,7 +13,7 @@
 
 use crate::db_worldstate::db_counters;
 use crate::fjall_provider::FjallProvider;
-use crate::moor_db::{SEQUENCE_MAX_OBJECT, WorldStateTransaction};
+use crate::moor_db::{Caches, SEQUENCE_MAX_OBJECT, WorldStateTransaction};
 use crate::tx_management::{Relation, RelationTransaction};
 use crate::{CommitSet, Error, ObjAndUUIDHolder, StringHolder};
 use ahash::AHasher;
@@ -647,11 +647,30 @@ impl WorldStateTransaction {
         match self.verb_resolution_cache.lookup(obj, &name) {
             Some(Some(verbdef)) if verbdef.location().eq(obj) => Ok(verbdef),
             Some(None) => Err(WorldStateError::VerbNotFound(*obj, name.to_string())),
-            _ => {
+            Some(Some(_verbdef)) => {
+                // Found cached verb but it's not directly on this object (it's inherited).
+                // get_verb_by_name only returns verbs directly on the object, so we need
+                // to look directly on this object. But we should NOT record a miss since
+                // the cached entry is valid for resolve_verb inheritance lookups.
                 let verbdefs = self.get_verbs(obj)?;
                 let named = verbdefs.find_named(name);
                 let Some(verb) = named.first() else {
-                    self.verb_resolution_cache.fill_miss(obj, &name);
+                    // Don't record miss - preserve the inherited verb cache entry
+                    return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
+                };
+
+                // Fill cache with the direct verb (this might replace the inherited one,
+                // but that's okay since this is more specific)
+                self.verb_resolution_cache.fill_hit(obj, &name, verb);
+                Ok(verb.clone())
+            }
+            None => {
+                // No cache entry at all, proceed with normal lookup
+                let verbdefs = self.get_verbs(obj)?;
+                let named = verbdefs.find_named(name);
+                let Some(verb) = named.first() else {
+                    // Don't record a miss - get_verb_by_name only looks directly on object,
+                    // so not finding it here doesn't mean the verb doesn't exist via inheritance
                     return Err(WorldStateError::VerbNotFound(*obj, name.to_string()));
                 };
 
@@ -1181,11 +1200,11 @@ impl WorldStateTransaction {
             if self.verb_resolution_cache.has_changed() || self.prop_resolution_cache.has_changed()
             {
                 self.commit_channel
-                    .send(CommitSet::CommitReadOnly(
-                        self.verb_resolution_cache,
-                        self.prop_resolution_cache,
-                        self.ancestry_cache,
-                    ))
+                    .send(CommitSet::CommitReadOnly(Caches {
+                        verb_resolution_cache: self.verb_resolution_cache,
+                        prop_resolution_cache: self.prop_resolution_cache,
+                        ancestry_cache: self.ancestry_cache,
+                    }))
                     .expect("Unable to send commit request for read-only transaction");
             }
             return Ok(CommitResult::Success);
