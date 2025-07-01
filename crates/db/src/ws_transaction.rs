@@ -1025,6 +1025,7 @@ impl WorldStateTransaction {
                 WorldStateError::DatabaseError(format!("Error clearing property value: {e:?}"))
             })?;
         self.has_mutations = true;
+        self.prop_resolution_cache.flush();
         Ok(())
     }
 
