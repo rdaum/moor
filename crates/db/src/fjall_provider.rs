@@ -18,7 +18,6 @@ use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_var::AsByteBuffer;
 use std::collections::{HashMap, HashSet};
-use std::marker::PhantomData;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
