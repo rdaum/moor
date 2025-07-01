@@ -36,19 +36,19 @@ export type ObjectRef = Oid | SysObj | ObjMatch;
 
 // Parse a JSON document representing a MOO 'Var'.
 // Moor JSON common are a bit special because we have a number of types that are not a direct map.
-export function jsonToValue(json: JSON) {
+export function jsonToValue(json: any): any {
     if (typeof json === "number") {
         return json;
     } else if (typeof json === "string") {
         return json;
     } else if (typeof json === "object") {
-        if (json["error"]) {
-            return new Error(json["error"], json["message"]);
-        } else if (json["oid"] != null) {
-            return oidRef(json["oid"]);
-        } else if (json["map_pairs"] != null) {
-            const pairs = [];
-            const jsonPairs = json["map_pairs"];
+        if ((json as any)["error"]) {
+            return new Error((json as any)["error"], (json as any)["message"]);
+        } else if ((json as any)["oid"] != null) {
+            return oidRef((json as any)["oid"]);
+        } else if ((json as any)["map_pairs"] != null) {
+            const pairs: any[] = [];
+            const jsonPairs = (json as any)["map_pairs"];
             if (!Array.isArray(jsonPairs)) {
                 throw "Map pairs must be an array";
             }
@@ -64,7 +64,7 @@ export function jsonToValue(json: JSON) {
     }
 }
 
-export function valueToJson(v) {
+export function valueToJson(v: any): any {
     if (typeof v === "number" || typeof v === "string") {
         return v;
     } else if (v instanceof Error) {
@@ -78,7 +78,7 @@ export function valueToJson(v) {
     }
 }
 
-export function oidRef(oid): Oid {
+export function oidRef(oid: number): Oid {
     return { kind: ORefKind.Oid, oid: oid };
 }
 
@@ -93,7 +93,7 @@ export function matchRef(match: string): ObjMatch {
 export class Error {
     code: string;
     message: string | null;
-    constructor(code: string, message) {
+    constructor(code: string, message: string | null) {
         this.code = code;
         this.message = message;
     }
@@ -115,14 +115,14 @@ export class Error {
 export class Map {
     pairs: Array<[any, any]>;
 
-    constructor(pairs = []) {
+    constructor(pairs: Array<[any, any]> = []) {
         this.pairs = pairs;
     }
 
     // Insert a key-value pair into the map, replacing the value if the key already exists, common are kept in sorted
     // order.
     // As in MOO, we are CoW friendly, so we return a new map with the new pair inserted.
-    insert(key, value) {
+    insert(key: any, value: any): Map {
         const pairs = this.pairs.slice();
         let i = pairs.findIndex(pair => pair[0] >= key);
         if (i < 0) {
@@ -136,7 +136,7 @@ export class Map {
     }
 
     // Remove a key-value pair from the map, returning a new map with the pair removed.
-    remove(key) {
+    remove(key: any): Map {
         const pairs = this.pairs.slice();
         const i = pairs.findIndex(pair => pair[0] === key);
         if (i < 0) {
@@ -147,7 +147,7 @@ export class Map {
     }
 
     // Get the value for a key, or undefined if the key is not in the map.
-    get(key) {
+    get(key: any): any {
         const i = this.pairs.findIndex(pair => pair[0] === key);
         if (i < 0) {
             return undefined;
@@ -167,7 +167,7 @@ export class Map {
     }
 
     // Return the number of pairs in the map
-    size() {
+    size(): number {
         return this.pairs.length;
     }
 }

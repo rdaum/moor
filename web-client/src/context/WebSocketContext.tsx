@@ -1,0 +1,69 @@
+// Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+// software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, version
+// 3.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see <https://www.gnu.org/licenses/>.
+//
+
+import React, { createContext, useContext } from "react";
+import { Player } from "../hooks/useAuth";
+import { useWebSocket, WebSocketState } from "../hooks/useWebSocket";
+import { PresentationData } from "../types/presentation";
+
+interface WebSocketContextType {
+    wsState: WebSocketState;
+    connect: (mode: "connect" | "create") => Promise<void>;
+    disconnect: () => void;
+    sendMessage: (message: string) => boolean;
+}
+
+const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
+
+interface WebSocketProviderProps {
+    children: React.ReactNode;
+    player: Player | null;
+    showMessage: (message: string, duration?: number) => void;
+    setPlayerConnected: (connected: boolean) => void;
+    handleNarrativeMessage: (content: string, timestamp?: string, contentType?: string, isHistorical?: boolean) => void;
+    handlePresentMessage: (presentData: PresentationData) => void;
+    handleUnpresentMessage: (id: string) => void;
+}
+
+export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
+    children,
+    player,
+    showMessage,
+    setPlayerConnected,
+    handleNarrativeMessage,
+    handlePresentMessage,
+    handleUnpresentMessage,
+}) => {
+    const webSocketHook = useWebSocket(
+        player,
+        showMessage,
+        setPlayerConnected,
+        handleNarrativeMessage,
+        handlePresentMessage,
+        handleUnpresentMessage,
+    );
+
+    return (
+        <WebSocketContext.Provider value={webSocketHook}>
+            {children}
+        </WebSocketContext.Provider>
+    );
+};
+
+export const useWebSocketContext = (): WebSocketContextType => {
+    const context = useContext(WebSocketContext);
+    if (context === undefined) {
+        throw new Error("useWebSocketContext must be used within a WebSocketProvider");
+    }
+    return context;
+};
