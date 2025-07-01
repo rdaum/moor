@@ -21,7 +21,7 @@
   - crates/telnet-host - exposes a line-oriented TCP stream that RPCs to the daemon
   - crates/web-host - exposes WebSocket and REST API endpoints for web clients
   - crates/rpc/* - shared rpc common bits.
-  - web-client/ - TypeScript/VanJS MOO client, which communicates with the web services defined by
+  - web-client/ - Web-based MOO client, which communicates with the web services defined by
     `web-host`
 
 * For more details there is a mdbook under book/, which can be explored

@@ -1,6 +1,6 @@
 # mooR Web Client
 
-A TypeScript/VanJS web client for connecting to mooR servers via the `moor-web-host` API service.
+A rich web client for connecting to mooR servers via the `moor-web-host` API service.
 
 ## Overview
 

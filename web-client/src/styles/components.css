@@ -8,14 +8,17 @@
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-medium);
   padding: var(--space-lg);
-  margin: var(--space-lg) var(--space-sm);
+  margin: 0 var(--space-sm);
   font-family: var(--font-sans);
   overflow-y: scroll;
   min-width: 50%;
-  height: calc(100% - 4em);
-  resize: horizontal;
+  flex: 1;
+  min-height: 0;
+  resize: none;
   width: 100%;
+  box-sizing: border-box;
 }
 
 /* Text styles within narrative */
@@ -68,13 +71,15 @@
   border: 1px solid var(--color-border-light);
   font-family: var(--font-sans);
   overflow-y: auto;
-  flex-grow: 1;
-  min-width: 20em;
+  flex-shrink: 0;
+  min-width: 12em;
+  width: 15em;
   display: none; /* starts hidden */
 }
 
 .right_dock {
   margin: var(--space-lg) var(--space-lg) var(--space-lg) var(--space-sm);
+  resize: horizontal;
 }
 
 .left_dock {
@@ -133,7 +138,8 @@
 
 .top_dock_panel,
 .bottom_dock_panel {
-  min-width: 20em;
+  min-width: 12em;
+  width: 15em;
   max-width: 30em;
   height: 100%;
   margin: 0;
@@ -212,16 +218,17 @@
 }
 
 /* ====== OUTPUT & INPUT AREAS ====== */
+
 .output_window {
-  background-color: var(--color-bg-primary);
+  background-color: transparent;
   color: var(--color-text-primary);
   overflow: auto;
   word-wrap: break-word;
-  margin: var(--space-md);
+  padding: var(--space-md);
   font-family: var(--font-mono);
-  align-self: center;
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
+  border: none;
+  flex: 1;
+  min-height: 0;
 }
 
 .input_area {
@@ -230,12 +237,14 @@
   font-family: var(--font-mono);
   padding: var(--space-md);
   margin: 0;
-  width: 100%;
   border: none;
-  border-bottom-left-radius: var(--radius-lg);
-  border-bottom-right-radius: var(--radius-lg);
-  resize: vertical;
+  border-top: 1px solid var(--color-border-light);
+  resize: none;
   overflow: auto;
+  min-height: 2.5rem;
+  height: 2.5rem;
+  max-height: 8rem;
+  box-sizing: border-box;
 }
 
 /* ====== WINDOWS & DIALOGS ====== */
@@ -356,6 +365,30 @@
   white-space: pre-wrap;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-medium) var(--color-bg-input);
+}
+
+/* Djot content styles */
+.text_djot {
+  font-family: var(--font-mono);
+  font-size: 1em;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow: auto;
+  padding: 0;
+  margin: 0;
+}
+
+/* Remove default paragraph margins for inline djot content */
+.text_djot p {
+  margin: 0;
+  padding: 0;
+  display: inline;
+}
+
+/* Add proper spacing for multi-paragraph djot content */
+.text_djot p + p {
+  display: block;
+  margin-top: 1em;
 }
 
 /* ====== HISTORICAL CONTENT ====== */

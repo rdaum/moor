@@ -83,4 +83,4 @@ excludes:
   - crates/daemon/debian/*
   - crates/telnet-host/debian/*
   - crates/web-host/debian/*
-  - .*\.(md|rst|txt|yml|yaml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css|gz|tgz|tar|zip|awk|data)
+  - .*\.(md|rst|txt|yml|yaml|png|jpg|gif|db|pem|lock|json|toml|in|out|html|moot|edn|node|css|gz|tgz|tar|zip|awk|data|conf)
