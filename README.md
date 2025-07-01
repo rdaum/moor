@@ -48,7 +48,7 @@ keep adding features right up until the last minute.
 **Runtime improvements:**
 
 - Fully multithreaded architecture for modern multicore systems
-- Web frontend with TypeScript/VanJS client
+- Web frontend client
 - Directory-based import/export format for version control integration
 - Modular architecture for easier extension
 
