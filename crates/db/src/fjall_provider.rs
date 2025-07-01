@@ -70,7 +70,6 @@ where
     kill_switch: Arc<AtomicBool>,
     /// Shared state tracking operations in-flight to background thread
     pending_ops: Arc<RwLock<PendingOperations<Domain, Codomain>>>,
-    _phantom_data: PhantomData<(Domain, Codomain)>,
     jh: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
@@ -184,7 +183,6 @@ where
             ops: ops_tx,
             kill_switch,
             pending_ops,
-            _phantom_data: PhantomData,
             jh: Arc::new(Mutex::new(Some(jh))),
         }
     }
