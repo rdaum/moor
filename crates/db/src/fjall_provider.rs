@@ -17,31 +17,59 @@ use fjall::UserValue;
 use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_var::AsByteBuffer;
+use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use tracing::error;
 
 enum WriteOp<
-    Domain: Clone + Eq + PartialEq + AsByteBuffer,
-    Codomain: Clone + PartialEq + AsByteBuffer,
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync,
+    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync,
 > {
     Insert(Timestamp, Domain, Codomain),
     Delete(Domain),
+}
+
+/// Tracks operations that have been submitted to the background thread but not yet completed
+struct PendingOperations<Domain, Codomain>
+where
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
+    Codomain: Clone + PartialEq + Send + Sync,
+{
+    /// Keys that have been deleted but delete hasn't flushed to backing store yet
+    pending_deletes: HashSet<Domain>,
+    /// Keys that have been written but write hasn't flushed to backing store yet  
+    pending_writes: HashMap<Domain, (Timestamp, Codomain)>,
+}
+
+impl<Domain, Codomain> Default for PendingOperations<Domain, Codomain>
+where
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + Send + Sync,
+    Codomain: Clone + PartialEq + Send + Sync,
+{
+    fn default() -> Self {
+        Self {
+            pending_deletes: HashSet::new(),
+            pending_writes: HashMap::new(),
+        }
+    }
 }
 
 /// A backing persistence provider that fills the DB cache from a Fjall partition.
 #[derive(Clone)]
 pub(crate) struct FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + AsByteBuffer,
-    Codomain: Clone + PartialEq + AsByteBuffer,
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync,
+    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync,
 {
     fjall_partition: fjall::PartitionHandle,
     ops: Sender<WriteOp<Domain, Codomain>>,
     kill_switch: Arc<AtomicBool>,
+    /// Shared state tracking operations in-flight to background thread
+    pending_ops: Arc<RwLock<PendingOperations<Domain, Codomain>>>,
     _phantom_data: PhantomData<(Domain, Codomain)>,
     jh: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
@@ -69,15 +97,17 @@ where
 
 impl<Domain, Codomain> FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + AsByteBuffer + Send + 'static,
-    Codomain: Clone + PartialEq + AsByteBuffer + Send + 'static,
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync + 'static,
 {
     pub fn new(relation_name: &str, fjall_partition: fjall::PartitionHandle) -> Self {
         let kill_switch = Arc::new(AtomicBool::new(false));
         let (ops_tx, ops_rx) = flume::unbounded::<WriteOp<Domain, Codomain>>();
+        let pending_ops = Arc::new(RwLock::new(PendingOperations::default()));
 
         let fj = fjall_partition.clone();
         let ks = kill_switch.clone();
+        let pending_ops_bg = pending_ops.clone();
         let thread_name = format!("moor-w-{relation_name}");
         let tb = std::thread::Builder::new().name(thread_name);
         let jh = tb
@@ -92,31 +122,55 @@ where
                             let Ok(key) = domain.as_bytes().map_err(|_| {
                                 error!("failed to encode domain to database");
                             }) else {
+                                // Remove from pending operations even on encoding error
+                                if let Ok(mut pending) = pending_ops_bg.write() {
+                                    pending.pending_writes.remove(&domain);
+                                }
                                 continue;
                             };
                             let Ok(value) = encode::<Codomain>(ts, &codomain) else {
                                 error!("failed to encode codomain to database");
+                                // Remove from pending operations even on encoding error
+                                if let Ok(mut pending) = pending_ops_bg.write() {
+                                    pending.pending_writes.remove(&domain);
+                                }
                                 continue;
                             };
-                            fjall_partition
-                                .insert(key, value)
-                                .map_err(|e| {
-                                    error!("failed to insert into database: {}", e);
-                                })
-                                .ok();
+
+                            // Perform the actual write
+                            let write_result = fj.insert(key, value);
+
+                            // Remove from pending operations after completion (success or failure)
+                            if let Ok(mut pending) = pending_ops_bg.write() {
+                                pending.pending_writes.remove(&domain);
+                            }
+
+                            if let Err(e) = write_result {
+                                error!("failed to insert into database: {}", e);
+                            }
                         }
                         Ok(WriteOp::Delete(domain)) => {
                             let Ok(key) = domain.as_bytes().map_err(|_| {
                                 error!("failed to encode domain to database for deletion");
                             }) else {
+                                // Remove from pending operations even on encoding error
+                                if let Ok(mut pending) = pending_ops_bg.write() {
+                                    pending.pending_deletes.remove(&domain);
+                                }
                                 continue;
                             };
-                            fjall_partition
-                                .remove(key)
-                                .map_err(|e| {
-                                    error!("failed to delete from database: {}", e);
-                                })
-                                .ok();
+
+                            // Perform the actual delete
+                            let delete_result = fj.remove(key);
+
+                            // Remove from pending operations after completion (success or failure)
+                            if let Ok(mut pending) = pending_ops_bg.write() {
+                                pending.pending_deletes.remove(&domain);
+                            }
+
+                            if let Err(e) = delete_result {
+                                error!("failed to delete from database: {}", e);
+                            }
                         }
                         Err(_e) => {
                             continue;
@@ -126,10 +180,11 @@ where
             })
             .expect("failed to spawn fjall-write");
         Self {
-            fjall_partition: fj,
+            fjall_partition,
             ops: ops_tx,
-            _phantom_data: PhantomData,
             kill_switch,
+            pending_ops,
+            _phantom_data: PhantomData,
             jh: Arc::new(Mutex::new(Some(jh))),
         }
     }
@@ -137,10 +192,28 @@ where
 
 impl<Domain, Codomain> Provider<Domain, Codomain> for FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + AsByteBuffer,
-    Codomain: Clone + PartialEq + AsByteBuffer,
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync,
+    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync,
 {
     fn get(&self, domain: &Domain) -> Result<Option<(Timestamp, Codomain)>, Error> {
+        // 1. Check pending operations first
+        {
+            let pending = self.pending_ops.read().map_err(|_| {
+                Error::StorageFailure("Failed to acquire pending ops read lock".to_string())
+            })?;
+
+            // If pending delete, definitely doesn't exist
+            if pending.pending_deletes.contains(domain) {
+                return Ok(None);
+            }
+
+            // If pending write, return that value
+            if let Some((ts, value)) = pending.pending_writes.get(domain) {
+                return Ok(Some((*ts, value.clone())));
+            }
+        }
+
+        // 2. Only then check backing store
         let key = domain.as_bytes().map_err(|_| Error::EncodingFailure)?;
         let Some(result) = self
             .fjall_partition
@@ -154,10 +227,27 @@ where
     }
 
     fn put(&self, timestamp: Timestamp, domain: &Domain, codomain: &Codomain) -> Result<(), Error> {
+        // Add to pending writes immediately
+        {
+            let mut pending = self.pending_ops.write().map_err(|_| {
+                Error::StorageFailure("Failed to acquire pending ops write lock".to_string())
+            })?;
+            pending
+                .pending_writes
+                .insert(domain.clone(), (timestamp, codomain.clone()));
+            // Also remove from pending deletes if it was there (overwriting a deleted key)
+            pending.pending_deletes.remove(domain);
+        }
+
+        // Send async operation
         if let Err(e) = self
             .ops
             .send(WriteOp::Insert(timestamp, domain.clone(), codomain.clone()))
         {
+            // If sending fails, remove from pending operations
+            if let Ok(mut pending) = self.pending_ops.write() {
+                pending.pending_writes.remove(domain);
+            }
             return Err(Error::StorageFailure(format!(
                 "failed to insert into database: {e}"
             )));
@@ -166,7 +256,22 @@ where
     }
 
     fn del(&self, _timestamp: Timestamp, domain: &Domain) -> Result<(), Error> {
+        // Add to pending deletes immediately
+        {
+            let mut pending = self.pending_ops.write().map_err(|_| {
+                Error::StorageFailure("Failed to acquire pending ops write lock".to_string())
+            })?;
+            pending.pending_deletes.insert(domain.clone());
+            // Also remove from pending writes if it was there
+            pending.pending_writes.remove(domain);
+        }
+
+        // Send async operation
         if let Err(e) = self.ops.send(WriteOp::Delete(domain.clone())) {
+            // If sending fails, remove from pending operations
+            if let Ok(mut pending) = self.pending_ops.write() {
+                pending.pending_deletes.remove(domain);
+            }
             return Err(Error::StorageFailure(format!(
                 "failed to delete from database: {e}"
             )));
@@ -179,15 +284,36 @@ where
         F: Fn(&Domain, &Codomain) -> bool,
     {
         let mut result = Vec::new();
+
+        // Get snapshot of pending operations
+        let pending = self.pending_ops.read().map_err(|_| {
+            Error::StorageFailure("Failed to acquire pending ops read lock".to_string())
+        })?;
+
+        // Scan backing store first
         for entry in self.fjall_partition.iter() {
             let (key, value) = entry.map_err(|e| Error::RetrievalFailure(e.to_string()))?;
             let domain =
                 Domain::from_bytes(key.clone().into()).map_err(|_| Error::EncodingFailure)?;
+
+            // Skip if this domain is pending deletion
+            if pending.pending_deletes.contains(&domain) {
+                continue;
+            }
+
             let (ts, codomain) = decode::<Codomain>(value)?;
             if predicate(&domain, &codomain) {
                 result.push((ts, domain, codomain));
             }
         }
+
+        // Add pending writes that match the predicate
+        for (domain, (ts, codomain)) in &pending.pending_writes {
+            if predicate(domain, codomain) {
+                result.push((*ts, domain.clone(), codomain.clone()));
+            }
+        }
+
         Ok(result)
     }
 
@@ -200,8 +326,8 @@ where
 
 impl<Domain, Codomain> Drop for FjallProvider<Domain, Codomain>
 where
-    Domain: Clone + Eq + PartialEq + AsByteBuffer,
-    Codomain: Clone + PartialEq + AsByteBuffer,
+    Domain: Clone + Eq + PartialEq + std::hash::Hash + AsByteBuffer + Send + Sync,
+    Codomain: Clone + PartialEq + AsByteBuffer + Send + Sync,
 {
     fn drop(&mut self) {
         self.stop().unwrap();

@@ -1652,6 +1652,338 @@ mod tests {
         assert_eq!(verb3.location(), parent_obj);
     }
 
+    /// Test property inheritance, clearing, and properties() function behavior
+    /// This is equivalent to the MOOT test in basic/property.moot
+    /// Each step runs in a separate transaction like MOOT tests do
+    #[test]
+    fn test_property_inheritance_and_clearing() {
+        // Run the test multiple times to help trigger inconsistent macOS bugs
+        for iteration in 0..5 {
+            let db = test_db();
+            let parent;
+            let child;
+
+            // Step 1: Create parent object (use different IDs per iteration) - separate transaction
+            {
+                let mut tx = db.start_transaction();
+                let parent_id = 1 + (iteration * 100); // Use different object IDs per iteration
+                parent = tx
+                    .create_object(
+                        Some(Obj::mk_id(parent_id)),
+                        ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+                    )
+                    .unwrap();
+                assert_eq!(parent, Obj::mk_id(parent_id));
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+
+            // Step 2: Create child object parented to parent - separate transaction
+            {
+                let mut tx = db.start_transaction();
+                child = tx
+                    .create_object(
+                        None,
+                        ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
+                    )
+                    .unwrap();
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+
+            // Step 3: Define property "test" on parent with value 1 - separate transaction
+            {
+                let mut tx = db.start_transaction();
+                tx.define_property(
+                    &parent,
+                    &parent,
+                    Symbol::mk("test"),
+                    &NOTHING,
+                    BitEnum::new(),
+                    Some(v_int(1)),
+                )
+                .unwrap();
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+
+            // Step 4: Check parent property value - separate transaction
+            {
+                let tx = db.start_transaction();
+                let (_prop, value, _perms, is_clear) =
+                    tx.resolve_property(&parent, Symbol::mk("test")).unwrap();
+                assert_eq!(value, v_int(1));
+                assert!(!is_clear, "Property should not be clear on defining object");
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+
+            // Step 5: Check child inherits property - separate transaction
+            {
+                let tx = db.start_transaction();
+                let (_prop, value, _perms, is_clear) =
+                    tx.resolve_property(&child, Symbol::mk("test")).unwrap();
+                assert_eq!(value, v_int(1));
+                assert!(is_clear, "Inherited property should be marked as clear");
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+
+            // Step 6: Set property on child to value 2 - separate transaction
+            let prop_uuid = {
+                let mut tx = db.start_transaction();
+                let (prop, _value, _perms, _is_clear) =
+                    tx.resolve_property(&child, Symbol::mk("test")).unwrap();
+                let uuid = prop.uuid();
+                tx.set_property(&child, uuid, v_int(2)).unwrap();
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+                uuid
+            };
+
+            // Step 7: Check child now has value 2, not clear - separate transaction
+            {
+                let tx = db.start_transaction();
+                let (_prop, value, _perms, is_clear) =
+                    tx.resolve_property(&child, Symbol::mk("test")).unwrap();
+                assert_eq!(value, v_int(2));
+                assert!(!is_clear, "Property should not be clear after being set");
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+
+            // Step 8: Check properties() function behavior - separate transaction
+            {
+                let tx = db.start_transaction();
+                let parent_props = tx.get_properties(&parent).unwrap();
+                assert_eq!(parent_props.len(), 1, "Parent should have 1 property");
+                assert!(parent_props.find_first_named(Symbol::mk("test")).is_some());
+
+                let child_props = tx.get_properties(&child).unwrap();
+                assert_eq!(
+                    child_props.len(),
+                    0,
+                    "Child should have 0 properties (inheritance not listed)"
+                );
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+
+            // Step 9: Clear property on child - separate transaction
+            {
+                let mut tx = db.start_transaction();
+
+                tx.clear_property(&child, prop_uuid).unwrap();
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+
+            // Step 10: Check child inherits parent's value again - separate transaction
+            {
+                let tx = db.start_transaction();
+
+                let (_prop, value, _perms, is_clear) =
+                    tx.resolve_property(&child, Symbol::mk("test")).unwrap();
+                assert_eq!(
+                    value,
+                    v_int(1),
+                    "Child should inherit parent's value (1) after clearing, but got {value:?}"
+                );
+                assert!(is_clear, "Property should be clear after clearing");
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+
+            // Step 11: Check parent property unchanged - separate transaction
+            {
+                let tx = db.start_transaction();
+                let (_prop, value, _perms, is_clear) =
+                    tx.resolve_property(&parent, Symbol::mk("test")).unwrap();
+                assert_eq!(value, v_int(1));
+                assert!(!is_clear, "Parent property should remain unchanged");
+                assert_eq!(tx.commit(), Ok(CommitResult::Success));
+            }
+        }
+    }
+
+    /// Test basic property persistence across transactions
+    #[test]
+    fn test_property_persistence_across_transactions() {
+        let db = test_db();
+        let parent;
+        let child;
+        let prop_uuid;
+
+        // Create objects and property
+        {
+            let mut tx = db.start_transaction();
+            parent = tx
+                .create_object(
+                    Some(Obj::mk_id(1)),
+                    ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+                )
+                .unwrap();
+            child = tx
+                .create_object(
+                    None,
+                    ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
+                )
+                .unwrap();
+            prop_uuid = tx
+                .define_property(
+                    &parent,
+                    &parent,
+                    Symbol::mk("test"),
+                    &NOTHING,
+                    BitEnum::new(),
+                    Some(v_int(1)),
+                )
+                .unwrap();
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Set property in one transaction
+        {
+            let mut tx = db.start_transaction();
+            tx.set_property(&child, prop_uuid, v_int(2)).unwrap();
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Read property in another transaction
+        {
+            let tx = db.start_transaction();
+            let (value, _) = tx.retrieve_property(&child, prop_uuid).unwrap();
+            assert_eq!(value, Some(v_int(2)));
+        }
+
+        // Clear property in one transaction
+        {
+            let mut tx = db.start_transaction();
+
+            // Debug: Check what the underlying relation delete does
+            tx.clear_property(&child, prop_uuid).unwrap();
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Read property in another transaction
+        {
+            let tx = db.start_transaction();
+            let (value, _) = tx.retrieve_property(&child, prop_uuid).unwrap();
+            assert_eq!(value, None, "Property should be None after clearing");
+        }
+    }
+
+    /// Test property operations across transactions using high-level APIs  
+    #[test]
+    fn test_relation_delete_operation() {
+        let db = test_db();
+        let obj = Obj::mk_id(1);
+        let prop_uuid;
+
+        // Test 1: Create object and define/set property in one transaction, read in another
+        {
+            let mut tx = db.start_transaction();
+            tx.create_object(
+                Some(obj),
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "test"),
+            )
+            .unwrap();
+            let _prop_uuid = tx
+                .define_property(
+                    &obj,
+                    &obj,
+                    Symbol::mk("test_prop"),
+                    &obj,
+                    BitEnum::new(),
+                    Some(v_int(42)),
+                )
+                .unwrap();
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Read property by name in another transaction - this should work
+        {
+            let tx = db.start_transaction();
+            let (prop, value, _perms, is_clear) =
+                tx.resolve_property(&obj, Symbol::mk("test_prop")).unwrap();
+            assert_eq!(
+                value,
+                v_int(42),
+                "Read after write should see the written value"
+            );
+            assert!(!is_clear, "Property should not be clear");
+            prop_uuid = prop.uuid(); // Get the actual UUID for later use
+        }
+
+        // Clear property in one transaction
+        {
+            let mut tx = db.start_transaction();
+            tx.clear_property(&obj, prop_uuid).unwrap();
+            assert_eq!(tx.commit(), Ok(CommitResult::Success));
+        }
+
+        // Read property in another transaction - should be None after clear
+        {
+            let tx = db.start_transaction();
+            let (value, _) = tx.retrieve_property(&obj, prop_uuid).unwrap();
+            assert_eq!(value, None, "Property should be None after clear");
+        }
+    }
+
+    /// Test the same property behavior in a single transaction to verify the bug is transaction-related
+    #[test]
+    fn test_property_inheritance_and_clearing_single_tx() {
+        let db = test_db();
+        let mut tx = db.start_transaction();
+
+        // Create parent object (#1 equivalent)
+        let parent = tx
+            .create_object(
+                Some(Obj::mk_id(1)),
+                ObjAttrs::new(NOTHING, NOTHING, NOTHING, BitEnum::new(), "parent"),
+            )
+            .unwrap();
+
+        // Create child object parented to parent
+        let child = tx
+            .create_object(
+                None,
+                ObjAttrs::new(NOTHING, parent, NOTHING, BitEnum::new(), "child"),
+            )
+            .unwrap();
+
+        // Define property "test" on parent with value 1
+        tx.define_property(
+            &parent,
+            &parent,
+            Symbol::mk("test"),
+            &NOTHING,
+            BitEnum::new(),
+            Some(v_int(1)),
+        )
+        .unwrap();
+
+        // Set property on child to value 2
+        let (prop, _value, _perms, _is_clear) =
+            tx.resolve_property(&child, Symbol::mk("test")).unwrap();
+        let prop_uuid = prop.uuid();
+        tx.set_property(&child, prop_uuid, v_int(2)).unwrap();
+
+        // Verify child has value 2, not clear
+        let (_prop, value, _perms, is_clear) =
+            tx.resolve_property(&child, Symbol::mk("test")).unwrap();
+        assert_eq!(value, v_int(2));
+        assert!(!is_clear);
+
+        // Clear property on child
+        tx.clear_property(&child, prop_uuid).unwrap();
+
+        // Check child inherits parent's value again
+        let (_prop, value, _perms, is_clear) =
+            tx.resolve_property(&child, Symbol::mk("test")).unwrap();
+        assert_eq!(
+            value,
+            v_int(1),
+            "Single TX: Child should inherit parent's value (1) after clearing, but got {value:?}"
+        );
+        assert!(
+            is_clear,
+            "Single TX: Property should be clear after clearing"
+        );
+
+        assert_eq!(tx.commit(), Ok(CommitResult::Success));
+    }
+
     #[test]
     fn test_get_verb_by_name_cache_miss_after_flush_regression() {
         // This test reproduces the exact bug from production logs:
