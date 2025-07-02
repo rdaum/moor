@@ -64,8 +64,6 @@ pub struct CodegenState {
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
     pub(crate) fork_vectors: Vec<(usize, Vec<Op>)>,
-    // TODO: these are incorrect for fork vectors and maybe each fork vector should have its own
-    //   set of line-no-spans here, and in PrgInner?
     pub(crate) line_number_spans: Vec<(usize, usize)>,
     pub(crate) fork_line_number_spans: Vec<Vec<(usize, usize)>>,
     pub(crate) current_line_col: (usize, usize),
