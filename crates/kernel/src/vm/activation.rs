@@ -25,20 +25,65 @@ use moor_common::model::VerbFlag;
 use moor_common::util::BitEnum;
 use moor_compiler::BuiltinId;
 use moor_compiler::Program;
+use moor_compiler::ScatterLabel;
 use moor_var::{AsByteBuffer, Symbol};
+use moor_var::{E_ARGS, Lambda};
 use moor_var::{Error, v_empty_str};
 use moor_var::{List, NOTHING};
 use moor_var::{Obj, v_arc_string};
-use moor_var::{Var, v_empty_list, v_obj, v_str, v_string};
+use moor_var::{Var, v_empty_list, v_list, v_obj, v_str, v_string};
 
 use crate::vm::VerbExecutionRequest;
 use crate::vm::moo_frame::MooStackFrame;
+use crate::vm::scatter_assign::scatter_assign;
 use moor_common::matching::ParsedCommand;
 use moor_var::program::ProgramType;
 use moor_var::program::names::{GlobalName, Name};
 
 lazy_static! {
     static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");
+}
+
+/// Helper function to perform scatter assignment for lambda parameter binding
+/// Uses the shared scatter assignment logic and handles lambda-specific defaults
+fn lambda_scatter_assign(
+    scatter_args: &moor_var::program::opcode::ScatterArgs,
+    args: &[Var],
+    environment: &mut Vec<Var>,
+) -> Result<(), Error> {
+    use moor_var::v_int;
+    use std::collections::HashSet;
+
+    // Track which parameters were actually assigned
+    let mut assigned_params = HashSet::new();
+
+    // Use the shared scatter assignment logic
+    let result = scatter_assign(scatter_args, args, |name, value| {
+        let name_idx = name.0 as usize;
+        if name_idx < environment.len() {
+            environment[name_idx] = value;
+            assigned_params.insert(name_idx);
+        }
+    });
+
+    match result.result {
+        Err(e) => Err(e),
+        Ok(()) => {
+            // For lambdas, optional parameters that weren't provided should be set to 0 (false)
+            // This is different from VM execution where jump-to-default logic is used
+            if result.needs_defaults {
+                for label in scatter_args.labels.iter() {
+                    if let ScatterLabel::Optional(id, _) = label {
+                        let name_idx = id.0 as usize;
+                        if name_idx < environment.len() && !assigned_params.contains(&name_idx) {
+                            environment[name_idx] = v_int(0); // MOO false value
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
 }
 
 /// Activation frame for the call stack of verb executions.
@@ -288,6 +333,79 @@ impl Activation {
             args: verb_call_request.call.args.clone(),
             permissions: verb_owner,
         }
+    }
+
+    /// Create an activation for lambda execution
+    /// Inherits context from current activation but uses lambda's program
+    pub fn for_lambda_call(
+        lambda: &Lambda,
+        current_activation: &Activation,
+        args: Vec<Var>,
+    ) -> Result<Self, Error> {
+        // Create new frame with lambda's program
+        let mut frame = Box::new(MooStackFrame::new(lambda.body.clone()));
+
+        // Restore lambda's captured environment
+        frame.environment = lambda.captured_env.clone();
+
+        // Perform parameter binding using lambda's scatter specification
+        // This binds the call arguments to lambda parameters in the environment
+        if let Some(env) = frame.environment.last_mut() {
+            lambda_scatter_assign(&lambda.params, &args, env)?;
+        } else {
+            return Err(E_ARGS.into());
+        }
+
+        let mut frame = Frame::Moo(frame);
+
+        // Inherit global variables from current activation (this, player, etc.)
+        frame.set_global_variable(GlobalName::this, current_activation.this.clone());
+        frame.set_global_variable(GlobalName::player, v_obj(current_activation.player));
+        frame.set_global_variable(GlobalName::caller, current_activation.this.clone());
+        frame.set_global_variable(
+            GlobalName::verb,
+            v_str("lambda"), // Use "lambda" as verb name
+        );
+        frame.set_global_variable(GlobalName::args, v_list(&args));
+
+        // Copy command context if available
+        if let Some(ref command) = current_activation.command {
+            frame.set_global_variable(GlobalName::argstr, v_string(command.argstr.clone()));
+            frame.set_global_variable(GlobalName::dobj, v_obj(command.dobj.unwrap_or(NOTHING)));
+            frame.set_global_variable(
+                GlobalName::dobjstr,
+                command
+                    .dobjstr
+                    .as_ref()
+                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
+            );
+            frame.set_global_variable(
+                GlobalName::prepstr,
+                command
+                    .prepstr
+                    .as_ref()
+                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
+            );
+            frame.set_global_variable(GlobalName::iobj, v_obj(command.iobj.unwrap_or(NOTHING)));
+            frame.set_global_variable(
+                GlobalName::iobjstr,
+                command
+                    .iobjstr
+                    .as_ref()
+                    .map_or_else(v_empty_str, |s| v_string(s.clone())),
+            );
+        }
+
+        Ok(Self {
+            frame,
+            this: current_activation.this.clone(),
+            player: current_activation.player,
+            verbdef: current_activation.verbdef.clone(),
+            verb_name: Symbol::mk("lambda"), // Use "lambda" as verb name
+            command: current_activation.command.clone(),
+            args: args.iter().cloned().collect(),
+            permissions: current_activation.permissions,
+        })
     }
 
     pub fn for_eval(permissions: Obj, player: &Obj, program: Program) -> Self {

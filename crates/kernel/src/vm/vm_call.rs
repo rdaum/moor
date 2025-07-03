@@ -283,6 +283,18 @@ impl VMExecState {
         self.stack.push(a);
     }
 
+    /// Execute a lambda call by creating a new lambda activation
+    pub fn exec_lambda_request(
+        &mut self,
+        lambda: moor_var::Lambda,
+        args: List,
+    ) -> Result<(), Error> {
+        let current_activation = self.top();
+        let a = Activation::for_lambda_call(&lambda, current_activation, args.iter().collect())?;
+        self.stack.push(a);
+        Ok(())
+    }
+
     /// Prepare a new stack & call hierarchy for invocation of a forked task.
     /// Called (ultimately) from the scheduler as the result of a fork() call.
     /// We get an activation record which is a copy of where it was borked from, and a new Program

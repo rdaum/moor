@@ -90,6 +90,11 @@ pub(crate) enum ExecutionResult {
     },
     /// Request dispatch of a builtin function with the given arguments.
     DispatchBuiltin { builtin: BuiltinId, arguments: List },
+    /// Request dispatch of a lambda function with the given arguments.
+    DispatchLambda {
+        lambda: moor_var::Lambda,
+        arguments: List,
+    },
     /// Request start of a new task as a fork, at a given offset into the fork vector of the
     /// current program. If the duration is None, the task should be started immediately, otherwise
     /// it should be scheduled to start after the given delay.
@@ -352,6 +357,22 @@ impl VmHost {
                         session,
                     );
                     continue;
+                }
+                ExecutionResult::DispatchLambda {
+                    lambda,
+                    arguments: args,
+                } => {
+                    // Handle lambda execution by pushing a new lambda activation
+                    match self.vm_exec_state.exec_lambda_request(lambda, args) {
+                        Ok(_) => {
+                            result = self.run_interpreter(&exec_params, world_state, session);
+                            continue;
+                        }
+                        Err(e) => {
+                            result = ExecutionResult::PushError(e);
+                            continue;
+                        }
+                    }
                 }
                 ExecutionResult::TaskStartFork(delay, task_id, fv_offset) => {
                     let a = self.vm_exec_state.top().clone();

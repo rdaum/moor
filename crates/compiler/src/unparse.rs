@@ -228,7 +228,14 @@ impl<'a> Unparse<'a> {
             }
             Expr::Call { function, args } => {
                 let mut buffer = String::new();
-                buffer.push_str(&function.as_arc_string());
+                match function {
+                    crate::ast::CallTarget::Builtin(symbol) => {
+                        buffer.push_str(&symbol.as_arc_string());
+                    }
+                    crate::ast::CallTarget::Expr(expr) => {
+                        buffer.push_str(self.unparse_expr(expr)?.as_str());
+                    }
+                }
                 buffer.push('(');
                 buffer.push_str(self.unparse_args(args)?.as_str());
                 buffer.push(')');

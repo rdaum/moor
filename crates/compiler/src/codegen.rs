@@ -24,7 +24,7 @@ use crate::Op::{
     BeginComprehension, ComprehendList, ComprehendRange, ContinueComprehension, ImmInt, Pop, Put,
 };
 use crate::ast::{
-    Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
+    Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
 use crate::parse::moo::Rule;
 use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
@@ -504,33 +504,45 @@ impl CodegenState {
                 self.emit(Op::Pass);
             }
             Expr::Call { function, args } => {
-                // Lookup builtin.
-                match BUILTINS.find_builtin(*function) {
-                    Some(id) => {
-                        self.generate_arg_list(args)?;
-                        self.emit(Op::FuncCall { id });
-                    }
-                    None => {
-                        if self.compile_options.call_unsupported_builtins {
-                            warn!(
-                                "Unable to resolve builtin function: {function}. Transforming into `call_function({function}, ...)`."
-                            );
-                            let call_function_id =
-                                BUILTINS.find_builtin("call_function".into()).unwrap();
-                            let mut new_args = vec![Arg::Normal(Expr::Value(v_sym(*function)))];
-                            new_args.extend_from_slice(args);
-                            self.generate_arg_list(&new_args)?;
-                            self.emit(Op::FuncCall {
-                                id: call_function_id,
-                            });
-                        } else {
-                            return Err(CompileError::UnknownBuiltinFunction(
-                                CompileContext::new(self.current_line_col),
-                                function.to_string(),
-                            ));
+                match function {
+                    CallTarget::Builtin(symbol) => {
+                        // Existing builtin call logic
+                        match BUILTINS.find_builtin(*symbol) {
+                            Some(id) => {
+                                self.generate_arg_list(args)?;
+                                self.emit(Op::FuncCall { id });
+                            }
+                            None => {
+                                if self.compile_options.call_unsupported_builtins {
+                                    warn!(
+                                        "Unable to resolve builtin function: {symbol}. Transforming into `call_function({symbol}, ...)`."
+                                    );
+                                    let call_function_id =
+                                        BUILTINS.find_builtin("call_function".into()).unwrap();
+                                    let mut new_args =
+                                        vec![Arg::Normal(Expr::Value(v_sym(*symbol)))];
+                                    new_args.extend_from_slice(args);
+                                    self.generate_arg_list(&new_args)?;
+                                    self.emit(Op::FuncCall {
+                                        id: call_function_id,
+                                    });
+                                } else {
+                                    return Err(CompileError::UnknownBuiltinFunction(
+                                        CompileContext::new(self.current_line_col),
+                                        symbol.to_string(),
+                                    ));
+                                }
+                            }
                         }
                     }
-                };
+                    CallTarget::Expr(expr) => {
+                        // New lambda call logic
+                        self.generate_expr(expr.as_ref())?; // Evaluate callable expression
+                        self.generate_arg_list(args)?; // Push args list  
+                        self.emit(Op::CallLambda); // Runtime dispatch
+                        self.pop_stack(1); // Pop callable, leave result
+                    }
+                }
             }
             Expr::Verb {
                 args,

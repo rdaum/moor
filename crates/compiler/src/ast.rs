@@ -118,6 +118,12 @@ pub enum CatchCodes {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub enum CallTarget {
+    Builtin(Symbol), // Compile-time known builtin function
+    Expr(Box<Expr>), // Runtime expression that evaluates to callable
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expr {
     Assign {
         left: Box<Expr>,
@@ -139,7 +145,7 @@ pub enum Expr {
         property: Box<Expr>,
     },
     Call {
-        function: Symbol,
+        function: CallTarget,
         args: Vec<Arg>,
     },
     Verb {

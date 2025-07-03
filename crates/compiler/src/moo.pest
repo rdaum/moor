@@ -27,6 +27,7 @@ statement  = {
   | try_except_statement
   | try_finally_statement
   | begin_statement
+  | fn_statement
   | expr_statement
   | local_assignment
   | const_assignment
@@ -63,6 +64,12 @@ labelled_except       = { ident ~ "(" ~ codes ~ ")" }
 unlabelled_except     = { "(" ~ codes ~ ")" }
 
 begin_statement       = { ^"begin" ~ statements ~ ^"end" }
+
+// Function definitions using fn/endfn
+fn_statement = { fn_named | fn_assignment }
+fn_named = { ^"fn" ~ ident ~ "(" ~ lambda_params ~ ")" ~ statements ~ ^"endfn" }
+fn_assignment = { ident ~ "=" ~ fn_expr ~ ";" }
+fn_expr = { ^"fn" ~ "(" ~ lambda_params ~ ")" ~ statements ~ ^"endfn" }
 
 local_assignment = { ^"let" ~ (local_assign_scatter | local_assign_single) ~ ";" }
 local_assign_single = { ident ~ (ASSIGN ~ expr)? }
@@ -145,6 +152,7 @@ return_expr    =  { ^"return" ~ (expr)? }
 
 primary    = _{
     lambda
+  | fn_expr
   | pass_expr
   | builtin_call
   | paren_expr
@@ -169,7 +177,7 @@ sysprop_call = { sysprop ~ arglist }
 
 atom     = { integer | float | string | object | err | boolean | symbol | type_constant | literal_binary | ident  }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
-lambda   = { "{" ~ lambda_params ~ "}" ~ "=>" ~ ((&"begin" ~ begin_statement) | expr) }
+lambda   = { "{" ~ lambda_params ~ "}" ~ "=>" ~ expr }
 lambda_params = { (lambda_param ~ ("," ~ lambda_param)*)? }
 lambda_param = { scatter_optional | scatter_target | scatter_rest }
 
@@ -210,10 +218,10 @@ keyword = @{
   | ^"except"
   | ^"endtry"
   | ^"finally"
-  | ^"begin"
-  | ^"end"
   | ^"in"
   | ^"let"
+  | ^"fn"
+  | ^"endfn"
   | err
 }
 

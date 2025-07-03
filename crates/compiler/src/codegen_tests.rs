@@ -16,7 +16,6 @@ mod tests {
     use crate::CompileOptions;
     use crate::codegen::compile;
     use moor_common::builtins::BUILTINS;
-    use moor_common::model::CompileError;
     use moor_var::SYSTEM_OBJECT;
     use moor_var::Symbol;
     use moor_var::program::labels::{Label, Offset};
@@ -321,11 +320,10 @@ mod tests {
     #[test]
     fn test_unknown_builtin_call() {
         let program = "bad_builtin(1, 2, 3);";
-        let parse = compile(program, CompileOptions::default());
-        assert!(matches!(
-            parse,
-            Err(CompileError::UnknownBuiltinFunction(_, _))
-        ));
+        let binary = compile(program, CompileOptions::default()).unwrap();
+        // Should compile successfully as a lambda call, not a builtin call
+        // bad_builtin will be treated as a variable expression
+        assert!(binary.main_vector().len() > 0);
     }
 
     #[test]

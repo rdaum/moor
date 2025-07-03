@@ -27,6 +27,7 @@ use crate::vm::activation::Activation;
 pub(crate) mod activation;
 pub(crate) mod exec_state;
 pub(crate) mod moo_execute;
+pub(crate) mod scatter_assign;
 pub(crate) mod vm_call;
 pub(crate) mod vm_unwind;
 

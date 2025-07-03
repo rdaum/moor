@@ -598,7 +598,10 @@ impl Decompile {
                         format!("expected list of args, got {args:?} instead").to_string(),
                     ));
                 };
-                self.push_expr(Expr::Call { function, args })
+                self.push_expr(Expr::Call {
+                    function: crate::ast::CallTarget::Builtin(function),
+                    args,
+                })
             }
             Op::CallVerb => {
                 let args = self.pop_expr()?;
@@ -1144,7 +1147,7 @@ impl Decompile {
                 // For now, we'll use a placeholder approach
                 // TODO: This needs to be updated when the AST supports CallTarget
                 self.push_expr(Expr::Call {
-                    function: Symbol::mk("__lambda_call__"),
+                    function: crate::ast::CallTarget::Builtin(Symbol::mk("__lambda_call__")),
                     args: {
                         let mut call_args = vec![Arg::Normal(lambda_expr)];
                         call_args.extend(args);

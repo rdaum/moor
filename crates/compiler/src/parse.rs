@@ -25,14 +25,15 @@ use pest::error::LineColLocation;
 use pest::iterators::{Pair, Pairs};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 
+use moor_common::builtins::BUILTINS;
 use moor_var::Obj;
 use moor_var::{v_binary, v_float, v_int, v_obj, v_str, v_string};
 
 use crate::ast::Arg::{Normal, Splice};
 use crate::ast::StmtNode::Scope;
 use crate::ast::{
-    Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
-    StmtNode, UnaryOp,
+    Arg, BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
+    ScatterKind, Stmt, StmtNode, UnaryOp,
 };
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
@@ -402,6 +403,32 @@ impl TreeTransformer {
 
                         Ok(Expr::Lambda { params, body })
                     }
+                    Rule::fn_expr => {
+                        let mut inner = primary.into_inner();
+                        let lambda_params = inner.next().unwrap();
+                        let statements_part = inner.next().unwrap();
+
+                        let params = primary_self
+                            .clone()
+                            .parse_lambda_params(lambda_params.into_inner())?;
+
+                        // Parse the statements and wrap them in a scope with proper binding tracking
+                        primary_self.enter_scope();
+                        let statements = primary_self
+                            .clone()
+                            .parse_statements(statements_part.into_inner())?;
+                        let num_total_bindings = primary_self.exit_scope();
+
+                        let body = Box::new(Stmt::new(
+                            StmtNode::Scope {
+                                num_bindings: num_total_bindings,
+                                body: statements,
+                            },
+                            (0, 0), // TODO: proper line numbers
+                        ));
+
+                        Ok(Expr::Lambda { params, body })
+                    }
                     Rule::list => {
                         let mut inner = primary.into_inner();
                         if let Some(arglist) = inner.next() {
@@ -500,10 +527,22 @@ impl TreeTransformer {
                         let args = primary_self
                             .clone()
                             .parse_arglist(inner.next().unwrap().into_inner())?;
-                        Ok(Expr::Call {
-                            function: Symbol::mk(bf),
-                            args,
-                        })
+                        let function_name = Symbol::mk(bf);
+
+                        // Determine if this is a builtin or variable call
+                        let function = if BUILTINS.find_builtin(function_name).is_some() {
+                            CallTarget::Builtin(function_name)
+                        } else {
+                            // Unknown function - could be lambda variable
+                            CallTarget::Expr(Box::new(Expr::Id(
+                                self.names
+                                    .borrow_mut()
+                                    .find_or_add_name_global(bf, DeclType::Unknown)
+                                    .unwrap(),
+                            )))
+                        };
+
+                        Ok(Expr::Call { function, args })
                     }
                     Rule::pass_expr => {
                         let mut inner = primary.into_inner();
@@ -1278,6 +1317,130 @@ impl TreeTransformer {
                 )))
             }
             Rule::empty_return => Ok(Some(Stmt::new(StmtNode::mk_return_none(), line_col))),
+            Rule::fn_statement => {
+                let inner = pair.into_inner().next().unwrap();
+                match inner.as_rule() {
+                    Rule::fn_named => {
+                        // fn name(params) statements endfn
+                        // This is like: let name = fn(params) statements endfn;
+                        let mut parts = inner.clone().into_inner();
+                        let func_name = parts.next().unwrap().as_str();
+                        let params_part = parts.next().unwrap();
+                        let statements_part = parts.next().unwrap();
+
+                        // Parse the lambda parameters
+                        let params = self.clone().parse_lambda_params(params_part.into_inner())?;
+
+                        // Parse the function body with proper scope tracking
+                        self.enter_scope();
+                        let statements = self
+                            .clone()
+                            .parse_statements(statements_part.into_inner())?;
+                        let num_total_bindings = self.exit_scope();
+
+                        let body = Box::new(Stmt::new(
+                            StmtNode::Scope {
+                                num_bindings: num_total_bindings,
+                                body: statements,
+                            },
+                            (0, 0), // TODO: proper line numbers
+                        ));
+
+                        // Create a lambda expression
+                        let lambda_expr = Expr::Lambda { params, body };
+
+                        // Create a declaration for the function name
+                        let id = {
+                            let mut names = self.names.borrow_mut();
+                            let Some(id) = names.declare(func_name, false, false, DeclType::Let)
+                            else {
+                                return Err(DuplicateVariable(
+                                    self.compile_context(&inner),
+                                    func_name.into(),
+                                ));
+                            };
+                            id
+                        };
+                        Ok(Some(Stmt::new(
+                            StmtNode::Expr(Expr::Decl {
+                                id,
+                                expr: Some(Box::new(lambda_expr)),
+                                is_const: false,
+                            }),
+                            line_col,
+                        )))
+                    }
+                    Rule::fn_assignment => {
+                        // name = fn(params) statements endfn;
+                        // Parse this as: variable = fn_expr
+                        let mut parts = inner.clone().into_inner();
+                        let var_name = parts.next().unwrap().as_str();
+                        let func_expr_part = parts.next().unwrap(); // This is the fn_expr rule
+
+                        // Parse the fn expression manually (similar to fn_expr case above)
+                        let mut func_parts = func_expr_part.into_inner();
+                        let lambda_params = func_parts.next().unwrap();
+                        let statements_part = func_parts.next().unwrap();
+
+                        let params = self
+                            .clone()
+                            .parse_lambda_params(lambda_params.into_inner())?;
+
+                        // Parse the function body with proper scope tracking
+                        self.enter_scope();
+                        let statements = self
+                            .clone()
+                            .parse_statements(statements_part.into_inner())?;
+                        let num_total_bindings = self.exit_scope();
+
+                        let body = Box::new(Stmt::new(
+                            StmtNode::Scope {
+                                num_bindings: num_total_bindings,
+                                body: statements,
+                            },
+                            (0, 0), // TODO: proper line numbers
+                        ));
+
+                        // Create the lambda expression
+                        let lambda_expr = Expr::Lambda { params, body };
+
+                        // Create assignment or declaration
+                        let maybe_id = self.names.borrow().find_name(var_name);
+                        let assign_expr = match maybe_id {
+                            Some(id) => {
+                                // Variable exists, create assignment
+                                Expr::Assign {
+                                    left: Box::new(Expr::Id(id)),
+                                    right: Box::new(lambda_expr),
+                                }
+                            }
+                            None => {
+                                // Variable doesn't exist, declare it
+                                let id = {
+                                    let mut names = self.names.borrow_mut();
+                                    let Some(id) =
+                                        names.declare(var_name, false, false, DeclType::Let)
+                                    else {
+                                        return Err(DuplicateVariable(
+                                            self.compile_context(&inner),
+                                            var_name.into(),
+                                        ));
+                                    };
+                                    id
+                                };
+                                Expr::Decl {
+                                    id,
+                                    expr: Some(Box::new(lambda_expr)),
+                                    is_const: false,
+                                }
+                            }
+                        };
+
+                        Ok(Some(Stmt::new(StmtNode::Expr(assign_expr), line_col)))
+                    }
+                    _ => panic!("Unexpected fn statement rule: {:?}", inner.as_rule()),
+                }
+            }
             _ => panic!("Unimplemented statement: {:?}", pair.as_rule()),
         }
     }
@@ -1643,8 +1806,8 @@ mod tests {
     use crate::ast::BinaryOp::Add;
     use crate::ast::Expr::{Call, Error, Flyweight, Id, Prop, Value, Verb};
     use crate::ast::{
-        BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
-        StmtNode, UnaryOp, assert_trees_match_recursive,
+        BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
+        ScatterKind, Stmt, StmtNode, UnaryOp, assert_trees_match_recursive,
     };
     use crate::parse::{parse_program, unquote_str};
     use crate::unparse::annotate_line_numbers;
@@ -1725,7 +1888,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts)[0],
             StmtNode::Expr(Call {
-                function: Symbol::mk("notify"),
+                function: CallTarget::Builtin(Symbol::mk("notify")),
                 args: vec![Normal(Value(v_str("test")))],
             })
         );
@@ -2323,7 +2486,10 @@ mod tests {
             vec![StmtNode::mk_return(Expr::List(vec![
                 Splice(Id(args)),
                 Normal(Call {
-                    function: Symbol::mk("frozzbozz"),
+                    function: CallTarget::Expr(Box::new(Id(parse
+                        .variables
+                        .find_name("frozzbozz")
+                        .unwrap()))),
                     args: vec![Splice(Id(args))],
                 }),
             ]))]
@@ -2643,7 +2809,7 @@ mod tests {
                 Box::new(Expr::Assign {
                     left: Box::new(Id(len)),
                     right: Box::new(Call {
-                        function: Symbol::mk("length"),
+                        function: CallTarget::Builtin(Symbol::mk("length")),
                         args: vec![Normal(Id(text))],
                     }),
                 }),
@@ -2745,7 +2911,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::TryCatch {
                 trye: Box::new(Call {
-                    function: Symbol::mk("raise"),
+                    function: CallTarget::Builtin(Symbol::mk("raise")),
                     args: vec![invarg]
                 }),
                 codes: CatchCodes::Any,
@@ -3458,8 +3624,8 @@ mod tests {
             }
         }
 
-        // Test statement lambda with begin/end
-        let program = r#"let f = {x} => begin return x + 1; end;"#;
+        // Test statement lambda with fn/endfn
+        let program = r#"let f = fn(x) return x + 1; endfn;"#;
         let parse = parse_program(program, CompileOptions::default()).unwrap();
 
         if let StmtNode::Expr(Expr::Decl {
@@ -3497,8 +3663,76 @@ mod tests {
             );
         }
 
-        // Test empty begin/end lambda
-        let empty_lambda = r#"let f = {x} => begin end;"#;
+        // Test empty fn lambda
+        let empty_lambda = r#"let f = fn(x) endfn;"#;
         parse_program(empty_lambda, CompileOptions::default()).unwrap();
+    }
+
+    /// Regression test for auditDB verb parsing issue
+    /// This verb from JHCore-DEV-2.db was failing to parse after lambda implementation
+    #[test]
+    fn test_auditdb_verb_regression() {
+        let verb_code = r#""Usage:  @auditDB [player] [from <start>] [to <end>] [for <matching string>]";
+set_task_perms(player);
+dobj = player:my_match_player(dobjstr);
+if (!dobjstr)
+dobj = player;
+elseif ($command_utils:player_match_failed(dobj, dobjstr) && (!(valid(dobj = $string_utils:literal_object(dobjstr)) && $command_utils:yes_or_no("Continue?"))))
+return;
+endif
+dobjwords = $string_utils:words(dobjstr);
+if (args[1..length(dobjwords)] == dobjwords)
+args = args[length(dobjwords) + 1..length(args)];
+endif
+if (!(parse_result = $code_utils:_parse_audit_args(@args)))
+player:notify(tostr("Usage:  ", verb, " [player] [from <start>] [to <end>] [for <match>]"));
+return;
+endif
+start = parse_result[1];
+end = parse_result[2];
+match = parse_result[3];
+player:notify(tostr("Objects owned by ", valid(dobj) ? dobj:name() | dobj, ((" (from #" + tostr(start)) + " to #") + tostr(end), match ? " matching " + match | "", ")", ":"));
+player:notify("");
+count = 0;
+"Only print every third suspension";
+do_print = 0;
+for i in [start..end]
+o = toobj(i);
+if ($command_utils:running_out_of_time())
+(do_print = (do_print + 1) % 3) || player:notify(tostr("... ", o));
+suspend(5);
+endif
+if (valid(o) && (o.owner == dobj))
+found = 0;
+names = {o:name(), @o.aliases};
+while (names && (!found))
+if (index(names[1], match) == 1)
+found = 1;
+endif
+names = listdelete(names, 1);
+endwhile
+if (found)
+player:notify(tostr(o:name(), " (", o, ")"));
+count = count + 1;
+do_print = 0;
+endif
+endif
+endfor
+if (count)
+player:notify("");
+endif
+player:notify(tostr("Total: ", count, " object", (count == 1) ? "." | "s."));
+return 0 && "Automatically Added Return";"#;
+
+        let result = parse_program(verb_code, CompileOptions::default());
+
+        match result {
+            Ok(_) => {
+                // Test passes if parsing succeeds
+            }
+            Err(e) => {
+                panic!("auditDB verb failed to parse (regression): {:?}", e);
+            }
+        }
     }
 }
