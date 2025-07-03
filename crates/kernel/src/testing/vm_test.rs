@@ -31,8 +31,6 @@ mod tests {
 
     use crate::testing::vm_test_utils::call_verb;
     use crate::vm::builtins::BuiltinRegistry;
-    use moor_common::program::ProgramType;
-    use moor_common::program::program::PrgInner;
     use moor_common::tasks::NoopClientSession;
     use moor_compiler::Op;
     use moor_compiler::Op::*;
@@ -41,6 +39,8 @@ mod tests {
     use moor_compiler::{CompileOptions, Names};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::Symbol;
+    use moor_var::program::ProgramType;
+    use moor_var::program::program::PrgInner;
     use test_case::test_case;
 
     fn mk_program(main_vector: Vec<Op>, literals: Vec<Var>, var_names: Names) -> Program {
@@ -53,6 +53,7 @@ mod tests {
             range_comprehensions: vec![],
             list_comprehensions: vec![],
             error_operands: vec![],
+            lambda_programs: vec![],
             main_vector,
             fork_vectors: vec![],
             line_number_spans: vec![],
@@ -1607,4 +1608,541 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_lambda_creation() {
+        // Test that lambda compilation and MakeLambda opcode work
+        let program_text = r#"
+            let f = {x} => x + 1;
+            return f;
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        )
+        .unwrap();
+
+        // The result should be a lambda value
+        assert!(
+            result.as_lambda().is_some(),
+            "Expected lambda value, got: {result:?}",
+        );
+
+        let lambda = result.as_lambda().unwrap();
+
+        // Verify lambda has correct parameter structure
+        assert_eq!(lambda.params.labels.len(), 1, "Expected 1 parameter");
+
+        // Verify parameter is required type (not optional or rest)
+        match &lambda.params.labels[0] {
+            moor_var::program::opcode::ScatterLabel::Required(_) => {
+                // This is what we expect
+            }
+            other => panic!("Expected Required parameter, got: {other:?}"),
+        }
+
+        // Test that the lambda can be converted back to literal form
+        let literal_form = moor_compiler::to_literal(&result);
+        assert!(
+            literal_form.contains("{x} => x + 1"),
+            "Lambda literal should contain correct syntax, got: {literal_form}",
+        );
+    }
+
+    #[test]
+    fn test_lambda_with_multiple_params() {
+        // Test lambda with multiple parameter types
+        let program_text = r#"
+            let f = {x, ?y, @rest} => x + y;
+            return f;
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        )
+        .unwrap();
+
+        let lambda = result.as_lambda().unwrap();
+
+        // Verify parameter types
+        assert_eq!(lambda.params.labels.len(), 3, "Expected 3 parameters");
+
+        match &lambda.params.labels[0] {
+            moor_var::program::opcode::ScatterLabel::Required(_) => {}
+            other => panic!("Expected Required parameter, got: {other:?}"),
+        }
+
+        match &lambda.params.labels[1] {
+            moor_var::program::opcode::ScatterLabel::Optional(_, _) => {}
+            other => panic!("Expected Optional parameter, got: {other:?}"),
+        }
+
+        match &lambda.params.labels[2] {
+            moor_var::program::opcode::ScatterLabel::Rest(_) => {}
+            other => panic!("Expected Rest parameter, got: {other:?}"),
+        }
+    }
+
+    // Lambda call tests for our new lambda execution implementation
+    #[test]
+    fn test_lambda_simple_call() {
+        let program_text = r#"
+            let add = {x, y} => x + y;
+            return add(5, 3);
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_int(8)));
+    }
+
+    #[test]
+    fn test_lambda_single_parameter() {
+        let program_text = r#"
+            let double = {x} => x * 2;
+            return double(7);
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_int(14)));
+    }
+
+    #[test]
+    fn test_lambda_no_parameters() {
+        let program_text = r#"
+            let hello = {} => "Hello, World!";
+            return hello();
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_str("Hello, World!")));
+    }
+
+    #[test]
+    fn test_lambda_optional_parameters() {
+        let program_text = r#"
+            let greet = {name, ?greeting} => (greeting || "Hello") + ", " + name + "!";
+            let result1 = greet("Alice");
+            let result2 = greet("Bob", "Hi");
+            return {result1, result2};
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[v_str("Hello, Alice!"), v_str("Hi, Bob!")]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_lambda_rest_parameters() {
+        let program_text = r#"
+            let sum = fn(@numbers)
+                let total = 0;
+                for n in (numbers)
+                    total = total + n;
+                endfor
+                return total;
+            endfn;
+            return sum(1, 2, 3, 4, 5);
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_int(15)));
+    }
+
+    #[test]
+    fn test_lambda_mixed_parameters() {
+        let program_text = r#"
+            let func = fn(required, ?optional, @rest)
+                return {required, optional || 0, length(rest)};
+            endfn;
+            return func(42, 100, "a", "b", "c");
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[v_int(42), v_int(100), v_int(3)]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_lambda_closure_capture() {
+        let program_text = r#"
+            let x = 10;
+            let y = 20;
+            let adder = {z} => x + y + z;
+            return adder(5);
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_int(35))); // 10 + 20 + 5
+    }
+
+    #[test]
+    fn test_lambda_nested_scope_capture() {
+        let program_text = r#"
+            let make_multiplier = fn(factor)
+                return {x} => x * factor;
+            endfn;
+            let times3 = make_multiplier(3);
+            return times3(7);
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_int(21))); // 7 * 3
+    }
+
+    #[test]
+    fn test_lambda_double_recursive_call() {
+        // Test lambda with two recursive calls (like fibonacci but simpler)
+        let program_text = r#"
+            fn test(x)
+                return test(1) + test(2);
+            endfn
+            return 1;
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_int(1)));
+    }
+
+    #[test]
+    fn test_lambda_recursive_fibonacci() {
+        let program_text = r#"
+            fn fib(n)
+                if (n <= 1)
+                    return n;
+                else
+                    return fib(n - 1) + fib(n - 2);
+                endif
+            endfn
+            return fib(6);
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        assert_eq!(result, Ok(v_int(8))); // fib(6) = 8
+    }
+
+    #[test]
+    fn test_lambda_higher_order_map() {
+        let program_text = r#"
+            let map = fn(func, lst)
+                let result = {};
+                for item in (lst)
+                    result = {@result, func(item)};
+                endfor
+                return result;
+            endfn;
+            let square = {x} => x * x;
+            return map(square, {1, 2, 3, 4});
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+        let expected = v_list(&[v_int(1), v_int(4), v_int(9), v_int(16)]);
+        assert_eq!(result, Ok(expected));
+    }
+
+    #[test]
+    fn test_lambda_parameter_error_too_few_args() {
+        let program_text = r#"
+            let add = {x, y} => x + y;
+            return add(5); // Missing second argument
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        // Should return an E_ARGS error
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.error, E_ARGS);
+    }
+
+    #[test]
+    fn test_lambda_parameter_error_too_many_args() {
+        let program_text = r#"
+            let add = {x, y} => x + y;
+            return add(5, 3, 7); // Too many arguments
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        // Should return an E_ARGS error
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.error, E_ARGS);
+    }
+
+    #[test]
+    fn test_lambda_call_type_error() {
+        let program_text = r#"
+            let not_a_lambda = 42;
+            return not_a_lambda(1, 2, 3); // Should fail with E_TYPE
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        // Should return an E_TYPE error
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.error, E_TYPE);
+    }
+
+    #[test]
+    fn test_lambda_stack_trace_format() {
+        let program_text = r#"
+            let lambda_func = fn(a, b)
+                return a / b; // Division by zero will cause error
+            endfn;
+            return lambda_func(1, 0); // Call lambda with division by zero
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        // Should return an E_DIV error with proper stack trace format
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.error, E_DIV);
+        
+        // Verify the stack trace contains the lambda format
+        // The lambda frame should show "test.<%fn>" in the traceback
+        let stack_contains_lambda_format = err.backtrace.iter().any(|frame| {
+            if let Some(frame_str) = frame.as_string() {
+                frame_str.contains("test.<fn>")
+            } else {
+                false
+            }
+        });
+        
+        
+        assert!(stack_contains_lambda_format, 
+                "Stack trace should contain 'test.<lambda>' format. Actual backtrace: {:?}", 
+                err.backtrace);
+    }
+
+    #[test]
+    fn test_lambda_line_numbers_simple() {
+        // Simple test to check lambda line number tracking without complex assertions
+        let program_text = "let f = fn(x) return x / 0; endfn; return f(1);";
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        // Should get a division by zero error
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        
+        // Verify we get the lambda format
+        let has_lambda_frame = err.backtrace.iter().any(|frame| {
+            if let Some(frame_str) = frame.as_string() {
+                frame_str.contains("test.<fn>")
+            } else {
+                false
+            }
+        });
+        
+        assert!(has_lambda_frame, "Should have lambda frame in stack trace");
+    }
+
+    #[test]
+    fn test_lambda_named_function_stack_trace() {
+        // Test that named recursive lambdas show the function name in stack traces
+        let program_text = r#"
+            fn factorial(n)
+                if (n <= 1)
+                    return 1;
+                else
+                    return n * factorial(n - 1) / 0; // Division by zero in recursion
+                endif
+            endfn
+            return factorial(3);
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        // Should return an E_DIV error with proper stack trace format
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.error, E_DIV);
+        
+        
+        // Verify the stack trace contains the function name "factorial"
+        let has_named_lambda_frame = err.backtrace.iter().any(|frame| {
+            if let Some(frame_str) = frame.as_string() {
+                frame_str.contains("test.factorial")
+            } else {
+                false
+            }
+        });
+        
+        assert!(has_named_lambda_frame, "Should have named lambda frame 'factorial' in stack trace");
+    }
+
 }

@@ -20,14 +20,14 @@ use crate::ast::{
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::parse::Parse;
 use crate::var_scope::VarScope;
-use moor_common::program::DeclType;
-use moor_common::program::builtins::BuiltinId;
-use moor_common::program::labels::{JumpLabel, Label, Offset};
-use moor_common::program::names::{Name, Variable};
-use moor_common::program::opcode::{
+use moor_common::builtins::BuiltinId;
+use moor_var::program::DeclType;
+use moor_var::program::labels::{JumpLabel, Label, Offset};
+use moor_var::program::names::{Name, Variable};
+use moor_var::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterLabel,
 };
-use moor_common::program::program::Program;
+use moor_var::program::program::Program;
 use moor_var::{Symbol, Var, v_int, v_none, v_obj};
 use moor_var::{Variant, v_float};
 use std::collections::{HashSet, VecDeque};
@@ -598,7 +598,10 @@ impl Decompile {
                         format!("expected list of args, got {args:?} instead").to_string(),
                     ));
                 };
-                self.push_expr(Expr::Call { function, args })
+                self.push_expr(Expr::Call {
+                    function: crate::ast::CallTarget::Builtin(function),
+                    args,
+                })
             }
             Op::CallVerb => {
                 let args = self.pop_expr()?;
@@ -1105,6 +1108,55 @@ impl Decompile {
             | Op::ComprehendList { .. } => {
                 // noop, handled above
             }
+            Op::MakeLambda {
+                scatter_offset,
+                program_offset,
+                ..
+            } => {
+                // Retrieve lambda program and scatter specification
+                let lambda_program = self.program.lambda_program(program_offset);
+                let scatter_spec = self.program.scatter_table(scatter_offset).clone();
+
+                // Decompile lambda body from standalone Program
+                let lambda_body = self.decompile_lambda_program(lambda_program)?;
+
+                // Convert scatter spec to parameter list
+                let params = self.decompile_scatter_params(&scatter_spec)?;
+
+                self.push_expr(Expr::Lambda {
+                    params,
+                    body: Box::new(lambda_body),
+                    self_name: None, // TODO: handle self_var from opcode
+                });
+            }
+            Op::CallLambda => {
+                let args = self.pop_expr()?;
+                let lambda_expr = self.pop_expr()?;
+
+                // Convert args expression to argument list
+                let args = match args {
+                    Expr::List(args) => args,
+                    _ => {
+                        return Err(MalformedProgram(
+                            "expected list of args for lambda call".to_string(),
+                        ));
+                    }
+                };
+
+                // For decompilation, we need to represent this as a function call
+                // where the function is the lambda expression itself
+                // But the current AST only supports Symbol for function names in Call
+                // For now, we'll use a placeholder approach
+                // TODO: This needs to be updated when the AST supports CallTarget
+                self.push_expr(Expr::Call {
+                    function: crate::ast::CallTarget::Builtin(Symbol::mk("__lambda_call__")),
+                    args: {
+                        let mut call_args = vec![Arg::Normal(lambda_expr)];
+                        call_args.extend(args);
+                        call_args
+                    },
+                });
+            }
         }
         Ok(())
     }
@@ -1115,6 +1167,63 @@ impl Decompile {
             .find_variable(name)
             .cloned()
             .ok_or(DecompileError::NameNotFound(*name))
+    }
+
+    fn decompile_lambda_program(&self, lambda_program: &Program) -> Result<Stmt, DecompileError> {
+        // Create separate decompiler for lambda's standalone Program
+        let mut lambda_decompile = Decompile {
+            program: lambda_program.clone(),
+            fork_vector: None,
+            position: 0,
+            expr_stack: VecDeque::new(),
+            statements: vec![],
+            assigned_vars: HashSet::new(),
+        };
+
+        // Decompile lambda body
+        let opcode_vector_len = lambda_decompile.opcode_vector().len();
+        while lambda_decompile.position < opcode_vector_len {
+            lambda_decompile.decompile()?;
+        }
+
+        // Lambda body should result in a single statement
+        if lambda_decompile.statements.len() == 1 {
+            Ok(lambda_decompile.statements.into_iter().next().unwrap())
+        } else {
+            Err(MalformedProgram(
+                "lambda body should produce single statement".to_string(),
+            ))
+        }
+    }
+
+    fn decompile_scatter_params(
+        &self,
+        scatter_spec: &moor_var::program::opcode::ScatterArgs,
+    ) -> Result<Vec<ScatterItem>, DecompileError> {
+        let mut params = Vec::new();
+
+        for label in &scatter_spec.labels {
+            let (kind, id, expr) = match label {
+                ScatterLabel::Required(name) => {
+                    let var = self.decompile_name(name)?;
+                    (ScatterKind::Required, var, None)
+                }
+                ScatterLabel::Optional(name, _label) => {
+                    let var = self.decompile_name(name)?;
+                    // TODO: Handle optional parameter default expressions
+                    // For now, we don't decompile the default expression
+                    (ScatterKind::Optional, var, None)
+                }
+                ScatterLabel::Rest(name) => {
+                    let var = self.decompile_name(name)?;
+                    (ScatterKind::Rest, var, None)
+                }
+            };
+
+            params.push(ScatterItem { kind, id, expr });
+        }
+
+        Ok(params)
     }
 }
 

@@ -21,9 +21,9 @@ use moor_common::model::VerbFlag;
 use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
 use moor_common::model::{HasUuid, Named};
-use moor_common::program::ProgramType;
 use moor_common::util::BitEnum;
 use moor_var::NOTHING;
+use moor_var::program::ProgramType;
 use moor_var::v_none;
 
 /// Convert verbargs spec to flags & preps accordingly

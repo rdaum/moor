@@ -14,10 +14,10 @@
 use std::time::Duration;
 
 use bincode::{Decode, Encode};
-pub use moor_common::program::ProgramType;
-use moor_common::program::names::Name;
 use moor_common::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_compiler::Offset;
+pub use moor_var::program::ProgramType;
+use moor_var::program::names::Name;
 use moor_var::{List, Obj, Symbol, Var};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
@@ -27,6 +27,7 @@ use crate::vm::activation::Activation;
 pub(crate) mod activation;
 pub(crate) mod exec_state;
 pub(crate) mod moo_execute;
+pub(crate) mod scatter_assign;
 pub(crate) mod vm_call;
 pub(crate) mod vm_unwind;
 

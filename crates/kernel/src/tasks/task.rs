@@ -55,8 +55,8 @@ use moor_common::matching::{
     CommandParser, DefaultObjectNameMatcher, DefaultParseCommand, ParseCommandError, ParsedCommand,
     WsMatchEnv,
 };
-use moor_common::program::ProgramType;
 use moor_common::tasks::Session;
+use moor_var::program::ProgramType;
 
 lazy_static! {
     static ref HUH_SYM: Symbol = Symbol::mk("huh");
@@ -739,12 +739,12 @@ mod tests {
     use moor_common::model::{
         ArgSpec, PrepSpec, VerbArgsSpec, VerbFlag, WorldState, WorldStateSource,
     };
-    use moor_common::program::ProgramType;
     use moor_common::tasks::{CommandError, Event, TaskId};
     use moor_common::util::BitEnum;
     use moor_compiler::{CompileOptions, Program, compile};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::E_DIV;
+    use moor_var::program::ProgramType;
     use moor_var::{NOTHING, SYSTEM_OBJECT};
     use moor_var::{Symbol, v_obj};
     use moor_var::{v_int, v_str};

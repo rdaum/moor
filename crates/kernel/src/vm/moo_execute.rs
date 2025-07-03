@@ -13,6 +13,7 @@
 
 use crate::config::FeaturesConfig;
 use crate::vm::moo_frame::{CatchType, MooStackFrame, ScopeType};
+use crate::vm::scatter_assign::scatter_assign;
 use crate::vm::vm_host::ExecutionResult;
 use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
@@ -22,8 +23,8 @@ use moor_var::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_bool, v_error,
 };
 use moor_var::{
-    Error, IndexMode, Obj, Sequence, TypeClass, Var, Variant, v_bool_int, v_empty_list,
-    v_empty_map, v_err, v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
+    Error, IndexMode, Obj, TypeClass, Var, Variant, v_bool_int, v_empty_list, v_empty_map, v_err,
+    v_float, v_flyweight, v_int, v_list, v_map, v_none, v_obj, v_sym,
 };
 use moor_var::{Symbol, VarType};
 use std::ops::Add;
@@ -862,27 +863,8 @@ pub fn moo_frame_execute(
                 return ExecutionResult::Unwind(FinallyReason::Exit { stack, label });
             }
             Op::Scatter(sa) => {
-                // TODO: this could do with some attention. a lot of the complexity here has to
-                //   do with translating fairly directly from the lambdamoo sources.
-                // It would be nice to be able to eliminate the clone here, but if we don't we get
-                // multiple borrow issues.
+                // Get the scatter table and the values to assign
                 let table = &f.program.scatter_table(sa).clone();
-                let (nargs, rest, nreq) = {
-                    let mut nargs = 0;
-                    let mut rest = 0;
-                    let mut nreq = 0;
-                    for label in table.labels.iter() {
-                        match label {
-                            ScatterLabel::Rest(_) => rest += 1,
-                            ScatterLabel::Required(_) => nreq += 1,
-                            ScatterLabel::Optional(_, _) => {}
-                        }
-                        nargs += 1;
-                    }
-                    (nargs, rest, nreq)
-                };
-                // TODO: ?
-                let have_rest = rest <= nargs;
                 let rhs_values = {
                     let rhs = f.peek_top();
                     let Some(rhs_values) = rhs.as_list() else {
@@ -894,64 +876,41 @@ pub fn moo_frame_execute(
                     rhs_values.clone()
                 };
 
-                let len = rhs_values.len();
-                if len < nreq || !have_rest && len > nargs {
-                    f.pop();
-                    return ExecutionResult::PushError(E_ARGS.with_msg(|| {
-                        format!(
-                            "Invalid number of arguments for scatter, expected {nreq}, got {len}"
-                        )
-                    }));
-                }
-                let mut nopt_avail = len - nreq;
-                let nrest = if have_rest && len >= nargs {
-                    len - nargs + 1
-                } else {
-                    0
-                };
+                // Use the shared scatter assignment logic
                 let mut jump_where = None;
-                let mut args_iter = rhs_values.iter();
+                let result = scatter_assign(
+                    table,
+                    &rhs_values.iter().collect::<Vec<_>>(),
+                    |name, value| {
+                        f.set_variable(name, value);
+                    },
+                );
 
-                for label in table.labels.iter() {
-                    match label {
-                        ScatterLabel::Rest(id) => {
-                            let mut v = vec![];
-                            for _ in 0..nrest {
-                                let Some(rest) = args_iter.next() else {
-                                    break;
-                                };
-                                v.push(rest.clone());
+                match result.result {
+                    Err(e) => {
+                        f.pop();
+                        return ExecutionResult::PushError(e);
+                    }
+                    Ok(()) => {
+                        // Handle default value assignment for optional parameters
+                        if result.needs_defaults {
+                            // Find the first optional parameter that needs defaults
+                            for label in table.labels.iter() {
+                                if let ScatterLabel::Optional(_, jump_to) = label {
+                                    if jump_where.is_none() && jump_to.is_some() {
+                                        jump_where = *jump_to;
+                                        break;
+                                    }
+                                }
                             }
-                            let rest = v_list(&v);
-                            f.set_variable(id, rest);
                         }
-                        ScatterLabel::Required(id) => {
-                            let Some(arg) = args_iter.next() else {
-                                return ExecutionResult::PushError(
-                                    E_ARGS.msg("Missing required arg for scatter"),
-                                );
-                            };
 
-                            f.set_variable(id, arg.clone());
-                        }
-                        ScatterLabel::Optional(id, jump_to) => {
-                            if nopt_avail > 0 {
-                                nopt_avail -= 1;
-                                let Some(arg) = args_iter.next() else {
-                                    return ExecutionResult::PushError(
-                                        E_ARGS.msg("Missing optional arg for scatter"),
-                                    );
-                                };
-                                f.set_variable(id, arg.clone());
-                            } else if jump_where.is_none() && jump_to.is_some() {
-                                jump_where = *jump_to;
-                            }
+                        // Jump to appropriate location
+                        match jump_where {
+                            None => f.jump(&table.done),
+                            Some(jump_where) => f.jump(&jump_where),
                         }
                     }
-                }
-                match &jump_where {
-                    None => f.jump(&table.done),
-                    Some(jump_where) => f.jump(jump_where),
                 }
             }
             Op::CheckListForSplice => {
@@ -1046,6 +1005,50 @@ pub fn moo_frame_execute(
                 };
                 f.set_variable(&id, new_position);
                 f.push(new_list);
+            }
+            Op::MakeLambda {
+                scatter_offset,
+                program_offset,
+                self_var,
+            } => {
+                // Retrieve the scatter specification for lambda parameters
+                let scatter_spec = f.program.scatter_table(scatter_offset).clone();
+
+                // Retrieve the pre-compiled Program for the lambda body
+                let lambda_program = f.program.lambda_program(program_offset).clone();
+
+                // Capture the current variable environment from the execution context
+                let captured_env = f.capture_environment();
+
+                // Create the lambda value with self-reference information
+                // Self-reference will be handled during lambda activation
+                let lambda_var =
+                    Var::mk_lambda(scatter_spec, lambda_program, captured_env, self_var);
+
+                // Push lambda value onto the stack
+                f.push(lambda_var);
+            }
+            Op::CallLambda => {
+                // Pop arguments list and lambda value from stack
+                let args_list = f.pop();
+                let lambda_var = f.pop();
+
+                // Verify we have a lambda value
+                let Some(lambda) = lambda_var.as_lambda() else {
+                    return ExecutionResult::PushError(E_TYPE.msg("expected lambda value"));
+                };
+
+                // Convert args list to List type for dispatch
+                let args = match args_list.variant() {
+                    Variant::List(args) => args.clone(),
+                    _ => return ExecutionResult::PushError(E_ARGS.msg("expected argument list")),
+                };
+
+                // Request lambda dispatch - this will create a new activation
+                return ExecutionResult::DispatchLambda {
+                    lambda: lambda.clone(),
+                    arguments: args,
+                };
             }
         }
     }

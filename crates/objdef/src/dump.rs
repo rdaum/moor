@@ -15,11 +15,11 @@ use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{
     HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, prop_flags_string, verb_perms_string,
 };
-use moor_common::program::ProgramType;
 use moor_compiler::{
     ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition, program_to_tree, to_literal,
     to_literal_objsub, unparse,
 };
+use moor_var::program::ProgramType;
 use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_arc_string, v_str, v_string};
 use std::collections::HashMap;
 use std::io::Write;

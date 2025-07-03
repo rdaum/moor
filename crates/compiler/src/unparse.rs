@@ -16,8 +16,8 @@ use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
 use base64::{Engine, engine::general_purpose};
-use moor_common::program::names::Variable;
 use moor_common::util::quote_str;
+use moor_var::program::names::Variable;
 use moor_var::{Obj, Sequence, Symbol, Var, Variant};
 use std::collections::HashMap;
 
@@ -81,6 +81,7 @@ impl Expr {
             Expr::Decl { .. } => 1,
             Expr::Return(_) => 1,
             Expr::TryCatch { .. } => 1,
+            Expr::Lambda { .. } => 1,
         };
         15 - cpp_ref_prep
     }
@@ -227,7 +228,14 @@ impl<'a> Unparse<'a> {
             }
             Expr::Call { function, args } => {
                 let mut buffer = String::new();
-                buffer.push_str(&function.as_arc_string());
+                match function {
+                    crate::ast::CallTarget::Builtin(symbol) => {
+                        buffer.push_str(&symbol.as_arc_string());
+                    }
+                    crate::ast::CallTarget::Expr(expr) => {
+                        buffer.push_str(self.unparse_expr(expr)?.as_str());
+                    }
+                }
                 buffer.push('(');
                 buffer.push_str(self.unparse_args(args)?.as_str());
                 buffer.push(')');
@@ -413,6 +421,51 @@ impl<'a> Unparse<'a> {
                 buffer.push_str(" in (");
                 buffer.push_str(&self.unparse_expr(list)?);
                 buffer.push_str(") }");
+                Ok(buffer)
+            }
+            Expr::Lambda { params, body, .. } => {
+                // Lambda syntax: {param1, ?param2, @param3} => expr
+                let mut buffer = String::new();
+                buffer.push('{');
+
+                let len = params.len();
+                for (i, param) in params.iter().enumerate() {
+                    match param.kind {
+                        ast::ScatterKind::Required => {
+                            // No prefix for required parameters
+                        }
+                        ast::ScatterKind::Optional => {
+                            buffer.push('?');
+                        }
+                        ast::ScatterKind::Rest => {
+                            buffer.push('@');
+                        }
+                    }
+                    let name = self.unparse_variable(&param.id);
+                    buffer.push_str(&name.as_arc_string());
+                    if let Some(expr) = &param.expr {
+                        buffer.push_str(" = ");
+                        buffer.push_str(self.unparse_expr(expr)?.as_str());
+                    }
+                    if i + 1 < len {
+                        buffer.push_str(", ");
+                    }
+                }
+
+                buffer.push_str("} => ");
+
+                // Handle different types of lambda bodies
+                match &body.node {
+                    // Expression lambda: return expr; → just show the expr
+                    StmtNode::Expr(Expr::Return(Some(expr))) => {
+                        buffer.push_str(&self.unparse_expr(expr)?);
+                    }
+                    // Statement lambda: show the full statement (like begin/end blocks)
+                    _ => {
+                        let stmt_lines = self.unparse_stmt(body, 0)?;
+                        buffer.push_str(&stmt_lines.join("\n"));
+                    }
+                }
                 Ok(buffer)
             }
         }
@@ -845,6 +898,61 @@ pub fn to_literal(v: &Var) -> String {
             let encoded = general_purpose::URL_SAFE.encode(b.as_bytes());
             format!("b\"{encoded}\"")
         }
+        Variant::Lambda(l) => {
+            use crate::decompile;
+            use moor_var::program::opcode::ScatterLabel;
+
+            // Build parameter list with proper names and syntax
+            let param_strings: Vec<String> = l
+                .params
+                .labels
+                .iter()
+                .map(|label| match label {
+                    ScatterLabel::Required(name) => {
+                        // Find the variable in lambda body's var_names and get its symbol
+                        if let Some(var) = l.body.var_names().find_variable(name) {
+                            var.to_symbol().as_arc_string().to_string()
+                        } else {
+                            format!("param_{}", name.0) // Fallback if name not found
+                        }
+                    }
+                    ScatterLabel::Optional(name, _) => {
+                        if let Some(var) = l.body.var_names().find_variable(name) {
+                            format!("?{}", var.to_symbol().as_arc_string())
+                        } else {
+                            format!("?param_{}", name.0)
+                        }
+                    }
+                    ScatterLabel::Rest(name) => {
+                        if let Some(var) = l.body.var_names().find_variable(name) {
+                            format!("@{}", var.to_symbol().as_arc_string())
+                        } else {
+                            format!("@param_{}", name.0)
+                        }
+                    }
+                })
+                .collect();
+            let param_str = param_strings.join(", ");
+
+            // Just manually construct the lambda syntax - simpler than reconstructing AST
+            let decompiled_tree = decompile::program_to_tree(&l.body).unwrap();
+            let lambda_body = &decompiled_tree.stmts[0];
+
+            let temp_unparse = Unparse::new(&decompiled_tree);
+            let body_str = match &lambda_body.node {
+                // Expression lambda: return expr; → just show the expr
+                crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(expr))) => {
+                    temp_unparse.unparse_expr(expr).unwrap()
+                }
+                // Statement lambda: show the full statement
+                _ => {
+                    let stmt_lines = temp_unparse.unparse_stmt(lambda_body, 0).unwrap();
+                    stmt_lines.join("\n")
+                }
+            };
+
+            format!("{{{param_str}}} => {body_str}")
+        }
     }
 }
 
@@ -1250,6 +1358,54 @@ end"#; "complex scatter declaration with optional and rest")]
     fn test_type_literals() {
         let progrma = r#"return {INT, STR, OBJ, LIST, MAP, SYM, FLYWEIGHT};"#;
         let stripped = unindent(progrma);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_simple() {
+        let program = r#"return {x} => x + 1;"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_optional() {
+        let program = r#"return {x, ?y} => x + y;"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_optional_with_default() {
+        let program = r#"return {x, ?y = 5} => x + y;"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_rest() {
+        let program = r#"return {x, @rest} => x + length(rest);"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_complex() {
+        let program = r#"return {x, ?y = 5, @rest} => x + y + length(rest);"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_no_params() {
+        let program = r#"return {} => 42;"#;
+        let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());
     }

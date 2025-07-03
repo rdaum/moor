@@ -11,12 +11,13 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use crate::program::builtins::BuiltinId;
 use crate::program::labels::{Label, Offset};
 use crate::program::names::Name;
+use crate::{ErrorCode, Obj, VarType};
 use bincode::{Decode, Encode};
-use moor_var::VarType;
-use moor_var::{ErrorCode, Obj};
+
+#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Hash, Encode, Decode)]
+pub struct BuiltinId(pub u16);
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
 pub enum Op {
@@ -141,6 +142,17 @@ pub enum Op {
     ComprehendRange(Offset),
     ComprehendList(Offset),
     ContinueComprehension(Name),
+    /// Create lambda value from pre-compiled Program and parameter specification
+    /// The lambda Program is compiled at compile-time and stored in lambda_programs table
+    MakeLambda {
+        scatter_offset: Offset, // Reference to parameter spec in scatter_tables
+        program_offset: Offset, // Reference to pre-compiled Program in lambda_programs table
+        self_var: Option<Name>, // Optional variable to assign lambda to itself for recursion
+    },
+    /// Call a lambda value with arguments from stack
+    /// Expects stack: [lambda_value, args_list]
+    /// Uses existing scatter assignment for parameter binding
+    CallLambda,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]

@@ -13,7 +13,7 @@
 
 #[macro_use]
 extern crate pest_derive;
-pub use moor_common::program::names::Names;
+pub use moor_var::program::names::Names;
 
 mod ast;
 mod codegen;
@@ -33,10 +33,10 @@ pub use crate::objdef::{
 };
 pub use crate::parse::CompileOptions;
 pub use crate::unparse::{to_literal, to_literal_objsub, unparse};
-pub use moor_common::program::builtins::{
+pub use moor_common::builtins::{
     ArgCount, ArgType, BUILTINS, Builtin, BuiltinId, offset_for_builtin,
 };
-pub use moor_common::program::labels::{JumpLabel, Label, Offset};
-pub use moor_common::program::opcode::{Op, ScatterLabel};
-pub use moor_common::program::program::{EMPTY_PROGRAM, Program};
+pub use moor_var::program::labels::{JumpLabel, Label, Offset};
+pub use moor_var::program::opcode::{Op, ScatterLabel};
+pub use moor_var::program::program::{EMPTY_PROGRAM, Program};
 pub use var_scope::VarScope;

@@ -11,12 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::BincodeAsByteBufferExt;
 use crate::program::names::Variable;
 use crate::program::program::Program;
 use bincode::{Decode, Encode};
-use moor_var::BincodeAsByteBufferExt;
 
-pub mod builtins;
 pub mod labels;
 pub mod names;
 pub mod opcode;

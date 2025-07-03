@@ -22,8 +22,8 @@ use moor_common::model::{
     PropFlag, PropPerms, ValSet, VerbArgsSpec, VerbAttrs, VerbDef, VerbDefs, VerbFlag,
     WorldStateError,
 };
-use moor_common::program::ProgramType;
 use moor_common::util::{BitEnum, PerfTimerGuard};
+use moor_var::program::ProgramType;
 use moor_var::{AsByteBuffer, NOTHING, Obj, Symbol, Var, v_none};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hash};

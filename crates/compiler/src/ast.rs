@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-/// The abstract syntax tree produced by the parser and converted by codegen into opcodes.
-use moor_common::program::names::Variable;
-use moor_common::program::opcode::Op;
 use moor_var::Var;
+/// The abstract syntax tree produced by the parser and converted by codegen into opcodes.
+use moor_var::program::names::Variable;
+use moor_var::program::opcode::Op;
 use moor_var::{ErrorCode, Symbol, VarType};
 use std::fmt::Display;
 
@@ -118,6 +118,12 @@ pub enum CatchCodes {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub enum CallTarget {
+    Builtin(Symbol), // Compile-time known builtin function
+    Expr(Box<Expr>), // Runtime expression that evaluates to callable
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expr {
     Assign {
         left: Box<Expr>,
@@ -139,7 +145,7 @@ pub enum Expr {
         property: Box<Expr>,
     },
     Call {
-        function: Symbol,
+        function: CallTarget,
         args: Vec<Arg>,
     },
     Verb {
@@ -188,6 +194,11 @@ pub enum Expr {
         expr: Option<Box<Expr>>,
     },
     Return(Option<Box<Expr>>),
+    Lambda {
+        params: Vec<ScatterItem>,
+        body: Box<Stmt>,
+        self_name: Option<Variable>, // For recursive lambdas, the variable to assign self to
+    },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]

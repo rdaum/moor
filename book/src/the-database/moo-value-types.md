@@ -13,6 +13,7 @@ database.
 - Binary values (arbitrary byte sequences)
 - Object numbers (references to the permanent objects in the database)
 - "Flyweights" - anonymous lightweight object _values_
+- Lambdas (anonymous functions with closures)
 
 ## Integer Type
 

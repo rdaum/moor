@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use crate::Symbol;
 use crate::program::Decl;
 use crate::program::names::VarName::{Named, Register};
 use bincode::{Decode, Encode};
-use moor_var::Symbol;
 use std::collections::HashMap;
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 

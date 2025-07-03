@@ -16,10 +16,10 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use moor_common::program::labels::Offset;
-use moor_common::program::names::{GlobalName, Name};
 use moor_compiler::{Label, Op, Program};
 use moor_var::VarType::TYPE_NONE;
+use moor_var::program::labels::Offset;
+use moor_var::program::names::{GlobalName, Name};
 use moor_var::{Error, Var, v_none};
 use std::cmp::max;
 use strum::EnumCount;
@@ -54,6 +54,7 @@ pub(crate) struct MooStackFrame {
 pub enum PcType {
     Main,
     ForkVector(Offset),
+    Lambda(Offset),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
@@ -116,6 +117,7 @@ impl MooStackFrame {
         match self.pc_type {
             PcType::Main => self.program.main_vector(),
             PcType::ForkVector(fork_vector) => self.program.fork_vector(fork_vector),
+            PcType::Lambda(lambda_offset) => self.program.lambda_program(lambda_offset).main_vector(),
         }
     }
 
@@ -123,6 +125,11 @@ impl MooStackFrame {
         match self.pc_type {
             PcType::Main => Some(self.program.line_num_for_position(pc, 0)),
             PcType::ForkVector(fv) => Some(self.program.fork_line_num_for_position(fv, pc)),
+            PcType::Lambda(lambda_offset) => {
+                // For lambdas, use the lambda program's own line number spans
+                let lambda_program = self.program.lambda_program(lambda_offset);
+                Some(lambda_program.line_num_for_position(pc, 0))
+            }
         }
     }
 
@@ -169,6 +176,9 @@ impl MooStackFrame {
             PcType::Main => self.program.main_vector().get(self.pc).cloned(),
             PcType::ForkVector(fork_vector) => {
                 self.program.fork_vector(fork_vector).get(self.pc).cloned()
+            }
+            PcType::Lambda(lambda_offset) => {
+                self.program.lambda_program(lambda_offset).main_vector().get(self.pc).cloned()
             }
         }
     }
@@ -271,6 +281,12 @@ impl MooStackFrame {
         }
         self.valstack.truncate(scope.valstack_pos);
         Some(scope)
+    }
+
+    /// Capture the current variable environment for lambda closures
+    /// Returns a snapshot of all accessible variable scopes
+    pub fn capture_environment(&self) -> Vec<Vec<Var>> {
+        self.environment.clone()
     }
 }
 

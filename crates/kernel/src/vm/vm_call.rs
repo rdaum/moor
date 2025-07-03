@@ -27,10 +27,10 @@ use moor_common::matching::ParsedCommand;
 use moor_common::model::VerbDef;
 use moor_common::model::WorldState;
 use moor_common::model::WorldStateError;
-use moor_common::program::ProgramType;
 use moor_common::tasks::Session;
 use moor_compiler::{BUILTINS, BuiltinId, Program, to_literal};
 use moor_var::VarType::TYPE_NONE;
+use moor_var::program::ProgramType;
 use moor_var::{E_INVIND, E_PERM, E_TYPE, E_VERBNF};
 use moor_var::{Error, SYSTEM_OBJECT, Sequence, Symbol, Variant};
 use moor_var::{List, Obj};
@@ -281,6 +281,18 @@ impl VMExecState {
         let a = Activation::for_eval(*permissions, player, program);
 
         self.stack.push(a);
+    }
+
+    /// Execute a lambda call by creating a new lambda activation
+    pub fn exec_lambda_request(
+        &mut self,
+        lambda: moor_var::Lambda,
+        args: List,
+    ) -> Result<(), Error> {
+        let current_activation = self.top();
+        let a = Activation::for_lambda_call(&lambda, current_activation, args.iter().collect())?;
+        self.stack.push(a);
+        Ok(())
     }
 
     /// Prepare a new stack & call hierarchy for invocation of a forked task.

@@ -21,8 +21,8 @@ use moor_common::model::{
     ArgSpec, CompileContext, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec,
     VerbFlag,
 };
-use moor_common::program::ProgramType;
 use moor_common::util::BitEnum;
+use moor_var::program::ProgramType;
 use moor_var::{
     ErrorCode, List, NOTHING, Obj, Symbol, Var, VarType, v_bool, v_err, v_float, v_flyweight,
     v_int, v_list, v_map, v_obj, v_str,

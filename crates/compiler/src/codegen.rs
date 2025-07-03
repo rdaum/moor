@@ -24,21 +24,21 @@ use crate::Op::{
     BeginComprehension, ComprehendList, ComprehendRange, ContinueComprehension, ImmInt, Pop, Put,
 };
 use crate::ast::{
-    Arg, BinaryOp, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
+    Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
 use crate::parse::moo::Rule;
 use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
+use moor_common::builtins::BUILTINS;
 use moor_common::model::CompileError::InvalidAssignemnt;
 use moor_common::model::{CompileContext, CompileError};
-use moor_common::program::builtins::BUILTINS;
-use moor_common::program::labels::{JumpLabel, Label, Offset};
-use moor_common::program::names::{Name, Names, Variable};
-use moor_common::program::opcode::Op::Jump;
-use moor_common::program::opcode::{
+use moor_var::program::labels::{JumpLabel, Label, Offset};
+use moor_var::program::names::{Name, Names, Variable};
+use moor_var::program::opcode::Op::Jump;
+use moor_var::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
     ScatterLabel,
 };
-use moor_common::program::program::{PrgInner, Program};
+use moor_var::program::program::{PrgInner, Program};
 
 pub struct Loop {
     loop_name: Option<Name>,
@@ -61,6 +61,7 @@ pub struct CodegenState {
     pub(crate) range_comprehensions: Vec<RangeComprehend>,
     pub(crate) list_comprehensions: Vec<ListComprehend>,
     pub(crate) error_operands: Vec<ErrorCode>,
+    pub(crate) lambda_programs: Vec<Program>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
     pub(crate) fork_vectors: Vec<(usize, Vec<Op>)>,
@@ -91,6 +92,7 @@ impl CodegenState {
             compile_options,
             list_comprehensions: vec![],
             error_operands: vec![],
+            lambda_programs: vec![],
         }
     }
 
@@ -133,6 +135,21 @@ impl CodegenState {
         let st_pos = self.scatter_tables.len();
         self.scatter_tables.push(ScatterArgs { labels, done });
         Offset(st_pos as u16)
+    }
+
+    fn add_lambda_program(&mut self, mut program: Program, base_line_offset: usize) -> Offset {
+        // Adjust lambda's line number spans to be relative to parent source
+        let adjusted_spans: Vec<(usize, usize)> = program.line_number_spans()
+            .iter()
+            .map(|(offset, line_num)| (*offset, line_num + base_line_offset))
+            .collect();
+        
+        // Update the lambda program's line number spans
+        Arc::make_mut(&mut program.0).line_number_spans = adjusted_spans;
+        
+        let lp_pos = self.lambda_programs.len();
+        self.lambda_programs.push(program);
+        Offset(lp_pos as u16)
     }
 
     fn add_range_comprehension(&mut self, range_comprehension: RangeComprehend) -> Offset {
@@ -496,33 +513,45 @@ impl CodegenState {
                 self.emit(Op::Pass);
             }
             Expr::Call { function, args } => {
-                // Lookup builtin.
-                match BUILTINS.find_builtin(*function) {
-                    Some(id) => {
-                        self.generate_arg_list(args)?;
-                        self.emit(Op::FuncCall { id });
-                    }
-                    None => {
-                        if self.compile_options.call_unsupported_builtins {
-                            warn!(
-                                "Unable to resolve builtin function: {function}. Transforming into `call_function({function}, ...)`."
-                            );
-                            let call_function_id =
-                                BUILTINS.find_builtin("call_function".into()).unwrap();
-                            let mut new_args = vec![Arg::Normal(Expr::Value(v_sym(*function)))];
-                            new_args.extend_from_slice(args);
-                            self.generate_arg_list(&new_args)?;
-                            self.emit(Op::FuncCall {
-                                id: call_function_id,
-                            });
-                        } else {
-                            return Err(CompileError::UnknownBuiltinFunction(
-                                CompileContext::new(self.current_line_col),
-                                function.to_string(),
-                            ));
+                match function {
+                    CallTarget::Builtin(symbol) => {
+                        // Existing builtin call logic
+                        match BUILTINS.find_builtin(*symbol) {
+                            Some(id) => {
+                                self.generate_arg_list(args)?;
+                                self.emit(Op::FuncCall { id });
+                            }
+                            None => {
+                                if self.compile_options.call_unsupported_builtins {
+                                    warn!(
+                                        "Unable to resolve builtin function: {symbol}. Transforming into `call_function({symbol}, ...)`."
+                                    );
+                                    let call_function_id =
+                                        BUILTINS.find_builtin("call_function".into()).unwrap();
+                                    let mut new_args =
+                                        vec![Arg::Normal(Expr::Value(v_sym(*symbol)))];
+                                    new_args.extend_from_slice(args);
+                                    self.generate_arg_list(&new_args)?;
+                                    self.emit(Op::FuncCall {
+                                        id: call_function_id,
+                                    });
+                                } else {
+                                    return Err(CompileError::UnknownBuiltinFunction(
+                                        CompileContext::new(self.current_line_col),
+                                        symbol.to_string(),
+                                    ));
+                                }
+                            }
                         }
                     }
-                };
+                    CallTarget::Expr(expr) => {
+                        // New lambda call logic
+                        self.generate_expr(expr.as_ref())?; // Evaluate callable expression
+                        self.generate_arg_list(args)?; // Push args list  
+                        self.emit(Op::CallLambda); // Runtime dispatch
+                        self.pop_stack(1); // Pop callable, leave result
+                    }
+                }
             }
             Expr::Verb {
                 args,
@@ -731,6 +760,34 @@ impl CodegenState {
             Expr::Return(None) => {
                 self.emit(Op::Return0);
                 self.push_stack(1);
+            }
+            Expr::Lambda {
+                params,
+                body,
+                self_name,
+            } => {
+                // Get the line number where the lambda starts
+                let lambda_start_line = body.line_col.0;
+                
+                // Compile lambda body into standalone Program (following fork vector pattern)
+                self.compile_lambda_body(params, body, lambda_start_line)?;
+
+                // If this is a self-referencing lambda, update the MakeLambda opcode
+                if let Some(var) = self_name {
+                    // Update the last emitted MakeLambda opcode to include self_var
+                    if let Some(Op::MakeLambda {
+                        scatter_offset,
+                        program_offset,
+                        self_var: _,
+                    }) = self.ops.last_mut()
+                    {
+                        *self.ops.last_mut().unwrap() = Op::MakeLambda {
+                            scatter_offset: *scatter_offset,
+                            program_offset: *program_offset,
+                            self_var: Some(self.find_name(var)),
+                        };
+                    }
+                }
             }
         }
 
@@ -1089,6 +1146,106 @@ impl CodegenState {
 
         Ok(())
     }
+
+    fn compile_lambda_body(
+        &mut self,
+        params: &[ScatterItem],
+        body: &Stmt,
+        base_line_offset: usize,
+    ) -> Result<(), CompileError> {
+        // Create scatter specification for lambda parameters
+        let labels: Vec<ScatterLabel> = params
+            .iter()
+            .map(|param| match param.kind {
+                ScatterKind::Required => ScatterLabel::Required(self.find_name(&param.id)),
+                ScatterKind::Optional => ScatterLabel::Optional(
+                    self.find_name(&param.id),
+                    // For lambdas, always create a jump label for optional parameters
+                    // to ensure that default value assignment is triggered during execution
+                    Some(self.make_jump_label(None)),
+                ),
+                ScatterKind::Rest => ScatterLabel::Rest(self.find_name(&param.id)),
+            })
+            .collect();
+        let done = self.make_jump_label(None);
+        let scatter_offset = self.add_scatter_table(labels.clone(), done);
+
+        // Stash current compilation state (following fork vector pattern)
+        let stashed_ops = std::mem::take(&mut self.ops);
+        let stashed_literals = std::mem::take(&mut self.literals);
+        let stashed_var_names = self.var_names.clone();
+        let stashed_jumps = std::mem::take(&mut self.jumps);
+        let stashed_scatter_tables = std::mem::take(&mut self.scatter_tables);
+        let stashed_for_sequence_operands = std::mem::take(&mut self.for_sequence_operands);
+        let stashed_range_comprehensions = std::mem::take(&mut self.range_comprehensions);
+        let stashed_list_comprehensions = std::mem::take(&mut self.list_comprehensions);
+        let stashed_error_operands = std::mem::take(&mut self.error_operands);
+        let stashed_lambda_programs = std::mem::take(&mut self.lambda_programs);
+        let stashed_fork_vectors = std::mem::take(&mut self.fork_vectors);
+        let stashed_line_number_spans = std::mem::take(&mut self.line_number_spans);
+        let stashed_fork_line_number_spans = std::mem::take(&mut self.fork_line_number_spans);
+
+        // Reset state for lambda compilation
+        self.ops = vec![];
+        self.literals = vec![];
+        self.jumps = vec![];
+        self.scatter_tables = vec![];
+        self.for_sequence_operands = vec![];
+        self.range_comprehensions = vec![];
+        self.list_comprehensions = vec![];
+        self.error_operands = vec![];
+        self.lambda_programs = vec![];
+        self.fork_vectors = vec![];
+        self.line_number_spans = vec![];
+        self.fork_line_number_spans = vec![];
+
+        // Compile lambda body as a statement
+        self.generate_stmt(body)?;
+
+        // Build standalone Program from compiled state
+        let lambda_program = Program(Arc::new(PrgInner {
+            literals: std::mem::take(&mut self.literals),
+            jump_labels: std::mem::take(&mut self.jumps),
+            var_names: self.var_names.clone(),
+            scatter_tables: std::mem::take(&mut self.scatter_tables),
+            for_sequence_operands: std::mem::take(&mut self.for_sequence_operands),
+            range_comprehensions: std::mem::take(&mut self.range_comprehensions),
+            list_comprehensions: std::mem::take(&mut self.list_comprehensions),
+            error_operands: std::mem::take(&mut self.error_operands),
+            lambda_programs: std::mem::take(&mut self.lambda_programs),
+            main_vector: std::mem::take(&mut self.ops),
+            fork_vectors: std::mem::take(&mut self.fork_vectors),
+            line_number_spans: std::mem::take(&mut self.line_number_spans),
+            fork_line_number_spans: std::mem::take(&mut self.fork_line_number_spans),
+        }));
+
+        // Restore main compilation context
+        self.ops = stashed_ops;
+        self.literals = stashed_literals;
+        self.var_names = stashed_var_names;
+        self.jumps = stashed_jumps;
+        self.scatter_tables = stashed_scatter_tables;
+        self.for_sequence_operands = stashed_for_sequence_operands;
+        self.range_comprehensions = stashed_range_comprehensions;
+        self.list_comprehensions = stashed_list_comprehensions;
+        self.error_operands = stashed_error_operands;
+        self.lambda_programs = stashed_lambda_programs;
+        self.fork_vectors = stashed_fork_vectors;
+        self.line_number_spans = stashed_line_number_spans;
+        self.fork_line_number_spans = stashed_fork_line_number_spans;
+
+        // Store compiled Program in lambda_programs table with adjusted line numbers
+        let program_offset = self.add_lambda_program(lambda_program, base_line_offset);
+
+        self.emit(Op::MakeLambda {
+            scatter_offset,
+            program_offset,
+            self_var: None, // Will be set properly for name-sugared forms
+        });
+        self.push_stack(1);
+
+        Ok(())
+    }
 }
 
 fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, CompileError> {
@@ -1114,11 +1271,12 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
         range_comprehensions: cg_state.range_comprehensions,
         list_comprehensions: cg_state.list_comprehensions,
         for_sequence_operands: cg_state.for_sequence_operands,
+        error_operands: cg_state.error_operands,
+        lambda_programs: cg_state.lambda_programs,
         main_vector: cg_state.ops,
         fork_vectors: cg_state.fork_vectors,
         line_number_spans: cg_state.line_number_spans,
         fork_line_number_spans: cg_state.fork_line_number_spans,
-        error_operands: cg_state.error_operands,
     });
     let program = Program(program);
     Ok(program)

@@ -29,7 +29,6 @@ mod test {
     use moor_common::model::loader::LoaderInterface;
     use moor_common::model::{CommitResult, ValSet};
     use moor_common::model::{HasUuid, Named};
-    use moor_common::program::ProgramType;
     use moor_compiler::CompileOptions;
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_textdump::{
@@ -38,6 +37,7 @@ mod test {
     };
     use moor_var::SYSTEM_OBJECT;
     use moor_var::Symbol;
+    use moor_var::program::ProgramType;
     use moor_var::{NOTHING, Obj};
 
     fn get_minimal_db() -> File {

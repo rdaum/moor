@@ -24,11 +24,11 @@ use moor_common::model::loader::LoaderInterface;
 use moor_common::model::{CommitResult, WorldStateError};
 use moor_common::model::{HasUuid, PropPerms, ValSet};
 use moor_common::model::{PropDef, PropDefs};
-use moor_common::program::ProgramType;
 use moor_common::util::BitEnum;
 use moor_var::Obj;
 use moor_var::Symbol;
 use moor_var::Var;
+use moor_var::program::ProgramType;
 
 /// A loader client which uses a database transaction to load the world state.
 impl LoaderInterface for DbWorldState {

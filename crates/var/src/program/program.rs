@@ -16,13 +16,11 @@ use crate::program::names::{Name, Names};
 use crate::program::opcode::{
     ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
 };
+use crate::{AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError, Symbol};
+use crate::{ErrorCode, Var};
 use bincode::{Decode, Encode};
 use byteview::ByteView;
 use lazy_static::lazy_static;
-use moor_var::{
-    AsByteBuffer, BINCODE_CONFIG, CountingWriter, DecodingError, EncodingError, Symbol,
-};
-use moor_var::{ErrorCode, Var};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -52,6 +50,8 @@ pub struct PrgInner {
     pub list_comprehensions: Vec<ListComprehend>,
     /// All the error operands referenced in by MakeError in the program.
     pub error_operands: Vec<ErrorCode>,
+    /// Lambda programs, referenced by the MakeLambda opcode.
+    pub lambda_programs: Vec<Program>,
     /// The actual program code.
     pub main_vector: Vec<Op>,
     /// The program code for each fork as (offset_in_main_vector, fork_opcodes).
@@ -72,11 +72,12 @@ impl Program {
             for_sequence_operands: vec![],
             range_comprehensions: vec![],
             list_comprehensions: vec![],
+            error_operands: vec![],
+            lambda_programs: vec![],
             main_vector: vec![],
             fork_vectors: vec![],
             line_number_spans: vec![],
             fork_line_number_spans: vec![],
-            error_operands: vec![],
         }))
     }
 
@@ -138,6 +139,10 @@ impl Program {
         &self.0.list_comprehensions[offset.0 as usize]
     }
 
+    pub fn lambda_program(&self, offset: Offset) -> &Program {
+        &self.0.lambda_programs[offset.0 as usize]
+    }
+
     pub fn jump_label(&self, offset: Label) -> &JumpLabel {
         &self.0.jump_labels[offset.0 as usize]
     }
@@ -181,6 +186,7 @@ impl Program {
         }
         last_line_num
     }
+
 }
 
 impl Default for Program {

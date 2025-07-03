@@ -41,6 +41,21 @@ fn bf_tostr(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             Variant::Sym(s) => result.push_str(&s.to_string()),
             Variant::Err(e) => result.push_str(&e.name().as_arc_string()),
             Variant::Flyweight(_) => result.push_str("<flyweight>"),
+            Variant::Lambda(l) => {
+                use moor_var::program::opcode::ScatterLabel;
+                let param_str = l
+                    .params
+                    .labels
+                    .iter()
+                    .map(|label| match label {
+                        ScatterLabel::Required(_) => "x".to_string(),
+                        ScatterLabel::Optional(_, _) => "?x".to_string(),
+                        ScatterLabel::Rest(_) => "@x".to_string(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                result.push_str(&format!("<lambda:({param_str})>"));
+            }
         }
     }
     Ok(Ret(v_str(result.as_str())))

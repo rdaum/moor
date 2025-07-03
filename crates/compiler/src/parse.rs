@@ -25,14 +25,15 @@ use pest::error::LineColLocation;
 use pest::iterators::{Pair, Pairs};
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 
+use moor_common::builtins::BUILTINS;
 use moor_var::Obj;
 use moor_var::{v_binary, v_float, v_int, v_obj, v_str, v_string};
 
 use crate::ast::Arg::{Normal, Splice};
 use crate::ast::StmtNode::Scope;
 use crate::ast::{
-    Arg, BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
-    StmtNode, UnaryOp,
+    Arg, BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
+    ScatterKind, Stmt, StmtNode, UnaryOp,
 };
 use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
@@ -40,8 +41,8 @@ use crate::var_scope::VarScope;
 use base64::{Engine, engine::general_purpose};
 use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
 use moor_common::model::{CompileContext, CompileError};
-use moor_common::program::DeclType;
-use moor_common::program::names::Names;
+use moor_var::program::DeclType;
+use moor_var::program::names::Names;
 
 pub mod moo {
     #[derive(Parser)]
@@ -357,6 +358,86 @@ impl TreeTransformer {
                             args,
                         })
                     }
+                    Rule::lambda => {
+                        let mut inner = primary.into_inner();
+                        let lambda_params = inner.next().unwrap();
+                        let body_part = inner.next().unwrap();
+
+                        let params = primary_self
+                            .clone()
+                            .parse_lambda_params(lambda_params.into_inner())?;
+
+                        let body = match body_part.as_rule() {
+                            Rule::begin_statement => {
+                                // Parse begin statement directly
+                                let line_col = body_part.line_col();
+                                let stmt_opt = primary_self.clone().parse_statement(body_part)?;
+                                let stmt = stmt_opt.ok_or_else(|| CompileError::ParseError {
+                                    error_position: CompileContext::new(line_col),
+                                    end_line_col: Some(line_col),
+                                    context: "lambda body parsing".to_string(),
+                                    message: "Expected statement in lambda body".to_string(),
+                                })?;
+                                Box::new(stmt)
+                            }
+                            Rule::expr => {
+                                // Parse expression and wrap it in a return statement
+                                let line_col = body_part.line_col();
+                                let expr =
+                                    primary_self.clone().parse_expr(body_part.into_inner())?;
+                                let return_stmt = Stmt::new(
+                                    StmtNode::Expr(Expr::Return(Some(Box::new(expr)))),
+                                    line_col, // Use actual line numbers from body expression
+                                );
+                                Box::new(return_stmt)
+                            }
+                            _ => {
+                                let line_col = body_part.line_col();
+                                return Err(CompileError::ParseError {
+                                    error_position: CompileContext::new(line_col),
+                                    end_line_col: Some(line_col),
+                                    context: "lambda body parsing".to_string(),
+                                    message: "Invalid lambda body".to_string(),
+                                });
+                            }
+                        };
+
+                        Ok(Expr::Lambda {
+                            params,
+                            body,
+                            self_name: None,
+                        })
+                    }
+                    Rule::fn_expr => {
+                        let mut inner = primary.into_inner();
+                        let lambda_params = inner.next().unwrap();
+                        let statements_part = inner.next().unwrap();
+
+                        let params = primary_self
+                            .clone()
+                            .parse_lambda_params(lambda_params.into_inner())?;
+
+                        // Parse the statements and wrap them in a scope with proper binding tracking
+                        let scope_line_col = statements_part.line_col();
+                        primary_self.enter_scope();
+                        let statements = primary_self
+                            .clone()
+                            .parse_statements(statements_part.into_inner())?;
+                        let num_total_bindings = primary_self.exit_scope();
+                        let body = Box::new(Stmt::new(
+                            StmtNode::Scope {
+                                num_bindings: num_total_bindings,
+                                body: statements,
+                            },
+                            scope_line_col, // Use actual line numbers from statements
+                        ));
+
+                        Ok(Expr::Lambda {
+                            params,
+                            body,
+                            self_name: None,
+                        })
+                    }
                     Rule::list => {
                         let mut inner = primary.into_inner();
                         if let Some(arglist) = inner.next() {
@@ -455,10 +536,22 @@ impl TreeTransformer {
                         let args = primary_self
                             .clone()
                             .parse_arglist(inner.next().unwrap().into_inner())?;
-                        Ok(Expr::Call {
-                            function: Symbol::mk(bf),
-                            args,
-                        })
+                        let function_name = Symbol::mk(bf);
+
+                        // Determine if this is a builtin or variable call
+                        let function = if BUILTINS.find_builtin(function_name).is_some() {
+                            CallTarget::Builtin(function_name)
+                        } else {
+                            // Unknown function - could be lambda variable
+                            CallTarget::Expr(Box::new(Expr::Id(
+                                self.names
+                                    .borrow_mut()
+                                    .find_or_add_name_global(bf, DeclType::Unknown)
+                                    .unwrap(),
+                            )))
+                        };
+
+                        Ok(Expr::Call { function, args })
                     }
                     Rule::pass_expr => {
                         let mut inner = primary.into_inner();
@@ -1233,6 +1326,131 @@ impl TreeTransformer {
                 )))
             }
             Rule::empty_return => Ok(Some(Stmt::new(StmtNode::mk_return_none(), line_col))),
+            Rule::fn_statement => {
+                let inner = pair.into_inner().next().unwrap();
+                match inner.as_rule() {
+                    Rule::fn_named => {
+                        // fn name(params) statements endfn
+                        // This is like: let name = fn(params) statements endfn;
+                        let mut parts = inner.clone().into_inner();
+                        let func_name = parts.next().unwrap().as_str();
+                        let params_part = parts.next().unwrap();
+                        let statements_part = parts.next().unwrap();
+
+                        // Parse the lambda parameters
+                        let params = self.clone().parse_lambda_params(params_part.into_inner())?;
+
+                        // Parse the function body with proper scope tracking
+                        let scope_line_col = statements_part.line_col();
+                        self.enter_scope();
+                        let statements = self
+                            .clone()
+                            .parse_statements(statements_part.into_inner())?;
+                        let num_total_bindings = self.exit_scope();
+                        let body = Box::new(Stmt::new(
+                            StmtNode::Scope {
+                                num_bindings: num_total_bindings,
+                                body: statements,
+                            },
+                            scope_line_col, // Use actual line numbers from statements
+                        ));
+
+                        // Create a declaration for the function name
+                        let id = {
+                            let mut names = self.names.borrow_mut();
+                            names.declare_or_use_name(func_name, DeclType::Let)
+                        };
+
+                        // Create a lambda expression with self-reference
+                        let lambda_expr = Expr::Lambda {
+                            params,
+                            body,
+                            self_name: Some(id),
+                        };
+                        Ok(Some(Stmt::new(
+                            StmtNode::Expr(Expr::Decl {
+                                id,
+                                expr: Some(Box::new(lambda_expr)),
+                                is_const: false,
+                            }),
+                            line_col,
+                        )))
+                    }
+                    Rule::fn_assignment => {
+                        // name = fn(params) statements endfn;
+                        // Parse this as: variable = fn_expr
+                        let mut parts = inner.clone().into_inner();
+                        let var_name = parts.next().unwrap().as_str();
+                        let func_expr_part = parts.next().unwrap(); // This is the fn_expr rule
+
+                        // Parse the fn expression manually (similar to fn_expr case above)
+                        let mut func_parts = func_expr_part.into_inner();
+                        let lambda_params = func_parts.next().unwrap();
+                        let statements_part = func_parts.next().unwrap();
+
+                        let params = self
+                            .clone()
+                            .parse_lambda_params(lambda_params.into_inner())?;
+
+                        // Parse the function body with proper scope tracking
+                        let scope_line_col = statements_part.line_col();
+                        self.enter_scope();
+                        let statements = self
+                            .clone()
+                            .parse_statements(statements_part.into_inner())?;
+                        let num_total_bindings = self.exit_scope();
+                        let body = Box::new(Stmt::new(
+                            StmtNode::Scope {
+                                num_bindings: num_total_bindings,
+                                body: statements,
+                            },
+                            scope_line_col, // Use actual line numbers from statements
+                        ));
+
+                        // Create the lambda expression
+                        let lambda_expr = Expr::Lambda {
+                            params,
+                            body,
+                            self_name: None,
+                        };
+
+                        // Create assignment or declaration
+                        let maybe_id = self.names.borrow().find_name(var_name);
+                        let assign_expr = match maybe_id {
+                            Some(id) => {
+                                // Variable exists, create assignment
+                                Expr::Assign {
+                                    left: Box::new(Expr::Id(id)),
+                                    right: Box::new(lambda_expr),
+                                }
+                            }
+                            None => {
+                                // Variable doesn't exist, declare it
+                                let id = {
+                                    let mut names = self.names.borrow_mut();
+                                    let Some(id) =
+                                        names.declare(var_name, false, false, DeclType::Let)
+                                    else {
+                                        return Err(DuplicateVariable(
+                                            self.compile_context(&inner),
+                                            var_name.into(),
+                                        ));
+                                    };
+                                    id
+                                };
+                                Expr::Decl {
+                                    id,
+                                    expr: Some(Box::new(lambda_expr)),
+                                    is_const: false,
+                                }
+                            }
+                        };
+
+                        Ok(Some(Stmt::new(StmtNode::Expr(assign_expr), line_col)))
+                    }
+                    _ => panic!("Unexpected fn statement rule: {:?}", inner.as_rule()),
+                }
+            }
             _ => panic!("Unimplemented statement: {:?}", pair.as_rule()),
         }
     }
@@ -1358,6 +1576,89 @@ impl TreeTransformer {
             }
         }
         Ok(Expr::Scatter(items, Box::new(rhs)))
+    }
+
+    fn parse_lambda_params(
+        self: Rc<Self>,
+        params: Pairs<Rule>,
+    ) -> Result<Vec<ScatterItem>, CompileError> {
+        let mut items = vec![];
+        for param in params {
+            match param.as_rule() {
+                Rule::lambda_param => {
+                    let inner_param = param.into_inner().next().unwrap();
+                    match inner_param.as_rule() {
+                        Rule::scatter_optional => {
+                            let context = self.compile_context(&inner_param);
+                            let mut inner = inner_param.into_inner();
+                            let id_str = inner.next().unwrap().as_str();
+                            let Some(id) = self.clone().names.borrow_mut().declare(
+                                id_str,
+                                false,
+                                false,
+                                DeclType::Assign,
+                            ) else {
+                                return Err(DuplicateVariable(context, id_str.into()));
+                            };
+
+                            let expr = inner
+                                .next()
+                                .map(|e| self.clone().parse_expr(e.into_inner()).unwrap());
+                            items.push(ScatterItem {
+                                kind: ScatterKind::Optional,
+                                id,
+                                expr,
+                            });
+                        }
+                        Rule::scatter_target => {
+                            let context = self.compile_context(&inner_param);
+                            let mut inner = inner_param.into_inner();
+                            let id_str = inner.next().unwrap().as_str();
+                            let Some(id) = self.clone().names.borrow_mut().declare(
+                                id_str,
+                                false,
+                                false,
+                                DeclType::Assign,
+                            ) else {
+                                return Err(DuplicateVariable(context, id_str.into()));
+                            };
+
+                            items.push(ScatterItem {
+                                kind: ScatterKind::Required,
+                                id,
+                                expr: None,
+                            });
+                        }
+                        Rule::scatter_rest => {
+                            let context = self.compile_context(&inner_param);
+                            let mut inner = inner_param.into_inner();
+                            let id_str = inner.next().unwrap().as_str();
+                            let Some(id) = self.clone().names.borrow_mut().declare(
+                                id_str,
+                                false,
+                                false,
+                                DeclType::Assign,
+                            ) else {
+                                return Err(DuplicateVariable(context, id_str.into()));
+                            };
+
+                            items.push(ScatterItem {
+                                kind: ScatterKind::Rest,
+                                id,
+                                expr: None,
+                            });
+                        }
+                        _ => {
+                            panic!("Unimplemented inner lambda_param: {inner_param:?}");
+                        }
+                    }
+                }
+                _ => {
+                    panic!("Unimplemented lambda_param: {param:?}");
+                }
+            }
+        }
+        Ok(items)
     }
 
     fn transform_tree(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
@@ -1515,8 +1816,8 @@ mod tests {
     use crate::ast::BinaryOp::Add;
     use crate::ast::Expr::{Call, Error, Flyweight, Id, Prop, Value, Verb};
     use crate::ast::{
-        BinaryOp, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem, ScatterKind, Stmt,
-        StmtNode, UnaryOp, assert_trees_match_recursive,
+        BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
+        ScatterKind, Stmt, StmtNode, UnaryOp, assert_trees_match_recursive,
     };
     use crate::parse::{parse_program, unquote_str};
     use crate::unparse::annotate_line_numbers;
@@ -1597,7 +1898,7 @@ mod tests {
         assert_eq!(
             stripped_stmts(&parse.stmts)[0],
             StmtNode::Expr(Call {
-                function: Symbol::mk("notify"),
+                function: CallTarget::Builtin(Symbol::mk("notify")),
                 args: vec![Normal(Value(v_str("test")))],
             })
         );
@@ -2195,7 +2496,10 @@ mod tests {
             vec![StmtNode::mk_return(Expr::List(vec![
                 Splice(Id(args)),
                 Normal(Call {
-                    function: Symbol::mk("frozzbozz"),
+                    function: CallTarget::Expr(Box::new(Id(parse
+                        .variables
+                        .find_name("frozzbozz")
+                        .unwrap()))),
                     args: vec![Splice(Id(args))],
                 }),
             ]))]
@@ -2515,7 +2819,7 @@ mod tests {
                 Box::new(Expr::Assign {
                     left: Box::new(Id(len)),
                     right: Box::new(Call {
-                        function: Symbol::mk("length"),
+                        function: CallTarget::Builtin(Symbol::mk("length")),
                         args: vec![Normal(Id(text))],
                     }),
                 }),
@@ -2617,7 +2921,7 @@ mod tests {
             stripped_stmts(&parse.stmts),
             vec![StmtNode::Expr(Expr::TryCatch {
                 trye: Box::new(Call {
-                    function: Symbol::mk("raise"),
+                    function: CallTarget::Builtin(Symbol::mk("raise")),
                     args: vec![invarg]
                 }),
                 codes: CatchCodes::Any,
@@ -3254,6 +3558,191 @@ mod tests {
             assert_eq!(binary.as_bytes(), original_data);
         } else {
             panic!("Expected return statement with binary value");
+        }
+    }
+
+    #[test]
+    fn test_lambda_parse_complex() {
+        // Test lambda with mixed parameter types
+        let program = r#"let f = {a, ?b, @rest} => a + b;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+
+        if let StmtNode::Expr(Expr::Decl {
+            expr: Some(expr), ..
+        }) = &parse.stmts[0].node
+        {
+            if let Expr::Lambda { params, .. } = expr.as_ref() {
+                assert_eq!(params.len(), 3);
+                assert!(matches!(params[0].kind, ScatterKind::Required));
+                assert!(matches!(params[1].kind, ScatterKind::Optional));
+                assert!(matches!(params[2].kind, ScatterKind::Rest));
+            } else {
+                panic!("Expected lambda expression in assignment, got: {expr:?}");
+            }
+        } else {
+            panic!(
+                "Expected declaration statement, got: {:?}",
+                &parse.stmts[0].node
+            );
+        }
+    }
+
+    #[test]
+    fn test_lambda_parse() {
+        // Test simple lambda
+        let program = r#"let f = {x} => 5;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+
+        if let StmtNode::Expr(Expr::Decl {
+            expr: Some(expr), ..
+        }) = &parse.stmts[0].node
+        {
+            if let Expr::Lambda { params, .. } = expr.as_ref() {
+                assert_eq!(params.len(), 1);
+                assert!(matches!(params[0].kind, ScatterKind::Required));
+            } else {
+                panic!("Expected lambda expression in assignment, got: {expr:?}");
+            }
+        } else {
+            panic!(
+                "Expected declaration statement, got: {:?}",
+                &parse.stmts[0].node
+            );
+        }
+    }
+
+    #[test]
+    fn test_lambda_statement_parse() {
+        // Test expression lambda
+        let expr_program = r#"let f = {x} => x + 1;"#;
+        let expr_parse = parse_program(expr_program, CompileOptions::default()).unwrap();
+
+        if let StmtNode::Expr(Expr::Decl {
+            expr: Some(expr), ..
+        }) = &expr_parse.stmts[0].node
+        {
+            if let Expr::Lambda { body, .. } = expr.as_ref() {
+                // Should be a return statement wrapping the expression
+                if let StmtNode::Expr(Expr::Return(Some(_))) = &body.node {
+                    // Good - expression lambda was wrapped in return
+                } else {
+                    panic!(
+                        "Expected return statement for expression lambda, got: {:?}",
+                        &body.node
+                    );
+                }
+            }
+        }
+
+        // Test statement lambda with fn/endfn
+        let program = r#"let f = fn(x) return x + 1; endfn;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+
+        if let StmtNode::Expr(Expr::Decl {
+            expr: Some(expr), ..
+        }) = &parse.stmts[0].node
+        {
+            if let Expr::Lambda { params, body, .. } = expr.as_ref() {
+                assert_eq!(params.len(), 1);
+                assert!(matches!(params[0].kind, ScatterKind::Required));
+
+                // Verify it's a begin statement (Scope)
+                if let StmtNode::Scope {
+                    body: statements, ..
+                } = &body.node
+                {
+                    assert_eq!(statements.len(), 1);
+                    if let StmtNode::Expr(Expr::Return(Some(_))) = &statements[0].node {
+                        // This is correct - the begin block contains a return statement
+                    } else {
+                        panic!(
+                            "Expected return statement in begin block, got: {:?}",
+                            &statements[0].node
+                        );
+                    }
+                } else {
+                    panic!("Expected begin block (Scope), got: {:?}", &body.node);
+                }
+            } else {
+                panic!("Expected lambda expression in assignment, got: {expr:?}");
+            }
+        } else {
+            panic!(
+                "Expected declaration statement, got: {:?}",
+                &parse.stmts[0].node
+            );
+        }
+
+        // Test empty fn lambda
+        let empty_lambda = r#"let f = fn(x) endfn;"#;
+        parse_program(empty_lambda, CompileOptions::default()).unwrap();
+    }
+
+    /// Regression test for auditDB verb parsing issue
+    /// This verb from JHCore-DEV-2.db was failing to parse after lambda implementation
+    #[test]
+    fn test_auditdb_verb_regression() {
+        let verb_code = r#""Usage:  @auditDB [player] [from <start>] [to <end>] [for <matching string>]";
+set_task_perms(player);
+dobj = player:my_match_player(dobjstr);
+if (!dobjstr)
+dobj = player;
+elseif ($command_utils:player_match_failed(dobj, dobjstr) && (!(valid(dobj = $string_utils:literal_object(dobjstr)) && $command_utils:yes_or_no("Continue?"))))
+return;
+endif
+dobjwords = $string_utils:words(dobjstr);
+if (args[1..length(dobjwords)] == dobjwords)
+args = args[length(dobjwords) + 1..length(args)];
+endif
+if (!(parse_result = $code_utils:_parse_audit_args(@args)))
+player:notify(tostr("Usage:  ", verb, " [player] [from <start>] [to <end>] [for <match>]"));
+return;
+endif
+start = parse_result[1];
+end = parse_result[2];
+match = parse_result[3];
+player:notify(tostr("Objects owned by ", valid(dobj) ? dobj:name() | dobj, ((" (from #" + tostr(start)) + " to #") + tostr(end), match ? " matching " + match | "", ")", ":"));
+player:notify("");
+count = 0;
+"Only print every third suspension";
+do_print = 0;
+for i in [start..end]
+o = toobj(i);
+if ($command_utils:running_out_of_time())
+(do_print = (do_print + 1) % 3) || player:notify(tostr("... ", o));
+suspend(5);
+endif
+if (valid(o) && (o.owner == dobj))
+found = 0;
+names = {o:name(), @o.aliases};
+while (names && (!found))
+if (index(names[1], match) == 1)
+found = 1;
+endif
+names = listdelete(names, 1);
+endwhile
+if (found)
+player:notify(tostr(o:name(), " (", o, ")"));
+count = count + 1;
+do_print = 0;
+endif
+endif
+endfor
+if (count)
+player:notify("");
+endif
+player:notify(tostr("Total: ", count, " object", (count == 1) ? "." | "s."));
+return 0 && "Automatically Added Return";"#;
+
+        let result = parse_program(verb_code, CompileOptions::default());
+
+        match result {
+            Ok(_) => {
+                // Test passes if parsing succeeds
+            }
+            Err(e) => {
+                panic!("auditDB verb failed to parse (regression): {e:?}");
+            }
         }
     }
 }

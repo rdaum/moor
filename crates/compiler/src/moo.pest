@@ -27,6 +27,7 @@ statement  = {
   | try_except_statement
   | try_finally_statement
   | begin_statement
+  | fn_statement
   | expr_statement
   | local_assignment
   | const_assignment
@@ -63,6 +64,12 @@ labelled_except       = { ident ~ "(" ~ codes ~ ")" }
 unlabelled_except     = { "(" ~ codes ~ ")" }
 
 begin_statement       = { ^"begin" ~ statements ~ ^"end" }
+
+// Function definitions using fn/endfn
+fn_statement = { fn_named | fn_assignment }
+fn_named = { ^"fn" ~ ident ~ "(" ~ lambda_params ~ ")" ~ statements ~ ^"endfn" }
+fn_assignment = { ident ~ "=" ~ fn_expr ~ ";" }
+fn_expr = { ^"fn" ~ "(" ~ lambda_params ~ ")" ~ statements ~ ^"endfn" }
 
 local_assignment = { ^"let" ~ (local_assign_scatter | local_assign_single) ~ ";" }
 local_assign_single = { ident ~ (ASSIGN ~ expr)? }
@@ -123,7 +130,7 @@ neg    =  { "-" }
 // 
 not = { "!" }
 
-scatter_assign   =  { "{" ~ scatter ~ "}" ~ ASSIGN }
+scatter_assign   =  { "{" ~ scatter ~ "}" ~ !"=>" ~ ASSIGN }
 scatter          = _{ scatter_item ~ ("," ~ scatter_item)* }
 scatter_item     = _{ scatter_optional | scatter_target | scatter_rest }
 scatter_optional =  { "?" ~ ident ~ (ASSIGN ~ expr)? }
@@ -138,13 +145,15 @@ verb_call      =  { ":" ~ ident ~ arglist }
 verb_expr_call =  { ":" ~ expr ~ arglist }
 prop           =  { "." ~ ident }
 prop_expr      =  { "." ~ "(" ~ expr ~ ")" }
-assign         =  { "=" ~ expr }
+assign         =  { "=" ~ !(">" | "=") ~ expr }
 cond_expr      =  { "?" ~ expr ~ "|" ~ expr }
 return_expr    =  { ^"return" ~ (expr)? }
 
 
 primary    = _{
-    pass_expr
+    lambda
+  | fn_expr
+  | pass_expr
   | builtin_call
   | paren_expr
   | sysprop_call
@@ -168,7 +177,11 @@ sysprop_call = { sysprop ~ arglist }
 
 atom     = { integer | float | string | object | err | boolean | symbol | type_constant | literal_binary | ident  }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
-list     = { ("{" ~ exprlist ~ "}") | "{}" }
+lambda   = { "{" ~ lambda_params ~ "}" ~ "=>" ~ expr }
+lambda_params = { (lambda_param ~ ("," ~ lambda_param)*)? }
+lambda_param = { scatter_optional | scatter_target | scatter_rest }
+
+list     = { ("{" ~ exprlist ~ "}" ~ !"=>") | "{}" }
 
 // flyweight is < parent, [ prop -> value, ... ], contents >
 flyweight     = { "<" ~ expr ~ ("," ~ flyweight_slots)? ~ ("," ~ expr)? ~ ">" }
@@ -181,7 +194,7 @@ map      = { ("[" ~ (expr ~ "->" ~ expr) ~ ("," ~ expr ~ "->" ~ expr)* ~ "]") | 
 range_end = { "$" }
 
 // An unambiguous assignment operator, for use in scatter assignments where list comparison could be a false match.
-ASSIGN = _{ "=" ~ !("=") }
+ASSIGN = _{ "=" ~ !("=" | ">") }
 
 err = { errcode ~ ("(" ~ expr ~ ")")? }
 errcode = @{ ^"e_" ~ ident_continue+  }
@@ -207,6 +220,8 @@ keyword = @{
   | ^"finally"
   | ^"in"
   | ^"let"
+  | ^"fn"
+  | ^"endfn"
   | err
 }
 
