@@ -142,6 +142,16 @@ pub enum Op {
     ComprehendRange(Offset),
     ComprehendList(Offset),
     ContinueComprehension(Name),
+    /// Create lambda value from pre-compiled Program and parameter specification
+    /// The lambda Program is compiled at compile-time and stored in lambda_programs table
+    MakeLambda {
+        scatter_offset: Offset, // Reference to parameter spec in scatter_tables
+        program_offset: Offset, // Reference to pre-compiled Program in lambda_programs table
+    },
+    /// Call a lambda value with arguments from stack
+    /// Expects stack: [lambda_value, args_list]
+    /// Uses existing scatter assignment for parameter binding
+    CallLambda,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Encode, Decode)]

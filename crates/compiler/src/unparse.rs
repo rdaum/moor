@@ -880,19 +880,54 @@ pub fn to_literal(v: &Var) -> String {
             format!("b\"{encoded}\"")
         }
         Variant::Lambda(l) => {
+            use crate::decompile;
             use moor_var::program::opcode::ScatterLabel;
-            let param_str = l
+
+            // Build parameter list with proper names and syntax
+            let param_strings: Vec<String> = l
                 .params
                 .labels
                 .iter()
                 .map(|label| match label {
-                    ScatterLabel::Required(_) => "x",
-                    ScatterLabel::Optional(_, _) => "?x",
-                    ScatterLabel::Rest(_) => "@x",
+                    ScatterLabel::Required(name) => {
+                        // Find the variable in lambda body's var_names and get its symbol
+                        if let Some(var) = l.body.var_names().find_variable(name) {
+                            var.to_symbol().as_arc_string().to_string()
+                        } else {
+                            format!("param_{}", name.0) // Fallback if name not found
+                        }
+                    }
+                    ScatterLabel::Optional(name, _) => {
+                        if let Some(var) = l.body.var_names().find_variable(name) {
+                            format!("?{}", var.to_symbol().as_arc_string())
+                        } else {
+                            format!("?param_{}", name.0)
+                        }
+                    }
+                    ScatterLabel::Rest(name) => {
+                        if let Some(var) = l.body.var_names().find_variable(name) {
+                            format!("@{}", var.to_symbol().as_arc_string())
+                        } else {
+                            format!("@param_{}", name.0)
+                        }
+                    }
                 })
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("#<lambda:({})>", param_str)
+                .collect();
+            let param_str = param_strings.join(", ");
+
+            // Decompile the lambda body - currently limited to expressions only
+            // TODO: Support begin/end blocks when AST is updated to handle LambdaBody enum
+            let decompiled_tree = decompile::program_to_tree(&l.body).unwrap();
+            let unparse = Unparse::new(&decompiled_tree);
+
+            // Lambda body should be a single expression statement
+            let expr = match &decompiled_tree.stmts[0].node {
+                crate::ast::StmtNode::Expr(expr) => expr,
+                _ => unreachable!("Lambda body should be a single expression"),
+            };
+
+            let body_str = unparse.unparse_expr(&expr).unwrap();
+            format!("{{{param_str}}} => {body_str}")
         }
     }
 }

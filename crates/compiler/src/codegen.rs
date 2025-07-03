@@ -61,6 +61,7 @@ pub struct CodegenState {
     pub(crate) range_comprehensions: Vec<RangeComprehend>,
     pub(crate) list_comprehensions: Vec<ListComprehend>,
     pub(crate) error_operands: Vec<ErrorCode>,
+    pub(crate) lambda_programs: Vec<Program>,
     pub(crate) cur_stack: usize,
     pub(crate) max_stack: usize,
     pub(crate) fork_vectors: Vec<(usize, Vec<Op>)>,
@@ -91,6 +92,7 @@ impl CodegenState {
             compile_options,
             list_comprehensions: vec![],
             error_operands: vec![],
+            lambda_programs: vec![],
         }
     }
 
@@ -133,6 +135,12 @@ impl CodegenState {
         let st_pos = self.scatter_tables.len();
         self.scatter_tables.push(ScatterArgs { labels, done });
         Offset(st_pos as u16)
+    }
+
+    fn add_lambda_program(&mut self, program: Program) -> Offset {
+        let lp_pos = self.lambda_programs.len();
+        self.lambda_programs.push(program);
+        Offset(lp_pos as u16)
     }
 
     fn add_range_comprehension(&mut self, range_comprehension: RangeComprehend) -> Offset {
@@ -732,9 +740,9 @@ impl CodegenState {
                 self.emit(Op::Return0);
                 self.push_stack(1);
             }
-            Expr::Lambda { params: _, body: _ } => {
-                // TODO: Implement lambda expression compilation
-                todo!("Lambda expression compilation not yet implemented")
+            Expr::Lambda { params, body } => {
+                // Compile lambda body into standalone Program (following fork vector pattern)
+                self.compile_lambda_body(params, body)?;
             }
         }
 
@@ -1093,6 +1101,107 @@ impl CodegenState {
 
         Ok(())
     }
+
+    fn compile_lambda_body(
+        &mut self,
+        params: &[ScatterItem],
+        body: &Expr,
+    ) -> Result<(), CompileError> {
+        // Create scatter specification for lambda parameters
+        let labels: Vec<ScatterLabel> = params
+            .iter()
+            .map(|param| match param.kind {
+                ScatterKind::Required => ScatterLabel::Required(self.find_name(&param.id)),
+                ScatterKind::Optional => ScatterLabel::Optional(
+                    self.find_name(&param.id),
+                    if param.expr.is_some() {
+                        Some(self.make_jump_label(None))
+                    } else {
+                        None
+                    },
+                ),
+                ScatterKind::Rest => ScatterLabel::Rest(self.find_name(&param.id)),
+            })
+            .collect();
+        let done = self.make_jump_label(None);
+        let scatter_offset = self.add_scatter_table(labels.clone(), done);
+
+        // Stash current compilation state (following fork vector pattern)
+        let stashed_ops = std::mem::take(&mut self.ops);
+        let stashed_literals = std::mem::take(&mut self.literals);
+        let stashed_var_names = self.var_names.clone();
+        let stashed_jumps = std::mem::take(&mut self.jumps);
+        let stashed_scatter_tables = std::mem::take(&mut self.scatter_tables);
+        let stashed_for_sequence_operands = std::mem::take(&mut self.for_sequence_operands);
+        let stashed_range_comprehensions = std::mem::take(&mut self.range_comprehensions);
+        let stashed_list_comprehensions = std::mem::take(&mut self.list_comprehensions);
+        let stashed_error_operands = std::mem::take(&mut self.error_operands);
+        let stashed_lambda_programs = std::mem::take(&mut self.lambda_programs);
+        let stashed_fork_vectors = std::mem::take(&mut self.fork_vectors);
+        let stashed_line_number_spans = std::mem::take(&mut self.line_number_spans);
+        let stashed_fork_line_number_spans = std::mem::take(&mut self.fork_line_number_spans);
+
+        // Reset state for lambda compilation
+        self.ops = vec![];
+        self.literals = vec![];
+        self.jumps = vec![];
+        self.scatter_tables = vec![];
+        self.for_sequence_operands = vec![];
+        self.range_comprehensions = vec![];
+        self.list_comprehensions = vec![];
+        self.error_operands = vec![];
+        self.lambda_programs = vec![];
+        self.fork_vectors = vec![];
+        self.line_number_spans = vec![];
+        self.fork_line_number_spans = vec![];
+
+        // Compile lambda body
+        self.generate_expr(body)?;
+        self.emit(Op::Return); // Implicit return of expression result
+
+        // Build standalone Program from compiled state
+        let lambda_program = Program(Arc::new(PrgInner {
+            literals: std::mem::take(&mut self.literals),
+            jump_labels: std::mem::take(&mut self.jumps),
+            var_names: self.var_names.clone(),
+            scatter_tables: std::mem::take(&mut self.scatter_tables),
+            for_sequence_operands: std::mem::take(&mut self.for_sequence_operands),
+            range_comprehensions: std::mem::take(&mut self.range_comprehensions),
+            list_comprehensions: std::mem::take(&mut self.list_comprehensions),
+            error_operands: std::mem::take(&mut self.error_operands),
+            lambda_programs: std::mem::take(&mut self.lambda_programs),
+            main_vector: std::mem::take(&mut self.ops),
+            fork_vectors: std::mem::take(&mut self.fork_vectors),
+            line_number_spans: std::mem::take(&mut self.line_number_spans),
+            fork_line_number_spans: std::mem::take(&mut self.fork_line_number_spans),
+        }));
+
+        // Restore main compilation context
+        self.ops = stashed_ops;
+        self.literals = stashed_literals;
+        self.var_names = stashed_var_names;
+        self.jumps = stashed_jumps;
+        self.scatter_tables = stashed_scatter_tables;
+        self.for_sequence_operands = stashed_for_sequence_operands;
+        self.range_comprehensions = stashed_range_comprehensions;
+        self.list_comprehensions = stashed_list_comprehensions;
+        self.error_operands = stashed_error_operands;
+        self.lambda_programs = stashed_lambda_programs;
+        self.fork_vectors = stashed_fork_vectors;
+        self.line_number_spans = stashed_line_number_spans;
+        self.fork_line_number_spans = stashed_fork_line_number_spans;
+
+        // Store compiled Program in lambda_programs table
+        let program_offset = self.add_lambda_program(lambda_program);
+
+        self.emit(Op::MakeLambda {
+            scatter_offset,
+            program_offset,
+        });
+        self.push_stack(1);
+
+        Ok(())
+    }
 }
 
 fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, CompileError> {
@@ -1118,11 +1227,12 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
         range_comprehensions: cg_state.range_comprehensions,
         list_comprehensions: cg_state.list_comprehensions,
         for_sequence_operands: cg_state.for_sequence_operands,
+        error_operands: cg_state.error_operands,
+        lambda_programs: cg_state.lambda_programs,
         main_vector: cg_state.ops,
         fork_vectors: cg_state.fork_vectors,
         line_number_spans: cg_state.line_number_spans,
         fork_line_number_spans: cg_state.fork_line_number_spans,
-        error_operands: cg_state.error_operands,
     });
     let program = Program(program);
     Ok(program)

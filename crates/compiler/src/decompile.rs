@@ -1105,6 +1105,53 @@ impl Decompile {
             | Op::ComprehendList { .. } => {
                 // noop, handled above
             }
+            Op::MakeLambda {
+                scatter_offset,
+                program_offset,
+            } => {
+                // Retrieve lambda program and scatter specification
+                let lambda_program = self.program.lambda_program(program_offset);
+                let scatter_spec = self.program.scatter_table(scatter_offset).clone();
+
+                // Decompile lambda body from standalone Program
+                let lambda_body = self.decompile_lambda_program(lambda_program)?;
+
+                // Convert scatter spec to parameter list
+                let params = self.decompile_scatter_params(&scatter_spec)?;
+
+                self.push_expr(Expr::Lambda {
+                    params,
+                    body: Box::new(lambda_body),
+                });
+            }
+            Op::CallLambda => {
+                let args = self.pop_expr()?;
+                let lambda_expr = self.pop_expr()?;
+
+                // Convert args expression to argument list
+                let args = match args {
+                    Expr::List(args) => args,
+                    _ => {
+                        return Err(MalformedProgram(
+                            "expected list of args for lambda call".to_string(),
+                        ));
+                    }
+                };
+
+                // For decompilation, we need to represent this as a function call
+                // where the function is the lambda expression itself
+                // But the current AST only supports Symbol for function names in Call
+                // For now, we'll use a placeholder approach
+                // TODO: This needs to be updated when the AST supports CallTarget
+                self.push_expr(Expr::Call {
+                    function: Symbol::mk("__lambda_call__"),
+                    args: {
+                        let mut call_args = vec![Arg::Normal(lambda_expr)];
+                        call_args.extend(args);
+                        call_args
+                    },
+                });
+            }
         }
         Ok(())
     }
@@ -1115,6 +1162,66 @@ impl Decompile {
             .find_variable(name)
             .cloned()
             .ok_or(DecompileError::NameNotFound(*name))
+    }
+
+    fn decompile_lambda_program(&self, lambda_program: &Program) -> Result<Expr, DecompileError> {
+        // Create separate decompiler for lambda's standalone Program
+        let mut lambda_decompile = Decompile {
+            program: lambda_program.clone(),
+            fork_vector: None,
+            position: 0,
+            expr_stack: VecDeque::new(),
+            statements: vec![],
+            assigned_vars: HashSet::new(),
+        };
+
+        // Decompile lambda body
+        let opcode_vector_len = lambda_decompile.opcode_vector().len();
+        while lambda_decompile.position < opcode_vector_len {
+            lambda_decompile.decompile()?;
+        }
+
+        // Lambda body should result in single expression (since we emit Op::Return)
+        // The last instruction should be Return, so we should have one expression on the stack
+        if lambda_decompile.expr_stack.len() == 1 && lambda_decompile.statements.is_empty() {
+            // Expression lambda - result should be on expression stack
+            lambda_decompile.pop_expr()
+        } else {
+            // This shouldn't happen with our current lambda compilation, but handle gracefully
+            Err(MalformedProgram(
+                "lambda body should produce single expression".to_string(),
+            ))
+        }
+    }
+
+    fn decompile_scatter_params(
+        &self,
+        scatter_spec: &moor_var::program::opcode::ScatterArgs,
+    ) -> Result<Vec<ScatterItem>, DecompileError> {
+        let mut params = Vec::new();
+
+        for label in &scatter_spec.labels {
+            let (kind, id, expr) = match label {
+                ScatterLabel::Required(name) => {
+                    let var = self.decompile_name(name)?;
+                    (ScatterKind::Required, var, None)
+                }
+                ScatterLabel::Optional(name, _label) => {
+                    let var = self.decompile_name(name)?;
+                    // TODO: Handle optional parameter default expressions
+                    // For now, we don't decompile the default expression
+                    (ScatterKind::Optional, var, None)
+                }
+                ScatterLabel::Rest(name) => {
+                    let var = self.decompile_name(name)?;
+                    (ScatterKind::Rest, var, None)
+                }
+            };
+
+            params.push(ScatterItem { kind, id, expr });
+        }
+
+        Ok(params)
     }
 }
 
