@@ -24,9 +24,9 @@ use crate::model::verbdef::{VerbDef, VerbDefs};
 use crate::model::verbs::{VerbAttrs, VerbFlag};
 use crate::model::{CommitResult, ObjectRef, PropPerms};
 use crate::model::{ObjAttr, Vid};
-use crate::program::ProgramType;
 use crate::util::{BitEnum, PerfCounter};
 use moor_var::Var;
+use moor_var::program::ProgramType;
 use moor_var::{E_INVARG, E_INVIND, E_PERM, E_PROPNF, E_RECMOVE, E_TYPE, E_VERBNF, Symbol};
 use moor_var::{Error, Obj};
 

@@ -21,11 +21,11 @@ mod tests {
     use moor_common::model::{ObjFlag, VerbAttrs};
     use moor_common::model::{ObjSet, ObjectRef};
     use moor_common::model::{VerbArgsSpec, VerbFlag};
-    use moor_common::program::ProgramType;
-    use moor_common::program::program::Program;
     use moor_common::util::BitEnum;
     use moor_var::Obj;
     use moor_var::Symbol;
+    use moor_var::program::ProgramType;
+    use moor_var::program::program::Program;
     use moor_var::{NOTHING, SYSTEM_OBJECT};
     use moor_var::{v_int, v_str};
     use std::sync::Arc;

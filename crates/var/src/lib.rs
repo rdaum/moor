@@ -18,6 +18,7 @@ mod flyweight;
 mod list;
 mod map;
 mod obj;
+pub mod program;
 mod scalar;
 mod string;
 mod symbol;

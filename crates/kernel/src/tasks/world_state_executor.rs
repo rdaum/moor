@@ -17,10 +17,10 @@ use moor_common::matching::ws_match_env::WsMatchEnv;
 use moor_common::model::{
     CommitResult, HasUuid, ObjectRef, ValSet, VerbAttrs, WorldState, WorldStateError,
 };
-use moor_common::program::ProgramType;
 use moor_common::tasks::SchedulerError::{CommandExecutionError, VerbProgramFailed};
 use moor_common::tasks::{CommandError, SchedulerError, VerbProgramError};
 use moor_compiler::{compile, program_to_tree, unparse};
+use moor_var::program::ProgramType;
 use moor_var::{E_INVIND, Obj, SYSTEM_OBJECT, v_err, v_obj};
 use std::sync::Arc;
 

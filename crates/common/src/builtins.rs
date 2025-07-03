@@ -14,7 +14,6 @@
 use ArgCount::{Q, U};
 use ArgType::{Any, AnyNum, Typed};
 use VarType::{TYPE_FLOAT, TYPE_INT, TYPE_LIST, TYPE_OBJ, TYPE_STR};
-use bincode::{Decode, Encode};
 use lazy_static::lazy_static;
 use moor_var::Symbol;
 use moor_var::VarType;
@@ -1272,8 +1271,8 @@ fn mk_builtin_table() -> Vec<Builtin> {
     ]
 }
 
-#[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Hash, Encode, Decode)]
-pub struct BuiltinId(pub u16);
+// BuiltinId is now defined in moor_var::program::opcode and re-exported
+pub use moor_var::program::opcode::BuiltinId;
 
 /// The dictionary of all builtins indexed by their name, and by their unique ID.
 pub struct Builtins {

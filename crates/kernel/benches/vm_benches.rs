@@ -26,7 +26,6 @@ use moor_common::model::CommitResult;
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbFlag;
 use moor_common::model::{WorldState, WorldStateSource};
-use moor_common::program::ProgramType;
 use moor_common::tasks::AbortLimitReason;
 use moor_common::tasks::{NoopClientSession, Session};
 use moor_common::util::BitEnum;
@@ -38,6 +37,7 @@ use moor_kernel::vm::VMHostResponse;
 use moor_kernel::vm::VerbCall;
 use moor_kernel::vm::builtins::BuiltinRegistry;
 use moor_kernel::vm::vm_host::VmHost;
+use moor_var::program::ProgramType;
 use moor_var::{List, Symbol, v_obj};
 use moor_var::{NOTHING, SYSTEM_OBJECT};
 

@@ -23,7 +23,6 @@ use moor_common::model::Named;
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbFlag;
 use moor_common::model::WorldStateSource;
-use moor_common::program::ProgramType;
 use moor_common::tasks::NoopClientSession;
 use moor_common::tasks::Session;
 use moor_compiler::Program;
@@ -36,6 +35,7 @@ use moor_moot::test_db_path;
 use moor_textdump::textdump_load;
 use moor_var::SYSTEM_OBJECT;
 use moor_var::Symbol;
+use moor_var::program::ProgramType;
 use moor_var::{List, Obj};
 
 #[allow(dead_code)]

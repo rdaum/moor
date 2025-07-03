@@ -28,17 +28,17 @@ use crate::ast::{
 };
 use crate::parse::moo::Rule;
 use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
+use moor_common::builtins::BUILTINS;
 use moor_common::model::CompileError::InvalidAssignemnt;
 use moor_common::model::{CompileContext, CompileError};
-use moor_common::program::builtins::BUILTINS;
-use moor_common::program::labels::{JumpLabel, Label, Offset};
-use moor_common::program::names::{Name, Names, Variable};
-use moor_common::program::opcode::Op::Jump;
-use moor_common::program::opcode::{
+use moor_var::program::labels::{JumpLabel, Label, Offset};
+use moor_var::program::names::{Name, Names, Variable};
+use moor_var::program::opcode::Op::Jump;
+use moor_var::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterArgs,
     ScatterLabel,
 };
-use moor_common::program::program::{PrgInner, Program};
+use moor_var::program::program::{PrgInner, Program};
 
 pub struct Loop {
     loop_name: Option<Name>,

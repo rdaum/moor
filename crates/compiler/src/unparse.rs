@@ -16,8 +16,8 @@ use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
 use crate::parse::Parse;
 use base64::{Engine, engine::general_purpose};
-use moor_common::program::names::Variable;
 use moor_common::util::quote_str;
+use moor_var::program::names::Variable;
 use moor_var::{Obj, Sequence, Symbol, Var, Variant};
 use std::collections::HashMap;
 

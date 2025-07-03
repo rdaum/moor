@@ -45,9 +45,9 @@ use crate::vm::vm_call::VmExecParams;
 use crate::vm::{Fork, VMHostResponse, VerbExecutionRequest};
 use crate::vm::{TaskSuspend, VerbCall};
 use moor_common::matching::ParsedCommand;
-use moor_common::program::ProgramType;
-use moor_common::program::names::Name;
 use moor_common::tasks::Session;
+use moor_var::program::ProgramType;
+use moor_var::program::names::Name;
 
 /// Possible outcomes from VM execution inner loop, which are used to determine what to do next.
 #[derive(Debug, Clone)]

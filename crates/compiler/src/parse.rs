@@ -40,8 +40,8 @@ use crate::var_scope::VarScope;
 use base64::{Engine, engine::general_purpose};
 use moor_common::model::CompileError::{DuplicateVariable, UnknownTypeConstant};
 use moor_common::model::{CompileContext, CompileError};
-use moor_common::program::DeclType;
-use moor_common::program::names::Names;
+use moor_var::program::DeclType;
+use moor_var::program::names::Names;
 
 pub mod moo {
     #[derive(Parser)]

@@ -20,8 +20,8 @@ mod tests {
         ArgSpec, CommitResult, PrepSpec, PropFlag, ValSet, VerbArgsSpec, VerbFlag, WorldState,
         WorldStateError,
     };
-    use moor_common::program::ProgramType;
     use moor_common::util::BitEnum;
+    use moor_var::program::ProgramType;
     use moor_var::{NOTHING, Obj, SYSTEM_OBJECT, Symbol, v_int, v_str};
     use shuttle::{check_random, sync::Arc, thread};
     use std::collections::HashMap;
@@ -183,7 +183,7 @@ mod tests {
                                 prep: PrepSpec::None,
                                 iobj: ArgSpec::None,
                             },
-                            ProgramType::MooR(moor_common::program::program::Program::new()),
+                            ProgramType::MooR(moor_var::program::program::Program::new()),
                         )
                         .unwrap();
                     }
@@ -485,7 +485,7 @@ mod tests {
                             prep: PrepSpec::None,
                             iobj: ArgSpec::None,
                         },
-                        ProgramType::MooR(moor_common::program::program::Program::new()),
+                        ProgramType::MooR(moor_var::program::program::Program::new()),
                     )
                     .unwrap();
 
@@ -500,7 +500,7 @@ mod tests {
                             prep: PrepSpec::None,
                             iobj: ArgSpec::None,
                         },
-                        ProgramType::MooR(moor_common::program::program::Program::new()),
+                        ProgramType::MooR(moor_var::program::program::Program::new()),
                     )
                     .unwrap();
 
@@ -515,7 +515,7 @@ mod tests {
                             prep: PrepSpec::None,
                             iobj: ArgSpec::None,
                         },
-                        ProgramType::MooR(moor_common::program::program::Program::new()),
+                        ProgramType::MooR(moor_var::program::program::Program::new()),
                     )
                     .unwrap();
 

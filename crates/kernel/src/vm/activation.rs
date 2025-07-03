@@ -34,8 +34,8 @@ use moor_var::{Var, v_empty_list, v_obj, v_str, v_string};
 use crate::vm::VerbExecutionRequest;
 use crate::vm::moo_frame::MooStackFrame;
 use moor_common::matching::ParsedCommand;
-use moor_common::program::ProgramType;
-use moor_common::program::names::{GlobalName, Name};
+use moor_var::program::ProgramType;
+use moor_var::program::names::{GlobalName, Name};
 
 lazy_static! {
     static ref EVAL_SYMBOL: Symbol = Symbol::mk("eval");

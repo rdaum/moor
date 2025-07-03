@@ -21,9 +21,9 @@ use crate::model::VerbFlag;
 use crate::model::{CommitResult, WorldStateError};
 use crate::model::{ObjAttrs, PropPerms};
 use crate::model::{PropDef, PropDefs};
-use crate::program::ProgramType;
 use crate::util::BitEnum;
 use moor_var::Var;
+use moor_var::program::ProgramType;
 use moor_var::{Obj, Symbol};
 
 /// Interface exposed to be used by the textdump/objdef loader. Overlap of functionality with what

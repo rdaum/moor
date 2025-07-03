@@ -20,14 +20,14 @@ use crate::ast::{
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
 use crate::parse::Parse;
 use crate::var_scope::VarScope;
-use moor_common::program::DeclType;
-use moor_common::program::builtins::BuiltinId;
-use moor_common::program::labels::{JumpLabel, Label, Offset};
-use moor_common::program::names::{Name, Variable};
-use moor_common::program::opcode::{
+use moor_common::builtins::BuiltinId;
+use moor_var::program::DeclType;
+use moor_var::program::labels::{JumpLabel, Label, Offset};
+use moor_var::program::names::{Name, Variable};
+use moor_var::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterLabel,
 };
-use moor_common::program::program::Program;
+use moor_var::program::program::Program;
 use moor_var::{Symbol, Var, v_int, v_none, v_obj};
 use moor_var::{Variant, v_float};
 use std::collections::{HashSet, VecDeque};
