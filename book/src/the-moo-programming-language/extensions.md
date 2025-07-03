@@ -281,3 +281,48 @@ let xml_string = to_xml(html_structure);
 ```
 
 This makes it easy to work with XML data in web applications and API integrations without requiring flyweight objects.
+
+### Lambda functions
+
+`mooR` adds support for creating small functions within your verbs, similar to functions in other programming languages.
+
+Enabled by default, this feature lets you create both named functions (for organizing code) and anonymous functions (called "lambdas") that can remember variables from where they were created.
+
+**Arrow syntax for simple expressions:**
+```moo
+let add = {x, y} => x + y;
+let greet = {name} => "Hello, " + name;
+```
+
+**Function syntax for complex logic:**
+```moo
+let max = fn(x, y)
+    if (x > y)
+        return x;
+    else
+        return y;
+    endif
+endfn;
+```
+
+**Named recursive functions:**
+```moo
+fn factorial(n)
+    if (n <= 1)
+        return 1;
+    else
+        return n * factorial(n - 1);
+    endif
+endfn
+```
+
+**Closures with variable capture:**
+```moo
+let multiplier = 5;
+let multiply_by_five = {x} => x * multiplier;  // Captures 'multiplier'
+return multiply_by_five(10);  // Returns 50
+```
+
+Functions support all MOO parameter patterns including optional parameters (`?param`) and rest parameters (`@args`). They can be called like regular functions and are particularly useful for organizing code, event handling, and data processing.
+
+> **Historical Note**: Despite its name suggesting otherwise, the original LambdaMOO never actually had lambda functions! mooR brings this useful programming tool to MOO as part of our mission of dragging the future into the past.

@@ -117,7 +117,9 @@ impl MooStackFrame {
         match self.pc_type {
             PcType::Main => self.program.main_vector(),
             PcType::ForkVector(fork_vector) => self.program.fork_vector(fork_vector),
-            PcType::Lambda(lambda_offset) => self.program.lambda_program(lambda_offset).main_vector(),
+            PcType::Lambda(lambda_offset) => {
+                self.program.lambda_program(lambda_offset).main_vector()
+            }
         }
     }
 
@@ -177,9 +179,12 @@ impl MooStackFrame {
             PcType::ForkVector(fork_vector) => {
                 self.program.fork_vector(fork_vector).get(self.pc).cloned()
             }
-            PcType::Lambda(lambda_offset) => {
-                self.program.lambda_program(lambda_offset).main_vector().get(self.pc).cloned()
-            }
+            PcType::Lambda(lambda_offset) => self
+                .program
+                .lambda_program(lambda_offset)
+                .main_vector()
+                .get(self.pc)
+                .cloned(),
         }
     }
 

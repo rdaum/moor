@@ -186,7 +186,6 @@ impl Program {
         }
         last_line_num
     }
-
 }
 
 impl Default for Program {

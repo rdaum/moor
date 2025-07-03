@@ -635,3 +635,168 @@ Both list and map formats work regardless of whether flyweights are enabled, mak
 - They're perfect for temporary data structures
 - The `player` variable can never be a flyweight (but `this` and `caller` can be)
 
+## Function Type
+
+_Functions_ in mooR let you create small pieces of reusable code within your verbs. You can store them in variables, pass them around like any other value, and they can even "remember" variables from where they were created.
+
+> **Fun Fact**: Despite its name suggesting otherwise, the original LambdaMOO never actually had lambda functions! mooR brings this useful programming tool to MOO as part of our mission of dragging the future into the past.
+
+### Function syntax:
+
+Functions can be written in several forms:
+
+**Arrow syntax** (for simple expressions):
+```moo
+{x, y} => x + y                    // Takes two parameters, returns their sum
+{name} => "Hello, " + name         // Simple string formatting
+{} => random(100)                  // No parameters, returns random number
+```
+
+**Function syntax** (for complex logic and code organization):
+```moo
+// Anonymous function
+fn(x, y)
+    if (x > y)
+        return x;
+    else
+        return y;
+    endif
+endfn
+
+// Named function (like def in Python)
+fn calculate_distance(x1, y1, x2, y2)
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    return sqrt(dx * dx + dy * dy);
+endfn
+```
+
+**Named recursive functions**:
+```moo
+fn factorial(n)
+    if (n <= 1)
+        return 1;
+    else
+        return n * factorial(n - 1);
+    endif
+endfn
+```
+
+### Parameter types:
+
+Lambdas support the same parameter patterns as regular MOO verbs:
+
+```moo
+{x, y} => x + y                    // Required parameters
+{x, ?y} => x + (y || 0)           // Optional parameters (default to 0 if not provided)
+{x, @rest} => x + length(rest)     // Rest parameters (collect extra args into a list)
+{a, ?b, @c} => {a, b, c}          // Mix of all types
+```
+
+### Code organization with named functions:
+
+Named functions help break down complex verb logic, much like functions in other programming languages:
+
+```moo
+// In a game combat verb:
+fn calculate_hit_chance(attacker, defender)
+    let base_chance = 0.5;
+    let skill_bonus = attacker.skill / 100.0;
+    return base_chance + skill_bonus;
+endfn
+
+fn apply_damage(target, damage)
+    target.health = target.health - damage;
+    notify(target, "You take " + damage + " damage!");
+endfn
+
+// Main logic becomes much cleaner:
+if (random() < calculate_hit_chance(this, target))
+    apply_damage(target, 10);
+endif
+```
+
+### Closures - capturing variables:
+
+Functions can "capture" variables from their surrounding environment:
+
+```moo
+let multiplier = 5;
+let multiply_by_five = {x} => x * multiplier;  // Captures 'multiplier'
+return multiply_by_five(10);  // Returns 50
+```
+
+Even when the original scope ends, the lambda remembers the captured values:
+
+```moo
+fn make_counter()
+    let count = 0;
+    return {} => count = count + 1;  // Captures 'count'
+endfn
+
+let counter = make_counter();
+counter();  // Returns 1
+counter();  // Returns 2
+counter();  // Returns 3
+```
+
+### Calling functions:
+
+Once you have a function, call it like any other function:
+
+```moo
+let add = {x, y} => x + y;
+result = add(5, 3);  // Returns 8
+
+// You can also call them immediately:
+result = ({x} => x * 2)(5);  // Returns 10
+```
+
+### Higher-order functions:
+
+Functions are perfect for creating functions that work with other functions:
+
+```moo
+fn map(func, list)
+    let result = {};
+    for item in (list)
+        result = {@result, func(item)};
+    endfor
+    return result;
+endfn
+
+let numbers = {1, 2, 3, 4};
+let doubled = map({x} => x * 2, numbers);  // {2, 4, 6, 8}
+let squared = map({x} => x * x, numbers);  // {1, 4, 9, 16}
+```
+
+### When should you use functions?
+
+**Great for named functions:**
+- Breaking down complex verb logic into manageable pieces  
+- Code organization and avoiding duplication within verbs
+- Mathematical calculations and data processing
+- Any logic that benefits from a descriptive name
+
+**Great for anonymous functions (lambdas):**
+- Event handlers and callbacks
+- Data transformation and filtering (map, filter, etc.)
+- Creating functions that create other functions
+- Short, one-off operations
+
+**Better to use regular verbs for:**
+- Functions called from multiple different verbs
+- Complex business logic that forms your application's core
+- Code that needs to be accessible via inheritance
+- Functions that need persistent storage
+
+### Technical notes:
+
+- Functions are immutable values like strings and lists
+- They capture variables by value, not by reference  
+- Named recursive functions can call themselves using their declared name
+- Functions work with the scatter assignment syntax for flexible parameter handling
+- Stack traces show function calls as `verb.<fn>` or `verb.function_name` for named functions
+
+For comprehensive examples and advanced usage, see the [Functions and Lambdas](../the-moo-programming-language/lambda-functions.md) chapter.
+

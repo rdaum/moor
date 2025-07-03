@@ -54,12 +54,12 @@ keep adding features right up until the last minute.
 
 **Language enhancements:**
 
-- All classic MOO features plus many extensions from ToastStunt
+- All classic MOO features plus compatibility with ToastStunt extensions (maps, booleans)
+- Lambda functions: anonymous functions with closures (`{x, y} => x + y`)
 - Maps: associative containers (`["key" -> "value"]`)
 - Lexically scoped variables with `begin`/`end` blocks
 - List/range comprehensions (`{x * 2 for x in [1..5]}`)
-- UTF-8 strings, 64-bit integers, booleans, symbols.
-- Binary values.
+- UTF-8 strings, 64-bit integers, symbols, binary values
 - Lightweight immutable objects ("flyweights")
 
 **Modern infrastructure:**

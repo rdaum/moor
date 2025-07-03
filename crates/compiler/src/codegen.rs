@@ -139,14 +139,15 @@ impl CodegenState {
 
     fn add_lambda_program(&mut self, mut program: Program, base_line_offset: usize) -> Offset {
         // Adjust lambda's line number spans to be relative to parent source
-        let adjusted_spans: Vec<(usize, usize)> = program.line_number_spans()
+        let adjusted_spans: Vec<(usize, usize)> = program
+            .line_number_spans()
             .iter()
             .map(|(offset, line_num)| (*offset, line_num + base_line_offset))
             .collect();
-        
+
         // Update the lambda program's line number spans
         Arc::make_mut(&mut program.0).line_number_spans = adjusted_spans;
-        
+
         let lp_pos = self.lambda_programs.len();
         self.lambda_programs.push(program);
         Offset(lp_pos as u16)
@@ -768,7 +769,7 @@ impl CodegenState {
             } => {
                 // Get the line number where the lambda starts
                 let lambda_start_line = body.line_col.0;
-                
+
                 // Compile lambda body into standalone Program (following fork vector pattern)
                 self.compile_lambda_body(params, body, lambda_start_line)?;
 

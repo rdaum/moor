@@ -17,6 +17,7 @@
     - [MOO Language Statements](./the-moo-programming-language/moo-language-statements.md)
     - [Variables](./the-moo-programming-language/variables.md)
     - [Calling Verbs](./the-moo-programming-language/calling-verbs.md)
+    - [Functions and Lambdas](./the-moo-programming-language/lambda-functions.md)
     - [MOO Tasks](the-system/moo-tasks.md)
     - [mooR's extensions](the-moo-programming-language/extensions.md)
     - [Built-in Functions](./the-moo-programming-language/built-in-functions.md)

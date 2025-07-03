@@ -398,7 +398,11 @@ impl Activation {
         let lambda_name = if let Some(self_var) = lambda.self_var {
             // Get the variable name from the lambda's program
             if let Some(var_name) = lambda.body.var_names().ident_for_name(&self_var) {
-                format!("{}.{}", current_activation.verb_name.as_string(), var_name.as_string())
+                format!(
+                    "{}.{}",
+                    current_activation.verb_name.as_string(),
+                    var_name.as_string()
+                )
             } else {
                 format!("{}.<fn>", current_activation.verb_name.as_string())
             }

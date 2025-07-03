@@ -2049,7 +2049,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.error, E_DIV);
-        
+
         // Verify the stack trace contains the lambda format
         // The lambda frame should show "test.<%fn>" in the traceback
         let stack_contains_lambda_format = err.backtrace.iter().any(|frame| {
@@ -2059,11 +2059,12 @@ mod tests {
                 false
             }
         });
-        
-        
-        assert!(stack_contains_lambda_format, 
-                "Stack trace should contain 'test.<lambda>' format. Actual backtrace: {:?}", 
-                err.backtrace);
+
+        assert!(
+            stack_contains_lambda_format,
+            "Stack trace should contain 'test.<lambda>' format. Actual backtrace: {:?}",
+            err.backtrace
+        );
     }
 
     #[test]
@@ -2087,7 +2088,7 @@ mod tests {
         // Should get a division by zero error
         assert!(result.is_err());
         let err = result.unwrap_err();
-        
+
         // Verify we get the lambda format
         let has_lambda_frame = err.backtrace.iter().any(|frame| {
             if let Some(frame_str) = frame.as_string() {
@@ -2096,7 +2097,7 @@ mod tests {
                 false
             }
         });
-        
+
         assert!(has_lambda_frame, "Should have lambda frame in stack trace");
     }
 
@@ -2131,8 +2132,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.error, E_DIV);
-        
-        
+
         // Verify the stack trace contains the function name "factorial"
         let has_named_lambda_frame = err.backtrace.iter().any(|frame| {
             if let Some(frame_str) = frame.as_string() {
@@ -2141,8 +2141,10 @@ mod tests {
                 false
             }
         });
-        
-        assert!(has_named_lambda_frame, "Should have named lambda frame 'factorial' in stack trace");
-    }
 
+        assert!(
+            has_named_lambda_frame,
+            "Should have named lambda frame 'factorial' in stack trace"
+        );
+    }
 }
