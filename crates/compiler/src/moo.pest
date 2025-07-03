@@ -138,13 +138,14 @@ verb_call      =  { ":" ~ ident ~ arglist }
 verb_expr_call =  { ":" ~ expr ~ arglist }
 prop           =  { "." ~ ident }
 prop_expr      =  { "." ~ "(" ~ expr ~ ")" }
-assign         =  { "=" ~ expr }
+assign         =  { "=" ~ !(">" | "=") ~ expr }
 cond_expr      =  { "?" ~ expr ~ "|" ~ expr }
 return_expr    =  { ^"return" ~ (expr)? }
 
 
 primary    = _{
-    pass_expr
+    lambda
+  | pass_expr
   | builtin_call
   | paren_expr
   | sysprop_call
@@ -168,6 +169,10 @@ sysprop_call = { sysprop ~ arglist }
 
 atom     = { integer | float | string | object | err | boolean | symbol | type_constant | literal_binary | ident  }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
+lambda   = { "{" ~ lambda_params ~ "}" ~ "=>" ~ expr }
+lambda_params = { (lambda_param ~ ("," ~ lambda_param)*)? }
+lambda_param = { scatter_optional | scatter_target | scatter_rest }
+
 list     = { ("{" ~ exprlist ~ "}") | "{}" }
 
 // flyweight is < parent, [ prop -> value, ... ], contents >
@@ -181,7 +186,7 @@ map      = { ("[" ~ (expr ~ "->" ~ expr) ~ ("," ~ expr ~ "->" ~ expr)* ~ "]") | 
 range_end = { "$" }
 
 // An unambiguous assignment operator, for use in scatter assignments where list comparison could be a false match.
-ASSIGN = _{ "=" ~ !("=") }
+ASSIGN = _{ "=" ~ !("=" | ">") }
 
 err = { errcode ~ ("(" ~ expr ~ ")")? }
 errcode = @{ ^"e_" ~ ident_continue+  }

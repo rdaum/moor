@@ -15,6 +15,7 @@ mod binary;
 pub mod encode;
 mod error;
 mod flyweight;
+mod lambda;
 mod list;
 mod map;
 mod obj;
@@ -30,6 +31,7 @@ pub use binary::Binary;
 use bincode::{Decode, Encode};
 pub use error::{Error, ErrorCode, ErrorCode::*};
 pub use flyweight::Flyweight;
+pub use lambda::Lambda;
 pub use list::List;
 pub use map::Map;
 pub use obj::{AMBIGUOUS, FAILED_MATCH, NOTHING, Obj, SYSTEM_OBJECT};
@@ -72,6 +74,7 @@ pub enum VarType {
     TYPE_FLYWEIGHT = 15,
     TYPE_SYMBOL = 16,
     TYPE_BINARY = 17,
+    TYPE_LAMBDA = 18,
 }
 
 impl VarType {
@@ -88,6 +91,7 @@ impl VarType {
             VarType::TYPE_FLYWEIGHT => "FLYWEIGHT",
             VarType::TYPE_SYMBOL => "SYM",
             VarType::TYPE_BINARY => "BINARY",
+            VarType::TYPE_LAMBDA => "LAMBDA",
             _ => "INVALID-TYPE",
         }
     }
@@ -106,6 +110,7 @@ impl VarType {
             "FLYWEIGHT" => Some(VarType::TYPE_FLYWEIGHT),
             "SYM" => Some(VarType::TYPE_SYMBOL),
             "BINARY" => Some(VarType::TYPE_BINARY),
+            "LAMBDA" => Some(VarType::TYPE_LAMBDA),
             _ => None,
         }
     }

@@ -732,6 +732,10 @@ impl CodegenState {
                 self.emit(Op::Return0);
                 self.push_stack(1);
             }
+            Expr::Lambda { params: _, body: _ } => {
+                // TODO: Implement lambda expression compilation
+                todo!("Lambda expression compilation not yet implemented")
+            }
         }
 
         Ok(())

@@ -113,6 +113,13 @@ pub fn var_as_json(v: &Var) -> serde_json::Value {
             let json_map = serde_json::Value::Object(slotmap);
             json!({"flyweight": json_map})
         }
+        Variant::Lambda(_) => {
+            // Lambda values cannot be serialized to JSON - return error representation
+            json!({
+                "error": "E_INVARG",
+                "error_msg": "Lambda values cannot be serialized"
+            })
+        }
     }
 }
 

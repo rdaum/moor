@@ -357,6 +357,19 @@ impl TreeTransformer {
                             args,
                         })
                     }
+                    Rule::lambda => {
+                        let mut inner = primary.into_inner();
+                        let lambda_params = inner.next().unwrap();
+                        let body_expr = inner.next().unwrap();
+
+                        let params = primary_self
+                            .clone()
+                            .parse_lambda_params(lambda_params.into_inner())?;
+                        let body =
+                            Box::new(primary_self.clone().parse_expr(body_expr.into_inner())?);
+
+                        Ok(Expr::Lambda { params, body })
+                    }
                     Rule::list => {
                         let mut inner = primary.into_inner();
                         if let Some(arglist) = inner.next() {
@@ -1358,6 +1371,89 @@ impl TreeTransformer {
             }
         }
         Ok(Expr::Scatter(items, Box::new(rhs)))
+    }
+
+    fn parse_lambda_params(
+        self: Rc<Self>,
+        params: Pairs<Rule>,
+    ) -> Result<Vec<ScatterItem>, CompileError> {
+        let mut items = vec![];
+        for param in params {
+            match param.as_rule() {
+                Rule::lambda_param => {
+                    let inner_param = param.into_inner().next().unwrap();
+                    match inner_param.as_rule() {
+                        Rule::scatter_optional => {
+                            let context = self.compile_context(&inner_param);
+                            let mut inner = inner_param.into_inner();
+                            let id_str = inner.next().unwrap().as_str();
+                            let Some(id) = self.clone().names.borrow_mut().declare(
+                                id_str,
+                                false,
+                                false,
+                                DeclType::Assign,
+                            ) else {
+                                return Err(DuplicateVariable(context, id_str.into()));
+                            };
+
+                            let expr = inner
+                                .next()
+                                .map(|e| self.clone().parse_expr(e.into_inner()).unwrap());
+                            items.push(ScatterItem {
+                                kind: ScatterKind::Optional,
+                                id,
+                                expr,
+                            });
+                        }
+                        Rule::scatter_target => {
+                            let context = self.compile_context(&inner_param);
+                            let mut inner = inner_param.into_inner();
+                            let id_str = inner.next().unwrap().as_str();
+                            let Some(id) = self.clone().names.borrow_mut().declare(
+                                id_str,
+                                false,
+                                false,
+                                DeclType::Assign,
+                            ) else {
+                                return Err(DuplicateVariable(context, id_str.into()));
+                            };
+
+                            items.push(ScatterItem {
+                                kind: ScatterKind::Required,
+                                id,
+                                expr: None,
+                            });
+                        }
+                        Rule::scatter_rest => {
+                            let context = self.compile_context(&inner_param);
+                            let mut inner = inner_param.into_inner();
+                            let id_str = inner.next().unwrap().as_str();
+                            let Some(id) = self.clone().names.borrow_mut().declare(
+                                id_str,
+                                false,
+                                false,
+                                DeclType::Assign,
+                            ) else {
+                                return Err(DuplicateVariable(context, id_str.into()));
+                            };
+
+                            items.push(ScatterItem {
+                                kind: ScatterKind::Rest,
+                                id,
+                                expr: None,
+                            });
+                        }
+                        _ => {
+                            panic!("Unimplemented inner lambda_param: {inner_param:?}");
+                        }
+                    }
+                }
+                _ => {
+                    panic!("Unimplemented lambda_param: {param:?}");
+                }
+            }
+        }
+        Ok(items)
     }
 
     fn transform_tree(self: Rc<Self>, pairs: Pairs<Rule>) -> Result<Parse, CompileError> {
@@ -3254,6 +3350,56 @@ mod tests {
             assert_eq!(binary.as_bytes(), original_data);
         } else {
             panic!("Expected return statement with binary value");
+        }
+    }
+
+    #[test]
+    fn test_lambda_parse_complex() {
+        // Test lambda with mixed parameter types
+        let program = r#"let f = {a, ?b, @rest} => a + b;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+
+        if let StmtNode::Expr(Expr::Decl {
+            expr: Some(expr), ..
+        }) = &parse.stmts[0].node
+        {
+            if let Expr::Lambda { params, body: _ } = expr.as_ref() {
+                assert_eq!(params.len(), 3);
+                assert!(matches!(params[0].kind, ScatterKind::Required));
+                assert!(matches!(params[1].kind, ScatterKind::Optional));
+                assert!(matches!(params[2].kind, ScatterKind::Rest));
+            } else {
+                panic!("Expected lambda expression in assignment, got: {:?}", expr);
+            }
+        } else {
+            panic!(
+                "Expected declaration statement, got: {:?}",
+                &parse.stmts[0].node
+            );
+        }
+    }
+
+    #[test]
+    fn test_lambda_parse() {
+        // Test simple lambda
+        let program = r#"let f = {x} => 5;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+
+        if let StmtNode::Expr(Expr::Decl {
+            expr: Some(expr), ..
+        }) = &parse.stmts[0].node
+        {
+            if let Expr::Lambda { params, body: _ } = expr.as_ref() {
+                assert_eq!(params.len(), 1);
+                assert!(matches!(params[0].kind, ScatterKind::Required));
+            } else {
+                panic!("Expected lambda expression in assignment, got: {:?}", expr);
+            }
+        } else {
+            panic!(
+                "Expected declaration statement, got: {:?}",
+                &parse.stmts[0].node
+            );
         }
     }
 }

@@ -81,6 +81,7 @@ impl Expr {
             Expr::Decl { .. } => 1,
             Expr::Return(_) => 1,
             Expr::TryCatch { .. } => 1,
+            Expr::Lambda { .. } => 1,
         };
         15 - cpp_ref_prep
     }
@@ -413,6 +414,39 @@ impl<'a> Unparse<'a> {
                 buffer.push_str(" in (");
                 buffer.push_str(&self.unparse_expr(list)?);
                 buffer.push_str(") }");
+                Ok(buffer)
+            }
+            Expr::Lambda { params, body } => {
+                // Lambda syntax: {param1, ?param2, @param3} => expr
+                let mut buffer = String::new();
+                buffer.push('{');
+
+                let len = params.len();
+                for (i, param) in params.iter().enumerate() {
+                    match param.kind {
+                        ast::ScatterKind::Required => {
+                            // No prefix for required parameters
+                        }
+                        ast::ScatterKind::Optional => {
+                            buffer.push('?');
+                        }
+                        ast::ScatterKind::Rest => {
+                            buffer.push('@');
+                        }
+                    }
+                    let name = self.unparse_variable(&param.id);
+                    buffer.push_str(&name.as_arc_string());
+                    if let Some(expr) = &param.expr {
+                        buffer.push_str(" = ");
+                        buffer.push_str(self.unparse_expr(expr)?.as_str());
+                    }
+                    if i + 1 < len {
+                        buffer.push_str(", ");
+                    }
+                }
+
+                buffer.push_str("} => ");
+                buffer.push_str(&self.unparse_expr(body)?);
                 Ok(buffer)
             }
         }
@@ -845,6 +879,21 @@ pub fn to_literal(v: &Var) -> String {
             let encoded = general_purpose::URL_SAFE.encode(b.as_bytes());
             format!("b\"{encoded}\"")
         }
+        Variant::Lambda(l) => {
+            use moor_var::program::opcode::ScatterLabel;
+            let param_str = l
+                .params
+                .labels
+                .iter()
+                .map(|label| match label {
+                    ScatterLabel::Required(_) => "x",
+                    ScatterLabel::Optional(_, _) => "?x",
+                    ScatterLabel::Rest(_) => "@x",
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("#<lambda:({})>", param_str)
+        }
     }
 }
 
@@ -1250,6 +1299,54 @@ end"#; "complex scatter declaration with optional and rest")]
     fn test_type_literals() {
         let progrma = r#"return {INT, STR, OBJ, LIST, MAP, SYM, FLYWEIGHT};"#;
         let stripped = unindent(progrma);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_simple() {
+        let program = r#"return {x} => x + 1;"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_optional() {
+        let program = r#"return {x, ?y} => x + y;"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_optional_with_default() {
+        let program = r#"return {x, ?y = 5} => x + y;"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_rest() {
+        let program = r#"return {x, @rest} => x + length(rest);"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_complex() {
+        let program = r#"return {x, ?y = 5, @rest} => x + y + length(rest);"#;
+        let stripped = unindent(program);
+        let result = parse_and_unparse(&stripped).unwrap();
+        assert_eq!(stripped.trim(), result.trim());
+    }
+
+    #[test]
+    fn test_lambda_unparse_no_params() {
+        let program = r#"return {} => 42;"#;
+        let stripped = unindent(program);
         let result = parse_and_unparse(&stripped).unwrap();
         assert_eq!(stripped.trim(), result.trim());
     }

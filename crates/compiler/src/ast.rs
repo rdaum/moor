@@ -188,6 +188,10 @@ pub enum Expr {
         expr: Option<Box<Expr>>,
     },
     Return(Option<Box<Expr>>),
+    Lambda {
+        params: Vec<ScatterItem>,
+        body: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]

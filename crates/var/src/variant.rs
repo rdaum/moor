@@ -15,6 +15,7 @@ use crate::Associative;
 use crate::Symbol;
 use crate::binary::Binary;
 use crate::flyweight::Flyweight;
+use crate::lambda::Lambda;
 use crate::list::List;
 use crate::{Error, Obj};
 use crate::{Sequence, map, string};
@@ -39,6 +40,7 @@ pub enum Variant {
     Flyweight(Flyweight),
     Sym(Symbol),
     Binary(Box<Binary>),
+    Lambda(Box<Lambda>),
 }
 
 impl Hash for Variant {
@@ -56,6 +58,7 @@ impl Hash for Variant {
             Variant::Flyweight(f) => f.hash(state),
             Variant::Sym(s) => s.hash(state),
             Variant::Binary(b) => b.hash(state),
+            Variant::Lambda(l) => std::ptr::hash(&*l.body.0, state),
         }
     }
 }
@@ -75,6 +78,12 @@ impl Ord for Variant {
             (Variant::Flyweight(l), Variant::Flyweight(r)) => l.cmp(r),
             (Variant::Sym(l), Variant::Sym(r)) => l.cmp(r),
             (Variant::Binary(l), Variant::Binary(r)) => l.cmp(r),
+            (Variant::Lambda(l), Variant::Lambda(r)) => {
+                use crate::program::program::PrgInner;
+                let l_ptr = &*l.body.0 as *const PrgInner;
+                let r_ptr = &*r.body.0 as *const PrgInner;
+                l_ptr.cmp(&r_ptr)
+            }
 
             (Variant::None, _) => Ordering::Less,
             (_, Variant::None) => Ordering::Greater,
@@ -94,11 +103,12 @@ impl Ord for Variant {
             (_, Variant::Map(_)) => Ordering::Greater,
             (Variant::Flyweight(_), _) => Ordering::Less,
             (_, Variant::Flyweight(_)) => Ordering::Greater,
-            (_, Variant::Binary(_)) => Ordering::Greater,
-            (Variant::Binary(_), _) => Ordering::Less,
-
             (Variant::Sym(_), _) => Ordering::Less,
             (_, Variant::Sym(_)) => Ordering::Greater,
+            (Variant::Binary(_), _) => Ordering::Less,
+            (_, Variant::Binary(_)) => Ordering::Greater,
+            (Variant::Lambda(_), _) => Ordering::Greater,
+            (_, Variant::Lambda(_)) => Ordering::Less,
         }
     }
 }
@@ -134,6 +144,21 @@ impl Debug for Variant {
             Variant::Flyweight(fl) => write!(f, "Flyweight({fl:?})"),
             Variant::Sym(s) => write!(f, "Symbol({s})"),
             Variant::Binary(b) => write!(f, "Binary({} bytes)", b.len()),
+            Variant::Lambda(l) => {
+                use crate::program::opcode::ScatterLabel;
+                let param_str = l
+                    .params
+                    .labels
+                    .iter()
+                    .map(|label| match label {
+                        ScatterLabel::Required(_) => "x",
+                        ScatterLabel::Optional(_, _) => "?x",
+                        ScatterLabel::Rest(_) => "@x",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "Lambda(({}))", param_str)
+            }
         }
     }
 }
@@ -153,6 +178,7 @@ impl PartialEq<Self> for Variant {
             (Variant::Err(s), Variant::Err(o)) => s == o,
             (Variant::Flyweight(s), Variant::Flyweight(o)) => s == o,
             (Variant::Binary(s), Variant::Binary(o)) => s == o,
+            (Variant::Lambda(s), Variant::Lambda(o)) => s == o,
             (Variant::None, Variant::None) => true,
             _ => false,
         }

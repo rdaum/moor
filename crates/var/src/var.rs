@@ -87,6 +87,19 @@ impl Var {
         Var(Variant::Binary(Box::new(Binary::from_bytes(bytes))))
     }
 
+    pub fn mk_lambda(
+        params: crate::program::opcode::ScatterArgs,
+        body: crate::program::program::Program,
+        captured_env: Vec<Vec<Var>>,
+    ) -> Self {
+        use crate::lambda::Lambda;
+        Var(Variant::Lambda(Box::new(Lambda::new(
+            params,
+            body,
+            captured_env,
+        ))))
+    }
+
     #[inline(always)]
     pub fn type_code(&self) -> VarType {
         match self.variant() {
@@ -102,6 +115,7 @@ impl Var {
             Variant::Flyweight(_) => VarType::TYPE_FLYWEIGHT,
             Variant::Sym(_) => VarType::TYPE_SYMBOL,
             Variant::Binary(_) => VarType::TYPE_BINARY,
+            Variant::Lambda(_) => VarType::TYPE_LAMBDA,
         }
     }
 
@@ -226,6 +240,15 @@ impl Var {
         }
     }
 
+    /// Extract the lambda value if this is a lambda variant, otherwise None.
+    #[inline(always)]
+    pub fn as_lambda(&self) -> Option<&crate::Lambda> {
+        match self.variant() {
+            Variant::Lambda(l) => Some(l.as_ref()),
+            _ => None,
+        }
+    }
+
     /// Returns true if this is a None variant.
     #[inline(always)]
     pub fn is_none(&self) -> bool {
@@ -260,6 +283,7 @@ impl Var {
             Variant::Flyweight(f) => !f.is_empty(),
             Variant::Sym(_) => true,
             Variant::Binary(b) => !b.is_empty(),
+            Variant::Lambda(_) => true,
         }
     }
 

@@ -136,6 +136,10 @@ impl<W: io::Write> TextdumpWriter<W> {
                 }
                 writeln!(self.writer, "0")?;
             }
+            Variant::Lambda(_) => {
+                // TODO: Implement lambda textdump serialization once decompilation is working
+                todo!("Lambda textdump serialization not yet implemented")
+            }
         }
         Ok(())
     }
