@@ -53,6 +53,7 @@ mod tests {
             range_comprehensions: vec![],
             list_comprehensions: vec![],
             error_operands: vec![],
+            lambda_programs: vec![],
             main_vector,
             fork_vectors: vec![],
             line_number_spans: vec![],
@@ -1605,6 +1606,100 @@ mod tests {
             Ok(_) => {
                 panic!("Expected an exception to be raised from the fork");
             }
+        }
+    }
+
+    #[test]
+    fn test_lambda_creation() {
+        // Test that lambda compilation and MakeLambda opcode work
+        let program_text = r#"
+            let f = {x} => x + 1;
+            return f;
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        )
+        .unwrap();
+
+        // The result should be a lambda value
+        assert!(
+            result.as_lambda().is_some(),
+            "Expected lambda value, got: {:?}",
+            result
+        );
+
+        let lambda = result.as_lambda().unwrap();
+
+        // Verify lambda has correct parameter structure
+        assert_eq!(lambda.params.labels.len(), 1, "Expected 1 parameter");
+
+        // Verify parameter is required type (not optional or rest)
+        match &lambda.params.labels[0] {
+            moor_var::program::opcode::ScatterLabel::Required(_) => {
+                // This is what we expect
+            }
+            other => panic!("Expected Required parameter, got: {:?}", other),
+        }
+
+        // Test that the lambda can be converted back to literal form
+        let literal_form = moor_compiler::to_literal(&result);
+        assert!(
+            literal_form.contains("{x} => x + 1"),
+            "Lambda literal should contain correct syntax, got: {}",
+            literal_form
+        );
+    }
+
+    #[test]
+    fn test_lambda_with_multiple_params() {
+        // Test lambda with multiple parameter types
+        let program_text = r#"
+            let f = {x, ?y, @rest} => x + y;
+            return f;
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        )
+        .unwrap();
+
+        let lambda = result.as_lambda().unwrap();
+
+        // Verify parameter types
+        assert_eq!(lambda.params.labels.len(), 3, "Expected 3 parameters");
+
+        match &lambda.params.labels[0] {
+            moor_var::program::opcode::ScatterLabel::Required(_) => {}
+            other => panic!("Expected Required parameter, got: {:?}", other),
+        }
+
+        match &lambda.params.labels[1] {
+            moor_var::program::opcode::ScatterLabel::Optional(_, _) => {}
+            other => panic!("Expected Optional parameter, got: {:?}", other),
+        }
+
+        match &lambda.params.labels[2] {
+            moor_var::program::opcode::ScatterLabel::Rest(_) => {}
+            other => panic!("Expected Rest parameter, got: {:?}", other),
         }
     }
 }

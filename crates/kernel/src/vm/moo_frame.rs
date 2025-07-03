@@ -272,6 +272,12 @@ impl MooStackFrame {
         self.valstack.truncate(scope.valstack_pos);
         Some(scope)
     }
+
+    /// Capture the current variable environment for lambda closures
+    /// Returns a snapshot of all accessible variable scopes
+    pub fn capture_environment(&self) -> Vec<Vec<Var>> {
+        self.environment.clone()
+    }
 }
 
 impl Encode for MooStackFrame {

@@ -446,7 +446,19 @@ impl<'a> Unparse<'a> {
                 }
 
                 buffer.push_str("} => ");
-                buffer.push_str(&self.unparse_expr(body)?);
+
+                // Handle different types of lambda bodies
+                match &body.node {
+                    // Expression lambda: return expr; → just show the expr
+                    StmtNode::Expr(Expr::Return(Some(expr))) => {
+                        buffer.push_str(&self.unparse_expr(expr)?);
+                    }
+                    // Statement lambda: show the full statement (like begin/end blocks)
+                    _ => {
+                        let stmt_lines = self.unparse_stmt(body, 0)?;
+                        buffer.push_str(&stmt_lines.join("\n"));
+                    }
+                }
                 Ok(buffer)
             }
         }
@@ -915,18 +927,23 @@ pub fn to_literal(v: &Var) -> String {
                 .collect();
             let param_str = param_strings.join(", ");
 
-            // Decompile the lambda body - currently limited to expressions only
-            // TODO: Support begin/end blocks when AST is updated to handle LambdaBody enum
+            // Just manually construct the lambda syntax - simpler than reconstructing AST
             let decompiled_tree = decompile::program_to_tree(&l.body).unwrap();
-            let unparse = Unparse::new(&decompiled_tree);
+            let lambda_body = &decompiled_tree.stmts[0];
 
-            // Lambda body should be a single expression statement
-            let expr = match &decompiled_tree.stmts[0].node {
-                crate::ast::StmtNode::Expr(expr) => expr,
-                _ => unreachable!("Lambda body should be a single expression"),
+            let temp_unparse = Unparse::new(&decompiled_tree);
+            let body_str = match &lambda_body.node {
+                // Expression lambda: return expr; → just show the expr
+                crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(expr))) => {
+                    temp_unparse.unparse_expr(expr).unwrap()
+                }
+                // Statement lambda: show the full statement
+                _ => {
+                    let stmt_lines = temp_unparse.unparse_stmt(lambda_body, 0).unwrap();
+                    stmt_lines.join("\n")
+                }
             };
 
-            let body_str = unparse.unparse_expr(&expr).unwrap();
             format!("{{{param_str}}} => {body_str}")
         }
     }

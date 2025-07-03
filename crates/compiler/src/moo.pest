@@ -123,7 +123,7 @@ neg    =  { "-" }
 // 
 not = { "!" }
 
-scatter_assign   =  { "{" ~ scatter ~ "}" ~ ASSIGN }
+scatter_assign   =  { "{" ~ scatter ~ "}" ~ !"=>" ~ ASSIGN }
 scatter          = _{ scatter_item ~ ("," ~ scatter_item)* }
 scatter_item     = _{ scatter_optional | scatter_target | scatter_rest }
 scatter_optional =  { "?" ~ ident ~ (ASSIGN ~ expr)? }
@@ -169,11 +169,11 @@ sysprop_call = { sysprop ~ arglist }
 
 atom     = { integer | float | string | object | err | boolean | symbol | type_constant | literal_binary | ident  }
 arglist  = { "(" ~ exprlist ~ ")" | "()" }
-lambda   = { "{" ~ lambda_params ~ "}" ~ "=>" ~ expr }
+lambda   = { "{" ~ lambda_params ~ "}" ~ "=>" ~ ((&"begin" ~ begin_statement) | expr) }
 lambda_params = { (lambda_param ~ ("," ~ lambda_param)*)? }
 lambda_param = { scatter_optional | scatter_target | scatter_rest }
 
-list     = { ("{" ~ exprlist ~ "}") | "{}" }
+list     = { ("{" ~ exprlist ~ "}" ~ !"=>") | "{}" }
 
 // flyweight is < parent, [ prop -> value, ... ], contents >
 flyweight     = { "<" ~ expr ~ ("," ~ flyweight_slots)? ~ ("," ~ expr)? ~ ">" }
@@ -210,6 +210,8 @@ keyword = @{
   | ^"except"
   | ^"endtry"
   | ^"finally"
+  | ^"begin"
+  | ^"end"
   | ^"in"
   | ^"let"
   | err

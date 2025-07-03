@@ -190,7 +190,7 @@ pub enum Expr {
     Return(Option<Box<Expr>>),
     Lambda {
         params: Vec<ScatterItem>,
-        body: Box<Expr>,
+        body: Box<Stmt>,
     },
 }
 

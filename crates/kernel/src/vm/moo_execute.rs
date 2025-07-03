@@ -1047,6 +1047,54 @@ pub fn moo_frame_execute(
                 f.set_variable(&id, new_position);
                 f.push(new_list);
             }
+            Op::MakeLambda {
+                scatter_offset,
+                program_offset,
+            } => {
+                // Retrieve the scatter specification for lambda parameters
+                let scatter_spec = f.program.scatter_table(scatter_offset).clone();
+
+                // Retrieve the pre-compiled Program for the lambda body
+                let lambda_program = f.program.lambda_program(program_offset).clone();
+
+                // Capture the current variable environment from the execution context
+                let captured_env = f.capture_environment();
+
+                // Create the lambda value
+                let lambda_var = Var::mk_lambda(scatter_spec, lambda_program, captured_env);
+
+                // Push lambda value onto the stack
+                f.push(lambda_var);
+            }
+            Op::CallLambda => {
+                // Pop arguments list and lambda value from stack
+                let args_list = f.pop();
+                let lambda_var = f.pop();
+
+                // Verify we have a lambda value
+                let Some(lambda) = lambda_var.as_lambda() else {
+                    return ExecutionResult::PushError(E_TYPE.msg("expected lambda value"));
+                };
+
+                // Convert args list to Vec<Var>
+                let args = match args_list.variant() {
+                    Variant::List(args) => args.iter().collect::<Vec<_>>(),
+                    _ => return ExecutionResult::PushError(E_ARGS.msg("expected argument list")),
+                };
+
+                // TODO: Implement lambda call execution
+                // This requires:
+                // 1. Create new execution frame for lambda's Program
+                // 2. Restore captured variable environment
+                // 3. Execute parameter binding using scatter specification
+                // 4. Execute lambda's Program in isolated context
+                // 5. Return result and clean up frame
+
+                // For now, return an error indicating this is not yet implemented
+                return ExecutionResult::PushError(
+                    E_TYPE.msg("lambda execution not yet implemented"),
+                );
+            }
         }
     }
     // We don't usually get here because most execution paths return before we hit the end of

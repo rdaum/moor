@@ -1105,7 +1105,7 @@ impl CodegenState {
     fn compile_lambda_body(
         &mut self,
         params: &[ScatterItem],
-        body: &Expr,
+        body: &Stmt,
     ) -> Result<(), CompileError> {
         // Create scatter specification for lambda parameters
         let labels: Vec<ScatterLabel> = params
@@ -1155,9 +1155,8 @@ impl CodegenState {
         self.line_number_spans = vec![];
         self.fork_line_number_spans = vec![];
 
-        // Compile lambda body
-        self.generate_expr(body)?;
-        self.emit(Op::Return); // Implicit return of expression result
+        // Compile lambda body as a statement
+        self.generate_stmt(body)?;
 
         // Build standalone Program from compiled state
         let lambda_program = Program(Arc::new(PrgInner {

@@ -1164,7 +1164,7 @@ impl Decompile {
             .ok_or(DecompileError::NameNotFound(*name))
     }
 
-    fn decompile_lambda_program(&self, lambda_program: &Program) -> Result<Expr, DecompileError> {
+    fn decompile_lambda_program(&self, lambda_program: &Program) -> Result<Stmt, DecompileError> {
         // Create separate decompiler for lambda's standalone Program
         let mut lambda_decompile = Decompile {
             program: lambda_program.clone(),
@@ -1181,15 +1181,12 @@ impl Decompile {
             lambda_decompile.decompile()?;
         }
 
-        // Lambda body should result in single expression (since we emit Op::Return)
-        // The last instruction should be Return, so we should have one expression on the stack
-        if lambda_decompile.expr_stack.len() == 1 && lambda_decompile.statements.is_empty() {
-            // Expression lambda - result should be on expression stack
-            lambda_decompile.pop_expr()
+        // Lambda body should result in a single statement
+        if lambda_decompile.statements.len() == 1 {
+            Ok(lambda_decompile.statements.into_iter().next().unwrap())
         } else {
-            // This shouldn't happen with our current lambda compilation, but handle gracefully
             Err(MalformedProgram(
-                "lambda body should produce single expression".to_string(),
+                "lambda body should produce single statement".to_string(),
             ))
         }
     }

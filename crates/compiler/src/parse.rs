@@ -360,13 +360,45 @@ impl TreeTransformer {
                     Rule::lambda => {
                         let mut inner = primary.into_inner();
                         let lambda_params = inner.next().unwrap();
-                        let body_expr = inner.next().unwrap();
+                        let body_part = inner.next().unwrap();
 
                         let params = primary_self
                             .clone()
                             .parse_lambda_params(lambda_params.into_inner())?;
-                        let body =
-                            Box::new(primary_self.clone().parse_expr(body_expr.into_inner())?);
+
+                        let body = match body_part.as_rule() {
+                            Rule::begin_statement => {
+                                // Parse begin statement directly
+                                let line_col = body_part.line_col();
+                                let stmt_opt = primary_self.clone().parse_statement(body_part)?;
+                                let stmt = stmt_opt.ok_or_else(|| CompileError::ParseError {
+                                    error_position: CompileContext::new(line_col),
+                                    end_line_col: Some(line_col),
+                                    context: "lambda body parsing".to_string(),
+                                    message: "Expected statement in lambda body".to_string(),
+                                })?;
+                                Box::new(stmt)
+                            }
+                            Rule::expr => {
+                                // Parse expression and wrap it in a return statement
+                                let expr =
+                                    primary_self.clone().parse_expr(body_part.into_inner())?;
+                                let return_stmt = Stmt::new(
+                                    StmtNode::Expr(Expr::Return(Some(Box::new(expr)))),
+                                    (0, 0), // TODO: proper line numbers
+                                );
+                                Box::new(return_stmt)
+                            }
+                            _ => {
+                                let line_col = body_part.line_col();
+                                return Err(CompileError::ParseError {
+                                    error_position: CompileContext::new(line_col),
+                                    end_line_col: Some(line_col),
+                                    context: "lambda body parsing".to_string(),
+                                    message: "Invalid lambda body".to_string(),
+                                });
+                            }
+                        };
 
                         Ok(Expr::Lambda { params, body })
                     }
@@ -3401,5 +3433,72 @@ mod tests {
                 &parse.stmts[0].node
             );
         }
+    }
+
+    #[test]
+    fn test_lambda_statement_parse() {
+        // Test expression lambda
+        let expr_program = r#"let f = {x} => x + 1;"#;
+        let expr_parse = parse_program(expr_program, CompileOptions::default()).unwrap();
+
+        if let StmtNode::Expr(Expr::Decl {
+            expr: Some(expr), ..
+        }) = &expr_parse.stmts[0].node
+        {
+            if let Expr::Lambda { body, .. } = expr.as_ref() {
+                // Should be a return statement wrapping the expression
+                if let StmtNode::Expr(Expr::Return(Some(_))) = &body.node {
+                    // Good - expression lambda was wrapped in return
+                } else {
+                    panic!(
+                        "Expected return statement for expression lambda, got: {:?}",
+                        &body.node
+                    );
+                }
+            }
+        }
+
+        // Test statement lambda with begin/end
+        let program = r#"let f = {x} => begin return x + 1; end;"#;
+        let parse = parse_program(program, CompileOptions::default()).unwrap();
+
+        if let StmtNode::Expr(Expr::Decl {
+            expr: Some(expr), ..
+        }) = &parse.stmts[0].node
+        {
+            if let Expr::Lambda { params, body } = expr.as_ref() {
+                assert_eq!(params.len(), 1);
+                assert!(matches!(params[0].kind, ScatterKind::Required));
+
+                // Verify it's a begin statement (Scope)
+                if let StmtNode::Scope {
+                    body: statements, ..
+                } = &body.node
+                {
+                    assert_eq!(statements.len(), 1);
+                    if let StmtNode::Expr(Expr::Return(Some(_))) = &statements[0].node {
+                        // This is correct - the begin block contains a return statement
+                    } else {
+                        panic!(
+                            "Expected return statement in begin block, got: {:?}",
+                            &statements[0].node
+                        );
+                    }
+                } else {
+                    panic!("Expected begin block (Scope), got: {:?}", &body.node);
+                }
+            } else {
+                panic!("Expected lambda expression in assignment, got: {:?}", expr);
+            }
+        } else {
+            panic!(
+                "Expected declaration statement, got: {:?}",
+                &parse.stmts[0].node
+            );
+        }
+
+        // Test empty begin/end lambda
+        let empty_lambda = r#"let f = {x} => begin end;"#;
+        parse_program(empty_lambda, CompileOptions::default()).unwrap();
     }
 }
