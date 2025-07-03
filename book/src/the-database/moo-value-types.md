@@ -139,6 +139,17 @@ The newly declared list can, of course, be assigned to the old list variable:
 oldlist = {@oldlist, newelement};
 ```
 
+### List Comprehensions
+
+mooR also provides a concise syntax for creating new lists by transforming existing ones, called list comprehensions:
+
+```
+doubled = { x * 2 for x in {1, 2, 3, 4} };    // Creates {2, 4, 6, 8}
+squares = { x * x for x in [1..5] };          // Creates {1, 4, 9, 16, 25}
+```
+
+This syntax lets you build complex lists in a single, readable expression. For detailed information about list comprehensions, see the [List Comprehensions](../the-moo-programming-language/list-comprehensions.md) chapter.
+
 (Note that @ is also a standard prefix character to denote certain kinds of user commands, but these two facts are not
 connected.)
 
