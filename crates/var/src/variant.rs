@@ -58,7 +58,7 @@ impl Hash for Variant {
             Variant::Flyweight(f) => f.hash(state),
             Variant::Sym(s) => s.hash(state),
             Variant::Binary(b) => b.hash(state),
-            Variant::Lambda(l) => std::ptr::hash(&*l.body.0, state),
+            Variant::Lambda(l) => std::ptr::hash(&*l.0.body.0, state),
         }
     }
 }
@@ -80,8 +80,8 @@ impl Ord for Variant {
             (Variant::Binary(l), Variant::Binary(r)) => l.cmp(r),
             (Variant::Lambda(l), Variant::Lambda(r)) => {
                 use crate::program::program::PrgInner;
-                let l_ptr = &*l.body.0 as *const PrgInner;
-                let r_ptr = &*r.body.0 as *const PrgInner;
+                let l_ptr = &*l.0.body.0 as *const PrgInner;
+                let r_ptr = &*r.0.body.0 as *const PrgInner;
                 l_ptr.cmp(&r_ptr)
             }
 
@@ -146,17 +146,17 @@ impl Debug for Variant {
             Variant::Binary(b) => write!(f, "Binary({} bytes)", b.len()),
             Variant::Lambda(l) => {
                 use crate::program::opcode::ScatterLabel;
-                let param_str = l
-                    .params
-                    .labels
-                    .iter()
-                    .map(|label| match label {
-                        ScatterLabel::Required(_) => "x",
-                        ScatterLabel::Optional(_, _) => "?x",
-                        ScatterLabel::Rest(_) => "@x",
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
+                let param_str =
+                    l.0.params
+                        .labels
+                        .iter()
+                        .map(|label| match label {
+                            ScatterLabel::Required(_) => "x",
+                            ScatterLabel::Optional(_, _) => "?x",
+                            ScatterLabel::Rest(_) => "@x",
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
                 write!(f, "Lambda(({param_str}))")
             }
         }

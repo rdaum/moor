@@ -343,41 +343,42 @@ impl Activation {
         args: Vec<Var>,
     ) -> Result<Self, Error> {
         // Create new frame with lambda's program
-        let mut frame = Box::new(MooStackFrame::new(lambda.body.clone()));
+        let mut frame = Box::new(MooStackFrame::new(lambda.0.body.clone()));
 
         // Restore lambda's captured environment
-        frame.environment = lambda.captured_env.clone();
+        frame.environment = lambda.0.captured_env.clone();
 
         // Ensure the environment has enough slots for all variables the lambda body expects
         {
             if let Some(env) = frame.environment.last_mut() {
                 // The lambda body was compiled with the same var_names table, so we need to ensure
                 // the environment has enough slots for all variable indices that might be accessed
-                let expected_var_count = lambda.body.var_names().global_width();
+                let expected_var_count = lambda.0.body.var_names().global_width();
                 if env.len() < expected_var_count {
                     env.resize(expected_var_count, moor_var::v_int(0));
                 }
 
                 // Perform parameter binding using lambda's scatter specification
                 // This binds the call arguments to lambda parameters in the environment
-                lambda_scatter_assign(&lambda.params, &args, env)?;
+                lambda_scatter_assign(&lambda.0.params, &args, env)?;
             } else {
                 return Err(E_ARGS.into());
             }
         }
 
         // Handle self-reference for recursive lambdas
-        if let Some(self_var_name) = lambda.self_var {
+        if let Some(self_var_name) = lambda.0.self_var {
             // Extract the information we need without borrowing frame.environment
             let current_env = frame.environment.clone();
             let var_idx = self_var_name.0 as usize;
 
-            // Create the lambda variable with the current environment
+            // Create a deep copy of the lambda to avoid cycles
+            let self_lambda = lambda.for_self_reference();
             let lambda_var = moor_var::Var::mk_lambda(
-                lambda.params.clone(),
-                lambda.body.clone(),
+                self_lambda.0.params.clone(),
+                self_lambda.0.body.clone(),
                 current_env,
-                lambda.self_var,
+                self_lambda.0.self_var,
             );
 
             // Now set the self-reference in the environment
@@ -395,9 +396,9 @@ impl Activation {
         frame.set_global_variable(GlobalName::player, v_obj(current_activation.player));
         frame.set_global_variable(GlobalName::caller, current_activation.this.clone());
         // Format verb name: show function name if available, otherwise just <fn>
-        let lambda_name = if let Some(self_var) = lambda.self_var {
+        let lambda_name = if let Some(self_var) = lambda.0.self_var {
             // Get the variable name from the lambda's program
-            if let Some(var_name) = lambda.body.var_names().ident_for_name(&self_var) {
+            if let Some(var_name) = lambda.0.body.var_names().ident_for_name(&self_var) {
                 format!(
                     "{}.{}",
                     current_activation.verb_name.as_string(),

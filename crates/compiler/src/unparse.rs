@@ -903,39 +903,39 @@ pub fn to_literal(v: &Var) -> String {
             use moor_var::program::opcode::ScatterLabel;
 
             // Build parameter list with proper names and syntax
-            let param_strings: Vec<String> = l
-                .params
-                .labels
-                .iter()
-                .map(|label| match label {
-                    ScatterLabel::Required(name) => {
-                        // Find the variable in lambda body's var_names and get its symbol
-                        if let Some(var) = l.body.var_names().find_variable(name) {
-                            var.to_symbol().as_arc_string().to_string()
-                        } else {
-                            format!("param_{}", name.0) // Fallback if name not found
+            let param_strings: Vec<String> =
+                l.0.params
+                    .labels
+                    .iter()
+                    .map(|label| match label {
+                        ScatterLabel::Required(name) => {
+                            // Find the variable in lambda body's var_names and get its symbol
+                            if let Some(var) = l.0.body.var_names().find_variable(name) {
+                                var.to_symbol().as_arc_string().to_string()
+                            } else {
+                                format!("param_{}", name.0) // Fallback if name not found
+                            }
                         }
-                    }
-                    ScatterLabel::Optional(name, _) => {
-                        if let Some(var) = l.body.var_names().find_variable(name) {
-                            format!("?{}", var.to_symbol().as_arc_string())
-                        } else {
-                            format!("?param_{}", name.0)
+                        ScatterLabel::Optional(name, _) => {
+                            if let Some(var) = l.0.body.var_names().find_variable(name) {
+                                format!("?{}", var.to_symbol().as_arc_string())
+                            } else {
+                                format!("?param_{}", name.0)
+                            }
                         }
-                    }
-                    ScatterLabel::Rest(name) => {
-                        if let Some(var) = l.body.var_names().find_variable(name) {
-                            format!("@{}", var.to_symbol().as_arc_string())
-                        } else {
-                            format!("@param_{}", name.0)
+                        ScatterLabel::Rest(name) => {
+                            if let Some(var) = l.0.body.var_names().find_variable(name) {
+                                format!("@{}", var.to_symbol().as_arc_string())
+                            } else {
+                                format!("@param_{}", name.0)
+                            }
                         }
-                    }
-                })
-                .collect();
+                    })
+                    .collect();
             let param_str = param_strings.join(", ");
 
             // Just manually construct the lambda syntax - simpler than reconstructing AST
-            let decompiled_tree = decompile::program_to_tree(&l.body).unwrap();
+            let decompiled_tree = decompile::program_to_tree(&l.0.body).unwrap();
             let lambda_body = &decompiled_tree.stmts[0];
 
             let temp_unparse = Unparse::new(&decompiled_tree);

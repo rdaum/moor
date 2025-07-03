@@ -436,7 +436,8 @@ user_validator(["name" -> "Alice", "email" -> "alice@example.com"]);
 
 - Lambda creation is fast, but not free - avoid creating them in tight loops
 - Variable capture is done by value, so large data structures are copied
-- Named recursive lambdas are optimized for tail-call elimination where possible
+- Recursive lambdas can still hit stack limits like regular MOO recursion (fancy functional languages like Scheme or
+  Lisp sometimes offer what's called tail-call elimination, but mooR doesn't)
 
 ### Debugging Tips
 
@@ -444,7 +445,7 @@ Stack traces show lambda calls clearly:
 
 - Anonymous lambdas appear as `verb.<fn>`
 - Named lambdas appear as `verb.function_name`
-- Line numbers are preserved for debugging
+- Line numbers point to where the function was declared, not where it was invoked (to find the invocation site, look one level up in the traceback)
 
 ## Technical Details
 
@@ -458,7 +459,7 @@ Stack traces show lambda calls clearly:
 
 - Lambdas are garbage collected when no longer referenced
 - Captured variables are freed when the lambda is freed
-- Circular references between lambdas are handled automatically
+- Circular references between lambdas are not possible due to pass-by-value capture
 
 ### Compatibility
 

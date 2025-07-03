@@ -1640,10 +1640,10 @@ mod tests {
         let lambda = result.as_lambda().unwrap();
 
         // Verify lambda has correct parameter structure
-        assert_eq!(lambda.params.labels.len(), 1, "Expected 1 parameter");
+        assert_eq!(lambda.0.params.labels.len(), 1, "Expected 1 parameter");
 
         // Verify parameter is required type (not optional or rest)
-        match &lambda.params.labels[0] {
+        match &lambda.0.params.labels[0] {
             moor_var::program::opcode::ScatterLabel::Required(_) => {
                 // This is what we expect
             }
@@ -1683,19 +1683,19 @@ mod tests {
         let lambda = result.as_lambda().unwrap();
 
         // Verify parameter types
-        assert_eq!(lambda.params.labels.len(), 3, "Expected 3 parameters");
+        assert_eq!(lambda.0.params.labels.len(), 3, "Expected 3 parameters");
 
-        match &lambda.params.labels[0] {
+        match &lambda.0.params.labels[0] {
             moor_var::program::opcode::ScatterLabel::Required(_) => {}
             other => panic!("Expected Required parameter, got: {other:?}"),
         }
 
-        match &lambda.params.labels[1] {
+        match &lambda.0.params.labels[1] {
             moor_var::program::opcode::ScatterLabel::Optional(_, _) => {}
             other => panic!("Expected Optional parameter, got: {other:?}"),
         }
 
-        match &lambda.params.labels[2] {
+        match &lambda.0.params.labels[2] {
             moor_var::program::opcode::ScatterLabel::Rest(_) => {}
             other => panic!("Expected Rest parameter, got: {other:?}"),
         }
