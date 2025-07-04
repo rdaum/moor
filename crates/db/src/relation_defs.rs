@@ -241,13 +241,22 @@ macro_rules! define_relations {
                 }
 
 
-                /// Wait for all writes up to the specified barrier sequence to be completed in all providers.
+                /// Send barrier messages to all providers to track transaction timestamp.
+                ///
+                /// This ensures transaction ordering consistency by recording the transaction
+                /// timestamp in all provider logs after write transactions commit.
+                pub fn send_barrier(&self, barrier_timestamp: Timestamp) -> Result<(), crate::tx_management::Error> {
+                    $( self.$field.source().send_barrier(barrier_timestamp)?; )*
+                    Ok(())
+                }
+
+                /// Wait for all writes up to the specified barrier timestamp to be completed in all providers.
                 ///
                 /// This ensures that all relation providers have fully processed writes up to
                 /// the barrier before returning. Critical for ensuring snapshots capture a
                 /// consistent view of the database at a specific point in time.
-                pub fn wait_for_write_barrier(&self, barrier_seq: u64, timeout: std::time::Duration) -> Result<(), crate::tx_management::Error> {
-                    $( self.$field.source().wait_for_write_barrier(barrier_seq, timeout)?; )*
+                pub fn wait_for_write_barrier(&self, barrier_timestamp: Timestamp, timeout: std::time::Duration) -> Result<(), crate::tx_management::Error> {
+                    $( self.$field.source().wait_for_write_barrier(barrier_timestamp, timeout)?; )*
                     Ok(())
                 }
             }

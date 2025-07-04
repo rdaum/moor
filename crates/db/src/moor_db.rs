@@ -97,6 +97,8 @@ pub struct MoorDB {
     commit_channel: Sender<CommitSet>,
     usage_send: Sender<oneshot::Sender<usize>>,
     caches: ArcSwap<Caches>,
+    /// Last write transaction timestamp that completed
+    last_write_commit: AtomicU64,
     jh: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -106,20 +108,23 @@ impl MoorDB {
         &self,
     ) -> Result<Box<dyn moor_common::model::loader::SnapshotInterface>, crate::tx_management::Error>
     {
-        // Create a barrier sequence number and wait for all writes up to this point to complete
-        // This ensures the snapshot captures all committed data at a specific barrier point
-        let barrier_seq = self
-            .monotonic
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        if let Err(e) = self
-            .relations
-            .wait_for_write_barrier(barrier_seq, std::time::Duration::from_secs(10))
-        {
-            warn!(
-                "Timeout waiting for write barrier {} before snapshot: {}",
-                barrier_seq, e
-            );
-            // Continue anyway - the snapshot might be slightly inconsistent but we don't want to fail completely
+        // Wait for all write transactions up to the last completed write to finish
+        // This ensures the snapshot captures all committed write data
+        let last_write_timestamp = Timestamp(
+            self.last_write_commit
+                .load(std::sync::atomic::Ordering::Acquire),
+        );
+        if last_write_timestamp.0 > 0 {
+            if let Err(e) = self
+                .relations
+                .wait_for_write_barrier(last_write_timestamp, std::time::Duration::from_secs(10))
+            {
+                warn!(
+                    "Timeout waiting for write barrier {} before snapshot: {}",
+                    last_write_timestamp.0, e
+                );
+                // Continue anyway - the snapshot might be slightly inconsistent but we don't want to fail completely
+            }
         }
 
         // Get a consistent instant from the keyspace
@@ -310,6 +315,7 @@ impl MoorDB {
             kill_switch: kill_switch.clone(),
             keyspace,
             caches,
+            last_write_commit: AtomicU64::new(0),
             jh: Mutex::new(None),
         });
 
@@ -358,6 +364,8 @@ impl MoorDB {
                             if combined_caches.has_changed() {
                                 this.caches.store(Arc::new(combined_caches));
                             }
+                            // Read-only transactions don't need barrier tracking since we only
+                            // wait for write transactions when creating snapshots
                             continue;
                         }
                         Err(flume::RecvTimeoutError::Timeout) => {
@@ -379,6 +387,8 @@ impl MoorDB {
                         warn!("Potential large batch @ commit... Checking {num_tuples} total tuples from the working set...");
                     }
 
+                    // Get the transaction timestamp before extracting working sets
+                    let tx_timestamp = ws.tx.ts;
                     let (relation_ws, verb_cache, prop_cache, ancestry_cache) = ws.extract_relation_working_sets();
                     {
                         if !checkers.check_all(&relation_ws) {
@@ -424,6 +434,14 @@ impl MoorDB {
                         // This will hold up new transactions starting, unfortunately.
                         // TODO: this is the major source of low throughput in benchmarking
                         checkers.commit_all(&this.relations);
+
+                        // Track the last write transaction timestamp for snapshot consistency
+                        this.last_write_commit.store(tx_timestamp.0, std::sync::atomic::Ordering::Release);
+
+                        // Send barrier message to providers to track this write transaction completion
+                        if let Err(e) = this.relations.send_barrier(tx_timestamp) {
+                            warn!("Failed to send barrier for write transaction: {}", e);
+                        }
 
                         // No need to block the caller while we're doing the final write to disk.
                         reply.send(CommitResult::Success).ok();

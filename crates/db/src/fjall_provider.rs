@@ -18,7 +18,7 @@ use flume::Sender;
 use gdt_cpus::ThreadPriority;
 use moor_var::AsByteBuffer;
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -30,8 +30,8 @@ enum WriteOp<
 > {
     Insert(Timestamp, Domain, Codomain),
     Delete(Domain),
-    /// Barrier marker for snapshot consistency - reply when all writes up to this sequence are complete
-    Barrier(u64, oneshot::Sender<()>),
+    /// Barrier marker for snapshot consistency - reply when all writes up to this timestamp are complete
+    Barrier(Timestamp, oneshot::Sender<()>),
 }
 
 /// Tracks operations that have been submitted to the background thread but not yet completed
@@ -44,8 +44,6 @@ where
     pending_deletes: HashSet<Domain>,
     /// Keys that have been written but write hasn't flushed to backing store yet  
     pending_writes: HashMap<Domain, (Timestamp, Codomain)>,
-    /// Highest barrier sequence that has been processed
-    completed_barrier: u64,
 }
 
 impl<Domain, Codomain> Default for PendingOperations<Domain, Codomain>
@@ -57,7 +55,6 @@ where
         Self {
             pending_deletes: HashSet::new(),
             pending_writes: HashMap::new(),
-            completed_barrier: 0,
         }
     }
 }
@@ -74,6 +71,8 @@ where
     kill_switch: Arc<AtomicBool>,
     /// Shared state tracking operations in-flight to background thread
     pending_ops: Arc<RwLock<PendingOperations<Domain, Codomain>>>,
+    /// Atomic tracking of the highest completed barrier timestamp
+    completed_barrier: Arc<AtomicU64>,
     jh: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
@@ -107,10 +106,12 @@ where
         let kill_switch = Arc::new(AtomicBool::new(false));
         let (ops_tx, ops_rx) = flume::unbounded::<WriteOp<Domain, Codomain>>();
         let pending_ops = Arc::new(RwLock::new(PendingOperations::default()));
+        let completed_barrier = Arc::new(AtomicU64::new(0));
 
         let fj = fjall_partition.clone();
         let ks = kill_switch.clone();
         let pending_ops_bg = pending_ops.clone();
+        let completed_barrier_bg = completed_barrier.clone();
         let thread_name = format!("moor-w-{relation_name}");
         let tb = std::thread::Builder::new().name(thread_name);
         let jh = tb
@@ -175,11 +176,10 @@ where
                                 error!("failed to delete from database: {}", e);
                             }
                         }
-                        Ok(WriteOp::Barrier(seq, reply)) => {
+                        Ok(WriteOp::Barrier(timestamp, reply)) => {
                             // Mark this barrier as completed and reply
-                            if let Ok(mut pending) = pending_ops_bg.write() {
-                                pending.completed_barrier = seq;
-                            }
+                            completed_barrier_bg
+                                .store(timestamp.0, std::sync::atomic::Ordering::SeqCst);
                             // Reply to indicate barrier is processed
                             reply.send(()).ok();
                         }
@@ -195,6 +195,7 @@ where
             ops: ops_tx,
             kill_switch,
             pending_ops,
+            completed_barrier,
             jh: Arc::new(Mutex::new(Some(jh))),
         }
     }
@@ -203,29 +204,62 @@ where
         &self.fjall_partition
     }
 
-    /// Wait for all writes up to the specified barrier sequence to be completed.
-    /// This ensures that all pending writes submitted before this barrier are flushed
-    /// to the backing store, providing a consistent point for snapshots.
-    pub fn wait_for_write_barrier(&self, barrier_seq: u64, timeout: Duration) -> Result<(), Error> {
-        let (send, recv) = oneshot::channel();
+    /// Send a barrier message to track transaction timestamp without waiting.
+    /// This is used after write transactions commit to track their completion.
+    pub fn send_barrier(&self, barrier_timestamp: Timestamp) -> Result<(), Error> {
+        // Check if we've already processed this barrier or a later one
+        let completed = self
+            .completed_barrier
+            .load(std::sync::atomic::Ordering::Acquire);
+        if completed >= barrier_timestamp.0 {
+            return Ok(());
+        }
 
-        // Send barrier message to background thread
-        if let Err(e) = self.ops.send(WriteOp::Barrier(barrier_seq, send)) {
+        let (send, _recv) = oneshot::channel();
+
+        // Send barrier message to background thread but don't wait for response
+        if let Err(e) = self.ops.send(WriteOp::Barrier(barrier_timestamp, send)) {
             return Err(Error::StorageFailure(format!(
                 "failed to send barrier message: {e}"
             )));
         }
 
-        // Wait for the barrier to be processed
-        match recv.recv_timeout(timeout) {
-            Ok(()) => Ok(()),
-            Err(oneshot::RecvTimeoutError::Timeout) => Err(Error::StorageFailure(format!(
-                "Timeout waiting for write barrier {barrier_seq}"
-            ))),
-            Err(oneshot::RecvTimeoutError::Disconnected) => Err(Error::StorageFailure(
-                "Background thread disconnected while waiting for barrier".to_string(),
-            )),
+        Ok(())
+    }
+
+    /// Wait for all writes up to the specified barrier timestamp to be completed.
+    /// This ensures that all pending writes submitted before this barrier are flushed
+    /// to the backing store, providing a consistent point for snapshots.
+    /// Note: This only waits, it doesn't send the barrier - barriers must be sent separately.
+    pub fn wait_for_write_barrier(
+        &self,
+        barrier_timestamp: Timestamp,
+        timeout: Duration,
+    ) -> Result<(), Error> {
+        // Check if we've already processed this barrier or a later one
+        let completed = self
+            .completed_barrier
+            .load(std::sync::atomic::Ordering::Acquire);
+        if completed >= barrier_timestamp.0 {
+            return Ok(());
         }
+
+        // Wait by polling the completed barrier timestamp
+        let start = std::time::Instant::now();
+        while start.elapsed() < timeout {
+            let completed = self
+                .completed_barrier
+                .load(std::sync::atomic::Ordering::Acquire);
+            if completed >= barrier_timestamp.0 {
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+
+        Err(Error::StorageFailure(format!(
+            "Timeout waiting for write barrier {}",
+            barrier_timestamp.0
+        )))
     }
 }
 
