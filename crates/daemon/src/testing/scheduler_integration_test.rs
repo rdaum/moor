@@ -31,7 +31,7 @@ mod tests {
     use moor_common::model::CommitResult;
     use moor_common::tasks::Event;
     use moor_db::{Database, DatabaseConfig, TxDB};
-    use moor_kernel::config::Config;
+    use moor_kernel::config::{Config, ImportExportFormat};
     use moor_kernel::tasks::NoopTasksDb;
     use moor_kernel::tasks::scheduler::Scheduler;
     use moor_textdump::textdump_load;
@@ -203,6 +203,8 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         scheduler_client: moor_kernel::SchedulerClient,
         kill_switch: Arc<AtomicBool>,
         _temp_dir: TempDir,
+        _temp_output_dir: Option<TempDir>,
+        output_dir_path: Option<PathBuf>,
         scheduler_thread: Option<std::thread::JoinHandle<()>>,
         rpc_thread: Option<std::thread::JoinHandle<()>>,
     }
@@ -229,7 +231,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         }
     }
 
-    fn setup_test_environment_with_real_scheduler() -> TestEnvironment {
+    fn setup_test_environment_with_export_format(
+        export_format: ImportExportFormat,
+    ) -> TestEnvironment {
         // Set up tracing to capture scheduler logs
         let _ = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::DEBUG)
@@ -237,7 +241,15 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             .try_init();
 
         let (public_key, private_key) = create_test_keys();
-        let config = Arc::new(Config::default());
+
+        // Create a config with a proper output path for textdump
+        let temp_output_dir = tempfile::tempdir().expect("Failed to create temp output dir");
+        let output_path = temp_output_dir.path().to_path_buf();
+
+        let mut config = Config::default();
+        config.import_export.output_path = Some(output_path.clone());
+        config.import_export.export_format = export_format;
+        let config = Arc::new(config);
 
         // Create real database with core
         let (db, temp_dir) = setup_test_db_with_core();
@@ -310,14 +322,22 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
             scheduler_client,
             kill_switch,
             _temp_dir: temp_dir,
+            _temp_output_dir: Some(temp_output_dir),
+            output_dir_path: Some(output_path),
             scheduler_thread: Some(scheduler_thread),
             rpc_thread: Some(rpc_thread),
         }
     }
 
+    fn setup_test_environment_with_real_scheduler() -> TestEnvironment {
+        setup_test_environment_with_export_format(ImportExportFormat::Textdump)
+    }
+
     #[test]
     fn test_real_scheduler_startup() {
-        let env = setup_test_environment_with_real_scheduler();
+        let mut env = setup_test_environment_with_real_scheduler();
+        env._temp_output_dir = None; // Don't need output dir for this test
+        env.output_dir_path = None;
 
         // Wait for scheduler to be ready by attempting a simple operation
         wait_for_scheduler_ready(&env.scheduler_client);
@@ -325,7 +345,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_connection_establishment_with_real_db() {
-        let env = setup_test_environment_with_real_scheduler();
+        let mut env = setup_test_environment_with_real_scheduler();
+        env._temp_output_dir = None; // Don't need output dir for this test
+        env.output_dir_path = None;
         wait_for_scheduler_ready(&env.scheduler_client);
 
         let client_id = Uuid::new_v4();
@@ -372,7 +394,9 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
     #[test]
     fn test_wizard_login_with_real_scheduler() {
-        let env = setup_test_environment_with_real_scheduler();
+        let mut env = setup_test_environment_with_real_scheduler();
+        env._temp_output_dir = None; // Don't need output dir for this test
+        env.output_dir_path = None;
         wait_for_scheduler_ready(&env.scheduler_client);
 
         let client_id = Uuid::new_v4();
@@ -639,6 +663,136 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
         for event in events {
             if let Event::Traceback(traceback) = event.event.event {
                 panic!("Unexpected traceback: {traceback:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_checkpoint_functionality_textdump() {
+        test_checkpoint_functionality_impl(ImportExportFormat::Textdump);
+    }
+
+    #[test]
+    fn test_checkpoint_functionality_objdef() {
+        test_checkpoint_functionality_impl(ImportExportFormat::Objdef);
+    }
+
+    fn test_checkpoint_functionality_impl(export_format: ImportExportFormat) {
+        let env = setup_test_environment_with_export_format(export_format.clone());
+        wait_for_scheduler_ready(&env.scheduler_client);
+
+        // Step 1: Verify scheduler is running and responsive
+        assert!(
+            env.scheduler_client.check_status().is_ok(),
+            "Scheduler should be responsive before checkpoint"
+        );
+
+        // Step 2: Request a blocking checkpoint from the scheduler
+        let checkpoint_result = env.scheduler_client.request_checkpoint_blocking();
+
+        // Step 3: Verify checkpoint completed successfully
+        assert!(
+            checkpoint_result.is_ok(),
+            "Blocking checkpoint should succeed: {checkpoint_result:?}"
+        );
+
+        // Step 4: Verify scheduler is still responsive after checkpoint
+        assert!(
+            env.scheduler_client.check_status().is_ok(),
+            "Scheduler should remain responsive after checkpoint"
+        );
+
+        // Step 5: Verify that the database is still functional by establishing a connection
+        let client_id = Uuid::new_v4();
+        let establish_message = rpc_common::HostClientToDaemonMessage::ConnectionEstablish {
+            peer_addr: "127.0.0.1:8080".to_string(),
+            acceptable_content_types: Some(vec![moor_var::Symbol::mk("text/plain")]),
+        };
+
+        let establish_result = env.transport.process_client_message(
+            env.message_handler.as_ref(),
+            env.scheduler_client.clone(),
+            client_id,
+            establish_message,
+        );
+
+        assert!(
+            establish_result.is_ok(),
+            "Database operations should work after checkpoint: {establish_result:?}"
+        );
+
+        // Step 6: Verify the connection was established properly
+        match establish_result.unwrap() {
+            rpc_common::DaemonToClientReply::NewConnection(token, obj) => {
+                assert!(!token.0.is_empty(), "Should receive valid client token");
+                assert!(obj.id().0 < 0, "Should receive valid connection object");
+            }
+            other => panic!("Expected NewConnection, got {other:?}"),
+        }
+
+        let output_dir = env.output_dir_path.as_ref().unwrap();
+        // Since we used blocking checkpoint, the file should already exist
+        let entries =
+            std::fs::read_dir(output_dir).expect("Should be able to read output directory");
+
+        let mut export_files: Vec<_> = entries
+            .flatten()
+            .filter(|entry| {
+                if let Some(filename) = entry.file_name().to_str() {
+                    // Handle both textdump and objdef formats
+                    if export_format == ImportExportFormat::Textdump {
+                        filename.starts_with("textdump-")
+                            && filename.ends_with(".moo-textdump")
+                            && !filename.contains(".in-progress")
+                    } else {
+                        filename.starts_with("textdump-")
+                            && filename.ends_with(".moo")
+                            && !filename.contains(".in-progress")
+                    }
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        let format_name = if export_format == ImportExportFormat::Textdump {
+            "Textdump"
+        } else {
+            "Objdef"
+        };
+        assert!(
+            !export_files.is_empty(),
+            "{} file should exist after blocking checkpoint in directory: {}",
+            format_name,
+            output_dir.display()
+        );
+
+        // Get the most recent file (there should be exactly one from our checkpoint)
+        export_files.sort_by_key(|entry| entry.metadata().unwrap().modified().unwrap());
+        let export_path = export_files.last().unwrap().path();
+
+        // Verify the file has content (JHCore should produce a non-empty export)
+        let metadata =
+            std::fs::metadata(&export_path).expect("Should be able to read export file metadata");
+        assert!(
+            metadata.len() > 1000, // JHCore export should be much larger than 1KB
+            "{} file should have substantial content, got {} bytes: {}",
+            format_name,
+            metadata.len(),
+            export_path.display()
+        );
+
+        println!(
+            "✓ Blocking checkpoint completed successfully: {} ({} bytes)",
+            export_path.display(),
+            metadata.len()
+        );
+
+        // Step 8: Verify there are no errors in the event log
+        let events = env.event_log.get_all_events();
+        for event in events {
+            if let Event::Traceback(traceback) = event.event.event {
+                panic!("Unexpected traceback after checkpoint: {traceback:?}");
             }
         }
     }

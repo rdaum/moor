@@ -239,6 +239,17 @@ macro_rules! define_relations {
                         has_mutations: false,
                     }
                 }
+
+
+                /// Wait for all writes up to the specified barrier sequence to be completed in all providers.
+                ///
+                /// This ensures that all relation providers have fully processed writes up to
+                /// the barrier before returning. Critical for ensuring snapshots capture a
+                /// consistent view of the database at a specific point in time.
+                pub fn wait_for_write_barrier(&self, barrier_seq: u64, timeout: std::time::Duration) -> Result<(), crate::tx_management::Error> {
+                    $( self.$field.source().wait_for_write_barrier(barrier_seq, timeout)?; )*
+                    Ok(())
+                }
             }
 
             /// Working sets for all relations, including caches.

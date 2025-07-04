@@ -508,8 +508,12 @@ impl Scheduler {
                 let result = self.stop(Some(msg));
                 reply.send(result).expect("Could not send shutdown reply");
             }
-            SchedulerClientMsg::Checkpoint(reply) => {
-                let result = self.checkpoint();
+            SchedulerClientMsg::Checkpoint(blocking, reply) => {
+                let result = if blocking {
+                    self.checkpoint_blocking()
+                } else {
+                    self.checkpoint()
+                };
                 reply.send(result).expect("Could not send checkpoint reply");
             }
             SchedulerClientMsg::CheckStatus(reply) => {
@@ -937,8 +941,16 @@ impl Scheduler {
                     }
                 }
             }
-            TaskControlMsg::Checkpoint => {
-                if let Err(e) = self.checkpoint() {
+            TaskControlMsg::Checkpoint(reply) => {
+                let result = if reply.is_some() {
+                    self.checkpoint_blocking()
+                } else {
+                    self.checkpoint()
+                };
+
+                if let Some(reply) = reply {
+                    let _ = reply.send(result);
+                } else if let Err(e) = result {
                     error!(?e, "Could not checkpoint");
                 }
             }
@@ -1022,10 +1034,11 @@ impl Scheduler {
         let encoding_mode = self.config.import_export.output_encoding;
 
         let loader_client = {
-            match self.database.loader_client() {
-                Ok(tx) => tx,
+            // Use snapshot database to avoid blocking ongoing operations
+            match self.database.create_snapshot() {
+                Ok(snapshot_loader) => snapshot_loader,
                 Err(e) => {
-                    error!(?e, "Could not start transaction for checkpoint");
+                    error!(?e, "Could not create snapshot for checkpoint");
                     return Err(SchedulerError::CouldNotStartTask);
                 }
             }
@@ -1079,6 +1092,103 @@ impl Scheduler {
 
         Ok(())
     }
+
+    /// Request a checkpoint and wait for the textdump generation to complete.
+    ///
+    /// Unlike `checkpoint()`, this method blocks until the background textdump thread
+    /// finishes, providing confirmation that the checkpoint has been written to disk.
+    fn checkpoint_blocking(&self) -> Result<(), SchedulerError> {
+        let Some(textdump_path) = self.config.import_export.output_path.clone() else {
+            error!("Cannot textdump as output directory not configured");
+            return Err(SchedulerError::CouldNotStartTask);
+        };
+
+        // Verify the directory exists / create it
+        if let Err(e) = std::fs::create_dir_all(&textdump_path) {
+            error!(?e, "Could not create textdump directory");
+            return Err(SchedulerError::CouldNotStartTask);
+        }
+
+        // Output file should be suffixed with an incrementing number, to avoid overwriting
+        // existing dumps, so we can do rolling backups.
+        // We should be able to just use seconds since epoch for this.
+        let textdump_path = textdump_path.join(format!(
+            "textdump-{}.in-progress",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs()
+        ));
+
+        let encoding_mode = self.config.import_export.output_encoding;
+
+        let loader_client = {
+            // Use snapshot database to avoid slowing things down
+            match self.database.create_snapshot() {
+                Ok(snapshot_loader) => snapshot_loader,
+                Err(e) => {
+                    error!(?e, "Could not create snapshot for checkpoint");
+                    return Err(SchedulerError::CouldNotStartTask);
+                }
+            }
+        };
+
+        let version_string = self
+            .config
+            .import_export
+            .version_string(&self.version, &self.config.features);
+        let dirdump = self.config.import_export.export_format == ImportExportFormat::Objdef;
+
+        let join_handle = std::thread::Builder::new()
+            .name("moor-export".to_string())
+            .spawn(move || {
+                if dirdump {
+                    info!("Collecting objects for dump...");
+                    let objects = collect_object_definitions(loader_client.as_ref());
+                    info!("Dumping objects to {textdump_path:?}");
+                    dump_object_definitions(&objects, &textdump_path);
+                    // Now that the dump has been written, strip the in-progress suffix.
+                    let final_path = textdump_path.with_extension("moo");
+                    if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
+                        error!(?e, "Could not rename objdefdump to final path");
+                    }
+                    info!(?final_path, "Objdefdump written.");
+                } else {
+                    let Ok(mut output) = File::create(&textdump_path) else {
+                        error!("Could not open textdump file for writing");
+                        return;
+                    };
+
+                    let textdump = make_textdump(loader_client.as_ref(), version_string);
+
+                    let mut writer = TextdumpWriter::new(&mut output, encoding_mode);
+                    if let Err(e) = writer.write_textdump(&textdump) {
+                        error!(?e, "Could not write textdump");
+                        return;
+                    }
+
+                    // Now that the dump has been written, strip the in-progress suffix.
+                    let final_path = textdump_path.with_extension("moo-textdump");
+                    if let Err(e) = std::fs::rename(&textdump_path, &final_path) {
+                        error!(?e, "Could not rename textdump to final path");
+                    }
+                    info!(?final_path, "Textdump written.");
+                }
+            })
+            .map_err(|e| {
+                error!(?e, "Could not start textdump thread");
+                SchedulerError::CouldNotStartTask
+            })?;
+
+        // Wait for the textdump thread to complete
+        if let Err(e) = join_handle.join() {
+            error!(?e, "Textdump thread panicked");
+            return Err(SchedulerError::CouldNotStartTask);
+        }
+
+        Ok(())
+    }
+
     fn process_fork_request(
         &mut self,
         fork_request: Box<Fork>,

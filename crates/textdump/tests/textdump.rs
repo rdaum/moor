@@ -63,16 +63,15 @@ mod test {
     }
 
     fn write_textdump(db: Arc<TxDB>, version: &str) -> String {
-        let tx = db.clone().loader_client().unwrap();
         let mut output = Vec::new();
-        let textdump = make_textdump(tx.as_ref(), version.to_string());
+        let snapshot = db.create_snapshot().unwrap();
+        let textdump = make_textdump(snapshot.as_ref(), version.to_string());
 
         let mut writer = TextdumpWriter::new(&mut output, EncodingMode::UTF8);
         writer
             .write_textdump(&textdump)
             .expect("Failed to write textdump");
 
-        assert_eq!(tx.commit().unwrap(), CommitResult::Success);
         String::from_utf8(output).expect("Failed to convert output to string")
     }
 
@@ -317,8 +316,8 @@ mod test {
 
         // Now go through the properties and verbs of all the objects on db1, and verify that
         // they're the same on db2.
-        let tx1 = db1.loader_client().unwrap();
-        let tx2 = db2.loader_client().unwrap();
+        let tx1 = db1.create_snapshot().unwrap();
+        let tx2 = db2.create_snapshot().unwrap();
         let objects1 = tx1.get_objects().unwrap();
         let objects2 = tx2.get_objects().unwrap();
         let objects1 = objects1.iter().collect::<BTreeSet<_>>();

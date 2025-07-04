@@ -326,11 +326,19 @@ mod tests {
         parser.define_properties().unwrap();
         parser.set_properties().unwrap();
 
-        let o = loader.get_object(&Obj::mk_id(1)).unwrap();
-        assert_eq!(o.owner().unwrap(), SYSTEM_OBJECT);
-        assert_eq!(o.name().unwrap(), "Test Object");
-        assert_eq!(o.parent(), None);
-        assert_eq!(o.location(), None);
+        loader.commit().unwrap();
+
+        // Verify the object was created using a new transaction
+        let tx = db.new_world_state().unwrap();
+        let owner = tx.owner_of(&Obj::mk_id(1)).unwrap();
+        let name = tx.name_of(&SYSTEM_OBJECT, &Obj::mk_id(1)).unwrap();
+        let parent = tx.parent_of(&SYSTEM_OBJECT, &Obj::mk_id(1)).unwrap();
+        let location = tx.location_of(&SYSTEM_OBJECT, &Obj::mk_id(1)).unwrap();
+
+        assert_eq!(owner, SYSTEM_OBJECT);
+        assert_eq!(name, "Test Object");
+        assert_eq!(parent, NOTHING);
+        assert_eq!(location, NOTHING);
     }
 
     #[test]

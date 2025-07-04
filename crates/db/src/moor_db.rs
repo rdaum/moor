@@ -38,6 +38,7 @@ use tempfile::TempDir;
 use tracing::{error, warn};
 
 use crate::relation_defs::define_relations;
+use crate::snapshot_loader::SnapshotLoader;
 use crate::utils::CachePadded;
 
 define_relations! {
@@ -100,6 +101,125 @@ pub struct MoorDB {
 }
 
 impl MoorDB {
+    /// Create a snapshot-based SnapshotInterface for consistent read-only access
+    pub fn create_snapshot(
+        &self,
+    ) -> Result<Box<dyn moor_common::model::loader::SnapshotInterface>, crate::tx_management::Error>
+    {
+        // Create a barrier sequence number and wait for all writes up to this point to complete
+        // This ensures the snapshot captures all committed data at a specific barrier point
+        let barrier_seq = self
+            .monotonic
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if let Err(e) = self
+            .relations
+            .wait_for_write_barrier(barrier_seq, std::time::Duration::from_secs(10))
+        {
+            warn!(
+                "Timeout waiting for write barrier {} before snapshot: {}",
+                barrier_seq, e
+            );
+            // Continue anyway - the snapshot might be slightly inconsistent but we don't want to fail completely
+        }
+
+        // Get a consistent instant from the keyspace
+        let instant = self.keyspace.instant();
+
+        // Create snapshots of each relation partition
+        let object_location_snapshot = self
+            .relations
+            .object_location
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_contents_snapshot = self
+            .relations
+            .object_contents
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_flags_snapshot = self
+            .relations
+            .object_flags
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_parent_snapshot = self
+            .relations
+            .object_parent
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_children_snapshot = self
+            .relations
+            .object_children
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_owner_snapshot = self
+            .relations
+            .object_owner
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_name_snapshot = self
+            .relations
+            .object_name
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_verbdefs_snapshot = self
+            .relations
+            .object_verbdefs
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_verbs_snapshot = self
+            .relations
+            .object_verbs
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_propdefs_snapshot = self
+            .relations
+            .object_propdefs
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_propvalues_snapshot = self
+            .relations
+            .object_propvalues
+            .source()
+            .partition()
+            .snapshot_at(instant);
+        let object_propflags_snapshot = self
+            .relations
+            .object_propflags
+            .source()
+            .partition()
+            .snapshot_at(instant);
+
+        // Create snapshot of sequences partition
+        let sequences_snapshot = self.sequences_partition.snapshot_at(instant);
+
+        // Return a custom SnapshotInterface implementation that uses these snapshots
+        Ok(Box::new(SnapshotLoader {
+            object_location_snapshot,
+            object_contents_snapshot,
+            object_flags_snapshot,
+            object_parent_snapshot,
+            object_children_snapshot,
+            object_owner_snapshot,
+            object_name_snapshot,
+            object_verbdefs_snapshot,
+            object_verbs_snapshot,
+            object_propdefs_snapshot,
+            object_propvalues_snapshot,
+            object_propflags_snapshot,
+            sequences_snapshot,
+        }))
+    }
+
     pub(crate) fn start_transaction(&self) -> WorldStateTransaction {
         let tx = Tx {
             ts: Timestamp(
@@ -304,6 +424,7 @@ impl MoorDB {
                         // This will hold up new transactions starting, unfortunately.
                         // TODO: this is the major source of low throughput in benchmarking
                         checkers.commit_all(&this.relations);
+
                         // No need to block the caller while we're doing the final write to disk.
                         reply.send(CommitResult::Success).ok();
 

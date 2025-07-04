@@ -38,8 +38,8 @@ use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
 use moor_db::db_counters;
 use moor_var::VarType::TYPE_STR;
 use moor_var::{
-    E_ARGS, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Symbol, v_arc_string, v_bool_int,
-    v_list_iter,
+    E_ARGS, E_INTRPT, E_INVARG, E_INVIND, E_PERM, E_QUOTA, E_TYPE, Error, Symbol, v_arc_string,
+    v_bool_int, v_list_iter,
 };
 use moor_var::{Sequence, v_map};
 use moor_var::{Var, v_float, v_int, v_list, v_obj, v_str, v_string};
@@ -1441,7 +1441,26 @@ fn bf_dump_database(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
         .check_wizard()
         .map_err(world_state_bf_err)?;
 
-    bf_args.task_scheduler_client.checkpoint();
+    if bf_args.args.len() > 1 {
+        return Err(ErrValue(
+            E_ARGS.msg("dump_database() requires 0 or 1 arguments"),
+        ));
+    }
+
+    let blocking = if bf_args.args.len() == 1 {
+        bf_args.args[0].is_true()
+    } else {
+        false
+    };
+
+    if let Err(e) = bf_args
+        .task_scheduler_client
+        .checkpoint_with_blocking(blocking)
+    {
+        return Err(ErrValue(
+            E_INTRPT.with_msg(|| format!("dump_database() checkpoint failed: {e:?}")),
+        ));
+    }
 
     Ok(Ret(bf_args.v_bool(true)))
 }

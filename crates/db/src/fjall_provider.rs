@@ -30,6 +30,8 @@ enum WriteOp<
 > {
     Insert(Timestamp, Domain, Codomain),
     Delete(Domain),
+    /// Barrier marker for snapshot consistency - reply when all writes up to this sequence are complete
+    Barrier(u64, oneshot::Sender<()>),
 }
 
 /// Tracks operations that have been submitted to the background thread but not yet completed
@@ -42,6 +44,8 @@ where
     pending_deletes: HashSet<Domain>,
     /// Keys that have been written but write hasn't flushed to backing store yet  
     pending_writes: HashMap<Domain, (Timestamp, Codomain)>,
+    /// Highest barrier sequence that has been processed
+    completed_barrier: u64,
 }
 
 impl<Domain, Codomain> Default for PendingOperations<Domain, Codomain>
@@ -53,6 +57,7 @@ where
         Self {
             pending_deletes: HashSet::new(),
             pending_writes: HashMap::new(),
+            completed_barrier: 0,
         }
     }
 }
@@ -170,6 +175,14 @@ where
                                 error!("failed to delete from database: {}", e);
                             }
                         }
+                        Ok(WriteOp::Barrier(seq, reply)) => {
+                            // Mark this barrier as completed and reply
+                            if let Ok(mut pending) = pending_ops_bg.write() {
+                                pending.completed_barrier = seq;
+                            }
+                            // Reply to indicate barrier is processed
+                            reply.send(()).ok();
+                        }
                         Err(_e) => {
                             continue;
                         }
@@ -183,6 +196,35 @@ where
             kill_switch,
             pending_ops,
             jh: Arc::new(Mutex::new(Some(jh))),
+        }
+    }
+
+    pub fn partition(&self) -> &fjall::PartitionHandle {
+        &self.fjall_partition
+    }
+
+    /// Wait for all writes up to the specified barrier sequence to be completed.
+    /// This ensures that all pending writes submitted before this barrier are flushed
+    /// to the backing store, providing a consistent point for snapshots.
+    pub fn wait_for_write_barrier(&self, barrier_seq: u64, timeout: Duration) -> Result<(), Error> {
+        let (send, recv) = oneshot::channel();
+
+        // Send barrier message to background thread
+        if let Err(e) = self.ops.send(WriteOp::Barrier(barrier_seq, send)) {
+            return Err(Error::StorageFailure(format!(
+                "failed to send barrier message: {e}"
+            )));
+        }
+
+        // Wait for the barrier to be processed
+        match recv.recv_timeout(timeout) {
+            Ok(()) => Ok(()),
+            Err(oneshot::RecvTimeoutError::Timeout) => Err(Error::StorageFailure(format!(
+                "Timeout waiting for write barrier {barrier_seq}"
+            ))),
+            Err(oneshot::RecvTimeoutError::Disconnected) => Err(Error::StorageFailure(
+                "Background thread disconnected while waiting for barrier".to_string(),
+            )),
         }
     }
 }

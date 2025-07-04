@@ -255,7 +255,7 @@ fn main() -> Result<(), eyre::Report> {
 
     // Dump phase.
     if let Some(textdump_path) = args.out_textdump {
-        let Ok(loader_interface) = database.loader_client() else {
+        let Ok(loader_interface) = database.create_snapshot() else {
             error!(
                 "Unable to open temporary database at {}",
                 db_dir.path().display()
@@ -293,7 +293,7 @@ fn main() -> Result<(), eyre::Report> {
     }
 
     if let Some(dirdump_path) = args.out_objdef_dir {
-        let Ok(loader_interface) = database.loader_client() else {
+        let Ok(loader_interface) = database.create_snapshot() else {
             error!(
                 "Unable to open temporary database at {}",
                 db_dir.path().display()

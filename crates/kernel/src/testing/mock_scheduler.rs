@@ -478,7 +478,7 @@ impl MockScheduler {
                 reply.send(Ok(responses)).ok();
             }
 
-            SchedulerClientMsg::Checkpoint(reply) => {
+            SchedulerClientMsg::Checkpoint(_, reply) => {
                 reply.send(Ok(())).ok();
             }
 

@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use moor_common::model::loader::LoaderInterface;
+use moor_common::model::loader::SnapshotInterface;
 use moor_common::model::{
     HasUuid, Named, ObjFlag, PrepSpec, PropFlag, ValSet, prop_flags_string, verb_perms_string,
 };
@@ -26,7 +26,7 @@ use std::io::Write;
 use std::path::Path;
 use tracing::info;
 
-pub fn collect_object_definitions(loader: &dyn LoaderInterface) -> Vec<ObjectDefinition> {
+pub fn collect_object_definitions(loader: &dyn SnapshotInterface) -> Vec<ObjectDefinition> {
     let mut object_defs = vec![];
 
     // Find all the ids
@@ -514,8 +514,8 @@ mod tests {
             assert_eq!(loader_client.commit().unwrap(), CommitResult::Success);
 
             // Make a tmpdir & dump objdefs into it
-            let loader_client = db.clone().loader_client().unwrap();
-            let object_defs = collect_object_definitions(loader_client.as_ref());
+            let snapshot = db.clone().create_snapshot().unwrap();
+            let object_defs = collect_object_definitions(snapshot.as_ref());
             dump_object_definitions(&object_defs, tmpdir_path);
         }
 

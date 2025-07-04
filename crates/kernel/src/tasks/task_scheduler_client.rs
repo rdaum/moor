@@ -19,7 +19,9 @@ use crate::tasks::task::Task;
 use crate::tasks::{TaskDescription, TaskStart};
 use crate::vm::{Fork, TaskSuspend};
 use moor_common::model::Perms;
-use moor_common::tasks::{AbortLimitReason, CommandError, Exception, NarrativeEvent, TaskId};
+use moor_common::tasks::{
+    AbortLimitReason, CommandError, Exception, NarrativeEvent, SchedulerError, TaskId,
+};
 use moor_var::Symbol;
 use moor_var::Var;
 use moor_var::{Error, Obj};
@@ -191,8 +193,29 @@ impl TaskSchedulerClient {
     /// Request that the scheduler write a textdump checkpoint.
     pub fn checkpoint(&self) {
         self.scheduler_sender
-            .send((self.task_id, TaskControlMsg::Checkpoint))
+            .send((self.task_id, TaskControlMsg::Checkpoint(None)))
             .expect("Could not deliver client message -- scheduler shut down?");
+    }
+
+    /// Request that the scheduler write a textdump checkpoint with optional blocking.
+    /// If `blocking` is true, waits for textdump generation to complete.
+    /// Returns an error if the checkpoint fails or times out.
+    pub fn checkpoint_with_blocking(&self, blocking: bool) -> Result<(), SchedulerError> {
+        if blocking {
+            let (reply, receive) = oneshot::channel();
+            self.scheduler_sender
+                .send((self.task_id, TaskControlMsg::Checkpoint(Some(reply))))
+                .expect("Could not deliver client message -- scheduler shut down?");
+
+            receive
+                .recv_timeout(Duration::from_secs(600)) // 10 minutes for large textdumps
+                .map_err(|_| SchedulerError::SchedulerNotResponding)?
+        } else {
+            self.scheduler_sender
+                .send((self.task_id, TaskControlMsg::Checkpoint(None)))
+                .expect("Could not deliver client message -- scheduler shut down?");
+            Ok(())
+        }
     }
 
     /// Ask the scheduler to dispatch a session notification to a player.
@@ -339,7 +362,9 @@ pub enum TaskControlMsg {
         player: Obj,
     },
     /// Task is requesting that a textdump checkpoint happen, to the configured file.
-    Checkpoint,
+    /// If reply channel is provided, waits for textdump generation to complete (blocking).
+    /// If None, returns immediately after initiating checkpoint (non-blocking).
+    Checkpoint(Option<oneshot::Sender<Result<(), SchedulerError>>>),
     Notify {
         player: Obj,
         event: Box<NarrativeEvent>,

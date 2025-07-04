@@ -26,53 +26,8 @@ use moor_var::Var;
 use moor_var::program::ProgramType;
 use moor_var::{Obj, Symbol};
 
-/// Interface exposed to be used by the textdump/objdef loader. Overlap of functionality with what
-/// WorldState could provide, but potentially different constraints/semantics (e.g. no perms checks)
-pub trait LoaderInterface: Send {
-    /// For reading textdumps...
-    fn create_object(
-        &mut self,
-        objid: Option<Obj>,
-        attrs: &ObjAttrs,
-    ) -> Result<Obj, WorldStateError>;
-    fn set_object_parent(&mut self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError>;
-
-    fn set_object_location(&mut self, o: &Obj, location: &Obj) -> Result<(), WorldStateError>;
-    fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError>;
-
-    fn add_verb(
-        &mut self,
-        obj: &Obj,
-        names: &[Symbol],
-        owner: &Obj,
-        flags: BitEnum<VerbFlag>,
-        args: VerbArgsSpec,
-        program: ProgramType,
-    ) -> Result<(), WorldStateError>;
-
-    fn define_property(
-        &mut self,
-        definer: &Obj,
-        objid: &Obj,
-        propname: Symbol,
-        owner: &Obj,
-        flags: BitEnum<PropFlag>,
-        value: Option<Var>,
-    ) -> Result<(), WorldStateError>;
-
-    fn set_property(
-        &mut self,
-        objid: &Obj,
-        propname: Symbol,
-        owner: Option<Obj>,
-        flags: Option<BitEnum<PropFlag>>,
-        value: Option<Var>,
-    ) -> Result<(), WorldStateError>;
-
-    fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
-
-    // For writing textdumps...
-
+/// Interface for read-only access to database snapshots for exporting/dumping
+pub trait SnapshotInterface: Send {
     /// Get the list of all active objects in the database
     fn get_objects(&self) -> Result<ObjSet, WorldStateError>;
 
@@ -104,4 +59,60 @@ pub trait LoaderInterface: Send {
         &self,
         objid: &Obj,
     ) -> Result<Vec<(PropDef, (Option<Var>, PropPerms))>, WorldStateError>;
+}
+
+/// Interface exposed to be used by the textdump/objdef loader for loading data into the database.
+/// Overlap of functionality with what WorldState could provide, but potentially different
+/// constraints/semantics (e.g. no perms checks)
+pub trait LoaderInterface: Send {
+    /// Create a new object with the given attributes
+    fn create_object(
+        &mut self,
+        objid: Option<Obj>,
+        attrs: &ObjAttrs,
+    ) -> Result<Obj, WorldStateError>;
+
+    /// Set the parent of an object
+    fn set_object_parent(&mut self, obj: &Obj, parent: &Obj) -> Result<(), WorldStateError>;
+
+    /// Set the location of an object
+    fn set_object_location(&mut self, o: &Obj, location: &Obj) -> Result<(), WorldStateError>;
+
+    /// Set the owner of an object
+    fn set_object_owner(&mut self, obj: &Obj, owner: &Obj) -> Result<(), WorldStateError>;
+
+    /// Add a verb to an object
+    fn add_verb(
+        &mut self,
+        obj: &Obj,
+        names: &[Symbol],
+        owner: &Obj,
+        flags: BitEnum<VerbFlag>,
+        args: VerbArgsSpec,
+        program: ProgramType,
+    ) -> Result<(), WorldStateError>;
+
+    /// Define a property on an object
+    fn define_property(
+        &mut self,
+        definer: &Obj,
+        objid: &Obj,
+        propname: Symbol,
+        owner: &Obj,
+        flags: BitEnum<PropFlag>,
+        value: Option<Var>,
+    ) -> Result<(), WorldStateError>;
+
+    /// Set property attributes and value
+    fn set_property(
+        &mut self,
+        objid: &Obj,
+        propname: Symbol,
+        owner: Option<Obj>,
+        flags: Option<BitEnum<PropFlag>>,
+        value: Option<Var>,
+    ) -> Result<(), WorldStateError>;
+
+    /// Commit all changes made through this loader
+    fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError>;
 }

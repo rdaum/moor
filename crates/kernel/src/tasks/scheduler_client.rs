@@ -251,13 +251,36 @@ impl SchedulerClient {
     }
 
     pub fn request_checkpoint(&self) -> Result<(), SchedulerError> {
+        self.request_checkpoint_with_blocking(false)
+    }
+
+    /// Request a checkpoint and wait for the textdump generation to complete.
+    ///
+    /// This method blocks until the background textdump thread finishes, providing
+    /// confirmation that the checkpoint has actually been written to disk.
+    /// Uses a longer timeout (10 minutes) to accommodate large database exports.
+    pub fn request_checkpoint_blocking(&self) -> Result<(), SchedulerError> {
+        self.request_checkpoint_with_blocking(true)
+    }
+
+    /// Request a checkpoint with optional blocking behavior.
+    ///
+    /// If `blocking` is true, waits for the textdump generation to complete.
+    /// If false, returns immediately after initiating the checkpoint.
+    pub fn request_checkpoint_with_blocking(&self, blocking: bool) -> Result<(), SchedulerError> {
         let (reply, receive) = oneshot::channel();
         self.scheduler_sender
-            .send(SchedulerClientMsg::Checkpoint(reply))
+            .send(SchedulerClientMsg::Checkpoint(blocking, reply))
             .map_err(|_| SchedulerError::SchedulerNotResponding)?;
 
+        let timeout = if blocking {
+            Duration::from_secs(600) // 10 minutes for large textdumps
+        } else {
+            Duration::from_secs(5)
+        };
+
         receive
-            .recv_timeout(Duration::from_secs(5))
+            .recv_timeout(timeout)
             .map_err(|_| SchedulerError::SchedulerNotResponding)?
     }
 
@@ -475,7 +498,8 @@ pub enum SchedulerClientMsg {
         reply: oneshot::Sender<Result<TaskHandle, SchedulerError>>,
     },
     /// Submit a request to checkpoint the database.
-    Checkpoint(oneshot::Sender<Result<(), SchedulerError>>),
+    /// If the boolean is true, waits for textdump generation to complete.
+    Checkpoint(bool, oneshot::Sender<Result<(), SchedulerError>>),
     /// Submit a (non-task specific) request to shutdown the scheduler
     Shutdown(String, oneshot::Sender<Result<(), SchedulerError>>),
     /// Check if the scheduler is alive and responding (lightweight operation)

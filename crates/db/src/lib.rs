@@ -22,7 +22,7 @@ use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use moor_common::model::loader::LoaderInterface;
+use moor_common::model::loader::{LoaderInterface, SnapshotInterface};
 
 mod db_loader_client;
 pub mod db_worldstate;
@@ -39,6 +39,7 @@ use crate::moor_db::{Caches, MoorDB, WorkingSets};
 pub use config::{DatabaseConfig, TableConfig};
 mod config;
 mod prop_cache;
+mod snapshot_loader;
 mod tx_management;
 mod utils;
 mod verb_cache;
@@ -49,6 +50,7 @@ pub use tx_management::{Error, Relation, RelationTransaction, Timestamp, Tx, Wor
 
 pub trait Database: Send + WorldStateSource {
     fn loader_client(&self) -> Result<Box<dyn LoaderInterface>, WorldStateError>;
+    fn create_snapshot(&self) -> Result<Box<dyn SnapshotInterface>, WorldStateError>;
 }
 
 #[derive(Clone)]
@@ -81,6 +83,12 @@ impl Database for TxDB {
         let tx = self.storage.start_transaction();
         let tx = DbWorldState { tx };
         Ok(Box::new(tx))
+    }
+
+    fn create_snapshot(&self) -> Result<Box<dyn SnapshotInterface>, WorldStateError> {
+        self.storage
+            .create_snapshot()
+            .map_err(|e| WorldStateError::DatabaseError(e.to_string()))
     }
 }
 

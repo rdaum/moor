@@ -20,7 +20,7 @@ use moor_common::model::PropFlag;
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbDefs;
 use moor_common::model::VerbFlag;
-use moor_common::model::loader::LoaderInterface;
+use moor_common::model::loader::{LoaderInterface, SnapshotInterface};
 use moor_common::model::{CommitResult, WorldStateError};
 use moor_common::model::{HasUuid, PropPerms, ValSet};
 use moor_common::model::{PropDef, PropDefs};
@@ -30,7 +30,7 @@ use moor_var::Symbol;
 use moor_var::Var;
 use moor_var::program::ProgramType;
 
-/// A loader client which uses a database transaction to load the world state.
+/// Implementation of LoaderInterface for write operations during loading
 impl LoaderInterface for DbWorldState {
     fn create_object(
         &mut self,
@@ -101,7 +101,10 @@ impl LoaderInterface for DbWorldState {
     fn commit(self: Box<Self>) -> Result<CommitResult, WorldStateError> {
         self.tx.commit()
     }
+}
 
+/// Implementation of SnapshotInterface for read operations during exporting
+impl SnapshotInterface for DbWorldState {
     fn get_objects(&self) -> Result<ObjSet, WorldStateError> {
         self.get_tx().get_objects()
     }

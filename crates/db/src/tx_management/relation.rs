@@ -69,6 +69,10 @@ where
     pub fn write_lock(&self) -> RwLockWriteGuard<Box<dyn RelationIndex<Domain, Codomain>>> {
         self.index.write().unwrap()
     }
+
+    pub fn source(&self) -> &Arc<Source> {
+        &self.source
+    }
 }
 
 /// Holds a lock on the cache while a transaction commit is in progress.

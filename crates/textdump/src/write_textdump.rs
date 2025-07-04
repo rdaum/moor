@@ -18,7 +18,7 @@ use crate::{
     VF_IOBJSHIFT, Verb, Verbdef,
 };
 use moor_common::model::VerbFlag;
-use moor_common::model::loader::LoaderInterface;
+use moor_common::model::loader::SnapshotInterface;
 use moor_common::model::{ArgSpec, PrepSpec, ValSet, VerbArgsSpec};
 use moor_common::model::{HasUuid, Named};
 use moor_common::util::BitEnum;
@@ -51,7 +51,7 @@ fn cv_arg(flags: BitEnum<VerbFlag>, arg: VerbArgsSpec) -> (u16, i16) {
 
 /// Take a transaction, and scan the relations and build a Textdump representing a snapshot of the world as it
 /// exists in the transaction.
-pub fn make_textdump(tx: &dyn LoaderInterface, version: String) -> Textdump {
+pub fn make_textdump(tx: &dyn SnapshotInterface, version: String) -> Textdump {
     // To create the objects list, we need to scan all objects.
     // For now, the expectation would be we can simply iterate from 0 to max object, checking validity of each
     // object, and then adding it to the list.
