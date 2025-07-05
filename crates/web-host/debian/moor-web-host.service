@@ -4,7 +4,7 @@ AssertPathExists=/usr/bin/moor-web-host
 [Service]
 Environment="RUST_BACKTRACE=full"
 ExecStart=/usr/bin/moor-web-host --private-key=/var/lib/moor/moor-signing-key.pem --public-key=/var/lib/moor/moor-verifying-key.pem --config-file /etc/moor/web-host.yaml
-WorkingDirectory=/var/spool/moor-web-host
+WorkingDirectory=/var/lib/moor
 Restart=always
 PrivateTmp=false
 NoNewPrivileges=true

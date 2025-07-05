@@ -18,7 +18,6 @@
  * including object reference handling, remote method invocation, and
  * data transformation between JSON and MOO formats.
  */
-import { context } from "./moor";
 import { matchRef, ObjectRef, oidRef, ORefKind, sysobjRef } from "./var";
 
 /**
@@ -97,7 +96,8 @@ function transformEval(json: any): any {
     // Convert object references to MoorRemoteObject instances
     if (json["oid"] != null) {
         const oref = oidRef(json["oid"]);
-        return new MoorRemoteObject(oref, context.authToken);
+        // Note: authToken will need to be passed separately when using this function
+        return new MoorRemoteObject(oref, "");
     } // Process arrays recursively
     else if (Array.isArray(json)) {
         return json.map(item => transformEval(item));
@@ -236,7 +236,7 @@ export class MoorRemoteObject {
             }
         } catch (err) {
             console.error("Exception during verb compilation:", err);
-            return { "error": `Exception during compilation: ${err.message}` };
+            return { "error": `Exception during compilation: ${err instanceof Error ? err.message : String(err)}` };
         }
     }
 
@@ -374,7 +374,7 @@ export async function performEval(authToken: string, expr: string): Promise<any>
         }
     } catch (err) {
         console.error("Exception during expression evaluation:", err);
-        throw new Error(`Exception during evaluation: ${err.message}`);
+        throw new Error(`Exception during evaluation: ${err instanceof Error ? err.message : String(err)}`);
     }
 }
 
@@ -388,7 +388,7 @@ export async function performEval(authToken: string, expr: string): Promise<any>
  */
 export async function retrieveWelcome(): Promise<string> {
     try {
-        const response = await fetch("/welcome");
+        const response = await fetch("/system_property/login/welcome_message");
 
         if (response.ok) {
             const welcomeText = await response.json() as string[];
@@ -397,13 +397,11 @@ export async function retrieveWelcome(): Promise<string> {
         } else {
             const errorMsg = `Failed to retrieve welcome text: ${response.status} ${response.statusText}`;
             console.error(errorMsg);
-            context.systemMessage.show("Failed to retrieve welcome text!", 3);
             return "";
         }
     } catch (err) {
-        const errorMsg = `Exception retrieving welcome text: ${err.message}`;
+        const errorMsg = `Exception retrieving welcome text: ${err instanceof Error ? err.message : String(err)}`;
         console.error(errorMsg);
-        context.systemMessage.show("Failed to retrieve welcome text!", 3);
         return "";
     }
 }

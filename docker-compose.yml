@@ -18,12 +18,16 @@ networks:
   # of how to use the system over a network if we were in a real distributed system.
   moor_net:
 
+
 services:
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
     build:
       context: .
+      target: backend
       network: host
+      args:
+        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-daemon"
     environment:
       - RUST_BACKTRACE=1
@@ -54,7 +58,10 @@ services:
   moor-telnet-host:
     build:
       context: .
+      target: backend
       network: host
+      args:
+        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-telnet-host"
     environment:
       - RUST_BACKTRACE=1
@@ -70,24 +77,41 @@ services:
     networks:
       - moor_net
 
-  # A web server that serves the client files and handles incoming websocket connections.
+  # Frontend web server that serves static files and proxies API calls
+  moor-frontend:
+    build:
+      context: .
+      target: frontend
+      network: host
+    container_name: "moor-frontend"
+    depends_on:
+      - moor-web-host
+    ports:
+      # Main web interface
+      - "8080:80"
+    networks:
+      - moor_net
+
+  # API server that handles websocket connections and REST endpoints
   moor-web-host:
     build:
       context: .
+      target: backend
       network: host
+      args:
+        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-web-host"
     environment:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
       ./moor-web-host 
-        --listen-address=0.0.0.0:8080 
+        --listen-address=0.0.0.0:8081
         --rpc-address=tcp://moor-daemon:7899 
-        --events-address=tcp://moor-daemon:7898 
-        --client-sources=./client
+        --events-address=tcp://moor-daemon:7898
     ports:
-      # HTTP listener
-      - "8080:8080"
+      # API listener (internal)
+      - "8081:8081"
     networks:
       - moor_net
 
@@ -96,7 +120,10 @@ services:
   moor-curl-worker:
     build:
       context: .
+      target: backend
       network: host
+      args:
+        BUILD_PROFILE: ${BUILD_PROFILE:-debug}
     container_name: "moor-curl-worker"
     environment:
       - RUST_BACKTRACE=1
