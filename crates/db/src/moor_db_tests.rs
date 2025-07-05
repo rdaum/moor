@@ -2132,8 +2132,6 @@ mod tests {
             .set_object_name(&n, "n".to_string())
             .unwrap();
 
-        println!("=== BEFORE RECYCLE ===");
-
         // Verify parent relationships before recycle
         assert_eq!(
             ws.parent_of(&SYSTEM_OBJECT, &e).unwrap(),
@@ -2222,20 +2220,7 @@ mod tests {
             "n.contents should be empty"
         );
 
-        println!(
-            "Contents of b before recycle: {:?}",
-            ws.contents_of(&SYSTEM_OBJECT, &b).unwrap()
-        );
-        println!(
-            "Children of b before recycle: {:?}",
-            ws.children_of(&SYSTEM_OBJECT, &b).unwrap()
-        );
-
-        // THE CRITICAL OPERATION: recycle b
-        println!("=== RECYCLING b ===");
         ws.recycle_object(&SYSTEM_OBJECT, &b).unwrap();
-
-        println!("=== AFTER RECYCLE ===");
 
         // After recycle, according to test_recycle.moot expectations:
 
@@ -2306,8 +2291,6 @@ mod tests {
             ObjSet::empty(),
             "n.contents should still be empty"
         );
-
-        println!("Test completed successfully!");
     }
 
     /// Test recycle with separate transactions (closer to .moot test behavior)
@@ -2377,11 +2360,8 @@ mod tests {
                 tx: db.start_transaction(),
             };
 
-            println!("=== VERIFICATION TRANSACTION ===");
             let b_contents = ws.contents_of(&SYSTEM_OBJECT, &b).unwrap();
             let b_children = ws.children_of(&SYSTEM_OBJECT, &b).unwrap();
-            println!("Contents of b: {b_contents:?}");
-            println!("Children of b: {b_children:?}");
 
             assert_eq!(
                 ws.parent_of(&SYSTEM_OBJECT, &m).unwrap(),
@@ -2421,14 +2401,9 @@ mod tests {
                 tx: db.start_transaction(),
             };
 
-            println!("=== RECYCLE TRANSACTION ===");
-            println!("About to recycle b={b:?}");
-
             // Log what we see before recycle
             let b_contents_before = ws.contents_of(&SYSTEM_OBJECT, &b).unwrap();
             let b_children_before = ws.children_of(&SYSTEM_OBJECT, &b).unwrap();
-            println!("Contents of b before recycle: {b_contents_before:?}");
-            println!("Children of b before recycle: {b_children_before:?}");
 
             ws.recycle_object(&SYSTEM_OBJECT, &b).unwrap();
 
@@ -2464,7 +2439,6 @@ mod tests {
                 tx: db.start_transaction(),
             };
 
-            println!("=== FINAL VERIFICATION ===");
             assert_eq!(
                 ws.parent_of(&SYSTEM_OBJECT, &m).unwrap(),
                 e,
@@ -2496,8 +2470,6 @@ mod tests {
                 "e.contents should be empty after commit"
             );
         }
-
-        println!("Multi-transaction test completed successfully!");
     }
 
     /// Test secondary index persistence across committed transactions
@@ -2541,8 +2513,6 @@ mod tests {
                 tx: db.start_transaction(),
             };
 
-            println!("=== FRESH TRANSACTION - TESTING SECONDARY INDEXES ===");
-
             // These calls should use secondary indexes on object_location and object_parent
             let e_contents = ws.contents_of(&SYSTEM_OBJECT, &e).unwrap();
             let b_contents = ws.contents_of(&SYSTEM_OBJECT, &b).unwrap();
@@ -2578,8 +2548,6 @@ mod tests {
             let mut ws = DbWorldState {
                 tx: db.start_transaction(),
             };
-
-            println!("=== FRESH TRANSACTION - RECYCLING ===");
 
             // Log what we see before recycle (this should use secondary indexes)
             let b_contents_before = ws.contents_of(&SYSTEM_OBJECT, &b).unwrap();
