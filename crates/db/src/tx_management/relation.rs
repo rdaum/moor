@@ -66,6 +66,18 @@ where
         }
     }
 
+    pub fn new_with_secondary(relation_name: Symbol, provider: Arc<Source>) -> Self
+    where
+        Codomain: Hash + Eq,
+    {
+        use crate::tx_management::indexes::SecondaryIndexRelation;
+        Self {
+            relation_name,
+            index: Arc::new(RwLock::new(Box::new(SecondaryIndexRelation::new()))),
+            source: provider,
+        }
+    }
+
     pub fn write_lock(&self) -> RwLockWriteGuard<Box<dyn RelationIndex<Domain, Codomain>>> {
         self.index.write().unwrap()
     }
@@ -79,7 +91,7 @@ where
 /// (Just wraps the lock to avoid leaking the Inner type.)
 pub struct CheckRelation<Domain, Codomain, P>
 where
-    Domain: Clone + Send + Sync + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
     P: Provider<Domain, Codomain>,
 {
@@ -91,7 +103,7 @@ where
 
 impl<Domain, Codomain, P> CheckRelation<Domain, Codomain, P>
 where
-    Domain: Clone + Send + Sync + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
     P: Provider<Domain, Codomain>,
 {
@@ -261,6 +273,11 @@ where
 
         Ok(results)
     }
+
+    fn get_by_codomain(&self, codomain: &Codomain) -> Vec<Domain> {
+        let inner = self.index.read().unwrap();
+        inner.get_by_codomain(codomain)
+    }
 }
 impl<Domain, Codomain, Source> Relation<Domain, Codomain, Source>
 where
@@ -284,7 +301,7 @@ mod tests {
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct TestDomain(u64);
 
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct TestCodomain(u64);
 
     #[derive(Clone)]
@@ -757,5 +774,66 @@ mod tests {
             relation.get(&TestDomain(1)).unwrap().unwrap().1,
             TestCodomain(300)
         );
+    }
+
+    #[test]
+    fn test_secondary_index_transaction_integration() {
+        use crate::tx_management::indexes::SecondaryIndexRelation;
+
+        let backing = HashMap::new();
+        let data = Arc::new(Mutex::new(backing));
+        let provider = Arc::new(TestProvider { data });
+
+        // Create relation with secondary index support
+        let relation = Arc::new(Relation {
+            relation_name: Symbol::mk("test"),
+            index: Arc::new(RwLock::new(Box::new(SecondaryIndexRelation::new()))),
+            source: provider,
+        });
+
+        let domain1 = TestDomain(1);
+        let domain2 = TestDomain(2);
+        let domain3 = TestDomain(3);
+        let codomain_a = TestCodomain(100);
+        let codomain_b = TestCodomain(200);
+
+        let tx = Tx { ts: Timestamp(10) };
+        let mut r_tx = relation.clone().start(&tx);
+
+        // Insert entries
+        r_tx.insert(domain1.clone(), codomain_a.clone()).unwrap();
+        r_tx.insert(domain2.clone(), codomain_a.clone()).unwrap();
+        r_tx.insert(domain3.clone(), codomain_b.clone()).unwrap();
+
+        // Test get_by_codomain through transaction interface
+        let result_a = r_tx.get_by_codomain(&codomain_a);
+        assert_eq!(result_a.len(), 2);
+        assert!(result_a.contains(&domain1));
+        assert!(result_a.contains(&domain2));
+
+        let result_b = r_tx.get_by_codomain(&codomain_b);
+        assert_eq!(result_b.len(), 1);
+        assert!(result_b.contains(&domain3));
+
+        // Commit the transaction
+        let ws = r_tx.working_set().unwrap();
+        let mut cr = relation.begin_check();
+        cr.check(&ws).unwrap();
+        cr.apply(ws).unwrap();
+        let guard = relation.index.write().unwrap();
+        cr.commit(Some(guard));
+
+        // Test that committed secondary index state is visible in new transaction
+        let tx2 = Tx { ts: Timestamp(20) };
+        let r_tx2 = relation.clone().start(&tx2);
+
+        let committed_result_a = r_tx2.get_by_codomain(&codomain_a);
+        assert_eq!(committed_result_a.len(), 2);
+        assert!(committed_result_a.contains(&domain1));
+        assert!(committed_result_a.contains(&domain2));
+
+        let committed_result_b = r_tx2.get_by_codomain(&codomain_b);
+        assert_eq!(committed_result_b.len(), 1);
+        assert!(committed_result_b.contains(&domain3));
     }
 }

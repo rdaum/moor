@@ -30,7 +30,7 @@ pub trait Named {
 
 /// A container for verb or property defs.
 /// Immutable, and can be iterated over in sequence, or searched by name.
-#[derive(Eq, PartialEq, Clone, Encode, Decode)]
+#[derive(Eq, PartialEq, Clone, Hash, Encode, Decode)]
 pub struct Defs<T: AsByteBuffer + Clone + Sized + HasUuid + Named + 'static> {
     contents: Vec<T>,
 }

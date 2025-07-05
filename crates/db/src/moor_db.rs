@@ -25,7 +25,7 @@ use fjall::{Config, PartitionCreateOptions, PartitionHandle, PersistMode};
 use flume::Sender;
 use gdt_cpus::{ThreadPriority, set_thread_priority};
 use minstant::Instant;
-use moor_common::model::{CommitResult, ObjFlag, ObjSet, PropDefs, PropPerms, VerbDefs};
+use moor_common::model::{CommitResult, ObjFlag, PropDefs, PropPerms, VerbDefs};
 use moor_common::util::{BitEnum, PerfTimerGuard};
 use moor_var::program::ProgramType;
 use moor_var::{Obj, Symbol, Var};
@@ -42,18 +42,16 @@ use crate::snapshot_loader::SnapshotLoader;
 use crate::utils::CachePadded;
 
 define_relations! {
-    object_location: Obj => Obj,
-    object_contents: Obj => ObjSet,
-    object_flags: Obj => BitEnum<ObjFlag>,
-    object_parent: Obj => Obj,
-    object_children: Obj => ObjSet,
-    object_owner: Obj => Obj,
-    object_name: Obj => StringHolder,
-    object_verbdefs: Obj => VerbDefs,
-    object_verbs: ObjAndUUIDHolder => ProgramType,
-    object_propdefs: Obj => PropDefs,
-    object_propvalues: ObjAndUUIDHolder => Var,
-    object_propflags: ObjAndUUIDHolder => PropPerms,
+    object_location == Obj, Obj,
+    object_parent == Obj, Obj,
+    object_flags => Obj, BitEnum<ObjFlag>,
+    object_owner => Obj, Obj,
+    object_name => Obj, StringHolder,
+    object_verbdefs => Obj, VerbDefs,
+    object_verbs => ObjAndUUIDHolder, ProgramType,
+    object_propdefs => Obj, PropDefs,
+    object_propvalues => ObjAndUUIDHolder, Var,
+    object_propflags => ObjAndUUIDHolder, PropPerms,
 }
 
 /// Combined cache structure to ensure atomic updates across all caches
@@ -137,12 +135,6 @@ impl MoorDB {
             .source()
             .partition()
             .snapshot_at(instant);
-        let object_contents_snapshot = self
-            .relations
-            .object_contents
-            .source()
-            .partition()
-            .snapshot_at(instant);
         let object_flags_snapshot = self
             .relations
             .object_flags
@@ -152,12 +144,6 @@ impl MoorDB {
         let object_parent_snapshot = self
             .relations
             .object_parent
-            .source()
-            .partition()
-            .snapshot_at(instant);
-        let object_children_snapshot = self
-            .relations
-            .object_children
             .source()
             .partition()
             .snapshot_at(instant);
@@ -210,10 +196,8 @@ impl MoorDB {
         // Return a custom SnapshotInterface implementation that uses these snapshots
         Ok(Box::new(SnapshotLoader {
             object_location_snapshot,
-            object_contents_snapshot,
             object_flags_snapshot,
             object_parent_snapshot,
-            object_children_snapshot,
             object_owner_snapshot,
             object_name_snapshot,
             object_verbdefs_snapshot,

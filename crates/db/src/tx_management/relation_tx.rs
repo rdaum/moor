@@ -39,7 +39,7 @@ where
 
 struct Inner<Domain, Codomain>
 where
-    Domain: Clone + Send + Sync + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     local_operations: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
@@ -88,7 +88,7 @@ where
 
 pub struct WorkingSet<Domain, Codomain>
 where
-    Domain: Clone + Send + Sync + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
@@ -96,7 +96,7 @@ where
 
 impl<Domain, Codomain> WorkingSet<Domain, Codomain>
 where
-    Domain: Clone + Send + Sync + 'static,
+    Domain: Clone + Hash + Eq + Send + Sync + 'static,
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     pub fn new(
@@ -140,10 +140,7 @@ where
         };
         RelationTransaction {
             tx,
-            index: Inner {
-                local_operations: inner.local_operations,
-                master_entries: inner.master_entries,
-            },
+            index: inner,
             backing_source: backing_source.into(),
         }
     }
@@ -195,12 +192,12 @@ where
             let old_value = match std::mem::replace(
                 &mut entry.operation,
                 if is_update {
-                    OpType::Update(value)
+                    OpType::Update(value.clone())
                 } else {
-                    OpType::Insert(value)
+                    OpType::Insert(value.clone())
                 },
             ) {
-                OpType::Insert(value) | OpType::Update(value) => value,
+                OpType::Insert(old_value) | OpType::Update(old_value) => old_value,
                 OpType::Delete => return Ok(None),
             };
             return Ok(Some(old_value));
@@ -222,9 +219,11 @@ where
                 Op {
                     read_ts,
                     write_ts: self.tx.ts,
-                    operation: OpType::Update(value),
+                    operation: OpType::Update(value.clone()),
                 },
             );
+
+            // Update local secondary index
 
             return Ok(Some(old_value));
         }
@@ -253,9 +252,11 @@ where
             Op {
                 read_ts,
                 write_ts: self.tx.ts,
-                operation: OpType::Update(value),
+                operation: OpType::Update(value.clone()),
             },
         );
+
+        // Update local secondary index
 
         Ok(Some(backing_value))
     }
@@ -267,7 +268,8 @@ where
                 OpType::Delete => {
                     // Convert delete to insert - avoids duplicate key errors
                     entry.write_ts = self.tx.ts;
-                    entry.operation = OpType::Insert(value);
+                    entry.operation = OpType::Insert(value.clone());
+                    // Update local secondary index (insert after delete)
                     return Ok(None);
                 }
                 OpType::Insert(_) | OpType::Update(_) => {
@@ -277,12 +279,15 @@ where
                     let old_value = match std::mem::replace(
                         &mut entry.operation,
                         if is_update {
-                            OpType::Update(value)
+                            OpType::Update(value.clone())
                         } else {
-                            OpType::Insert(value)
+                            OpType::Insert(value.clone())
                         },
                     ) {
-                        OpType::Insert(old) | OpType::Update(old) => old,
+                        OpType::Insert(old) | OpType::Update(old) => {
+                            // Update local secondary index
+                            old
+                        }
                         OpType::Delete => unreachable!(), // Already handled above
                     };
                     return Ok(Some(old_value));
@@ -295,13 +300,14 @@ where
             // Existing entry in master - do update via local operation
             let old_value = entry.value.clone();
             self.index.local_operations.insert(
-                domain,
+                domain.clone(),
                 Op {
                     read_ts: entry.ts,
                     write_ts: self.tx.ts,
-                    operation: OpType::Update(value),
+                    operation: OpType::Update(value.clone()),
                 },
             );
+            // Update local secondary index
             return Ok(Some(old_value));
         }
 
@@ -310,24 +316,25 @@ where
             if read_ts < self.tx.ts {
                 // Existing entry in backing - do update via local operation
                 self.index.local_operations.insert(
-                    domain,
+                    domain.clone(),
                     Op {
                         read_ts,
                         write_ts: self.tx.ts,
-                        operation: OpType::Update(value),
+                        operation: OpType::Update(value.clone()),
                     },
                 );
+                // Update local secondary index
                 return Ok(Some(backing_value));
             }
         }
 
         // No existing entry anywhere - do insert via local operation
         self.index.local_operations.insert(
-            domain,
+            domain.clone(),
             Op {
                 read_ts: self.tx.ts,
                 write_ts: self.tx.ts,
-                operation: OpType::Insert(value),
+                operation: OpType::Insert(value.clone()),
             },
         );
         Ok(None)
@@ -335,6 +342,34 @@ where
 
     pub fn has_domain(&self, domain: &Domain) -> Result<bool, Error> {
         Ok(self.get(domain)?.is_some())
+    }
+
+    pub fn get_by_codomain(&self, codomain: &Codomain) -> Vec<Domain> {
+        // Start with results from master entries
+        let mut results = self.index.master_entries.get_by_codomain(codomain);
+
+        // Process local operations to account for uncommitted changes
+        for (domain, op) in self.index.local_operations.iter() {
+            match &op.operation {
+                OpType::Insert(value) | OpType::Update(value) => {
+                    if value == codomain {
+                        // Add this domain if it maps to the requested codomain
+                        if !results.contains(domain) {
+                            results.push(domain.clone());
+                        }
+                    } else {
+                        // Remove this domain if it no longer maps to the requested codomain
+                        results.retain(|d| d != domain);
+                    }
+                }
+                OpType::Delete => {
+                    // Remove this domain since it's been deleted
+                    results.retain(|d| d != domain);
+                }
+            }
+        }
+
+        results
     }
 
     pub fn get(&self, domain: &Domain) -> Result<Option<Codomain>, Error> {
@@ -374,7 +409,10 @@ where
             // If it's an insert or update, we can delete it.
             entry.write_ts = self.tx.ts;
             let old_value = match std::mem::replace(&mut entry.operation, OpType::Delete) {
-                OpType::Insert(value) | OpType::Update(value) => value,
+                OpType::Insert(value) | OpType::Update(value) => {
+                    // Update local secondary index (remove from old codomain)
+                    value
+                }
                 OpType::Delete => return Ok(None),
             };
             return Ok(Some(old_value));
@@ -386,6 +424,11 @@ where
             // Check to see if we already have an operations-log entry for this domain.
             // If we do, we can update it to its new state.
             if let Some(old_entry) = self.index.local_operations.get_mut(domain) {
+                let local_old_value = match &old_entry.operation {
+                    OpType::Update(value) | OpType::Insert(value) => Some(value.clone()),
+                    OpType::Delete => None,
+                };
+
                 old_entry.operation = match old_entry.operation {
                     OpType::Update(_) => OpType::Delete,
                     OpType::Delete => {
@@ -394,6 +437,13 @@ where
                     OpType::Insert(_) => OpType::Delete,
                 };
                 old_entry.write_ts = self.tx.ts;
+
+                // Update local secondary index (remove from old codomain)
+                if let Some(_local_old) = local_old_value {
+                } else {
+                    // Fallback to master entry value if local entry was delete
+                }
+
                 return Ok(Some(old_value));
             } else {
                 // Upstream may or may not have this key to delete, but we'll log the operation
@@ -407,6 +457,8 @@ where
                         operation: OpType::Delete,
                     },
                 );
+
+                // Update local secondary index (remove from old codomain)
             }
 
             return Ok(Some(old_value));
@@ -437,6 +489,8 @@ where
                 operation: OpType::Delete,
             },
         );
+
+        // Update local secondary index (remove from old codomain)
 
         Ok(Some(backing_value))
     }

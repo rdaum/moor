@@ -63,4 +63,5 @@ pub trait Canonical<Domain, Codomain> {
     fn scan<F>(&self, f: &F) -> Result<Vec<(Timestamp, Domain, Codomain)>, Error>
     where
         F: Fn(&Domain, &Codomain) -> bool;
+    fn get_by_codomain(&self, codomain: &Codomain) -> Vec<Domain>;
 }

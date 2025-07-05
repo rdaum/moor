@@ -18,7 +18,7 @@ use moor_var::Obj;
 use moor_var::Symbol;
 use uuid::Uuid;
 
-#[derive(Debug, Eq, PartialEq, Encode, Decode, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Encode, Decode, Clone)]
 pub struct PropDef {
     #[bincode(with_serde)]
     uuid: Uuid,

@@ -28,12 +28,8 @@ use moor_var::{AsByteBuffer, NOTHING, Obj, Var};
 /// A snapshot-based implementation of LoaderInterface for read-only database access
 pub struct SnapshotLoader {
     pub object_location_snapshot: fjall::Snapshot,
-    #[allow(dead_code)]
-    pub object_contents_snapshot: fjall::Snapshot,
     pub object_flags_snapshot: fjall::Snapshot,
     pub object_parent_snapshot: fjall::Snapshot,
-    #[allow(dead_code)]
-    pub object_children_snapshot: fjall::Snapshot,
     pub object_owner_snapshot: fjall::Snapshot,
     pub object_name_snapshot: fjall::Snapshot,
     pub object_verbdefs_snapshot: fjall::Snapshot,

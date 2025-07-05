@@ -25,7 +25,8 @@
 ///
 /// ```rust,ignore
 /// define_relations! {
-///     field_name: DomainType => CodomainType,
+///     field_name => DomainType, CodomainType,      // Normal relation (primary index only)
+///     field_name == DomainType, CodomainType,      // Bidirectional secondary indexed relation
 ///     // ... more relations
 /// }
 /// ```
@@ -60,9 +61,9 @@
 ///
 /// ```rust,ignore
 /// define_relations! {
-///     object_location: Obj => Obj,
-///     object_contents: Obj => ObjSet,
-///     object_flags: Obj => BitEnum<ObjFlag>,
+///     object_location == Obj, Obj,
+///     object_contents => Obj, ObjSet,
+///     object_flags => Obj, BitEnum<ObjFlag>,
 /// }
 /// ```
 ///
@@ -73,16 +74,24 @@
 /// # Type Aliases
 ///
 /// The macro uses `R<Domain, Codomain>` as a type alias for
-/// `Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>`.
+/// `Relation<Domain, Codomain, FjallProvider<Domain, Codomain>`.
 ///
 /// # Dependencies
 ///
 /// The macro requires the `paste` crate for token concatenation to generate
 /// unique variable names for each relation during initialization.
 macro_rules! define_relations {
+    // Entry point: parse all items
     (
-        $( $field:ident: $domain:ty => $codomain:ty ),* $(,)?
+        $( 
+            $field:ident $arrow:tt $domain:ty, $codomain:ty
+        ),* $(,)?
     ) => {
+        define_relations!(@process [ $( ($field, $domain, $codomain, $arrow) ),* ]);
+    };
+    
+    // Main processing rule
+    (@process [ $( ($field:ident, $domain:ty, $codomain:ty, $arrow:tt) ),* ]) => {
         paste::paste! {
             /// Type alias for Relations to reduce verbosity in macro.
             type R<Domain, Codomain> = Relation<Domain, Codomain, FjallProvider<Domain, Codomain>>;
@@ -173,12 +182,12 @@ macro_rules! define_relations {
                         let [<$field _provider>] = FjallProvider::new(stringify!($field), [<$field _partition>]);
 
                         // Create relation with symbolized field name
-                        let [<$field _relation>] = Relation::new(Symbol::mk(stringify!($field)), Arc::new([<$field _provider>]));
+                        let [<$field _relation>] = define_relations!(@create_relation $arrow, $field, [<$field _provider>]);
 
                         // Seed the relation by scanning all existing data
                         [<$field _relation>]
                             .scan(&|_, _| true)
-                            .expect("Failed to seed base relation");
+                            .expect(concat!("Failed to seed ", stringify!($field)));
                     )*
 
                     Relations {
@@ -367,6 +376,18 @@ macro_rules! define_relations {
             /// that has been allocated, used for generating new unique object IDs.
             pub const SEQUENCE_MAX_OBJECT: usize = 0;
         }
+    };
+    
+    // Helper rule to create a relation based on arrow type
+    (@create_relation =>, $field:ident, $provider:ident) => {
+        Relation::new(Symbol::mk(stringify!($field)), Arc::new($provider))
+    };
+    
+    (@create_relation ==, $field:ident, $provider:ident) => {
+        Relation::new_with_secondary(
+            Symbol::mk(stringify!($field)),
+            Arc::new($provider)
+        )
     };
 }
 

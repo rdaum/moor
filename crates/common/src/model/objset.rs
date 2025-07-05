@@ -28,7 +28,7 @@ lazy_static! {
 
 /// When we want to refer to a set of object ids, use this type.
 /// Note that equality is defined as "same bytes" buffer for efficiency reasons.
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct ObjSet(ByteView);
 
 impl Clone for ObjSet {

@@ -42,8 +42,12 @@ $nothing
 {}
 ; return children($b);
 {}
-; return children($c);
-{$b, $a}
+; return length(children($c));
+2
+; return is_member($b, children($c));
+1
+; return is_member($a, children($c));
+1
 
 ; chparent($a, $nothing);
 ; chparent($b, $nothing);

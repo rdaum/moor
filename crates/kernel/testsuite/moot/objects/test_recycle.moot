@@ -49,8 +49,12 @@ $b
 
 ; return children($e);
 {$b}
-; return children($b);
-{$m, $n}
+; return length(children($b));
+2
+; return is_member($m, children($b));
+1
+; return is_member($n, children($b));
+1
 ; return children($m);
 {}
 ; return children($n);
@@ -67,8 +71,12 @@ $b
 
 ; return $e.contents;
 {$b}
-; return $b.contents;
-{$m, $n}
+; return length($b.contents);
+2
+; return is_member($m, $b.contents);
+1
+; return is_member($n, $b.contents);
+1
 ; return $m.contents;
 {}
 ; return $n.contents;
@@ -85,8 +93,12 @@ $e
 ; return parent($n);
 $e
 
-; return children($e);
-{$m, $n}
+; return length(children($e));
+2
+; return is_member($m, children($e));
+1
+; return is_member($n, children($e));
+1
 ; return children($b);
 E_INVARG
 ; return children($m);

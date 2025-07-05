@@ -118,7 +118,7 @@ binary_layout!(prop_perms_buf, LittleEndian, {
     flags: BitEnum<PropFlag> as u16,
 });
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PropPerms(ByteView);
 
 impl PropPerms {

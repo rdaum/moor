@@ -244,33 +244,31 @@ impl WorldStateTransaction {
         // to #-1.  It's up to the caller here to execute :exitfunc on all of them before invoking
         // this method.
 
+        // Get both contents and children BEFORE making any modifications to avoid
+        // secondary index confusion during transaction
         let contents = self.get_object_contents(obj)?;
+        let parent = self.get_object_parent(obj)?;
+        let children = self.get_object_children(obj)?;
+
+        // Move contents to NOTHING
         for c in contents.iter() {
             self.set_object_location(&c, &NOTHING)?;
         }
         self.has_mutations = true;
 
-        // Now reparent all our immediate children to our parent.
-        // This should properly move all properties all the way down the chain.
-        let parent = self.get_object_parent(obj)?;
-        let children = self.get_object_children(obj)?;
+        // Reparent all children to our parent
         for c in children.iter() {
             self.set_object_parent(&c, &parent)?;
         }
 
-        // Make sure we are removed from the parent's children list.
-        let parent_children = self.get_object_children(&parent)?;
-        let parent_children = parent_children.with_removed(*obj);
-        upsert(&mut self.object_children, parent, parent_children).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error updating parent children: {e:?}"))
+        // Remove parent relationship (children list is automatically updated via secondary index)
+        self.object_parent.delete(obj).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error removing parent relationship: {e:?}"))
         })?;
 
-        // Make sure we are removed from the location's contents list.
-        let location = self.get_object_location(obj)?;
-        let location_contents = self.get_object_contents(&location)?;
-        let location_contents = location_contents.with_removed(*obj);
-        upsert(&mut self.object_contents, location, location_contents).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error updating location contents: {e:?}"))
+        // Remove location relationship (contents list is automatically updated via secondary index)
+        self.object_location.delete(obj).map_err(|e| {
+            WorldStateError::DatabaseError(format!("Error removing location relationship: {e:?}"))
         })?;
 
         // Now we can remove this object from all relevant relations
@@ -281,9 +279,7 @@ impl WorldStateTransaction {
         self.object_name.delete(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error deleting object name: {e:?}"))
         })?;
-        self.object_children.delete(obj).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error deleting object children: {e:?}"))
-        })?;
+        // object_children is now derived from object_parent secondary index, no need to delete
         self.object_owner.delete(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error deleting object owner: {e:?}"))
         })?;
@@ -412,21 +408,13 @@ impl WorldStateTransaction {
 
         upsert(&mut self.object_parent, *o, *new_parent).expect("Unable to update parent");
 
-        // Make sure the old_parent's children now have use removed.
-        let old_parent_children = self.get_object_children(&old_parent)?;
-        let old_parent_children = old_parent_children.with_removed(*o);
-        upsert(&mut self.object_children, old_parent, old_parent_children)
-            .expect("Unable to update children");
+        // Children lists are automatically updated via object_parent secondary index
 
         if new_parent.is_nothing() {
             return Ok(());
         }
 
-        // And add to the new parent's children.
-        let new_parent_children = self.get_object_children(new_parent)?;
-        let new_parent_children = new_parent_children.with_appended(&[*o]);
-        upsert(&mut self.object_children, *new_parent, new_parent_children)
-            .expect("Unable to update children");
+        // Children lists are automatically updated via object_parent secondary index
 
         // Now walk all my new descendants and give them the properties that derive from any
         // ancestors they don't already share.
@@ -486,10 +474,9 @@ impl WorldStateTransaction {
     }
 
     pub fn get_object_children(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
-        let r = self.object_children.get(obj).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error getting object children: {e:?}"))
-        })?;
-        Ok(r.unwrap_or_default())
+        // Use object_parent secondary index to get children of a parent
+        let children_vec = self.object_parent.get_by_codomain(obj);
+        Ok(ObjSet::from_items(&children_vec))
     }
 
     pub fn get_object_location(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
@@ -500,10 +487,9 @@ impl WorldStateTransaction {
     }
 
     pub fn get_object_contents(&self, obj: &Obj) -> Result<ObjSet, WorldStateError> {
-        let r = self.object_contents.get(obj).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error getting object contents: {e:?}"))
-        })?;
-        Ok(r.unwrap_or_default())
+        // Use object_location secondary index to get contents of a location
+        let contents_vec = self.object_location.get_by_codomain(obj);
+        Ok(ObjSet::from_items(&contents_vec))
     }
 
     pub fn get_object_size_bytes(&self, obj: &Obj) -> Result<usize, WorldStateError> {
@@ -593,25 +579,8 @@ impl WorldStateTransaction {
         self.has_mutations = true;
 
         // Now need to update contents in both.
-        if let Some(old_location) = old_location {
-            let old_contents = self.object_contents.get(&old_location).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error getting object contents: {e:?}"))
-            })?;
-
-            let old_contents = old_contents.unwrap_or_default().with_removed(*what);
-
-            upsert(&mut self.object_contents, old_location, old_contents).map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error setting object contents: {e:?}"))
-            })?;
-        }
-
-        let new_contents = self.object_contents.get(new_location).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error getting object contents: {e:?}"))
-        })?;
-        let new_contents = new_contents.unwrap_or_default().with_appended(&[*what]);
-        upsert(&mut self.object_contents, *new_location, new_contents).map_err(|e| {
-            WorldStateError::DatabaseError(format!("Error setting object contents: {e:?}"))
-        })?;
+        // Contents lists are automatically updated via object_location secondary index
+        // Just update the core object_location relation
 
         if new_location.is_nothing() {
             return Ok(());
@@ -1256,25 +1225,13 @@ impl WorldStateTransaction {
     }
 
     pub fn descendants(&self, obj: &Obj, include_self: bool) -> Result<ObjSet, WorldStateError> {
-        let children = self
-            .object_children
-            .get(obj)
-            .map_err(|e| {
-                WorldStateError::DatabaseError(format!("Error getting object children: {e:?}"))
-            })?
-            .unwrap_or_else(ObjSet::empty);
+        let children = self.get_object_children(obj)?;
 
         let mut results_sans_self = vec![];
         let mut queue: VecDeque<_> = children.iter().collect();
         while let Some(o) = queue.pop_front() {
             results_sans_self.push(o);
-            let children = self
-                .object_children
-                .get(&o)
-                .map_err(|e| {
-                    WorldStateError::DatabaseError(format!("Error getting object children: {e:?}"))
-                })?
-                .unwrap_or_else(ObjSet::empty);
+            let children = self.get_object_children(&o)?;
             queue.extend(children.iter());
         }
 

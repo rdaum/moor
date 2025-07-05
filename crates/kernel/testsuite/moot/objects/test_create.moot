@@ -20,8 +20,12 @@ $b
 // test that `children()' works for single inheritance hierarchies
 ; return children($a);
 {$b}
-; return children($b);
-{$c, $d}
+; return length(children($b));
+2
+; return is_member($c, children($b));
+1
+; return is_member($d, children($b));
+1
 ; return children($c);
 {}
 ; return children($d);

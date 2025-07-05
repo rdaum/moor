@@ -22,7 +22,7 @@ use moor_var::Obj;
 use moor_var::Symbol;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, PartialEq, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
 pub struct VerbDef {
     #[bincode(with_serde)]
     uuid: Uuid,
