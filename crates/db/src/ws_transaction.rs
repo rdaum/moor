@@ -479,6 +479,12 @@ impl WorldStateTransaction {
         Ok(ObjSet::from_items(&children_vec))
     }
 
+    pub fn get_owned_objects(&self, owner: &Obj) -> Result<ObjSet, WorldStateError> {
+        // Use object_owner secondary index to get objects owned by an owner
+        let owned_vec = self.object_owner.get_by_codomain(owner);
+        Ok(ObjSet::from_items(&owned_vec))
+    }
+
     pub fn get_object_location(&self, obj: &Obj) -> Result<Obj, WorldStateError> {
         let r = self.object_location.get(obj).map_err(|e| {
             WorldStateError::DatabaseError(format!("Error getting object location: {e:?}"))

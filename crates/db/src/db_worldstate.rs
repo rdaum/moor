@@ -811,6 +811,11 @@ impl WorldState for DbWorldState {
         self.get_tx().get_object_children(obj)
     }
 
+    fn owned_objects(&self, _perms: &Obj, owner: &Obj) -> Result<ObjSet, WorldStateError> {
+        let _t = PerfTimerGuard::new(&WORLD_STATE_PERF.owned_objects);
+        self.get_tx().get_owned_objects(owner)
+    }
+
     fn descendants_of(
         &self,
         _perms: &Obj,

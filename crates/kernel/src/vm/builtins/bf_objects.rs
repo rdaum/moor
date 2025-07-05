@@ -991,6 +991,41 @@ fn bf_players(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(players.iter().map(v_obj))))
 }
 
+/*
+Function: list owned_objects (obj owner)
+Returns a list of objects owned by the given object. If owner is not valid, then E_INVARG is raised.
+If the programmer does not have read permission on owner, then E_PERM is raised.
+*/
+fn bf_owned_objects(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(BfErr::ErrValue(
+            E_ARGS.msg("owned_objects() takes 1 argument"),
+        ));
+    }
+    let Some(owner) = bf_args.args[0].as_object() else {
+        return Err(BfErr::ErrValue(
+            E_TYPE.msg("owned_objects() first argument must be an object"),
+        ));
+    };
+    if !bf_args
+        .world_state
+        .valid(&owner)
+        .map_err(world_state_bf_err)?
+    {
+        return Err(BfErr::ErrValue(
+            E_INVARG.msg("owned_objects() argument must be a valid object"),
+        ));
+    }
+
+    let owned_objects = bf_args
+        .world_state
+        .owned_objects(&bf_args.task_perms_who(), &owner)
+        .map_err(world_state_bf_err)?;
+
+    let owned_objects = owned_objects.iter().map(v_obj).collect::<Vec<_>>();
+    Ok(Ret(v_list(&owned_objects)))
+}
+
 pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("create")] = Box::new(bf_create);
     builtins[offset_for_builtin("valid")] = Box::new(bf_valid);
@@ -1008,4 +1043,5 @@ pub(crate) fn register_bf_objects(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("max_object")] = Box::new(bf_max_object);
     builtins[offset_for_builtin("players")] = Box::new(bf_players);
     builtins[offset_for_builtin("locations")] = Box::new(bf_locations);
+    builtins[offset_for_builtin("owned_objects")] = Box::new(bf_owned_objects);
 }

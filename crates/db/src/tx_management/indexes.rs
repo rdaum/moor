@@ -111,7 +111,6 @@ where
         codomain: Codomain,
     ) -> Option<Entry<Codomain>> {
         // Update primary index
-        
 
         self.entries.insert(
             domain.clone(),

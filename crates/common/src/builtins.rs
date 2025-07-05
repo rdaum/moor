@@ -1268,6 +1268,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
             ],
             implemented: true,
         },
+        Builtin {
+            name: Symbol::mk("owned_objects"),
+            min_args: Q(1),
+            max_args: Q(1),
+            types: vec![Typed(TYPE_OBJ)],
+            implemented: true,
+        },
     ]
 }
 

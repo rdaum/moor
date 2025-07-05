@@ -45,7 +45,7 @@ define_relations! {
     object_location == Obj, Obj,
     object_parent == Obj, Obj,
     object_flags => Obj, BitEnum<ObjFlag>,
-    object_owner => Obj, Obj,
+    object_owner == Obj, Obj,
     object_name => Obj, StringHolder,
     object_verbdefs => Obj, VerbDefs,
     object_verbs => ObjAndUUIDHolder, ProgramType,

@@ -365,6 +365,9 @@ pub trait WorldState: Send {
     /// Get the children of the given object.
     fn children_of(&self, perms: &Obj, obj: &Obj) -> Result<ObjSet, WorldStateError>;
 
+    /// Get all objects owned by the given object.
+    fn owned_objects(&self, perms: &Obj, owner: &Obj) -> Result<ObjSet, WorldStateError>;
+
     /// Get the full descendant tree of the given object.
     fn descendants_of(
         &self,
@@ -446,6 +449,7 @@ pub struct WorldStatePerf {
     pub parent_of: PerfCounter,
     pub change_parent: PerfCounter,
     pub children_of: PerfCounter,
+    pub owned_objects: PerfCounter,
     pub descendants_of: PerfCounter,
     pub ancestors_of: PerfCounter,
     pub valid: PerfCounter,
@@ -508,6 +512,7 @@ impl WorldStatePerf {
             parent_of: PerfCounter::new("parent_of"),
             change_parent: PerfCounter::new("change_parent"),
             children_of: PerfCounter::new("children_of"),
+            owned_objects: PerfCounter::new("owned_objects"),
             descendants_of: PerfCounter::new("descendants_of"),
             ancestors_of: PerfCounter::new("ancestors_of"),
             valid: PerfCounter::new("valid"),
@@ -562,6 +567,7 @@ impl WorldStatePerf {
             &self.parent_of,
             &self.change_parent,
             &self.children_of,
+            &self.owned_objects,
             &self.descendants_of,
             &self.ancestors_of,
             &self.valid,

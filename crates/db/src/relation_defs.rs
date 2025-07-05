@@ -83,13 +83,13 @@
 macro_rules! define_relations {
     // Entry point: parse all items
     (
-        $( 
+        $(
             $field:ident $arrow:tt $domain:ty, $codomain:ty
         ),* $(,)?
     ) => {
         define_relations!(@process [ $( ($field, $domain, $codomain, $arrow) ),* ]);
     };
-    
+
     // Main processing rule
     (@process [ $( ($field:ident, $domain:ty, $codomain:ty, $arrow:tt) ),* ]) => {
         paste::paste! {
@@ -377,12 +377,12 @@ macro_rules! define_relations {
             pub const SEQUENCE_MAX_OBJECT: usize = 0;
         }
     };
-    
+
     // Helper rule to create a relation based on arrow type
     (@create_relation =>, $field:ident, $provider:ident) => {
         Relation::new(Symbol::mk(stringify!($field)), Arc::new($provider))
     };
-    
+
     (@create_relation ==, $field:ident, $provider:ident) => {
         Relation::new_with_secondary(
             Symbol::mk(stringify!($field)),
