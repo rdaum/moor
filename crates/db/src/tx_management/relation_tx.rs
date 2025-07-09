@@ -44,6 +44,7 @@ where
 {
     local_operations: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
     master_entries: Box<dyn RelationIndex<Domain, Codomain>>,
+    provider_fully_loaded: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -137,6 +138,7 @@ where
         let inner = Inner {
             local_operations: Box::new(IndexMap::default()),
             master_entries: canonical,
+            provider_fully_loaded: false,
         };
         RelationTransaction {
             tx,
@@ -499,35 +501,43 @@ where
     where
         F: Fn(&Domain, &Codomain) -> bool,
     {
-        // TODO: this is brutally inefficient. we should be able to get the master index to populate
-        //   the results for us, and then we can just merge in the local operations, but will require
-        //   some refactoring of the RelationIndex trait to allow for that.
+        let mut results: HashMap<_, _> = HashMap::new();
 
-        // Bring in the results from the backing source first, indexed by domain, filtering
-        // by the predicate.
-        let mut results: HashMap<_, _> = self
-            .backing_source
-            .scan(predicate)?
-            .iter()
-            .filter_map(|(ts, domain, value)| {
-                if *ts <= self.tx.ts && predicate(domain, value) {
-                    return Some((domain.clone(), value.clone()));
+        // If we've already fully loaded from the provider, we can skip the expensive backing source scan
+        if self.index.provider_fully_loaded {
+            // Just use the master entries - they already contain all the provider data
+            for (domain, entry) in self.index.master_entries.iter() {
+                if entry.ts <= self.tx.ts && predicate(domain, &entry.value) {
+                    results.insert(domain.clone(), entry.value.clone());
                 }
-                None
-            })
-            .collect();
+            }
+        } else {
+            // Need to hit the backing source to get data not yet loaded into master entries
+            let backing_results: HashMap<_, _> = self
+                .backing_source
+                .scan(predicate)?
+                .iter()
+                .filter_map(|(ts, domain, value)| {
+                    if *ts <= self.tx.ts && predicate(domain, value) {
+                        return Some((domain.clone(), value.clone()));
+                    }
+                    None
+                })
+                .collect();
+            results.extend(backing_results);
 
-        // Now, we need to merge in the master entries from the index.
-        for (domain, entry) in self.index.master_entries.iter() {
-            if !results.contains_key(domain)
-                && entry.ts <= self.tx.ts
-                && predicate(domain, &entry.value)
-            {
-                results.insert(domain.clone(), entry.value.clone());
+            // Also merge in the master entries from the index
+            for (domain, entry) in self.index.master_entries.iter() {
+                if !results.contains_key(domain)
+                    && entry.ts <= self.tx.ts
+                    && predicate(domain, &entry.value)
+                {
+                    results.insert(domain.clone(), entry.value.clone());
+                }
             }
         }
 
-        // And then scan our local operations.
+        // Apply local operations to get the final view
         for (domain, op) in self.index.local_operations.iter() {
             match &op.operation {
                 OpType::Insert(value) | OpType::Update(value) => {
@@ -536,12 +546,59 @@ where
                     }
                 }
                 OpType::Delete => {
-                    // We don't include deletes in the results.
+                    results.remove(domain);
                 }
             }
         }
 
         Ok(results.into_iter().collect())
+    }
+
+    /// Optimized method to get all tuples without filtering
+    /// Loads from provider once and caches the result for subsequent calls
+    pub fn get_all(&mut self) -> Result<Vec<(Domain, Codomain)>, Error> {
+        // If we haven't loaded from provider yet, do it now
+        if !self.index.provider_fully_loaded {
+            self.fully_load_from_provider()?;
+            self.index.provider_fully_loaded = true;
+        }
+
+        // Now we can just merge master_entries + local_operations
+        // without touching the provider again
+        let mut results = HashMap::new();
+
+        // Add all master entries that are visible to this transaction
+        for (domain, entry) in self.index.master_entries.iter() {
+            if entry.ts <= self.tx.ts {
+                results.insert(domain.clone(), entry.value.clone());
+            }
+        }
+
+        // Apply local operations to get the final view
+        for (domain, op) in self.index.local_operations.iter() {
+            match &op.operation {
+                OpType::Insert(value) | OpType::Update(value) => {
+                    results.insert(domain.clone(), value.clone());
+                }
+                OpType::Delete => {
+                    results.remove(domain);
+                }
+            }
+        }
+
+        Ok(results.into_iter().collect())
+    }
+
+    /// Helper method to fully load all data from the provider into the master index
+    /// Now that we fixed the lock contention in Canonical::scan(), this should work properly
+    fn fully_load_from_provider(&mut self) -> Result<(), Error> {
+        // Scan all data from the provider that's visible to this transaction
+        let _provider_data = self.backing_source.scan(&|_domain, _codomain| true)?;
+
+        // The scan() call above will have populated the master_entries index as a side effect
+        // due to the Canonical::scan() implementation, so we don't need to do anything else here
+
+        Ok(())
     }
 
     pub fn working_set(self) -> Result<WorkingSet<Domain, Codomain>, WorldStateError> {
