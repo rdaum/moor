@@ -3,9 +3,6 @@
 
 # INSTALLATION:
 # 1. Install process-compose from: https://github.com/F1bonacc1/process-compose
-#    - macOS: brew install process-compose
-#    - Linux: Download binary from releases page
-#    - Windows: Download binary from releases page or use scoop: scoop install process-compose
 # 2. Run with: process-compose up
 # 3. Stop with: Ctrl+C or process-compose down
 
