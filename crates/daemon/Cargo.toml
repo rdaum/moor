@@ -71,6 +71,8 @@ oneshot.workspace = true
 papaya.workspace = true
 
 # Authentication & Security
+base64.workspace = true
+ed25519-dalek.workspace = true
 rusty_paseto.workspace = true
 
 # Error Handling & Logging
@@ -83,6 +85,7 @@ tracing-subscriber.workspace = true
 ahash.workspace = true
 byteview.workspace = true
 minstant.workspace = true
+rand.workspace = true
 semver.workspace = true
 uuid.workspace = true
 

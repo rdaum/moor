@@ -138,6 +138,9 @@ pub struct Args {
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     pub debug: bool,
+
+    #[arg(long, help = "Generate ED25519 keypair and exit")]
+    pub generate_keypair: bool,
 }
 
 /// Formats for import or export

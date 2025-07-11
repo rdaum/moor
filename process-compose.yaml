@@ -1,0 +1,96 @@
+# Process composition for starting up a mooR system, with a telnet server and a web server, and a worker process
+# for handling outbound HTTP requests.
+
+# INSTALLATION:
+# 1. Install process-compose from: https://github.com/F1bonacc1/process-compose
+#    - macOS: brew install process-compose
+#    - Linux: Download binary from releases page
+#    - Windows: Download binary from releases page or use scoop: scoop install process-compose
+# 2. Run with: process-compose up
+# 3. Stop with: Ctrl+C or process-compose down
+
+# This mimics the behavior of docker-compose.yml but runs processes directly on the host using cargo run.
+# Uses IPC defaults for ZMQ communication since all processes are running locally.
+
+# The first time the system starts, it will import JHCore-DEV-2.db from the root of the repository. This is a recent
+# JaysHouseCore database, with no modifications. After import, `development.db` will contain the database
+# that resulted. To re-import the textdump, simply delete this directory.
+
+# After this is running, a MUD client / telnet client can connect to port 8888 on localhost to interact with the
+# system. (e.g. telnet localhost 8888). Or a websocket client can connect to port 8080 on localhost.
+
+version: "0.5"
+
+environment:
+  - "RUST_BACKTRACE=1"
+
+processes:
+  # Initialization step: Generate keypair for signing PASETO tokens using moor-daemon
+  init-certificates:
+    command: >
+      sh -c "
+        if [ ! -f moor-signing-key.pem ]; then
+          cargo run --release -p moor-daemon -- --generate-keypair
+        fi
+      "
+    working_dir: /Users/ryan/moor
+    restart: no
+    availability:
+      restart: exit_on_failure
+  # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
+  moor-daemon:
+    command: >
+      cargo run --release -p moor-daemon -- 
+      ./moor-data
+      --db=development.db 
+      --import=JHCore-DEV-2.db --import-format=textdump 
+      --export=development-export --export-format=objdef 
+      --checkpoint-interval-seconds=360
+      --use-boolean-returns=false
+      --custom-errors=true
+    working_dir: /Users/ryan/moor
+    restart: on_failure
+    depends_on:
+      init-certificates:
+        condition: process_completed_successfully
+
+  # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
+  moor-telnet-host:
+    command: >
+      cargo run -p moor-telnet-host -- 
+      --telnet-address=0.0.0.0 
+      --telnet-port=8888
+    working_dir: /Users/ryan/moor
+    restart: on_failure
+    depends_on:
+      init-certificates:
+        condition: process_completed_successfully
+      moor-daemon:
+        condition: process_started
+
+  # A web server that serves the client files and handles incoming websocket connections.
+  moor-web-host:
+    command: >
+      cargo run -p moor-web-host -- 
+      --listen-address=0.0.0.0:8080 
+      --client-sources=./client
+      --watch-changes
+    working_dir: /Users/ryan/moor
+    restart: on_failure
+    depends_on:
+      init-certificates:
+        condition: process_completed_successfully
+      moor-daemon:
+        condition: process_started
+
+  # A worker process that handles requests from the daemon for outbound HTTP requests and returns the results back
+  # to the daemon.
+  moor-curl-worker:
+    command: cargo run -p moor-curl-worker
+    working_dir: /Users/ryan/moor
+    restart: on_failure
+    depends_on:
+      init-certificates:
+        condition: process_completed_successfully
+      moor-daemon:
+        condition: process_started
