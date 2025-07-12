@@ -775,17 +775,20 @@ impl CodegenState {
 
                 // If this is a self-referencing lambda, update the MakeLambda opcode
                 if let Some(var) = self_name {
+                    let self_var_name = self.find_name(var);
                     // Update the last emitted MakeLambda opcode to include self_var
                     if let Some(Op::MakeLambda {
                         scatter_offset,
                         program_offset,
                         self_var: _,
+                        num_captured,
                     }) = self.ops.last_mut()
                     {
                         *self.ops.last_mut().unwrap() = Op::MakeLambda {
                             scatter_offset: *scatter_offset,
                             program_offset: *program_offset,
-                            self_var: Some(self.find_name(var)),
+                            self_var: Some(self_var_name),
+                            num_captured: *num_captured,
                         };
                     }
                 }
@@ -1238,10 +1241,23 @@ impl CodegenState {
         // Store compiled Program in lambda_programs table with adjusted line numbers
         let program_offset = self.add_lambda_program(lambda_program, base_line_offset);
 
+        // Analyze which variables this lambda captures
+        let captured_symbols = analyze_lambda_captures(params, body, &self.var_names);
+        let captured_names: Vec<Name> = captured_symbols
+            .iter()
+            .filter_map(|sym| self.var_names.name_for_ident(*sym))
+            .collect();
+
+        // Emit Capture opcodes for each captured variable
+        for &name in &captured_names {
+            self.emit(Op::Capture(name));
+        }
+
         self.emit(Op::MakeLambda {
             scatter_offset,
             program_offset,
             self_var: None, // Will be set properly for name-sugared forms
+            num_captured: captured_names.len() as u16,
         });
         self.push_stack(1);
 
@@ -1297,4 +1313,100 @@ pub fn compile_tree(tree: Pairs<Rule>, options: CompileOptions) -> Result<Progra
     // TODO: we'll have to adjust line numbers accordingly to who called us?
 
     do_compile(parse, options)
+}
+
+use crate::ast::AstVisitor;
+use moor_var::Symbol;
+use std::collections::HashSet;
+
+/// A visitor that finds all variable references in lambda bodies for capture analysis
+struct CaptureAnalyzer<'a> {
+    captures: HashSet<Symbol>,
+    param_names: HashSet<Symbol>,
+    outer_names: &'a Names,
+}
+
+impl<'a> CaptureAnalyzer<'a> {
+    fn new(lambda_params: &[ScatterItem], outer_names: &'a Names) -> Self {
+        let param_names: HashSet<Symbol> = lambda_params
+            .iter()
+            .map(|param| param.id.to_symbol())
+            .collect();
+
+        Self {
+            captures: HashSet::new(),
+            param_names,
+            outer_names,
+        }
+    }
+
+    fn should_capture(&self, var_symbol: &Symbol) -> bool {
+        // Skip if it's a lambda parameter
+        if self.param_names.contains(var_symbol) {
+            return false;
+        }
+
+        // Check if this variable exists in the outer names
+        self.outer_names.name_for_ident(*var_symbol).is_some()
+    }
+}
+
+impl<'a> AstVisitor for CaptureAnalyzer<'a> {
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Id(var) => {
+                // This is a variable reference - check if it should be captured
+                let var_symbol = var.to_symbol();
+                if self.should_capture(&var_symbol) {
+                    self.captures.insert(var_symbol);
+                }
+            }
+            Expr::Assign { left, right: _ } => {
+                // For assignments, we need to check both sides
+                // The left side might be a variable assignment that needs capture
+                if let Expr::Id(var) = left.as_ref() {
+                    let var_symbol = var.to_symbol();
+                    if self.should_capture(&var_symbol) {
+                        self.captures.insert(var_symbol);
+                    }
+                }
+                // Continue walking for right side and other assignment targets
+                self.walk_expr(expr);
+            }
+            Expr::Scatter(items, _) => {
+                // Check scatter items for variable assignments
+                for item in items {
+                    let var_symbol = item.id.to_symbol();
+                    if self.should_capture(&var_symbol) {
+                        self.captures.insert(var_symbol);
+                    }
+                }
+                // Continue walking for the expression part
+                self.walk_expr(expr);
+            }
+            _ => {
+                // For all other expressions, use the default walking behavior
+                self.walk_expr(expr);
+            }
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_stmt_node(&mut self, stmt_node: &StmtNode) {
+        self.walk_stmt_node(stmt_node);
+    }
+}
+
+/// Analyze a lambda AST to find which variables it references from the outer scope
+fn analyze_lambda_captures(
+    lambda_params: &[ScatterItem],
+    lambda_body: &Stmt,
+    outer_names: &Names,
+) -> Vec<Symbol> {
+    let mut analyzer = CaptureAnalyzer::new(lambda_params, outer_names);
+    analyzer.visit_stmt(lambda_body);
+    analyzer.captures.into_iter().collect()
 }

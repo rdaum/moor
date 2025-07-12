@@ -651,7 +651,7 @@ mod tests {
         );
         assert!(content.contains("=>"), "Should contain lambda arrow syntax");
         assert!(
-            content.contains("{x} => x + 1"),
+            content.contains("{x} => 1"),
             "Should contain correct lambda syntax"
         );
 

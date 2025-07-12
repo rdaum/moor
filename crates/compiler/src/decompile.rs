@@ -75,7 +75,7 @@ impl Decompile {
         if self.position >= opcode_vector.len() {
             return Err(DecompileError::UnexpectedProgramEnd);
         }
-        let op = opcode_vector[self.position];
+        let op = opcode_vector[self.position].clone();
         self.position += 1;
         Ok(op)
     }
@@ -1107,6 +1107,10 @@ impl Decompile {
             | Op::ComprehendRange { .. }
             | Op::ComprehendList { .. } => {
                 // noop, handled above
+            }
+            Op::Capture(_) => {
+                // Capture opcodes are handled implicitly during lambda creation
+                // They don't produce expressions themselves
             }
             Op::MakeLambda {
                 scatter_offset,

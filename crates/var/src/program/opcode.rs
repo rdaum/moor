@@ -19,7 +19,7 @@ use bincode::{Decode, Encode};
 #[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Hash, Encode, Decode)]
 pub struct BuiltinId(pub u16);
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Encode, Decode)]
 pub enum Op {
     Add,
     And(Label),
@@ -142,12 +142,16 @@ pub enum Op {
     ComprehendRange(Offset),
     ComprehendList(Offset),
     ContinueComprehension(Name),
+    /// Capture a variable from the current environment for lambda closure
+    /// Pushes the variable's value onto a capture stack in the frame
+    Capture(Name),
     /// Create lambda value from pre-compiled Program and parameter specification
     /// The lambda Program is compiled at compile-time and stored in lambda_programs table
     MakeLambda {
         scatter_offset: Offset, // Reference to parameter spec in scatter_tables
         program_offset: Offset, // Reference to pre-compiled Program in lambda_programs table
         self_var: Option<Name>, // Optional variable to assign lambda to itself for recursion
+        num_captured: u16,      // Number of variables captured (from preceding Capture opcodes)
     },
     /// Call a lambda value with arguments from stack
     /// Expects stack: [lambda_value, args_list]

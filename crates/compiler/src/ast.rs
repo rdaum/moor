@@ -388,3 +388,282 @@ pub fn assert_trees_match_recursive(a: &[Stmt], b: &[Stmt]) {
         }
     }
 }
+
+// AST Visitor Pattern for traversing the entire AST
+pub trait AstVisitor {
+    fn visit_expr(&mut self, expr: &Expr);
+    fn visit_stmt(&mut self, stmt: &Stmt);
+    fn visit_stmt_node(&mut self, stmt_node: &StmtNode);
+
+    // Default implementations that traverse all children
+    fn walk_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Assign { left, right } => {
+                self.visit_expr(left);
+                self.visit_expr(right);
+            }
+            Expr::Pass { args } => {
+                for arg in args {
+                    self.walk_arg(arg);
+                }
+            }
+            Expr::TypeConstant(_) => {}
+            Expr::Value(_) => {}
+            Expr::Error(_, opt_expr) => {
+                if let Some(expr) = opt_expr {
+                    self.visit_expr(expr);
+                }
+            }
+            Expr::Id(_) => {
+                // This is where variable references happen!
+            }
+            Expr::Binary(_, left, right) => {
+                self.visit_expr(left);
+                self.visit_expr(right);
+            }
+            Expr::And(left, right) | Expr::Or(left, right) => {
+                self.visit_expr(left);
+                self.visit_expr(right);
+            }
+            Expr::Unary(_, expr) => {
+                self.visit_expr(expr);
+            }
+            Expr::Prop { location, property } => {
+                self.visit_expr(location);
+                self.visit_expr(property);
+            }
+            Expr::Call { function: _, args } => {
+                for arg in args {
+                    self.walk_arg(arg);
+                }
+            }
+            Expr::Verb {
+                location,
+                verb,
+                args,
+            } => {
+                self.visit_expr(location);
+                self.visit_expr(verb);
+                for arg in args {
+                    self.walk_arg(arg);
+                }
+            }
+            Expr::Range { base, from, to } => {
+                self.visit_expr(base);
+                self.visit_expr(from);
+                self.visit_expr(to);
+            }
+            Expr::Cond {
+                condition,
+                consequence,
+                alternative,
+            } => {
+                self.visit_expr(condition);
+                self.visit_expr(consequence);
+                self.visit_expr(alternative);
+            }
+            Expr::TryCatch {
+                trye,
+                codes: _,
+                except,
+            } => {
+                self.visit_expr(trye);
+                if let Some(except_expr) = except {
+                    self.visit_expr(except_expr);
+                }
+            }
+            Expr::Index(base, index) => {
+                self.visit_expr(base);
+                self.visit_expr(index);
+            }
+            Expr::List(args) => {
+                for arg in args {
+                    self.walk_arg(arg);
+                }
+            }
+            Expr::Map(pairs) => {
+                for (key, value) in pairs {
+                    self.visit_expr(key);
+                    self.visit_expr(value);
+                }
+            }
+            Expr::Flyweight(delegate, slots, contents) => {
+                self.visit_expr(delegate);
+                for (_, slot_expr) in slots {
+                    self.visit_expr(slot_expr);
+                }
+                if let Some(contents_expr) = contents {
+                    self.visit_expr(contents_expr);
+                }
+            }
+            Expr::Scatter(items, expr) => {
+                for item in items {
+                    if let Some(default_expr) = &item.expr {
+                        self.visit_expr(default_expr);
+                    }
+                }
+                self.visit_expr(expr);
+            }
+            Expr::Length => {}
+            Expr::ComprehendList {
+                variable: _,
+                position_register: _,
+                list_register: _,
+                producer_expr,
+                list,
+            } => {
+                self.visit_expr(producer_expr);
+                self.visit_expr(list);
+            }
+            Expr::ComprehendRange {
+                variable: _,
+                end_of_range_register: _,
+                producer_expr,
+                from,
+                to,
+            } => {
+                self.visit_expr(producer_expr);
+                self.visit_expr(from);
+                self.visit_expr(to);
+            }
+            Expr::Decl {
+                id: _,
+                is_const: _,
+                expr,
+            } => {
+                if let Some(init_expr) = expr {
+                    self.visit_expr(init_expr);
+                }
+            }
+            Expr::Return(opt_expr) => {
+                if let Some(expr) = opt_expr {
+                    self.visit_expr(expr);
+                }
+            }
+            Expr::Lambda {
+                params,
+                body,
+                self_name: _,
+            } => {
+                // For lambda parameters, we visit them but they don't count as "captures"
+                for param in params {
+                    if let Some(default_expr) = &param.expr {
+                        self.visit_expr(default_expr);
+                    }
+                }
+                self.visit_stmt(body);
+            }
+        }
+    }
+
+    fn walk_arg(&mut self, arg: &Arg) {
+        match arg {
+            Arg::Normal(expr) | Arg::Splice(expr) => {
+                self.visit_expr(expr);
+            }
+        }
+    }
+
+    fn walk_stmt(&mut self, stmt: &Stmt) {
+        self.visit_stmt_node(&stmt.node);
+    }
+
+    fn walk_stmt_node(&mut self, stmt_node: &StmtNode) {
+        match stmt_node {
+            StmtNode::Cond { arms, otherwise } => {
+                for arm in arms {
+                    self.visit_expr(&arm.condition);
+                    for stmt in &arm.statements {
+                        self.visit_stmt(stmt);
+                    }
+                }
+                if let Some(else_arm) = otherwise {
+                    for stmt in &else_arm.statements {
+                        self.visit_stmt(stmt);
+                    }
+                }
+            }
+            StmtNode::ForList {
+                value_binding: _,
+                key_binding: _,
+                expr,
+                body,
+                environment_width: _,
+            } => {
+                self.visit_expr(expr);
+                for stmt in body {
+                    self.visit_stmt(stmt);
+                }
+            }
+            StmtNode::ForRange {
+                id: _,
+                from,
+                to,
+                body,
+                environment_width: _,
+            } => {
+                self.visit_expr(from);
+                self.visit_expr(to);
+                for stmt in body {
+                    self.visit_stmt(stmt);
+                }
+            }
+            StmtNode::While {
+                id: _,
+                condition,
+                body,
+                environment_width: _,
+            } => {
+                self.visit_expr(condition);
+                for stmt in body {
+                    self.visit_stmt(stmt);
+                }
+            }
+            StmtNode::Fork { id: _, time, body } => {
+                self.visit_expr(time);
+                for stmt in body {
+                    self.visit_stmt(stmt);
+                }
+            }
+            StmtNode::TryExcept {
+                body,
+                excepts,
+                environment_width: _,
+            } => {
+                for stmt in body {
+                    self.visit_stmt(stmt);
+                }
+                for except in excepts {
+                    // except.codes would need more analysis for CatchCodes::Codes
+                    for stmt in &except.statements {
+                        self.visit_stmt(stmt);
+                    }
+                }
+            }
+            StmtNode::TryFinally {
+                body,
+                handler,
+                environment_width: _,
+            } => {
+                for stmt in body {
+                    self.visit_stmt(stmt);
+                }
+                for stmt in handler {
+                    self.visit_stmt(stmt);
+                }
+            }
+            StmtNode::Scope {
+                num_bindings: _,
+                body,
+            } => {
+                for stmt in body {
+                    self.visit_stmt(stmt);
+                }
+            }
+            StmtNode::Break { exit: _ } | StmtNode::Continue { exit: _ } => {}
+            StmtNode::Expr(expr) => {
+                self.visit_expr(expr);
+            }
+        }
+    }
+}

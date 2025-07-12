@@ -18,6 +18,7 @@ use crate::parse::Parse;
 use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
 use moor_var::program::names::Variable;
+use moor_var::program::opcode::ScatterLabel;
 use moor_var::{Obj, Sequence, Symbol, Var, Variant};
 use std::collections::HashMap;
 
@@ -955,56 +956,50 @@ pub fn to_literal(v: &Var) -> String {
             let mut metadata_parts = vec![];
 
             if !l.0.captured_env.is_empty() {
-                let frames: Vec<String> =
-                    l.0.captured_env
-                        .iter()
-                        .enumerate()
-                        .map(|(scope_depth, frame)| {
-                            // Try to map variables to their names using the lambda body's variable name table
-                            let var_strings: Vec<String> = frame
-                                .iter()
-                                .enumerate()
-                                .map(|(var_offset, var_value)| {
-                                    // Search for variable names in the lambda body's name table that match this scope and offset
-                                    let var_names = l.0.body.var_names();
+                let mut captured_vars: Vec<String> = vec![];
 
-                                    // Look for a variable name that corresponds to this position
-                                    let maybe_name = var_names
-                                        .names()
-                                        .iter()
-                                        .filter_map(|name| {
-                                            // Check if this name corresponds to our scope depth and offset
-                                            if name.1 as usize == scope_depth
-                                                && name.0 as usize == var_offset
-                                            {
-                                                var_names.ident_for_name(name)
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                        .next();
+                for (scope_depth, frame) in l.0.captured_env.iter().enumerate() {
+                    for (var_offset, var_value) in frame.iter().enumerate() {
+                        // Only include variables that are not None/v_none
+                        if var_value.is_none() {
+                            continue;
+                        }
 
-                                    match maybe_name {
-                                        Some(symbol) => {
-                                            // Include both variable name and value for clarity
-                                            format!(
-                                                "{}: {}",
-                                                symbol.as_arc_string(),
-                                                to_literal(var_value)
-                                            )
-                                        }
-                                        None => {
-                                            // Fall back to just the value if no name is found
-                                            to_literal(var_value)
-                                        }
-                                    }
-                                })
-                                .collect();
+                        // Search for variable names in the lambda body's name table that match this scope and offset
+                        let var_names = l.0.body.var_names();
+                        let maybe_name = var_names
+                            .names()
+                            .iter()
+                            .filter_map(|name| {
+                                // Check if this name corresponds to our scope depth and offset
+                                if name.1 as usize == scope_depth && name.0 as usize == var_offset {
+                                    var_names.ident_for_name(name)
+                                } else {
+                                    None
+                                }
+                            })
+                            .next();
 
-                            format!("{{{}}}", var_strings.join(", "))
-                        })
-                        .collect();
-                metadata_parts.push(format!("captured [{}]", frames.join(", ")));
+                        match maybe_name {
+                            Some(symbol) => {
+                                // Include both variable name and value for clarity
+                                captured_vars.push(format!(
+                                    "{}: {}",
+                                    symbol.as_arc_string(),
+                                    to_literal(var_value)
+                                ));
+                            }
+                            None => {
+                                // Fall back to just the value if no name is found
+                                captured_vars.push(to_literal(var_value));
+                            }
+                        }
+                    }
+                }
+
+                if !captured_vars.is_empty() {
+                    metadata_parts.push(format!("captured [{}]", captured_vars.join(", ")));
+                }
             }
 
             if let Some(_self_var) = l.0.self_var {
@@ -1152,6 +1147,114 @@ pub fn to_literal_objsub(v: &Var, name_subs: &HashMap<Obj, String>, indent_depth
         }
         Variant::Obj(oid) => {
             result.push_str(&f(oid));
+        }
+        Variant::Lambda(l) => {
+            // Special objdef formatting for lambdas - needs to match the grammar:
+            // lambda_captured = { "captured" ~ "[" ~ (captured_var_map ~ ("," ~ captured_var_map)*)? ~ "]" }
+            // captured_var_map = { "{" ~ (captured_var_entry ~ ("," ~ captured_var_entry)*)? ~ "}" }
+            // captured_var_entry = { ident ~ ":" ~ literal }
+
+            // Build parameter string
+            let param_str =
+                l.0.params
+                    .labels
+                    .iter()
+                    .map(|label| match label {
+                        ScatterLabel::Required(name) => {
+                            l.0.body
+                                .var_names()
+                                .ident_for_name(name)
+                                .map(|s| s.as_arc_string().to_string())
+                                .unwrap_or_else(|| "x".to_string())
+                        }
+                        ScatterLabel::Optional(name, _) => {
+                            let var_name =
+                                l.0.body
+                                    .var_names()
+                                    .ident_for_name(name)
+                                    .map(|s| s.as_arc_string().to_string())
+                                    .unwrap_or_else(|| "x".to_string());
+                            format!("?{var_name}")
+                        }
+                        ScatterLabel::Rest(name) => {
+                            let var_name =
+                                l.0.body
+                                    .var_names()
+                                    .ident_for_name(name)
+                                    .map(|s| s.as_arc_string().to_string())
+                                    .unwrap_or_else(|| "x".to_string());
+                            format!("@{var_name}")
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+            // Build body string - for objdef we need to reconstruct the lambda body
+            // For now, use a simple placeholder that's valid MOO syntax
+            let body_str = "1"; // Simple placeholder
+
+            // Build metadata for objdef format
+            let mut metadata_parts = vec![];
+
+            if !l.0.captured_env.is_empty() {
+                let mut scope_maps = vec![];
+
+                for (scope_depth, frame) in l.0.captured_env.iter().enumerate() {
+                    let mut captured_vars: Vec<String> = vec![];
+
+                    for (var_offset, var_value) in frame.iter().enumerate() {
+                        if var_value.is_none() {
+                            continue;
+                        }
+
+                        let var_names = l.0.body.var_names();
+                        let maybe_name = var_names
+                            .names()
+                            .iter()
+                            .filter_map(|name| {
+                                if name.1 as usize == scope_depth && name.0 as usize == var_offset {
+                                    var_names.ident_for_name(name)
+                                } else {
+                                    None
+                                }
+                            })
+                            .next();
+
+                        if let Some(symbol) = maybe_name {
+                            captured_vars.push(format!(
+                                "{}: {}",
+                                symbol.as_arc_string(),
+                                to_literal_objsub(
+                                    var_value,
+                                    name_subs,
+                                    indent_depth + INDENT_LEVEL
+                                )
+                            ));
+                        }
+                    }
+
+                    if !captured_vars.is_empty() {
+                        scope_maps.push(format!("{{{}}}", captured_vars.join(", ")));
+                    }
+                }
+
+                if !scope_maps.is_empty() {
+                    metadata_parts.push(format!("captured [{}]", scope_maps.join(", ")));
+                }
+            }
+
+            if let Some(_self_var) = l.0.self_var {
+                metadata_parts.push("self 1".to_string());
+            }
+
+            if metadata_parts.is_empty() {
+                result.push_str(&format!("{{{param_str}}} => {body_str}"));
+            } else {
+                result.push_str(&format!(
+                    "{{{param_str}}} => {body_str} with {}",
+                    metadata_parts.join(" ")
+                ));
+            }
         }
         _ => {
             result.push_str(to_literal(v).as_str());

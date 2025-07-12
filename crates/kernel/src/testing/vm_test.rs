@@ -2147,4 +2147,157 @@ mod tests {
             "Should have named lambda frame 'factorial' in stack trace"
         );
     }
+
+    #[test]
+    fn test_lambda_capture_pure_lambda() {
+        // Test that pure lambdas (no variable references) have empty captured environments
+        let program_text = r#"
+            let f = {x} => x * 5;
+            return f;
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        )
+        .unwrap();
+
+        let lambda = result.as_lambda().unwrap();
+
+        // Pure lambda should have empty captured environment
+        assert!(
+            lambda.0.captured_env.is_empty(),
+            "Pure lambda should have empty captured environment, got: {:?}",
+            lambda.0.captured_env
+        );
+    }
+
+    #[test]
+    fn test_lambda_capture_with_outer_variable() {
+        // Test that lambdas referencing outer variables capture them correctly
+        let program_text = r#"
+            let multiplier = 10;
+            let f = {x} => x * multiplier;
+            return f;
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        )
+        .unwrap();
+
+        let lambda = result.as_lambda().unwrap();
+
+        // Lambda should have non-empty captured environment since it references 'multiplier'
+        assert!(
+            !lambda.0.captured_env.is_empty(),
+            "Lambda should capture outer variable 'multiplier'"
+        );
+    }
+
+    #[test]
+    fn test_lambda_capture_multiple_variables() {
+        // Test lambda capturing multiple outer variables
+        let program_text = r#"
+            let a = 5;
+            let b = 10;
+            let c = 15;
+            let f = {x} => x + a + b; // Only references a and b, not c
+            return f;
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        )
+        .unwrap();
+
+        let lambda = result.as_lambda().unwrap();
+
+        // Lambda should capture variables since it references outer variables a and b
+        assert!(
+            !lambda.0.captured_env.is_empty(),
+            "Lambda should capture outer variables 'a' and 'b'"
+        );
+    }
+
+    #[test]
+    fn test_lambda_capture_functionality() {
+        // Test that capture works correctly for execution
+        let program_text = r#"
+            let base = 100;
+            let f = {x} => x + base;
+            return f(5);
+        "#;
+
+        let mut state = world_with_test_program(program_text);
+        let session = Arc::new(NoopClientSession::new());
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        );
+
+        // Should correctly access captured variable
+        assert_eq!(result, Ok(v_int(105))); // 5 + 100
+    }
+
+    #[test]
+    fn test_lambda_capture_creation_only() {
+        // Test pure lambda creation without calling it to isolate capture analysis
+        let program_text = r#"
+            let outer_var = 999; // This should NOT be captured since it's not referenced
+            let f = {x} => x + 1; // Only references parameter 'x', not 'outer_var'
+            return f; // Return the lambda itself, don't call it
+        "#;
+
+        let program = compile(program_text, CompileOptions::default()).unwrap();
+        let state_source = test_db_with_verb("test", &program);
+        let mut state = state_source.new_world_state().unwrap();
+        let session = Arc::new(NoopClientSession::new());
+
+        let result = call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        )
+        .unwrap();
+
+        let lambda = result.as_lambda().unwrap();
+
+        // Lambda should have empty captured environment since it doesn't reference outer_var
+        assert!(
+            lambda.0.captured_env.is_empty(),
+            "Lambda should have empty captured environment since it doesn't reference outer_var"
+        );
+    }
 }

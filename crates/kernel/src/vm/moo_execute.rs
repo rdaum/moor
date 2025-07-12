@@ -19,6 +19,7 @@ use crate::vm::vm_unwind::FinallyReason;
 use lazy_static::lazy_static;
 use moor_common::model::WorldState;
 use moor_compiler::{Op, ScatterLabel, to_literal};
+use moor_var::program::names::Name;
 use moor_var::{
     E_ARGS, E_DIV, E_INVARG, E_INVIND, E_RANGE, E_TYPE, E_VARNF, v_arc_string, v_bool, v_error,
 };
@@ -33,6 +34,66 @@ use std::time::Duration;
 lazy_static! {
     static ref DELEGATE_SYM: Symbol = Symbol::mk("delegate");
     static ref SLOTS_SYM: Symbol = Symbol::mk("slots");
+}
+
+/// Build a captured environment from a list of captured variables
+/// This recreates the environment structure needed by lambda execution
+fn build_captured_environment(
+    captured_vars: &[(moor_var::program::names::Name, Var)],
+    lambda_program: &moor_compiler::Program,
+) -> Vec<Vec<Var>> {
+    if captured_vars.is_empty() {
+        return vec![];
+    }
+
+    // Organize variables by scope depth using a Vec (scope depths are sequential from 0)
+    let max_scope_depth = captured_vars
+        .iter()
+        .map(|(name, _)| name.1 as usize)
+        .max()
+        .unwrap_or(0);
+
+    let mut scope_vars: Vec<Vec<(u16, Var)>> = vec![Vec::new(); max_scope_depth + 1];
+
+    for &(name, ref value) in captured_vars {
+        let scope_depth = name.1 as usize;
+        let var_offset = name.0;
+        scope_vars[scope_depth].push((var_offset, value.clone()));
+    }
+
+    // Build environment with proper scope structure
+    let mut captured_env = Vec::new();
+
+    for (scope_idx, vars_in_scope) in scope_vars.iter().enumerate() {
+        // For scope 0 (global), use global width. For others, use a reasonable default.
+        let expected_var_count = if scope_idx == 0 {
+            lambda_program.var_names().global_width()
+        } else {
+            // For non-global scopes, start with a minimum size and expand as needed
+            16
+        };
+        let mut scope_env = vec![moor_var::v_none(); expected_var_count];
+
+        if !vars_in_scope.is_empty() {
+            // Find the maximum offset to ensure we have enough space
+            let max_offset = vars_in_scope
+                .iter()
+                .map(|(offset, _)| *offset as usize)
+                .max()
+                .unwrap_or(0);
+            if max_offset >= scope_env.len() {
+                scope_env.resize(max_offset + 1, moor_var::v_none());
+            }
+
+            for &(var_offset, ref value) in vars_in_scope {
+                scope_env[var_offset as usize] = value.clone();
+            }
+        }
+
+        captured_env.push(scope_env);
+    }
+
+    captured_env
 }
 
 macro_rules! binary_bool_op {
@@ -98,7 +159,7 @@ pub fn moo_frame_execute(
         // Otherwise, start poppin' opcodes.
         // We panic here if we run out of opcodes, as that means there's a bug in either the
         // compiler or in opcode execution.
-        let op = f.opcodes()[f.pc];
+        let op = f.opcodes()[f.pc].clone();
         f.pc += 1;
 
         match op {
@@ -1006,10 +1067,20 @@ pub fn moo_frame_execute(
                 f.set_variable(&id, new_position);
                 f.push(new_list);
             }
+            Op::Capture(var_name) => {
+                // Capture a variable from the current environment for lambda closure
+                if let Some(value) = f.get_env(&var_name) {
+                    f.capture_stack.push((var_name, value.clone()));
+                } else {
+                    // Variable not found - capture None/v_none
+                    f.capture_stack.push((var_name, moor_var::v_none()));
+                }
+            }
             Op::MakeLambda {
                 scatter_offset,
                 program_offset,
                 self_var,
+                num_captured,
             } => {
                 // Retrieve the scatter specification for lambda parameters
                 let scatter_spec = f.program.scatter_table(scatter_offset).clone();
@@ -1017,8 +1088,26 @@ pub fn moo_frame_execute(
                 // Retrieve the pre-compiled Program for the lambda body
                 let lambda_program = f.program.lambda_program(program_offset).clone();
 
-                // Capture the current variable environment from the execution context
-                let captured_env = f.capture_environment();
+                // Build captured environment from the capture stack
+                let captured_env = if num_captured == 0 {
+                    vec![]
+                } else {
+                    // Take the last num_captured items from the capture stack
+                    let stack_len = f.capture_stack.len();
+                    if stack_len < num_captured as usize {
+                        return ExecutionResult::PushError(
+                            E_ARGS.msg("insufficient captured variables on stack"),
+                        );
+                    }
+
+                    // Extract captured variables and convert to environment format
+                    let captured_vars: Vec<(Name, Var)> = f
+                        .capture_stack
+                        .drain(stack_len - num_captured as usize..)
+                        .collect();
+
+                    build_captured_environment(&captured_vars, &lambda_program)
+                };
 
                 // Create the lambda value with self-reference information
                 // Self-reference will be handled during lambda activation

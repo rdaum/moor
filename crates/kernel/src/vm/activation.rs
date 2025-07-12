@@ -26,8 +26,8 @@ use moor_common::util::BitEnum;
 use moor_compiler::BuiltinId;
 use moor_compiler::Program;
 use moor_compiler::ScatterLabel;
+use moor_var::Lambda;
 use moor_var::{AsByteBuffer, Symbol};
-use moor_var::{E_ARGS, Lambda};
 use moor_var::{Error, v_empty_str};
 use moor_var::{List, NOTHING};
 use moor_var::{Obj, v_arc_string};
@@ -345,25 +345,99 @@ impl Activation {
         // Create new frame with lambda's program
         let mut frame = Box::new(MooStackFrame::new(lambda.0.body.clone()));
 
-        // Restore lambda's captured environment
-        frame.environment = lambda.0.captured_env.clone();
-
-        // Ensure the environment has enough slots for all variables the lambda body expects
-        {
-            if let Some(env) = frame.environment.last_mut() {
-                // The lambda body was compiled with the same var_names table, so we need to ensure
-                // the environment has enough slots for all variable indices that might be accessed
-                let expected_var_count = lambda.0.body.var_names().global_width();
-                if env.len() < expected_var_count {
-                    env.resize(expected_var_count, moor_var::v_int(0));
-                }
-
-                // Perform parameter binding using lambda's scatter specification
-                // This binds the call arguments to lambda parameters in the environment
-                lambda_scatter_assign(&lambda.0.params, &args, env)?;
-            } else {
-                return Err(E_ARGS.into());
+        // Merge captured variables into the fresh environment
+        // The MooStackFrame::new already created a proper global environment
+        if !lambda.0.captured_env.is_empty() {
+            // Ensure the environment has at least as many scopes as the captured environment
+            while frame.environment.len() < lambda.0.captured_env.len() {
+                frame.environment.push(vec![]);
             }
+
+            // Merge captured variables from each scope
+            for (scope_idx, captured_scope) in lambda.0.captured_env.iter().enumerate() {
+                if scope_idx < frame.environment.len() {
+                    let target_scope = &mut frame.environment[scope_idx];
+
+                    // Ensure target scope has enough slots
+                    if target_scope.len() < captured_scope.len() {
+                        target_scope.resize(captured_scope.len(), moor_var::v_none());
+                    }
+
+                    for (var_idx, captured_var) in captured_scope.iter().enumerate() {
+                        if var_idx < target_scope.len() && !captured_var.is_none() {
+                            target_scope[var_idx] = captured_var.clone();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Lambda parameters go into their designated scopes
+        // Group parameters by scope depth using a Vec (scope depths are sequential from 0)
+        let max_scope_depth = lambda
+            .0
+            .params
+            .labels
+            .iter()
+            .map(|label| {
+                let name = match label {
+                    moor_var::program::opcode::ScatterLabel::Required(name) => name,
+                    moor_var::program::opcode::ScatterLabel::Optional(name, _) => name,
+                    moor_var::program::opcode::ScatterLabel::Rest(name) => name,
+                };
+                name.1 as usize
+            })
+            .max()
+            .unwrap_or(0);
+
+        let mut scope_params: Vec<Vec<moor_var::program::opcode::ScatterLabel>> =
+            vec![Vec::new(); max_scope_depth + 1];
+
+        for label in &lambda.0.params.labels {
+            let name = match label {
+                moor_var::program::opcode::ScatterLabel::Required(name) => name,
+                moor_var::program::opcode::ScatterLabel::Optional(name, _) => name,
+                moor_var::program::opcode::ScatterLabel::Rest(name) => name,
+            };
+
+            let scope_depth = name.1 as usize;
+            scope_params[scope_depth].push(label.clone());
+        }
+
+        // For each scope that has parameters, ensure it exists and bind parameters
+        for (scope_depth, labels) in scope_params.iter().enumerate() {
+            if labels.is_empty() {
+                continue;
+            }
+            // Ensure we have enough scopes
+            while frame.environment.len() <= scope_depth {
+                frame.environment.push(vec![]);
+            }
+
+            // Find the maximum offset needed for this scope
+            let max_offset = labels
+                .iter()
+                .map(|label| match label {
+                    moor_var::program::opcode::ScatterLabel::Required(name) => name.0 as usize,
+                    moor_var::program::opcode::ScatterLabel::Optional(name, _) => name.0 as usize,
+                    moor_var::program::opcode::ScatterLabel::Rest(name) => name.0 as usize,
+                })
+                .max()
+                .unwrap_or(0);
+
+            // Ensure the scope has enough space
+            if frame.environment[scope_depth].len() <= max_offset {
+                frame.environment[scope_depth].resize(max_offset + 1, moor_var::v_none());
+            }
+
+            // Create a ScatterArgs for just this scope
+            let scope_scatter = moor_var::program::opcode::ScatterArgs {
+                labels: labels.clone(),
+                done: lambda.0.params.done,
+            };
+
+            // Perform parameter binding for this scope
+            lambda_scatter_assign(&scope_scatter, &args, &mut frame.environment[scope_depth])?;
         }
 
         // Handle self-reference for recursive lambdas

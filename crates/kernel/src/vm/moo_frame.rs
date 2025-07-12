@@ -48,6 +48,8 @@ pub(crate) struct MooStackFrame {
     /// Scratch space for holding finally-reasons to be popped off the stack when a finally block
     /// is ended.
     pub(crate) finally_stack: Vec<FinallyReason>,
+    /// Stack for captured variables during lambda creation
+    pub(crate) capture_stack: Vec<(Name, Var)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Encode, Decode)]
@@ -110,6 +112,7 @@ impl MooStackFrame {
             scope_stack: Default::default(),
             catch_stack: Default::default(),
             finally_stack: Default::default(),
+            capture_stack: Default::default(),
         }
     }
 
@@ -160,7 +163,20 @@ impl MooStackFrame {
     /// Return the value of a local variable.
     #[inline]
     pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
-        let v = &self.environment[id.1 as usize][id.0 as usize];
+        let scope_idx = id.1 as usize;
+        let var_idx = id.0 as usize;
+
+        // Check if the scope exists in the environment
+        if scope_idx >= self.environment.len() {
+            return None;
+        }
+
+        // Check if the variable offset exists in the scope
+        if var_idx >= self.environment[scope_idx].len() {
+            return None;
+        }
+
+        let v = &self.environment[scope_idx][var_idx];
         if v.type_code() == TYPE_NONE {
             return None;
         }
@@ -287,12 +303,6 @@ impl MooStackFrame {
         self.valstack.truncate(scope.valstack_pos);
         Some(scope)
     }
-
-    /// Capture the current variable environment for lambda closures
-    /// Returns a snapshot of all accessible variable scopes
-    pub fn capture_environment(&self) -> Vec<Vec<Var>> {
-        self.environment.clone()
-    }
 }
 
 impl Encode for MooStackFrame {
@@ -305,7 +315,8 @@ impl Encode for MooStackFrame {
         self.scope_stack.encode(encoder)?;
         self.temp.encode(encoder)?;
         self.catch_stack.encode(encoder)?;
-        self.finally_stack.encode(encoder)
+        self.finally_stack.encode(encoder)?;
+        self.capture_stack.encode(encoder)
     }
 }
 
@@ -320,6 +331,7 @@ impl<C> Decode<C> for MooStackFrame {
         let temp = Var::decode(decoder)?;
         let catch_stack = Vec::decode(decoder)?;
         let finally_stack = Vec::decode(decoder)?;
+        let capture_stack = Vec::decode(decoder)?;
         Ok(Self {
             program,
             pc,
@@ -330,6 +342,7 @@ impl<C> Decode<C> for MooStackFrame {
             temp,
             catch_stack,
             finally_stack,
+            capture_stack,
         })
     }
 }
@@ -345,6 +358,7 @@ impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
         let temp = Var::borrow_decode(decoder)?;
         let catch_stack = Vec::borrow_decode(decoder)?;
         let finally_stack = Vec::borrow_decode(decoder)?;
+        let capture_stack = Vec::borrow_decode(decoder)?;
         Ok(Self {
             program,
             pc,
@@ -355,6 +369,7 @@ impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
             temp,
             catch_stack,
             finally_stack,
+            capture_stack,
         })
     }
 }
