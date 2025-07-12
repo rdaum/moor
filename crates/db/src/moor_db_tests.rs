@@ -14,7 +14,7 @@
 #[cfg(test)]
 mod tests {
     use crate::DatabaseConfig;
-    
+
     use crate::moor_db::MoorDB;
     use moor_common::model::{CommitResult, WorldStateError};
     use moor_common::model::{HasUuid, Named};

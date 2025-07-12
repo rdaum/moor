@@ -13,11 +13,11 @@
 //
 
 use std::fs::{File, OpenOptions};
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::exit;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::io::Write;
 
 use crate::args::Args;
 use eyre::{bail, eyre};
@@ -27,7 +27,10 @@ use crate::connections::ConnectionRegistryFactory;
 use crate::event_log::{EventLog, EventLogConfig};
 use crate::rpc::{RpcServer, Transport, transport::RpcTransport};
 use crate::workers::WorkersServer;
+use base64::{Engine as _, engine::general_purpose};
 use clap::Parser;
+use ed25519_dalek::SigningKey;
+use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use eyre::Report;
 use mimalloc::MiMalloc;
 use moor_common::build;
@@ -37,13 +40,10 @@ use moor_kernel::tasks::scheduler::Scheduler;
 use moor_kernel::tasks::{NoopTasksDb, TasksDb};
 use moor_objdef::ObjectDefinitionLoader;
 use moor_textdump::textdump_load;
+use rand::{Rng, rngs::OsRng};
 use rpc_common::load_keypair;
 use tracing::{error, info, warn};
 use tracing_subscriber::fmt::format::FmtSpan;
-use ed25519_dalek::SigningKey;
-use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
-use rand::{rngs::OsRng, Rng};
-use base64::{Engine as _, engine::general_purpose};
 
 mod args;
 mod connections;
@@ -134,62 +134,80 @@ fn perform_import(
 /// Generate ED25519 keypair and write to PEM files
 fn generate_keypair(public_key_path: &PathBuf, private_key_path: &PathBuf) -> Result<(), Report> {
     info!("Generating ED25519 keypair...");
-    
+
     // Generate a new signing key
     let mut rng = OsRng;
     let secret_key_bytes: [u8; 32] = rng.r#gen();
     let signing_key = SigningKey::from_bytes(&secret_key_bytes);
     let verifying_key = signing_key.verifying_key();
-    
+
     // Convert to DER format first
-    let private_der = signing_key.to_pkcs8_der()
+    let private_der = signing_key
+        .to_pkcs8_der()
         .map_err(|e| eyre!("Failed to encode private key to DER: {}", e))?;
-    let public_der = verifying_key.to_public_key_der()
+    let public_der = verifying_key
+        .to_public_key_der()
         .map_err(|e| eyre!("Failed to encode public key to DER: {}", e))?;
-    
+
     // Convert DER to PEM using base64 encoding with proper line wrapping
     let private_b64 = general_purpose::STANDARD.encode(private_der.as_bytes());
     let public_b64 = general_purpose::STANDARD.encode(public_der.as_bytes());
-    
+
     // Wrap base64 content at 64 characters per line
-    let private_wrapped = private_b64.chars()
+    let private_wrapped = private_b64
+        .chars()
         .collect::<Vec<_>>()
         .chunks(64)
         .map(|chunk| chunk.iter().collect::<String>())
         .collect::<Vec<_>>()
         .join("\n");
-    let public_wrapped = public_b64.chars()
+    let public_wrapped = public_b64
+        .chars()
         .collect::<Vec<_>>()
         .chunks(64)
         .map(|chunk| chunk.iter().collect::<String>())
         .collect::<Vec<_>>()
         .join("\n");
-    
-    let private_pem = format!(
-        "-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n",
-        private_wrapped
-    );
-    let public_pem = format!(
-        "-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----\n",
-        public_wrapped
-    );
-    
+
+    let private_pem =
+        format!("-----BEGIN PRIVATE KEY-----\n{private_wrapped}\n-----END PRIVATE KEY-----\n");
+    let public_pem =
+        format!("-----BEGIN PUBLIC KEY-----\n{public_wrapped}\n-----END PUBLIC KEY-----\n");
+
     // Write private key
-    let mut private_file = File::create(private_key_path)
-        .map_err(|e| eyre!("Failed to create private key file {:?}: {}", private_key_path, e))?;
-    private_file.write_all(private_pem.as_bytes())
-        .map_err(|e| eyre!("Failed to write private key to {:?}: {}", private_key_path, e))?;
-    
+    let mut private_file = File::create(private_key_path).map_err(|e| {
+        eyre!(
+            "Failed to create private key file {:?}: {}",
+            private_key_path,
+            e
+        )
+    })?;
+    private_file
+        .write_all(private_pem.as_bytes())
+        .map_err(|e| {
+            eyre!(
+                "Failed to write private key to {:?}: {}",
+                private_key_path,
+                e
+            )
+        })?;
+
     // Write public key
-    let mut public_file = File::create(public_key_path)
-        .map_err(|e| eyre!("Failed to create public key file {:?}: {}", public_key_path, e))?;
-    public_file.write_all(public_pem.as_bytes())
+    let mut public_file = File::create(public_key_path).map_err(|e| {
+        eyre!(
+            "Failed to create public key file {:?}: {}",
+            public_key_path,
+            e
+        )
+    })?;
+    public_file
+        .write_all(public_pem.as_bytes())
         .map_err(|e| eyre!("Failed to write public key to {:?}: {}", public_key_path, e))?;
-    
+
     info!("Generated keypair:");
     info!("  Private key: {:?}", private_key_path);
     info!("  Public key: {:?}", public_key_path);
-    
+
     Ok(())
 }
 
