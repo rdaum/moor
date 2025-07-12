@@ -317,14 +317,20 @@ argspec = {"this" | "none" | "any"}
 flagchars = @{ ASCII_ALPHA* }
 flags_attr = {"flags" ~ ":" ~ "\"" ~ flagchars ~ "\"" }
 
-literal = { literal_atom | literal_map | literal_list | literal_flyweight | variable }
+literal = { literal_atom | literal_map | literal_lambda | literal_list | literal_flyweight | variable }
 variable = { ident }
 literal_atom = { integer | float | string | object | err | boolean | symbol | literal_binary | ident  }
 literal_map =  { ("[" ~ (literal ~ "->" ~ literal) ~ ("," ~ literal ~ "->" ~ literal)* ~ "]") | ( "[" ~ "]") }
-literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}") | "{}" }
+literal_list     = { ("{" ~ literal ~ ("," ~ literal)* ~ "}" ~ !"=>") | "{}" }
 literal_flyweight = { "<" ~ literal ~ ("," ~ literal_flyweight_slots)? ~ ("," ~ literal_flyweight_contents)? ~ ">" }
 literal_flyweight_slots = { ("[" ~ (ident ~ "->" ~ literal) ~ ("," ~ ident ~ "->" ~ literal)* ~ "]") | ("[" ~ "]") }
 literal_flyweight_contents = { "{" ~ (literal ~ ("," ~ literal)*)? ~ "}" }
+literal_lambda = { "{" ~ lambda_params ~ "}" ~ "=>" ~ expr ~ lambda_metadata? }
+lambda_metadata = { "with" ~ lambda_captured? ~ lambda_self_ref? }
+lambda_captured = { "captured" ~ "[" ~ (captured_var_map ~ ("," ~ captured_var_map)*)? ~ "]" }
+captured_var_map = { "{" ~ (captured_var_entry ~ ("," ~ captured_var_entry)*)? ~ "}" }
+captured_var_entry = { ident ~ ":" ~ literal }
+lambda_self_ref = { "self" ~ literal }
 prop_def = {"property" ~ propname ~ propinfo ~ ("=" ~ literal)? ~ ";" }
 prop_set = {"override" ~ propname ~ propinfo? ~ ("=" ~ literal)? ~ ";" }
 unquoted_propname = { PROPCHARS+ }

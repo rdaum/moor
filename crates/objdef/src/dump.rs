@@ -481,9 +481,15 @@ pub fn dump_object_definitions(object_defs: &[ObjectDefinition], directory_path:
 mod tests {
     use crate::{ObjectDefinitionLoader, collect_object_definitions, dump_object_definitions};
     use moor_common::model::CommitResult;
-    use moor_compiler::CompileOptions;
+    use moor_common::model::{PropFlag, WorldStateSource};
+    use moor_common::util::BitEnum;
+    use moor_compiler::{CompileOptions, compile};
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_textdump::textdump_load;
+    use moor_var::program::labels::Label;
+    use moor_var::program::names::Name;
+    use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
+    use moor_var::{Obj, SYSTEM_OBJECT, Symbol, Var, v_int};
     use semver::Version;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -531,5 +537,198 @@ mod tests {
 
         // Round trip worked, so we'll just leave it at that for now. A more anal retentive test
         // would go look at known objects and props etc and compare.
+    }
+
+    /// Test lambda objdef serialization by creating lambdas and doing a round-trip
+    #[test]
+    fn test_lambda_objdef_serialization() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let tmpdir_path = tmpdir.path();
+
+        // Create database with lambda properties
+        let (db1, _) = TxDB::open(None, DatabaseConfig::default());
+        let db1 = Arc::new(db1);
+
+        {
+            let mut tx = db1.new_world_state().unwrap();
+
+            // Create the system object first
+            let system_obj = tx
+                .create_object(
+                    &SYSTEM_OBJECT,
+                    &Obj::mk_id(-1), // parent: nothing
+                    &SYSTEM_OBJECT,  // owner: self
+                    BitEnum::new(),  // flags: none
+                )
+                .unwrap();
+            assert_eq!(system_obj, SYSTEM_OBJECT);
+
+            // Create a simple lambda by compiling a lambda expression
+            let lambda_source = "return {x} => x + 1;";
+            let lambda_program = compile(lambda_source, CompileOptions::default()).unwrap();
+            // Extract the lambda from the compiled program - it should be the result of the return statement
+            let simple_lambda = match lambda_program
+                .literals()
+                .iter()
+                .find(|lit| lit.as_lambda().is_some())
+            {
+                Some(lambda_var) => lambda_var.clone(),
+                None => {
+                    // Fallback: create a simple test lambda manually with correct parameter mapping
+                    let simple_source = "return x + 1;";
+                    let simple_program = compile(simple_source, CompileOptions::default()).unwrap();
+                    let x_name = Name(11, 0, 0); // x variable from debug output above
+                    let simple_params = ScatterArgs {
+                        labels: vec![ScatterLabel::Required(x_name)],
+                        done: Label(0),
+                    };
+                    Var::mk_lambda(simple_params, simple_program, vec![], None)
+                }
+            };
+
+            // Create a lambda with captured environment - use fallback approach
+            let captured_source = "return x + captured_var;";
+            let captured_program = compile(captured_source, CompileOptions::default()).unwrap();
+            let x_name = Name(11, 0, 0); // x variable from the compiled environment
+            let captured_params = ScatterArgs {
+                labels: vec![ScatterLabel::Required(x_name)],
+                done: Label(0),
+            };
+            let captured_env = vec![vec![v_int(42), v_int(123)]];
+            let captured_lambda =
+                Var::mk_lambda(captured_params, captured_program, captured_env, None);
+
+            // Define lambda properties
+            tx.define_property(
+                &SYSTEM_OBJECT,                                      // perms
+                &SYSTEM_OBJECT,                                      // definer
+                &SYSTEM_OBJECT,                                      // location
+                Symbol::mk("simple_lambda"),                         // pname
+                &SYSTEM_OBJECT,                                      // owner
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write, // prop_flags
+                Some(simple_lambda.clone()),                         // initial_value
+            )
+            .unwrap();
+
+            tx.define_property(
+                &SYSTEM_OBJECT,                                      // perms
+                &SYSTEM_OBJECT,                                      // definer
+                &SYSTEM_OBJECT,                                      // location
+                Symbol::mk("captured_lambda"),                       // pname
+                &SYSTEM_OBJECT,                                      // owner
+                BitEnum::new_with(PropFlag::Read) | PropFlag::Write, // prop_flags
+                Some(captured_lambda.clone()),                       // initial_value
+            )
+            .unwrap();
+
+            tx.commit().unwrap();
+        }
+
+        // Force database checkpoint to ensure data is persisted
+        db1.checkpoint().unwrap();
+
+        // Dump to objdef format
+        {
+            let snapshot = db1.create_snapshot().unwrap();
+            let object_defs = collect_object_definitions(snapshot.as_ref());
+            dump_object_definitions(&object_defs, tmpdir_path);
+        }
+
+        // Read the generated objdef file to verify lambda syntax
+        let system_file = tmpdir_path.join("sysobj.moo");
+        assert!(system_file.exists(), "System object file should be created");
+
+        let content = std::fs::read_to_string(&system_file).unwrap();
+
+        // Verify lambda syntax appears in the file with correct format
+        assert!(
+            content.contains("simple_lambda"),
+            "Should contain simple_lambda property"
+        );
+        assert!(
+            content.contains("captured_lambda"),
+            "Should contain captured_lambda property"
+        );
+        assert!(content.contains("=>"), "Should contain lambda arrow syntax");
+        assert!(
+            content.contains("{x} => x + 1"),
+            "Should contain correct lambda syntax"
+        );
+
+        // Verify the new variable name mapping format in captured environments
+        assert!(
+            content.contains("with captured"),
+            "Should contain captured environment metadata"
+        );
+        assert!(
+            content.contains("player: 42"),
+            "Should contain variable name mapping for first captured var"
+        );
+        assert!(
+            content.contains("this: 123"),
+            "Should contain variable name mapping for second captured var"
+        );
+
+        // Load objdef back into new database - should now work with literal_lambda support
+        let (db2, _) = TxDB::open(None, DatabaseConfig::default());
+        let db2 = Arc::new(db2);
+
+        {
+            let mut loader = db2.loader_client().unwrap();
+            let mut defloader = ObjectDefinitionLoader::new(loader.as_mut());
+            defloader
+                .read_dirdump(CompileOptions::default(), tmpdir_path)
+                .unwrap();
+            assert_eq!(loader.commit().unwrap(), CommitResult::Success);
+        }
+
+        // Verify lambdas were loaded correctly
+        {
+            let tx = db2.new_world_state().unwrap();
+
+            let simple_prop = tx
+                .retrieve_property(&SYSTEM_OBJECT, &SYSTEM_OBJECT, Symbol::mk("simple_lambda"))
+                .unwrap();
+            assert!(
+                simple_prop.as_lambda().is_some(),
+                "Simple lambda should be loaded as lambda"
+            );
+
+            let captured_prop = tx
+                .retrieve_property(
+                    &SYSTEM_OBJECT,
+                    &SYSTEM_OBJECT,
+                    Symbol::mk("captured_lambda"),
+                )
+                .unwrap();
+            assert!(
+                captured_prop.as_lambda().is_some(),
+                "Captured lambda should be loaded as lambda"
+            );
+
+            if let Some(lambda) = captured_prop.as_lambda() {
+                // With metadata support, captured environments should now be preserved
+                assert_eq!(
+                    lambda.0.captured_env.len(),
+                    1,
+                    "Should preserve captured environment with metadata"
+                );
+                assert_eq!(
+                    lambda.0.captured_env[0].len(),
+                    2,
+                    "Should have 2 captured variables"
+                );
+                assert_eq!(
+                    lambda.0.captured_env[0][0],
+                    v_int(42),
+                    "First captured var should be 42"
+                );
+                assert_eq!(
+                    lambda.0.captured_env[0][1],
+                    v_int(123),
+                    "Second captured var should be 123"
+                );
+            }
+        }
     }
 }

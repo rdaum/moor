@@ -26,11 +26,12 @@ mod test {
     use moor_common::model::VerbArgsSpec;
     use moor_common::model::VerbFlag;
     use moor_common::model::WorldStateSource;
-    use moor_common::util::BitEnum;
     use moor_common::model::loader::LoaderInterface;
-    use moor_common::model::{CommitResult, ValSet, PropFlag};
+    use moor_common::model::{CommitResult, PropFlag, ValSet};
     use moor_common::model::{HasUuid, Named};
+    use moor_common::util::BitEnum;
     use moor_compiler::CompileOptions;
+    use moor_compiler::compile;
     use moor_db::{Database, DatabaseConfig, TxDB};
     use moor_textdump::{
         EncodingMode, LambdaMOODBVersion, TextdumpReader, TextdumpVersion, TextdumpWriter,
@@ -39,11 +40,10 @@ mod test {
     use moor_var::SYSTEM_OBJECT;
     use moor_var::Symbol;
     use moor_var::program::ProgramType;
-    use moor_var::{NOTHING, Obj, Var, v_int};
-    use moor_compiler::compile;
-    use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
     use moor_var::program::labels::Label;
     use moor_var::program::names::Name;
+    use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
+    use moor_var::{NOTHING, Obj, Var, v_int};
 
     fn get_minimal_db() -> File {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -449,7 +449,6 @@ mod test {
         }
     }
 
-
     /// Test basic lambda database storage and retrieval
     #[test]
     fn test_lambda_database_storage() {
@@ -469,7 +468,7 @@ mod test {
             let mut tx = db.new_world_state().unwrap();
             let wizard = Obj::mk_id(3);
             let system_obj = SYSTEM_OBJECT;
-            
+
             // Create a simple lambda
             let simple_source = "return x + 1;";
             let simple_program = compile(simple_source, CompileOptions::default()).unwrap();
@@ -481,12 +480,15 @@ mod test {
 
             // Store the lambda
             tx.define_property(
-                &wizard, &wizard, &system_obj,
+                &wizard,
+                &wizard,
+                &system_obj,
                 Symbol::mk("test_lambda"),
                 &wizard,
                 BitEnum::new_with(PropFlag::Read) | PropFlag::Write,
-                Some(simple_lambda.clone())
-            ).unwrap();
+                Some(simple_lambda.clone()),
+            )
+            .unwrap();
 
             tx.commit().unwrap();
         }
@@ -497,16 +499,30 @@ mod test {
             let wizard = Obj::mk_id(3);
             let system_obj = SYSTEM_OBJECT;
 
-            let retrieved = tx.retrieve_property(
-                &wizard, &system_obj, Symbol::mk("test_lambda")
-            ).unwrap();
+            let retrieved = tx
+                .retrieve_property(&wizard, &system_obj, Symbol::mk("test_lambda"))
+                .unwrap();
 
-            assert!(retrieved.as_lambda().is_some(), "Retrieved value should be a lambda");
-            
+            assert!(
+                retrieved.as_lambda().is_some(),
+                "Retrieved value should be a lambda"
+            );
+
             if let Some(lambda) = retrieved.as_lambda() {
-                assert_eq!(lambda.0.params.labels.len(), 1, "Lambda should have 1 parameter");
-                assert_eq!(lambda.0.captured_env.len(), 0, "Lambda should have no captured environment");
-                assert!(lambda.0.self_var.is_none(), "Lambda should have no self-reference");
+                assert_eq!(
+                    lambda.0.params.labels.len(),
+                    1,
+                    "Lambda should have 1 parameter"
+                );
+                assert_eq!(
+                    lambda.0.captured_env.len(),
+                    0,
+                    "Lambda should have no captured environment"
+                );
+                assert!(
+                    lambda.0.self_var.is_none(),
+                    "Lambda should have no self-reference"
+                );
             }
         }
     }
@@ -530,7 +546,7 @@ mod test {
             let mut tx = db1.new_world_state().unwrap();
             let wizard = Obj::mk_id(3); // Wizard object from minimal db
             let system_obj = SYSTEM_OBJECT;
-            
+
             // Create a simple lambda with no captured variables
             let simple_source = "return x + 1;";
             let simple_program = compile(simple_source, CompileOptions::default()).unwrap();
@@ -548,7 +564,8 @@ mod test {
                 done: Label(0),
             };
             let captured_env = vec![vec![v_int(42), v_int(123)]];
-            let captured_lambda = Var::mk_lambda(captured_params, captured_program, captured_env, None);
+            let captured_lambda =
+                Var::mk_lambda(captured_params, captured_program, captured_env, None);
 
             // Create a lambda with self-reference (just test the structure, not actual recursion)
             let recursive_source = "return n + 1;";
@@ -558,38 +575,42 @@ mod test {
                 done: Label(0),
             };
             let self_var = Some(Name(1, 0, 0)); // self-reference variable
-            let recursive_lambda = Var::mk_lambda(recursive_params, recursive_program, vec![], self_var);
+            let recursive_lambda =
+                Var::mk_lambda(recursive_params, recursive_program, vec![], self_var);
 
             // Define properties on system object for testing
             tx.define_property(
-                &wizard, // perms
-                &system_obj, // definer  
-                &system_obj, // location
-                Symbol::mk("simple_lambda"), // pname
-                &wizard, // owner
+                &wizard,                                             // perms
+                &system_obj,                                         // definer
+                &system_obj,                                         // location
+                Symbol::mk("simple_lambda"),                         // pname
+                &wizard,                                             // owner
                 BitEnum::new_with(PropFlag::Read) | PropFlag::Write, // prop_flags
-                Some(simple_lambda.clone()) // initial_value
-            ).unwrap();
+                Some(simple_lambda.clone()),                         // initial_value
+            )
+            .unwrap();
 
             tx.define_property(
-                &wizard, // perms
-                &system_obj, // definer
-                &system_obj, // location
-                Symbol::mk("captured_lambda"), // pname
-                &wizard, // owner
+                &wizard,                                             // perms
+                &system_obj,                                         // definer
+                &system_obj,                                         // location
+                Symbol::mk("captured_lambda"),                       // pname
+                &wizard,                                             // owner
                 BitEnum::new_with(PropFlag::Read) | PropFlag::Write, // prop_flags
-                Some(captured_lambda.clone()) // initial_value
-            ).unwrap();
+                Some(captured_lambda.clone()),                       // initial_value
+            )
+            .unwrap();
 
             tx.define_property(
-                &wizard, // perms
-                &system_obj, // definer
-                &system_obj, // location
-                Symbol::mk("recursive_lambda"), // pname
-                &wizard, // owner
+                &wizard,                                             // perms
+                &system_obj,                                         // definer
+                &system_obj,                                         // location
+                Symbol::mk("recursive_lambda"),                      // pname
+                &wizard,                                             // owner
                 BitEnum::new_with(PropFlag::Read) | PropFlag::Write, // prop_flags
-                Some(recursive_lambda.clone()) // initial_value
-            ).unwrap();
+                Some(recursive_lambda.clone()),                      // initial_value
+            )
+            .unwrap();
 
             tx.commit().unwrap();
         }
@@ -610,7 +631,8 @@ mod test {
             buffered_reader,
             Version::new(0, 1, 0),
             CompileOptions::default(),
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(loader.commit().unwrap(), CommitResult::Success);
 
         // Verify lambdas were preserved correctly
@@ -620,49 +642,97 @@ mod test {
             let system_obj = SYSTEM_OBJECT;
 
             // Check simple lambda
-            let simple_prop = tx.retrieve_property(
-                &wizard, 
-                &system_obj,
-                Symbol::mk("simple_lambda")
-            ).unwrap();
-            assert!(simple_prop.as_lambda().is_some(), "Simple lambda property should be a lambda");
-            
+            let simple_prop = tx
+                .retrieve_property(&wizard, &system_obj, Symbol::mk("simple_lambda"))
+                .unwrap();
+            assert!(
+                simple_prop.as_lambda().is_some(),
+                "Simple lambda property should be a lambda"
+            );
+
             if let Some(lambda) = simple_prop.as_lambda() {
-                assert_eq!(lambda.0.params.labels.len(), 1, "Simple lambda should have 1 parameter");
-                assert_eq!(lambda.0.captured_env.len(), 0, "Simple lambda should have no captured environment");
-                assert!(lambda.0.self_var.is_none(), "Simple lambda should have no self-reference");
+                assert_eq!(
+                    lambda.0.params.labels.len(),
+                    1,
+                    "Simple lambda should have 1 parameter"
+                );
+                assert_eq!(
+                    lambda.0.captured_env.len(),
+                    0,
+                    "Simple lambda should have no captured environment"
+                );
+                assert!(
+                    lambda.0.self_var.is_none(),
+                    "Simple lambda should have no self-reference"
+                );
             }
 
             // Check captured lambda
-            let captured_prop = tx.retrieve_property(
-                &wizard,
-                &system_obj,
-                Symbol::mk("captured_lambda")
-            ).unwrap();
-            assert!(captured_prop.as_lambda().is_some(), "Captured lambda property should be a lambda");
-            
+            let captured_prop = tx
+                .retrieve_property(&wizard, &system_obj, Symbol::mk("captured_lambda"))
+                .unwrap();
+            assert!(
+                captured_prop.as_lambda().is_some(),
+                "Captured lambda property should be a lambda"
+            );
+
             if let Some(lambda) = captured_prop.as_lambda() {
-                assert_eq!(lambda.0.params.labels.len(), 1, "Captured lambda should have 1 parameter");
-                assert_eq!(lambda.0.captured_env.len(), 1, "Captured lambda should have 1 frame");
-                assert_eq!(lambda.0.captured_env[0].len(), 2, "Captured lambda frame should have 2 variables");
-                assert_eq!(lambda.0.captured_env[0][0], v_int(42), "First captured var should be 42");
-                assert_eq!(lambda.0.captured_env[0][1], v_int(123), "Second captured var should be 123");
-                assert!(lambda.0.self_var.is_none(), "Captured lambda should have no self-reference");
+                assert_eq!(
+                    lambda.0.params.labels.len(),
+                    1,
+                    "Captured lambda should have 1 parameter"
+                );
+                assert_eq!(
+                    lambda.0.captured_env.len(),
+                    1,
+                    "Captured lambda should have 1 frame"
+                );
+                assert_eq!(
+                    lambda.0.captured_env[0].len(),
+                    2,
+                    "Captured lambda frame should have 2 variables"
+                );
+                assert_eq!(
+                    lambda.0.captured_env[0][0],
+                    v_int(42),
+                    "First captured var should be 42"
+                );
+                assert_eq!(
+                    lambda.0.captured_env[0][1],
+                    v_int(123),
+                    "Second captured var should be 123"
+                );
+                assert!(
+                    lambda.0.self_var.is_none(),
+                    "Captured lambda should have no self-reference"
+                );
             }
 
             // Check recursive lambda
-            let recursive_prop = tx.retrieve_property(
-                &wizard,
-                &system_obj,
-                Symbol::mk("recursive_lambda")
-            ).unwrap();
-            assert!(recursive_prop.as_lambda().is_some(), "Recursive lambda property should be a lambda");
-            
+            let recursive_prop = tx
+                .retrieve_property(&wizard, &system_obj, Symbol::mk("recursive_lambda"))
+                .unwrap();
+            assert!(
+                recursive_prop.as_lambda().is_some(),
+                "Recursive lambda property should be a lambda"
+            );
+
             if let Some(lambda) = recursive_prop.as_lambda() {
-                assert_eq!(lambda.0.params.labels.len(), 1, "Recursive lambda should have 1 parameter");
-                assert_eq!(lambda.0.captured_env.len(), 0, "Recursive lambda should have no captured environment");
-                assert!(lambda.0.self_var.is_some(), "Recursive lambda should have self-reference");
-                
+                assert_eq!(
+                    lambda.0.params.labels.len(),
+                    1,
+                    "Recursive lambda should have 1 parameter"
+                );
+                assert_eq!(
+                    lambda.0.captured_env.len(),
+                    0,
+                    "Recursive lambda should have no captured environment"
+                );
+                assert!(
+                    lambda.0.self_var.is_some(),
+                    "Recursive lambda should have self-reference"
+                );
+
                 if let Some(self_var) = lambda.0.self_var {
                     assert_eq!(self_var.0, 1, "Self-var should have offset 1");
                     assert_eq!(self_var.1, 0, "Self-var should have scope depth 0");

@@ -136,6 +136,145 @@ fn parse_literal_map(
     Ok(v_map(&pairs))
 }
 
+fn parse_literal_lambda(
+    context: &mut ObjFileContext,
+    mut pairs: Pairs<Rule>,
+) -> Result<Var, ObjDefParseError> {
+    // Parse lambda_params
+    let params_pair = pairs.next().unwrap();
+    let params = parse_objdef_lambda_params(context, params_pair)?;
+
+    // Parse the lambda body (expression)
+    let body_pair = pairs.next().unwrap();
+
+    // For now, convert the body expression back to source and compile it
+    // This is not ideal but works for the objdef format
+    let body_source = format!("return {};", body_pair.as_str());
+    let body_program =
+        crate::compile(&body_source, crate::CompileOptions::default()).map_err(VerbCompileError)?;
+
+    // Parse optional metadata
+    let mut captured_env = vec![];
+    let mut self_var = None;
+
+    if let Some(metadata_pair) = pairs.next() {
+        if metadata_pair.as_rule() == Rule::lambda_metadata {
+            for meta_item in metadata_pair.into_inner() {
+                match meta_item.as_rule() {
+                    Rule::lambda_captured => {
+                        captured_env = parse_lambda_captured_env(context, meta_item)?;
+                    }
+                    Rule::lambda_self_ref => {
+                        self_var = parse_lambda_self_ref(context, meta_item)?;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    Ok(moor_var::Var::mk_lambda(
+        params,
+        body_program,
+        captured_env,
+        self_var,
+    ))
+}
+
+fn parse_objdef_lambda_params(
+    _context: &mut ObjFileContext,
+    params_pair: Pair<Rule>,
+) -> Result<moor_var::program::opcode::ScatterArgs, ObjDefParseError> {
+    use moor_var::program::labels::Label;
+    use moor_var::program::names::Name;
+    use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
+
+    let mut labels = vec![];
+
+    if params_pair.as_rule() == Rule::lambda_params {
+        for param in params_pair.into_inner() {
+            match param.as_rule() {
+                Rule::scatter_target => {
+                    // Simple required parameter: just the identifier
+                    let ident = param.into_inner().next().unwrap();
+                    let _param_name = ident.as_str();
+                    // Create a dummy Name - this will be fixed up during compilation
+                    let name = Name(0, 0, 0); // Will be assigned proper values during compilation
+                    labels.push(ScatterLabel::Required(name));
+                }
+                Rule::scatter_optional => {
+                    // Optional parameter: ?ident (= expr)?
+                    let mut inner = param.into_inner();
+                    let ident = inner.next().unwrap();
+                    let _param_name = ident.as_str();
+                    let name = Name(0, 0, 0);
+                    let default_label = if inner.peek().is_some() {
+                        // Has default value - we'll need to parse and compile it
+                        Some(Label(0)) // Dummy label for now
+                    } else {
+                        None
+                    };
+                    labels.push(ScatterLabel::Optional(name, default_label));
+                }
+                Rule::scatter_rest => {
+                    // Rest parameter: @ident
+                    let ident = param.into_inner().next().unwrap();
+                    let _param_name = ident.as_str();
+                    let name = Name(0, 0, 0);
+                    labels.push(ScatterLabel::Rest(name));
+                }
+                _ => {} // Ignore other rules
+            }
+        }
+    }
+
+    Ok(ScatterArgs {
+        labels,
+        done: Label(0), // Dummy label
+    })
+}
+
+fn parse_lambda_captured_env(
+    context: &mut ObjFileContext,
+    captured_pair: Pair<Rule>,
+) -> Result<Vec<Vec<moor_var::Var>>, ObjDefParseError> {
+    let mut frames = vec![];
+
+    // Parse the captured environment frames with variable name mapping
+    for frame_pair in captured_pair.into_inner() {
+        if frame_pair.as_rule() == Rule::captured_var_map {
+            let mut frame_vars = vec![];
+            for entry_pair in frame_pair.into_inner() {
+                if entry_pair.as_rule() == Rule::captured_var_entry {
+                    let mut entry_parts = entry_pair.into_inner();
+                    let _var_name = entry_parts.next().unwrap().as_str(); // Variable name (for reference)
+                    let var_value = parse_literal(context, entry_parts.next().unwrap())?;
+                    frame_vars.push(var_value);
+                }
+            }
+            frames.push(frame_vars);
+        }
+    }
+
+    Ok(frames)
+}
+
+fn parse_lambda_self_ref(
+    context: &mut ObjFileContext,
+    self_pair: Pair<Rule>,
+) -> Result<Option<moor_var::program::names::Name>, ObjDefParseError> {
+    use moor_var::program::names::Name;
+
+    // Skip the "self" keyword and parse the literal value
+    if let Some(literal_pair) = self_pair.into_inner().next() {
+        let _self_var = parse_literal(context, literal_pair)?;
+        // For now, return a dummy Name - this would need proper mapping to variable names
+        return Ok(Some(Name(1, 0, 0)));
+    }
+
+    Ok(None)
+}
+
 fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, ObjDefParseError> {
     match pair.as_rule() {
         Rule::literal_atom => {
@@ -151,9 +290,19 @@ fn parse_literal(context: &mut ObjFileContext, pair: Pair<Rule>) -> Result<Var, 
 
             parse_literal_map(context, pairs)
         }
+        Rule::literal_lambda => {
+            let pairs = pair.into_inner();
+            parse_literal_lambda(context, pairs)
+        }
         Rule::literal => {
             let literal = pair.into_inner().next().unwrap();
             parse_literal(context, literal)
+        }
+        Rule::variable => {
+            let ident = pair.into_inner().next().unwrap();
+            let var_name = ident.as_str();
+            // For now, just treat variables as identifiers (this might need more sophisticated handling)
+            Ok(v_str(var_name))
         }
         Rule::literal_flyweight => {
             // Three components:

@@ -11,11 +11,11 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
+use moor_compiler::{program_to_tree, unparse};
 use moor_var::{ErrorCode, Obj, Sequence};
-use moor_var::{Var, VarType, Variant, Lambda};
+use moor_var::{Lambda, Var, VarType, Variant};
 use std::collections::BTreeMap;
 use std::io;
-use moor_compiler::{program_to_tree, unparse};
 
 use crate::read::TYPE_CLEAR;
 use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
@@ -49,7 +49,7 @@ impl<W: io::Write> TextdumpWriter<W> {
 
     fn write_lambda(&mut self, lambda: &Lambda) -> Result<(), io::Error> {
         writeln!(self.writer, "{}", VarType::TYPE_LAMBDA as i64)?;
-        
+
         // Write parameter specification
         writeln!(self.writer, "{}", lambda.0.params.labels.len())?;
         for label in &lambda.0.params.labels {
@@ -81,19 +81,19 @@ impl<W: io::Write> TextdumpWriter<W> {
             }
         }
         writeln!(self.writer, "{}", lambda.0.params.done.0)?;
-        
+
         // Decompile the lambda body to source code, just like we do for verbs
         let decompiled = program_to_tree(&lambda.0.body)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let unparsed = unparse(&decompiled)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        
+        let unparsed =
+            unparse(&decompiled).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
         // Write the source code
         writeln!(self.writer, "{}", unparsed.len())?;
         for line in unparsed {
-            writeln!(self.writer, "{}", line)?;
+            writeln!(self.writer, "{line}")?;
         }
-        
+
         // Write captured environment
         writeln!(self.writer, "{}", lambda.0.captured_env.len())?;
         for frame in &lambda.0.captured_env {
@@ -102,7 +102,7 @@ impl<W: io::Write> TextdumpWriter<W> {
                 self.write_var(var, false)?;
             }
         }
-        
+
         // Write self-reference variable name if present
         if let Some(self_var) = lambda.0.self_var {
             writeln!(self.writer, "1")?;
@@ -112,7 +112,7 @@ impl<W: io::Write> TextdumpWriter<W> {
         } else {
             writeln!(self.writer, "0")?;
         }
-        
+
         Ok(())
     }
 

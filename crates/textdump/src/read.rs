@@ -28,16 +28,16 @@ use crate::ToastStuntDBVersion::{
 use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_common::model::CompileError;
 use moor_common::model::WorldStateError;
+use moor_compiler::{CompileOptions, compile};
+use moor_var::program::labels::Label;
+use moor_var::program::names::Name;
+use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
 use moor_var::{Error, ErrorCode, NOTHING, Sequence, Variant, v_error, v_list, v_map};
 use moor_var::{
     List, Symbol, Var, VarType, v_binary, v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str,
     v_sym,
 };
 use moor_var::{Obj, v_flyweight};
-use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
-use moor_var::program::labels::Label;
-use moor_var::program::names::Name;
-use moor_compiler::{compile, CompileOptions};
 
 pub const TYPE_CLEAR: i64 = 5;
 
@@ -282,9 +282,7 @@ impl<R: Read> TextdumpReader<R> {
 
                 v_none()
             }
-            VarType::TYPE_LAMBDA => {
-                self.read_lambda()?
-            }
+            VarType::TYPE_LAMBDA => self.read_lambda()?,
             _ => {
                 return Err(TextdumpReaderError::ParseError(
                     format!("invalid var type: {vtype:?}"),
@@ -334,7 +332,7 @@ impl<R: Read> TextdumpReader<R> {
                 }
                 _ => {
                     return Err(TextdumpReaderError::ParseError(
-                        format!("Invalid scatter label variant: {}", variant),
+                        format!("Invalid scatter label variant: {variant}"),
                         self.line_num,
                     ));
                 }
@@ -355,11 +353,12 @@ impl<R: Read> TextdumpReader<R> {
         let source_code = source_lines.join("\n");
 
         // Compile the source code back into a Program
-        let program = compile(&source_code, CompileOptions::default())
-            .map_err(|e| TextdumpReaderError::ParseError(
-                format!("Failed to compile lambda source: {:?}", e),
+        let program = compile(&source_code, CompileOptions::default()).map_err(|e| {
+            TextdumpReaderError::ParseError(
+                format!("Failed to compile lambda source: {e:?}"),
                 self.line_num,
-            ))?;
+            )
+        })?;
 
         // Read captured environment
         let frame_count = self.read_num()? as usize;

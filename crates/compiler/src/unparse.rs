@@ -951,7 +951,75 @@ pub fn to_literal(v: &Var) -> String {
                 }
             };
 
-            format!("{{{param_str}}} => {body_str}")
+            // Build metadata string for captured environment and self-reference
+            let mut metadata_parts = vec![];
+
+            if !l.0.captured_env.is_empty() {
+                let frames: Vec<String> =
+                    l.0.captured_env
+                        .iter()
+                        .enumerate()
+                        .map(|(scope_depth, frame)| {
+                            // Try to map variables to their names using the lambda body's variable name table
+                            let var_strings: Vec<String> = frame
+                                .iter()
+                                .enumerate()
+                                .map(|(var_offset, var_value)| {
+                                    // Search for variable names in the lambda body's name table that match this scope and offset
+                                    let var_names = l.0.body.var_names();
+
+                                    // Look for a variable name that corresponds to this position
+                                    let maybe_name = var_names
+                                        .names()
+                                        .iter()
+                                        .filter_map(|name| {
+                                            // Check if this name corresponds to our scope depth and offset
+                                            if name.1 as usize == scope_depth
+                                                && name.0 as usize == var_offset
+                                            {
+                                                var_names.ident_for_name(name)
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .next();
+
+                                    match maybe_name {
+                                        Some(symbol) => {
+                                            // Include both variable name and value for clarity
+                                            format!(
+                                                "{}: {}",
+                                                symbol.as_arc_string(),
+                                                to_literal(var_value)
+                                            )
+                                        }
+                                        None => {
+                                            // Fall back to just the value if no name is found
+                                            to_literal(var_value)
+                                        }
+                                    }
+                                })
+                                .collect();
+
+                            format!("{{{}}}", var_strings.join(", "))
+                        })
+                        .collect();
+                metadata_parts.push(format!("captured [{}]", frames.join(", ")));
+            }
+
+            if let Some(_self_var) = l.0.self_var {
+                // For now, represent self-reference as a simple marker
+                metadata_parts.push("self 1".to_string());
+            }
+
+            if metadata_parts.is_empty() {
+                format!("{{{param_str}}} => {body_str}")
+            } else {
+                format!(
+                    "{{{param_str}}} => {body_str} with {}",
+                    metadata_parts.join(" ")
+                )
+            }
         }
     }
 }
