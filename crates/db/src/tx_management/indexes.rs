@@ -52,6 +52,14 @@ where
     fn has_secondary_index(&self) -> bool {
         false
     }
+
+    /// Whether the provider has been fully loaded into this index
+    fn is_provider_fully_loaded(&self) -> bool {
+        false
+    }
+
+    /// Mark the provider as fully loaded
+    fn set_provider_fully_loaded(&mut self, loaded: bool);
 }
 
 /// Hash-based implementation of RelationIndex using im::HashMap
@@ -68,6 +76,9 @@ where
     /// Only present if secondary indexing is enabled
     secondary_index:
         Option<im::HashMap<Codomain, im::HashSet<Domain>, BuildHasherDefault<AHasher>>>,
+
+    /// Whether the provider has been fully loaded
+    provider_fully_loaded: bool,
 }
 
 // Basic constructor for any Domain that supports Hash
@@ -80,6 +91,7 @@ where
         Self {
             entries: Default::default(),
             secondary_index: None,
+            provider_fully_loaded: false,
         }
     }
 }
@@ -94,6 +106,7 @@ where
         Self {
             entries: Default::default(),
             secondary_index: Some(Default::default()),
+            provider_fully_loaded: false,
         }
     }
 }
@@ -157,6 +170,14 @@ where
 
     fn has_secondary_index(&self) -> bool {
         self.secondary_index.is_some()
+    }
+
+    fn is_provider_fully_loaded(&self) -> bool {
+        self.provider_fully_loaded
+    }
+
+    fn set_provider_fully_loaded(&mut self, loaded: bool) {
+        self.provider_fully_loaded = loaded;
     }
 }
 
@@ -295,6 +316,14 @@ where
 
     fn has_secondary_index(&self) -> bool {
         true
+    }
+
+    fn is_provider_fully_loaded(&self) -> bool {
+        self.inner.provider_fully_loaded
+    }
+
+    fn set_provider_fully_loaded(&mut self, loaded: bool) {
+        self.inner.provider_fully_loaded = loaded;
     }
 }
 

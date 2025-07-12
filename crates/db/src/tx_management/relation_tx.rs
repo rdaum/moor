@@ -93,6 +93,7 @@ where
     Codomain: Clone + PartialEq + Send + Sync + 'static,
 {
     tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
+    provider_fully_loaded: bool,
 }
 
 impl<Domain, Codomain> WorkingSet<Domain, Codomain>
@@ -103,7 +104,20 @@ where
     pub fn new(
         tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
     ) -> WorkingSet<Domain, Codomain> {
-        WorkingSet { tuples }
+        WorkingSet {
+            tuples,
+            provider_fully_loaded: false,
+        }
+    }
+
+    pub fn new_with_fully_loaded(
+        tuples: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
+        provider_fully_loaded: bool,
+    ) -> WorkingSet<Domain, Codomain> {
+        WorkingSet {
+            tuples,
+            provider_fully_loaded,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -121,6 +135,10 @@ where
     pub fn tuples_ref(&self) -> &IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>> {
         &self.tuples
     }
+
+    pub fn provider_fully_loaded(&self) -> bool {
+        self.provider_fully_loaded
+    }
 }
 
 /// Represents the state of a relation in the context of a current transaction.
@@ -135,10 +153,11 @@ where
         canonical: Box<dyn RelationIndex<Domain, Codomain>>,
         backing_source: Source,
     ) -> RelationTransaction<Domain, Codomain, Source> {
+        let provider_fully_loaded = canonical.is_provider_fully_loaded();
         let inner = Inner {
             local_operations: Box::new(IndexMap::default()),
             master_entries: canonical,
-            provider_fully_loaded: false,
+            provider_fully_loaded,
         };
         RelationTransaction {
             tx,
@@ -598,10 +617,16 @@ where
         // The scan() call above will have populated the master_entries index as a side effect
         // due to the Canonical::scan() implementation, so we don't need to do anything else here
 
+        // Mark the master entries as fully loaded
+        self.index.master_entries.set_provider_fully_loaded(true);
+
         Ok(())
     }
 
     pub fn working_set(self) -> Result<WorkingSet<Domain, Codomain>, WorldStateError> {
-        Ok(WorkingSet::new(self.index.local_operations))
+        Ok(WorkingSet::new_with_fully_loaded(
+            self.index.local_operations,
+            self.index.provider_fully_loaded,
+        ))
     }
 }

@@ -184,6 +184,11 @@ where
     /// This is the final phase of the transaction commit process, and mutates the cache and
     /// requests mutation into the Source.
     pub fn apply(&mut self, working_set: WorkingSet<Domain, Codomain>) -> Result<(), Error> {
+        // Update the provider_fully_loaded state first
+        if working_set.provider_fully_loaded() {
+            self.index.set_provider_fully_loaded(true);
+        }
+
         // Apply phase.
         for (domain, op) in working_set.tuples().into_iter() {
             match op.operation {
@@ -266,9 +271,15 @@ where
         F: Fn(&Domain, &Codomain) -> bool,
     {
         let results = self.source.scan(&predicate)?;
-        for (ts, domain, codomain) in &results {
+        {
             let mut index = self.index.write().unwrap();
-            index.insert_entry(*ts, domain.clone(), codomain.clone());
+            for (ts, domain, codomain) in &results {
+                index.insert_entry(*ts, domain.clone(), codomain.clone());
+            }
+            // If we're scanning with a predicate that accepts everything, mark as fully loaded
+            if self.is_full_scan_predicate(predicate) {
+                index.set_provider_fully_loaded(true);
+            }
         }
 
         Ok(results)
@@ -287,6 +298,17 @@ where
 {
     pub fn stop_provider(&self) -> Result<(), Error> {
         self.source.stop()
+    }
+
+    /// Check if a predicate represents a full scan (accepts everything)
+    /// We can detect this by testing with dummy values, but for now we'll use a simpler approach
+    fn is_full_scan_predicate<F>(&self, _predicate: &F) -> bool
+    where
+        F: Fn(&Domain, &Codomain) -> bool,
+    {
+        // For now, we'll be conservative and only mark as fully loaded when
+        // explicitly called through get_all() in RelationTransaction
+        false
     }
 }
 
