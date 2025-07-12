@@ -12,9 +12,10 @@
 //
 
 use moor_var::{ErrorCode, Obj, Sequence};
-use moor_var::{Var, VarType, Variant};
+use moor_var::{Var, VarType, Variant, Lambda};
 use std::collections::BTreeMap;
 use std::io;
+use moor_compiler::{program_to_tree, unparse};
 
 use crate::read::TYPE_CLEAR;
 use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
@@ -44,6 +45,75 @@ impl<W: io::Write> TextdumpWriter<W> {
             verbdef.flags,
             verbdef.prep
         )
+    }
+
+    fn write_lambda(&mut self, lambda: &Lambda) -> Result<(), io::Error> {
+        writeln!(self.writer, "{}", VarType::TYPE_LAMBDA as i64)?;
+        
+        // Write parameter specification
+        writeln!(self.writer, "{}", lambda.0.params.labels.len())?;
+        for label in &lambda.0.params.labels {
+            match label {
+                moor_var::program::opcode::ScatterLabel::Optional(name, opt_label) => {
+                    writeln!(self.writer, "0")?; // Optional variant
+                    writeln!(self.writer, "{}", name.0)?;
+                    writeln!(self.writer, "{}", name.1)?;
+                    writeln!(self.writer, "{}", name.2)?;
+                    if let Some(label) = opt_label {
+                        writeln!(self.writer, "1")?;
+                        writeln!(self.writer, "{}", label.0)?;
+                    } else {
+                        writeln!(self.writer, "0")?;
+                    }
+                }
+                moor_var::program::opcode::ScatterLabel::Required(name) => {
+                    writeln!(self.writer, "1")?; // Required variant
+                    writeln!(self.writer, "{}", name.0)?;
+                    writeln!(self.writer, "{}", name.1)?;
+                    writeln!(self.writer, "{}", name.2)?;
+                }
+                moor_var::program::opcode::ScatterLabel::Rest(name) => {
+                    writeln!(self.writer, "2")?; // Rest variant
+                    writeln!(self.writer, "{}", name.0)?;
+                    writeln!(self.writer, "{}", name.1)?;
+                    writeln!(self.writer, "{}", name.2)?;
+                }
+            }
+        }
+        writeln!(self.writer, "{}", lambda.0.params.done.0)?;
+        
+        // Decompile the lambda body to source code, just like we do for verbs
+        let decompiled = program_to_tree(&lambda.0.body)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let unparsed = unparse(&decompiled)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        
+        // Write the source code
+        writeln!(self.writer, "{}", unparsed.len())?;
+        for line in unparsed {
+            writeln!(self.writer, "{}", line)?;
+        }
+        
+        // Write captured environment
+        writeln!(self.writer, "{}", lambda.0.captured_env.len())?;
+        for frame in &lambda.0.captured_env {
+            writeln!(self.writer, "{}", frame.len())?;
+            for var in frame {
+                self.write_var(var, false)?;
+            }
+        }
+        
+        // Write self-reference variable name if present
+        if let Some(self_var) = lambda.0.self_var {
+            writeln!(self.writer, "1")?;
+            writeln!(self.writer, "{}", self_var.0)?;
+            writeln!(self.writer, "{}", self_var.1)?;
+            writeln!(self.writer, "{}", self_var.2)?;
+        } else {
+            writeln!(self.writer, "0")?;
+        }
+        
+        Ok(())
     }
 
     fn write_var(&mut self, var: &Var, is_clear: bool) -> Result<(), io::Error> {
@@ -136,9 +206,8 @@ impl<W: io::Write> TextdumpWriter<W> {
                 }
                 writeln!(self.writer, "0")?;
             }
-            Variant::Lambda(_) => {
-                // TODO: Implement lambda textdump serialization once decompilation is working
-                todo!("Lambda textdump serialization not yet implemented")
+            Variant::Lambda(lambda) => {
+                self.write_lambda(lambda)?;
             }
         }
         Ok(())

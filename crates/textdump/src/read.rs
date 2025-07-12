@@ -28,13 +28,16 @@ use crate::ToastStuntDBVersion::{
 use crate::{EncodingMode, Object, Propval, Textdump, Verb, Verbdef};
 use moor_common::model::CompileError;
 use moor_common::model::WorldStateError;
-use moor_compiler::Label;
 use moor_var::{Error, ErrorCode, NOTHING, Sequence, Variant, v_error, v_list, v_map};
 use moor_var::{
     List, Symbol, Var, VarType, v_binary, v_bool_int, v_err, v_float, v_int, v_none, v_obj, v_str,
     v_sym,
 };
 use moor_var::{Obj, v_flyweight};
+use moor_var::program::opcode::{ScatterArgs, ScatterLabel};
+use moor_var::program::labels::Label;
+use moor_var::program::names::Name;
+use moor_compiler::{compile, CompileOptions};
 
 pub const TYPE_CLEAR: i64 = 5;
 
@@ -279,6 +282,9 @@ impl<R: Read> TextdumpReader<R> {
 
                 v_none()
             }
+            VarType::TYPE_LAMBDA => {
+                self.read_lambda()?
+            }
             _ => {
                 return Err(TextdumpReaderError::ParseError(
                     format!("invalid var type: {vtype:?}"),
@@ -287,6 +293,99 @@ impl<R: Read> TextdumpReader<R> {
             }
         };
         Ok(v)
+    }
+
+    fn read_lambda(&mut self) -> Result<Var, TextdumpReaderError> {
+        // Read parameter specification
+        let param_count = self.read_num()? as usize;
+        let mut labels = Vec::with_capacity(param_count);
+        for _ in 0..param_count {
+            let variant = self.read_num()? as u8;
+            match variant {
+                0 => {
+                    // Optional variant
+                    let offset = self.read_num()? as u16;
+                    let scope_depth = self.read_num()? as u8;
+                    let scope_id = self.read_num()? as u16;
+                    let name = Name(offset, scope_depth, scope_id);
+                    let has_label = self.read_num()? != 0;
+                    let opt_label = if has_label {
+                        Some(Label(self.read_num()? as u16))
+                    } else {
+                        None
+                    };
+                    labels.push(ScatterLabel::Optional(name, opt_label));
+                }
+                1 => {
+                    // Required variant
+                    let offset = self.read_num()? as u16;
+                    let scope_depth = self.read_num()? as u8;
+                    let scope_id = self.read_num()? as u16;
+                    let name = Name(offset, scope_depth, scope_id);
+                    labels.push(ScatterLabel::Required(name));
+                }
+                2 => {
+                    // Rest variant
+                    let offset = self.read_num()? as u16;
+                    let scope_depth = self.read_num()? as u8;
+                    let scope_id = self.read_num()? as u16;
+                    let name = Name(offset, scope_depth, scope_id);
+                    labels.push(ScatterLabel::Rest(name));
+                }
+                _ => {
+                    return Err(TextdumpReaderError::ParseError(
+                        format!("Invalid scatter label variant: {}", variant),
+                        self.line_num,
+                    ));
+                }
+            }
+        }
+        let done_label = Label(self.read_num()? as u16);
+        let params = ScatterArgs {
+            labels,
+            done: done_label,
+        };
+
+        // Read source code
+        let source_line_count = self.read_num()? as usize;
+        let mut source_lines = Vec::with_capacity(source_line_count);
+        for _ in 0..source_line_count {
+            source_lines.push(self.read_string()?);
+        }
+        let source_code = source_lines.join("\n");
+
+        // Compile the source code back into a Program
+        let program = compile(&source_code, CompileOptions::default())
+            .map_err(|e| TextdumpReaderError::ParseError(
+                format!("Failed to compile lambda source: {:?}", e),
+                self.line_num,
+            ))?;
+
+        // Read captured environment
+        let frame_count = self.read_num()? as usize;
+        let mut captured_env = Vec::with_capacity(frame_count);
+        for _ in 0..frame_count {
+            let var_count = self.read_num()? as usize;
+            let mut frame = Vec::with_capacity(var_count);
+            for _ in 0..var_count {
+                frame.push(self.read_var()?);
+            }
+            captured_env.push(frame);
+        }
+
+        // Read self-reference variable name if present
+        let has_self_var = self.read_num()? != 0;
+        let self_var = if has_self_var {
+            let offset = self.read_num()? as u16;
+            let scope_depth = self.read_num()? as u8;
+            let scope_id = self.read_num()? as u16;
+            Some(Name(offset, scope_depth, scope_id))
+        } else {
+            None
+        };
+
+        // Create the lambda
+        Ok(Var::mk_lambda(params, program, captured_env, self_var))
     }
 
     fn read_var(&mut self) -> Result<Var, TextdumpReaderError> {
