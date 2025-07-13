@@ -17,21 +17,29 @@ pub use moor_var::program::names::Names;
 
 mod ast;
 mod codegen;
+mod cst;
 mod decompile;
 mod parse;
+mod parse2;
+mod precedence;
 mod unparse;
 
 mod codegen_tests;
 mod objdef;
 mod var_scope;
 
-pub use crate::codegen::compile;
+pub use crate::codegen::{compile, compile_legacy};
+pub use crate::cst::{
+    CSTNode, CSTNodeKind, CSTSpan, CommentType, PestToCSTConverter,
+    CSTExpressionParser, CSTExpressionParserBuilder, Associativity, OperatorInfo,
+};
 pub use crate::decompile::program_to_tree;
 pub use crate::objdef::{
     ObjDefParseError, ObjFileContext, ObjPropDef, ObjPropOverride, ObjVerbDef, ObjectDefinition,
     compile_object_definitions,
 };
 pub use crate::parse::CompileOptions;
+pub use crate::parse2::{parse_program2, Parse2, CSTTreeTransformer};
 pub use crate::unparse::{to_literal, to_literal_objsub, unparse};
 pub use moor_common::builtins::{
     ArgCount, ArgType, BUILTINS, Builtin, BuiltinId, offset_for_builtin,
