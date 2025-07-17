@@ -32,7 +32,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Instant, SystemTime};
 use tmq::subscribe::Subscribe;
 use tmq::{request, subscribe};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -331,11 +331,51 @@ pub struct ExecutionContext {
     pub kill_switch: Arc<std::sync::atomic::AtomicBool>,
 }
 
+/// Wait for a specific task to complete using async notification instead of polling
+pub async fn wait_for_task_completion(
+    task_id: usize,
+    task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Error>, Arc<Notify>)>>>,
+    timeout: std::time::Duration,
+) -> Result<Result<Var, eyre::Error>, eyre::Error> {
+    let notify = {
+        let mut tasks = task_results.lock().await;
+        if let Some((result, _notify)) = tasks.remove(&task_id) {
+            // Task already completed
+            return Ok(result);
+        }
+        // Task not completed yet, create a notifier for it
+        let notify = Arc::new(Notify::new());
+        tasks.insert(task_id, (Err(anyhow!("Task pending")), notify.clone()));
+        notify
+    };
+
+    // Wait for notification with timeout
+    let timeout_result = tokio::time::timeout(timeout, notify.notified()).await;
+
+    match timeout_result {
+        Ok(_) => {
+            // Notification received, get the result
+            let mut tasks = task_results.lock().await;
+            if let Some((result, _)) = tasks.remove(&task_id) {
+                Ok(result)
+            } else {
+                Err(anyhow!("Task result not found after notification"))
+            }
+        }
+        Err(_) => {
+            // Timeout occurred
+            let mut tasks = task_results.lock().await;
+            tasks.remove(&task_id); // Clean up
+            Err(anyhow!("Timeout waiting for task {}", task_id))
+        }
+    }
+}
+
 pub async fn listen_responses(
     client_id: Uuid,
     mut events_sub: Subscribe,
     ks: Arc<AtomicBool>,
-    event_listen_task_results: Arc<Mutex<HashMap<usize, Result<Var, eyre::Error>>>>,
+    event_listen_task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Error>, Arc<Notify>)>>>,
 ) {
     tokio::spawn(async move {
         let start_time = Instant::now();
@@ -348,11 +388,28 @@ pub async fn listen_responses(
             match msg {
                 Ok(ClientEvent::TaskSuccess(tid, v)) => {
                     let mut tasks = event_listen_task_results.lock().await;
-                    tasks.insert(tid, Ok(v));
+                    if let Some((_, notify)) = tasks.get(&tid) {
+                        let notify = notify.clone();
+                        tasks.insert(tid, (Ok(v), notify.clone()));
+                        notify.notify_one();
+                    } else {
+                        // Task not found in pending tasks, create new entry
+                        tasks.insert(tid, (Ok(v), Arc::new(Notify::new())));
+                    }
                 }
                 Ok(ClientEvent::TaskError(tid, e)) => {
                     let mut tasks = event_listen_task_results.lock().await;
-                    tasks.insert(tid, Err(anyhow!("Task error: {:?}", e)));
+                    if let Some((_, notify)) = tasks.get(&tid) {
+                        let notify = notify.clone();
+                        tasks.insert(tid, (Err(anyhow!("Task error: {:?}", e)), notify.clone()));
+                        notify.notify_one();
+                    } else {
+                        // Task not found in pending tasks, create new entry
+                        tasks.insert(
+                            tid,
+                            (Err(anyhow!("Task error: {:?}", e)), Arc::new(Notify::new())),
+                        );
+                    }
                 }
                 Ok(_) => {}
                 Err(e) => {

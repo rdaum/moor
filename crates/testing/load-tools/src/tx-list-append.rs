@@ -23,6 +23,7 @@ mod setup;
 
 use crate::setup::{
     broadcast_handle, create_user_session, initialization_session, listen_responses,
+    wait_for_task_completion,
 };
 use clap::Parser;
 use clap_derive::Parser;
@@ -44,10 +45,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tmq::request;
-use tokio::sync::Mutex;
-use tokio::time::sleep;
+use tokio::sync::{Mutex, Notify};
 use tracing::{debug, info};
 use uuid::Uuid;
 
@@ -247,7 +247,7 @@ async fn workload(
     auth_token: AuthToken,
     client_token: ClientToken,
     client_id: Uuid,
-    task_results: Arc<Mutex<HashMap<usize, Result<Var, eyre::Report>>>>,
+    task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>,
 ) -> Result<Vec<(Instant, WorkItem)>, eyre::Error> {
     debug!(
         "Workload process {} starting, performing {} iterations across {} properties ",
@@ -305,22 +305,11 @@ async fn workload(
             }
         };
 
-        let start_time = Instant::now();
-        // Spin waiting for results to show up in the task_results map
-        let result = loop {
-            {
-                let mut tasks = task_results.lock().await;
-                if let Some(results) = tasks.remove(&task_id) {
-                    break results;
-                }
-            }
-            sleep(std::time::Duration::from_millis(100)).await;
-
-            if start_time.elapsed().as_secs() > 5 {
-                panic!("Timed out waiting for task results");
-            }
-        }
-        .expect("Task results not found");
+        let result =
+            wait_for_task_completion(task_id, task_results.clone(), Duration::from_secs(5))
+                .await
+                .expect("Failed to get task completion")
+                .expect("Task results not found");
 
         // For our workload this should be a list, and if it isn't there's something messed up!
         let Some(result) = result.as_list() else {

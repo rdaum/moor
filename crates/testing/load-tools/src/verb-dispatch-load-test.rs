@@ -19,7 +19,7 @@ mod setup;
 
 use crate::setup::{
     ExecutionContext, broadcast_handle, create_user_session, initialization_session,
-    listen_responses,
+    listen_responses, wait_for_task_completion,
 };
 use clap::Parser;
 use clap_derive::Parser;
@@ -42,8 +42,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use tmq::request;
-use tokio::sync::Mutex;
-use tokio::time::sleep;
+use tokio::sync::{Mutex, Notify};
 use tracing::info;
 use uuid::Uuid;
 
@@ -140,7 +139,7 @@ async fn workload(
     auth_token: AuthToken,
     client_token: ClientToken,
     client_id: Uuid,
-    task_results: Arc<Mutex<HashMap<usize, Result<Var, eyre::Report>>>>,
+    task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>,
 ) -> Result<Duration, eyre::Error> {
     let rpc_request_sock = request(&zmq_ctx)
         .set_rcvtimeo(100)
@@ -177,21 +176,11 @@ async fn workload(
             }
         };
 
-        let wait_time = Instant::now();
-        let results = loop {
-            {
-                let mut tasks = task_results.lock().await;
-                if let Some(results) = tasks.remove(&task_id) {
-                    break results;
-                }
-            }
-            sleep(Duration::from_millis(1)).await;
-
-            if wait_time.elapsed().as_secs() > 10 {
-                panic!("Timed out waiting for task results");
-            }
-        }
-        .expect("Task results not found");
+        let results =
+            wait_for_task_completion(task_id, task_results.clone(), Duration::from_secs(10))
+                .await
+                .expect("Failed to get task completion")
+                .expect("Task results not found");
 
         let Some(result) = results.as_integer() else {
             panic!("Unexpected task result: {results:?}");
