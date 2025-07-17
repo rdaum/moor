@@ -164,7 +164,7 @@ async fn continuous_workload(
     let mut rpc_client = RpcSendClient::new(rpc_request_sock);
     let start_time = Instant::now();
     let mut request_count = 0;
-    
+
     while Instant::now() < stop_time {
         let response = rpc_client
             .make_client_rpc_call(
@@ -205,7 +205,7 @@ async fn continuous_workload(
         if result != 1 {
             panic!("Load test failed");
         }
-        
+
         request_count += 1;
     }
 
@@ -412,8 +412,10 @@ async fn swamp_mode_workload(
     )
     .await;
 
-    info!("Starting swamp mode - running {} concurrent threads for {} seconds", 
-        args.max_concurrent_workload, args.swamp_duration_seconds);
+    info!(
+        "Starting swamp mode - running {} concurrent threads for {} seconds",
+        args.max_concurrent_workload, args.swamp_duration_seconds
+    );
 
     let start_time = Instant::now();
     let duration = Duration::from_secs(args.swamp_duration_seconds);
@@ -427,7 +429,7 @@ async fn swamp_mode_workload(
     // Create continuous workload tasks that run for the specified duration
     let mut all_tasks = FuturesUnordered::new();
     let stop_time = start_time + duration;
-    
+
     for i in 0..args.max_concurrent_workload {
         let zmq_ctx = zmq_ctx.clone();
         let auth_token = auth_token.clone();
@@ -435,7 +437,7 @@ async fn swamp_mode_workload(
         let rpc_address = args.client_args.rpc_address.clone();
         let args = args.clone();
         let task_results = task_results.clone();
-        
+
         all_tasks.push(continuous_workload(
             args,
             zmq_ctx,
@@ -470,20 +472,26 @@ async fn swamp_mode_workload(
     let cumulative_time = times.iter().fold(Duration::new(0, 0), |acc, x| acc + *x);
     let total_time = start_time.elapsed();
     let total_verb_calls = total_requests * args.num_verb_iterations + total_requests;
-    
+
     let result = Results {
         concurrency: args.max_concurrent_workload,
         total_invocations: total_requests,
         total_time,
         cumulative_time,
         total_verb_calls,
-        per_verb_call: Duration::from_secs_f64(cumulative_time.as_secs_f64() / total_verb_calls as f64),
+        per_verb_call: Duration::from_secs_f64(
+            cumulative_time.as_secs_f64() / total_verb_calls as f64,
+        ),
         counters: processed_counters,
     };
 
     info!(
         "Swamp mode completed: {} concurrent threads, {} total requests, Total Time: {:?}, Cumulative: {:?}, Per Verb: {:?}",
-        result.concurrency, result.total_invocations, result.total_time, result.cumulative_time, result.per_verb_call
+        result.concurrency,
+        result.total_invocations,
+        result.total_time,
+        result.cumulative_time,
+        result.per_verb_call
     );
 
     Ok(vec![result])

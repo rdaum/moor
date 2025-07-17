@@ -17,7 +17,7 @@ use pest::iterators::Pairs;
 use std::sync::Arc;
 use tracing::warn;
 
-use moor_var::{ErrorCode, Var, v_arc_string, v_int};
+use moor_var::{ErrorCode, Symbol, Var, v_arc_string, v_int};
 use moor_var::{Variant, v_sym};
 
 use crate::Op::{
@@ -365,7 +365,7 @@ impl CodegenState {
             }
             Expr::Prop { property, location } => {
                 self.generate_expr(location.as_ref())?;
-                self.generate_expr(property.as_ref())?;
+                self.generate_symbol_expr(property.as_ref())?;
                 if indexed_above {
                     self.emit(Op::PushGetProp);
                     self.push_stack(1);
@@ -505,7 +505,7 @@ impl CodegenState {
             }
             Expr::Prop { location, property } => {
                 self.generate_expr(location.as_ref())?;
-                self.generate_expr(property.as_ref())?;
+                self.generate_symbol_expr(property.as_ref())?;
                 self.emit(Op::GetProp);
                 self.pop_stack(1);
             }
@@ -560,7 +560,7 @@ impl CodegenState {
                 location,
             } => {
                 self.generate_expr(location.as_ref())?;
-                self.generate_expr(verb.as_ref())?;
+                self.generate_symbol_expr(verb.as_ref())?;
                 self.generate_arg_list(args)?;
                 self.emit(Op::CallVerb);
                 self.pop_stack(2);
@@ -796,6 +796,32 @@ impl CodegenState {
         }
 
         Ok(())
+    }
+
+    /// Generate code for an expression that should be a symbol.
+    /// This optimizes string literals to ImmSymbol instead of Imm.
+    fn generate_symbol_expr(&mut self, expr: &Expr) -> Result<(), CompileError> {
+        match expr {
+            Expr::Value(v) => {
+                match v.variant() {
+                    Variant::Str(s) => {
+                        // String literal in symbol context - emit ImmSymbol
+                        let symbol = Symbol::mk(s.as_str());
+                        self.emit(Op::ImmSymbol(symbol));
+                        self.push_stack(1);
+                        return Ok(());
+                    }
+                    _ => {
+                        // Fall back to regular expression generation
+                        return self.generate_expr(expr);
+                    }
+                }
+            }
+            _ => {
+                // Fall back to regular expression generation
+                return self.generate_expr(expr);
+            }
+        }
     }
 
     pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), CompileError> {
@@ -1316,7 +1342,6 @@ pub fn compile_tree(tree: Pairs<Rule>, options: CompileOptions) -> Result<Progra
 }
 
 use crate::ast::AstVisitor;
-use moor_var::Symbol;
 use std::collections::HashSet;
 
 /// A visitor that finds all variable references in lambda bodies for capture analysis

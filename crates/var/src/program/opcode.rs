@@ -13,7 +13,7 @@
 
 use crate::program::labels::{Label, Offset};
 use crate::program::names::Name;
-use crate::{ErrorCode, Obj, VarType};
+use crate::{ErrorCode, Obj, Symbol, VarType};
 use bincode::{Decode, Encode};
 
 #[derive(Clone, Copy, Debug, PartialOrd, PartialEq, Eq, Hash, Encode, Decode)]
@@ -63,6 +63,7 @@ pub enum Op {
     ImmType(VarType),
     ImmNone,
     ImmObjid(Obj),
+    ImmSymbol(Symbol),
     In,
     IndexSet,
     Jump {

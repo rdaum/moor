@@ -355,6 +355,9 @@ pub fn moo_frame_execute(
             Op::ImmObjid(val) => {
                 f.push(v_obj(val));
             }
+            Op::ImmSymbol(val) => {
+                f.push(v_sym(val));
+            }
             Op::ImmErr(val) => {
                 f.push(v_err(val));
             }

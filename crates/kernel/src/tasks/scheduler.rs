@@ -142,7 +142,7 @@ impl Scheduler {
             max_stack_depth: DEFAULT_MAX_STACK_DEPTH,
         };
         let builtin_registry = BuiltinRegistry::new();
-        
+
         Self {
             version,
             running: false,

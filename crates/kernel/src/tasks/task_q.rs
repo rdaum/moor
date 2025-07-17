@@ -17,6 +17,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use flume::Sender;
+use gdt_cpus;
 use minstant::Instant;
 use rayon::ThreadPool;
 use std::collections::HashMap;
@@ -26,7 +27,6 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
 use uuid::Uuid;
-use gdt_cpus;
 
 use moor_var::Obj;
 
@@ -83,7 +83,7 @@ impl TaskQ {
             .thread_name(|i| format!("moor-task-pool-{i}"))
             .build()
             .expect("Failed to create thread pool");
-        
+
         Self {
             active: Default::default(),
             suspended,

@@ -180,7 +180,6 @@ mod tests {
         let player = binary.find_var("player");
         let a = binary.find_var("a");
         let n = binary.find_var("n");
-        let tell = binary.find_label_for_literal("tell".into());
 
         /*
          0: 124                   NUM 1
@@ -205,7 +204,7 @@ mod tests {
                     environment_width: 0,
                 },
                 Push(player),
-                Imm(tell),
+                ImmSymbol(Symbol::mk("tell")),
                 Push(a),
                 MakeSingletonList,
                 CallVerb,
@@ -224,7 +223,6 @@ mod tests {
 
         let player = binary.find_var("player");
         let a = binary.find_label_for_literal("a".into());
-        let tell = binary.find_label_for_literal("tell".into());
 
         assert_eq!(
             binary.main_vector().to_vec(),
@@ -240,9 +238,9 @@ mod tests {
         assert_eq!(
             binary.fork_vector(Offset(0)).to_vec(),
             vec![
-                Push(player), // player
-                Imm(tell),    // tell
-                Imm(a),       // 'a'
+                Push(player),                  // player
+                ImmSymbol(Symbol::mk("tell")), // tell
+                Imm(a),                        // 'a'
                 MakeSingletonList,
                 CallVerb,
                 Pop,
@@ -258,7 +256,6 @@ mod tests {
 
         let player = binary.find_var("player");
         let fid = binary.find_var("fid");
-        let tell = binary.find_label_for_literal("tell".into());
 
         assert_eq!(
             binary.main_vector().to_vec(),
@@ -274,9 +271,9 @@ mod tests {
         assert_eq!(
             binary.fork_vector(Offset(0)).to_vec(),
             vec![
-                Push(player), // player
-                Imm(tell),    // tell
-                Push(fid),    // fid
+                Push(player),                  // player
+                ImmSymbol(Symbol::mk("tell")), // tell
+                Push(fid),                     // fid
                 MakeSingletonList,
                 CallVerb,
                 Pop,
@@ -397,7 +394,6 @@ mod tests {
         let binary = compile(program, CompileOptions::default()).unwrap();
 
         let player = binary.find_var("player");
-        let tell = binary.find_label_for_literal("tell".into());
         let test = binary.find_label_for_literal("test".into());
 
         /*
@@ -412,7 +408,7 @@ mod tests {
             binary.main_vector().to_vec(),
             vec![
                 Push(player), // Player
-                Imm(tell),
+                ImmSymbol(Symbol::mk("tell")),
                 Imm(test),
                 MakeSingletonList,
                 CallVerb,
@@ -817,8 +813,6 @@ mod tests {
         let program = "$string_utils:from_list(test_string);";
         let binary = compile(program, CompileOptions::default()).unwrap();
 
-        let string_utils = binary.find_label_for_literal("string_utils".into());
-        let from_list = binary.find_label_for_literal("from_list".into());
         let test_string = binary.find_var("test_string");
         /*
          0: 100 000               PUSH_LITERAL #0
@@ -833,9 +827,9 @@ mod tests {
             binary.main_vector().to_vec(),
             vec![
                 ImmObjid(SYSTEM_OBJECT),
-                Imm(string_utils),
+                ImmSymbol(Symbol::mk("string_utils")),
                 GetProp,
-                Imm(from_list),
+                ImmSymbol(Symbol::mk("from_list")),
                 Push(test_string),
                 MakeSingletonList,
                 CallVerb,
@@ -849,12 +843,11 @@ mod tests {
     fn test_sysverbcall() {
         let program = "$verb_metadata(#1, 1);";
         let binary = compile(program, CompileOptions::default()).unwrap();
-        let verb_metadata = binary.find_label_for_literal("verb_metadata".into());
         assert_eq!(
             binary.main_vector().to_vec(),
             vec![
                 ImmObjid(SYSTEM_OBJECT),
-                Imm(verb_metadata),
+                ImmSymbol(Symbol::mk("verb_metadata")),
                 ImmObjid(Obj::mk_id(1)),
                 MakeSingletonList,
                 ImmInt(1),
@@ -1091,7 +1084,7 @@ mod tests {
                 ImmInt(2),
                 ListAddTail,
                 Push(binary.find_var("player")),
-                Imm(binary.find_label_for_literal("kill".into())),
+                ImmSymbol(Symbol::mk("kill")),
                 Push(b),
                 MakeSingletonList,
                 CallVerb,
@@ -1147,7 +1140,7 @@ mod tests {
             binary.main_vector().to_vec(),
             vec![
                 Push(binary.find_var("this")),
-                Imm(binary.find_label_for_literal("stack".into())),
+                ImmSymbol(Symbol::mk("stack")),
                 PushGetProp,
                 ImmInt(5),
                 ImmInt(5),
@@ -1227,7 +1220,7 @@ mod tests {
             binary.main_vector().to_vec(),
             vec![
                 Push(binary.find_var("this")),
-                Imm(binary.find_label_for_literal("stack".into())),
+                ImmSymbol(Symbol::mk("stack")),
                 GetProp,
                 Return,
                 Pop,
@@ -1244,7 +1237,7 @@ mod tests {
             binary.main_vector().to_vec(),
             vec![
                 ImmObjid(Obj::mk_id(0)),
-                Imm(binary.find_label_for_literal("test_verb".into())),
+                ImmSymbol(Symbol::mk("test_verb")),
                 ImmEmptyList,
                 CallVerb,
                 Pop,

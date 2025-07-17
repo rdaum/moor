@@ -28,7 +28,7 @@ use moor_var::program::opcode::{
     ComprehensionType, ForSequenceOperand, ListComprehend, Op, RangeComprehend, ScatterLabel,
 };
 use moor_var::program::program::Program;
-use moor_var::{Symbol, Var, v_int, v_none, v_obj};
+use moor_var::{Symbol, Var, v_int, v_none, v_obj, v_str};
 use moor_var::{Variant, v_float};
 use std::collections::{HashSet, VecDeque};
 
@@ -991,6 +991,9 @@ impl Decompile {
             }
             Op::ImmObjid(oid) => {
                 self.push_expr(Expr::Value(v_obj(oid)));
+            }
+            Op::ImmSymbol(sym) => {
+                self.push_expr(Expr::Value(v_str(&sym.as_string())));
             }
             Op::ImmType(t) => self.push_expr(Expr::TypeConstant(t)),
             Op::BeginScope {
