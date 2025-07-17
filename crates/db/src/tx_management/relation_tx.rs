@@ -45,6 +45,7 @@ where
     local_operations: Box<IndexMap<Domain, Op<Codomain>, BuildHasherDefault<AHasher>>>,
     master_entries: Box<dyn RelationIndex<Domain, Codomain>>,
     provider_fully_loaded: bool,
+    has_local_mutations: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -158,6 +159,7 @@ where
             local_operations: Box::new(IndexMap::default()),
             master_entries: canonical,
             provider_fully_loaded,
+            has_local_mutations: false,
         };
         RelationTransaction {
             tx,
@@ -195,33 +197,37 @@ where
                 operation: OpType::Insert(value.clone()),
             },
         );
+        self.index.has_local_mutations = true;
 
         Ok(())
     }
 
     pub fn update(&mut self, domain: &Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
-        // Check our local index first.
+        // Check our local index first, but only if we have mutations.
         // If we have an entry for this domain, we can update it.
-        if let Some(entry) = self.index.local_operations.get_mut(domain) {
-            // If the operation is a delete, we can't update it.
-            if entry.operation.is_delete() {
-                return Ok(None);
+        if self.index.has_local_mutations {
+            if let Some(entry) = self.index.local_operations.get_mut(domain) {
+                // If the operation is a delete, we can't update it.
+                if entry.operation.is_delete() {
+                    return Ok(None);
+                }
+                // If it's an insert or update, we can update it.
+                entry.write_ts = self.tx.ts;
+                let is_update = entry.operation.is_update();
+                let old_value = match std::mem::replace(
+                    &mut entry.operation,
+                    if is_update {
+                        OpType::Update(value.clone())
+                    } else {
+                        OpType::Insert(value.clone())
+                    },
+                ) {
+                    OpType::Insert(old_value) | OpType::Update(old_value) => old_value,
+                    OpType::Delete => return Ok(None),
+                };
+                self.index.has_local_mutations = true;
+                return Ok(Some(old_value));
             }
-            // If it's an insert or update, we can update it.
-            entry.write_ts = self.tx.ts;
-            let is_update = entry.operation.is_update();
-            let old_value = match std::mem::replace(
-                &mut entry.operation,
-                if is_update {
-                    OpType::Update(value.clone())
-                } else {
-                    OpType::Insert(value.clone())
-                },
-            ) {
-                OpType::Insert(old_value) | OpType::Update(old_value) => old_value,
-                OpType::Delete => return Ok(None),
-            };
-            return Ok(Some(old_value));
         }
 
         // Is this already in the *master* index?
@@ -243,6 +249,7 @@ where
                     operation: OpType::Update(value.clone()),
                 },
             );
+            self.index.has_local_mutations = true;
 
             // Update local secondary index
 
@@ -276,6 +283,7 @@ where
                 operation: OpType::Update(value.clone()),
             },
         );
+        self.index.has_local_mutations = true;
 
         // Update local secondary index
 
@@ -283,35 +291,39 @@ where
     }
 
     pub fn upsert(&mut self, domain: Domain, value: Codomain) -> Result<Option<Codomain>, Error> {
-        // Check local operations first - single lookup that handles all cases
-        if let Some(entry) = self.index.local_operations.get_mut(&domain) {
-            match &entry.operation {
-                OpType::Delete => {
-                    // Convert delete to insert - avoids duplicate key errors
-                    entry.write_ts = self.tx.ts;
-                    entry.operation = OpType::Insert(value.clone());
-                    // Update local secondary index (insert after delete)
-                    return Ok(None);
-                }
-                OpType::Insert(_) | OpType::Update(_) => {
-                    // Update existing entry
-                    entry.write_ts = self.tx.ts;
-                    let is_update = matches!(entry.operation, OpType::Update(_));
-                    let old_value = match std::mem::replace(
-                        &mut entry.operation,
-                        if is_update {
-                            OpType::Update(value.clone())
-                        } else {
-                            OpType::Insert(value.clone())
-                        },
-                    ) {
-                        OpType::Insert(old) | OpType::Update(old) => {
-                            // Update local secondary index
-                            old
-                        }
-                        OpType::Delete => unreachable!(), // Already handled above
-                    };
-                    return Ok(Some(old_value));
+        // Check local operations first - single lookup that handles all cases, but only if we have mutations
+        if self.index.has_local_mutations {
+            if let Some(entry) = self.index.local_operations.get_mut(&domain) {
+                match &entry.operation {
+                    OpType::Delete => {
+                        // Convert delete to insert - avoids duplicate key errors
+                        entry.write_ts = self.tx.ts;
+                        entry.operation = OpType::Insert(value.clone());
+                        self.index.has_local_mutations = true;
+                        // Update local secondary index (insert after delete)
+                        return Ok(None);
+                    }
+                    OpType::Insert(_) | OpType::Update(_) => {
+                        // Update existing entry
+                        entry.write_ts = self.tx.ts;
+                        let is_update = matches!(entry.operation, OpType::Update(_));
+                        let old_value = match std::mem::replace(
+                            &mut entry.operation,
+                            if is_update {
+                                OpType::Update(value.clone())
+                            } else {
+                                OpType::Insert(value.clone())
+                            },
+                        ) {
+                            OpType::Insert(old) | OpType::Update(old) => {
+                                // Update local secondary index
+                                old
+                            }
+                            OpType::Delete => unreachable!(), // Already handled above
+                        };
+                        self.index.has_local_mutations = true;
+                        return Ok(Some(old_value));
+                    }
                 }
             }
         }
@@ -328,6 +340,7 @@ where
                     operation: OpType::Update(value.clone()),
                 },
             );
+            self.index.has_local_mutations = true;
             // Update local secondary index
             return Ok(Some(old_value));
         }
@@ -344,6 +357,7 @@ where
                         operation: OpType::Update(value.clone()),
                     },
                 );
+                self.index.has_local_mutations = true;
                 // Update local secondary index
                 return Ok(Some(backing_value));
             }
@@ -358,6 +372,7 @@ where
                 operation: OpType::Insert(value.clone()),
             },
         );
+        self.index.has_local_mutations = true;
         Ok(None)
     }
 
@@ -394,14 +409,16 @@ where
     }
 
     pub fn get(&self, domain: &Domain) -> Result<Option<Codomain>, Error> {
-        // Check local operations first.
-        if let Some(op) = self.index.local_operations.get(domain) {
-            match &op.operation {
-                // If it's a delete, we don't have it.
-                OpType::Delete => return Ok(None),
-                // If it's an insert or update, we have it.
-                OpType::Insert(value) | OpType::Update(value) => {
-                    return Ok(Some(value.clone()));
+        // Check local operations first, but only if we have mutations.
+        if self.index.has_local_mutations {
+            if let Some(op) = self.index.local_operations.get(domain) {
+                match &op.operation {
+                    // If it's a delete, we don't have it.
+                    OpType::Delete => return Ok(None),
+                    // If it's an insert or update, we have it.
+                    OpType::Insert(value) | OpType::Update(value) => {
+                        return Ok(Some(value.clone()));
+                    }
                 }
             }
         }
@@ -420,23 +437,26 @@ where
 
     pub fn delete(&mut self, domain: &Domain) -> Result<Option<Codomain>, Error> {
         // This is like update, but we're removing.
-        // Check our local index first.
+        // Check our local index first, but only if we have mutations.
         // If we have an entry for this domain, we can delete it and move on
-        if let Some(entry) = self.index.local_operations.get_mut(domain) {
-            // If the operation is a delete, we can't delete it again.
-            if entry.operation.is_delete() {
-                return Ok(None);
-            }
-            // If it's an insert or update, we can delete it.
-            entry.write_ts = self.tx.ts;
-            let old_value = match std::mem::replace(&mut entry.operation, OpType::Delete) {
-                OpType::Insert(value) | OpType::Update(value) => {
-                    // Update local secondary index (remove from old codomain)
-                    value
+        if self.index.has_local_mutations {
+            if let Some(entry) = self.index.local_operations.get_mut(domain) {
+                // If the operation is a delete, we can't delete it again.
+                if entry.operation.is_delete() {
+                    return Ok(None);
                 }
-                OpType::Delete => return Ok(None),
-            };
-            return Ok(Some(old_value));
+                // If it's an insert or update, we can delete it.
+                entry.write_ts = self.tx.ts;
+                let old_value = match std::mem::replace(&mut entry.operation, OpType::Delete) {
+                    OpType::Insert(value) | OpType::Update(value) => {
+                        // Update local secondary index (remove from old codomain)
+                        value
+                    }
+                    OpType::Delete => return Ok(None),
+                };
+                self.index.has_local_mutations = true;
+                return Ok(Some(old_value));
+            }
         }
 
         if let Some(entry) = self.index.master_entries.index_lookup(domain) {
@@ -458,6 +478,7 @@ where
                     OpType::Insert(_) => OpType::Delete,
                 };
                 old_entry.write_ts = self.tx.ts;
+                self.index.has_local_mutations = true;
 
                 // Update local secondary index (remove from old codomain)
                 if let Some(_local_old) = local_old_value {
@@ -478,6 +499,7 @@ where
                         operation: OpType::Delete,
                     },
                 );
+                self.index.has_local_mutations = true;
 
                 // Update local secondary index (remove from old codomain)
             }
@@ -510,6 +532,7 @@ where
                 operation: OpType::Delete,
             },
         );
+        self.index.has_local_mutations = true;
 
         // Update local secondary index (remove from old codomain)
 
