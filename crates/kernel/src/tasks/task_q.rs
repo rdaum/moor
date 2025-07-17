@@ -18,6 +18,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use flume::Sender;
 use minstant::Instant;
+use rayon::ThreadPool;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
@@ -25,6 +26,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
 use uuid::Uuid;
+use gdt_cpus;
 
 use moor_var::Obj;
 
@@ -43,6 +45,8 @@ pub struct TaskQ {
     ///     Suspended foreground tasks that are either indefinitely suspended or will execute someday
     ///     Suspended tasks waiting for input from the player or a task id to complete
     pub(crate) suspended: SuspensionQ,
+    /// Thread pool for task execution instead of creating new threads for each task
+    pub(crate) thread_pool: ThreadPool,
 }
 
 /// Scheduler-side per-task record. Lives in the scheduler thread and owned by the scheduler and
@@ -72,6 +76,21 @@ fn none_or_push(vec: &mut Option<Vec<TaskId>>, task: TaskId) {
 }
 
 impl TaskQ {
+    pub fn new(suspended: SuspensionQ) -> Self {
+        let num_threads = (gdt_cpus::num_logical_cores().unwrap_or(8) * 2).min(64);
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .thread_name(|i| format!("moor-task-pool-{i}"))
+            .build()
+            .expect("Failed to create thread pool");
+        
+        Self {
+            active: Default::default(),
+            suspended,
+            thread_pool,
+        }
+    }
+
     /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
     pub(crate) fn collect_wake_tasks(&mut self) -> Option<Vec<SuspendedTask>> {
         if self.suspended.tasks.is_empty() {

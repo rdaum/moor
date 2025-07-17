@@ -67,6 +67,7 @@ xml-rs.workspace = true
 # Async Runtime & Concurrency
 flume.workspace = true
 oneshot.workspace = true
+rayon.workspace = true
 
 # Authentication & Security
 age = { workspace = true, features = ["ssh"] }

@@ -133,10 +133,7 @@ impl Scheduler {
         let (task_control_sender, task_control_receiver) = flume::unbounded();
         let (scheduler_sender, scheduler_receiver) = flume::unbounded();
         let suspension_q = SuspensionQ::new(tasks_database);
-        let task_q = TaskQ {
-            active: Default::default(),
-            suspended: suspension_q,
-        };
+        let task_q = TaskQ::new(suspension_q);
         let default_server_options = ServerOptions {
             bg_seconds: DEFAULT_BG_SECONDS,
             bg_ticks: DEFAULT_BG_TICKS,
@@ -145,6 +142,7 @@ impl Scheduler {
             max_stack_depth: DEFAULT_MAX_STACK_DEPTH,
         };
         let builtin_registry = BuiltinRegistry::new();
+        
         Self {
             version,
             running: false,
@@ -1357,7 +1355,6 @@ impl TaskQ {
         // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
         self.active.insert(task_id, task_control);
 
-        let thread_name = format!("moor-task-{task_id}-player-{player}");
         let control_sender = control_sender.clone();
 
         let mut world_state = match database.new_world_state() {
@@ -1367,28 +1364,25 @@ impl TaskQ {
                 return Err(SchedulerError::CouldNotStartTask);
             }
         };
-        std::thread::Builder::new()
-            .name(thread_name)
-            .spawn(move || {
-                // Start the db transaction, which will initially be used to resolve the verb before the task
-                // starts executing.
-                if !task.setup_task_start(&control_sender, world_state.as_mut()) {
-                    // Log level should be low here as this happens on every command if `do_command`
-                    // is not found.
-                    return;
-                }
-                task.retry_state = task.vm_host.snapshot_state();
+        self.thread_pool.spawn(move || {
+            // Start the db transaction, which will initially be used to resolve the verb before the task
+            // starts executing.
+            if !task.setup_task_start(&control_sender, world_state.as_mut()) {
+                // Log level should be low here as this happens on every command if `do_command`
+                // is not found.
+                return;
+            }
+            task.retry_state = task.vm_host.snapshot_state();
 
-                Task::run_task_loop(
-                    task,
-                    &task_scheduler_client,
-                    session,
-                    world_state,
-                    builtin_registry,
-                    config,
-                );
-            })
-            .expect("Could not spawn task thread");
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                world_state,
+                builtin_registry,
+                config,
+            );
+        });
 
         Ok(TaskHandle(task_id, receiver))
     }
@@ -1439,22 +1433,18 @@ impl TaskQ {
 
         self.active.insert(task_id, task_control);
         task.vm_host.resume_execution(resume_val);
-        let thread_name = format!("moor-task-{task_id}-player-{player}");
         let control_sender = control_sender.clone();
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
-        std::thread::Builder::new()
-            .name(thread_name)
-            .spawn(move || {
-                Task::run_task_loop(
-                    task,
-                    &task_scheduler_client,
-                    session,
-                    world_state,
-                    builtin_registry,
-                    config,
-                );
-            })
-            .expect("Could not spawn task thread");
+        self.thread_pool.spawn(move || {
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                session,
+                world_state,
+                builtin_registry,
+                config,
+            );
+        });
 
         Ok(())
     }
@@ -1533,7 +1523,6 @@ impl TaskQ {
         // Footgun warning: ALWAYS `self.tasks.insert` before spawning the task thread!
         self.active.insert(task_id, task_control);
 
-        let thread_name = format!("moor-task-{}-player-{}", task_id, task.player);
         let control_sender = control_sender.clone();
 
         let world_state = match database.new_world_state() {
@@ -1545,20 +1534,17 @@ impl TaskQ {
             }
         };
         let task_scheduler_client = TaskSchedulerClient::new(task_id, control_sender.clone());
-        std::thread::Builder::new()
-            .name(thread_name)
-            .spawn(move || {
-                info!(?task.task_id, "Restarting retry task");
-                Task::run_task_loop(
-                    task,
-                    &task_scheduler_client,
-                    new_session,
-                    world_state,
-                    builtin_registry,
-                    config,
-                );
-            })
-            .expect("Could not spawn task thread");
+        self.thread_pool.spawn(move || {
+            info!(?task.task_id, "Restarting retry task");
+            Task::run_task_loop(
+                task,
+                &task_scheduler_client,
+                new_session,
+                world_state,
+                builtin_registry,
+                config,
+            );
+        });
     }
 
     fn kill_task(&mut self, victim_task_id: TaskId, sender_permissions: Perms) -> Var {
