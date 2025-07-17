@@ -91,6 +91,20 @@ struct Args {
 
     #[arg(long, help = "Enable debug logging", default_value = "false")]
     debug: bool,
+
+    #[arg(
+        long,
+        help = "Swamp mode: immediately run at maximum concurrency with all requests in parallel to stress test the server",
+        default_value = "false"
+    )]
+    swamp_mode: bool,
+
+    #[arg(
+        long,
+        help = "Duration in seconds to run swamp mode (continuously sending requests)",
+        default_value = "30"
+    )]
+    swamp_duration_seconds: u64,
 }
 
 /// Create N objects as children of the player, these wil be used to invoke the verb which is
@@ -128,6 +142,75 @@ return 1;
 const LOAD_TEST_VERB: &str = r#"
 return 1;
 "#;
+
+#[allow(clippy::too_many_arguments)]
+async fn continuous_workload(
+    args: Args,
+    zmq_ctx: tmq::Context,
+    rpc_address: String,
+    _process_id: usize,
+    connection_oid: Obj,
+    auth_token: AuthToken,
+    client_token: ClientToken,
+    client_id: Uuid,
+    task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>,
+    stop_time: Instant,
+) -> Result<(Duration, usize), eyre::Error> {
+    let rpc_request_sock = request(&zmq_ctx)
+        .set_rcvtimeo(100)
+        .set_sndtimeo(100)
+        .connect(rpc_address.as_str())
+        .expect("Unable to bind RPC server for connection");
+    let mut rpc_client = RpcSendClient::new(rpc_request_sock);
+    let start_time = Instant::now();
+    let mut request_count = 0;
+    
+    while Instant::now() < stop_time {
+        let response = rpc_client
+            .make_client_rpc_call(
+                client_id,
+                HostClientToDaemonMessage::InvokeVerb(
+                    client_token.clone(),
+                    auth_token.clone(),
+                    ObjectRef::Id(connection_oid),
+                    Symbol::mk("invoke_load_test"),
+                    vec![v_int(args.num_verb_iterations as i64)],
+                ),
+            )
+            .await
+            .expect("Unable to send call request to RPC server");
+
+        let task_id = match response {
+            ReplyResult::HostSuccess(hs) => {
+                panic!("Unexpected host message: {hs:?}");
+            }
+            ReplyResult::ClientSuccess(TaskSubmitted(submitted_task_id)) => submitted_task_id,
+            ReplyResult::ClientSuccess(e) => {
+                panic!("Unexpected client result in call: {e:?}");
+            }
+            ReplyResult::Failure(e) => {
+                panic!("RPC failure in call: {e}");
+            }
+        };
+
+        let results =
+            wait_for_task_completion(task_id, task_results.clone(), Duration::from_secs(10))
+                .await
+                .expect("Failed to get task completion")
+                .expect("Task results not found");
+
+        let Some(result) = results.as_integer() else {
+            panic!("Unexpected task result: {results:?}");
+        };
+        if result != 1 {
+            panic!("Load test failed");
+        }
+        
+        request_count += 1;
+    }
+
+    Ok((start_time.elapsed(), request_count))
+}
 
 #[allow(clippy::too_many_arguments)]
 async fn workload(
@@ -253,6 +336,157 @@ fn process_counters(
         }
     }
     results
+}
+
+async fn swamp_mode_workload(
+    args: &Args,
+    ExecutionContext {
+        zmq_ctx,
+        kill_switch,
+    }: ExecutionContext,
+    host_token: &HostToken,
+) -> Result<Vec<Results>, eyre::Error> {
+    let (
+        connection_oid,
+        auth_token,
+        client_token,
+        client_id,
+        rpc_client,
+        events_sub,
+        broadcast_sub,
+    ) = create_user_session(
+        zmq_ctx.clone(),
+        args.client_args.rpc_address.clone(),
+        args.client_args.events_address.clone(),
+    )
+    .await?;
+
+    {
+        let kill_switch = kill_switch.clone();
+        let zmq_ctx = zmq_ctx.clone();
+        let rpc_address = args.client_args.rpc_address.clone();
+        let client_token = client_token.clone();
+        tokio::spawn(async move {
+            broadcast_handle(
+                zmq_ctx,
+                rpc_address,
+                broadcast_sub,
+                client_id,
+                client_token,
+                connection_oid,
+                kill_switch,
+            )
+            .await;
+        });
+    }
+
+    info!("Initializing swamp mode workload session");
+    let num_props_script = format!(
+        "let num_objects = {};{}",
+        args.num_objects, LOAD_TEST_INITIALIZATION_SCRIPT
+    );
+
+    initialization_session(
+        connection_oid,
+        auth_token.clone(),
+        client_token.clone(),
+        client_id,
+        rpc_client,
+        &num_props_script,
+        &[
+            (
+                Symbol::mk("invoke_load_test"),
+                LOAD_TEST_INVOKE_VERB.to_string(),
+            ),
+            (Symbol::mk("load_test"), LOAD_TEST_VERB.to_string()),
+        ],
+    )
+    .await?;
+
+    let task_results = Arc::new(Mutex::new(HashMap::new()));
+    listen_responses(
+        client_id,
+        events_sub,
+        kill_switch.clone(),
+        task_results.clone(),
+    )
+    .await;
+
+    info!("Starting swamp mode - running {} concurrent threads for {} seconds", 
+        args.max_concurrent_workload, args.swamp_duration_seconds);
+
+    let start_time = Instant::now();
+    let duration = Duration::from_secs(args.swamp_duration_seconds);
+    let before_counters = request_counters(
+        zmq_ctx.clone(),
+        args.client_args.rpc_address.clone(),
+        host_token,
+    )
+    .await?;
+
+    // Create continuous workload tasks that run for the specified duration
+    let mut all_tasks = FuturesUnordered::new();
+    let stop_time = start_time + duration;
+    
+    for i in 0..args.max_concurrent_workload {
+        let zmq_ctx = zmq_ctx.clone();
+        let auth_token = auth_token.clone();
+        let client_token = client_token.clone();
+        let rpc_address = args.client_args.rpc_address.clone();
+        let args = args.clone();
+        let task_results = task_results.clone();
+        
+        all_tasks.push(continuous_workload(
+            args,
+            zmq_ctx,
+            rpc_address,
+            i,
+            connection_oid,
+            auth_token,
+            client_token,
+            client_id,
+            task_results,
+            stop_time,
+        ));
+    }
+
+    // Wait for all tasks to complete
+    let mut times = vec![];
+    let mut total_requests = 0;
+    while let Some(result) = all_tasks.next().await {
+        let (time, requests) = result?;
+        times.push(time);
+        total_requests += requests;
+    }
+
+    let after_counters = request_counters(
+        zmq_ctx.clone(),
+        args.client_args.rpc_address.clone(),
+        host_token,
+    )
+    .await?;
+
+    let processed_counters = process_counters(before_counters, after_counters);
+    let cumulative_time = times.iter().fold(Duration::new(0, 0), |acc, x| acc + *x);
+    let total_time = start_time.elapsed();
+    let total_verb_calls = total_requests * args.num_verb_iterations + total_requests;
+    
+    let result = Results {
+        concurrency: args.max_concurrent_workload,
+        total_invocations: total_requests,
+        total_time,
+        cumulative_time,
+        total_verb_calls,
+        per_verb_call: Duration::from_secs_f64(cumulative_time.as_secs_f64() / total_verb_calls as f64),
+        counters: processed_counters,
+    };
+
+    info!(
+        "Swamp mode completed: {} concurrent threads, {} total requests, Total Time: {:?}, Cumulative: {:?}, Per Verb: {:?}",
+        result.concurrency, result.total_invocations, result.total_time, result.cumulative_time, result.per_verb_call
+    );
+
+    Ok(vec![result])
 }
 
 async fn load_test_workload(
@@ -508,7 +742,11 @@ async fn main() -> Result<(), eyre::Error> {
         kill_switch: kill_switch.clone(),
     };
 
-    let results = load_test_workload(&args, exec_context, &host_token).await?;
+    let results = if args.swamp_mode {
+        swamp_mode_workload(&args, exec_context, &host_token).await?
+    } else {
+        load_test_workload(&args, exec_context, &host_token).await?
+    };
 
     if let Some(output_file) = args.output_file {
         let num_records = results.len();
