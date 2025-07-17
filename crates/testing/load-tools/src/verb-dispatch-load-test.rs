@@ -46,6 +46,8 @@ use tokio::sync::{Mutex, Notify};
 use tracing::info;
 use uuid::Uuid;
 
+type TaskResults = Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>;
+
 #[derive(Clone, Parser, Debug)]
 struct Args {
     #[command(flatten)]
@@ -153,7 +155,7 @@ async fn continuous_workload(
     auth_token: AuthToken,
     client_token: ClientToken,
     client_id: Uuid,
-    task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>,
+    task_results: TaskResults,
     stop_time: Instant,
 ) -> Result<(Duration, usize), eyre::Error> {
     let rpc_request_sock = request(&zmq_ctx)
@@ -222,7 +224,7 @@ async fn workload(
     auth_token: AuthToken,
     client_token: ClientToken,
     client_id: Uuid,
-    task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>,
+    task_results: TaskResults,
 ) -> Result<Duration, eyre::Error> {
     let rpc_request_sock = request(&zmq_ctx)
         .set_rcvtimeo(100)

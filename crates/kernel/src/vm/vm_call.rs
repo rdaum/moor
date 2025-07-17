@@ -322,7 +322,7 @@ impl VMExecState {
     /// If a bf_<xxx> wrapper function is present on #0, invoke that instead.
     fn maybe_invoke_bf_proxy(
         &mut self,
-        bf_name: Symbol,
+        bf_override_name: Symbol,
         args: &List,
         world_state: &mut dyn WorldState,
     ) -> Option<ExecutionResult> {
@@ -334,8 +334,6 @@ impl VMExecState {
         if self.caller() == v_obj(SYSTEM_OBJECT) {
             return None;
         }
-
-        let bf_override_name = Symbol::mk(&format!("bf_{bf_name}"));
 
         // Look for it...
         let (program, resolved_verb) = world_state
@@ -379,7 +377,9 @@ impl VMExecState {
 
         // TODO: check for $server_options.protect_[func]
         // Check for builtin override at #0.
-        if let Some(proxy_result) = self.maybe_invoke_bf_proxy(bf_name, &args, world_state) {
+        if let Some(proxy_result) =
+            self.maybe_invoke_bf_proxy(bf_desc.bf_override_name, &args, world_state)
+        {
             return proxy_result;
         }
 

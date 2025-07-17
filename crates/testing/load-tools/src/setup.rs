@@ -37,6 +37,8 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
+type TaskResults = Arc<Mutex<HashMap<usize, (Result<Var, eyre::Error>, Arc<Notify>)>>>;
+
 pub async fn noop_listeners_loop() -> (ListenersClient, JoinHandle<()>) {
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let t = tokio::spawn(async move {
@@ -334,7 +336,7 @@ pub struct ExecutionContext {
 /// Wait for a specific task to complete using async notification instead of polling
 pub async fn wait_for_task_completion(
     task_id: usize,
-    task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Error>, Arc<Notify>)>>>,
+    task_results: TaskResults,
     timeout: std::time::Duration,
 ) -> Result<Result<Var, eyre::Error>, eyre::Error> {
     let notify = {
@@ -375,7 +377,7 @@ pub async fn listen_responses(
     client_id: Uuid,
     mut events_sub: Subscribe,
     ks: Arc<AtomicBool>,
-    event_listen_task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Error>, Arc<Notify>)>>>,
+    event_listen_task_results: TaskResults,
 ) {
     tokio::spawn(async move {
         let start_time = Instant::now();

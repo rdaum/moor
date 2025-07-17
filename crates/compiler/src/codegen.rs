@@ -809,17 +809,17 @@ impl CodegenState {
                         let symbol = Symbol::mk(s.as_str());
                         self.emit(Op::ImmSymbol(symbol));
                         self.push_stack(1);
-                        return Ok(());
+                        Ok(())
                     }
                     _ => {
                         // Fall back to regular expression generation
-                        return self.generate_expr(expr);
+                        self.generate_expr(expr)
                     }
                 }
             }
             _ => {
                 // Fall back to regular expression generation
-                return self.generate_expr(expr);
+                self.generate_expr(expr)
             }
         }
     }

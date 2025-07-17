@@ -48,6 +48,8 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use tmq::request;
 use tokio::sync::{Mutex, Notify};
+
+type TaskResults = Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>;
 use tracing::{debug, info};
 use uuid::Uuid;
 
@@ -247,7 +249,7 @@ async fn workload(
     auth_token: AuthToken,
     client_token: ClientToken,
     client_id: Uuid,
-    task_results: Arc<Mutex<HashMap<usize, (Result<Var, eyre::Report>, Arc<Notify>)>>>,
+    task_results: TaskResults,
 ) -> Result<Vec<(Instant, WorkItem)>, eyre::Error> {
     debug!(
         "Workload process {} starting, performing {} iterations across {} properties ",
