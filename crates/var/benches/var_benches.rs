@@ -11,212 +11,369 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-#[cfg(target_os = "linux")]
-mod bench_code {
-    use moor_var::{IndexMode, Var, v_int, v_list};
-    #[cfg(target_os = "linux")]
-    use perf_event::Builder;
-    #[cfg(target_os = "linux")]
-    use perf_event::events::Hardware;
-    use std::hint::black_box;
-    use std::time::Duration;
-    const CHUNK_SIZE: usize = 100_000;
+use moor_bench_utils::{BenchContext, NoContext, black_box};
+use moor_var::{IndexMode, Var, v_bool, v_float, v_int, v_list, v_none, v_str};
 
-    struct Results {
-        instructions: u64,
-        branches: u64,
-        branch_misses: u64,
-        cache_misses: u64,
-        duration: Duration,
-        iterations: u64,
+
+// Context for integer benchmarks
+struct IntContext(Var);
+impl BenchContext for IntContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        IntContext(v_int(0))
     }
+}
 
-    /// Probe to see how many iterations we can do in 5 seconds
-    #[cfg(target_os = "linux")]
-    fn probe<F: Fn(&Var, usize, usize)>(f: &F, prepared: &Var, chunk_size: usize) -> usize {
-        let start_time = minstant::Instant::now();
-        let mut num_chunks = 0;
-        loop {
-            num_chunks += 1;
-            black_box(|| f(prepared, chunk_size, num_chunks))();
-            if start_time.elapsed() >= Duration::from_secs(5) {
-                break;
-            }
-        }
-        num_chunks * chunk_size
+// Context for small list benchmarks
+struct SmallListContext(Var);
+impl BenchContext for SmallListContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        SmallListContext(v_list(&(0..8).map(v_int).collect::<Vec<_>>()))
     }
+}
 
-    /// Benchmarks a function and returns the results
-    #[cfg(target_os = "linux")]
-    fn bench<F: Fn(&Var, usize, usize)>(
-        f: &F,
-        prepared: &Var,
-        chunk_size: usize,
-        iterations: usize,
-    ) -> Results {
-        let start_time = minstant::Instant::now();
-        let mut instructions_counter = Builder::new(Hardware::INSTRUCTIONS).build().unwrap();
-        let mut branch_counter = Builder::new(Hardware::BRANCH_INSTRUCTIONS).build().unwrap();
-        let mut branch_misses = Builder::new(Hardware::BRANCH_MISSES).build().unwrap();
-        let mut cache_misses = Builder::new(Hardware::CACHE_MISSES).build().unwrap();
-
-        instructions_counter.enable().unwrap();
-        branch_counter.enable().unwrap();
-        branch_misses.enable().unwrap();
-        cache_misses.enable().unwrap();
-
-        for c in 0..iterations / chunk_size {
-            black_box(|| f(prepared, chunk_size, c))();
-        }
-
-        instructions_counter.disable().unwrap();
-        branch_counter.disable().unwrap();
-        branch_misses.disable().unwrap();
-        cache_misses.disable().unwrap();
-
-        Results {
-            instructions: instructions_counter.read().unwrap(),
-            branches: branch_counter.read().unwrap(),
-            branch_misses: branch_misses.read().unwrap(),
-            cache_misses: cache_misses.read().unwrap(),
-            duration: start_time.elapsed(),
-            iterations: 0,
-        }
+// Context for large list benchmarks
+struct LargeListContext(Var);
+impl BenchContext for LargeListContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        LargeListContext(v_list(&(0..100_000).map(v_int).collect::<Vec<_>>()))
     }
+}
 
-    /// Benchmark for addition on integers
-    #[cfg(target_os = "linux")]
-    pub fn op_bench<F: Fn(&Var, usize, usize)>(name: &str, f: F, prepared: Var) {
-        eprintln!("Probing .... {name}");
-        let probed_iterations = probe(&f, &prepared, CHUNK_SIZE);
-        eprintln!("Probed iterations: {probed_iterations}");
-
-        eprintln!("Running .... {name}");
-        let mut summed_results = Results {
-            instructions: 0,
-            branches: 0,
-            branch_misses: 0,
-            cache_misses: 0,
-            duration: Duration::ZERO,
-            iterations: probed_iterations as u64,
-        };
-        for i in 0..5 {
-            eprint!("{}...", i + 1);
-            let results = bench(&f, &prepared, CHUNK_SIZE, probed_iterations);
-            summed_results.instructions += results.instructions;
-            summed_results.branches += results.branches;
-            summed_results.branch_misses += results.branch_misses;
-            summed_results.cache_misses += results.cache_misses;
-            summed_results.duration += results.duration;
-            summed_results.iterations += results.iterations;
-        }
-        eprintln!();
-
-        // Calculate averages
-        let results = Results {
-            instructions: summed_results.instructions / 10,
-            branches: summed_results.branches / 10,
-            branch_misses: summed_results.branch_misses / 10,
-            cache_misses: summed_results.cache_misses / 10,
-            duration: summed_results.duration / 10,
-            iterations: summed_results.iterations / 10,
-        };
-
-        eprintln!("Results for {name}:");
-        eprintln!("  Iterations: {}", results.iterations);
-        eprintln!("  Instructions: {}", results.instructions);
-        eprintln!("  Branches: {}", results.branches);
-        eprintln!("  Branch misses: {}", results.branch_misses);
-        eprintln!("  Cache misses: {}", results.cache_misses);
-        eprintln!("  Duration: {:?}", results.duration);
-        eprintln!(
-            "  Throughput: {:.2} Mops/s",
-            results.iterations as f64 / results.duration.as_secs_f64() / 1_000_000.0
-        );
+fn int_add(ctx: &mut IntContext, chunk_size: usize, _chunk_num: usize) {
+    let mut v = ctx.0.clone();
+    for _ in 0..chunk_size {
+        v = v.add(&v_int(1)).unwrap();
     }
+}
 
-    pub(crate) fn prepare_int() -> Var {
-        v_int(0)
+fn int_eq(ctx: &mut IntContext, chunk_size: usize, _chunk_num: usize) {
+    let v = ctx.0.clone();
+    for _ in 0..chunk_size {
+        let _ = v.eq(&v);
     }
-    pub(crate) fn int_add(v: &Var, chunk_size: usize, _chunk_num: usize) {
-        let mut v = v.clone();
-        for _ in 0..chunk_size {
-            v = v.add(&v_int(1)).unwrap();
-        }
-    }
+}
 
-    pub(crate) fn int_eq(v: &Var, chunk_size: usize, _chunk_num: usize) {
-        let v = v.clone();
-        for _ in 0..chunk_size {
-            let _ = v.eq(&v);
-        }
+fn int_cmp(ctx: &mut IntContext, chunk_size: usize, _chunk_num: usize) {
+    let v = ctx.0.clone();
+    for _ in 0..chunk_size {
+        let _ = v.cmp(&v);
     }
+}
 
-    pub(crate) fn int_cmp(v: &Var, chunk_size: usize, _chunk_num: usize) {
-        let v = v.clone();
-        for _ in 0..chunk_size {
-            let _ = v.cmp(&v);
-        }
+fn list_push(ctx: &mut SmallListContext, chunk_size: usize, _chunk_num: usize) {
+    let mut v = ctx.0.clone();
+    for _ in 0..chunk_size {
+        v = v.push(&v_int(1)).unwrap();
     }
+}
 
-    pub(crate) fn prepare_small_list() -> Var {
-        v_list(&[v_int(0)])
+fn list_index_pos(ctx: &mut LargeListContext, chunk_size: usize, _chunk_num: usize) {
+    let v = ctx.0.clone();
+    let list_len = 100_000; // LargeListContext has 100k items
+    for c in 0..chunk_size {
+        let index = c % list_len; // Cycle through available indices
+        let _ = v.index(&v_int(index as i64), IndexMode::ZeroBased).unwrap();
     }
+}
 
-    pub(crate) fn list_push(v: &Var, chunk_size: usize, _chunk_num: usize) {
-        let mut v = v.clone();
-        for _ in 0..chunk_size {
-            v = v.push(&v_int(1)).unwrap();
-        }
+fn list_index_assign(ctx: &mut LargeListContext, chunk_size: usize, _chunk_num: usize) {
+    let mut v = ctx.0.clone();
+    let list_len = 100_000; // LargeListContext has 100k items
+    for c in 0..chunk_size {
+        let index = c % list_len; // Cycle through available indices
+        v = v
+            .index_set(
+                &v_int(index as i64),
+                &v_int(index as i64),
+                IndexMode::ZeroBased,
+            )
+            .unwrap();
     }
+}
 
-    pub(crate) fn prepare_large_list() -> Var {
-        // Make a quite large list
-        v_list(&(0..100_000).map(v_int).collect::<Vec<_>>())
+// === VAR CONSTRUCTION BENCHMARKS ===
+// These measure the cost of creating different types of Vars
+
+fn var_construct_ints(_ctx: &mut NoContext, chunk_size: usize, _chunk_num: usize) {
+    for i in 0..chunk_size {
+        let var = v_int(i as i64);
+        black_box(var);
     }
+}
 
-    pub(crate) fn list_index_pos(v: &Var, chunk_size: usize, _chunk_num: usize) {
-        let v = v.clone();
-        for c in 0..chunk_size {
-            let _ = v.index(&v_int(c as i64), IndexMode::ZeroBased).unwrap();
-        }
+fn var_construct_strings(_ctx: &mut NoContext, chunk_size: usize, chunk_num: usize) {
+    for i in 0..chunk_size {
+        let s = format!("string_{chunk_num}_{i})");
+        let var = v_str(&s);
+        black_box(var);
     }
+}
 
-    pub(crate) fn list_index_assign(v: &Var, chunk_size: usize, _chunk_num: usize) {
-        let mut v = v.clone();
-        for c in 0..chunk_size {
-            v = v
-                .index_set(&v_int(c as i64), &v_int(c as i64), IndexMode::ZeroBased)
-                .unwrap();
+fn var_construct_small_lists(_ctx: &mut NoContext, chunk_size: usize, _chunk_num: usize) {
+    for i in 0..chunk_size {
+        let var = v_list(&[v_int(i as i64), v_int((i + 1) as i64)]);
+        black_box(var);
+    }
+}
+
+fn var_construct_nested_lists(_ctx: &mut NoContext, chunk_size: usize, _chunk_num: usize) {
+    for i in 0..chunk_size {
+        let inner = v_list(&[v_int(i as i64), v_str("nested")]);
+        let var = v_list(&[inner, v_int((i + 1) as i64)]);
+        black_box(var);
+    }
+}
+
+// CLONE BENCHMARKS ===
+// These measure cloning costs which are relevant for scope operations
+
+// Context for string clone benchmarks
+struct StringCloneContext(Var, Var);
+impl BenchContext for StringCloneContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        StringCloneContext(v_str("test_string_for_cloning"), v_none())
+    }
+}
+
+// Context for list clone benchmarks
+struct ListCloneContext(Var, Var);
+impl BenchContext for ListCloneContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        ListCloneContext(
+            v_list(&[v_int(1), v_str("test"), v_int(2), v_str("clone")]),
+            v_none(),
+        )
+    }
+}
+
+fn var_clone_strings(ctx: &mut StringCloneContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        ctx.1 = ctx.0.clone();
+    }
+}
+
+fn var_clone_lists(ctx: &mut ListCloneContext, chunk_size: usize, _chunk_num: usize) {
+    for _ in 0..chunk_size {
+        ctx.1 = ctx.0.clone();
+    }
+}
+
+// Context that pre-creates pools of Vars to drop
+struct DropContext {
+    int_vars: Vec<Var>,
+    string_vars: Vec<Var>,
+    list_vars: Vec<Var>,
+    mixed_vars: Vec<Var>,
+}
+
+impl BenchContext for DropContext {
+    fn prepare(_num_chunks: usize) -> Self {
+        let pool_size = 100_000; // Pool size matches our preferred chunk size
+        DropContext {
+            int_vars: (0..pool_size).map(|i| v_int(i as i64)).collect(),
+            string_vars: (0..pool_size).map(|i| v_str(&format!("str_{i}"))).collect(),
+            list_vars: (0..pool_size).map(|i| v_list(&[v_int(i as i64), v_str("item")])).collect(),
+            mixed_vars: (0..pool_size).map(|i| match i % 5 {
+                0 => v_int(i as i64),
+                1 => v_str(&format!("str_{i}")),
+                2 => v_list(&[v_int(i as i64)]),
+                3 => v_float(i as f64),
+                _ => v_bool(i % 2 == 0),
+            }).collect(),
         }
     }
+    
+    fn chunk_size() -> Option<usize> {
+        Some(50_000) // Use half the pool size so we can do multiple samples
+    }
+}
+
+fn var_drop_ints(ctx: &mut DropContext, chunk_size: usize, _chunk_num: usize) {
+    // Drop exactly chunk_size items from the pool
+    ctx.int_vars.truncate(ctx.int_vars.len() - chunk_size);
+}
+
+fn var_drop_strings(ctx: &mut DropContext, chunk_size: usize, _chunk_num: usize) {
+    // Drop exactly chunk_size items from the pool
+    ctx.string_vars.truncate(ctx.string_vars.len() - chunk_size);
+}
+
+fn var_drop_lists(ctx: &mut DropContext, chunk_size: usize, _chunk_num: usize) {
+    // Drop exactly chunk_size items from the pool
+    ctx.list_vars.truncate(ctx.list_vars.len() - chunk_size);
+}
+
+fn var_drop_mixed(ctx: &mut DropContext, chunk_size: usize, _chunk_num: usize) {
+    // Drop exactly chunk_size items from the pool
+    ctx.mixed_vars.truncate(ctx.mixed_vars.len() - chunk_size);
 }
 
 // Linux only...
 #[cfg(target_os = "linux")]
 pub fn main() {
-    use crate::bench_code::{
-        int_add, int_cmp, int_eq, list_index_assign, list_index_pos, list_push, op_bench,
-        prepare_int, prepare_large_list, prepare_small_list,
+    use moor_bench_utils::{
+        BenchmarkDef, NoContext, generate_session_summary,
+        perf_event::{Builder, events::Hardware},
+        run_benchmark_group,
     };
-    #[cfg(target_os = "linux")]
-    use perf_event::Builder;
-    #[cfg(target_os = "linux")]
-    use perf_event::events::Hardware;
+    use std::env;
 
-    // Check if we can do perf events, and if not just exit early (wthout panic) so that test runners etc
+    // Check if we can do perf events, and if not just exit early (without panic) so that test runners etc
     // don't fail.
     if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
         eprintln!("Perf events are not supported on this system. Skipping benchmarks.");
         return;
     }
 
-    op_bench("int_add", int_add, prepare_int());
-    op_bench("int_eq", int_eq, prepare_int());
-    op_bench("int_cmp", int_cmp, prepare_int());
-    op_bench("list_push", list_push, prepare_small_list());
-    op_bench("list_index_pos", list_index_pos, prepare_large_list());
-    op_bench("list_index_assign", list_index_assign, prepare_large_list());
+    let args: Vec<String> = env::args().collect();
+    // Look for filter arguments after "--"
+    let filter = if let Some(separator_pos) = args.iter().position(|arg| arg == "--") {
+        // Filter is the first argument after "--"
+        args.get(separator_pos + 1).map(|s| s.as_str())
+    } else {
+        // Fallback: look for any non-flag argument that's not our binary name
+        args.iter()
+            .skip(1)
+            .find(|arg| !arg.starts_with("--") && !args[0].contains(arg.as_str()))
+            .map(|s| s.as_str())
+    };
+
+    if let Some(f) = filter {
+        eprintln!("Running benchmarks matching filter: '{f}'");
+        eprintln!(
+            "Available filters: all, int, list, scope, construct, drop, clone, or any benchmark name substring"
+        );
+        eprintln!();
+    }
+
+    // Define all benchmark groups declaratively
+    let int_benchmarks = [
+        BenchmarkDef {
+            name: "int_add",
+            group: "int",
+            func: int_add,
+        },
+        BenchmarkDef {
+            name: "int_eq",
+            group: "int",
+            func: int_eq,
+        },
+        BenchmarkDef {
+            name: "int_cmp",
+            group: "int",
+            func: int_cmp,
+        },
+    ];
+
+    let small_list_benchmarks = [BenchmarkDef {
+        name: "list_push",
+        group: "list",
+        func: list_push,
+    }];
+
+    let large_list_benchmarks = [
+        BenchmarkDef {
+            name: "list_index_pos",
+            group: "list",
+            func: list_index_pos,
+        },
+        BenchmarkDef {
+            name: "list_index_assign",
+            group: "list",
+            func: list_index_assign,
+        },
+    ];
+
+    let construct_benchmarks = [
+        BenchmarkDef {
+            name: "var_construct_ints",
+            group: "construct",
+            func: var_construct_ints,
+        },
+        BenchmarkDef {
+            name: "var_construct_strings",
+            group: "construct",
+            func: var_construct_strings,
+        },
+        BenchmarkDef {
+            name: "var_construct_small_lists",
+            group: "construct",
+            func: var_construct_small_lists,
+        },
+        BenchmarkDef {
+            name: "var_construct_nested_lists",
+            group: "construct",
+            func: var_construct_nested_lists,
+        },
+    ];
+
+    let drop_benchmarks = [
+        BenchmarkDef {
+            name: "var_drop_ints",
+            group: "drop",
+            func: var_drop_ints,
+        },
+        BenchmarkDef {
+            name: "var_drop_strings",
+            group: "drop",
+            func: var_drop_strings,
+        },
+        BenchmarkDef {
+            name: "var_drop_lists",
+            group: "drop",
+            func: var_drop_lists,
+        },
+        BenchmarkDef {
+            name: "var_drop_mixed",
+            group: "drop",
+            func: var_drop_mixed,
+        },
+    ];
+
+    let clone_string_benchmarks = [BenchmarkDef {
+        name: "var_clone_strings",
+        group: "clone",
+        func: var_clone_strings,
+    }];
+
+    let clone_list_benchmarks = [BenchmarkDef {
+        name: "var_clone_lists",
+        group: "clone",
+        func: var_clone_lists,
+    }];
+
+    // Run benchmark groups
+    run_benchmark_group::<IntContext>(&int_benchmarks, "Integer Operations", filter);
+    run_benchmark_group::<SmallListContext>(
+        &small_list_benchmarks,
+        "Small List Operations",
+        filter,
+    );
+    run_benchmark_group::<LargeListContext>(
+        &large_list_benchmarks,
+        "Large List Operations",
+        filter,
+    );
+    run_benchmark_group::<NoContext>(&construct_benchmarks, "Var Construction Benchmarks", filter);
+    run_benchmark_group::<DropContext>(&drop_benchmarks, "Var Drop Benchmarks", filter);
+
+    run_benchmark_group::<StringCloneContext>(
+        &clone_string_benchmarks,
+        "Var Clone (String) Benchmarks",
+        filter,
+    );
+    run_benchmark_group::<ListCloneContext>(
+        &clone_list_benchmarks,
+        "Var Clone (List) Benchmarks",
+        filter,
+    );
+
+    if filter.is_some() {
+        eprintln!("\nBenchmark filtering complete.");
+    }
+
+    // Generate session summary with regression analysis
+    generate_session_summary();
 }
 
 // Non-linux platforms will not run the benchmarks

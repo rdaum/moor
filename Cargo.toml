@@ -12,6 +12,7 @@ members = [
     "crates/rpc/rpc-common",
     "crates/rpc/rpc-sync-client",
     "crates/telnet-host",
+    "crates/testing/bench-utils",
     "crates/testing/load-tools",
     "crates/testing/moot",
     "crates/textdump",
@@ -33,6 +34,7 @@ default-members = [
     "crates/daemon",
     "crates/telnet-host",
     "crates/web-host",
+    "crates/testing/bench-utils",
     "crates/testing/moot",
     "crates/testing/load-tools",
     "crates/curl-worker",
@@ -84,7 +86,6 @@ gdt-cpus = "25.5"
 libc = "0.2"
 mimalloc = "0.1"
 minstant = { version = "0.1", features = ["fallback-coarse"] }
-perf-event2 = "0.7"
 signal-hook = "0.3"
 
 # Command Line & Configuration
@@ -175,6 +176,7 @@ lazy_static = "1.5"
 num-traits = "0.2"
 once_cell = { version = "1.21" }
 paste = "1.0"
+perf_event = { package = "perf-event2", version = "0.7" }
 rand = "0.8"
 semver = "1.0"
 shadow-rs = "1.1"

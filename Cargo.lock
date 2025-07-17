@@ -3000,6 +3000,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "moor-bench-utils"
+version = "0.9.0-alpha"
+dependencies = [
+ "lazy_static",
+ "minstant",
+ "perf-event2",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "moor-common"
 version = "0.9.0-alpha"
 dependencies = [
@@ -3297,7 +3308,7 @@ dependencies = [
  "byteview",
  "im",
  "lazy_static",
- "minstant",
+ "moor-bench-utils",
  "num-traits",
  "once_cell",
  "papaya",

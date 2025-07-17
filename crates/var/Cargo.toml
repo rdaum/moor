@@ -13,10 +13,10 @@ description = "The set of primitive MOO value types across the system"
 
 # dev dependencies only for linux...
 [target.'cfg(all(target_os = "linux"))'.dev-dependencies]
-perf-event2.workspace = true
+perf_event.workspace = true
 
 [dev-dependencies]
-minstant.workspace = true
+moor-bench-utils = { path = "../testing/bench-utils" }
 serde_json.workspace = true
 shuttle.workspace = true
 

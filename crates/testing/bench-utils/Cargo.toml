@@ -1,0 +1,29 @@
+[package]
+name = "moor-bench-utils"
+version = "0.9.0-alpha"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Benchmark utilities for the MOO system"
+
+# This is a dev-only crate - only used in benchmarks and tests
+[lib]
+doctest = false
+
+[dependencies]
+# Timing and measurements
+minstant.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# Other utilities
+lazy_static.workspace = true
+
+# Linux-specific performance counters (dev-only is fine here)
+[target.'cfg(all(target_os = "linux"))'.dependencies]
+perf_event.workspace = true
