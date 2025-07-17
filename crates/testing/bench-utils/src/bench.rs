@@ -523,11 +523,6 @@ pub fn op_bench<T: BenchContext, F: Fn(&T, usize, usize)>(_name: &str, _group: &
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn op_bench_timed<T: TimedBenchContext>(_name: &str, _group: &str) {
-    eprintln!("Benchmarks are only supported on Linux due to perf_event usage.");
-}
-
-#[cfg(not(target_os = "linux"))]
 pub fn run_benchmark<T: BenchContext>(_bench: &BenchmarkDef<T>) {
     eprintln!("Benchmarks are only supported on Linux due to perf_event usage.");
 }
