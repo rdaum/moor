@@ -15,6 +15,7 @@ program    = { SOI ~ statements ~ EOI }
 statements = { statement* }
 statement  = {
     if_statement
+  | for_statement
   | for_in_statement
   | for_range_statement
   | while_statement
@@ -39,6 +40,8 @@ elseif_clause = { ^"elseif" ~ "(" ~ expr ~ ")" ~ statements }
 else_clause   = { ^"else" ~ statements }
 endif_clause  = { ^"endif" }
 
+for_statement = { ^"for" ~ ident ~ "in" ~ for_iterable ~ statements ~ ^"endfor" }
+for_iterable = { for_range_clause | for_in_clause }
 for_in_statement    = { ^"for" ~ for_in_index  ~ "in" ~ for_in_clause ~ statements ~ ^"endfor" }
 for_in_index = { ident ~ ("," ~ ident)?}
 for_range_statement    = { ^"for" ~ ident  ~ "in" ~ for_range_clause ~ statements ~ ^"endfor" }

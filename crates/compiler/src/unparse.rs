@@ -14,7 +14,8 @@
 use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
-use crate::parse::Parse;
+use crate::parsers::parse::Parse;
+use crate::precedence::get_precedence;
 use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
 use moor_var::program::names::Variable;
@@ -31,60 +32,7 @@ struct Unparse<'a> {
 impl Expr {
     /// Returns the precedence of the operator. The higher the return value the higher the precedent.
     fn precedence(&self) -> u8 {
-        // The table here is in reverse order from the return argument because the numbers are based
-        // directly on http://en.cppreference.com/w/cpp/language/operator_precedence
-        // Should be kept in sync with the pratt parser in `parse.rs`
-        // Starting from lowest to highest precedence...
-        // TODO: drive Pratt and this from one common precedence table.
-        let cpp_ref_prep = match self {
-            Expr::Scatter(_, _) | Expr::Assign { .. } => 14,
-            Expr::Cond { .. } => 13,
-            Expr::Or(_, _) => 12,
-            Expr::And(_, _) => 11,
-            Expr::Binary(op, _, _) => match op {
-                ast::BinaryOp::Eq => 7,
-                ast::BinaryOp::NEq => 7,
-                ast::BinaryOp::Gt => 6,
-                ast::BinaryOp::GtE => 6,
-                ast::BinaryOp::Lt => 6,
-                ast::BinaryOp::LtE => 6,
-                ast::BinaryOp::In => 6,
-
-                ast::BinaryOp::Add => 4,
-                ast::BinaryOp::Sub => 4,
-
-                ast::BinaryOp::Mul => 3,
-                ast::BinaryOp::Div => 3,
-                ast::BinaryOp::Mod => 3,
-
-                ast::BinaryOp::Exp => 2,
-            },
-
-            Expr::Unary(_, _) => 1,
-
-            Expr::Prop { .. } => 1,
-            Expr::Verb { .. } => 1,
-            Expr::Range { .. } => 1,
-            Expr::ComprehendRange { .. } => 1,
-            Expr::ComprehendList { .. } => 1,
-            Expr::Index(_, _) => 2,
-
-            Expr::Value(_) => 1,
-            Expr::Error(_, _) => 1,
-            Expr::Id(_) => 1,
-            Expr::TypeConstant(_) => 1,
-            Expr::List(_) => 1,
-            Expr::Map(_) => 1,
-            Expr::Flyweight(..) => 1,
-            Expr::Pass { .. } => 1,
-            Expr::Call { .. } => 1,
-            Expr::Length => 1,
-            Expr::Decl { .. } => 1,
-            Expr::Return(_) => 1,
-            Expr::TryCatch { .. } => 1,
-            Expr::Lambda { .. } => 1,
-        };
-        15 - cpp_ref_prep
+        get_precedence(self)
     }
 }
 
@@ -1513,7 +1461,7 @@ end"#; "complex scatter declaration with optional and rest")]
     }
 
     pub fn parse_and_unparse(original: &str) -> Result<String, DecompileError> {
-        let tree = crate::parse::parse_program(original, CompileOptions::default()).unwrap();
+        let tree = crate::parsers::parse::parse_program(original, CompileOptions::default()).unwrap();
         Ok(unparse(&tree)?.join("\n"))
     }
 

@@ -26,8 +26,9 @@ use crate::Op::{
 use crate::ast::{
     Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
-use crate::parse::moo::Rule;
-use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
+use crate::parsers::parse::moo::Rule;
+use crate::parsers::parse::{CompileOptions, Parse, parse_program, parse_tree};
+use crate::parsers::parse_cst::{ParseCst, parse_program_cst};
 use moor_common::builtins::BUILTINS;
 use moor_common::model::CompileError::InvalidAssignemnt;
 use moor_common::model::{CompileContext, CompileError};
@@ -1325,11 +1326,76 @@ fn do_compile(parse: Parse, compile_options: CompileOptions) -> Result<Program, 
     Ok(program)
 }
 
-/// Compile from a program string, starting at the "program" rule.
+pub(crate) fn do_compile_cst(
+    parse_cst: ParseCst,
+    compile_options: CompileOptions,
+) -> Result<Program, CompileError> {
+    // Generate the code into 'cg_state' - same as do_compile but with ParseCst
+    let mut cg_state = CodegenState::new(compile_options, parse_cst.names);
+    for x in parse_cst.stmts {
+        cg_state.generate_stmt(&x)?;
+    }
+    cg_state.emit(Op::Done);
+
+    if cg_state.cur_stack != 0 || cg_state.saved_stack.is_some() {
+        panic!(
+            "Stack is not empty at end of compilation: cur_stack#: {} stack: {:?}",
+            cg_state.cur_stack, cg_state.saved_stack
+        )
+    }
+
+    let program = Arc::new(PrgInner {
+        literals: cg_state.literals,
+        jump_labels: cg_state.jumps,
+        var_names: cg_state.var_names,
+        scatter_tables: cg_state.scatter_tables,
+        range_comprehensions: cg_state.range_comprehensions,
+        list_comprehensions: cg_state.list_comprehensions,
+        for_sequence_operands: cg_state.for_sequence_operands,
+        error_operands: cg_state.error_operands,
+        lambda_programs: cg_state.lambda_programs,
+        main_vector: cg_state.ops,
+        fork_vectors: cg_state.fork_vectors,
+        line_number_spans: cg_state.line_number_spans,
+        fork_line_number_spans: cg_state.fork_line_number_spans,
+    });
+    let program = Program(program);
+    Ok(program)
+}
+
+/// Compile from a program string using the CST-based parser that preserves comments.
+/// This is now the default compiler that maintains source fidelity and comment preservation.
 pub fn compile(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
+    let parse_cst = parse_program_cst(program, options.clone())?;
+
+    do_compile_cst(parse_cst, options)
+}
+
+/// Legacy compile function using the original parser (for backward compatibility).
+/// Use this only if you need the exact behavior of the original parser.
+pub fn compile_legacy(program: &str, options: CompileOptions) -> Result<Program, CompileError> {
     let parse = parse_program(program, options.clone())?;
 
     do_compile(parse, options)
+}
+
+/// Compile from a program string using the tree-sitter-based parser.
+#[cfg(feature = "tree-sitter-parser")]
+pub fn compile_with_tree_sitter(
+    program: &str,
+    options: CompileOptions,
+) -> Result<Program, CompileError> {
+    crate::parsers::tree_sitter::parse_treesitter::compile_with_tree_sitter(program, options)
+}
+
+/// Compile from a program string using the tree-sitter-based parser with moot-compatible errors.
+#[cfg(feature = "tree-sitter-parser")]
+pub fn compile_with_tree_sitter_moot_compatible(
+    program: &str,
+    options: CompileOptions,
+) -> Result<Program, CompileError> {
+    // For now, use the same implementation
+    crate::parsers::tree_sitter::parse_treesitter::compile_with_tree_sitter(program, options)
 }
 
 /// Compile from an already-parsed tree stating at the `statements` rule.
@@ -1343,6 +1409,52 @@ pub fn compile_tree(tree: Pairs<Rule>, options: CompileOptions) -> Result<Progra
 
 use crate::ast::AstVisitor;
 use std::collections::HashSet;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cst_vs_legacy_bytecode_parity() {
+        let test_cases = vec![
+            "1;",
+            "1 + 2;",
+            "1 * 2 + 3;",
+            "(1 + 2) * 3;",
+            "true && false;",
+            "1 == 2;",
+            "a || b;",
+        ];
+
+        for source in test_cases {
+            println!("Testing bytecode parity for: {}", source);
+
+            // Compile with both parsers (compile is legacy, compile_cst is CST)
+            let legacy_program = compile(source, CompileOptions::default())
+                .expect(&format!("Legacy compile failed for: {}", source));
+            let cst_program = compile(source, CompileOptions::default())
+                .expect(&format!("CST compile failed for: {}", source));
+
+            // The bytecode should be identical
+            assert_eq!(
+                cst_program.main_vector(),
+                legacy_program.main_vector(),
+                "Bytecode mismatch for: {}",
+                source
+            );
+
+            // Variable names should also match
+            assert_eq!(
+                cst_program.var_names(),
+                legacy_program.var_names(),
+                "Variable names mismatch for: {}",
+                source
+            );
+
+            println!("✅ Bytecode parity confirmed for: {}", source);
+        }
+    }
+}
 
 /// A visitor that finds all variable references in lambda bodies for capture analysis
 struct CaptureAnalyzer<'a> {

@@ -28,6 +28,8 @@ pub struct Config {
     pub database: Option<DatabaseConfig>,
     pub features: Arc<FeaturesConfig>,
     pub import_export: ImportExportConfig,
+    /// The parser to use for MOO code compilation (e.g., "cst", "tree-sitter", "tree-sitter-moot")
+    pub parser: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
