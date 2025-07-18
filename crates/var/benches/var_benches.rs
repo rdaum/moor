@@ -272,7 +272,7 @@ mod bench_code {
                 //              "   Change    " = 13 chars total
                 let col1 = format!(" {:<23} ", truncate_string(&result.name, 23)); // " " + 23 + " " = 25
                 let col2 = format!("   {:>7.1}   ", result.mops_per_sec); // "   " + 7 + "   " = 13
-                let col3 = format!("   {:>6.2}    ", result.ns_per_op); // "   " + 6 + "    " = 13  
+                let col3 = format!("   {:>6.2}    ", result.ns_per_op); // "   " + 6 + "    " = 13
                 let col4 = format!("   {:<7}   ", change_info); // "   " + 7 + "   " = 13
 
                 println!("│{}│{}│{}│{}│", col1, col2, col3, col4);

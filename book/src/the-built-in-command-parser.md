@@ -145,4 +145,3 @@ When a verb is executed, these variables are set:
 > **Note:** mooR's command parser is implemented in Rust and can be extended by Rust programmers. This allows for custom parsing logic or new features beyond the standard MOO command syntax.
 
 --
-

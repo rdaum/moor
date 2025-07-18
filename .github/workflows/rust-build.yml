@@ -14,7 +14,7 @@ jobs:
         with:
           submodules: 'true'
       - name: Install Rust 1.88
-        run: rustup update 1.88.0	  
+        run: rustup update 1.88.0
       - name: Build
         run: cargo +1.88.0 build --verbose
       - name: Run tests
@@ -26,7 +26,7 @@ jobs:
         with:
           submodules: 'true'
       - name: Install Rust 1.88
-        run: rustup update 1.88.0	  
+        run: rustup update 1.88.0
       - name: Build
         run: cargo +1.88.0 build --verbose --all-features --all-targets
       - name: Run tests
@@ -39,7 +39,7 @@ jobs:
         with:
           submodules: 'true'
       - name: Install Rust 1.88
-        run: rustup update 1.88.0	  
+        run: rustup update 1.88.0
       - name: Build
         run: cargo +1.88.0 build --verbose --all-features --all-targets
       - name: Run tests

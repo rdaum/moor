@@ -1864,7 +1864,7 @@ mod tests {
         }
     }
 
-    /// Test property operations across transactions using high-level APIs  
+    /// Test property operations across transactions using high-level APIs
     #[test]
     fn test_relation_delete_operation() {
         let db = test_db();

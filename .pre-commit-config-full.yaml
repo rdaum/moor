@@ -1,0 +1,142 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+
+  # Rust formatting
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+  # Rust linting
+  - repo: local
+    hooks:
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+  # Check that code compiles
+  - repo: local
+    hooks:
+      - id: cargo-check
+        name: cargo check
+        entry: cargo check --all-features
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+  # Check tree-sitter feature
+  - repo: local
+    hooks:
+      - id: cargo-check-tree-sitter
+        name: cargo check tree-sitter
+        entry: cargo check --features tree-sitter-parser
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+  # License header check for Rust files
+  - repo: local
+    hooks:
+      - id: license-header-rust
+        name: Check license headers in Rust files
+        entry: bash
+        args: ['-c', 'for file in "$@"; do if [[ "$file" == *.rs ]] && ! head -n 1 "$file" | grep -q "Copyright"; then echo "Missing license header: $file"; exit 1; fi; done', '--']
+        language: system
+        types: [rust]
+
+  # Quick tests (only on commit, not push)
+  - repo: local
+    hooks:
+      - id: cargo-test-quick
+        name: cargo test (quick)
+        entry: cargo test --lib -- --test-threads=4
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-commit]
+
+  # Comprehensive tests (only on push)
+  - repo: local
+    hooks:
+      - id: cargo-test-full
+        name: cargo test (full)
+        entry: cargo test --all-features
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
+
+  # Check examples compile
+  - repo: local
+    hooks:
+      - id: cargo-check-examples
+        name: cargo check examples
+        entry: cargo check --examples
+        language: system
+        types: [rust]
+        pass_filenames: false
+        files: ^examples/
+
+  # Check benchmarks compile
+  - repo: local
+    hooks:
+      - id: cargo-check-benches
+        name: cargo check benches
+        entry: cargo check --benches
+        language: system
+        types: [rust]
+        pass_filenames: false
+        files: ^.*benches/
+
+  # TOML formatting
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.12.0
+    hooks:
+      - id: pretty-format-toml
+        args: [--autofix]
+
+  # Security audit
+  - repo: local
+    hooks:
+      - id: cargo-audit
+        name: cargo audit
+        entry: cargo audit
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+# Configuration
+default_stages: [pre-commit]
+fail_fast: false
+exclude: |
+  (?x)^(
+    target/|
+    Cargo\.lock|
+    .*\.snap$|
+    .*\.bak$
+  )
+
+# Environment variables
+ci:
+  skip: [cargo-fmt, cargo-clippy, cargo-check, cargo-check-tree-sitter, cargo-test-quick, cargo-test-full, cargo-check-examples, cargo-check-benches, cargo-audit]

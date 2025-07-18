@@ -1,4 +1,37 @@
+[[bench]]
+harness = false
+name = "var_benches"
+
+[dependencies]
+# Collections & Data Structures
+ahash.workspace = true
+# Utilities & Helpers
+binary-layout.workspace = true
+# Serialization & Data Formats
+bincode.workspace = true
+# Async Runtime & Concurrency
+boxcar.workspace = true
+byteview.workspace = true
+im.workspace = true
+lazy_static.workspace = true
+num-traits.workspace = true
+once_cell.workspace = true
+papaya.workspace = true
+paste.workspace = true
+serde.workspace = true
+strum.workspace = true
+# Error Handling
+thiserror.workspace = true
+# Text Processing & Regex
+unicase.workspace = true
+
+[dev-dependencies]
+minstant.workspace = true
+serde_json.workspace = true
+shuttle.workspace = true
+
 [package]
+description = "The set of primitive MOO value types across the system"
 name = "moor-var"
 version = "0.9.0-alpha"
 authors.workspace = true
@@ -9,46 +42,9 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "The set of primitive MOO value types across the system"
+
+[target.'cfg(all(target_os = "linux"))']
 
 # dev dependencies only for linux...
 [target.'cfg(all(target_os = "linux"))'.dev-dependencies]
 perf-event2.workspace = true
-
-[dev-dependencies]
-minstant.workspace = true
-serde_json.workspace = true
-shuttle.workspace = true
-
-[target.'cfg(all(target_os = "linux"))']
-[[bench]]
-name = "var_benches"
-harness = false
-
-[dependencies]
-# Serialization & Data Formats
-bincode.workspace = true
-serde.workspace = true
-
-# Async Runtime & Concurrency
-boxcar.workspace = true
-papaya.workspace = true
-
-# Collections & Data Structures
-ahash.workspace = true
-im.workspace = true
-
-# Text Processing & Regex
-unicase.workspace = true
-
-# Error Handling
-thiserror.workspace = true
-
-# Utilities & Helpers
-binary-layout.workspace = true
-byteview.workspace = true
-lazy_static.workspace = true
-num-traits.workspace = true
-once_cell.workspace = true
-paste.workspace = true
-strum.workspace = true

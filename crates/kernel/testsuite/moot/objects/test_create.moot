@@ -47,7 +47,7 @@ $a
 ; add_property($system, "h", create($nothing, $invalid_object), {$wizard_player, "rwc"});
 
 ; return $e.owner;
-$e 
+$e
 ; return $_f.owner;
 $ambiguous_match
 ; return $g.owner;

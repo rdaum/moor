@@ -56,8 +56,8 @@ let result = xml_parse(xml, MAP);
 
 // result = {
 //   "div",
-//   ["class" -> "container"], 
-//   "Hello ", 
+//   ["class" -> "container"],
+//   "Hello ",
 //   {"span", [], "World"}
 // }
 ```
@@ -104,7 +104,7 @@ let xml = to_xml(element);
 // Returns: "<div class=\"container\">Hello World</div>"
 
 // Nested structure
-let page = {"html", 
+let page = {"html",
     {"head", {"title", "My Page"}},
     {"body", {"class", "main"},
         {"h1", "Welcome"},
@@ -120,9 +120,9 @@ let html = to_xml(page);
 ```moo
 // The new map format is a list where the first element is the tag name,
 // the second element is a map of attributes, and remaining elements are content
-let element = {"div", 
+let element = {"div",
                ["class" -> "container", "id" -> "main"],
-               "Hello ", 
+               "Hello ",
                {"span", [], "World"}
               };
 let xml = to_xml(element);
@@ -170,7 +170,7 @@ for data in (weather_data)
     if (data["tag"] == "current")
         let temp = data["attributes"]["temperature"];
         let humidity = data["attributes"]["humidity"];
-        
+
         player:tell("Current temperature: ", temp, "°F");
         player:tell("Humidity: ", humidity, "%");
     endif

@@ -18,7 +18,7 @@ file = _{
     EOI
 }
 
-block = _{ 
+block = _{
     change_player |
     eval |
     cmd |

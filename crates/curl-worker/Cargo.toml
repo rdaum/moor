@@ -1,4 +1,26 @@
+[dependencies]
+moor-common = {path = "../common"}
+moor-var = {path = "../var"}
+rpc-async-client = {path = "../rpc/rpc-async-client"}
+rpc-common = {path = "../rpc/rpc-common"}
+# # Command line arguments parsing.
+clap.workspace = true
+clap_derive.workspace = true
+# # General.
+color-eyre.workspace = true
+eyre.workspace = true
+# # Asynchronous transaction processing & networking
+reqwest.workspace = true
+# # ZMQ / RPC
+tmq.workspace = true
+tokio.workspace = true
+# # Logging & tracing
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
 [package]
+description = "A worker for initiating outbound HTTP or related requests"
 name = "moor-curl-worker"
 version = "0.9.0-alpha"
 authors.workspace = true
@@ -9,30 +31,3 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "A worker for initiating outbound HTTP or related requests"
-
-[dependencies]
-moor-common = { path = "../common" }
-moor-var = { path = "../var" }
-rpc-async-client = { path = "../rpc/rpc-async-client" }
-rpc-common = { path = "../rpc/rpc-common" }
-
-## Command line arguments parsing.
-clap.workspace = true
-clap_derive.workspace = true
-
-## General.
-color-eyre.workspace = true
-eyre.workspace = true
-
-## Asynchronous transaction processing & networking
-reqwest.workspace = true
-tokio.workspace = true
-
-## Logging & tracing
-tracing.workspace = true
-tracing-subscriber.workspace = true
-
-## ZMQ / RPC
-tmq.workspace = true
-uuid.workspace = true

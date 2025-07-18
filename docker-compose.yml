@@ -31,15 +31,15 @@ services:
     volumes:
       - ./:/db
     command: >
-      ./moor-daemon 
+      ./moor-daemon
         /db/moor-data
-        --db=development.db 
-        --rpc-listen=tcp://0.0.0.0:7899 
-        --events-listen=tcp://0.0.0.0:7898 
-        --workers-response-listen=tcp://0.0.0.0:7897 
-        --workers-request-listen=tcp://0.0.0.0:7896 
-        --import=/db/JHCore-DEV-2.db --import-format=textdump 
-        --export=export --export-format objdef 
+        --db=development.db
+        --rpc-listen=tcp://0.0.0.0:7899
+        --events-listen=tcp://0.0.0.0:7898
+        --workers-response-listen=tcp://0.0.0.0:7897
+        --workers-request-listen=tcp://0.0.0.0:7896
+        --import=/db/JHCore-DEV-2.db --import-format=textdump
+        --export=export --export-format objdef
         --checkpoint-interval-seconds=360
     ports:
       # ZMQ ports
@@ -60,9 +60,9 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      ./moor-telnet-host --telnet-address=0.0.0.0 
-        --telnet-port=8888 
-        --rpc-address=tcp://moor-daemon:7899 
+      ./moor-telnet-host --telnet-address=0.0.0.0
+        --telnet-port=8888
+        --rpc-address=tcp://moor-daemon:7899
         --events-address=tcp://moor-daemon:7898
     ports:
       # Telnet listener
@@ -80,10 +80,10 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      ./moor-web-host 
-        --listen-address=0.0.0.0:8080 
-        --rpc-address=tcp://moor-daemon:7899 
-        --events-address=tcp://moor-daemon:7898 
+      ./moor-web-host
+        --listen-address=0.0.0.0:8080
+        --rpc-address=tcp://moor-daemon:7899
+        --events-address=tcp://moor-daemon:7898
         --client-sources=./client
     ports:
       # HTTP listener
@@ -102,10 +102,10 @@ services:
       - RUST_BACKTRACE=1
     working_dir: /moor
     command: >
-      ./moor-curl-worker 
-        --rpc-address=tcp://moor-daemon:7899 
-        --events-address=tcp://moor-daemon:7898 
-        --workers-request-address=tcp://moor-daemon:7896 
+      ./moor-curl-worker
+        --rpc-address=tcp://moor-daemon:7899
+        --events-address=tcp://moor-daemon:7898
+        --workers-request-address=tcp://moor-daemon:7896
         --workers-response-address=tcp://moor-daemon:7897
     networks:
       - moor_net

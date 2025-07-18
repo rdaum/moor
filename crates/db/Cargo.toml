@@ -1,4 +1,50 @@
+[[bench]]
+harness = false
+name = "txdb_benches"
+
+[dependencies]
+# Internal Dependencies
+moor-common = {path = "../common"}
+moor-var = {path = "../var"}
+# Collections & Data Structures
+ahash.workspace = true
+# Async Runtime & Concurrency
+arc-swap.workspace = true
+# Utilities & Helpers
+byteview.workspace = true
+# Database & Persistence
+fjall.workspace = true
+flume.workspace = true
+# Core Runtime & System
+gdt-cpus.workspace = true
+im.workspace = true
+indexmap.workspace = true
+lazy_static.workspace = true
+minstant.workspace = true
+oneshot.workspace = true
+paste.workspace = true
+rand.workspace = true
+# Serialization & Data Formats
+serde.workspace = true
+# Testing & Development
+tempfile.workspace = true
+# Error Handling & Logging
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+edn-format.workspace = true
+eyre.workspace = true
+shuttle.workspace = true
+tempfile.workspace = true
+
+[features]
+relbox = []
+
 [package]
+description = "Interfaces for describing the worldstate of a moor database"
 name = "moor-db"
 version = "0.9.0-alpha"
 authors.workspace = true
@@ -9,57 +55,3 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Interfaces for describing the worldstate of a moor database"
-
-[[bench]]
-name = "txdb_benches"
-harness = false
-
-[dev-dependencies]
-criterion.workspace = true
-edn-format.workspace = true
-eyre.workspace = true
-shuttle.workspace = true
-tempfile.workspace = true
-
-[dependencies]
-# Internal Dependencies
-moor-common = { path = "../common" }
-moor-var = { path = "../var" }
-
-# Core Runtime & System
-gdt-cpus.workspace = true
-
-# Serialization & Data Formats
-serde.workspace = true
-
-# Database & Persistence
-fjall.workspace = true
-
-# Async Runtime & Concurrency
-arc-swap.workspace = true
-flume.workspace = true
-oneshot.workspace = true
-
-# Collections & Data Structures
-ahash.workspace = true
-im.workspace = true
-indexmap.workspace = true
-
-# Error Handling & Logging
-thiserror.workspace = true
-tracing.workspace = true
-
-# Utilities & Helpers
-byteview.workspace = true
-lazy_static.workspace = true
-minstant.workspace = true
-paste.workspace = true
-rand.workspace = true
-uuid.workspace = true
-
-# Testing & Development
-tempfile.workspace = true
-
-[features]
-relbox = []

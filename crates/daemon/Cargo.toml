@@ -1,4 +1,58 @@
+[[bin]]
+name = "moor-daemon"
+path = "src/main.rs"
+
+[dependencies]
+# Internal Dependencies
+moor-common = {path = "../common"}
+moor-db = {path = "../db"}
+moor-kernel = {path = "../kernel"}
+moor-objdef = {path = "../objdef"}
+moor-textdump = {path = "../textdump"}
+moor-var = {path = "../var"}
+rpc-common = {path = "../rpc/rpc-common"}
+# Utilities & Helpers
+ahash.workspace = true
+# Authentication & Security
+base64.workspace = true
+# Serialization & Data Formats
+bincode.workspace = true
+byteview.workspace = true
+# Command Line & Configuration
+clap.workspace = true
+clap_derive.workspace = true
+# Error Handling & Logging
+color-eyre.workspace = true
+ed25519-dalek.workspace = true
+eyre.workspace = true
+figment.workspace = true
+# Database & Persistence
+fjall.workspace = true
+# Async Runtime & Concurrency
+flume.workspace = true
+fs2.workspace = true
+# Core Runtime & System
+gdt-cpus.workspace = true
+mimalloc.workspace = true
+minstant.workspace = true
+oneshot.workspace = true
+papaya.workspace = true
+rand.workspace = true
+rusty_paseto.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+signal-hook.workspace = true
+# Testing & Development
+tempfile.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+# Networking & Communication
+zmq.workspace = true
+
 [package]
+description = "The actual moor binary that runs as an RPC-accessible daemon that various frontends can connect to."
 name = "moor-daemon"
 version = "0.9.0-alpha"
 authors.workspace = true
@@ -6,88 +60,24 @@ categories.workspace = true
 edition.workspace = true
 keywords.workspace = true
 license.workspace = true
+
+[package.metadata.deb]
+assets = [
+  ["target/release/moor-daemon", "/usr/bin/moor-daemon", "755"],
+  [
+    "debian/moor-daemon.service",
+    "/lib/systemd/system/moor-daemon.service",
+    "644"
+  ],
+  ["debian/moor-daemon-config.yaml", "/etc/moor/daemon-config.yaml", "644"]
+]
+depends = "$auto, systemd, openssl"
+extended-description = "Daemon for the Moor virtual machine. This is the main process that runs the Moor VM and provides an RPC interface for clients to connect to."
+license-file = ["../../LICENSE", "0"]
+maintainer-scripts = "debian/scripts"
+priority = "optional"
+section = "net"
+systemd-units = {enable = false}
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "The actual moor binary that runs as an RPC-accessible daemon that various frontends can connect to."
-
-[package.metadata.deb]
-depends = "$auto, systemd, openssl"
-extended-description = "Daemon for the Moor virtual machine. This is the main process that runs the Moor VM and provides an RPC interface for clients to connect to."
-section = "net"
-license-file = ["../../LICENSE", "0"]
-priority = "optional"
-assets = [
-    ["target/release/moor-daemon", "/usr/bin/moor-daemon", "755"],
-    [
-        "debian/moor-daemon.service",
-        "/lib/systemd/system/moor-daemon.service",
-        "644",
-    ],
-    ["debian/moor-daemon-config.yaml", "/etc/moor/daemon-config.yaml", "644"],
-]
-maintainer-scripts = "debian/scripts"
-systemd-units = { enable = false }
-
-[[bin]]
-name = "moor-daemon"
-path = "src/main.rs"
-
-[dependencies]
-# Internal Dependencies
-moor-common = { path = "../common" }
-moor-db = { path = "../db" }
-moor-kernel = { path = "../kernel" }
-moor-objdef = { path = "../objdef" }
-moor-textdump = { path = "../textdump" }
-moor-var = { path = "../var" }
-rpc-common = { path = "../rpc/rpc-common" }
-
-# Core Runtime & System
-gdt-cpus.workspace = true
-mimalloc.workspace = true
-signal-hook.workspace = true
-
-# Command Line & Configuration
-clap.workspace = true
-clap_derive.workspace = true
-figment.workspace = true
-
-# Serialization & Data Formats
-bincode.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-
-# Database & Persistence
-fjall.workspace = true
-fs2.workspace = true
-
-# Networking & Communication
-zmq.workspace = true
-
-# Async Runtime & Concurrency
-flume.workspace = true
-oneshot.workspace = true
-papaya.workspace = true
-
-# Authentication & Security
-base64.workspace = true
-ed25519-dalek.workspace = true
-rusty_paseto.workspace = true
-
-# Error Handling & Logging
-color-eyre.workspace = true
-eyre.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-
-# Utilities & Helpers
-ahash.workspace = true
-byteview.workspace = true
-minstant.workspace = true
-rand.workspace = true
-semver.workspace = true
-uuid.workspace = true
-
-# Testing & Development
-tempfile.workspace = true

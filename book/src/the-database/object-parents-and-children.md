@@ -10,7 +10,7 @@ You may have used inheritance in another programming language, but MOO's approac
 
 Every object in the MOO database has a parent object, which is another object in the database. The parent object can be
 thought of as a template for the child object, providing default values for properties and default implementations for
-verbs. This hierarchy allows for inheritance, where a child object can override the properties and verbs of its parent  
+verbs. This hierarchy allows for inheritance, where a child object can override the properties and verbs of its parent
 object.
 
 **What makes MOO inheritance special:**

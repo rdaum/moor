@@ -23,7 +23,7 @@ Lambda functions use scatter-style parameter declarations with arrow syntax:
 ```moo
 // Simple expression lambdas
 {x, y} => x + y;                    // Two required parameters
-{x} => x * 2;                       // Single parameter  
+{x} => x * 2;                       // Single parameter
 {} => "hello world";                // No parameters
 
 // Statement lambdas
@@ -43,7 +43,7 @@ MOO's scatter assignment syntax naturally extends to lambda parameters:
 {x, ?y} => x + (y || 0);            // y defaults to 0 if not provided
 {?name} => name || "Anonymous";     // Single optional parameter
 
-// Rest parameters (using @var syntax) 
+// Rest parameters (using @var syntax)
 {x, @rest} => x + length(rest);     // x gets first arg, rest gets remainder
 {@all} => length(all);              // All args collected into list
 
@@ -104,9 +104,9 @@ pub enum CallTarget {
 }
 
 // Modified Call expression
-Call { 
+Call {
     function: CallTarget,   // Changed from Symbol to CallTarget
-    args: Vec<Arg> 
+    args: Vec<Arg>
 }
 ```
 
@@ -120,7 +120,7 @@ The `ScatterItem` structure already supports:
 
 ```moo
 my_lambda(x, y)                    // Direct variable reference
-obj.method_lambda(x, y)            // Property access  
+obj.method_lambda(x, y)            // Property access
 lambdas[index](x, y)               // Array/map indexing
 get_transformer()(x, y)            // Function returning lambda
 (use_fast ? fast_fn | slow_fn)(x)  // Conditional lambda selection
@@ -185,7 +185,7 @@ Expr::Call { function, args } => {
         CallTarget::Expr(expr) => {
             // New lambda call logic
             self.generate_expr(expr.as_ref())?;       // Evaluate callable expression
-            self.generate_arg_list(args)?;            // Push args list  
+            self.generate_arg_list(args)?;            // Push args list
             self.emit(Op::CallLambda);                // Runtime dispatch
             self.pop_stack(1);                        // Pop callable, leave result
         }
@@ -196,14 +196,14 @@ Expr::Call { function, args } => {
 Expr::Lambda { params, body } => {
     // Compile lambda body into standalone Program (similar to fork vector pattern)
     let lambda_program = self.compile_lambda_body(params, body)?;
-    
+
     // Store compiled Program as literal
     let program_literal = self.add_literal(Var::mk_program(lambda_program))?;
     let scatter_offset = self.compile_scatter_params(params)?;
-    
-    self.emit(Op::MakeLambda { 
-        scatter_offset, 
-        program_literal 
+
+    self.emit(Op::MakeLambda {
+        scatter_offset,
+        program_literal
     });
     self.push_stack(1);
 }
@@ -218,15 +218,15 @@ fn compile_lambda_body(&mut self, params: &[ScatterItem], body: &Expr) -> Result
     let stashed_literals = std::mem::take(&mut self.literals);
     let stashed_var_names = self.var_names.clone();
     // ... stash other state ...
-    
+
     // Create new compilation context for lambda
     self.reset_for_lambda_compilation();
     self.setup_lambda_parameters(params)?;
-    
+
     // Compile lambda body in isolation
     self.generate_expr(body)?;
     self.emit(Op::Return);  // Implicit return of expression result
-    
+
     // Build standalone Program from compiled state
     let lambda_program = Program::new(
         std::mem::take(&mut self.ops),
@@ -234,13 +234,13 @@ fn compile_lambda_body(&mut self, params: &[ScatterItem], body: &Expr) -> Result
         self.var_names.clone(),
         // ... all other compilation state ...
     );
-    
+
     // Restore main compilation context
     self.ops = stashed_ops;
     self.literals = stashed_literals;
     self.var_names = stashed_var_names;
     // ... restore other state ...
-    
+
     Ok(lambda_program)
 }
 ```
@@ -253,16 +253,16 @@ Function call parsing determines the appropriate `CallTarget`:
 fn parse_call(&mut self, name: Symbol, args: Vec<Arg>) -> Expr {
     if BUILTINS.find_builtin(name).is_some() {
         // Known builtin at compile time
-        Expr::Call { 
-            function: CallTarget::Builtin(name), 
-            args 
+        Expr::Call {
+            function: CallTarget::Builtin(name),
+            args
         }
     } else {
         // Unknown function - could be lambda variable
         let var_expr = self.create_variable_expr(name);
-        Expr::Call { 
-            function: CallTarget::Expr(Box::new(var_expr)), 
-            args 
+        Expr::Call {
+            function: CallTarget::Expr(Box::new(var_expr)),
+            args
         }
     }
 }
@@ -282,16 +282,16 @@ Op::MakeLambda { scatter_offset, program_literal } => {
     let Variant::Program(program) = lambda_program.variant() else {
         return Err(MalformedProgram("expected Program literal for lambda".to_string()));
     };
-    
+
     // Retrieve scatter specification
     let scatter_spec = self.program.scatter_table(scatter_offset).clone();
-    
+
     // Decompile lambda body from standalone Program
     let lambda_body = decompile_lambda_program(program)?;
-    
+
     // Convert scatter spec to parameter list
     let params = self.decompile_scatter_params(&scatter_spec)?;
-    
+
     self.push_expr(Expr::Lambda {
         params,
         body: Box::new(lambda_body),
@@ -304,7 +304,7 @@ Op::CallLambda => {
     let Expr::List(args) = args else {
         return Err(MalformedProgram("expected list of args for lambda call".to_string()));
     };
-    
+
     self.push_expr(Expr::Call {
         function: CallTarget::Expr(Box::new(lambda_expr)),
         args,
@@ -325,13 +325,13 @@ fn decompile_lambda_program(program: &Program) -> Result<Expr, DecompileError> {
         statements: vec![],
         assigned_vars: HashSet::new(),
     };
-    
+
     // Decompile lambda body
     let opcode_vector_len = lambda_decompile.opcode_vector().len();
     while lambda_decompile.position < opcode_vector_len {
         lambda_decompile.decompile()?;
     }
-    
+
     // Lambda body should result in single expression or statement block
     match lambda_decompile.statements.len() {
         0 => {
@@ -355,7 +355,7 @@ Add unparsing support for lambda expressions:
 Expr::Lambda { params, body } => {
     let mut buffer = String::new();
     buffer.push('{');
-    
+
     // Unparse parameter list using scatter syntax
     let len = params.len();
     for (i, param) in params.iter().enumerate() {
@@ -364,22 +364,22 @@ Expr::Lambda { params, body } => {
             ScatterKind::Optional => buffer.push('?'),
             ScatterKind::Rest => buffer.push('@'),
         }
-        
+
         let name = self.unparse_variable(&param.id);
         buffer.push_str(&name.as_arc_string());
-        
+
         if let Some(expr) = &param.expr {
             buffer.push_str(" = ");
             buffer.push_str(self.unparse_expr(expr)?.as_str());
         }
-        
+
         if i + 1 < len {
             buffer.push_str(", ");
         }
     }
-    
+
     buffer.push_str("} => ");
-    
+
     // Unparse lambda body
     match body.as_ref() {
         Expr::Block(statements) => {
@@ -398,14 +398,14 @@ Expr::Lambda { params, body } => {
             buffer.push_str(self.unparse_expr(body)?.as_str());
         }
     }
-    
+
     Ok(buffer)
 }
 
 // Update Call expression unparsing to handle CallTarget
 Expr::Call { function, args } => {
     let mut buffer = String::new();
-    
+
     match function {
         CallTarget::Builtin(sym) => {
             buffer.push_str(&sym.as_arc_string());
@@ -414,7 +414,7 @@ Expr::Call { function, args } => {
             buffer.push_str(self.unparse_expr(expr)?.as_str());
         }
     }
-    
+
     buffer.push('(');
     buffer.push_str(self.unparse_args(args)?.as_str());
     buffer.push(')');
@@ -466,7 +466,7 @@ impl Var {
     pub fn mk_lambda(params: ScatterArgs, body: Program, captured_env: Vec<Vec<Var>>) -> Self {
         Var(Variant::Lambda(Box::new(Lambda { params, body, captured_env })))
     }
-    
+
     pub fn as_lambda(&self) -> Option<&Lambda> {
         match self.variant() {
             Variant::Lambda(l) => Some(l.as_ref()),
@@ -700,7 +700,7 @@ let result = func(5);  // Execute now (5 + 10) or curry waiting for y?
 // Case 2: Rest parameters make the decision impossible
 let func = {x, @rest} => x + length(rest);
 func(1)        // Complete? (x=1, rest=[])
-func(1, 2)     // Complete? (x=1, rest=[2])  
+func(1, 2)     // Complete? (x=1, rest=[2])
 func(1, 2, 3)  // Complete? (x=1, rest=[2,3])
 // Every call could be either "done" or "partial" - no way to decide!
 

@@ -65,4 +65,3 @@ window.addEventListener('load', () => {
   listenActive();
   window.addEventListener("scroll", updateFunction);
 });
-

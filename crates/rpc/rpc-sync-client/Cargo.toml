@@ -1,4 +1,17 @@
+[dependencies]
+# Internal Dependencies
+rpc-common = {path = "../rpc-common"}
+# Serialization & Data Formats
+bincode.workspace = true
+# Error Handling & Logging
+tracing.workspace = true
+# Utilities & Helpers
+uuid.workspace = true
+# Networking & Communication
+zmq.workspace = true
+
 [package]
+description = "Utilities for connection to the 0MQ RPC server via blocking synchronous calls"
 name = "rpc-sync-client"
 version = "0.9.0-alpha"
 authors.workspace = true
@@ -9,20 +22,3 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Utilities for connection to the 0MQ RPC server via blocking synchronous calls"
-
-[dependencies]
-# Internal Dependencies
-rpc-common = { path = "../rpc-common" }
-
-# Serialization & Data Formats
-bincode.workspace = true
-
-# Networking & Communication
-zmq.workspace = true
-
-# Error Handling & Logging
-tracing.workspace = true
-
-# Utilities & Helpers
-uuid.workspace = true

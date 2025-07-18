@@ -66,7 +66,7 @@ MOO supports several basic data types:
     - Integer (`INT`) - Whole numbers
     - Float (`FLOAT`) - Decimal numbers
     - String (`STR`) - Text in double quotes
-    - Binary (`BINARY`) - Binary data in base64 format with `b"` prefix, e.g. `b"SGVsbG8gV29ybGQ="` 
+    - Binary (`BINARY`) - Binary data in base64 format with `b"` prefix, e.g. `b"SGVsbG8gV29ybGQ="`
     - Boolean (`BOOL`) - `true` or `false`
     - Object (`OBJ`) - References to objects in the DB, written as `#123` or `$room`. Note that `$` is a special prefix
       for "system" objects, which are objects referenced off the system object `#0`. `$room` is short-hand for

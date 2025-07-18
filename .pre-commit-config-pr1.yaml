@@ -1,0 +1,64 @@
+# Pre-commit config for PR 1 (CST Foundation)
+# This includes Rust checks that should work with the CST-only code
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+        exclude: |
+          (?x)^(
+            crates/daemon/src/main\.rs|
+            crates/daemon/src/testing/.*|
+            crates/telnet-host/tests/.*
+          )$
+
+  # Rust formatting - this should work even with partial code
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --
+        language: system
+        types: [rust]
+        pass_filenames: false
+        args: [--check]
+
+  # Try cargo check on just the files we have
+  - repo: local
+    hooks:
+      - id: cargo-check-workspace
+        name: cargo check (workspace)
+        entry: cargo check --workspace
+        language: system
+        types: [rust]
+        pass_filenames: false
+        # Continue even if this fails since we have partial code
+        verbose: true
+
+  # TOML formatting
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.12.0
+    hooks:
+      - id: pretty-format-toml
+        args: [--autofix]
+
+# Configuration
+default_stages: [pre-commit]
+fail_fast: false
+exclude: |
+  (?x)^(
+    target/|
+    Cargo\.lock|
+    .*\.snap$|
+    .*\.bak$|
+    JHCore.*\.db$
+  )

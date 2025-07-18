@@ -16,53 +16,53 @@
 
 - `sequence`: The sequence to measure
 
-**Returns:** An integer representing the length of the sequence  
+**Returns:** An integer representing the length of the sequence
 **Note:** Will raise an error if the value is not a sequence type.
 
 ## Type Conversion Functions
 
 ### `tostr`
 
-**Description**: Converts value(s) to a string representation.  
+**Description**: Converts value(s) to a string representation.
 **Arguments**:
 
 
 - `value1, value2, ...`: One or more values to convert to string
 
-**Returns:** A string representation of the concatenated values  
+**Returns:** A string representation of the concatenated values
 **Note:** If multiple arguments are provided, they are concatenated together.
 
 ### `tosym`
 
-**Description**: Converts a scalar value to a symbol.  
+**Description**: Converts a scalar value to a symbol.
 **Arguments**:
 
 
 - `value`: The value to convert (must be a string, boolean, error, or symbol)
 
-**Returns:** A symbol representing the value  
+**Returns:** A symbol representing the value
 **Note:** Will raise E_TYPE if the value cannot be converted to a symbol.
 
 ### `toliteral`
 
-**Description**: Converts a value to its literal string representation.  
+**Description**: Converts a value to its literal string representation.
 **Arguments**:
 
 
 - `value`: The value to convert
 
-**Returns:** A string containing the literal representation of the value  
+**Returns:** A string containing the literal representation of the value
 **Note:** This produces a string that could be evaluated to recreate the original value.
 
 ### `toint`
 
-**Description**: Converts a value to an integer.  
+**Description**: Converts a value to an integer.
 **Arguments**:
 
 
 - `value`: The value to convert (must be a number, object, string, or error)
 
-**Returns:** The integer representation of the value  
+**Returns:** The integer representation of the value
 **Note:** String conversion parses the string as a number; invalid strings convert to 0.
 
 ### `tonum`
@@ -71,31 +71,31 @@ Alias for `toint`. **Description:**
 
 ### `toobj`
 
-**Description**: Converts a value to an object reference.  
+**Description**: Converts a value to an object reference.
 **Arguments**:
 
 
 - `value`: The value to convert (must be a number, string, or object)
 
-**Returns:** An object reference  
+**Returns:** An object reference
 **Note:** For strings, accepts formats like "123" or "#123". Invalid strings convert to object #0.
 
 ### `tofloat`
 
-**Description**: Converts a value to a floating-point number.  
+**Description**: Converts a value to a floating-point number.
 **Arguments**:
 
 
 - `value`: The value to convert (must be a number, string, or error)
 
-**Returns:** The floating-point representation of the value  
+**Returns:** The floating-point representation of the value
 **Note:** String conversion parses the string as a number; invalid strings convert to 0.0.
 
 ## Comparison Functions
 
 ### `equal`
 
-**Description**: Performs a case-sensitive equality comparison between two values.  
+**Description**: Performs a case-sensitive equality comparison between two values.
 **Arguments**:
 
 
@@ -202,7 +202,7 @@ parse_json("{\"#1|obj\":2}", "embedded-types")              =>   [#1 -> 2]
 
 ### `value_bytes`
 
-**Description**: Returns the size of a value in bytes.  
+**Description**: Returns the size of a value in bytes.
 **Arguments**:
 
 
@@ -212,13 +212,13 @@ parse_json("{\"#1|obj\":2}", "embedded-types")              =>   [#1 -> 2]
 
 ### `object_bytes`
 
-**Description**: Returns the size of an object in bytes.  
+**Description**: Returns the size of an object in bytes.
 **Arguments**:
 
 
 - `object`: The object to measure
 
-**Returns:** The size of the object in bytes  
+**Returns:** The size of the object in bytes
 **Note:** This includes all properties, verbs, and other object data.
 Note: Most of these functions follow a consistent pattern of validating arguments and providing appropriate error
 handling. Type conversion functions generally attempt to convert intelligently between types and provide sensible
@@ -228,7 +228,7 @@ defaults or errors when conversion isn't possible.
 
 ### `error_message`
 
-**Description**: Returns the error message associated with an error value.  
+**Description**: Returns the error message associated with an error value.
 **Arguments**:
 
 
@@ -238,7 +238,7 @@ defaults or errors when conversion isn't possible.
 
 ### `error_code`
 
-**Description**: Strips off the message from an error value and returns just the error without it.  
+**Description**: Strips off the message from an error value and returns just the error without it.
 **Arguments**:
 
 

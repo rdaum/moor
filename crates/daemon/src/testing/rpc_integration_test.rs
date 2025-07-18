@@ -1699,7 +1699,7 @@ MCowBQYDK2VwAyEAZQUxGvw8u9CcUHUGLttWFZJaoroXAmQgUGINgbBlVYw=
 
         // Find the input response reply
         let input_reply_found = client_replies.iter().any(|(_, msg, reply)| {
-            matches!(msg, rpc_common::HostClientToDaemonMessage::RequestedInput(_, _, captured_id, _) 
+            matches!(msg, rpc_common::HostClientToDaemonMessage::RequestedInput(_, _, captured_id, _)
                      if *captured_id == request_id) &&
             matches!(reply, Ok(rpc_common::DaemonToClientReply::InputThanks) | Err(_))
         });

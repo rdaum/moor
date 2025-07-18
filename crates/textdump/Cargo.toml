@@ -1,5 +1,28 @@
+[dependencies]
+# Internal Dependencies
+moor-common = {path = "../common"}
+moor-compiler = {path = "../compiler"}
+moor-var = {path = "../var"}
+# Serialization & Data Formats
+base64.workspace = true
+# Text Processing & Regex
+encoding_rs.workspace = true
+# Utilities & Helpers
+semver.workspace = true
+serde.workspace = true
+strum.workspace = true
+# Error Handling & Logging
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+moor-db = {path = "../db"}
+similar-asserts.workspace = true
+
 [package]
+description = "LambdaMOO compatible textdump parsing and generation for mooR."
 name = "moor-textdump"
+resolver = "2"
 version = "0.9.0-alpha"
 authors.workspace = true
 categories.workspace = true
@@ -8,31 +31,4 @@ keywords.workspace = true
 license.workspace = true
 readme.workspace = true
 repository.workspace = true
-resolver = "2"
 rust-version.workspace = true
-description = "LambdaMOO compatible textdump parsing and generation for mooR."
-
-[dev-dependencies]
-moor-db = { path = "../db" }
-similar-asserts.workspace = true
-
-[dependencies]
-# Internal Dependencies
-moor-common = { path = "../common" }
-moor-compiler = { path = "../compiler" }
-moor-var = { path = "../var" }
-
-# Serialization & Data Formats
-base64.workspace = true
-serde.workspace = true
-
-# Text Processing & Regex
-encoding_rs.workspace = true
-
-# Error Handling & Logging
-thiserror.workspace = true
-tracing.workspace = true
-
-# Utilities & Helpers
-semver.workspace = true
-strum.workspace = true

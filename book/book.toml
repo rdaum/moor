@@ -5,10 +5,10 @@ multilingual = false
 src = "src"
 title = "The mooR Book"
 
-[preprocessor.pagetoc]
-
 [output.html]
-additional-js = ["theme/moo-syntax-highlight.js", "theme/pagetoc.js"]
 additional-css = ["theme/style.css", "theme/pagetoc.css"]
+additional-js = ["theme/moo-syntax-highlight.js", "theme/pagetoc.js"]
 
 [output.linkcheck]
+
+[preprocessor.pagetoc]

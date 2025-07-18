@@ -93,4 +93,3 @@ properties and verbs are listed inside the file in a readable and editable way. 
 for use with version control systems such as git, can be effectively used with diff/merge tools, and is the default
 format
 for checkpoints in the mooR server.
-

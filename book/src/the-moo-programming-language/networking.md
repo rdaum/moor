@@ -112,7 +112,7 @@ connections(#456)
 
 // Multiple connections for same player (telnet + web)
 connections()
-=> {{#-42, "desktop.example.com", 5.0, {"text/plain", "text/markdown"}}, 
+=> {{#-42, "desktop.example.com", 5.0, {"text/plain", "text/markdown"}},
     {#-43, "mobile.example.com", 300.5, {"text/plain", "text/html", "text/djot"}}}
 
 // Check an unlogged connection (would need to be called from that context)

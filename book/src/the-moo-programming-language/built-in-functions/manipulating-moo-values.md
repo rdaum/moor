@@ -178,13 +178,3 @@ str value_hmac(value, STR key [, STR algo [, binary]])
 Returns the same string as string_hmac(toliteral(value), key)
 
 See the description of string_hmac() for details.
-
-
-
-
-
-
-
-
-
-

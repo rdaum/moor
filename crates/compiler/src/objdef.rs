@@ -14,8 +14,8 @@
 use crate::CompileOptions;
 use crate::ObjDefParseError::VerbCompileError;
 use crate::codegen::compile_tree;
-use crate::parse::moo::{MooParser, Rule};
-use crate::parse::unquote_str;
+use crate::parsers::parse::moo::{MooParser, Rule};
+use crate::parsers::parse::unquote_str;
 use itertools::Itertools;
 use moor_common::model::{
     ArgSpec, CompileContext, CompileError, ObjFlag, PrepSpec, PropFlag, PropPerms, VerbArgsSpec,
@@ -1067,7 +1067,7 @@ mod tests {
                     override other (owner: #2, flags: "rc") = "test";
 
                     override "@funky_prop_name" = "test";
-                    
+
                     verb "look_self look_*" (this to any) owner: #2 flags: "rxd"
                         return 5;
                     endverb

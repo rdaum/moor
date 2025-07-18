@@ -1,4 +1,31 @@
+[dependencies]
+# Internal Dependencies
+moor-common = {path = "../../crates/common"}
+moor-compiler = {path = "../../crates/compiler"}
+moor-db = {path = "../../crates/db"}
+moor-kernel = {path = "../../crates/kernel"}
+moor-moot = {path = "../../crates/testing/moot"}
+moor-objdef = {path = "../../crates/objdef"}
+moor-textdump = {path = "../../crates/textdump"}
+moor-var = {path = "../../crates/var"}
+# Command Line & Configuration
+clap.workspace = true
+clap_derive.workspace = true
+# Error Handling & Logging
+color-eyre.workspace = true
+eyre.workspace = true
+# Utilities & Helpers
+semver.workspace = true
+# Testing & Development
+tempfile.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints.rust]
+unexpected_cfgs = {level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)']}
+
 [package]
+description = "A tool for importing, compiling, and exporting mooR cores without running the full daemon"
 name = "moorc"
 version = "0.9.0-alpha"
 authors.workspace = true
@@ -9,34 +36,3 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "A tool for importing, compiling, and exporting mooR cores without running the full daemon"
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
-
-[dependencies]
-# Internal Dependencies
-moor-common = { path = "../../crates/common" }
-moor-compiler = { path = "../../crates/compiler" }
-moor-db = { path = "../../crates/db" }
-moor-kernel = { path = "../../crates/kernel" }
-moor-moot = { path = "../../crates/testing/moot" }
-moor-objdef = { path = "../../crates/objdef" }
-moor-textdump = { path = "../../crates/textdump" }
-moor-var = { path = "../../crates/var" }
-
-# Command Line & Configuration
-clap.workspace = true
-clap_derive.workspace = true
-
-# Error Handling & Logging
-color-eyre.workspace = true
-eyre.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-
-# Utilities & Helpers
-semver.workspace = true
-
-# Testing & Development
-tempfile.workspace = true

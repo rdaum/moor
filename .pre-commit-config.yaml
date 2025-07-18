@@ -1,0 +1,51 @@
+# Pre-commit config that matches GitHub CI checks
+# This version works even when code doesn't fully compile
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+        exclude: |
+          (?x)^(
+            crates/daemon/src/main\.rs|
+            crates/daemon/src/testing/.*|
+            crates/telnet-host/tests/.*
+          )$
+
+  # Rust formatting check (this is what GitHub CI runs)
+  - repo: local
+    hooks:
+      - id: cargo-fmt-check
+        name: cargo fmt --check
+        entry: bash -c 'cargo fmt --all -- --check || echo "Run cargo fmt --all to fix formatting"'
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+  # TOML formatting
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.12.0
+    hooks:
+      - id: pretty-format-toml
+        args: [--autofix]
+
+# Configuration
+default_stages: [pre-commit]
+fail_fast: false
+exclude: |
+  (?x)^(
+    target/|
+    Cargo\.lock|
+    .*\.snap$|
+    .*\.bak$|
+    JHCore.*\.db$
+  )

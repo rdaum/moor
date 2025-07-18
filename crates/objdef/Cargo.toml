@@ -1,5 +1,23 @@
+[dependencies]
+# Internal Dependencies
+moor-common = {path = "../common"}
+moor-compiler = {path = "../compiler"}
+moor-var = {path = "../var"}
+# Utilities & Helpers
+semver.workspace = true
+# Error Handling & Logging
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+moor-db = {path = "../db"}
+moor-textdump = {path = "../textdump"}
+tempfile.workspace = true
+
 [package]
+description = "New style import/export of object definitions in text files in directories for mooR."
 name = "moor-objdef"
+resolver = "2"
 version = "0.9.0-alpha"
 authors.workspace = true
 categories.workspace = true
@@ -8,24 +26,4 @@ keywords.workspace = true
 license.workspace = true
 readme.workspace = true
 repository.workspace = true
-resolver = "2"
 rust-version.workspace = true
-description = "New style import/export of object definitions in text files in directories for mooR."
-
-[dev-dependencies]
-moor-db = { path = "../db" }
-moor-textdump = { path = "../textdump" }
-tempfile.workspace = true
-
-[dependencies]
-# Internal Dependencies
-moor-common = { path = "../common" }
-moor-compiler = { path = "../compiler" }
-moor-var = { path = "../var" }
-
-# Error Handling & Logging
-thiserror.workspace = true
-tracing.workspace = true
-
-# Utilities & Helpers
-semver.workspace = true

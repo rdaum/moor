@@ -295,7 +295,7 @@ called the "system object."
 
 ```moo
 $room     // This is the same as #0.room
-$player   // This is the same as #0.player  
+$player   // This is the same as #0.player
 $thing    // This is the same as #0.thing
 ```
 
@@ -405,7 +405,7 @@ player_stats = ['name -> "Alice", 'score -> 100, 'level -> 5];
 
 // Symbols can't contain spaces or special characters:
 'player_name    // ✓ Valid symbol
-'hello_world    // ✓ Valid symbol  
+'hello_world    // ✓ Valid symbol
 'item2_count    // ✓ Valid symbol
 'hello world    // ✗ Invalid - contains space
 'item-count     // ✗ Invalid - contains hyphen
@@ -566,7 +566,7 @@ The basic pattern is: `< delegate_object, [slots], {contents} >`
 < $container, [name -> "treasure chest"], {"gold coins", "ruby", "scroll"} >
 
 // Complex example - a room in a maze:
-< $maze_room, 
+< $maze_room,
   [description -> "A twisty passage", exits -> {"north", "south"}],
   {player1, player2} >
 ```
@@ -616,8 +616,8 @@ Flyweights are especially useful for building web pages because they can be easi
 
 ```moo
 // A flyweight representing HTML structure:
-div_element = < $html_div, 
-               [class -> "player-info"], 
+div_element = < $html_div,
+               [class -> "player-info"],
                {"Player: Alice", "Score: 1500"} >;
 
 // Convert to XML string:
@@ -784,7 +784,7 @@ let squared = map({x} => x * x, numbers);  // {1, 4, 9, 16}
 ### When should you use functions?
 
 **Great for named functions:**
-- Breaking down complex verb logic into manageable pieces  
+- Breaking down complex verb logic into manageable pieces
 - Code organization and avoiding duplication within verbs
 - Mathematical calculations and data processing
 - Any logic that benefits from a descriptive name
@@ -804,10 +804,9 @@ let squared = map({x} => x * x, numbers);  // {1, 4, 9, 16}
 ### Technical notes:
 
 - Functions are immutable values like strings and lists
-- They capture variables by value, not by reference  
+- They capture variables by value, not by reference
 - Named recursive functions can call themselves using their declared name
 - Functions work with the scatter assignment syntax for flexible parameter handling
 - Stack traces show function calls as `verb.<fn>` or `verb.function_name` for named functions
 
 For comprehensive examples and advanced usage, see the [Functions and Lambdas](../the-moo-programming-language/lambda-functions.md) chapter.
-

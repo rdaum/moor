@@ -27,7 +27,7 @@ pub trait ConnectionRegistryPersistence: Send + Sync {
     /// Persist changes to client->player mappings
     fn persist_client_mappings(&self, changes: &ClientMappingChanges) -> Result<(), Error>;
 
-    /// Persist changes to player->connections mappings  
+    /// Persist changes to player->connections mappings
     fn persist_player_connections(&self, changes: &PlayerConnectionChanges) -> Result<(), Error>;
 
     /// Get and increment the connection sequence number

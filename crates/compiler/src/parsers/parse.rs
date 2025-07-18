@@ -29,13 +29,13 @@ use moor_common::builtins::BUILTINS;
 use moor_var::Obj;
 use moor_var::{v_binary, v_float, v_int, v_obj, v_str, v_string};
 
+use self::moo::{MooParser, Rule};
 use crate::ast::Arg::{Normal, Splice};
 use crate::ast::StmtNode::Scope;
 use crate::ast::{
     Arg, BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
     ScatterKind, Stmt, StmtNode, UnaryOp,
 };
-use crate::parse::moo::{MooParser, Rule};
 use crate::unparse::annotate_line_numbers;
 use crate::var_scope::VarScope;
 use base64::{Engine, engine::general_purpose};
@@ -1451,6 +1451,83 @@ impl TreeTransformer {
                     _ => panic!("Unexpected fn statement rule: {:?}", inner.as_rule()),
                 }
             }
+            Rule::for_in_statement | Rule::for_range_statement => {
+                // Unified for loop: for var in iterable
+                let mut parts = pair.into_inner();
+                let varname = parts.next().unwrap().as_str();
+                let iterable = parts.next().unwrap(); // this is for_iterable
+                let statements_part = parts.next().unwrap();
+
+                // Parse the iterable part to determine if it's a range or expression
+                let iterable_inner = iterable.into_inner().next().unwrap();
+
+                match iterable_inner.as_rule() {
+                    Rule::for_range_clause => {
+                        // Handle range: for i in [start..end]
+                        let mut clause_parts = iterable_inner.into_inner();
+                        let from_rule = clause_parts.next().unwrap();
+                        let to_rule = clause_parts.next().unwrap();
+
+                        let value_binding = {
+                            let mut names = self.names.borrow_mut();
+                            names.declare_or_use_name(varname, DeclType::For)
+                        };
+
+                        self.enter_scope();
+                        let body = self
+                            .clone()
+                            .parse_statements(statements_part.into_inner())?;
+                        let environment_width = self.exit_scope();
+
+                        let from = self.clone().parse_expr(from_rule.into_inner())?;
+                        let to = self.clone().parse_expr(to_rule.into_inner())?;
+
+                        Ok(Some(Stmt::new(
+                            StmtNode::ForRange {
+                                id: value_binding,
+                                from,
+                                to,
+                                body,
+                                environment_width,
+                            },
+                            line_col,
+                        )))
+                    }
+                    Rule::for_in_clause => {
+                        // Handle expression: for i in (expr)
+                        let mut clause_parts = iterable_inner.into_inner();
+                        let expr_rule = clause_parts.next().unwrap();
+
+                        let value_binding = {
+                            let mut names = self.names.borrow_mut();
+                            names.declare_or_use_name(varname, DeclType::For)
+                        };
+
+                        self.enter_scope();
+                        let body = self
+                            .clone()
+                            .parse_statements(statements_part.into_inner())?;
+                        let environment_width = self.exit_scope();
+
+                        let expr = self.clone().parse_expr(expr_rule.into_inner())?;
+
+                        Ok(Some(Stmt::new(
+                            StmtNode::ForList {
+                                value_binding,
+                                key_binding: None, // for_statement only has one variable
+                                expr,
+                                body,
+                                environment_width,
+                            },
+                            line_col,
+                        )))
+                    }
+                    _ => panic!(
+                        "Unimplemented for_iterable clause: {:?}",
+                        iterable_inner.as_rule()
+                    ),
+                }
+            }
             _ => panic!("Unimplemented statement: {:?}", pair.as_rule()),
         }
     }
@@ -1819,7 +1896,7 @@ mod tests {
         BinaryOp, CallTarget, CatchCodes, CondArm, ElseArm, ExceptArm, Expr, ScatterItem,
         ScatterKind, Stmt, StmtNode, UnaryOp, assert_trees_match_recursive,
     };
-    use crate::parse::{parse_program, unquote_str};
+    use crate::parsers::parse::{parse_program, unquote_str};
     use crate::unparse::annotate_line_numbers;
     use moor_common::model::CompileError;
 

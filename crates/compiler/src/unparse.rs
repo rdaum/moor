@@ -14,7 +14,7 @@
 use crate::ast;
 use crate::ast::{Expr, Stmt, StmtNode};
 use crate::decompile::DecompileError;
-use crate::parse::Parse;
+use crate::parsers::parse::Parse;
 use base64::{Engine, engine::general_purpose};
 use moor_common::util::quote_str;
 use moor_var::program::names::Variable;
@@ -1375,9 +1375,9 @@ end"#; "complex scatter declaration with optional and rest")]
         // Now parse both again, and verify that the complete ASTs match, ignoring the parser line
         // numbers, but validating everything else.
         let parsed_original =
-            crate::parse::parse_program(&stripped, CompileOptions::default()).unwrap();
+            crate::parsers::parse::parse_program(&stripped, CompileOptions::default()).unwrap();
         let parsed_decompiled =
-            crate::parse::parse_program(&result, CompileOptions::default()).unwrap();
+            crate::parsers::parse::parse_program(&result, CompileOptions::default()).unwrap();
         assert_trees_match_recursive(&parsed_original.stmts, &parsed_decompiled.stmts)
     }
 
@@ -1513,7 +1513,7 @@ end"#; "complex scatter declaration with optional and rest")]
     }
 
     pub fn parse_and_unparse(original: &str) -> Result<String, DecompileError> {
-        let tree = crate::parse::parse_program(original, CompileOptions::default()).unwrap();
+        let tree = crate::parsers::parse::parse_program(original, CompileOptions::default()).unwrap();
         Ok(unparse(&tree)?.join("\n"))
     }
 

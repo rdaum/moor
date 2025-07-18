@@ -14,7 +14,7 @@ object is represented by the `location` property of the object.
 
 The builtin-property `contents` is the inverse relationship of `location`. It is a list of objects that are contained
 in the object. For example, if an object is a room, then its `contents` property will contain all of the objects that
-are in that room. 
+are in that room.
 
 The `move()` function is used to move an object from one location to another. It takes two arguments: the object to be
 moved and the destination object. The destination can be any object that is a valid location for the object being moved.
@@ -36,7 +36,7 @@ One of MOO's powerful features is that objects can react intelligently when some
 
 These verbs let you create smart, responsive environments. For example:
 - A locked chest can reject items unless the player has the key (`accept` verb)
-- A room can announce when players enter ("Alice walks in from the north") (`enterfunc` verb)  
+- A room can announce when players enter ("Alice walks in from the north") (`enterfunc` verb)
 - A magic portal can transport the player somewhere else when they leave (`exitfunc` verb)
 - A scale can update its weight display when items are added or removed
 

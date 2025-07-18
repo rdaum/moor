@@ -18,7 +18,7 @@ use crate::ast::{
     StmtNode, UnaryOp,
 };
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
-use crate::parse::Parse;
+use crate::parsers::parse::Parse;
 use crate::var_scope::VarScope;
 use moor_common::builtins::BuiltinId;
 use moor_var::program::DeclType;
@@ -1269,8 +1269,8 @@ mod tests {
     use crate::ast::assert_trees_match_recursive;
     use crate::codegen::compile;
     use crate::decompile::program_to_tree;
-    use crate::parse::Parse;
-    use crate::parse::parse_program;
+    use crate::parsers::parse::Parse;
+    use crate::parsers::parse::parse_program;
     use crate::unparse::annotate_line_numbers;
     use test_case::test_case;
 

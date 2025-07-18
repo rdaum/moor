@@ -25,7 +25,7 @@ E_TYPE
 ; return create({"1"});
 E_TYPE
 ; return create({$nothing});
-E_TYPE 
+E_TYPE
 ; return create({$ambiguous_match});
 E_TYPE
 ; return create({$failed_match});

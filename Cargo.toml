@@ -1,197 +1,183 @@
-[workspace]
-resolver = "2"
-members = [
-    "crates/common",
-    "crates/compiler",
-    "crates/curl-worker",
-    "crates/daemon",
-    "crates/db",
-    "crates/kernel",
-    "crates/objdef",
-    "crates/rpc/rpc-async-client",
-    "crates/rpc/rpc-common",
-    "crates/rpc/rpc-sync-client",
-    "crates/telnet-host",
-    "crates/testing/load-tools",
-    "crates/testing/moot",
-    "crates/textdump",
-    "crates/var",
-    "crates/web-host",
-    "tools/moorc",
-]
-default-members = [
-    "crates/var",
-    "crates/common",
-    "crates/compiler",
-    "crates/kernel",
-    "crates/objdef",
-    "crates/db",
-    "crates/textdump",
-    "crates/rpc/rpc-common",
-    "crates/rpc/rpc-sync-client",
-    "crates/rpc/rpc-async-client",
-    "crates/daemon",
-    "crates/telnet-host",
-    "crates/web-host",
-    "crates/testing/moot",
-    "crates/testing/load-tools",
-    "crates/curl-worker",
-    "tools/moorc",
-]
-
-[workspace.package]
-authors = [
-    "Ryan Daum <ryan.daum@gmail.com>",
-    "Norman Nunley <nnunley@gmail.com>",
-    "Zoltán Nagy <abesto0@gmail.com>",
-]
-categories = [
-    "game",
-    "virtual-world",
-    "mud",
-    "database",
-    "programming-language",
-]
-edition = "2024"
-keywords = [
-    "mud",
-    "programming-language",
-    "virtual-world",
-    "game",
-    "virtual-machine",
-]
-license = "GPL-3"
-readme = "README.md"
-repository = "https://github.com/rdaum/moor.git"
-rust-version = "1.88.0"
-
 [profile.release]
 # The Rust compiler splits crates into multiple codegen units to parallelize (and thus speed up)
 # compilation. However, this might cause it to miss some potential optimizations.
 # You may be able to improve runtime speed and reduce binary size, at the cost of increased
 # compile times, by setting the number of units to one.
 codegen-units = 1
-# Link-time optimization (LTO) is a whole-program optimization technique that can improve runtime
-# speed by 10-20% or more, and also reduce binary size, at the cost of worse compile times.
-lto = "fat"
 # Having full debug info in release builds can be useful for debugging/profiling, but it will increase the size of
 # the binary.
 debug = "full"
+# Link-time optimization (LTO) is a whole-program optimization technique that can improve runtime
+# speed by 10-20% or more, and also reduce binary size, at the cost of worse compile times.
+lto = "fat"
+
+[workspace]
+default-members = [
+  "crates/var",
+  "crates/common",
+  "crates/compiler",
+  "crates/kernel",
+  "crates/objdef",
+  "crates/db",
+  "crates/textdump",
+  "crates/rpc/rpc-common",
+  "crates/rpc/rpc-sync-client",
+  "crates/rpc/rpc-async-client",
+  "crates/daemon",
+  "crates/telnet-host",
+  "crates/web-host",
+  "crates/testing/moot",
+  "crates/testing/load-tools",
+  "crates/curl-worker",
+  "tools/moorc"
+]
+members = [
+  "crates/common",
+  "crates/compiler",
+  "crates/curl-worker",
+  "crates/daemon",
+  "crates/db",
+  "crates/kernel",
+  "crates/objdef",
+  "crates/rpc/rpc-async-client",
+  "crates/rpc/rpc-common",
+  "crates/rpc/rpc-sync-client",
+  "crates/telnet-host",
+  "crates/testing/load-tools",
+  "crates/testing/moot",
+  "crates/textdump",
+  "crates/var",
+  "crates/web-host",
+  "tools/moorc"
+]
+resolver = "2"
 
 [workspace.dependencies]
-# Core Runtime & System
-gdt-cpus = "25.5"
-libc = "0.2"
-mimalloc = "0.1"
-minstant = { version = "0.1", features = ["fallback-coarse"] }
-perf-event2 = "0.7"
-signal-hook = "0.3"
-
-# Command Line & Configuration
-clap = "4.5"
-clap_derive = "4.5"
-figment = { version = "0.10", features = ["yaml", "json"] }
-
-# Serialization & Data Formats
-bincode = { version = "2.0", features = ["serde"] }
-csv = "1.3.1"
-edn-format = "3.3"
-humantime = "2.2"
-serde = { version = "1.0", features = ["derive", "rc"] }
-serde_derive = "1.0"
-serde_json = "1.0"
-xml-rs = "0.8"
-
-# Database & Persistence
-fjall = { version = "2.11", default-features = false, features = ["lz4"] }
-fs2 = "0.4"
-
-# Networking & Communication
-axum = { version = "0.8", features = ["ws"] }
-reqwest = "0.12"
-tmq = "0.5"
-tower-http = { version = "0.6", features = ["fs"] }
-zmq = "0.10"
-
-# Async Runtime & Concurrency
-arc-swap = "1.7"
-boxcar = "0.2"
-flume = "0.11"
-futures = "0.3"
-futures-util = { version = "0.3", features = ["sink", "std"] }
-oneshot = { version = "0.1", default-features = false, features = ["std"] }
-papaya = "0.2"
-rayon = "1.10"
-shuttle = "0.8"
-tokio = { version = "1.44", features = ["full"] }
-tokio-util = { version = "0.7", features = ["full"] }
-
 # Authentication & Security
 age = "0.11"
+# Collections & Data Structures
+ahash = "0.8"
+# Async Runtime & Concurrency
+arc-swap = "1.7"
 argon2 = "0.5"
+# Networking & Communication
+axum = {version = "0.8", features = ["ws"]}
 base64 = "0.21"
-ed25519-dalek = { version = "2.1", features = ["pkcs8", "pem", "signature"] }
-hmac = "0.12"
-md-5 = "0.10" # For MOO's "string_hash"
-pwhash = { version = "1.0", default-features = false }
-rusty_paseto = { version = "0.7" }
-sha1 = "0.10"
-sha2 = "0.10"
-ssh-key = "0.6"
-
+# Utilities & Helpers
+binary-layout = "4.0"
+# Serialization & Data Formats
+bincode = {version = "2.0", features = ["serde"]}
+boxcar = "0.2"
+byteview = "0.6"
 # Time & Locale
 chrono = "0.4"
 chrono-tz = "0.10"
-iana-time-zone = "0.1"
-
+# Command Line & Configuration
+clap = "4.5"
+clap_derive = "4.5"
+# Error Handling & Logging
+color-eyre = "0.6"
+# Testing & Development
+criterion = {version = "0.6", features = ["async_tokio"]}
+csv = "1.3.1"
+ed25519-dalek = {version = "2.1", features = ["pkcs8", "pem", "signature"]}
+edn-format = "3.3"
 # Text Processing & Regex
 encoding_rs = "0.8"
-onig = { version = "6.4", default-features = false }
-unicase = "2.8"
-
-# Compiler & Language Processing
-pest = "2.8"
-pest_derive = "2.8"
-
-# Collections & Data Structures
-ahash = "0.8"
+enum-primitive-derive = "0.3"
+escargot = "0.5"
+eyre = "0.6"
+fast-counter = "1.0"
+figment = {version = "0.10", features = ["yaml", "json"]}
+# Database & Persistence
+fjall = {version = "2.11", default-features = false, features = ["lz4"]}
+flume = "0.11"
+fs2 = "0.4"
+futures = "0.3"
+futures-util = {version = "0.3", features = ["sink", "std"]}
+# Core Runtime & System
+gdt-cpus = "25.5"
+hmac = "0.12"
+humantime = "2.2"
+iana-time-zone = "0.1"
 im = "15.1"
 indexmap = "2.9"
 itertools = "0.14"
-
-# Error Handling & Logging
-color-eyre = "0.6"
-eyre = "0.6"
-thiserror = "2.0"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
-# Utilities & Helpers
-binary-layout = "4.0"
-byteview = "0.6"
-enum-primitive-derive = "0.3"
-fast-counter = "1.0"
 lazy_static = "1.5"
+libc = "0.2"
+md-5 = "0.10"  # For MOO's "string_hash"
+mimalloc = "0.1"
+minstant = {version = "0.1", features = ["fallback-coarse"]}
 num-traits = "0.2"
-once_cell = { version = "1.21" }
+once_cell = {version = "1.21"}
+oneshot = {version = "0.1", default-features = false, features = ["std"]}
+onig = {version = "6.4", default-features = false}
+papaya = "0.2"
 paste = "1.0"
-rand = "0.8"
-semver = "1.0"
-shadow-rs = "1.1"
-strum = { version = "0.27", features = ["derive"] }
-uuid = { version = "1.16", features = ["v4", "v7", "serde"] }
-
-# Testing & Development
-criterion = { version = "0.6", features = ["async_tokio"] }
-escargot = "0.5"
+perf-event2 = "0.7"
+# Compiler & Language Processing
+pest = "2.8"
+pest_derive = "2.8"
 pretty_assertions = "1.4"
+pwhash = {version = "1.0", default-features = false}
+rand = "0.8"
+rayon = "1.10"
+reqwest = "0.12"
+rusty_paseto = {version = "0.7"}
+semver = "1.0"
+serde = {version = "1.0", features = ["derive", "rc"]}
+serde_derive = "1.0"
+serde_json = "1.0"
 serial_test = "3.1"
+sha1 = "0.10"
+sha2 = "0.10"
+shadow-rs = "1.1"
+shuttle = "0.8"
+signal-hook = "0.3"
 similar = "*"
 similar-asserts = "*"
+ssh-key = "0.6"
+strum = {version = "0.27", features = ["derive"]}
 tempfile = "3.10"
-test-case = "3.3"
-test_each_file = "0.3"
-unindent = "0.2"
-
 # Terminal & UI
 termimad = "0.33"
+test-case = "3.3"
+test_each_file = "0.3"
+thiserror = "2.0"
+tmq = "0.5"
+tokio = {version = "1.44", features = ["full"]}
+tokio-util = {version = "0.7", features = ["full"]}
+tower-http = {version = "0.6", features = ["fs"]}
+tracing = "0.1"
+tracing-subscriber = "0.3"
+unicase = "2.8"
+unindent = "0.2"
+uuid = {version = "1.16", features = ["v4", "v7", "serde"]}
+xml-rs = "0.8"
+zmq = "0.10"
+
+[workspace.package]
+authors = [
+  "Ryan Daum <ryan.daum@gmail.com>",
+  "Norman Nunley <nnunley@gmail.com>",
+  "Zoltán Nagy <abesto0@gmail.com>"
+]
+categories = [
+  "game",
+  "virtual-world",
+  "mud",
+  "database",
+  "programming-language"
+]
+edition = "2024"
+keywords = [
+  "mud",
+  "programming-language",
+  "virtual-world",
+  "game",
+  "virtual-machine"
+]
+license = "GPL-3"
+readme = "README.md"
+repository = "https://github.com/rdaum/moor.git"
+rust-version = "1.88.0"

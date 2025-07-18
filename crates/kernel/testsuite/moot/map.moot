@@ -227,4 +227,3 @@ E_TYPE
 // test_map_slicing
 ; return slice({["a" -> 1, "b" -> 2], ["a" -> 5, "b" -> 6], ["b" -> 8]}, "a", 0);
 {1, 5, 0}
-
