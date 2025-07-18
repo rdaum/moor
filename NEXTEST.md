@@ -6,6 +6,8 @@ This document describes the nextest integration for handling flaky tests in the 
 
 The Moor project uses [cargo-nextest](https://nexte.st/) to handle flaky tests more robustly. Nextest provides automatic retry capabilities and better test isolation, which is particularly useful for integration tests that interact with real databases and schedulers.
 
+The integration works seamlessly with the existing bacon development workflow, allowing you to run nextest with file watching via `bacon nextest`.
+
 ## Configuration
 
 Nextest is configured via `.config/nextest.toml` with the following profiles:
@@ -44,9 +46,6 @@ This particularly flaky test gets maximum attention:
 ```bash
 # Install nextest
 cargo install cargo-nextest
-
-# Or use the Justfile
-just install-nextest
 ```
 
 ### Running Tests
@@ -68,23 +67,17 @@ cargo nextest run --workspace 'test(scheduler_integration_test)'
 cargo nextest run --workspace --verbose
 ```
 
-### Using Justfile
+### Using Bacon
 
 ```bash
-# Run tests with nextest
-just test
+# Run tests with nextest (watches for file changes)
+bacon nextest
 
-# Run tests in CI mode
-just test-ci
+# Run tests in CI mode (watches for file changes)
+bacon nextest-ci
 
-# Run tests without retries
-just test-no-retries
-
-# Run only scheduler tests
-just test-scheduler
-
-# Show nextest configuration
-just show-config
+# Traditional one-off test runs
+bacon test
 ```
 
 ## GitHub Actions Integration
@@ -165,7 +158,7 @@ cargo nextest run --workspace
 
 # Both work during transition
 cargo test --workspace  # Still works
-just test-standard      # Explicit fallback
+bacon test             # Bacon fallback
 ```
 
 ## Configuration Reference

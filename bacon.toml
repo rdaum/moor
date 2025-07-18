@@ -60,6 +60,18 @@ command = [
 ]
 need_stdout = true
 
+# Nextest integration for flaky test handling
+# Run: bacon nextest
+[jobs.nextest]
+command = ["cargo", "nextest", "run", "--workspace"]
+need_stdout = true
+
+# Nextest with CI profile (fewer retries, fail-fast)
+# Run: bacon nextest-ci
+[jobs.nextest-ci]
+command = ["cargo", "nextest", "run", "--workspace", "--profile", "ci"]
+need_stdout = true
+
 [jobs.telnet]
 allow_warnings = true
 command = ["cargo", "run", "-p", "moor-telnet-host"]
