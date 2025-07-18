@@ -33,7 +33,6 @@ use moor_common::tasks::Event::{Present, Unpresent};
 use moor_common::tasks::TaskId;
 use moor_common::tasks::{NarrativeEvent, Presentation, SessionError};
 use moor_common::util::PerfCounter;
-use moor_compiler::compile;
 use moor_compiler::{ArgCount, ArgType, BUILTINS, Builtin, offset_for_builtin};
 use moor_db::db_counters;
 use moor_var::VarType::TYPE_STR;
@@ -1384,11 +1383,25 @@ pub const BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE: usize = 0;
 pub const BF_SERVER_EVAL_TRAMPOLINE_RESUME: usize = 1;
 
 fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    bf_args
+    // Debug: Log that bf_eval is being called
+    eprintln!("DEBUG: bf_eval called by user {:?}", bf_args.task_perms_who());
+    
+    let perms = bf_args
         .task_perms()
-        .map_err(world_state_bf_err)?
-        .check_programmer()
         .map_err(world_state_bf_err)?;
+    
+    // Debug: Log the user's flags
+    eprintln!("DEBUG: User flags: {:?}", perms.flags);
+    
+    match perms.check_programmer() {
+        Ok(_) => {
+            eprintln!("DEBUG: Permission check PASSED - user is a programmer");
+        }
+        Err(e) => {
+            eprintln!("DEBUG: Permission check FAILED - returning E_PERM: {e:?}");
+            return Err(world_state_bf_err(e));
+        }
+    }
     if bf_args.args.len() != 1 {
         return Err(ErrValue(E_ARGS.msg("bf_eval() requires 1 argument")));
     }
@@ -1409,9 +1422,26 @@ fn bf_eval(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 
     match tramp {
         BF_SERVER_EVAL_TRAMPOLINE_START_INITIALIZE => {
-            let program = match compile(&program_code_string, bf_args.config.compile_options()) {
-                Ok(program) => program,
-                Err(e) => return Ok(Ret(v_list(&[v_int(0), v_string(e.to_string())]))),
+            // Check for MOO_PARSER environment variable to support testing
+            let program = if let Ok(parser_name) = std::env::var("MOO_PARSER") {
+                match moor_compiler::get_parser_by_name(&parser_name) {
+                    Some(parser) => match parser.compile(&program_code_string, bf_args.config.compile_options()) {
+                        Ok(program) => program,
+                        Err(e) => return Ok(Ret(v_list(&[v_int(0), v_string(e.to_string())]))),
+                    },
+                    None => {
+                        // Fall back to default compile if parser not found
+                        match moor_compiler::compile(&program_code_string, bf_args.config.compile_options()) {
+                            Ok(program) => program,
+                            Err(e) => return Ok(Ret(v_list(&[v_int(0), v_string(e.to_string())]))),
+                        }
+                    }
+                }
+            } else {
+                match moor_compiler::compile(&program_code_string, bf_args.config.compile_options()) {
+                    Ok(program) => program,
+                    Err(e) => return Ok(Ret(v_list(&[v_int(0), v_string(e.to_string())]))),
+                }
             };
             let bf_frame = bf_args.bf_frame_mut();
             bf_frame.bf_trampoline = Some(BF_SERVER_EVAL_TRAMPOLINE_RESUME);

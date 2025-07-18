@@ -19,7 +19,7 @@ use moor_common::model::{
 };
 use moor_common::tasks::SchedulerError::{CommandExecutionError, VerbProgramFailed};
 use moor_common::tasks::{CommandError, SchedulerError, VerbProgramError};
-use moor_compiler::{compile, program_to_tree, unparse};
+use moor_compiler::{program_to_tree, unparse};
 use moor_var::program::ProgramType;
 use moor_var::{E_INVIND, Obj, SYSTEM_OBJECT, v_err, v_obj};
 use std::sync::Arc;
@@ -96,11 +96,29 @@ impl WorldStateActionExecutor {
                     return Err(VerbProgramFailed(VerbProgramError::NoVerbToProgram));
                 }
 
-                let program = compile(
-                    code.join("\n").as_str(),
-                    self.config.features.compile_options(),
-                )
-                .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?;
+                let program = if let Ok(parser_name) = std::env::var("MOO_PARSER") {
+                    match moor_compiler::get_parser_by_name(&parser_name) {
+                        Some(parser) => parser.compile(
+                            code.join("\n").as_str(),
+                            self.config.features.compile_options(),
+                        )
+                        .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?,
+                        None => {
+                            // Fall back to default compile if parser not found
+                            moor_compiler::compile(
+                                code.join("\n").as_str(),
+                                self.config.features.compile_options(),
+                            )
+                            .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?
+                        }
+                    }
+                } else {
+                    moor_compiler::compile(
+                        code.join("\n").as_str(),
+                        self.config.features.compile_options(),
+                    )
+                    .map_err(|e| VerbProgramFailed(VerbProgramError::CompilationError(e)))?
+                };
 
                 // Now we can update the verb.
                 let update_attrs = VerbAttrs {
