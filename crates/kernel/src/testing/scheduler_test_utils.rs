@@ -71,11 +71,14 @@ pub fn call_eval(
     player: &Obj,
     code: String,
 ) -> Result<Var, SchedulerError> {
+    // Instead of directly executing eval tasks, call the eval() builtin function
+    // This ensures proper permission checking through bf_eval
+    let eval_call = format!("return eval({code:?});");
     execute(|| {
         scheduler.submit_eval_task(
             player,
             player,
-            code,
+            eval_call,
             session,
             Arc::new(FeaturesConfig::default()),
         )

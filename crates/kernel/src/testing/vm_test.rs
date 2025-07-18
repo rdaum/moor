@@ -37,6 +37,7 @@ mod tests {
     use moor_compiler::Program;
     use moor_compiler::compile;
     use moor_compiler::{CompileOptions, Names};
+    use moor_compiler::{MooParser, get_available_parsers};
     use moor_db::{DatabaseConfig, TxDB};
     use moor_var::Symbol;
     use moor_var::program::ProgramType;
@@ -369,6 +370,81 @@ mod tests {
     fn world_with_test_programs(programs: &[(&str, &Program)]) -> Box<dyn WorldState> {
         let db = test_db_with_verbs(programs);
         db.new_world_state().unwrap()
+    }
+
+    /// Create a world with a test program compiled by a specific parser
+    fn world_with_test_program_parser(
+        program: &str,
+        parser: &dyn MooParser,
+    ) -> Box<dyn WorldState> {
+        let binary = parser.compile(program, CompileOptions::default()).unwrap();
+        let db = test_db_with_verb("test", &binary);
+        db.new_world_state().unwrap()
+    }
+
+    /// Run a test program with a specific parser and return the result
+    fn run_test_with_parser(
+        program: &str,
+        parser: &dyn MooParser,
+    ) -> Result<Var, Box<dyn std::error::Error>> {
+        let mut state = world_with_test_program_parser(program, parser);
+        let session = Arc::new(NoopClientSession::new());
+        call_verb(
+            state.as_mut(),
+            session,
+            BuiltinRegistry::new(),
+            "test",
+            List::mk_list(&[]),
+        )
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    }
+
+    /// Test a program with all available parsers and ensure they produce the same result
+    fn test_program_all_parsers(program: &str, expected_result: Var) {
+        let parsers = get_available_parsers();
+        let mut results = Vec::new();
+
+        for parser in &parsers {
+            let result = run_test_with_parser(program, parser.as_ref());
+
+            // Assert that this parser produces the expected result
+            match &result {
+                Ok(actual) => assert_eq!(
+                    actual,
+                    &expected_result,
+                    "Parser '{}' returned wrong result for program: {}",
+                    parser.name(),
+                    program
+                ),
+                Err(e) => panic!(
+                    "Parser '{}' failed for program '{}': {}",
+                    parser.name(),
+                    program,
+                    e
+                ),
+            }
+
+            results.push((parser.name(), result));
+        }
+
+        // Assert that all parsers produce identical results
+        if results.len() > 1 {
+            let first_result = &results[0].1;
+            for (parser_name, result) in &results[1..] {
+                match (first_result, result) {
+                    (Ok(first), Ok(current)) => assert_eq!(
+                        current, first,
+                        "Parser '{}' produced different result than '{}' for program: {}",
+                        parser_name, results[0].0, program
+                    ),
+                    (Err(_), Err(_)) => {} // Both failed, that's consistent
+                    _ => panic!(
+                        "Parser '{}' had different success/failure status than '{}' for program: {}",
+                        parser_name, results[0].0, program
+                    ),
+                }
+            }
+        }
     }
 
     #[test]
@@ -2299,5 +2375,115 @@ mod tests {
             lambda.0.captured_env.is_empty(),
             "Lambda should have empty captured environment since it doesn't reference outer_var"
         );
+    }
+
+    // Multi-parser tests - these run the same tests with all available parsers
+
+    #[test]
+    fn test_all_parsers_simple_return() {
+        test_program_all_parsers("return 42;", v_int(42));
+    }
+
+    #[test]
+    fn test_all_parsers_for_range_loop() {
+        test_program_all_parsers(
+            "z = 0; for i in [1..4] z = z + i; endfor return {i,z};",
+            v_list(&[v_int(4), v_int(10)]),
+        );
+    }
+
+    #[test]
+    fn test_all_parsers_for_list_loop() {
+        test_program_all_parsers(
+            "x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};",
+            v_list(&[v_int(4), v_int(10)]),
+        );
+    }
+
+    #[test]
+    fn test_all_parsers_if_else() {
+        test_program_all_parsers("if (1 == 1) return 42; else return 24; endif", v_int(42));
+    }
+
+    #[test]
+    fn test_all_parsers_while_loop() {
+        test_program_all_parsers(
+            "x = 0; while (x < 5) x = x + 1; endwhile return x;",
+            v_int(5),
+        );
+    }
+
+    #[test]
+    fn test_all_parsers_try_catch() {
+        test_program_all_parsers(
+            "try return 1/0; except (E_DIV) return 999; endtry",
+            v_int(999),
+        );
+    }
+
+    #[test]
+    fn test_all_parsers_list_operations() {
+        test_program_all_parsers("x = {1,2,3}; return x[2];", v_int(2));
+    }
+
+    #[test]
+    fn test_all_parsers_string_operations() {
+        test_program_all_parsers("x = \"hello\"; return x[2];", v_str("e"));
+    }
+
+    #[test]
+    fn test_all_parsers_arithmetic() {
+        test_program_all_parsers("return 2 + 3 * 4;", v_int(14));
+    }
+
+    #[test]
+    fn test_all_parsers_logical_operations() {
+        test_program_all_parsers("return 1 && 2 || 0;", v_int(2));
+    }
+
+    #[test]
+    fn test_all_parsers_nested_for_loops() {
+        test_program_all_parsers(
+            r#"
+            result = {};
+            for i in [1..3]
+                for j in [1..2]
+                    result = {@result, i * j};
+                endfor
+            endfor
+            return result;
+            "#,
+            v_list(&[v_int(1), v_int(2), v_int(2), v_int(4), v_int(3), v_int(6)]),
+        );
+    }
+
+    #[test]
+    fn test_all_parsers_scatter_assignment() {
+        test_program_all_parsers(
+            "{a, b, c} = {1, 2, 3}; return {a, b, c};",
+            v_list(&[v_int(1), v_int(2), v_int(3)]),
+        );
+    }
+
+    /// Test individual parsers for debugging
+    #[test]
+    fn test_individual_parsers_debug() {
+        let program = "z = 0; for i in [1..4] z = z + i; endfor return z;";
+        let expected = v_int(10);
+
+        for parser in get_available_parsers() {
+            println!("Testing parser: {}", parser.name());
+            let result = run_test_with_parser(program, parser.as_ref());
+            println!("Result: {result:?}");
+            match result {
+                Ok(actual) => assert_eq!(
+                    actual,
+                    expected,
+                    "Parser '{}' returned wrong result",
+                    parser.name()
+                ),
+                Err(e) => panic!("Parser '{}' failed: {}", parser.name(), e),
+            }
+        }
     }
 }

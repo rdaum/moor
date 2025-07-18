@@ -1,0 +1,178 @@
+[package]
+name = "moor-examples"
+version = "0.9.0-alpha"
+edition = "2021"
+authors = [
+    "Ryan Daum <ryan.daum@gmail.com>",
+    "Norman Nunley <nnunley@gmail.com>",
+    "Zoltán Nagy <abesto0@gmail.com>",
+]
+
+[dependencies]
+moor-compiler = { path = "../crates/compiler", features = ["tree-sitter-parser"] }
+tree-sitter.workspace = true
+tree-sitter-moo.workspace = true
+
+[[example]]
+name = "enhanced_error_demo"
+path = "enhanced_error_demo.rs"
+
+[[example]]
+name = "test_precise_errors"
+path = "test_precise_errors.rs"
+
+[[example]]
+name = "compare_parsers"
+path = "compare_parsers.rs"
+
+[[example]]
+name = "test_moot_parsing"
+path = "test_moot_parsing.rs"
+
+[[example]]
+name = "syntax_error_comparison"
+path = "syntax_error_comparison.rs"
+
+[[example]]
+name = "test_map_syntax"
+path = "test_map_syntax.rs"
+
+[[example]]
+name = "parser_validation"
+path = "parser_validation.rs"
+
+[[example]]
+name = "debug_tree_structure"
+path = "debug_tree_structure.rs"
+
+[[example]]
+name = "debug_cst_structure"
+path = "debug_cst_structure.rs"
+
+[[example]]
+name = "show_tree_sitter_sexp"
+path = "show_tree_sitter_sexp.rs"
+
+[[example]]
+name = "test_return_parse_only"
+path = "test_return_parse_only.rs"
+
+[[example]]
+name = "quick_return_test"
+path = "quick_return_test.rs"
+
+[[example]]
+name = "test_semantic_walker"
+path = "test_semantic_walker.rs"
+
+[[example]]
+name = "test_semantic_vs_traditional"
+path = "test_semantic_vs_traditional.rs"
+
+[[example]]
+name = "test_semantic_validation"
+path = "test_semantic_validation.rs"
+
+[[example]]
+name = "test_list_comprehensions"
+path = "test_list_comprehensions.rs"
+
+[[example]]
+name = "debug_list_comprehension"
+path = "debug_list_comprehension.rs"
+
+[[example]]
+name = "debug_standalone_comprehension"
+path = "debug_standalone_comprehension.rs"
+
+[[example]]
+name = "debug_empty_statement"
+path = "debug_empty_statement.rs"
+
+[[example]]
+name = "debug_tree_sitter_empty"
+path = "debug_tree_sitter_empty.rs"
+
+[[example]]
+name = "debug_scatter_optional"
+path = "debug_scatter_optional.rs"
+
+[[example]]
+name = "debug_bytecode_scatter"
+path = "debug_bytecode_scatter.rs"
+
+[[example]]
+name = "debug_scatter_structure"
+path = "debug_scatter_structure.rs"
+
+[[example]]
+name = "test_semantic_scatter"
+path = "test_semantic_scatter.rs"
+
+[[example]]
+name = "debug_tree_sitter_scatter"
+path = "debug_tree_sitter_scatter.rs"
+
+[[example]]
+name = "debug_while"
+path = "debug_while.rs"
+
+[[example]]
+name = "debug_while_detailed"
+path = "debug_while_detailed.rs"
+
+[[example]]
+name = "debug_expression_tree"
+path = "debug_expression_tree.rs"
+
+[[example]]
+name = "debug_cst_while"
+path = "debug_cst_while.rs"
+
+[[example]]
+name = "debug_map"
+path = "debug_map.rs"
+
+[[example]]
+name = "debug_map_parse"
+path = "debug_map_parse.rs"
+
+[[example]]
+name = "debug_map_cst"
+path = "debug_map_cst.rs"
+
+[[example]]
+name = "debug_list_parse"
+path = "debug_list_parse.rs"
+
+[[example]]
+name = "compare_cst_map"
+path = "compare_cst_map.rs"
+
+[[example]]
+name = "debug_try_except_unparse"
+path = "debug_try_except_unparse.rs"
+
+[[example]]
+name = "debug_try_tree_sitter"
+path = "debug_try_tree_sitter.rs"
+
+[[example]]
+name = "debug_except_parsing"
+path = "debug_except_parsing.rs"
+
+[[example]]
+name = "debug_error_code"
+path = "debug_error_code.rs"
+
+[[example]]
+name = "debug_scatter_unparse"
+path = "debug_scatter_unparse.rs"
+
+[[example]]
+name = "demo_from_trait"
+path = "demo_from_trait.rs"
+
+[features]
+default = ["tree-sitter-parser"]
+tree-sitter-parser = ["moor-compiler/tree-sitter-parser"]
