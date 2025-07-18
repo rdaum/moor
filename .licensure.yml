@@ -70,6 +70,7 @@ excludes:
   - \.git/.*
   - \.idea/.*
   - \.cargo/.*
+  - \.helpers/.*
   - crates/web-host/src/client/flexbuffers/*
   - crates/db-wiredtiger/third-party/*
   - target/.*

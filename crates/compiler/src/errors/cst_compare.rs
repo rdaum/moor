@@ -92,23 +92,23 @@ impl CSTComparator {
 
                     // Show what's missing or extra
                     if pest_children.len() > ts_children.len() {
-                        for i in ts_children.len()..pest_children.len() {
+                        for (i, child) in pest_children.iter().enumerate().skip(ts_children.len()) {
                             let child_path = format!("{path}.children[{i}]");
                             self.differences.push(CSTDifference {
                                 path: child_path,
                                 description: "Missing child in tree-sitter".to_string(),
-                                expected: Some(format!("{:?}", pest_children[i].rule)),
+                                expected: Some(format!("{:?}", child.rule)),
                                 actual: None,
                             });
                         }
                     } else {
-                        for i in pest_children.len()..ts_children.len() {
+                        for (i, child) in ts_children.iter().enumerate().skip(pest_children.len()) {
                             let child_path = format!("{path}.children[{i}]");
                             self.differences.push(CSTDifference {
                                 path: child_path,
                                 description: "Extra child in tree-sitter".to_string(),
                                 expected: None,
-                                actual: Some(format!("{:?}", ts_children[i].rule)),
+                                actual: Some(format!("{:?}", child.rule)),
                             });
                         }
                     }
