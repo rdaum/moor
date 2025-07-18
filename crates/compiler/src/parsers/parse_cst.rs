@@ -120,6 +120,16 @@ impl CSTTreeTransformer {
         }
     }
 
+    /// Helper to create a parse error with custom context
+    fn parse_error_with_context(&self, context: CompileContext, message: &str) -> CompileError {
+        CompileError::ParseError {
+            error_position: context,
+            end_line_col: None,
+            context: "CST parsing".to_string(),
+            message: message.to_string(),
+        }
+    }
+
     /// Convert a CST node representing an atom (terminal expression) to an AST expression
     fn parse_atom(self: Rc<Self>, node: &CSTNode) -> Result<Expr, CompileError> {
         match node.rule {
@@ -237,12 +247,7 @@ impl CSTTreeTransformer {
             // Handle error codes
             Rule::err => {
                 let Some(children) = node.children() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Error node has no children".to_string(),
-                    });
+                    return Err(self.parse_error(node, "Error node has no children"));
                 };
 
                 // Error nodes can have an error code and optional message expression
@@ -3659,12 +3664,7 @@ impl CSTTreeTransformer {
                 };
                 let content_children: Vec<_> = children.iter().filter(|n| n.is_content()).collect();
                 if content_children.is_empty() {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Fn statement missing content".to_string(),
-                    });
+                    return Err(self.parse_error_with_context(context, "Fn statement missing content"));
                 }
 
                 let inner = content_children[0];
@@ -3673,34 +3673,15 @@ impl CSTTreeTransformer {
                         // fn name(params) statements endfn
                         // This is like: let name = fn(params) statements endfn;
                         let Some(fn_children) = inner.children() else {
-                            return Err(CompileError::ParseError {
-                                error_position: self.compile_context(inner),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "Fn named statement has no children".to_string(),
-                            });
+                            return Err(self.parse_error(inner, "Fn named statement has no children"));
                         };
                         let fn_content: Vec<_> =
                             fn_children.iter().filter(|n| n.is_content()).collect();
                         if fn_content.len() < 3 {
-                            return Err(CompileError::ParseError {
-                                error_position: self.compile_context(inner),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "Fn named statement missing name, params, or body"
-                                    .to_string(),
-                            });
+                            return Err(self.parse_error(inner, "Fn named statement missing name, params, or body"));
                         }
 
-                        let func_name =
-                            fn_content[0]
-                                .text()
-                                .ok_or_else(|| CompileError::ParseError {
-                                    error_position: self.compile_context(fn_content[0]),
-                                    end_line_col: None,
-                                    context: "fn named parsing".to_string(),
-                                    message: "Function name has no text".to_string(),
-                                })?;
+                        let func_name = self.extract_text(fn_content[0], "Function name")?;
 
                         let params_part = fn_content[1];
                         let statements_part = fn_content[2];
@@ -3757,45 +3738,21 @@ impl CSTTreeTransformer {
                         let fn_content: Vec<_> =
                             fn_children.iter().filter(|n| n.is_content()).collect();
                         if fn_content.len() < 2 {
-                            return Err(CompileError::ParseError {
-                                error_position: self.compile_context(inner),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "Fn assignment statement missing variable or function"
-                                    .to_string(),
-                            });
+                            return Err(self.parse_error(inner, "Fn assignment statement missing variable or function"));
                         }
 
-                        let var_name =
-                            fn_content[0]
-                                .text()
-                                .ok_or_else(|| CompileError::ParseError {
-                                    error_position: self.compile_context(fn_content[0]),
-                                    end_line_col: None,
-                                    context: "fn assignment parsing".to_string(),
-                                    message: "Variable name has no text".to_string(),
-                                })?;
+                        let var_name = self.extract_text(fn_content[0], "Variable name")?;
 
                         let func_expr_part = fn_content[1]; // This contains the fn_expr
 
                         // Parse the fn expression manually (similar to fn_expr case above)
                         let Some(func_children) = func_expr_part.children() else {
-                            return Err(CompileError::ParseError {
-                                error_position: self.compile_context(func_expr_part),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "Fn expression has no children".to_string(),
-                            });
+                            return Err(self.parse_error(func_expr_part, "Fn expression has no children"));
                         };
                         let func_content: Vec<_> =
                             func_children.iter().filter(|n| n.is_content()).collect();
                         if func_content.len() < 2 {
-                            return Err(CompileError::ParseError {
-                                error_position: self.compile_context(func_expr_part),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "Fn expression missing params or body".to_string(),
-                            });
+                            return Err(self.parse_error(func_expr_part, "Fn expression missing params or body"));
                         }
 
                         let lambda_params = func_content[0];
