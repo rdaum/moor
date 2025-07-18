@@ -18,7 +18,7 @@ use crate::ast::{
     StmtNode, UnaryOp,
 };
 use crate::decompile::DecompileError::{BuiltinNotFound, MalformedProgram};
-use crate::parse::Parse;
+use crate::parsers::parse::Parse;
 use crate::var_scope::VarScope;
 use moor_common::builtins::BuiltinId;
 use moor_var::program::DeclType;
@@ -737,13 +737,17 @@ impl Decompile {
                             label_pos += 1;
                             let _ = self.decompile_statements_up_to(next_label)?;
                             let assign_expr = self.pop_expr()?;
-                            let Expr::Assign { left: _, right } = assign_expr else {
-                                return Err(MalformedProgram(
-                                    format!(
-                                        "expected assign for optional scatter assignment; got {assign_expr:?}"
-                                    )
-                                    .to_string(),
-                                ));
+                            let right = match assign_expr {
+                                Expr::Assign { left: _, right } => right,
+                                Expr::Decl { id: _, is_const: _, expr: Some(expr) } => expr,
+                                _ => {
+                                    return Err(MalformedProgram(
+                                        format!(
+                                            "expected assign or decl for optional scatter assignment; got {assign_expr:?}"
+                                        )
+                                        .to_string(),
+                                    ));
+                                }
                             };
                             // We need to eat the 'pop' after us that is present in the program
                             // stream.

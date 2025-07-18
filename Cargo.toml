@@ -18,6 +18,7 @@ members = [
     "crates/var",
     "crates/web-host",
     "tools/moorc",
+    "examples",
 ]
 default-members = [
     "crates/var",
@@ -151,6 +152,8 @@ unicase = "2.8"
 # Compiler & Language Processing
 pest = "2.8"
 pest_derive = "2.8"
+tree-sitter = "0.25"
+tree-sitter-moo = { git = "https://github.com/nnunley/tree-sitter-moo", rev = "0dbb601" }
 
 # Collections & Data Structures
 ahash = "0.8"
