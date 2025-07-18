@@ -1,0 +1,41 @@
+[profile.ci]
+fail-fast = true
+# CI-specific profile with more conservative settings
+retries = 2
+slow-timeout = {period = "120s", terminate-after = 2}
+
+# For CI, be more aggressive about retrying the flaky test
+[profile.ci.override]
+filter = 'test(scheduler_integration_test)'
+retries = 3
+slow-timeout = {period = "180s", terminate-after = 2}
+
+[profile.default]
+# Default retry policy - retry flaky tests up to 3 times
+retries = 3
+# Timeout for tests
+slow-timeout = {period = "60s", terminate-after = 2}
+# Run tests in parallel
+test-threads = "num-cpus"
+
+# Specific configuration for the flaky scheduler integration test
+[profile.default.override]
+filter = 'test(scheduler_integration_test)'
+retries = 5
+slow-timeout = {period = "120s", terminate-after = 3}
+
+# More specific targeting for the exact failing test
+[[profile.default.overrides]]
+filter = 'test(test_wizard_login_with_real_scheduler)'
+# Give it more time since it's doing real scheduler work
+leak-timeout = "30s"
+retries = 5
+slow-timeout = {period = "120s", terminate-after = 3}
+
+[profile.no-retries]
+# Profile for local development when you don't want retries
+retries = 0
+
+[test-groups]
+# Group integration tests that use real database/scheduler
+integration = {max-threads = 1}

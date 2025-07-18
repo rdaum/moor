@@ -1,0 +1,81 @@
+# Example GitHub Actions workflow for nextest integration
+# This file can be moved to .github/workflows/tests.yml to replace existing test workflows
+
+name: Tests with Nextest
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ matrix.rust }}
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install nextest
+      uses: taiki-e/install-action@cargo-nextest
+
+    - name: Run tests with nextest
+      run: cargo nextest run --workspace --profile ci
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}
+        path: target/nextest/ci/junit.xml
+
+    - name: Upload test report
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: Test Results (${{ matrix.os }})
+        path: target/nextest/ci/junit.xml
+        reporter: java-junit
+
+  style:
+    name: Style Check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+    - name: Run clippy
+      run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+
+  license:
+    name: License Check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install licensure
+      run: cargo install licensure
+    - name: Check licenses
+      run: licensure --project . --check
