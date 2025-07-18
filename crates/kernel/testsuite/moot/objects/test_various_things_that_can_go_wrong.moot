@@ -1,5 +1,5 @@
 // Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
-//   def test_various_things_that_can_go_wrong 
+//   def test_various_things_that_can_go_wrong
 @programmer
 ; add_property($system, "a", create($nothing), {player, "wrc"});
 ; add_property($system, "b", create($nothing), {player, "wrc"});

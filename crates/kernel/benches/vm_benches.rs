@@ -263,7 +263,7 @@ fn opcode_throughput(c: &mut Criterion) {
                 db.clone(),
                 r#"while(1)
                             l = {1};
-                            for i in [0..10000] 
+                            for i in [0..10000]
                                 l[1] = i;
                             endfor
                           endwhile"#,

@@ -802,7 +802,7 @@ impl TelnetConnection {
         Ok(())
     }
 
-    /// Send output suffix if defined  
+    /// Send output suffix if defined
     async fn send_output_suffix(&mut self) -> Result<(), eyre::Error> {
         if let Some(ref suffix) = self.output_suffix {
             self.write.send(suffix.clone()).await?;

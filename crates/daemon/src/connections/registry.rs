@@ -81,7 +81,7 @@ pub trait ConnectionRegistry {
 pub enum ConnectionRegistryConfig {
     /// In-memory only, no persistence
     InMemoryOnly,
-    /// In-memory with Fjall persistence  
+    /// In-memory with Fjall persistence
     WithFjallPersistence { path: Option<Box<Path>> },
 }
 

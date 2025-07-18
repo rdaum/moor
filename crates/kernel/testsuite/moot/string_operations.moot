@@ -45,7 +45,7 @@
 ; return length("");
 0
 
-// strcmp 
+// strcmp
 ; return strcmp("woo", "woo");
 0
 ; return strcmp("axx", "baa");
@@ -73,7 +73,7 @@
 // ; return encode_binary("foo", 10, "bar", 13);
 // "foo~0Abar~0D"
 
-// match & rmatch 
+// match & rmatch
 ; return match("foo", "^f*o$");
 {}
 ; return match("foo", "^fo*$");
@@ -85,11 +85,11 @@
 ; return match("foobar", "f%(o*%)b");
 {1, 4, {{2, 3}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}, {0, -1}}, "foobar"}
 
-// substitute 
+// substitute
 ; subs = match("*** Welcome to LambdaMOO!!!", "%(%w*%) to %(%w*%)"); return substitute("I thank you for your %1 here in %2.", subs);
 "I thank you for your Welcome here in LambdaMOO."
 
-// crypt 
+// crypt
 ; return crypt("foobar", "J3");
 "J3fSFQfgkp26w"
 ; return crypt("mumble", "J3");

@@ -249,5 +249,3 @@ subs = match("*** Welcome to LambdaMOO!!!", "%(%w*%) to %(%w*%)");
 substitute("I thank you for your %1 here in %2.", subs)
         =>   "I thank you for your Welcome here in LambdaMOO."
 ```
-
-

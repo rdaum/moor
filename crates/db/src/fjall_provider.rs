@@ -42,7 +42,7 @@ where
 {
     /// Keys that have been deleted but delete hasn't flushed to backing store yet
     pending_deletes: HashSet<Domain>,
-    /// Keys that have been written but write hasn't flushed to backing store yet  
+    /// Keys that have been written but write hasn't flushed to backing store yet
     pending_writes: HashMap<Domain, (Timestamp, Codomain)>,
 }
 

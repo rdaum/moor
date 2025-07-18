@@ -1,4 +1,27 @@
+[dependencies]
+# Internal Dependencies
+moor-common = {path = "../common"}
+moor-var = {path = "../var"}
+# Serialization & Data Formats
+base64.workspace = true
+# Collections & Data Structures
+itertools.workspace = true
+# Compiler & Language Processing
+pest.workspace = true
+pest_derive.workspace = true
+# Utilities & Helpers
+strum.workspace = true
+# Error Handling & Logging
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+test-case.workspace = true
+unindent.workspace = true
+
 [package]
+description = "Functions and structures for compilation and decompilation of MOO source, including opcode declarations and builtin declarations"
 name = "moor-compiler"
 version = "0.9.0-alpha"
 authors.workspace = true
@@ -9,31 +32,3 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Functions and structures for compilation and decompilation of MOO source, including opcode declarations and builtin declarations"
-
-[dev-dependencies]
-pretty_assertions.workspace = true
-test-case.workspace = true
-unindent.workspace = true
-
-[dependencies]
-# Internal Dependencies
-moor-common = { path = "../common" }
-moor-var = { path = "../var" }
-
-# Serialization & Data Formats
-base64.workspace = true
-
-# Compiler & Language Processing
-pest.workspace = true
-pest_derive.workspace = true
-
-# Collections & Data Structures
-itertools.workspace = true
-
-# Error Handling & Logging
-thiserror.workspace = true
-tracing.workspace = true
-
-# Utilities & Helpers
-strum.workspace = true

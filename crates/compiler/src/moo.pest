@@ -127,7 +127,7 @@ in_range = @{ ^"in" ~ !ident_continue+ }
 
 prefix = _{ neg | not | scatter_assign }
 neg    =  { "-" }
-// 
+//
 not = { "!" }
 
 scatter_assign   =  { "{" ~ scatter ~ "}" ~ !"=>" ~ ASSIGN }

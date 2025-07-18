@@ -7,47 +7,47 @@
 //   @wizard
 //   // create a hole
 //   ; recycle(create($nothing));
-//   
+//
 //   ; add_property($system, "l", eval("for o in [#0..max_object()]; if (!valid(o)); return o; endif; endfor; return $nothing;")[2], {player, "wrc"});
-//   
+//
 //   ; add_property($system, "a", create($nothing), {player, "wrc"});
 //   ; add_property($system, "b", create($a), {player, "wrc"});
 //   ; add_property($system, "c", create($b), {player, "wrc"});
-//   
+//
 //   ; move($b, $a);
 //   ; move($c, $b);
-//   
+//
 //   ; return parent($a);
 //   $nothing
 //   ; return parent($b);
 //   $a
 //   ; return parent($c);
 //   $b
-//   
+//
 //   ; return children($a);
 //   {$b}
 //   ; return children($b);
 //   {$c}
 //   ; return children($c);
 //   {}
-//   
+//
 //   ; return $a.location;
 //   $nothing
 //   ; return $b.location;
 //   $a
 //   ; return $c.location;
 //   $b
-//   
+//
 //   ; return $a.contents;
 //   {$b}
 //   ; return $b.contents;
 //   {$c}
 //   ; return $c.contents;
 //   {}
-//   
+//
 //   ; return renumber($b);
 //   $l
-//   
+//
 //   ; return parent($a);
 //   $nothing
 //   ; return parent($b);
@@ -56,7 +56,7 @@
 //   $a
 //   ; return parent($c);
 //   $l
-//   
+//
 //   ; return children($a);
 //   {$l}
 //   ; return children($b);
@@ -65,7 +65,7 @@
 //   {$c}
 //   ; return children($c);
 //   {}
-//   
+//
 //   ; return $a.location;
 //   $nothing
 //   ; return $b.location;
@@ -74,7 +74,7 @@
 //   $a
 //   ; return $c.location;
 //   $l
-//   
+//
 //   ; return $a.contents;
 //   {$l}
 //   ; return $b.contents;
