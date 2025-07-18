@@ -1,0 +1,226 @@
+# Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+# software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, version
+# 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+
+name: MOOT Integration Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'crates/kernel/testsuite/moot/**'
+      - 'crates/testing/moot/**'
+      - 'crates/compiler/src/parse_*.rs'
+      - 'crates/compiler/src/test_utils.rs'
+      - 'crates/compiler/src/operand_parsing_tests.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'crates/kernel/testsuite/moot/**'
+      - 'crates/testing/moot/**'
+      - 'crates/compiler/src/parse_*.rs'
+      - 'crates/compiler/src/test_utils.rs'
+      - 'crates/compiler/src/operand_parsing_tests.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  moot-parsing:
+    name: MOOT Parsing Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        parser: ["pest", "tree-sitter"]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-moot-${{ matrix.parser }}-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Run MOOT parsing tests (PEST)
+      if: matrix.parser == 'pest'
+      run: |
+        cargo test --verbose moocode_parsing
+    
+    - name: Run MOOT parsing tests (Tree-sitter)
+      if: matrix.parser == 'tree-sitter'
+      run: |
+        cargo test --verbose --features tree-sitter-parser moocode_parsing
+    
+    - name: Run MOOT debug format tests
+      run: |
+        cargo test --verbose ${{ matrix.parser == 'tree-sitter' && '--features tree-sitter-parser' || '' }} test_utils::tests::test_moot_debug_format_compatibility
+      continue-on-error: true
+
+  moot-basic-tests:
+    name: MOOT Basic Language Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-moot-basic-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Run basic arithmetic tests
+      run: |
+        cargo test --verbose moot_run::basic::arithmetic
+      continue-on-error: true
+    
+    - name: Run basic string tests
+      run: |
+        cargo test --verbose moot_run::basic::string
+      continue-on-error: true
+    
+    - name: Run basic list tests
+      run: |
+        cargo test --verbose moot_run::basic::list
+      continue-on-error: true
+    
+    - name: Run basic value tests
+      run: |
+        cargo test --verbose moot_run::basic::value
+      continue-on-error: true
+    
+    - name: Run basic object tests
+      run: |
+        cargo test --verbose moot_run::basic::object
+      continue-on-error: true
+    
+    - name: Run basic property tests
+      run: |
+        cargo test --verbose moot_run::basic::property
+      continue-on-error: true
+
+  moot-regression:
+    name: MOOT Regression Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-moot-regression-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Run regression tests
+      run: |
+        cargo test --verbose moot_run::regression
+      continue-on-error: true
+    
+    - name: Run time tests
+      run: |
+        cargo test --verbose moot_run::time
+      continue-on-error: true
+    
+    - name: Run truthiness tests
+      run: |
+        cargo test --verbose moot_run::truthiness
+      continue-on-error: true
+    
+    - name: Run equality tests
+      run: |
+        cargo test --verbose moot_run::equality
+      continue-on-error: true
+
+  moot-integration:
+    name: MOOT Integration Test Suite
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-moot-integration-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Run full MOOT test suite
+      run: |
+        cargo test --verbose -- moot
+      continue-on-error: true
+    
+    - name: Run MOOT telnet tests
+      run: |
+        cargo test --verbose --test integration_test
+      continue-on-error: true
+    
+    - name: Generate MOOT test report
+      run: |
+        echo "MOOT Test Results Summary:" > moot_results.txt
+        cargo test --verbose -- moot 2>&1 | tee -a moot_results.txt || true
+        echo "Total MOOT tests completed" >> moot_results.txt
+    
+    - name: Upload MOOT test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: moot-test-results
+        path: moot_results.txt

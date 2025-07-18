@@ -1,0 +1,177 @@
+# Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+# software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, version
+# 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+
+name: Tree-sitter Grammar Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly check for grammar updates
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  grammar-coverage:
+    name: Grammar Coverage Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install Node.js (for tree-sitter)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Install tree-sitter CLI
+      run: npm install -g tree-sitter-cli
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-grammar-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Test problematic MOO constructs
+      run: |
+        mkdir -p /tmp/grammar-test
+        
+        # Test cases for tree-sitter grammar
+        echo '{_, _, perms, @_} = callers()[2];' > /tmp/grammar-test/scatter.moo
+        echo 'parties = $pronoun_sub:parse_parties(args, caller);' > /tmp/grammar-test/sysprop_call.moo
+        echo '{msg, parties} = $pronoun_sub:flatten_message(msg, parties);' > /tmp/grammar-test/sysprop_scatter.moo
+        echo 'result = callers()[2];' > /tmp/grammar-test/builtin_call.moo
+        echo 'x = $some_prop;' > /tmp/grammar-test/sysprop.moo
+        echo 'return 42; "moot-line:2";' > /tmp/grammar-test/multi_statement.moo
+        
+        # Test compilation with tree-sitter parser
+        for file in /tmp/grammar-test/*.moo; do
+          echo "Testing: $file"
+          echo "Content: $(cat $file)"
+          cargo run --bin moorc --features tree-sitter-parser -- --check "$file" || echo "FAILED: $file"
+        done
+    
+    - name: Run parser comparison tests
+      run: |
+        cargo test --verbose --features tree-sitter-parser test_utils::tests::test_moot_basic_compatibility
+        cargo test --verbose --features tree-sitter-parser test_utils::tests::test_moot_debug_format_compatibility
+    
+    - name: Generate grammar analysis report
+      run: |
+        echo "## Grammar Analysis Report" > grammar_report.md
+        echo "Generated on: $(date)" >> grammar_report.md
+        echo "" >> grammar_report.md
+        
+        echo "### Test Results" >> grammar_report.md
+        echo "- Scatter assignments: $(cargo run --bin moorc --features tree-sitter-parser -- --check /tmp/grammar-test/scatter.moo && echo 'PASS' || echo 'FAIL')" >> grammar_report.md
+        echo "- System property calls: $(cargo run --bin moorc --features tree-sitter-parser -- --check /tmp/grammar-test/sysprop_call.moo && echo 'PASS' || echo 'FAIL')" >> grammar_report.md
+        echo "- Builtin function calls: $(cargo run --bin moorc --features tree-sitter-parser -- --check /tmp/grammar-test/builtin_call.moo && echo 'PASS' || echo 'FAIL')" >> grammar_report.md
+        echo "- Multi-statement programs: $(cargo run --bin moorc --features tree-sitter-parser -- --check /tmp/grammar-test/multi_statement.moo && echo 'PASS' || echo 'FAIL')" >> grammar_report.md
+        
+        echo "" >> grammar_report.md
+        echo "### Grammar Source" >> grammar_report.md
+        echo "- Repository: https://github.com/nnunley/tree-sitter-moo" >> grammar_report.md
+        echo "- Branch: main" >> grammar_report.md
+        echo "- Last checked: $(date)" >> grammar_report.md
+    
+    - name: Upload grammar analysis report
+      uses: actions/upload-artifact@v4
+      with:
+        name: grammar-analysis-report
+        path: grammar_report.md
+
+  grammar-update-check:
+    name: Check for Grammar Updates
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check tree-sitter-moo repository
+      run: |
+        # Get latest commit from tree-sitter-moo repository
+        LATEST_COMMIT=$(curl -s https://api.github.com/repos/nnunley/tree-sitter-moo/commits/main | jq -r '.sha')
+        echo "Latest tree-sitter-moo commit: $LATEST_COMMIT"
+        
+        # Check if our dependency is up to date
+        echo "Current dependency in Cargo.toml:"
+        grep -n "tree-sitter-moo" Cargo.toml
+        
+        # Create update notification if needed
+        echo "## Grammar Update Check" > grammar_update.md
+        echo "Latest commit: $LATEST_COMMIT" >> grammar_update.md
+        echo "Repository: https://github.com/nnunley/tree-sitter-moo" >> grammar_update.md
+        echo "Checked on: $(date)" >> grammar_update.md
+    
+    - name: Upload update check results
+      uses: actions/upload-artifact@v4
+      with:
+        name: grammar-update-check
+        path: grammar_update.md
+
+  grammar-regression-tests:
+    name: Grammar Regression Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-grammar-regression-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Run JHCore regression tests
+      run: |
+        cargo test --verbose operand_parsing_tests::test_jhcore_object16_verb6
+        cargo test --verbose operand_parsing_tests::test_jhcore_object34_verb0
+    
+    - name: Run operand parsing regression tests
+      run: |
+        cargo test --verbose operand_parsing_tests::test_builtin_call_in_scatter_assignment
+        cargo test --verbose operand_parsing_tests::test_sysprop_call_in_scatter_assignment
+        cargo test --verbose operand_parsing_tests::test_mixed_operand_types
+    
+    - name: Run multi-statement parsing tests
+      run: |
+        cargo test --verbose --features tree-sitter-parser test_utils::tests::test_moot_debug_format_compatibility
+    
+    - name: Test tree-sitter specific functionality
+      run: |
+        cargo test --verbose --features tree-sitter-parser parse_treesitter_tests

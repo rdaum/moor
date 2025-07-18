@@ -38,5 +38,12 @@ tracing-subscriber.workspace = true
 # Utilities & Helpers
 semver.workspace = true
 
+# Networking & Communication
+reqwest.workspace = true
+tokio.workspace = true
+
+# Compression
+flate2 = "1.0"
+
 # Testing & Development
 tempfile.workspace = true

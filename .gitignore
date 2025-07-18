@@ -18,3 +18,10 @@ textdumps
 .aider*
 
 mise.toml
+
+# Debug artifacts and temporary files
+.debug/
+debug_*.rs
+test_*.rs
+error_output_*.txt
+tree_sitter_moo_bug_report.md

@@ -1,0 +1,206 @@
+# Copyright (C) 2025 Ryan Daum <ryan.daum@gmail.com> This program is free
+# software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, version
+# 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+
+name: Tree-sitter Parser Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'crates/compiler/src/parse_treesitter.rs'
+      - 'crates/compiler/src/parse_treesitter_tests.rs'
+      - 'crates/compiler/src/operand_parsing_tests.rs'
+      - 'crates/compiler/src/test_utils.rs'
+      - 'crates/compiler/src/parse_cst.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'crates/compiler/src/parse_treesitter.rs'
+      - 'crates/compiler/src/parse_treesitter_tests.rs'
+      - 'crates/compiler/src/operand_parsing_tests.rs'
+      - 'crates/compiler/src/test_utils.rs'
+      - 'crates/compiler/src/parse_cst.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  parser-compatibility:
+    name: Parser Compatibility Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-parser-compat-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Run parser compatibility tests
+      run: |
+        cargo test --verbose --features tree-sitter-parser test_utils::tests::test_moot_basic_compatibility
+        cargo test --verbose --features tree-sitter-parser test_utils::tests::test_moot_debug_format_compatibility
+    
+    - name: Run operand parsing regression tests
+      run: |
+        cargo test --verbose operand_parsing_tests::test_jhcore_object16_verb6
+        cargo test --verbose operand_parsing_tests::test_jhcore_object34_verb0
+    
+    - name: Run comprehensive operand parsing tests
+      run: |
+        cargo test --verbose operand_parsing_tests
+    
+    - name: Validate tree-sitter parser against PEST parser
+      run: |
+        cargo run --example parser_validation --features tree-sitter-parser
+
+  moot-debug-format:
+    name: MOOT Debug Format Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-moot-debug-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Test MOOT debug format parsing
+      run: |
+        cargo test --verbose --features tree-sitter-parser -- "moot.*debug"
+    
+    - name: Test multi-statement parsing
+      run: |
+        cargo run --example test_moot_parsing --features tree-sitter-parser
+
+  jhcore-conversion:
+    name: JHCore Conversion Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-jhcore-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Build moorc tool
+      run: cargo build --bin moorc --verbose
+    
+    - name: Test JHCore conversion capability
+      run: |
+        # Test that moorc can handle complex MOO code patterns
+        echo 'parties = $pronoun_sub:parse_parties(p_s_args, caller);' > test_builtin.moo
+        echo '{msg, parties} = $pronoun_sub:flatten_message(msg, parties);' > test_sysprop.moo
+        echo '{_, _, perms, @_} = callers()[2];' > test_scatter.moo
+        
+        cargo run --bin moorc -- --check test_builtin.moo
+        cargo run --bin moorc -- --check test_sysprop.moo  
+        cargo run --bin moorc -- --check test_scatter.moo
+        
+        rm test_builtin.moo test_sysprop.moo test_scatter.moo
+    
+    - name: Verify JHCore conversion artifacts exist
+      run: |
+        if [ -d "cores/jhcore" ]; then
+          echo "JHCore conversion artifacts found"
+          ls -la cores/jhcore/ | head -10
+          echo "Total objects: $(ls cores/jhcore/*.moo | wc -l)"
+        else
+          echo "JHCore conversion artifacts not found - this is expected in CI"
+        fi
+
+  regression-tests:
+    name: Parser Regression Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-regression-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Run RefCell reentrancy regression tests
+      run: |
+        cargo test --verbose operand_parsing_tests::test_builtin_call_in_scatter_assignment
+        cargo test --verbose operand_parsing_tests::test_sysprop_call_in_scatter_assignment
+    
+    - name: Run multi-statement parsing regression tests
+      run: |
+        cargo test --verbose --features tree-sitter-parser test_utils::tests::test_moot_debug_format_compatibility
+    
+    - name: Run operand parsing regression tests
+      run: |
+        cargo test --verbose operand_parsing_tests::test_mixed_operand_types
+        cargo test --verbose operand_parsing_tests::test_nested_system_calls
+    
+    - name: Test expression node parsing
+      run: |
+        cargo test --verbose --features tree-sitter-parser parse_treesitter_tests
