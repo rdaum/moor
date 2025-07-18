@@ -32,6 +32,7 @@ pub(crate) mod vm_call;
 pub(crate) mod vm_unwind;
 
 pub mod builtins;
+pub mod compile_selector;
 mod moo_frame;
 pub mod vm_host;
 
