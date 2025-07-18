@@ -15,15 +15,7 @@
 
 pub mod parse;
 pub mod parse_cst;
-pub mod parser_trait;
-
-#[cfg(feature = "tree-sitter-parser")]
-pub mod tree_sitter;
 
 // Re-export main parsing functionality
 pub use parse::parse_program;
 pub use parse_cst::{CSTTreeTransformer, ParseCst};
-pub use parser_trait::MooParser;
-
-#[cfg(feature = "tree-sitter-parser")]
-pub use tree_sitter::{SemanticTreeWalker, parse_program_with_tree_sitter};

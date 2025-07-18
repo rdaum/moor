@@ -1,0 +1,293 @@
+MOO Parser Error Output - pest Parser
+=========================================
+
+Test Case: unclosed_string (Unclosed string literal)
+Code:
+return "hello world;
+
+Error Output:
+Failure to parse program @ 1/8: Parse error: parsing error: expected expr, add, sub, mul, div, pow, modulus, land, lor, eq, neq, lt, gt, lte, gte, in_range, index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, assign, or cond_expr
+
+   1 | return "hello world;
+     |        ^
+
+Context: Expression
+Expected one of: identifier, number, string, list literal, map literal, function call, parenthesized expression
+
+Error Location: 1:8
+Quality Score: 9/10
+================================================================================
+
+Test Case: missing_semicolon (Missing semicolon at end of statement)
+Code:
+x = 42
+return x;
+
+Error Output:
+Failure to parse program @ 2/1: Parse error: parsing error: expected add, sub, mul, div, pow, modulus, land, lor, eq, neq, lt, gt, lte, gte, in_range, index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, assign, or cond_expr
+
+   1 | x = 42
+   2 | return x;
+     | ^
+
+Context: Statement
+Expected one of: variable assignment, if statement, for loop, while loop, function call, return statement, function definition
+
+Error Location: 2:1
+Quality Score: 7/10
+================================================================================
+
+Test Case: unmatched_paren (Unmatched opening parenthesis)
+Code:
+if (x > 0
+    return x;
+endif
+
+Error Output:
+Failure to parse program @ 2/5: Parse error: parsing error: expected add, sub, mul, div, pow, modulus, land, lor, eq, neq, lt, gt, lte, gte, in_range, index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, assign, or cond_expr
+
+   1 | if (x > 0
+   2 |     return x;
+     |     ^
+   3 | endif
+
+Context: Statement
+Expected one of: variable assignment, if statement, for loop, while loop, function call, return statement, function definition
+
+Error Location: 2:5
+Quality Score: 7/10
+================================================================================
+
+Test Case: unmatched_bracket (Unmatched opening bracket)
+Code:
+list = [1, 2, 3;
+return list;
+
+Error Output:
+Failure to parse program @ 1/10: Parse error: parsing error: expected add, sub, mul, div, pow, modulus, land, lor, eq, neq, lt, gt, lte, gte, in_range, index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, assign, or cond_expr
+
+   1 | list = [1, 2, 3;
+     |          ^
+   2 | return list;
+
+Context: List
+Expected one of: expression, ',', ']'
+
+Error Location: 1:10
+Quality Score: 7/10
+================================================================================
+
+Test Case: unmatched_brace (Unmatched opening brace)
+Code:
+map = ["key" -> "value";
+return map;
+
+Error Output:
+Failure to parse program @ 1/24: Parse error: parsing error: expected add, sub, mul, div, pow, modulus, land, lor, eq, neq, lt, gt, lte, gte, in_range, index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, assign, or cond_expr
+
+   1 | map = ["key" -> "value";
+     |                        ^
+   2 | return map;
+
+Context: List
+Expected one of: expression, ',', ']'
+
+Error Location: 1:24
+Quality Score: 7/10
+================================================================================
+
+Test Case: invalid_assignment (Invalid assignment target)
+Code:
+42 = x;
+return x;
+
+Error Output:
+Invalid l-value for assignment @ 1/1
+
+Error Location: 1:1
+Quality Score: 7/10
+================================================================================
+
+Test Case: invalid_operator (Invalid operator usage)
+Code:
+x = 1 ++ 2;
+return x;
+
+Error Output:
+Failure to parse program @ 1/8: Parse error: parsing error: expected fn_expr, range_comprehension, neg, not, scatter_assign, pass_expr, return_expr, paren_expr, try_expr, sysprop, atom, lambda, list, flyweight, map, range_end, ident, or integer
+
+   1 | x = 1 ++ 2;
+     |        ^
+   2 | return x;
+
+Context: Assignment
+Expected one of: identifier, number, string, list literal, map literal, function call, parenthesized expression
+
+Error Location: 1:8
+Quality Score: 7/10
+================================================================================
+
+Test Case: malformed_if (Malformed if statement)
+Code:
+if x > 0 then
+    return x;
+end
+
+Error Output:
+Failure to parse program @ 1/1: Parse error: parsing error: expected program
+
+   1 | if x > 0 then
+     | ^
+   2 |     return x;
+
+Context: Statement
+Expected one of: variable assignment, if statement, for loop, while loop, function call, return statement, function definition
+
+Error Location: 1:1
+Quality Score: 7/10
+================================================================================
+
+Test Case: malformed_for (Malformed for loop)
+Code:
+for x in (1, 2, 3)
+    return x;
+endfor
+
+Error Output:
+Failure to parse program @ 1/12: Parse error: parsing error: expected add, sub, mul, div, pow, modulus, land, lor, eq, neq, lt, gt, lte, gte, in_range, index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, assign, or cond_expr
+
+   1 | for x in (1, 2, 3)
+     |            ^
+   2 |     return x;
+
+Context: ForLoop
+Expected one of: variable name, 'in', iterable expression, 'endfor'
+
+Error Location: 1:12
+Quality Score: 7/10
+================================================================================
+
+Test Case: malformed_while (Malformed while loop)
+Code:
+while x > 0
+    x = x - 1;
+end
+
+Error Output:
+Failure to parse program @ 1/1: Parse error: parsing error: expected program
+
+   1 | while x > 0
+     | ^
+   2 |     x = x - 1;
+
+Context: Statement
+Expected one of: variable assignment, if statement, for loop, while loop, function call, return statement, function definition
+
+Error Location: 1:1
+Quality Score: 7/10
+================================================================================
+
+Test Case: invalid_scatter (Invalid scatter assignment)
+Code:
+{x, y, z} = [1, 2];
+return x;
+
+Error Output:
+Failure to parse program @ 1/15: Parse error: parsing error: expected add, sub, mul, div, pow, modulus, land, lor, eq, neq, lt, gt, lte, gte, in_range, index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, assign, or cond_expr
+
+   1 | {x, y, z} = [1, 2];
+     |               ^
+   2 | return x;
+
+Context: List
+Expected one of: expression, ',', ']'
+
+Error Location: 1:15
+Quality Score: 7/10
+================================================================================
+
+Test Case: invalid_try_catch (Invalid try-catch block)
+Code:
+try
+    x = dangerous_operation();
+catch e
+    return e;
+end
+
+Error Output:
+Failure to parse program @ 3/7: Parse error: parsing error: expected add, sub, mul, div, pow, modulus, land, lor, eq, neq, lt, gt, lte, gte, in_range, index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, assign, cond_expr, or arglist
+
+   2 |     x = dangerous_operation();
+   3 | catch e
+     |       ^
+   4 |     return e;
+
+Context: Expression
+Expected one of: identifier, number, string, list literal, map literal, function call, parenthesized expression
+
+Error Location: 3:7
+Quality Score: 7/10
+================================================================================
+
+Test Case: invalid_property_access (Invalid property access syntax)
+Code:
+x = obj.;
+return x;
+
+Error Output:
+Failure to parse program @ 1/9: Parse error: parsing error: expected ident
+
+   1 | x = obj.;
+     |         ^
+   2 | return x;
+
+Context: Assignment
+Expected one of: identifier, number, string, list literal, map literal, function call, parenthesized expression
+
+Error Location: 1:9
+Quality Score: 7/10
+================================================================================
+
+Test Case: invalid_verb_call (Invalid verb call syntax)
+Code:
+x = obj:();
+return x;
+
+Error Output:
+Failure to parse program @ 1/10: Parse error: parsing error: expected expr
+
+   1 | x = obj:();
+     |          ^
+   2 | return x;
+
+Context: FunctionCall
+Expected one of: function name, argument, ',', ')'
+
+Error Location: 1:10
+Quality Score: 7/10
+================================================================================
+
+Test Case: nested_error (Nested syntax error in complex expression)
+Code:
+if (x > 0 && (y < 10 || z == "test")
+    for item in items
+        if item.valid
+            return item.process();
+        endif
+    endfor
+endif
+
+Error Output:
+Failure to parse program @ 2/5: Parse error: parsing error: expected add, sub, mul, div, pow, modulus, land, lor, eq, neq, lt, gt, lte, gte, in_range, index_range, index_single, verb_call, verb_expr_call, prop, prop_expr, assign, or cond_expr
+
+   1 | if (x > 0 && (y < 10 || z == "test")
+   2 |     for item in items
+     |     ^
+   3 |         if item.valid
+
+Context: Statement
+Expected one of: variable assignment, if statement, for loop, while loop, function call, return statement, function definition
+
+Error Location: 2:5
+Quality Score: 7/10
+================================================================================

@@ -1,5 +1,5 @@
-# Pre-commit config that matches GitHub CI checks
-# This version works even when code doesn't fully compile
+# Simplified pre-commit config for initial setup
+# This only runs file checks that don't require compilation
 repos:
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -20,16 +20,6 @@ repos:
             crates/daemon/src/testing/.*|
             crates/telnet-host/tests/.*
           )$
-
-  # Rust formatting check (this is what GitHub CI runs)
-  - repo: local
-    hooks:
-      - id: cargo-fmt-check
-        name: cargo fmt --check
-        entry: bash -c 'cargo fmt --all -- --check || echo "Run cargo fmt --all to fix formatting"'
-        language: system
-        types: [rust]
-        pass_filenames: false
 
   # TOML formatting
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks

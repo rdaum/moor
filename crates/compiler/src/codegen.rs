@@ -26,8 +26,8 @@ use crate::Op::{
 use crate::ast::{
     Arg, BinaryOp, CallTarget, CatchCodes, Expr, ScatterItem, ScatterKind, Stmt, StmtNode, UnaryOp,
 };
-use crate::parse::moo::Rule;
-use crate::parse::{CompileOptions, Parse, parse_program, parse_tree};
+use crate::parsers::parse::moo::Rule;
+use crate::parsers::parse::{CompileOptions, Parse, parse_program, parse_tree};
 use moor_common::builtins::BUILTINS;
 use moor_common::model::CompileError::InvalidAssignemnt;
 use moor_common::model::{CompileContext, CompileError};

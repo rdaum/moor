@@ -14,10 +14,6 @@
 //! Error handling and recovery modules
 
 pub mod cst_compare;
-pub mod enhanced_errors;
-pub mod tree_error_recovery;
 
 // Re-export error types and utilities
 pub use cst_compare::{CSTComparator, format_cst_differences};
-pub use enhanced_errors::{ErrorPosition, ErrorSpan, ParseContext};
-pub use tree_error_recovery::{ErrorFix, TreeErrorInfo, TreeErrorType};
