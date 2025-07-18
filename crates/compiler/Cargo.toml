@@ -11,10 +11,15 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Functions and structures for compilation and decompilation of MOO source, including opcode declarations and builtin declarations"
 
+[features]
+default = []
+tree-sitter-parser = ["dep:tree-sitter-moo"]
+
 [dev-dependencies]
 pretty_assertions.workspace = true
 test-case.workspace = true
 unindent.workspace = true
+criterion.workspace = true
 
 [dependencies]
 # Internal Dependencies
@@ -27,6 +32,7 @@ base64.workspace = true
 # Compiler & Language Processing
 pest.workspace = true
 pest_derive.workspace = true
+tree-sitter.workspace = true
 
 # Collections & Data Structures
 itertools.workspace = true
@@ -37,3 +43,11 @@ tracing.workspace = true
 
 # Utilities & Helpers
 strum.workspace = true
+
+# Tree-sitter MOO grammar
+tree-sitter-moo = { workspace = true, optional = true }
+log = "0.4.27"
+
+[[bench]]
+name = "parser_benchmarks"
+harness = false
