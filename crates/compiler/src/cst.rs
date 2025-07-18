@@ -883,9 +883,9 @@ impl CSTExpressionParserBuilder {
     }
 }
 
-/// Implementation of TreeNode trait for CSTNode
-///
-/// This allows CSTNode to work with the generic AST building pipeline
+// Implementation of TreeNode trait for CSTNode
+//
+// This allows CSTNode to work with the generic AST building pipeline
 // TODO: Uncomment when tree-sitter feature is added in PR 2
 /*
 #[cfg(feature = "tree-sitter-parser")]

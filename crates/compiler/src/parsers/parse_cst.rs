@@ -65,7 +65,6 @@ impl From<ParseCst> for Parse {
 pub struct CSTTreeTransformer {
     names: RefCell<VarScope>,
     options: CompileOptions,
-    #[allow(dead_code)]
 }
 
 impl CSTTreeTransformer {
@@ -4513,7 +4512,7 @@ pub fn parse_program_cst(
         Ok(pairs) => pairs,
         Err(e) => {
             // Use enhanced error reporting for PEST errors
-            return Err(create_enhanced_pest_error(program_text, &e));
+            return Err(create_pest_error(&e));
         }
     };
 

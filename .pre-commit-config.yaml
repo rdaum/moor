@@ -38,6 +38,17 @@ repos:
       - id: pretty-format-toml
         args: [--autofix]
 
+  # License header check (commented out for now)
+  # - repo: local
+  #   hooks:
+  #     - id: license-header-check
+  #       name: Check license headers
+  #       entry: bash
+  #       args: ['-c', 'for f in $(find crates -name "*.rs" -type f); do if ! head -n 1 "$f" | grep -q "^// Copyright (C) [0-9]* Ryan Daum"; then echo "$f: Missing or incorrect license header"; exit 1; fi; done']
+  #       language: system
+  #       types: [rust]
+  #       pass_filenames: false
+
 # Configuration
 default_stages: [pre-commit]
 fail_fast: false
