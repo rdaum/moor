@@ -94,18 +94,37 @@ impl CSTTreeTransformer {
         }
     }
 
+    /// Helper to extract text from a CST node or return a specific error
+    fn extract_text<'a>(
+        &self,
+        node: &'a CSTNode,
+        node_type: &str,
+    ) -> Result<&'a str, CompileError> {
+        node.text().ok_or_else(|| {
+            CompileError::ParseError {
+                error_position: self.compile_context(node),
+                end_line_col: None,
+                context: "CST parsing".to_string(),
+                message: format!("{} node has no text", node_type),
+            }
+        })
+    }
+
+    /// Helper to create a parse error with consistent formatting
+    fn parse_error(&self, node: &CSTNode, message: &str) -> CompileError {
+        CompileError::ParseError {
+            error_position: self.compile_context(node),
+            end_line_col: None,
+            context: "CST parsing".to_string(),
+            message: message.to_string(),
+        }
+    }
+
     /// Convert a CST node representing an atom (terminal expression) to an AST expression
     fn parse_atom(self: Rc<Self>, node: &CSTNode) -> Result<Expr, CompileError> {
         match node.rule {
             Rule::ident => {
-                let Some(text) = node.text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Identifier node has no text".to_string(),
-                    });
-                };
+                let text = self.extract_text(node, "Identifier")?;
                 let name = {
                     let mut names_guard = self.names.borrow_mut();
                     names_guard
@@ -115,14 +134,7 @@ impl CSTTreeTransformer {
                 Ok(Expr::Id(name))
             }
             Rule::type_constant => {
-                let Some(type_str) = node.text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Type constant node has no text".to_string(),
-                    });
-                };
+                let type_str = self.extract_text(node, "Type constant")?;
                 let Some(type_id) = VarType::parse(type_str) else {
                     return Err(UnknownTypeConstant(
                         self.compile_context(node),
@@ -132,28 +144,14 @@ impl CSTTreeTransformer {
                 Ok(Expr::TypeConstant(type_id))
             }
             Rule::object => {
-                let Some(text) = node.text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Object node has no text".to_string(),
-                    });
-                };
+                let text = self.extract_text(node, "Object")?;
                 let ostr = &text[1..]; // Remove '#' prefix
                 let oid = i32::from_str(ostr).unwrap();
                 let objid = Obj::mk_id(oid);
                 Ok(Expr::Value(v_obj(objid)))
             }
             Rule::integer => {
-                let Some(text) = node.text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Integer node has no text".to_string(),
-                    });
-                };
+                let text = self.extract_text(node, "Integer")?;
                 match text.parse::<i64>() {
                     Ok(int) => Ok(Expr::Value(v_int(int))),
                     Err(e) => Err(CompileError::StringLexError(
@@ -169,14 +167,7 @@ impl CSTTreeTransformer {
                         "Booleans".to_string(),
                     ));
                 }
-                let Some(text) = node.text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Boolean node has no text".to_string(),
-                    });
-                };
+                let text = self.extract_text(node, "Boolean")?;
                 let b = text.trim() == "true";
                 Ok(Expr::Value(Var::mk_bool(b)))
             }
@@ -187,14 +178,7 @@ impl CSTTreeTransformer {
                         "Symbols".to_string(),
                     ));
                 }
-                let Some(text) = node.text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Symbol node has no text".to_string(),
-                    });
-                };
+                let text = self.extract_text(node, "Symbol")?;
                 let s = Symbol::mk(&text[1..]); // Remove ' prefix
                 Ok(Expr::Value(Var::mk_symbol(s)))
             }
@@ -202,30 +186,15 @@ impl CSTTreeTransformer {
                 // For floats, get the text by reconstructing from CST
                 let text = node.to_source();
                 if text.is_empty() {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Float node has empty source".to_string(),
-                    });
+                    return Err(self.parse_error(node, "Float node has empty source"));
                 }
-                let float = text.parse::<f64>().map_err(|e| CompileError::ParseError {
-                    error_position: self.compile_context(node),
-                    end_line_col: None,
-                    context: "CST parsing".to_string(),
-                    message: format!("Invalid float literal '{text}': {e}"),
+                let float = text.parse::<f64>().map_err(|e| {
+                    self.parse_error(node, &format!("Invalid float literal '{text}': {e}"))
                 })?;
                 Ok(Expr::Value(v_float(float)))
             }
             Rule::string => {
-                let Some(text) = node.text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "String node has no text".to_string(),
-                    });
-                };
+                let text = self.extract_text(node, "String")?;
                 let parsed = match unquote_str(text) {
                     Ok(str) => str,
                     Err(e) => {
@@ -238,14 +207,7 @@ impl CSTTreeTransformer {
                 Ok(Expr::Value(v_str(&parsed)))
             }
             Rule::literal_binary => {
-                let Some(binary_literal) = node.text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Binary literal node has no text".to_string(),
-                    });
-                };
+                let binary_literal = self.extract_text(node, "Binary literal")?;
                 // Remove b" and " from the literal to get just the base64 content
                 let base64_content = binary_literal
                     .strip_prefix("b\"")
@@ -287,24 +249,12 @@ impl CSTTreeTransformer {
                 let content_children: Vec<_> = children.iter().filter(|n| n.is_content()).collect();
 
                 if content_children.is_empty() {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Error node has no content children".to_string(),
-                    });
+                    return Err(self.parse_error(node, "Error node has no content children"));
                 }
 
                 // First child should be the error code
                 let errcode_node = content_children[0];
-                let Some(errcode_text) = errcode_node.text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Error code node has no text".to_string(),
-                    });
-                };
+                let errcode_text = self.extract_text(errcode_node, "Error code")?;
 
                 let error_code = match ErrorCode::parse_str(errcode_text) {
                     Some(ec) => ec,
@@ -312,21 +262,11 @@ impl CSTTreeTransformer {
                         if self.options.custom_errors {
                             // For custom errors, create a new error code
                             // TODO: This needs proper implementation
-                            return Err(CompileError::ParseError {
-                                error_position: self.compile_context(node),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: format!(
-                                    "Custom error codes not yet implemented: {errcode_text}"
-                                ),
-                            });
+                            return Err(self.parse_error(node, &format!(
+                                "Custom error codes not yet implemented: {errcode_text}"
+                            )));
                         } else {
-                            return Err(CompileError::ParseError {
-                                error_position: self.compile_context(node),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: format!("Unknown error code: {errcode_text}"),
-                            });
+                            return Err(self.parse_error(node, &format!("Unknown error code: {errcode_text}")));
                         }
                     }
                 };
@@ -344,22 +284,12 @@ impl CSTTreeTransformer {
             }
             Rule::lambda => {
                 let Some(children) = node.children() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Lambda node has no children".to_string(),
-                    });
+                    return Err(self.parse_error(node, "Lambda node has no children"));
                 };
                 let content_children: Vec<_> = children.iter().filter(|n| n.is_content()).collect();
 
                 if content_children.len() < 2 {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Lambda missing parameters or body".to_string(),
-                    });
+                    return Err(self.parse_error(node, "Lambda missing parameters or body"));
                 }
 
                 let lambda_params_node = content_children[0];
@@ -369,23 +299,15 @@ impl CSTTreeTransformer {
                 let params = if lambda_params_node.rule == Rule::lambda_params {
                     self.clone().parse_lambda_params(lambda_params_node)?
                 } else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(lambda_params_node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Expected lambda_params node".to_string(),
-                    });
+                    return Err(self.parse_error(lambda_params_node, "Expected lambda_params node"));
                 };
 
                 let body = match body_part.rule {
                     Rule::begin_statement => {
                         // Parse begin statement directly
                         let stmt_opt = self.clone().parse_statement(body_part)?;
-                        let stmt = stmt_opt.ok_or_else(|| CompileError::ParseError {
-                            error_position: self.compile_context(body_part),
-                            end_line_col: None,
-                            context: "lambda body parsing".to_string(),
-                            message: "Expected statement in lambda body".to_string(),
+                        let stmt = stmt_opt.ok_or_else(|| {
+                            self.parse_error(body_part, "Expected statement in lambda body")
                         })?;
                         Box::new(stmt)
                     }
@@ -418,22 +340,12 @@ impl CSTTreeTransformer {
             Rule::fn_expr => {
                 // fn_expr = { ^"fn" ~ "(" ~ lambda_params ~ ")" ~ statements ~ ^"endfn" }
                 let Some(children) = node.children() else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Fn expression node has no children".to_string(),
-                    });
+                    return Err(self.parse_error(node, "Fn expression node has no children"));
                 };
                 let content_children: Vec<_> = children.iter().filter(|n| n.is_content()).collect();
 
                 if content_children.len() < 2 {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Fn expression missing parameters or statements".to_string(),
-                    });
+                    return Err(self.parse_error(node, "Fn expression missing parameters or statements"));
                 }
 
                 let lambda_params_node = content_children[0];
@@ -443,12 +355,7 @@ impl CSTTreeTransformer {
                 let params = if lambda_params_node.rule == Rule::lambda_params {
                     self.clone().parse_lambda_params(lambda_params_node)?
                 } else {
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(lambda_params_node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Expected lambda_params node in fn expression".to_string(),
-                    });
+                    return Err(self.parse_error(lambda_params_node, "Expected lambda_params node in fn expression"));
                 };
 
                 // Parse the statements and wrap them in a scope with proper binding tracking
@@ -489,12 +396,7 @@ impl CSTTreeTransformer {
                     self_name: None,
                 })
             }
-            _ => Err(CompileError::ParseError {
-                error_position: self.compile_context(node),
-                end_line_col: None,
-                context: "CST parsing".to_string(),
-                message: format!("Unimplemented atom: {:?}", node.rule),
-            }),
+            _ => Err(self.parse_error(node, &format!("Unimplemented atom: {:?}", node.rule))),
         }
     }
 
@@ -511,21 +413,10 @@ impl CSTTreeTransformer {
                     return Ok(Expr::Pass { args: vec![] });
                 } else if text == "(" || text == ")" {
                     // These are parentheses - we should skip them in expression parsing
-                    return Err(CompileError::ParseError {
-                        error_position: self.compile_context(expr_node),
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "Parentheses should not be parsed as standalone expressions"
-                            .to_string(),
-                    });
+                    return Err(self.parse_error(expr_node, "Parentheses should not be parsed as standalone expressions"));
                 }
             }
-            return Err(CompileError::ParseError {
-                error_position: self.compile_context(expr_node),
-                end_line_col: None,
-                context: "CST parsing".to_string(),
-                message: "Expression node has no children".to_string(),
-            });
+            return Err(self.parse_error(expr_node, "Expression node has no children"));
         };
 
         let content_children: Vec<_> = children.iter().filter(|n| n.is_content()).collect();
