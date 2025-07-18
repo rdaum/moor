@@ -15,7 +15,7 @@
 //!
 //! Despite the name "RPC", this module actually handles:
 //! - Client connections and session management
-//! - Host connections and listener registration  
+//! - Host connections and listener registration
 //! - Narrative event publishing (pub/sub)
 //! - Task completion delivery
 //! - System messages and input requests

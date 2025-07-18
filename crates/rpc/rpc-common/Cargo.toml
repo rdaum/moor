@@ -1,4 +1,23 @@
+[dependencies]
+# Internal Dependencies
+moor-common = {path = "../../common"}
+moor-var = {path = "../../var"}
+# Serialization & Data Formats
+bincode.workspace = true
+# Command Line & Configuration
+clap.workspace = true
+clap_derive.workspace = true
+# Authentication & Security
+ed25519-dalek.workspace = true
+rusty_paseto.workspace = true
+serde.workspace = true
+# Error Handling
+thiserror.workspace = true
+# Utilities & Helpers
+uuid.workspace = true
+
 [package]
+description = "Common entities used for 0MQ based RPC communication with the daemon."
 name = "rpc-common"
 version = "0.9.0-alpha"
 authors.workspace = true
@@ -9,27 +28,3 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Common entities used for 0MQ based RPC communication with the daemon."
-
-[dependencies]
-# Internal Dependencies
-moor-common = { path = "../../common" }
-moor-var = { path = "../../var" }
-
-# Command Line & Configuration
-clap.workspace = true
-clap_derive.workspace = true
-
-# Serialization & Data Formats
-bincode.workspace = true
-serde.workspace = true
-
-# Authentication & Security
-ed25519-dalek.workspace = true
-rusty_paseto.workspace = true
-
-# Error Handling
-thiserror.workspace = true
-
-# Utilities & Helpers
-uuid.workspace = true

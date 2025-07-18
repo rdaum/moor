@@ -1,5 +1,82 @@
+[[bench]]
+harness = false
+name = "vm_benches"
+
+[dependencies]
+# Authentication & Security
+age = {workspace = true, features = ["ssh"]}
+# Internal Dependencies
+moor-common = {path = "../common"}
+moor-compiler = {path = "../compiler"}
+moor-db = {path = "../db"}
+moor-moot = {path = "../testing/moot", features = ["colors"]}
+moor-objdef = {path = "../objdef"}
+moor-textdump = {path = "../textdump"}
+moor-var = {path = "../var"}
+# Collections & Data Structures
+ahash.workspace = true
+argon2.workspace = true
+base64.workspace = true
+# Serialization & Data Formats
+bincode.workspace = true
+# Utilities & Helpers
+byteview.workspace = true
+# Time & Locale
+chrono.workspace = true
+chrono-tz.workspace = true
+# Async Runtime & Concurrency
+flume.workspace = true
+# Core Runtime & System
+gdt-cpus.workspace = true
+hmac.workspace = true
+humantime.workspace = true
+iana-time-zone.workspace = true
+lazy_static.workspace = true
+libc.workspace = true
+md-5.workspace = true
+minstant.workspace = true
+oneshot.workspace = true
+# Text Processing & Regex
+onig.workspace = true
+paste.workspace = true
+pwhash.workspace = true
+rand.workspace = true
+rayon.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+ssh-key.workspace = true
+strum.workspace = true
+# Error Handling & Logging
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+xml-rs.workspace = true
+
+[dev-dependencies]
+# SOURCE OF TRUTH FOR VERSIONS: crates/testing/moot/Cargo.toml
+# Optional dependencies are not supported for workspace-inherited dependencies.
+# Alternative to optional color support is enforced color support; then we can move `anstream`
+# and `anstyle` to the top level as usual.
+anstream = {version = "0.6.18", features = ["test"]}
+anstyle = {version = "1.0.10"}
+moor-db = {path = "../db"}
+criterion.workspace = true
+eyre.workspace = true
+pretty_assertions.workspace = true
+similar.workspace = true
+similar-asserts.workspace = true
+tempfile.workspace = true
+test-case.workspace = true
+test_each_file.workspace = true
+tracing.workspace = true
+
 [package]
+description = "The actual implementation of most of the moor system; virtual machine, scheduler, and builtins."
 name = "moor-kernel"
+resolver = "2"
 version = "0.9.0-alpha"
 authors.workspace = true
 categories.workspace = true
@@ -8,29 +85,7 @@ keywords.workspace = true
 license.workspace = true
 readme.workspace = true
 repository.workspace = true
-resolver = "2"
 rust-version.workspace = true
-description = "The actual implementation of most of the moor system; virtual machine, scheduler, and builtins."
-
-[dev-dependencies]
-moor-db = { path = "../db" }
-tempfile.workspace = true
-
-criterion.workspace = true
-eyre.workspace = true
-pretty_assertions.workspace = true
-similar.workspace = true
-similar-asserts.workspace = true
-test-case.workspace = true
-test_each_file.workspace = true
-tracing.workspace = true
-
-# SOURCE OF TRUTH FOR VERSIONS: crates/testing/moot/Cargo.toml
-# Optional dependencies are not supported for workspace-inherited dependencies.
-# Alternative to optional color support is enforced color support; then we can move `anstream`
-# and `anstyle` to the top level as usual.
-anstream = { version = "0.6.18", features = ["test"] }
-anstyle = { version = "1.0.10" }
 
 [[test]]
 name = "regression-suite"
@@ -39,69 +94,3 @@ path = "testsuite/regression_suite.rs"
 [[test]]
 name = "moot-suite"
 path = "testsuite/moot_suite.rs"
-
-[[bench]]
-name = "vm_benches"
-harness = false
-
-[dependencies]
-# Internal Dependencies
-moor-common = { path = "../common" }
-moor-compiler = { path = "../compiler" }
-moor-db = { path = "../db" }
-moor-moot = { path = "../testing/moot", features = ["colors"] }
-moor-objdef = { path = "../objdef" }
-moor-textdump = { path = "../textdump" }
-moor-var = { path = "../var" }
-
-# Core Runtime & System
-gdt-cpus.workspace = true
-libc.workspace = true
-
-# Serialization & Data Formats
-bincode.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-xml-rs.workspace = true
-
-# Async Runtime & Concurrency
-flume.workspace = true
-oneshot.workspace = true
-rayon.workspace = true
-
-# Authentication & Security
-age = { workspace = true, features = ["ssh"] }
-argon2.workspace = true
-base64.workspace = true
-hmac.workspace = true
-md-5.workspace = true
-pwhash.workspace = true
-sha1.workspace = true
-sha2.workspace = true
-ssh-key.workspace = true
-
-# Time & Locale
-chrono.workspace = true
-chrono-tz.workspace = true
-humantime.workspace = true
-iana-time-zone.workspace = true
-
-# Text Processing & Regex
-onig.workspace = true
-
-# Collections & Data Structures
-ahash.workspace = true
-
-# Error Handling & Logging
-thiserror.workspace = true
-tracing.workspace = true
-
-# Utilities & Helpers
-byteview.workspace = true
-lazy_static.workspace = true
-minstant.workspace = true
-paste.workspace = true
-rand.workspace = true
-semver.workspace = true
-strum.workspace = true
-uuid.workspace = true

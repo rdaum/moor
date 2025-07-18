@@ -170,4 +170,3 @@ URL-safe version.
 ```
 encode_base64(b"AAEC")      ⇒    "AAEC"
 ```
-

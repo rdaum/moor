@@ -1,70 +1,29 @@
-[package]
-name = "moor-telnet-host"
-version = "0.9.0-alpha"
-authors.workspace = true
-categories.workspace = true
-edition.workspace = true
-keywords.workspace = true
-license.workspace = true
-readme.workspace = true
-repository.workspace = true
-rust-version.workspace = true
-description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a mooR daemon."
-
-[package.metadata.deb]
-depends = "$auto, systemd, openssl"
-extended-description = "Process for listening for telnet sessions and forwarding them to a mooR daemon."
-section = "net"
-license-file = ["../../LICENSE", "0"]
-priority = "optional"
-assets = [
-    ["target/release/moor-telnet-host", "/usr/bin/moor-telnet-host", "755"],
-    [
-        "debian/moor-telnet-host.service",
-        "/lib/systemd/system/moor-telnet-host.service",
-        "644",
-    ],
-    ["debian/telnet-host.yaml", "/etc/moor/telnet-host.yaml", "644"],
-]
-maintainer-scripts = "debian/scripts"
-systemd-units = { enable = false }
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
-
 [dependencies]
 # Internal Dependencies
-moor-common = { path = "../common" }
-moor-moot = { path = "../testing/moot", features = ["colors"] }
-moor-var = { path = "../var" }
-rpc-async-client = { path = "../rpc/rpc-async-client" }
-rpc-common = { path = "../rpc/rpc-common" }
-
+moor-common = {path = "../common"}
+moor-moot = {path = "../testing/moot", features = ["colors"]}
+moor-var = {path = "../var"}
+rpc-async-client = {path = "../rpc/rpc-async-client"}
+rpc-common = {path = "../rpc/rpc-common"}
 # Command Line & Configuration
 clap.workspace = true
 clap_derive.workspace = true
-figment.workspace = true
-
-# Serialization & Data Formats
-serde.workspace = true
-
-# Networking & Communication
-tmq.workspace = true
-
-# Async Runtime & Concurrency
-futures-util.workspace = true
-tokio.workspace = true
-tokio-util.workspace = true
-
 # Error Handling & Logging
 color-eyre.workspace = true
 eyre.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-
+figment.workspace = true
+# Async Runtime & Concurrency
+futures-util.workspace = true
+# Serialization & Data Formats
+serde.workspace = true
 # Terminal & UI
 termimad.workspace = true
-
+# Networking & Communication
+tmq.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 # Utilities & Helpers
 uuid.workspace = true
 
@@ -73,3 +32,37 @@ uuid.workspace = true
 escargot.workspace = true
 serial_test.workspace = true
 tempfile.workspace = true
+
+[lints.rust]
+unexpected_cfgs = {level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)']}
+
+[package]
+description = "A server which presents a classic LambdaMOO-style line-based TCP interface for interacting with a mooR daemon."
+name = "moor-telnet-host"
+version = "0.9.0-alpha"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+
+[package.metadata.deb]
+assets = [
+  ["target/release/moor-telnet-host", "/usr/bin/moor-telnet-host", "755"],
+  [
+    "debian/moor-telnet-host.service",
+    "/lib/systemd/system/moor-telnet-host.service",
+    "644"
+  ],
+  ["debian/telnet-host.yaml", "/etc/moor/telnet-host.yaml", "644"]
+]
+depends = "$auto, systemd, openssl"
+extended-description = "Process for listening for telnet sessions and forwarding them to a mooR daemon."
+license-file = ["../../LICENSE", "0"]
+maintainer-scripts = "debian/scripts"
+priority = "optional"
+section = "net"
+systemd-units = {enable = false}
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true

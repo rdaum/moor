@@ -60,14 +60,14 @@
     # assert_equal. Heuristics: LHS is the expected value. RHS is a function call.
     # Bunch of special cases to save time on manual postprocessing when we know(ish) that an argument will be
     # an object that gets corified in the `.moot` test
-    s = gensub(/^assert_equal (.*), parent\((.*)\)/, "; return parent($\\2);\n\\1", "g", s); 
-    s = gensub(/^assert_equal (.*), children\((.*)\)/, "; return children($\\2);\n\\1", "g", s); 
-    s = gensub(/^assert_equal (.*), get\((.*), ['"](.*)['"]\)/, "; return $\\2.\\3;\n\\1", "g", s); 
-    s = gensub(/^assert_equal (.*), call\((.*), "(.*)"\)/, "; return $\\2:\\3();\n\\1", "g", s); 
-    s = gensub(/^assert_equal (.*), ([a-z_]+\(.+\))/, "; return \\2;\n\\1", "g", s); 
+    s = gensub(/^assert_equal (.*), parent\((.*)\)/, "; return parent($\\2);\n\\1", "g", s);
+    s = gensub(/^assert_equal (.*), children\((.*)\)/, "; return children($\\2);\n\\1", "g", s);
+    s = gensub(/^assert_equal (.*), get\((.*), ['"](.*)['"]\)/, "; return $\\2.\\3;\n\\1", "g", s);
+    s = gensub(/^assert_equal (.*), call\((.*), "(.*)"\)/, "; return $\\2:\\3();\n\\1", "g", s);
+    s = gensub(/^assert_equal (.*), ([a-z_]+\(.+\))/, "; return \\2;\n\\1", "g", s);
 
     # assert_not_equal. Same heuristics as assert_equal.
-    s = gensub(/^assert_not_equal (.*), ([a-z_]+\(.+\))/, "; return \\1 == \\2;\n0", "g", s); 
+    s = gensub(/^assert_not_equal (.*), ([a-z_]+\(.+\))/, "; return \\1 == \\2;\n0", "g", s);
 
     # set(obj, field, value)
     s = gensub(/^set\((.*), ['"](.*)['"], (.*)\)/, "; $\\1.\\2 = \\3;", "g", s);

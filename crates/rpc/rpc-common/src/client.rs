@@ -80,7 +80,7 @@ pub struct PropInfo {
 /// Response containing batched historical events
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct HistoryResponse {
-    /// The events in chronological order  
+    /// The events in chronological order
     pub events: Vec<HistoricalNarrativeEvent>,
     /// The range of time covered by this response
     pub time_range: (SystemTime, SystemTime),

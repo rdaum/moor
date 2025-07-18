@@ -35,4 +35,3 @@
 // TEST_slicing_multiple
 ; return slice({{"z", 1, 3}, {"y", 2, 4}}, {2, 1});
 {{1, "z"}, {2, "y"}}
-

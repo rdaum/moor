@@ -1,5 +1,5 @@
 // Adapted from https://github.com/toddsundsted/stunt/blob/e83e946/test/test_objects.rb
-//   def test_recycle 
+//   def test_recycle
 @wizard
 // e = kahuna($nothing, $nothing, 'e')
 ; add_property($system, "e", create($nothing), {player, "wrc"});

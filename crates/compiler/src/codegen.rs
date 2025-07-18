@@ -548,7 +548,7 @@ impl CodegenState {
                     CallTarget::Expr(expr) => {
                         // New lambda call logic
                         self.generate_expr(expr.as_ref())?; // Evaluate callable expression
-                        self.generate_arg_list(args)?; // Push args list  
+                        self.generate_arg_list(args)?; // Push args list
                         self.emit(Op::CallLambda); // Runtime dispatch
                         self.pop_stack(1); // Pop callable, leave result
                     }

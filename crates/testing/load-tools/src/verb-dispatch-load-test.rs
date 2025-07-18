@@ -133,7 +133,7 @@ const LOAD_TEST_INVOKE_VERB: &str = r#"
 let num_verb_invocations = args[1];
 for i in [1..num_verb_invocations]
     for object in (player.test_objects)
-        if (object:load_test() != 1) 
+        if (object:load_test() != 1)
             raise(E_INVARG, "Load test failed");
         endif
     endfor

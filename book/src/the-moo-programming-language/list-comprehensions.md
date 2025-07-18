@@ -14,7 +14,7 @@ The pattern for a list comprehension looks like this:
 
 Let's break this down:
 - `source_list` is where your original data comes from
-- `each_item` is what you call each piece of data as you work with it  
+- `each_item` is what you call each piece of data as you work with it
 - `what_to_do_with_each_item` is the transformation you want to apply
 - The curly braces `{}` tell MOO you're creating a new list
 
@@ -60,9 +60,9 @@ let names = { student[1] for student in (students) };
 Or you could convert the numeric scores to letter grades:
 
 ```moo
-let grades = { 
-    student[2] >= 90 ? "A" | student[2] >= 80 ? "B" | "C" 
-    for student in (students) 
+let grades = {
+    student[2] >= 90 ? "A" | student[2] >= 80 ? "B" | "C"
+    for student in (students)
 };
 // Result: {"B", "A", "C"}
 ```

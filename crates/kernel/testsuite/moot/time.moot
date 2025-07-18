@@ -10,4 +10,3 @@
 // and subsequent calls return a delta from that
 ; return ftime(1) >= 0.0;
 1
-

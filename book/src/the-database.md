@@ -52,5 +52,4 @@ values to create rich, interactive MOO worlds.
 
 > **Note on "Core" vs "Database"**: The "db" is generally broken down, mentally, into the "core db" that a given MOO was
 > started with, and then all the user-created content that came later. The core provides the fundamental systems and
-> objects needed for a MOO to function, while user content builds upon that foundation. 
-
+> objects needed for a MOO to function, while user content builds upon that foundation.

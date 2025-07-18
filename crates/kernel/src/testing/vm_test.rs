@@ -957,7 +957,7 @@ mod tests {
     #[test_case(r#"rest = "me:words"; rest[0..2] = ""; return rest;"#, v_str(":words");
         "range assignment 2")]
     #[test_case(r#"return (!1 || 1);"#, v_int(1); "not/or precedence")]
-    #[test_case(r#"return {1, eval("return $test;")};"#, 
+    #[test_case(r#"return {1, eval("return $test;")};"#,
             v_list(&[v_int(1), v_list(&[v_bool_int(true), v_int(1)])]); "eval builtin")]
     #[test_case(
         r#"string="you";
@@ -1002,27 +1002,27 @@ mod tests {
         v_str("ello world"); "try except string indexing"
     )]
     #[test_case(r#"a = "you"; a[1] = "Y"; return a;"#, v_str("You") ; "string index assignment")]
-    #[test_case("a={1,2,3,4}; a[1..2] = {3,4}; return a;", 
+    #[test_case("a={1,2,3,4}; a[1..2] = {3,4}; return a;",
         v_list(&[v_int(3), v_int(4), v_int(3), v_int(4)]) ; "range assignment 3")]
-    #[test_case("try a; finally return 666; endtry return 333;", 
+    #[test_case("try a; finally return 666; endtry return 333;",
         v_int(666); "try finally")]
-    #[test_case("try a; except e (E_VARNF) return 666; endtry return 333;", 
+    #[test_case("try a; except e (E_VARNF) return 666; endtry return 333;",
         v_int(666); "try except")]
     #[test_case("return `1/0 ! ANY';", v_err(E_DIV); "catch expr 1")]
     #[test_case("return {`x ! e_varnf => 666', `321 ! e_verbnf => 123'};",
         v_list(&[v_int(666), v_int(321)]); "catch expr 2")]
     #[test_case("return 1 ? 2 | 3;", v_int(2);"ternary expr")]
-    #[test_case("{a,b,c} = {{1,2,3}}[1]; return {a,b,c};" , 
+    #[test_case("{a,b,c} = {{1,2,3}}[1]; return {a,b,c};" ,
         v_list(&[v_int(1), v_int(2), v_int(3)]); "tuple/splice assignment")]
-    #[test_case("return {{1,2,3}[2..$], {1}[$]};", 
+    #[test_case("return {{1,2,3}[2..$], {1}[$]};",
         v_list(&[
             v_list(&[v_int(2), v_int(3)]), v_int(1)]);
         "range to end retrieval")]
     #[test_case( "{a,b,@c}= {1,2,3,4,5}; return c;",
         v_list(&[v_int(3), v_int(4), v_int(5)]); "new scatter regression")]
-    #[test_case("{?a, ?b, ?c, ?d = a, @remain} = {1, 2, 3}; return {d, c, b, a, remain};" , 
+    #[test_case("{?a, ?b, ?c, ?d = a, @remain} = {1, 2, 3}; return {d, c, b, a, remain};" ,
         v_list(&[v_int(1), v_int(3), v_int(2), v_int(1), v_empty_list()]); "complicated scatter")]
-    #[test_case("{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};" , 
+    #[test_case("{a, b, @c} = {1, 2, 3, 4}; {x, @y, ?z} = {5,6,7,8}; return {a,b,c,x,y,z};" ,
         v_list(&[
             v_int(1),
             v_int(2),
@@ -1031,13 +1031,13 @@ mod tests {
             v_list(&[v_int(6), v_int(7)]),
             v_int(8),
         ]); "scatter complex 2")]
-    #[test_case("{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};" , 
+    #[test_case("{a, b, c, ?d = 4} = {1, 2, 3}; return {d, c, b, a};" ,
         v_list(&[v_int(4), v_int(3), v_int(2), v_int(1)]); "scatter optional")]
-    #[test_case("z = 0; for i in [1..4] z = z + i; endfor return {i,z};" , 
+    #[test_case("z = 0; for i in [1..4] z = z + i; endfor return {i,z};" ,
         v_list(&[v_int(4), v_int(10)]); "for range loop")]
-    #[test_case("x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};" , 
+    #[test_case("x = {1,2,3,4}; z = 0; for i in (x) z = z + i; endfor return {i,z};" ,
         v_list(&[v_int(4), v_int(10)]); "for list loop")]
-    #[test_case(r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#, 
+    #[test_case(r#"if (E_INVARG == (vi = `verb_info(#-1, "blerg") ! ANY')) return 666; endif return 333;"#,
         v_int(666); "verb_info invalid object error")]
     #[test_case("return -9223372036854775808;", v_int(i64::MIN); "minint")]
     #[test_case("return [ 1 -> 2][1];", v_int(2); "map index")]
@@ -1368,7 +1368,7 @@ mod tests {
         fork (0)
             y = 2;
             z = 3;
-            raise(E_ARGS);  
+            raise(E_ARGS);
         endfork
         return 99;"#;
 

@@ -2217,7 +2217,7 @@ thing
 2
 do
 2
-You have been expelled from 
+You have been expelled from
 4
 3
 2
@@ -2227,7 +2227,7 @@ iobj
 0
 0
 2
- by 
+ by
 4
 3
 2
@@ -2247,7 +2247,7 @@ player
 2
 do
 2
-You expel 
+You expel
 4
 3
 2
@@ -2257,7 +2257,7 @@ dobj
 0
 0
 2
- from 
+ from
 4
 3
 2
@@ -2287,7 +2287,7 @@ dobj
 2
 dc
 2
- 
+
 4
 3
 2
@@ -2297,7 +2297,7 @@ dobj
 2
 is
 2
- unceremoniously expelled from 
+ unceremoniously expelled from
 4
 3
 2
@@ -2309,7 +2309,7 @@ iobj
 2
 d
 2
- by 
+ by
 4
 3
 2
@@ -2371,7 +2371,7 @@ player
 0
 1
 2
-'s friends arrive to cart 
+'s friends arrive to cart
 4
 3
 2
@@ -2385,7 +2385,7 @@ po
 184
 5
 2
-  
+
 184
 5
 4
@@ -2403,7 +2403,7 @@ player
 0
 1
 2
-'s friends arrive to drop 
+'s friends arrive to drop
 4
 3
 2
@@ -2445,7 +2445,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -3069,7 +3069,7 @@ take_failed_msg
 2
 do
 2
-You can't seem to drop 
+You can't seem to drop
 4
 3
 2
@@ -3089,7 +3089,7 @@ thing
 2
 do
 2
-You drop 
+You drop
 4
 3
 2
@@ -3117,7 +3117,7 @@ player
 2
 tries
 2
- to drop 
+ to drop
 4
 3
 2
@@ -3127,7 +3127,7 @@ thing
 0
 0
 2
- but 
+ but
 4
 3
 2
@@ -3155,7 +3155,7 @@ player
 2
 drops
 2
- 
+
 4
 3
 2
@@ -3183,7 +3183,7 @@ player
 2
 picks
 2
- up 
+ up
 4
 3
 2
@@ -3207,7 +3207,7 @@ thing
 2
 do
 2
-You take 
+You take
 4
 3
 2
@@ -3227,7 +3227,7 @@ thing
 2
 do
 2
-You can't pick up 
+You can't pick up
 4
 3
 2
@@ -4458,7 +4458,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -4564,7 +4564,7 @@ Everyman
 35
 1
 2
-  
+
 184
 5
 0
@@ -4672,7 +4672,7 @@ fstamp
 2
 do
 2
-(from 
+(from
 4
 3
 2
@@ -4798,7 +4798,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -5151,7 +5151,7 @@ in
 2
 c
 2
-, you see 
+, you see
 4
 3
 2
@@ -5349,7 +5349,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -5359,7 +5359,7 @@ player
 2
 closes
 2
- 
+
 4
 3
 2
@@ -5389,7 +5389,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -5399,7 +5399,7 @@ player
 2
 opens
 2
- 
+
 4
 3
 2
@@ -6374,7 +6374,7 @@ The routines above pass around handles of the form
 2
 where root_node is the (string) name of a property that holds the root of the tree, size is the number of leaves in the tree, and leftmost_ord is the :_ord value of the leftmost element of the list (i.e., the leftmost leaf).
 2
-Each node property has a value of the form 
+Each node property has a value of the form
 2
 
 2
@@ -6423,7 +6423,7 @@ Generic BigList Utilities
 2
 
 2
-This is a package for maintaining huge persistent (sorted) lists in a format that is less likely to spam the server (which runs into a certain amount of trouble dealing with long ordinary lists --- btw we use `biglist' to refer to the huge data structure we're about to describe and `list' to refer to ordinary MOO lists {...}).  The biglist in question lives on a particular object, to which we will refer in the discussion below as the `home' object, and its various elements appear as leaves of a tree whose nodes are kept in properties of the home object.  It should be noted that the home object does not need to be (and in fact should *not* be) a descendant of this one; this object merely provides utilities for manipulating the properties on the home object that are used in a particular biglist manipulation.  
+This is a package for maintaining huge persistent (sorted) lists in a format that is less likely to spam the server (which runs into a certain amount of trouble dealing with long ordinary lists --- btw we use `biglist' to refer to the huge data structure we're about to describe and `list' to refer to ordinary MOO lists {...}).  The biglist in question lives on a particular object, to which we will refer in the discussion below as the `home' object, and its various elements appear as leaves of a tree whose nodes are kept in properties of the home object.  It should be noted that the home object does not need to be (and in fact should *not* be) a descendant of this one; this object merely provides utilities for manipulating the properties on the home object that are used in a particular biglist manipulation.
 2
 
 2
@@ -6443,7 +6443,7 @@ All of the utilities below refer to `caller' to locate the home object.  Thus ve
 2
                     return the corresponding ordinal (for sorting purposes).
 2
-                    If you never intend to use :find_ord, then this can be a 
+                    If you never intend to use :find_ord, then this can be a
 2
                     routine that always returns 0 or some other random value.
 2
@@ -6471,7 +6471,7 @@ either {} (empty biglist) or some biglist returned by one of the other routines
 2
      Always returns a value between 0 and length(biglist) inclusive.
 2
-     This assumes biglist to be sorted in order of increasing :_ord values 
+     This assumes biglist to be sorted in order of increasing :_ord values
 2
      with respect to home:(comp)().
 2
@@ -6531,7 +6531,7 @@ The following all destructively modify their biglist argument(s) L (and M).
 2
 
 2
-  :extract_range(L,m,n) => {{@L[1..m-1],@L[n+1..]}, L[m..n]} 
+  :extract_range(L,m,n) => {{@L[1..m-1],@L[n+1..]}, L[m..n]}
 2
      breaks the given biglist into two distinct biglists.
 2
@@ -6547,9 +6547,9 @@ The following all destructively modify their biglist argument(s) L (and M).
 2
   :insertlast(L,value)  => {@L,value}
 2
-     inserts a new element at the end of biglist.  
+     inserts a new element at the end of biglist.
 2
-     If find_ord is to continue to work properly, it is assumed that the 
+     If find_ord is to continue to work properly, it is assumed that the
 2
      home:_ord(elt) is greater (comp-wise) than all of the :_ord values
 2
@@ -6557,9 +6557,9 @@ The following all destructively modify their biglist argument(s) L (and M).
 2
 
 2
-  :kill(L[,leafkiller]) 
+  :kill(L[,leafkiller])
 2
-     destroys all nodes used by biglist.  
+     destroys all nodes used by biglist.
 2
      Calls home:leafkiller on each element.
 35
@@ -7011,7 +7011,7 @@ player
 2
 ic
 2
- 
+
 4
 3
 2
@@ -8138,7 +8138,7 @@ abcdefghijklmnopqrstuvwxyz
 184
 5
 2
-	
+
 184
 5
 2
@@ -8314,7 +8314,7 @@ For a complete description of a given verb, do `help $string_utils:verbname'
 2
 :space         (n/string[,filler])     => n spaces
 2
-:left          (string,width[,filler]) => left justified string in field 
+:left          (string,width[,filler]) => left justified string in field
 2
 :right         (string,width[,filler]) => right justified string in field
 2
@@ -8777,7 +8777,7 @@ Recall that for each line that an unconnected player types, the server parses th
 2
     given the sequence of arguments that were fed to #0:do_login_command
 2
-    this returns the name of a verb on $login to be called together with a 
+    this returns the name of a verb on $login to be called together with a
 2
     list of arguments to be passed to it.
 2
@@ -8829,11 +8829,11 @@ Customizations
 2
 
 2
-  .welcome_message 
+  .welcome_message
 2
     -- the message for "help" to print.
 2
-  .create_enabled 
+  .create_enabled
 2
     == 0 => @create prints .registration_string if one tries to use it
 2
@@ -8847,11 +8847,11 @@ Customizations
 2
     -- an email address for character creation requests
 2
-  .registration_string  
+  .registration_string
 2
-    -- string to print to players to give them information about how to get 
+    -- string to print to players to give them information about how to get
 2
-       a character created for them, .registration_address is substituted 
+       a character created for them, .registration_address is substituted
 2
        for %e, % for %%
 2
@@ -8879,9 +8879,9 @@ Other verbs
 2
    :newt_registration_string() => .newt_registration_string with substitutions
 2
-   :player_creation_enabled(connection) 
+   :player_creation_enabled(connection)
 2
-       decides whether someone on connection should be allowed to create 
+       decides whether someone on connection should be allowed to create
 2
        a player.  If you decide this shouldn't depend strictly on the blacklist
 2
@@ -8889,13 +8889,13 @@ Other verbs
 2
    :check_for_shutdown()
 2
-       prints a warning message to append to the login banner in the event 
+       prints a warning message to append to the login banner in the event
 2
        that the server will be going down soon.
 2
    :check_player_db()
 2
-       prints a warning message to append to the login banner in the event 
+       prints a warning message to append to the login banner in the event
 2
        that $player_db is being reloaded to warn players that their character
 2
@@ -8939,11 +8939,11 @@ the following verbs and properties are available for use within programs
 2
    == 1  container is dark iff it is closed
 2
-   == 2  container is always dark              
+   == 2  container is always dark
 2
 
 2
-:set_opaque(newvalue)   
+:set_opaque(newvalue)
 2
   changes the .opaque value for the container
 2
@@ -8951,7 +8951,7 @@ the following verbs and properties are available for use within programs
 2
 
 2
-:set_opened(newvalue)   
+:set_opened(newvalue)
 2
   opens/closes the container (updates .open and .dark) according to newvalue
 2
@@ -8959,7 +8959,7 @@ the following verbs and properties are available for use within programs
 2
 
 2
-:is_openable_by(player) 
+:is_openable_by(player)
 2
  what the :open command uses to test whether the player should be able to open
 2
@@ -8969,7 +8969,7 @@ the following verbs and properties are available for use within programs
 2
 
 2
-N.B.:  There is no way to directly set .dark; .dark can be changed only by 
+N.B.:  There is no way to directly set .dark; .dark can be changed only by
 2
 changing one of .opaque or .opened.  Use :set_opaque(0) and :set_opaque(2)
 2
@@ -8989,7 +8989,7 @@ This object contains a two distinct sets of routines:
 2
   1.  utilities for performing basic mailsystem functions, e.g.,
 2
-      matching on recipient names, resolving mail forwarding, 
+      matching on recipient names, resolving mail forwarding,
 2
       formatting messages, sending messages
 2
@@ -9037,11 +9037,11 @@ Sending Messages
 2
 send_message  - advertised message sending routine.
 2
-raw_send      - raw message sending routine 
+raw_send      - raw message sending routine
 2
                 (only called by $mail_editor:send and this:send_message)
 2
-resolve_addr  - converts a given list recipients into a list of actual 
+resolve_addr  - converts a given list recipients into a list of actual
 2
                 recipients and objects to be notified.
 2
@@ -9053,7 +9053,7 @@ Mail Options
 2
 
 2
-option         
+option
 2
 option_verbose
 2
@@ -9141,11 +9141,11 @@ Each player has a .current_message property that contains, for each recipient th
 2
 player:current_message(rcpt)                 (somewhat obsolete)
 2
- => player's current message number for rcpt 
+ => player's current message number for rcpt
 2
 
 2
-player:get_current_message(rcpt) 
+player:get_current_message(rcpt)
 2
  => player's {current message number for rcpt, last-read-date for rcpt}
 2
@@ -9203,25 +9203,25 @@ The .aliases field holds the names by which one may refer to the list, but only 
 2
 
 2
-$mail_agent:match(name) 
+$mail_agent:match(name)
 2
-    is the canonical way to obtain the objectid of a mailing list 
+    is the canonical way to obtain the objectid of a mailing list
 2
     given the name ("*" is assumed; an initial "*" will be dropped).
 2
 
 2
-$mail_agent:match_recipient(name) 
+$mail_agent:match_recipient(name)
 2
     is the canonical way to obtain the objectid of a list or player
 2
-    matching the given name.  An initial "*" indicates that this is 
+    matching the given name.  An initial "*" indicates that this is
 2
     supposed to be a list.
 2
 
 2
-$mail_agent:match_failed(objid,name) 
+$mail_agent:match_failed(objid,name)
 2
     is the mail_recipient counterpart to $command_utils:object_match_failed
 35
@@ -9255,7 +9255,7 @@ writers   - list of players other than the owner who have full privileges.
 2
 readers   - if == 1, indicates a public mailing list.
 2
-            list of additional readers (by default anyone who receives mail 
+            list of additional readers (by default anyone who receives mail
 2
             sent to the list can read the saved messages).
 2
@@ -9407,13 +9407,13 @@ A transmitted message is a list in the following form
 2
      the sending object (address list form)
 2
-     if this is not a player, an additional header will indicate the 
+     if this is not a player, an additional header will indicate the
 2
      current ownership of the object.
 2
    to  (string),
 2
-     recipients (address list form) which can either be players 
+     recipients (address list form) which can either be players
 2
      or $mail_recipient descendents.
 2
@@ -9423,11 +9423,11 @@ A transmitted message is a list in the following form
 2
   @additional optional headers (list of strings),
 2
-     each header has the form "<header-name>: text" where <header-name>: 
+     each header has the form "<header-name>: text" where <header-name>:
 2
-     is padded out to a width of 10 columns for the convenience of 
+     is padded out to a width of 10 columns for the convenience of
 2
-     :display_message.  Currently "Reply-to: <address list>" is the only 
+     :display_message.  Currently "Reply-to: <address list>" is the only
 2
      additional header in use,
 2
@@ -9501,7 +9501,7 @@ If :mail_forward returns a nonempty list, the recipient itself will *not* actual
 2
 
 2
-object:notify_mail is called with the arguments (sender,recipients,msgnumbers) where 
+object:notify_mail is called with the arguments (sender,recipients,msgnumbers) where
 2
 
 2
@@ -9571,17 +9571,17 @@ $mail_agent:send_message(from,recipients,headers,body)
 2
 
 2
-  from:        sender of the message 
+  from:        sender of the message
 2
                (this must be you or something you own; otherwise => E_PERM)
 2
-  recipients:  object or list of objects (must all be players or 
+  recipients:  object or list of objects (must all be players or
 2
                $mail_recipient descendants)
 2
-  headers:     either a string (contents of the Subject: line) 
+  headers:     either a string (contents of the Subject: line)
 2
-               or a list {subject,replytos} replytos is a list 
+               or a list {subject,replytos} replytos is a list
 2
                of objects designated to receive replies.
 2
@@ -9675,11 +9675,11 @@ Verbs supplied include
 2
 
 2
-  :insert(string,player) 
+  :insert(string,player)
 2
        records that string is now a name or alias of player
 2
-  :delete(string) 
+  :delete(string)
 2
        removes string from the db
 2
@@ -9827,7 +9827,7 @@ Object matching failures
 2
 
 2
-As with other matching routines, one gets back 
+As with other matching routines, one gets back
 2
 
 2
@@ -9933,7 +9933,7 @@ When an exit is invoked on a particular object (via exit:move(object)), the foll
 2
 
 2
-(1) The exit may be locked against the object, in which case we print the 
+(1) The exit may be locked against the object, in which case we print the
 2
    nogo messages and quit.
 2
@@ -10011,7 +10011,7 @@ residents  - objects on this list may teleport in and/or set their homes here.
 2
 
 2
-:accept_for_abode(player) 
+:accept_for_abode(player)
 2
             => true iff player should be allowed to set .home to this room.
 2
@@ -10083,7 +10083,7 @@ blessed_task   - task_id for entering object
 2
 
 2
-e/east/w/west/s/south/n/north/ne/northeast/nw/northwest/se/southeast/sw/southwest/u/up/d/down, go, @add-exit, @add-entrance, @remove-exit, @remove-entrance, @exits, @entrances 
+e/east/w/west/s/south/n/north/ne/northeast/nw/northwest/se/southeast/sw/southwest/u/up/d/down, go, @add-exit, @add-entrance, @remove-exit, @remove-entrance, @exits, @entrances
 2
 
 2
@@ -10139,13 +10139,13 @@ Lookup Verbs
 2
 
 2
-  :find_all(string,vname)   
+  :find_all(string,vname)
 2
        does the general find_all operation, i.e.,
 2
 
 2
-         result == {}. 
+         result == {}.
 2
          for every {key, datum} matching string
 2
@@ -10181,7 +10181,7 @@ Modification Verbs
 2
   :insert(string,datum)
 2
-       if the string is already present in the db, 
+       if the string is already present in the db,
 2
        changes the associated datum and returns {old_datum};
 2
@@ -10189,15 +10189,15 @@ Modification Verbs
 2
   :delete(string)
 2
-       if there is a datum associated with string, 
+       if there is a datum associated with string,
 2
        remove this association and return {datum}; otherwise return 0.
 2
   :delete2(string,datum)
 2
-       if the given datum is associated with string, 
+       if the given datum is associated with string,
 2
-       removes that association and return {datum}, 
+       removes that association and return {datum},
 2
        if some other datum is associated with string, just return {other datum}
 2
@@ -10207,7 +10207,7 @@ Modification Verbs
 2
        removes all associations from the database.
 2
-       optional arguments change 
+       optional arguments change
 2
        the .no_data flag (0 is normal, 1 see below) and/or
 2
@@ -10313,9 +10313,9 @@ this.(" "+<prefix>)[2] = <continuations>
 2
 this.(" "+<prefix>)[3] = <exact_matches>
 2
-   list of all strings in this subtree for which 
+   list of all strings in this subtree for which
 2
-   the character (or lack thereof) following the <prefix>+<common> substring 
+   the character (or lack thereof) following the <prefix>+<common> substring
 2
    suffices to determine the string.  Note that these strings are not
 2
@@ -10329,15 +10329,15 @@ this.(" "+<prefix>)[4] = <data>
 2
 
 2
-Child nodes are       this.(" "+<prefix>+<common>+<c>) 
+Child nodes are       this.(" "+<prefix>+<common>+<c>)
 2
        for all <c> in this.(" "+<prefix>)[2].
 2
 The root node is this.(" ").
 2
-If, e.g., there are 2 or more strings in the db beginning with a, 
+If, e.g., there are 2 or more strings in the db beginning with a,
 2
-there will be a node this.(" a").  
+there will be a node this.(" a").
 2
 If all of these strings actually begin with "ani", then this.(" a")[1]=="ni".
 2
@@ -10381,27 +10381,27 @@ The Generic Editor enables a player to edit a list of strings.  While one might 
 2
 
 2
-say         <text>                      w*hat       
+say         <text>                      w*hat
 2
-emote       <text>                      abort       
+emote       <text>                      abort
 2
-lis*t       [<range>] [nonum]           q*uit,done,pause 
+lis*t       [<range>] [nonum]           q*uit,done,pause
 2
-ins*ert     [<ins>] ["<text>]           
+ins*ert     [<ins>] ["<text>]
 2
-n*ext,p*rev [n] ["<text>]               
+n*ext,p*rev [n] ["<text>]
 2
-del*ete     [<range>]                   
+del*ete     [<range>]
 2
-f*ind       /<str>[/[c][<range>]]       
+f*ind       /<str>[/[c][<range>]]
 2
 s*ubst      /<str1>/<str2>[/[g][c][<range>]]
 2
-m*ove,c*opy [<range>] to <ins>          
+m*ove,c*opy [<range>] to <ins>
 2
-join*l      [<range>]                   
+join*l      [<range>]
 2
-fill        [<range>] [@<col>]          
+fill        [<range>] [@<col>]
 2
 
 2
@@ -10425,11 +10425,11 @@ You'll notice that nowhere does it say how to load in a given list of strings or
 2
 
 2
-Note that, by default, there is a difference between 
+Note that, by default, there is a difference between
 2
 
 2
-        having nothing loaded                (:text(who)==0) and 
+        having nothing loaded                (:text(who)==0) and
 2
         having loaded something with no text (:text(who)=={}).
 2
@@ -10441,11 +10441,11 @@ If you don't care about this distinction in a particular case, just do (player i
 2
         @stateprop texts={} for <youreditor>
 2
-     which changes the initial value of :text() to {} 
+     which changes the initial value of :text() to {}
 2
 
 2
-In all functions below, 'who' is the index returned by :loaded(player) 
+In all functions below, 'who' is the index returned by :loaded(player)
 2
 
 2
@@ -10469,7 +10469,7 @@ For getting and loading text, we have
 2
 
 2
-  :text(who)    
+  :text(who)
 2
      the current text string list or 0 if nothing loaded yet.
 2
@@ -10477,7 +10477,7 @@ For getting and loading text, we have
 2
      loads the given list of strings as the text to be edited.
 2
-     this also resets the 'changed' flag and pushes the insertion 
+     this also resets the 'changed' flag and pushes the insertion
 2
      point to the end.
 2
@@ -10495,11 +10495,11 @@ and various flags and properties (all of the set_* routines return E_PERM when n
 2
   :set_changed(who,value)
 2
-     Any child editor command that is considered to save the text should do a 
+     Any child editor command that is considered to save the text should do a
 2
-     :set_changed(who,0).  
+     :set_changed(who,0).
 2
-     Note that if the changed flag is 0, the session will be flushed when 
+     Note that if the changed flag is 0, the session will be flushed when
 2
      the player leaves the editor, so you may also want certain commands to
 2
@@ -10509,7 +10509,7 @@ and various flags and properties (all of the set_* routines return E_PERM when n
 2
   :origin(who)
 2
-     room where the player came from.  
+     room where the player came from.
 2
   :set_origin(who,room)
 2
@@ -10527,7 +10527,7 @@ and various flags and properties (all of the set_* routines return E_PERM when n
 2
   :set_insertion(who,linenumber)
 2
-     linenumber needs to be a positive integer and will get 
+     linenumber needs to be a positive integer and will get
 2
 
 2
@@ -10551,13 +10551,13 @@ We also provide
 2
       If the player has a previous unsaved (i.e., :changed()!=0)
 2
-      session, we return to it, moving the player to the editor.  
+      session, we return to it, moving the player to the editor.
 2
       If the player is already in the editor, this has no effect other
 2
       than to print a few nasty messages.  In any case a :changed()
 2
-      session must be aborted or set_changed(,0) before anything else 
+      session must be aborted or set_changed(,0) before anything else
 2
       can be started
 2
@@ -10579,7 +10579,7 @@ We also provide
 2
       :invoke will have a true (i.e., nonzero number, nonempty list or
 2
-      string) first arg iff the command line is nonempty, in which case 
+      string) first arg iff the command line is nonempty, in which case
 2
       'args' works fine for this purpose.
 2
@@ -10587,7 +10587,7 @@ We also provide
 2
       If the command parses sucessfully (:parse_invoke() returns a list),
 2
-      we move the player to the editor if necessary and then call 
+      we move the player to the editor if necessary and then call
 2
       :init_session() to set things up.
 2
@@ -10611,13 +10611,13 @@ The child editor is assumed to provide
 2
      where spec is something that was returned by :parse_invoke().
 2
-     Loads the text and sets the stateprops (below) to indicate that 
+     Loads the text and sets the stateprops (below) to indicate that
 2
      we are working on whatever it is we're suppose to be working on.
 2
 
 2
-  :working_on(who)   
+  :working_on(who)
 2
      returns a string X as in "You are working on X."
 2
@@ -10679,11 +10679,11 @@ There are also numerous _msg properties that may be customized
 2
 
 2
-    @depart          announced at the origin when :invoke() is called. 
+    @depart          announced at the origin when :invoke() is called.
 2
     @return          announced at the origin the player is returned there.
 2
-    @nothing_loaded  printed when user attempts editing 
+    @nothing_loaded  printed when user attempts editing
 2
                      before anything has been loaded.
 2
@@ -10695,7 +10695,7 @@ There are also numerous _msg properties that may be customized
 2
     @no_littering    printed upon leaving the editor with :changed()==1.
 2
-    @previous_session  printed by :invoke() when player tries to start a 
+    @previous_session  printed by :invoke() when player tries to start a
 2
                      new session without aborting or saving the old one
 2
@@ -10721,7 +10721,7 @@ The general procedure for creating a child editor:
 2
 
 2
-. define a verb (somewhere) to invoke the editor 
+. define a verb (somewhere) to invoke the editor
 2
     This could be just a one-liner that calls <editor>:invoke(args,verb).
 2
@@ -10729,11 +10729,11 @@ The general procedure for creating a child editor:
 2
       .  you have to set up an exit somewhere whose destination is <editor>
 2
-      .  you have to advertise the object number so that people can 
+      .  you have to advertise the object number so that people can
 2
          teleport to it.
 2
-  
+
 2
 . @stateprop x for <editor>
 2
@@ -10747,13 +10747,13 @@ The general procedure for creating a child editor:
 2
 . set <editor>.commands to be the list of additional commands defined
 2
-    by <editor>.  
+    by <editor>.
 2
     Each element of the list is itself a list of the form {name,args}.
 2
   set <editor>.commands2 to be the list of commands that should appear
 2
-    in the `look' listing, and should be a list of strings appearing 
+    in the `look' listing, and should be a list of strings appearing
 2
     as names in .commands on either <editor> or some editor ancestor.
 2
@@ -10761,9 +10761,9 @@ The general procedure for creating a child editor:
 2
 
 2
-. If you want to have help text for new verbs you define, create a child of 
+. If you want to have help text for new verbs you define, create a child of
 2
-    $generic_help and add properties to this object for each of the topics 
+    $generic_help and add properties to this object for each of the topics
 2
     that you want to provide help text.
 2
@@ -10793,7 +10793,7 @@ A help database (in the sense of anything that is usable by $player:help()) is a
 2
      where string is a supposed help topic, returns a list of strings,
 2
-     i.e., actual help topics that this db knows about, or some boolean 
+     i.e., actual help topics that this db knows about, or some boolean
 2
      false value in the event that this db is clueless...
 2
@@ -10817,7 +10817,7 @@ A help database (in the sense of anything that is usable by $player:help()) is a
 2
      information to the player.
 2
-     The second argument is the list of all help dbs that are being 
+     The second argument is the list of all help dbs that are being
 2
      consulted.
 2
@@ -10885,7 +10885,7 @@ The Generic Help Database, $generic_help, is the parent class of a particular ki
 2
 
 2
-  this.(topic) = string             
+  this.(topic) = string
 2
       one-line help text.
 2
@@ -10893,13 +10893,13 @@ The Generic Help Database, $generic_help, is the parent class of a particular ki
 2
   this.(topic) = {"*<verb>*",@args}
 2
-      call this:<verb>(args,dblist) to get text; dblist is the full list of 
+      call this:<verb>(args,dblist) to get text; dblist is the full list of
 2
       help objects that are being consulted (as passed in by :get_topic).
 2
 
 2
-  this.(topic) = other list of strings 
+  this.(topic) = other list of strings
 2
       multi-line help text--see `help help-format' for more information
 2
@@ -10909,15 +10909,15 @@ For the {"*<verb>*",...} form, the current verbs available are
 2
 
 2
-  {"*forward*", topic, @rest}   
+  {"*forward*", topic, @rest}
 2
-     - get help text for topic and then append the lines of `rest'.  
+     - get help text for topic and then append the lines of `rest'.
 2
        rest may, in turn, begin with a "*<verb>*"...
 2
 
 2
-  {"*pass*", topic, @rest}   
+  {"*pass*", topic, @rest}
 2
      - get help text for topic from the first help database after this one
 2
@@ -10941,13 +10941,13 @@ For the {"*<verb>*",...} form, the current verbs available are
 2
 
 2
-  {"*subst*", @lines} 
+  {"*subst*", @lines}
 2
      - All occurences of %[exp] in lines are replaced with the value of exp
 2
-         which is assumed to evaluate to a string.  
+         which is assumed to evaluate to a string.
 2
-       All lines beginning with %;exp are replaced with the value of exp 
+       All lines beginning with %;exp are replaced with the value of exp
 2
          which is assumed to evaluate to a list of strings.
 2
@@ -11049,7 +11049,7 @@ For setting or retrieving values we have
 2
 
 2
- pkg:get(options,name) 
+ pkg:get(options,name)
 2
     => value (or 0 if name isn't a real option)
 2
@@ -11069,7 +11069,7 @@ One may however designate a wider range of possible values for an option "foo" b
 2
   pkg.type_foo
 2
-    -- list of allowed types, 
+    -- list of allowed types,
 2
        e.g., {NUM,STR}   => must be a number or a string
 2
@@ -11107,7 +11107,7 @@ Other verbs
 2
 
 2
-  one may install pkg:parse_foo to parse arguments for option "foo" 
+  one may install pkg:parse_foo to parse arguments for option "foo"
 2
     !foo     => {"foo",0}  (:parse_foo not called)
 2
@@ -11187,7 +11187,7 @@ The following verbs are available for obtaining indices to use in message sequen
 2
                         => index of most recent message dated <= date
 2
- 
+
 2
   :length_date_gt(date) => number of messages dated > date
 2
@@ -11195,7 +11195,7 @@ The following verbs are available for obtaining indices to use in message sequen
 2
 Note that r:length_date_gt(date) == r:length_all_msgs()-r:length_date_le(date).
 2
-The only reason :length_date_gt is provided as a separate routine is in order 
+The only reason :length_date_gt is provided as a separate routine is in order
 2
 to do quick checks for the existence of new mail (as @rn needs to do).
 35
@@ -11271,7 +11271,7 @@ The following verbs can be used to manipulate writable mail recipients/players:
 2
 :rm_message_seq (message sequence)
 2
-  Does an @rmmail.  Messages in message sequence are removed from this 
+  Does an @rmmail.  Messages in message sequence are removed from this
 2
   recipient's saved .messages and written to .messages_going.
 2
@@ -11664,7 +11664,7 @@ Syntax:  @check-property <object>.<propname>
 2
 
 2
-You cannot add a new property to an object if an ancestor or a descendant already defines a property with the same name.  @check-property will give you the list of all descendants of <object> that that define .<propname>.  
+You cannot add a new property to an object if an ancestor or a descendant already defines a property with the same name.  @check-property will give you the list of all descendants of <object> that that define .<propname>.
 2
 
 2
@@ -12082,11 +12082,11 @@ For programmers, the help system provides the following additional forms:
 2
                             at the beginning of the program for that verb.
 2
-  help $<whatever>_utils -- prints general information about one of the 
+  help $<whatever>_utils -- prints general information about one of the
 2
-                            $..._utils objects (e.g., $string_utils, 
+                            $..._utils objects (e.g., $string_utils,
 2
-                            $list_utils, etc...), which are all libraries 
+                            $list_utils, etc...), which are all libraries
 2
                             of generally used verbs.
 2
@@ -12126,7 +12126,7 @@ More detailed information can be obtained for (some of) these, via `help $whatev
 2
 
 2
-$building_utils -- 
+$building_utils --
 2
 $code_utils     -- parsing and manipulating verb code
 2
@@ -12140,9 +12140,9 @@ $set_utils      -- set manipulation
 2
 $lock_utils     -- key expression manipulation
 2
-$match_utils    -- 
+$match_utils    --
 2
-$object_utils   -- object information 
+$object_utils   -- object information
 2
                   (inheritance/location hierarchy, verb/property lists)
 2
@@ -12466,7 +12466,7 @@ functions -- a list of the primitive functions available to MOO programs
 4
 141
 2
-There are many, many built-in functions available to MOO programmers.  The following list gives a brief summary of the arguments and purpose of each function; for more information, see the LambdaMOO Programmer's Manual.  
+There are many, many built-in functions available to MOO programmers.  The following list gives a brief summary of the arguments and purpose of each function; for more information, see the LambdaMOO Programmer's Manual.
 2
 
 2
@@ -12650,7 +12650,7 @@ delete_verb(object, verb-name)   -- remove a verb from an object
 2
 set_verb_info(object, verb-name, {owner, perms, names})
 2
-set_verb_args(object, verb-name, {dobj, prep, iobj})   
+set_verb_args(object, verb-name, {dobj, prep, iobj})
 2
 set_verb_code(object, verb-name, {line, line, ...})
 2
@@ -13220,7 +13220,7 @@ Syntax:  @property <object>.<prop-name>
 2
 
 2
-Adds a new property named <prop-name> to the named object.  The initial value is given by the second argument, if present; it defaults to 0.  
+Adds a new property named <prop-name> to the named object.  The initial value is given by the second argument, if present; it defaults to 0.
 2
 
 2
@@ -13282,7 +13282,7 @@ Typing the @program command always puts the server into a line-reading mode, in 
 2
 
 2
-A period on a line by itself ends the line-reading mode and continues with the command, in this case, the saved lines are considered as a program, checked for syntax errors and, if no errors are found, installed as the new program for the specified verb.  
+A period on a line by itself ends the line-reading mode and continues with the command, in this case, the saved lines are considered as a program, checked for syntax errors and, if no errors are found, installed as the new program for the specified verb.
 2
 
 2
@@ -13312,7 +13312,7 @@ Usage:  @list <object>:<verb>
 2
 
 2
-Prints out the code for the MOO program associated with the named verb on the named object.  
+Prints out the code for the MOO program associated with the named verb on the named object.
 2
 
 2
@@ -13762,7 +13762,7 @@ Example:
 2
   => "You see nothing special"
 2
-  ;#42.description  
+  ;#42.description
 2
   => "You see nothing special"
 2
@@ -13776,11 +13776,11 @@ Example:
 2
   => "Boring"
 2
-  ;#42.description  
+  ;#42.description
 2
   => "Something special"
 2
-   
+
 2
   @clearp foo.description
 2
@@ -13808,7 +13808,7 @@ Example:
 4
 12
 2
-Syntax:   @disinherit <object> 
+Syntax:   @disinherit <object>
 2
           @disinherit <object> [from <parent>]
 2
@@ -13818,7 +13818,7 @@ Synonym:  @disown
 2
 
 2
-This command is used to remove an unwanted child from an object you own.  If you owned said child, you could use @chparent; this command is to cover the other case, namely where you don't own the child.  
+This command is used to remove an unwanted child from an object you own.  If you owned said child, you could use @chparent; this command is to cover the other case, namely where you don't own the child.
 2
 
 2
@@ -14238,7 +14238,7 @@ The way named arguments actually work is by automatically creating and interpret
 2
     1:  // Usage: :foo(bar, baz, @quux)
 2
-    2:  // 
+    2:  //
 2
     3:  // Call bar:baz with the given quux arguments.
 2
@@ -14821,7 +14821,7 @@ As with @toad and @programmer, there are messages that one may set
 2
 @newt_victim  [unset]
 2
-  Printed to the victim.  
+  Printed to the victim.
 2
   This is followed by $login:newt_registration_string().
 2
@@ -14883,7 +14883,7 @@ $site_db is a database of places people have connected from.  Important verbs an
 2
 
 2
-For each domain we keep a list of players and subdomains. 
+For each domain we keep a list of players and subdomains.
 2
 
 2
@@ -14895,7 +14895,7 @@ For example, :add("doc.ic.ac.uk",#666) enters #666 on the lists for "doc.ic.ac.u
 2
   :find_all_keys(string) => list of all domains that begin with string
 2
-  :find_key     (string) => unique domain that begins with string, 
+  :find_key     (string) => unique domain that begins with string,
 2
                             $ambiguous_match or $failed_match
 2
@@ -14925,7 +14925,7 @@ $login maintains three lists of hosts/domains to support player registration sch
 2
 
 2
-  .redlist   -- all connections from these sites are disabled 
+  .redlist   -- all connections from these sites are disabled
 2
   .blacklist -- player creation and guest logins are disabled
 2
@@ -14949,7 +14949,7 @@ where `*' is one of `black', `red', or `gray'.
 2
 
 2
-One may either specify a domain name (e.g., "baz.edu") or a numeric IP address (e.g., "36.0.23.17").  Domain names match all hosts underneath that domain, so, e.g., puting "baz.edu" on a list effectively adds "x.bax.edu" for all x as well.  
+One may either specify a domain name (e.g., "baz.edu") or a numeric IP address (e.g., "36.0.23.17").  Domain names match all hosts underneath that domain, so, e.g., puting "baz.edu" on a list effectively adds "x.bax.edu" for all x as well.
 2
 
 2
@@ -15223,7 +15223,7 @@ Syntax:  @programmer <player>
 2
 
 2
-Sets the programmer flag on the indicated player and sends mail to $new_prog_log.  
+Sets the programmer flag on the indicated player and sends mail to $new_prog_log.
 2
 
 2
@@ -15331,7 +15331,7 @@ Syntax:  @unredlist   [<domain or subnet> [commentary]]
 2
 With no argument, the current contents of the <color>list are printed.
 2
-Otherwise, the specified domain or subnet is added to or removed from the list and mail will be sent to $site_log.  
+Otherwise, the specified domain or subnet is added to or removed from the list and mail will be sent to $site_log.
 2
 
 2
@@ -15387,7 +15387,7 @@ Syntax:  @chmod-raw <object>.<property-name> <permissions>
 2
 
 2
-Like @chmod, this Changes the permissions of a property to those given.  
+Like @chmod, this Changes the permissions of a property to those given.
 2
 
 2
@@ -15662,7 +15662,7 @@ of various things that the server (for whatever reason) does not handle.
 2
 :set_player(object[,nochown])       set_player_flag(object,1);
 2
-    set player flag, 
+    set player flag,
 2
     add name/aliases to $player_db,
 2
@@ -15704,9 +15704,9 @@ of various things that the server (for whatever reason) does not handle.
 2
 :set_property_flags(object, property, flags)
 2
-    change the permissions on a given property and propagate these to 
+    change the permissions on a given property and propagate these to
 2
-    *all descendants*.  property ownership is changed on descendants 
+    *all descendants*.  property ownership is changed on descendants
 2
     where necessary.
 184
@@ -16249,7 +16249,7 @@ Integer Properties:
 2
   is_prime(n) -- returns 1 if the number is a prime and 0 otherwise
 2
-  
+
 2
 Miscellaneous:
 2
@@ -18731,19 +18731,19 @@ For the {"*verb*",...} form, the current verbs available are
 2
 
 2
-  {"*forward*", topic2, @rest}   
+  {"*forward*", topic2, @rest}
 2
-     - get topic2 help text and then append rest.  
+     - get topic2 help text and then append rest.
 2
        rest may, in turn, begin with a "*verb*"...
 2
 
 2
-  {"*subst*", @lines} 
+  {"*subst*", @lines}
 2
-     - all occurences of %[exp] in lines are replaced with value of exp.  
+     - all occurences of %[exp] in lines are replaced with value of exp.
 2
-       exp is assumed to evaluate to a string.  Evaluation is done using 
+       exp is assumed to evaluate to a string.  Evaluation is done using
 2
        $no_one's permissions so exp can only refer to public information.
 2
@@ -19334,7 +19334,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -19344,7 +19344,7 @@ player
 2
 boots
 2
- 
+
 4
 3
 2
@@ -19850,9 +19850,9 @@ This package supplies the following verbs:
 2
   :complement(seq)       => [-2147483648..2147483647] - seq
 2
-  :union    (seq,seq,...) 
+  :union    (seq,seq,...)
 2
-  :intersect(seq,seq,...) 
+  :intersect(seq,seq,...)
 2
 
 2
@@ -19882,7 +19882,7 @@ For boolean expressions, note that
 2
 
 2
-The representation used works better than the usual list implementation for sets consisting of long uninterrupted ranges of integers.  
+The representation used works better than the usual list implementation for sets consisting of long uninterrupted ranges of integers.
 2
 For sparse sets of integers the representation is decidedly non-optimal (though it never takes more than double the space of the usual list representation).
 2
@@ -20106,7 +20106,7 @@ Verbs:
 2
   :verb_sub(STR verbspec) -> conjugates the given verb into singular form
 2
-  :say_action(message [,who [,thing, [,where]]]) -> appropriately pronoun 
+  :say_action(message [,who [,thing, [,where]]]) -> appropriately pronoun
 2
       substituted message announced to where, which defaults to who.location
 2
@@ -21605,7 +21605,7 @@ pdb
 4
 2
 2
-A database containing all player names and aliases.  
+A database containing all player names and aliases.
 2
 See `help $player_db' for more information.
 35
@@ -21740,15 +21740,15 @@ Properties:
 2
   .pronouns -- list of pronoun properties
 2
-  .ps .po .pp .pq .pr .psc .poc .ppc .pqc .prc 
+  .ps .po .pp .pq .pr .psc .poc .ppc .pqc .prc
 2
             -- lists of pronouns for each of the standard genders
 2
 
 2
-  If foo is of gender this.gender[n], 
+  If foo is of gender this.gender[n],
 2
-  then the default pronoun foo.p is this.p[n] 
+  then the default pronoun foo.p is this.p[n]
 2
   (where p is one of ps/po/pp/pq...)
 2
@@ -22299,7 +22299,7 @@ time
 4
 23
 2
-    Converting from seconds-since-1970    
+    Converting from seconds-since-1970
 2
 dhms          (time)                 => string ...DD:HH:MM:SS
 2
@@ -22341,7 +22341,7 @@ time_sub      (string, time)         => substitute time information
 2
 sun           ([time])               => angle between sun and zenith
 2
-dst_midnight  (time)                 
+dst_midnight  (time)
 2
 lunar_phase   (time)                 => string of phase of the moon
 35
@@ -22463,7 +22463,7 @@ help edit-index -- for a full list of editor help topics
 2
 help editors    -- for a general discussion about editors
 2
-help moo        -- for the general MOO help summary (i.e., what you get by 
+help moo        -- for the general MOO help summary (i.e., what you get by
 2
                    typing `help' with no arguments from outside the editor).
 35
@@ -22559,7 +22559,7 @@ The added text appears as a new line at the insertion point.  The insertion poin
 4
 5
 2
-Syntax:  del*ete [<range>] 
+Syntax:  del*ete [<range>]
 2
 
 2
@@ -22591,7 +22591,7 @@ If <text> is provided, a new line will be created and inserted as with `say'.
 2
 <ins>, both here and in other commands that require specifying an insertion point (e.g., copy/move), can be one of
 2
-          
+
 2
     ^n   above line n
 2
@@ -22697,11 +22697,11 @@ Syntax:  mode
 2
          mode value
 2
-         
+
 2
 There are (currently) three modes the note editor can be in.
 2
-One is string mode, in which if the text being edited is one line or less, 
+One is string mode, in which if the text being edited is one line or less,
 2
 it will be saved as a single string (or an empty string) rather than as a list.
 2
@@ -22731,13 +22731,13 @@ This is similar to .program in that every line you type after the `enter' comman
 2
 
 2
- - If you type a line whose sole text is `@abort', 
+ - If you type a line whose sole text is `@abort',
 2
-   that aborts this command without making any changes to the text.  
+   that aborts this command without making any changes to the text.
 2
  - Any line whose first nonblank character is `.' and has additional text
 2
-   is entered but with its first `.' stripped off.  
+   is entered but with its first `.' stripped off.
 2
 
 2
@@ -22751,7 +22751,7 @@ Syntax:  q*uit
 2
          done
 2
-         pause  
+         pause
 2
 
 2
@@ -22795,7 +22795,7 @@ Syntax: subscribe to <list-name>
 2
 (MAILROOM)
 2
-Add yourself to the given mailing list.  
+Add yourself to the given mailing list.
 2
 The second form adds arbitrary people to a mailing list.
 2
@@ -22877,7 +22877,7 @@ Syntax:  edit <object>:<verb>
 2
 Changes what verb you are editing and loads the code for that verb
 2
-into the editor. 
+into the editor.
 2
 Equivalent to @edit <object>:<verb>.
 2
@@ -22891,7 +22891,7 @@ Syntax:  edit <note-object>
 2
 
 2
-Changes to a different note or a different object text property and 
+Changes to a different note or a different object text property and
 2
 loads its text into the editor.
 2
@@ -22993,7 +22993,7 @@ Same rules apply as for the `to' command.
 4
 7
 2
-Syntax:  who 
+Syntax:  who
 2
          who <rcpt>...
 2
@@ -23089,9 +23089,9 @@ Syntax:  s*ubst/<str1>/<str2>[/[g][c][<range>]]
 2
 Substitutes <str2> for <str1>, in all of the lines of <range>.
 2
-Any character (not just `/') may be used to delimit the strings. 
+Any character (not just `/') may be used to delimit the strings.
 2
-If <str1> is blank, <str2> is inserted at the beginning of the line.  
+If <str1> is blank, <str2> is inserted at the beginning of the line.
 2
 (For inserting a string at the end of a line use emote/:).
 2
@@ -23157,7 +23157,7 @@ Syntax:  c*opy [<range>] to <ins>
 2
 Copies the specified range of lines to place given by <ins>.
 2
-If <ins> happens to be the current insertion point, the insertion 
+If <ins> happens to be the current insertion point, the insertion
 2
 point moves to the end of the inserted lines.
 2
@@ -23211,7 +23211,7 @@ Essentially, one needs to specify a first line and a last line.
 2
 Line numbers may be given in any of the following forms
 2
-  
+
 2
   n      (i.e., the nth line of text)
 2
@@ -23237,7 +23237,7 @@ following ways:
 2
   from <line> to <line>   what it says; the following two forms are equivalent:
 2
-  <line>-<line>            
+  <line>-<line>
 2
   <line> <line>
 2
@@ -24217,7 +24217,7 @@ You're not editing anything!
 2
 do
 2
-[mailing] 
+[mailing]
 35
 5
 5
@@ -24642,7 +24642,7 @@ Use the EDIT command to select a note.
 2
 do
 2
-[editing notes] 
+[editing notes]
 35
 5
 5
@@ -24971,7 +24971,7 @@ readable
 4
 3
 2
-Keeping your verb for later work.  
+Keeping your verb for later work.
 2
 To return, give the `@edit' command with no arguments.
 2
@@ -25017,7 +25017,7 @@ First, you have to select a verb to edit with the EDIT command.
 2
 do
 2
-[editing verbs] 
+[editing verbs]
 35
 5
 5
@@ -25654,7 +25654,7 @@ player
 0
 1
 2
- heads off to 
+ heads off to
 4
 3
 2
@@ -25682,7 +25682,7 @@ player
 0
 1
 2
- comes back from 
+ comes back from
 4
 3
 2
@@ -25738,7 +25738,7 @@ You're not currently editing anything.
 2
 do
 2
-[editing] 
+[editing]
 35
 5
 5
@@ -25765,7 +25765,7 @@ dobj
 0
 1
 2
- 
+
 4
 3
 2
@@ -25775,7 +25775,7 @@ dobj
 2
 is
 2
- unceremoniously expelled from 
+ unceremoniously expelled from
 4
 3
 2
@@ -26074,7 +26074,7 @@ Investigating inheritance:
 2
   leaves           (object)     => descendants with no children
 2
-  branches         (object)     => descendants with children 
+  branches         (object)     => descendants with children
 2
   isa        (object,class) => true iff object is a descendant of class (or ==)
 2
@@ -26104,13 +26104,13 @@ Suspending:
 2
   Many of the above verbs have ..._suspended versions to assist with very large object hierarchies.  The following exist:
 2
-   descendants_suspended              
+   descendants_suspended
 2
-   branches_suspended                 
+   branches_suspended
 2
-   leaves_suspended                   
+   leaves_suspended
 2
-   all_properties_suspended           
+   all_properties_suspended
 2
    descendants_with_property_suspended
 184
@@ -26718,9 +26718,9 @@ Reading Input from the Player
 2
 :read_lines()   -- Read zero or more lines of input from the player.
 2
-:dump_lines(lines) 
+:dump_lines(lines)
 2
-                -- Return list of lines quoted so that feeding them to 
+                -- Return list of lines quoted so that feeding them to
 2
                    :read_lines() will reproduce the original lines.
 2
@@ -26986,7 +26986,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -26996,7 +26996,7 @@ player
 2
 @newts
 2
- 
+
 4
 3
 2
@@ -27038,7 +27038,7 @@ dobj
 0
 1
 2
- 
+
 4
 3
 2
@@ -27074,7 +27074,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -27084,7 +27084,7 @@ player
 2
 @toads
 2
- 
+
 4
 3
 2
@@ -27124,7 +27124,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -27134,7 +27134,7 @@ player
 2
 boots
 2
- 
+
 4
 3
 2
@@ -28821,7 +28821,7 @@ parse_verbref("foo:bar")  => {"foo","bar"} (or 0 if arg. isn't a verb ref.)
 2
 parse_argspec("any","in","front","of","this","baz"...)
 2
-                          => {{"any", "in front of", "this"},{"baz"...}} 
+                          => {{"any", "in front of", "this"},{"baz"...}}
 2
                                            (or string if args don't parse)
 2
@@ -29379,7 +29379,7 @@ These respectively set and reset the specified flag.
 2
  -sticky       each mail command applies by default to one's own collection
 2
- +sticky       each mail command applies by default to the same message 
+ +sticky       each mail command applies by default to the same message
 2
                  collection that the previous successful command did
 2
@@ -29399,7 +29399,7 @@ For "sticky", `mail command' is one of @mail, @read, @prev, @next, @answer.
 2
 
 2
-All flags default to the `-' settings.  
+All flags default to the `-' settings.
 2
 
 2
@@ -29433,7 +29433,7 @@ The "@mail" option determines what message-sequence the @mail command uses by de
 2
 
 2
-The first form specifies that a Reply-To: field is to be placed in all messages constructed by @send or @answer.  Note this can still be changed before sending via the mail room's reply-to command.  
+The first form specifies that a Reply-To: field is to be placed in all messages constructed by @send or @answer.  Note this can still be changed before sending via the mail room's reply-to command.
 2
 
 2
@@ -29523,7 +29523,7 @@ A list of objects that will receive any mail that gets sent to you. Objects on t
 2
 
 2
-A list of objects to be notified whenever mail is sent to you. This list may include anything that has a :notify_mail() verb. Notification will take place regardless of whether or how your mail is forwarded.  
+A list of objects to be notified whenever mail is sent to you. This list may include anything that has a :notify_mail() verb. Notification will take place regardless of whether or how your mail is forwarded.
 2
 
 2
@@ -29573,7 +29573,7 @@ don't type any other commands.
 2
 
 2
-You will need to use the @more command to continue reading output once it 
+You will need to use the @more command to continue reading output once it
 2
 has been stopped.  Make sure you read `help @more' before setting @pagelength.
 2
@@ -29583,7 +29583,7 @@ has been stopped.  Make sure you read `help @more' before setting @pagelength.
 2
 
 2
-By default the MOO will assume you have an infinitely wide terminal screen, 
+By default the MOO will assume you have an infinitely wide terminal screen,
 2
 so you may wish to set @linelength as well.  As with word wrapping, you are
 2
@@ -29615,7 +29615,7 @@ If you have @pagelength set (see `help @pagelength') and some combination of eve
 2
 
 2
-indicating (in this case) 37 more lines of text waiting to be read.  At this point, you should give one of the @more commands above.  
+indicating (in this case) 37 more lines of text waiting to be read.  At this point, you should give one of the @more commands above.
 2
 
 2
@@ -29623,7 +29623,7 @@ indicating (in this case) 37 more lines of text waiting to be read.  At this poi
 2
 
 2
-@more rest will print all of the remaining lines, regardless of your @pagelength setting.  
+@more rest will print all of the remaining lines, regardless of your @pagelength setting.
 2
 
 2
@@ -29765,7 +29765,7 @@ For each collection of mail messages that you read other from your own, a curren
 2
 
 2
-The @skip command indicates that you're not interested in reading the rest of the messages that currently exist in that given collection.  
+The @skip command indicates that you're not interested in reading the rest of the messages that currently exist in that given collection.
 2
 
 2
@@ -30135,7 +30135,7 @@ OMNISCIENT CORE GROUP AND SYSADMINS
 2
 
 2
-People in the Core Group (see `help admin-policy') can look at absolutely *anything* in the MOO database.  
+People in the Core Group (see `help admin-policy') can look at absolutely *anything* in the MOO database.
 2
 
 2
@@ -30179,7 +30179,7 @@ Adds or removes a player from the residents list of a room.  The residents list 
 2
 
 2
-  * @resident player adds that player to the list.  
+  * @resident player adds that player to the list.
 2
   * @resident !player removes that player from the list.
 2
@@ -30417,7 +30417,7 @@ If <text> is given, a one-line message is sent to the owner of the room, presuma
 2
 
 2
-The usual mail editor is only invoked for this command when in rooms that allow free entry, i.e., rooms that are likely to allow you back after you are done editing your message.  Otherwise these commands will require <text> and only let you do one-line messages.  
+The usual mail editor is only invoked for this command when in rooms that allow free entry, i.e., rooms that are likely to allow you back after you are done editing your message.  Otherwise these commands will require <text> and only let you do one-line messages.
 35
 5
 4
@@ -30481,19 +30481,19 @@ There is a generic editor that provides basic editing commands that are applicab
 2
 
 2
-    abort              emote/:            pause              send      (M) 
+    abort              emote/:            pause              send      (M)
 2
-    also-to (M)        fill               prev               showlists (M) 
+    also-to (M)        fill               prev               showlists (M)
 2
-    compile (V)        insert             print     (M)      subject   (M) 
+    compile (V)        insert             print     (M)      subject   (M)
 2
-    copy               join               quit               subst         
+    copy               join               quit               subst
 2
-    delete             list               ranges             to    (M)     
+    delete             list               ranges             to    (M)
 2
-    done               move               save      (N)      what          
+    done               move               save      (N)      what
 2
-    edit    (V,N)      next               say/"              who   (M)     
+    edit    (V,N)      next               say/"              who   (M)
 2
 
 2
@@ -30557,7 +30557,7 @@ Syntax:
 2
 
 2
-Clears the lock which restricts who may open <container>.  See 'help locking' for general information about locking. 
+Clears the lock which restricts who may open <container>.  See 'help locking' for general information about locking.
 2
 
 2
@@ -30903,7 +30903,7 @@ Objects are represented by their object numbers and all other kinds of key expre
 2
         "&&"     "||"     "!"     "?"
 2
-  
+
 2
 
 2
@@ -31043,7 +31043,7 @@ rooms
 2
 rooms
 2
- and 
+ and
 4
 3
 1
@@ -31111,7 +31111,7 @@ things
 2
 things
 2
- (including 
+ (including
 4
 3
 1
@@ -31131,7 +31131,7 @@ notes
 2
 notes
 2
- and 
+ and
 4
 3
 1
@@ -31355,7 +31355,7 @@ The problem is the use of 'his' in the message; what if the player in question i
 2
 
 2
-The `%[player:unparse_message("%%{pronoun player pp}")]' in the message will be replaced by either 'his', 'her', or 'its', depending upon the gender of the player.  
+The `%[player:unparse_message("%%{pronoun player pp}")]' in the message will be replaced by either 'his', 'her', or 'its', depending upon the gender of the player.
 2
 
 2
@@ -31651,7 +31651,7 @@ If there is a Reply-to: field in the message you are @answer'ing, its contents w
 2
 
 2
-`include' includes the text of the original message in your reply, `noinclude' does not.  
+`include' includes the text of the original message in your reply, `noinclude' does not.
 2
 
 2
@@ -31659,7 +31659,7 @@ If there is a Reply-to: field in the message you are @answer'ing, its contents w
 2
 
 2
-Defaults are `sender' and `noinclude', but you can change this by setting your .mail-options (see `help mail-options').  
+Defaults are `sender' and `noinclude', but you can change this by setting your .mail-options (see `help mail-options').
 35
 5
 4
@@ -31705,7 +31705,7 @@ The most general form of the @read command is
 2
 
 2
-         @read <message-sequence> [on *<collection>]  
+         @read <message-sequence> [on *<collection>]
 2
 
 2
@@ -31767,9 +31767,9 @@ The MOO email system allows you to send and receive messages to and from other p
 2
 subject
 2
-@mail       
+@mail
 2
-@mail       
+@mail
 2
 seeing a table of contents for a collection of email messages
 4
@@ -31789,11 +31789,11 @@ seeing a table of contents for a collection of email messages
 2
 subject
 2
-@read       
+@read
 2
-@read       
+@read
 2
-reading individual messages 
+reading individual messages
 4
 2
 4
@@ -31811,9 +31811,9 @@ reading individual messages
 2
 subject
 2
-@next       
+@next
 2
-@next       
+@next
 2
 reading the 'next'     message
 4
@@ -31833,9 +31833,9 @@ reading the 'next'     message
 2
 subject
 2
-@prev       
+@prev
 2
-@prev       
+@prev
 2
 reading the 'previous' message
 4
@@ -31859,9 +31859,9 @@ reading the 'previous' message
 2
 subject
 2
-@send       
+@send
 2
-@send       
+@send
 2
 composing and sending a message to other players
 4
@@ -31881,9 +31881,9 @@ composing and sending a message to other players
 2
 subject
 2
-@answer     
+@answer
 2
-@answer     
+@answer
 2
 replying to one of the messages in a collection
 4
@@ -31903,9 +31903,9 @@ replying to one of the messages in a collection
 2
 subject
 2
-@forward    
+@forward
 2
-@forward    
+@forward
 2
 resending one of the messages in a collection somewhere else
 4
@@ -31925,9 +31925,9 @@ resending one of the messages in a collection somewhere else
 2
 subject
 2
-@forward-me 
+@forward-me
 2
-@forward-me 
+@forward-me
 2
 resending a message to your email address
 4
@@ -31951,9 +31951,9 @@ resending a message to your email address
 2
 subject
 2
-@rmmail     
+@rmmail
 2
-@rmmail     
+@rmmail
 2
 discarding some subset of a collection
 4
@@ -31973,9 +31973,9 @@ discarding some subset of a collection
 2
 subject
 2
-@unrmmail   
+@unrmmail
 2
-@unrmmail   
+@unrmmail
 2
 undoing the most recent @rmm on a collection
 4
@@ -31995,9 +31995,9 @@ undoing the most recent @rmm on a collection
 2
 subject
 2
-@renumber   
+@renumber
 2
-@renumber   
+@renumber
 2
 renumbering the messages in a collection
 4
@@ -32053,9 +32053,9 @@ For viewing collections other from your own, the following commands are useful:
 2
 subject
 2
-@rn         
+@rn
 2
-@rn         
+@rn
 2
 list those collections that have new messages on them
 4
@@ -32075,9 +32075,9 @@ list those collections that have new messages on them
 2
 subject
 2
-@subscribe  
+@subscribe
 2
-@subscribe  
+@subscribe
 2
 indicate that you want @rn to report on a given collection and add yourself to its .mail_notify list
 4
@@ -32097,9 +32097,9 @@ indicate that you want @rn to report on a given collection and add yourself to i
 2
 subject
 2
-@skip       
+@skip
 2
-@skip       
+@skip
 2
 ignore any remaining new messages in a given collection
 4
@@ -32325,7 +32325,7 @@ and no longer hears anything that Grover says.  What a relief!
 2
 
 2
-If you specify an object, then any text originating from that object will not be printed to you.  
+If you specify an object, then any text originating from that object will not be printed to you.
 2
 
 2
@@ -32811,17 +32811,17 @@ Print out entries from the online documentation system.  The commands `?' and `i
 2
 
 2
-The first form prints out a summary table of contents for the entire help system.  
+The first form prints out a summary table of contents for the entire help system.
 2
 
 2
-The second form prints out the documentation available on the given topic.  Many help system entries contain references to other entries accessible in this way.  The topic name may be abbreviated; if there is no topic exactly matching the name you give, the help system checks for topics for which the name is a prefix, perhaps with the addition or omission of an initial `@', or perhaps with some confusion beween dashes (-) and underscores (_), e.g., 
+The second form prints out the documentation available on the given topic.  Many help system entries contain references to other entries accessible in this way.  The topic name may be abbreviated; if there is no topic exactly matching the name you give, the help system checks for topics for which the name is a prefix, perhaps with the addition or omission of an initial `@', or perhaps with some confusion beween dashes (-) and underscores (_), e.g.,
 2
 
 2
-      `bui' instead of `building', 
+      `bui' instead of `building',
 2
-      `who' instead of `@who', 
+      `who' instead of `@who',
 2
      `@wri' instead of `write',
 2
@@ -32851,7 +32851,7 @@ The descriptions of most rooms outline the directions in which exits exist.  Typ
 2
 
 2
-To go in a particular direction, simply type the name of that direction (e.g, 'north', 'up').  The name of the direction can usually be abbreviated to one or two characters (e.g., 'n', 'sw').  You can also type 'go <direction>' or 'go to <location>' to move; this is particularly useful if you know you're going to type several movement commands in a row (see `help go').  
+To go in a particular direction, simply type the name of that direction (e.g, 'north', 'up').  The name of the direction can usually be abbreviated to one or two characters (e.g., 'n', 'sw').  You can also type 'go <direction>' or 'go to <location>' to move; this is particularly useful if you know you're going to type several movement commands in a row (see `help go').
 2
 
 2
@@ -34171,7 +34171,7 @@ The idle command lets you notify people that you are idling for some kind of act
 2
   idle to go the bathroom
 2
- 
+
 2
 
 2
@@ -34193,7 +34193,7 @@ You can set how you are described when someone looks in a room as well (often re
 2
   idle (cooking dinner)
 2
- 
+
 2
 
 2
@@ -34207,7 +34207,7 @@ You can combine both methods at the same time:
 2
   idle (eating ice cream) going to the mall for a snack
 2
- 
+
 2
 
 2
@@ -34221,7 +34221,7 @@ You may set your default idle message to something else:
 2
   @idle me is <new default message>
 2
- 
+
 2
 
 2
@@ -34231,7 +34231,7 @@ And your default dozing message:
 2
   @dozing me is <new dozing message>
 2
- 
+
 2
 
 2
@@ -34259,7 +34259,7 @@ DOING
 2
 
 2
-The doing message is used to tell others what you are doing (logical enough). 
+The doing message is used to tell others what you are doing (logical enough).
 2
 
 2
@@ -34311,7 +34311,7 @@ There are two types of topics.  One is the default topic, settable by the owner 
 2
 
 2
-Think of it like this:  The default topic is carved into the wood of the sign while the other stack topics are slips of paper covering each other and the wood.  
+Think of it like this:  The default topic is carved into the wood of the sign while the other stack topics are slips of paper covering each other and the wood.
 2
 
 2
@@ -34355,7 +34355,7 @@ The @who-options are as follows:
 2
    o order: One of %[$string_utils:english_list($who_utils.valid_sorts)].  These modify the which field @who is sorted by.
 2
-   o ascending: This setting also affects sorting order.  Toggling it will always reverse the current sort order.  
+   o ascending: This setting also affects sorting order.  Toggling it will always reverse the current sort order.
 2
    o columns: One of %[$string_utils:english_list($who_utils.valid_columns)].  This setting is set with the command @who-options columns="column1 column2 ..." (the quotes are required).  It determines which columns are visible in @who.
 2
@@ -34429,7 +34429,7 @@ Every object on the MOO (players included) has a list of aliases, or names by wh
 2
 Syntax:  @netforward <message-number>
 2
-         @netforward 
+         @netforward
 2
          @netforward <message-sequence> on *collection
 2
@@ -34477,7 +34477,7 @@ Example:
 2
   [ 9:10 am ]                               {a time stamp}
 2
-  Foo says, "I'll be back soon ..."         
+  Foo says, "I'll be back soon ..."
 2
   (you idle too)
 2
@@ -37598,7 +37598,7 @@ dobj
 0
 1
 2
- 
+
 4
 3
 2
@@ -37628,7 +37628,7 @@ player
 2
 dc
 2
- [to 
+ [to
 4
 3
 2
@@ -37640,7 +37640,7 @@ dobj
 2
 d
 2
-]: 
+]:
 4
 3
 2
@@ -37668,7 +37668,7 @@ player
 2
 dc
 2
- [to 
+ [to
 4
 3
 2
@@ -37678,7 +37678,7 @@ player
 2
 pr
 2
-]: 
+]:
 4
 3
 2
@@ -41183,7 +41183,7 @@ no_data
 failed
 ambiguous
 last_modify
- 
+
 21
 4
 2
@@ -41609,7 +41609,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -41619,7 +41619,7 @@ player
 2
 sits
 2
- 
+
 4
 4
 2
@@ -41631,7 +41631,7 @@ on
 4
 0
 2
- 
+
 4
 3
 2
@@ -41661,7 +41661,7 @@ dobj
 2
 dc
 2
- 
+
 4
 3
 2
@@ -41671,7 +41671,7 @@ dobj
 2
 is
 2
- squeezed off 
+ squeezed off
 4
 3
 2
@@ -41703,7 +41703,7 @@ dobj
 2
 dc
 2
- 
+
 4
 3
 2
@@ -41713,7 +41713,7 @@ dobj
 2
 stands
 2
- up from 
+ up from
 4
 3
 2
@@ -41745,7 +41745,7 @@ dobj
 2
 dc
 2
- 
+
 4
 3
 2
@@ -41755,7 +41755,7 @@ dobj
 2
 falls
 2
- off 
+ off
 4
 3
 2
@@ -41785,7 +41785,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -41795,7 +41795,7 @@ player
 2
 shoves
 2
- 
+
 4
 3
 2
@@ -41805,7 +41805,7 @@ dobj
 0
 0
 2
- off 
+ off
 4
 3
 2
@@ -41833,7 +41833,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -41843,7 +41843,7 @@ player
 2
 takes
 2
- 
+
 4
 3
 2
@@ -41853,7 +41853,7 @@ dobj
 0
 0
 2
- with 
+ with
 4
 3
 2
@@ -41873,7 +41873,7 @@ po
 2
 do
 2
-There's no room 
+There's no room
 4
 4
 2
@@ -41885,7 +41885,7 @@ on
 4
 0
 2
- 
+
 4
 3
 2
@@ -41917,7 +41917,7 @@ thing
 2
 ic
 2
- 
+
 4
 3
 2
@@ -41937,7 +41937,7 @@ is
 2
 do
 2
-  
+
 4
 3
 2
@@ -41949,7 +41949,7 @@ player
 2
 ic
 2
- 
+
 4
 3
 2
@@ -41959,7 +41959,7 @@ player
 2
 is
 2
- 
+
 4
 4
 2
@@ -41971,7 +41971,7 @@ sitting
 4
 0
 2
- 
+
 4
 4
 2
@@ -41983,7 +41983,7 @@ on
 4
 0
 2
- 
+
 4
 3
 2
@@ -42003,7 +42003,7 @@ po
 2
 do
 2
- 
+
 4
 3
 2
@@ -42013,7 +42013,7 @@ dobj
 2
 beside/between
 2
- 
+
 4
 3
 2
@@ -42037,7 +42037,7 @@ d
 2
 do
 2
-You are already 
+You are already
 4
 4
 2
@@ -42049,7 +42049,7 @@ sitting
 4
 0
 2
- 
+
 4
 4
 2
@@ -42061,7 +42061,7 @@ on
 4
 0
 2
- 
+
 4
 3
 2
@@ -42093,7 +42093,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -42103,7 +42103,7 @@ player
 2
 crawls
 2
- over 
+ over
 4
 3
 2
@@ -42115,7 +42115,7 @@ iobj
 2
 d
 2
- on 
+ on
 4
 3
 2
@@ -42125,7 +42125,7 @@ player
 2
 pp
 2
- way to 
+ way to
 4
 3
 2
@@ -42755,7 +42755,7 @@ Parameters:
 2
 
 2
-.large_domains 
+.large_domains
 2
         A list of sites where more than 2 levels of host name are
 2
@@ -42789,7 +42789,7 @@ Parameters:
 2
         Inserted in 'From:' for mail from characters without
 2
-        registration addresses.        
+        registration addresses.
 2
 
 2
@@ -42801,7 +42801,7 @@ Parameters:
 2
 
 2
-                
+
 184
 5
 5
@@ -43882,7 +43882,7 @@ Last Disconnected
 35
 1
 2
-  
+
 35
 5
 4
@@ -48594,7 +48594,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -48604,7 +48604,7 @@ player
 2
 opens
 2
- 
+
 4
 3
 2
@@ -48632,7 +48632,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -48642,7 +48642,7 @@ player
 2
 closes
 2
- 
+
 4
 3
 2
@@ -48674,7 +48674,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -48702,7 +48702,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -48734,7 +48734,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -48766,7 +48766,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -48794,7 +48794,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -48826,7 +48826,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -48854,7 +48854,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -48864,7 +48864,7 @@ player
 2
 locks
 2
- 
+
 4
 3
 2
@@ -48892,7 +48892,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -48902,7 +48902,7 @@ player
 2
 unlocks
 2
- 
+
 4
 3
 2
@@ -48926,7 +48926,7 @@ thing
 2
 do
 2
-You hear the click of 
+You hear the click of
 4
 3
 2
@@ -48946,7 +48946,7 @@ thing
 2
 do
 2
-You hear the click of 
+You hear the click of
 4
 3
 2
@@ -48974,7 +48974,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -48984,7 +48984,7 @@ player
 2
 knocks
 2
- on 
+ on
 4
 3
 2
@@ -49004,7 +49004,7 @@ thing
 2
 do
 2
-Someone knocks on 
+Someone knocks on
 4
 3
 2
@@ -49090,7 +49090,7 @@ Most of the default messages on the door will work well enough.  Type `@messages
 2
 do
 2
-You don't have the key for 
+You don't have the key for
 4
 3
 2
@@ -49126,7 +49126,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -49156,7 +49156,7 @@ player
 2
 ic
 2
- 
+
 4
 3
 2
@@ -49166,7 +49166,7 @@ player
 2
 reaches
 2
- through 
+ through
 4
 3
 2
@@ -49178,7 +49178,7 @@ thing
 2
 d
 2
- and 
+ and
 4
 3
 2
@@ -49188,7 +49188,7 @@ player
 2
 pulls
 2
- 
+
 4
 3
 2
@@ -49200,7 +49200,7 @@ dobj
 2
 d
 2
- into 
+ into
 4
 3
 2
@@ -49298,7 +49298,7 @@ thing
 2
 dc
 2
- to 
+ to
 4
 3
 2
@@ -49310,7 +49310,7 @@ name
 2
 d
 2
- 
+
 4
 3
 2
@@ -49320,7 +49320,7 @@ thing
 2
 is
 2
- 
+
 4
 4
 2
@@ -49891,7 +49891,7 @@ integration_enabled
 2
 do
 2
-You can't put 
+You can't put
 4
 3
 2
@@ -49903,7 +49903,7 @@ dobj
 2
 d
 2
- 
+
 4
 4
 2
@@ -49943,7 +49943,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -49953,7 +49953,7 @@ player
 2
 removes
 2
- 
+
 4
 3
 2
@@ -49963,7 +49963,7 @@ dobj
 0
 0
 2
- from 
+ from
 4
 3
 2
@@ -49993,7 +49993,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -50003,7 +50003,7 @@ player
 2
 puts
 2
- 
+
 4
 3
 2
@@ -50015,7 +50015,7 @@ dobj
 2
 d
 2
- 
+
 4
 4
 2
@@ -50027,7 +50027,7 @@ in
 4
 0
 2
- 
+
 4
 3
 2
@@ -50057,7 +50057,7 @@ thing
 2
 Psc
 2
- 
+
 4
 3
 2
@@ -50077,7 +50077,7 @@ is
 2
 do
 2
-  
+
 35
 1
 0
@@ -52589,7 +52589,7 @@ newt_msg
 2
 do
 2
-You've been booted by 
+You've been booted by
 4
 3
 2
@@ -52601,7 +52601,7 @@ player
 2
 d
 2
-.  
+.
 4
 3
 2
@@ -52611,7 +52611,7 @@ player
 2
 Psc
 2
- gave the reason:  
+ gave the reason:
 4
 3
 2
@@ -52641,7 +52641,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -52651,7 +52651,7 @@ player
 2
 @newts
 2
- 
+
 4
 3
 2
@@ -53039,7 +53039,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -53067,7 +53067,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -53095,7 +53095,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -53123,7 +53123,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -53151,7 +53151,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -53189,7 +53189,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -53199,7 +53199,7 @@ player
 2
 opens
 2
- 
+
 4
 3
 2
@@ -53227,7 +53227,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -53237,7 +53237,7 @@ player
 2
 closes
 2
- 
+
 4
 3
 2
@@ -53265,7 +53265,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -53293,7 +53293,7 @@ thing
 0
 1
 2
- 
+
 4
 3
 2
@@ -53333,7 +53333,7 @@ Table of Contents
 2
 do
 2
-What page do you want to turn 
+What page do you want to turn
 4
 3
 2
@@ -53361,7 +53361,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -53371,7 +53371,7 @@ player
 2
 turns
 2
- 
+
 4
 3
 2
@@ -53399,7 +53399,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -53409,7 +53409,7 @@ player
 2
 turns
 2
- 
+
 4
 3
 2
@@ -53437,7 +53437,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -53447,7 +53447,7 @@ player
 2
 turns
 2
- 
+
 4
 3
 2
@@ -53475,7 +53475,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -53485,7 +53485,7 @@ player
 2
 turns
 2
- 
+
 4
 3
 2
@@ -53523,7 +53523,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -53533,7 +53533,7 @@ player
 2
 picks
 2
- up the pen attached to 
+ up the pen attached to
 4
 3
 2
@@ -53543,7 +53543,7 @@ thing
 0
 0
 2
- and 
+ and
 4
 3
 2
@@ -53553,7 +53553,7 @@ player
 2
 enters
 2
- 
+
 4
 3
 2
@@ -53563,7 +53563,7 @@ dobj
 0
 0
 2
- into 
+ into
 4
 3
 2
@@ -53749,7 +53749,7 @@ For each element, <e>, the verb <e>:to_<jform> MUST accept the following two arg
 2
 
 2
-Each such verb MUST arrange with the player object to display the jtext element.  
+Each such verb MUST arrange with the player object to display the jtext element.
 2
 
 2
@@ -53785,9 +53785,9 @@ A target is an object on which are defined the following VERBs that accept the f
 2
 
 2
-************* I'll finish this later, R.T.              
+************* I'll finish this later, R.T.
 2
- 
+
 35
 5
 4
@@ -53937,7 +53937,7 @@ A link identifier uniquely identifies a link _within a given document_.  Typical
 2
 
 2
-The document address alone is enough to specify where the client (user) wants to go, of course; or, given a document, the link identifier is enough to indicate a destination.  The reason we send both is to provide a sort of synchronization: If the user wants to follow link 3 to Tennessee, and the current document's link 3 does go to Tennessee, then we can go ahead to Tennessee,  even if the user may actually have been following from a different document.  That's weird, maybe we should do something more definite.  I suppose we could have the client send (current address, 
+The document address alone is enough to specify where the client (user) wants to go, of course; or, given a document, the link identifier is enough to indicate a destination.  The reason we send both is to provide a sort of synchronization: If the user wants to follow link 3 to Tennessee, and the current document's link 3 does go to Tennessee, then we can go ahead to Tennessee,  even if the user may actually have been following from a different document.  That's weird, maybe we should do something more definite.  I suppose we could have the client send (current address,
 2
 link identifier).
 2
@@ -54119,7 +54119,7 @@ Jtext documents contain many of the same elements as an HTML document.  At a min
 2
 
 2
-This document contains a title, a header, and a short paragraph including a link to a help document.  It is composed of several tagged lists (see `help tagged-lists').   Jtags have a tagged list of the form: 
+This document contains a title, a header, and a short paragraph including a link to a help document.  It is composed of several tagged lists (see `help tagged-lists').   Jtags have a tagged list of the form:
 2
 
 2
@@ -54340,7 +54340,7 @@ bf_add_verb and bf_set_verb_info are wrappers that prevent writable verbs.
 2
 
 2
-bf_set_verb_code, bf_verb_code, verb_metadata, and set_verb_metadata all implement a metadata-in-verb-code system. 
+bf_set_verb_code, bf_verb_code, verb_metadata, and set_verb_metadata all implement a metadata-in-verb-code system.
 2
 
 2
@@ -54863,7 +54863,7 @@ Pronoun substition is done on a string by calling:
 2
   $string_utils:pronoun_sub(string);
 2
- 
+
 2
 
 2
@@ -54877,7 +54877,7 @@ For example, if an object named `sun' calls this code:
 2
   $string_utils:pronoun_sub("%td sets in the west.");
 2
- 
+
 2
 
 2
@@ -54887,7 +54887,7 @@ the returned string will be:
 2
   "The sun sets in the west."
 2
- 
+
 2
 
 2
@@ -54913,7 +54913,7 @@ These values, which :pronoun_sub() figures out by itself, can be set explicitly 
 2
    $string_utils:pronoun_sub(string, player, this, location, dobj, iobj)
 2
- 
+
 2
 
 2
@@ -55029,7 +55029,7 @@ Information Specifiers (capitalizable)
 2
   'n - possessive title         ("duck's")
 2
-  #  - the object's number 
+  #  - the object's number
 2
   <object specifier>x{foo arg1 arg2 ...} is an information specifier
 2
@@ -55049,7 +55049,7 @@ Verbs, Nouns, Properties (capitalizable)
 2
 Other Substitutions
 2
-  %${a,d,i,p} - the {arg,dobj,iobj,prep}str 
+  %${a,d,i,p} - the {arg,dobj,iobj,prep}str
 35
 5
 4
@@ -55125,7 +55125,7 @@ The object specifier is the letter that follows the % sign.  Consider the string
 2
     "%Td %t:(looks) at %dd oddly."
 2
- 
+
 2
 
 2
@@ -55155,7 +55155,7 @@ As an example, If Munchkin typed this command:
 2
   put duck in pond
 2
- 
+
 2
 
 2
@@ -55165,7 +55165,7 @@ and the duck had this as a @put_in_water message:
 2
   "%Nd %n:(puts) %td in %id."
 2
- 
+
 2
 
 2
@@ -55283,7 +55283,7 @@ If you want to make a noun singular or plural depending on context, you can give
 2
   '(noun)
 2
- 
+
 2
 
 2
@@ -55319,7 +55319,7 @@ You can also obtain information about the actual object by using these informati
 2
 
 2
-  #      - the object's number 
+  #      - the object's number
 2
   .(foo) - the object's "foo" property
 2
@@ -55355,7 +55355,7 @@ A list of arguments enclosed in curly brackets (see `help pronoun-literals') can
 2
   %n{u}
 2
- 
+
 2
 
 2
@@ -55377,7 +55377,7 @@ To add a little variety to oft-used messages, you can specify that one of severa
 2
   %Nd %(%n:(dives) gracefully|%n:(bellyflops) clumsily) into the water.
 2
- 
+
 2
 
 2
@@ -55387,13 +55387,13 @@ The section in parentheses will be broken up into phrases at the vertical bars (
 2
   %Nd %n:(dives|plunges) gracefully into the water.
 2
- 
+
 2
 
 2
 When used with $you:say_action (see `help $you:say_action') the same alternatives will be used for everyone.  Vertical bars may be included literally by preceding them with a percent sign.
 2
- 
+
 2
 Object Locations and Contents
 2
@@ -55405,7 +55405,7 @@ Sometimes you want information about an object's location.  This can be retrieve
 2
 
 2
-  %tln - Get the `thing' this code is on, find out where it's located, and then get the name of that location. 
+  %tln - Get the `thing' this code is on, find out where it's located, and then get the name of that location.
 2
 
 2
@@ -55463,7 +55463,7 @@ In addition to the format of %(object specifier)(information specifier), you can
 2
   %% - A percent sign.   That is:  %
 2
- 
+
 2
   %$a - the argstr to the verb that called :pronoun_sub().
 2
@@ -55473,11 +55473,11 @@ In addition to the format of %(object specifier)(information specifier), you can
 2
   %$p - the prepstr to the verb that called :pronoun_sub().
 2
- 
+
 2
-  %{information} 
+  %{information}
 2
- 
+
 2
 
 2
@@ -58566,7 +58566,7 @@ local_editing_info
 2
 do
 2
-[editing notes] 
+[editing notes]
 35
 5
 5
@@ -59156,7 +59156,7 @@ Verbs the system calls:
 2
  :set_quota(who, howmuch)
 2
- :quota_remaining(who) 
+ :quota_remaining(who)
 2
  :display_quota_summary -- internal, called by display quota
 2
@@ -60013,7 +60013,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -60043,7 +60043,7 @@ player
 2
 c
 2
- 
+
 4
 3
 2
@@ -60053,7 +60053,7 @@ player
 2
 pulls
 2
- the top sheet off 
+ the top sheet off
 4
 3
 2
@@ -60097,7 +60097,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -60107,7 +60107,7 @@ player
 2
 kicks
 2
- 
+
 4
 3
 2
@@ -60117,7 +60117,7 @@ thing
 0
 0
 2
- down. The groundskeeper whisks 
+ down. The groundskeeper whisks
 4
 3
 2
@@ -60145,7 +60145,7 @@ player
 0
 1
 2
- 
+
 4
 3
 2
@@ -60167,7 +60167,7 @@ default_topic
 0
 0
 2
-' on 
+' on
 4
 3
 2
@@ -60326,7 +60326,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -60336,7 +60336,7 @@ player
 2
 opens
 2
- 
+
 4
 3
 2
@@ -60368,7 +60368,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -60378,7 +60378,7 @@ player
 2
 closes
 2
- 
+
 4
 3
 2
@@ -60425,7 +60425,7 @@ player
 2
 dc
 2
- locks 
+ locks
 4
 3
 2
@@ -60457,7 +60457,7 @@ player
 2
 dc
 2
- unlocks 
+ unlocks
 4
 3
 2
@@ -60492,7 +60492,7 @@ player
 2
 dc
 2
- 
+
 4
 3
 2
@@ -60502,7 +60502,7 @@ player
 2
 knocks
 2
- on 
+ on
 4
 3
 2
@@ -60623,7 +60623,7 @@ thing
 2
 dc
 2
- to 
+ to
 4
 3
 2
@@ -60635,7 +60635,7 @@ name
 2
 d
 2
- 
+
 4
 3
 2
@@ -60645,7 +60645,7 @@ thing
 2
 is
 2
- 
+
 4
 4
 2
@@ -62412,7 +62412,7 @@ The syntax for setting the authentication key is:
 2
   #$#authentication-key <auth-key>
 2
- 
+
 2
 
 2
@@ -62472,7 +62472,7 @@ Present the JHM home page:
 2
   #$#display-url 12345678 url: "http://jhm.ccs.neu.edu:7043/"
 2
- 
+
 35
 5
 4
@@ -62658,7 +62658,7 @@ Upload a file from an anonymous ftp site:
 2
   #$#ftp 12345678 host: ipac.caltech.edu directory: /pub/deposit file: mud.el.Z type: "compressed ascii" destination: clients/mud.el.Z
 2
- 
+
 35
 5
 4
@@ -62674,7 +62674,7 @@ Most MUD clients and servers communicate by an informal protocol: lines of print
 2
 
 2
-Once people started to use clients, several realized that intelligence and user interface closer to the user could be exploited by the MUD.  
+Once people started to use clients, several realized that intelligence and user interface closer to the user could be exploited by the MUD.
 2
 
 2
@@ -62764,7 +62764,7 @@ A request to retrive Gustavus Adolphus College's root menu:
 2
   #$#gopher 12345678 host: gopher.gac.edu description: "1Gustavus Adolphus College"
 2
- 
+
 2
 
 2
@@ -62808,7 +62808,7 @@ An MCP request is of the general form:
 2
   #$#<request-name>[*][ <auth-key>][ <keyword>: <value>]...
 2
- 
+
 2
 
 2
@@ -62872,7 +62872,7 @@ An authentication key is generated and uploaded by the client to the server at l
 2
   #$#authentication-key <key>
 2
- 
+
 2
 
 2
@@ -62892,7 +62892,7 @@ String sent by server:
 2
   #$#<request-name><*-if-data-follows> [<auth-key>] <keyword>: <value> ...
 2
- 
+
 2
 
 2
@@ -63084,7 +63084,7 @@ A request to upload a file from an anonymous ftp site.  The request line contain
 2
   #$#ftp 12345678 host: ipac.caltech.edu directory: /pub/deposit file: mud.el.Z type: "compressed ascii" destination: clients/mud.el.Z
 2
- 
+
 2
 
 2
@@ -63094,7 +63094,7 @@ A request to retrieve a document from a gopher server.
 2
   #$#gopher 12345678 host: gopher.gac.edu description: "1Gustavus Adolphus College"
 2
- 
+
 2
 
 2
@@ -63120,7 +63120,7 @@ An MCP request is of the general form:
 2
   #$#<request-name>[*][ <auth-key>][ <keyword>: <value>]...
 2
- 
+
 2
 
 2
@@ -63144,11 +63144,11 @@ Proposal: require <request-name> to start with a letter.  This reserves a substa
 2
 
 2
-<value> is 
+<value> is
 2
 
 2
-  o  a string of one or more printable ASCII characters not containing spaces, double-quotes or backslashes 
+  o  a string of one or more printable ASCII characters not containing spaces, double-quotes or backslashes
 2
   o  OR is a string of zero or more printable ASCII characters, enclosed in double-quotes, with double-quotes and backslashes inside the string `quoted' by preceding them with a backslash.
 2
@@ -63218,7 +63218,7 @@ address
 2
 
 2
-Required.  Multicast address 
+Required.  Multicast address
 2
 
 2
@@ -63347,7 +63347,7 @@ tkmoo-setup -- How to set up and configure tkmoo
 2
 tkmoo-usage -- Using tkmoo
 2
-tkmoo-internals -- Extending tkmoo 
+tkmoo-internals -- Extending tkmoo
 2
 tkmoo-versions -- Release history
 184
@@ -63361,7 +63361,7 @@ Goals of tkmoo
 2
 
 2
-Early in January of 1993, the jtext system (see `help jtext-intro') was getting off the ground.  From the beginning, we were planning to build clients that could display richtext---text with attributes such as boldfacing, links and headers.  
+Early in January of 1993, the jtext system (see `help jtext-intro') was getting off the ground.  From the beginning, we were planning to build clients that could display richtext---text with attributes such as boldfacing, links and headers.
 2
 
 2
@@ -63473,7 +63473,7 @@ tkmoo responds to this protocol:
 2
 
 2
-  remoteCommand <this application's name> 
+  remoteCommand <this application's name>
 2
                 <name of function to call upon completion>
 2
@@ -63489,7 +63489,7 @@ The tkmoo process uses the MOO PREFIX/SUFFIX directives to collect the results o
 2
   <callback name> <client-data> <list of lines of text>
 2
- 
+
 184
 5
 4
@@ -63565,7 +63565,7 @@ The Session menu
 2
 
 2
-The Session menu contains entries for the MUD world definitions you have (see `help tkmoo-setup'), and a Quit item.  
+The Session menu contains entries for the MUD world definitions you have (see `help tkmoo-setup'), and a Quit item.
 2
 
 2
@@ -63613,7 +63613,7 @@ The interaction window displays both flat text sent to it, and tkmoo tagged text
 2
   @set-jtext-form tkmoo
 2
- 
+
 2
 
 2
@@ -63623,7 +63623,7 @@ or in the standard `linemode' form:
 2
   @set-jtext-form linemode
 2
- 
+
 2
 
 2
@@ -63725,7 +63725,7 @@ VERSION 0.4.0
 2
 
 2
-Unreleased.  
+Unreleased.
 2
 
 2
@@ -65573,7 +65573,7 @@ C->S #$#dns-org-mud-moo-simpleedit-set (reference, content*, type)
 2
 
 2
-reference, content, and type are as above.  This is the message sent by the client to set when the user 'saves' the value.  Note this does not necessarily save the value.  Errors such as lack of permission to set the given reference or moo-code compliation errors may prevent it.  It is expected that the server will tell the user this (in the in-band text stream).  
+reference, content, and type are as above.  This is the message sent by the client to set when the user 'saves' the value.  Note this does not necessarily save the value.  Errors such as lack of permission to set the given reference or moo-code compliation errors may prevent it.  It is expected that the server will tell the user this (in the in-band text stream).
 2
 
 2
@@ -65607,11 +65607,11 @@ handled by $mail_editor:
 2
 
 2
-@edit uses a semi-complicated system to determine (a) what the user is trying to edit and (b) how to edit it.   
+@edit uses a semi-complicated system to determine (a) what the user is trying to edit and (b) how to edit it.
 2
 
 2
-So it looks like the critical things to modify are $generic_editor:invoke_local_editor, $note_editor:local_editing_info, $verb_editor:local_editing_info, and $mail_editor:local_editing_info.  
+So it looks like the critical things to modify are $generic_editor:invoke_local_editor, $note_editor:local_editing_info, $verb_editor:local_editing_info, and $mail_editor:local_editing_info.
 2
 
 2
@@ -71566,13 +71566,13 @@ Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1998, 2001, 2002 by Ken Fox.
 2
 
 2
-Permission to use, copy, modify, and distribute this software and its 
+Permission to use, copy, modify, and distribute this software and its
 2
-documentation for any purpose and without fee is hereby granted, 
+documentation for any purpose and without fee is hereby granted,
 2
 provided that the above copyright notice appear in all copies and that
 2
-both that copyright notice and this permission notice appear in 
+both that copyright notice and this permission notice appear in
 2
 supporting documentation.
 2

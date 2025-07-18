@@ -191,8 +191,8 @@ properties, and pass them to other functions. This might seem strange at first, 
 
 ```moo
 let add = {x, y} => x + y;
-let max_func = fn(x, y) 
-    return x > y && x || y; 
+let max_func = fn(x, y)
+    return x > y && x || y;
 endfn;
 
 result = add(5, 3);        // Returns 8
@@ -205,8 +205,8 @@ Functions can be stored in object properties and called later:
 
 ```moo
 this.validator = {input} => length(input) >= 3;
-this.formatter = fn(text) 
-    return uppercase(text[1]) + lowercase(text[2..$]); 
+this.formatter = fn(text)
+    return uppercase(text[1]) + lowercase(text[2..$]);
 endfn;
 
 // Later in another verb:

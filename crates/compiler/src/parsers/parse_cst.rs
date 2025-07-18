@@ -3522,7 +3522,7 @@ impl CSTTreeTransformer {
 
                 // Labelled fork: fork ident (expr) statements endfork
                 let label_node = content_children[0]; // ident
-                let time_node = content_children[1]; // expr 
+                let time_node = content_children[1]; // expr
                 let statements_node = content_children[2]; // statements
 
                 let Some(label_name) = label_node.text() else {

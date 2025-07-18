@@ -574,9 +574,9 @@ where
 ///
 /// 2. A list in one of these formats:
 ///    - {"tag", {"attr", "value"}, ...contents...} - strings for tag/attr names
-///    - {'tag, {'attr, "value"}, ...contents...} - symbols for tag/attr names  
+///    - {'tag, {'attr, "value"}, ...contents...} - symbols for tag/attr names
 ///    - {'tag, ['attr -> "value"], ...contents...} - symbols with map for attributes
-///    
+///
 /// List format details:
 ///  - First element: tag name (string or symbol)
 ///  - Subsequent elements can be:

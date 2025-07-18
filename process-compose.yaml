@@ -37,11 +37,11 @@ processes:
   # The core Moor daemon, which handles the database, scheduling and execution of tasks, and hosts the RPC server.
   moor-daemon:
     command: >
-      cargo run --release -p moor-daemon -- 
+      cargo run --release -p moor-daemon --
       ./moor-data
-      --db=development.db 
-      --import=JHCore-DEV-2.db --import-format=textdump 
-      --export=development-export --export-format=objdef 
+      --db=development.db
+      --import=JHCore-DEV-2.db --import-format=textdump
+      --export=development-export --export-format=objdef
       --checkpoint-interval-seconds=360
       --use-boolean-returns=false
       --custom-errors=true
@@ -54,8 +54,8 @@ processes:
   # A host process that runs the telnet server, and handles incoming connections and forwards events to the daemon.
   moor-telnet-host:
     command: >
-      cargo run -p moor-telnet-host -- 
-      --telnet-address=0.0.0.0 
+      cargo run -p moor-telnet-host --
+      --telnet-address=0.0.0.0
       --telnet-port=8888
     working_dir: /Users/ryan/moor
     restart: on_failure
@@ -68,8 +68,8 @@ processes:
   # A web server that serves the client files and handles incoming websocket connections.
   moor-web-host:
     command: >
-      cargo run -p moor-web-host -- 
-      --listen-address=0.0.0.0:8080 
+      cargo run -p moor-web-host --
+      --listen-address=0.0.0.0:8080
       --client-sources=./client
       --watch-changes
     working_dir: /Users/ryan/moor

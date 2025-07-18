@@ -31,7 +31,7 @@ MOO is what's called a "dynamically typed" language. This means:
 ```moo
 // This is perfectly fine in MOO:
 my_var = "Hello";        // my_var holds a string
-my_var = 42;             // now my_var holds a number  
+my_var = 42;             // now my_var holds a number
 my_var = {"a", "b"};     // now my_var holds a list
 my_var = #123;           // now my_var holds an object reference
 ```
@@ -138,7 +138,7 @@ player_count = 0;  // Global variable
 if (new_player_joined)
     global player_count;  // Explicitly refer to the global variable
     player_count = player_count + 1;
-    
+
     let welcome_message = "Welcome! You are player #" + tostr(player_count);
     player:tell(welcome_message);
 endif
@@ -207,7 +207,7 @@ begin
     let base_damage = weapon.damage;
     let strength_bonus = player.strength / 10;
     let final_damage = base_damage + strength_bonus;
-    
+
     target.health = target.health - final_damage;
 end
 ```

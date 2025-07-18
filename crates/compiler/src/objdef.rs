@@ -1067,7 +1067,7 @@ mod tests {
                     override other (owner: #2, flags: "rc") = "test";
 
                     override "@funky_prop_name" = "test";
-                    
+
                     verb "look_self look_*" (this to any) owner: #2 flags: "rxd"
                         return 5;
                     endverb
