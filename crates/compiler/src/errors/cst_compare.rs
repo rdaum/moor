@@ -27,15 +27,14 @@ pub struct CSTDifference {
     pub actual: Option<String>,
 }
 
+#[derive(Default)]
 pub struct CSTComparator {
     differences: Vec<CSTDifference>,
 }
 
 impl CSTComparator {
     pub fn new() -> Self {
-        Self {
-            differences: Vec::new(),
-        }
+        Self::default()
     }
 
     /// Compare two CST trees and return a list of differences
@@ -94,7 +93,7 @@ impl CSTComparator {
                     // Show what's missing or extra
                     if pest_children.len() > ts_children.len() {
                         for i in ts_children.len()..pest_children.len() {
-                            let child_path = format!("{}.children[{}]", path, i);
+                            let child_path = format!("{path}.children[{i}]");
                             self.differences.push(CSTDifference {
                                 path: child_path,
                                 description: "Missing child in tree-sitter".to_string(),
@@ -104,7 +103,7 @@ impl CSTComparator {
                         }
                     } else {
                         for i in pest_children.len()..ts_children.len() {
-                            let child_path = format!("{}.children[{}]", path, i);
+                            let child_path = format!("{path}.children[{i}]");
                             self.differences.push(CSTDifference {
                                 path: child_path,
                                 description: "Extra child in tree-sitter".to_string(),
@@ -137,18 +136,18 @@ impl CSTComparator {
     fn build_child_path(&self, parent_path: &str, child: &CSTNode, index: usize) -> String {
         // Use rule name if it's meaningful, otherwise use index
         match child.rule {
-            Rule::ident => format!("{}.ident", parent_path),
-            Rule::expr => format!("{}.expr[{}]", parent_path, index),
-            Rule::statement => format!("{}.statement[{}]", parent_path, index),
-            Rule::statements => format!("{}.statements", parent_path),
-            Rule::assign => format!("{}.assign", parent_path),
-            Rule::list => format!("{}.list", parent_path),
-            Rule::map => format!("{}.map", parent_path),
-            Rule::exprlist => format!("{}.exprlist", parent_path),
-            Rule::argument => format!("{}.argument[{}]", parent_path, index),
-            Rule::while_statement => format!("{}.while_statement", parent_path),
-            Rule::if_statement => format!("{}.if_statement", parent_path),
-            _ => format!("{}.children[{}]", parent_path, index),
+            Rule::ident => format!("{parent_path}.ident"),
+            Rule::expr => format!("{parent_path}.expr[{index}]"),
+            Rule::statement => format!("{parent_path}.statement[{index}]"),
+            Rule::statements => format!("{parent_path}.statements"),
+            Rule::assign => format!("{parent_path}.assign"),
+            Rule::list => format!("{parent_path}.list"),
+            Rule::map => format!("{parent_path}.map"),
+            Rule::exprlist => format!("{parent_path}.exprlist"),
+            Rule::argument => format!("{parent_path}.argument[{index}]"),
+            Rule::while_statement => format!("{parent_path}.while_statement"),
+            Rule::if_statement => format!("{parent_path}.if_statement"),
+            _ => format!("{parent_path}.children[{index}]"),
         }
     }
 
@@ -156,7 +155,6 @@ impl CSTComparator {
         match kind {
             CSTNodeKind::Terminal { .. } => "Terminal".to_string(),
             CSTNodeKind::NonTerminal { .. } => "NonTerminal".to_string(),
-            CSTNodeKind::Semantic { .. } => "Semantic".to_string(),
             CSTNodeKind::Comment { .. } => "Comment".to_string(),
             CSTNodeKind::Whitespace { .. } => "Whitespace".to_string(),
         }
@@ -179,10 +177,10 @@ pub fn format_cst_differences(differences: &[CSTDifference]) -> String {
         writeln!(&mut output, "Path: {}", diff.path).unwrap();
         writeln!(&mut output, "  Issue: {}", diff.description).unwrap();
         if let Some(expected) = &diff.expected {
-            writeln!(&mut output, "  Expected (PEST): {}", expected).unwrap();
+            writeln!(&mut output, "  Expected (PEST): {expected}").unwrap();
         }
         if let Some(actual) = &diff.actual {
-            writeln!(&mut output, "  Actual (TS):     {}", actual).unwrap();
+            writeln!(&mut output, "  Actual (TS):     {actual}").unwrap();
         }
         writeln!(&mut output).unwrap();
     }

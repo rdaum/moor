@@ -1513,7 +1513,8 @@ end"#; "complex scatter declaration with optional and rest")]
     }
 
     pub fn parse_and_unparse(original: &str) -> Result<String, DecompileError> {
-        let tree = crate::parsers::parse::parse_program(original, CompileOptions::default()).unwrap();
+        let tree =
+            crate::parsers::parse::parse_program(original, CompileOptions::default()).unwrap();
         Ok(unparse(&tree)?.join("\n"))
     }
 

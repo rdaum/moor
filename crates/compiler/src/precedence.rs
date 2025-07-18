@@ -38,6 +38,7 @@ impl Precedence {
 }
 
 /// Get the precedence for an expression
+#[allow(dead_code)]
 pub fn get_precedence(expr: &Expr) -> u8 {
     match expr {
         Expr::Scatter(_, _) | Expr::Assign { .. } => Precedence::ScatterAssign.as_u8(),

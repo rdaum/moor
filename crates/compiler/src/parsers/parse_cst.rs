@@ -72,7 +72,7 @@ impl CSTTreeTransformer {
         Rc::new(Self {
             names: RefCell::new(VarScope::new()),
             options,
-                })
+        })
     }
 
     fn compile_context(&self, node: &CSTNode) -> CompileContext {
@@ -81,11 +81,7 @@ impl CSTTreeTransformer {
 
     /// Create an enhanced error for CST parsing with better error messages
     #[allow(dead_code)]
-    fn create_parse_error(
-        &self,
-        node: &CSTNode,
-        message: &str,
-    ) -> CompileError {
+    fn create_parse_error(&self, node: &CSTNode, message: &str) -> CompileError {
         CompileError::ParseError {
             error_position: self.compile_context(node),
             end_line_col: None,
@@ -100,13 +96,11 @@ impl CSTTreeTransformer {
         node: &'a CSTNode,
         node_type: &str,
     ) -> Result<&'a str, CompileError> {
-        node.text().ok_or_else(|| {
-            CompileError::ParseError {
-                error_position: self.compile_context(node),
-                end_line_col: None,
-                context: "CST parsing".to_string(),
-                message: format!("{} node has no text", node_type),
-            }
+        node.text().ok_or_else(|| CompileError::ParseError {
+            error_position: self.compile_context(node),
+            end_line_col: None,
+            context: "CST parsing".to_string(),
+            message: format!("{node_type} node has no text"),
         })
     }
 
@@ -267,11 +261,15 @@ impl CSTTreeTransformer {
                         if self.options.custom_errors {
                             // For custom errors, create a new error code
                             // TODO: This needs proper implementation
-                            return Err(self.parse_error(node, &format!(
-                                "Custom error codes not yet implemented: {errcode_text}"
-                            )));
+                            return Err(self.parse_error(
+                                node,
+                                &format!("Custom error codes not yet implemented: {errcode_text}"),
+                            ));
                         } else {
-                            return Err(self.parse_error(node, &format!("Unknown error code: {errcode_text}")));
+                            return Err(self.parse_error(
+                                node,
+                                &format!("Unknown error code: {errcode_text}"),
+                            ));
                         }
                     }
                 };
@@ -350,7 +348,9 @@ impl CSTTreeTransformer {
                 let content_children: Vec<_> = children.iter().filter(|n| n.is_content()).collect();
 
                 if content_children.len() < 2 {
-                    return Err(self.parse_error(node, "Fn expression missing parameters or statements"));
+                    return Err(
+                        self.parse_error(node, "Fn expression missing parameters or statements")
+                    );
                 }
 
                 let lambda_params_node = content_children[0];
@@ -360,7 +360,10 @@ impl CSTTreeTransformer {
                 let params = if lambda_params_node.rule == Rule::lambda_params {
                     self.clone().parse_lambda_params(lambda_params_node)?
                 } else {
-                    return Err(self.parse_error(lambda_params_node, "Expected lambda_params node in fn expression"));
+                    return Err(self.parse_error(
+                        lambda_params_node,
+                        "Expected lambda_params node in fn expression",
+                    ));
                 };
 
                 // Parse the statements and wrap them in a scope with proper binding tracking
@@ -418,7 +421,10 @@ impl CSTTreeTransformer {
                     return Ok(Expr::Pass { args: vec![] });
                 } else if text == "(" || text == ")" {
                     // These are parentheses - we should skip them in expression parsing
-                    return Err(self.parse_error(expr_node, "Parentheses should not be parsed as standalone expressions"));
+                    return Err(self.parse_error(
+                        expr_node,
+                        "Parentheses should not be parsed as standalone expressions",
+                    ));
                 }
             }
             return Err(self.parse_error(expr_node, "Expression node has no children"));
@@ -1484,73 +1490,6 @@ impl CSTTreeTransformer {
                         // Parse the expression to iterate over
                         primary_self.clone().parse_operand(content_children[0])
                     }
-                    Rule::for_in_clause | Rule::for_range_clause => {
-                        // For-iterable contains an expression to iterate over
-                        let Some(children) = node.children() else {
-                            return Err(CompileError::ParseError {
-                                error_position: primary_self.compile_context(node),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "For-iterable has no children".to_string(),
-                            });
-                        };
-
-                        let content_children: Vec<_> =
-                            children.iter().filter(|n| n.is_content()).collect();
-                        if content_children.len() != 1 {
-                            return Err(CompileError::ParseError {
-                                error_position: primary_self.compile_context(node),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: format!(
-                                    "Expected 1 expression in for-iterable, found {}",
-                                    content_children.len()
-                                ),
-                            });
-                        }
-
-                        let child = content_children[0];
-                        match child.rule {
-                            Rule::for_range_clause => {
-                                // Handle range clause - this represents [start..end] syntax
-                                let Some(range_children) = child.children() else {
-                                    return Err(CompileError::ParseError {
-                                        error_position: primary_self.compile_context(child),
-                                        end_line_col: None,
-                                        context: "CST parsing".to_string(),
-                                        message: "For range clause has no children".to_string(),
-                                    });
-                                };
-                                let range_content: Vec<_> =
-                                    range_children.iter().filter(|n| n.is_content()).collect();
-                                if range_content.len() < 2 {
-                                    return Err(CompileError::ParseError {
-                                        error_position: primary_self.compile_context(child),
-                                        end_line_col: None,
-                                        context: "CST parsing".to_string(),
-                                        message: "For range clause missing start/end".to_string(),
-                                    });
-                                }
-
-                                let start =
-                                    primary_self.clone().parse_expression(&[range_content[0]])?;
-                                let end =
-                                    primary_self.clone().parse_expression(&[range_content[1]])?;
-                                // For range clauses in for loops, create a list with range
-                                // Use a simple integer as base for list ranges
-                                let range_arg = Arg::Normal(Expr::Range {
-                                    base: Box::new(Expr::Value(v_int(0))), // Use 0 as placeholder for list ranges
-                                    from: Box::new(start),
-                                    to: Box::new(end),
-                                });
-                                Ok(Expr::List(vec![range_arg]))
-                            }
-                            _ => {
-                                // Handle other iterables as regular expressions
-                                primary_self.clone().parse_operand(child)
-                            }
-                        }
-                    }
                     Rule::exprlist => {
                         // This should not be handled as a primary expression
                         // exprlist is a container for arguments within lists
@@ -2341,8 +2280,7 @@ impl CSTTreeTransformer {
                 // Check if the child is actually a statement that should be parsed as a statement
                 let first_child = content_children[0];
                 match first_child.rule {
-                    Rule::for_in_statement | Rule::for_range_statement
-                    | Rule::for_in_statement
+                    Rule::for_in_statement
                     | Rule::for_range_statement
                     | Rule::while_statement
                     | Rule::labelled_while_statement
@@ -2551,130 +2489,8 @@ impl CSTTreeTransformer {
                 )))
             }
             Rule::for_in_statement | Rule::for_range_statement => {
-                // Handle semantic for_statement with fields
-                if let Some(fields) = node.fields() {
-                    // Get variable field
-                    let variable_node =
-                        fields
-                            .get("variable")
-                            .ok_or_else(|| CompileError::ParseError {
-                                error_position: context.clone(),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "For statement missing variable field".to_string(),
-                            })?;
-
-                    let variable_text =
-                        variable_node
-                            .text()
-                            .ok_or_else(|| CompileError::ParseError {
-                                error_position: context.clone(),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "For variable has no text".to_string(),
-                            })?;
-
-                    // Get iterable field
-                    let iterable_node =
-                        fields
-                            .get("iterable")
-                            .ok_or_else(|| CompileError::ParseError {
-                                error_position: context.clone(),
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "For statement missing iterable field".to_string(),
-                            })?;
-
-                    // Check if iterable is a range (has start/end) or expression
-                    if let Some(iterable_fields) = iterable_node.fields() {
-                        if iterable_fields.contains_key("start")
-                            && iterable_fields.contains_key("end")
-                        {
-                            // This is a range: for i in [start..end]
-                            let start_expr = self
-                                .clone()
-                                .parse_expression(&[iterable_fields.get("start").unwrap()])?;
-                            let end_expr = self
-                                .clone()
-                                .parse_expression(&[iterable_fields.get("end").unwrap()])?;
-
-                            // Declare loop variable
-                            let id = self
-                                .names
-                                .borrow_mut()
-                                .declare_or_use_name(variable_text, DeclType::For);
-
-                            // Parse body
-                            let body_node =
-                                fields.get("body").ok_or_else(|| CompileError::ParseError {
-                                    error_position: context.clone(),
-                                    end_line_col: None,
-                                    context: "CST parsing".to_string(),
-                                    message: "For statement missing body field".to_string(),
-                                })?;
-
-                            self.enter_scope();
-                            let body = self.clone().parse_statements_from_node(body_node)?;
-                            let environment_width = self.exit_scope();
-
-                            return Ok(Some(Stmt::new(
-                                StmtNode::ForRange {
-                                    id,
-                                    from: start_expr,
-                                    to: end_expr,
-                                    body,
-                                    environment_width,
-                                },
-                                line_col,
-                            )));
-                        } else if iterable_fields.contains_key("expression") {
-                            // This is an expression: for i in (expr)
-                            let iter_expr = self
-                                .clone()
-                                .parse_expression(&[iterable_fields.get("expression").unwrap()])?;
-
-                            // Declare loop variable
-                            let value_binding = self
-                                .names
-                                .borrow_mut()
-                                .declare_or_use_name(variable_text, DeclType::For);
-
-                            // Parse body
-                            let body_node =
-                                fields.get("body").ok_or_else(|| CompileError::ParseError {
-                                    error_position: context.clone(),
-                                    end_line_col: None,
-                                    context: "CST parsing".to_string(),
-                                    message: "For statement missing body field".to_string(),
-                                })?;
-
-                            self.enter_scope();
-                            let body = self.clone().parse_statements_from_node(body_node)?;
-                            let environment_width = self.exit_scope();
-
-                            return Ok(Some(Stmt::new(
-                                StmtNode::ForList {
-                                    value_binding,
-                                    key_binding: None,
-                                    expr: iter_expr,
-                                    body,
-                                    environment_width,
-                                },
-                                line_col,
-                            )));
-                        }
-                    }
-
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For statement iterable has unknown structure".to_string(),
-                    });
-                }
-
-                // Fall back to positional parsing if no fields available
-                // This supports the old PEST structure during migration
+                // Note: Semantic field handling moved to cst_treesitter.rs for PR 2
+                // Using positional parsing for PEST compatibility
                 let Some(children) = node.children() else {
                     return Err(CompileError::ParseError {
                         error_position: context,
@@ -2779,105 +2595,6 @@ impl CSTTreeTransformer {
                             line_col,
                         )))
                     }
-                    Rule::for_in_clause | Rule::for_range_clause => {
-                        // Handle for_iterable which contains the actual iterable expression
-                        // Check if this contains a range clause
-                        let Some(iterable_children) = iterable_node.children() else {
-                            return Err(CompileError::ParseError {
-                                error_position: context,
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "For iterable has no children".to_string(),
-                            });
-                        };
-
-                        let iterable_content: Vec<_> = iterable_children
-                            .iter()
-                            .filter(|n| n.is_content())
-                            .collect();
-                        if iterable_content.len() != 1 {
-                            return Err(CompileError::ParseError {
-                                error_position: context,
-                                end_line_col: None,
-                                context: "CST parsing".to_string(),
-                                message: "For iterable expected 1 child".to_string(),
-                            });
-                        }
-
-                        let child = iterable_content[0];
-                        match child.rule {
-                            Rule::for_range_clause => {
-                                // This is a range: for i in [start..end]
-                                let Some(range_children) = child.children() else {
-                                    return Err(CompileError::ParseError {
-                                        error_position: context,
-                                        end_line_col: None,
-                                        context: "CST parsing".to_string(),
-                                        message: "For range clause has no children".to_string(),
-                                    });
-                                };
-                                let range_content: Vec<_> =
-                                    range_children.iter().filter(|n| n.is_content()).collect();
-
-                                if range_content.len() < 2 {
-                                    return Err(CompileError::ParseError {
-                                        error_position: context,
-                                        end_line_col: None,
-                                        context: "CST parsing".to_string(),
-                                        message: "For range clause missing start/end".to_string(),
-                                    });
-                                }
-
-                                let start_expr =
-                                    self.clone().parse_expression(&[range_content[0]])?;
-                                let end_expr =
-                                    self.clone().parse_expression(&[range_content[1]])?;
-
-                                let id = self
-                                    .names
-                                    .borrow_mut()
-                                    .declare_or_use_name(variable_text, DeclType::For);
-
-                                self.enter_scope();
-                                let body = self.clone().parse_statements_from_node(body_node)?;
-                                let environment_width = self.exit_scope();
-
-                                Ok(Some(Stmt::new(
-                                    StmtNode::ForRange {
-                                        id,
-                                        from: start_expr,
-                                        to: end_expr,
-                                        body,
-                                        environment_width,
-                                    },
-                                    line_col,
-                                )))
-                            }
-                            _ => {
-                                // Handle other iterables as regular expressions
-                                let iter_expr = self.clone().parse_expression(&[iterable_node])?;
-                                let value_binding = self
-                                    .names
-                                    .borrow_mut()
-                                    .declare_or_use_name(variable_text, DeclType::For);
-
-                                self.enter_scope();
-                                let body = self.clone().parse_statements_from_node(body_node)?;
-                                let environment_width = self.exit_scope();
-
-                                Ok(Some(Stmt::new(
-                                    StmtNode::ForList {
-                                        value_binding,
-                                        key_binding: None,
-                                        expr: iter_expr,
-                                        body,
-                                        environment_width,
-                                    },
-                                    line_col,
-                                )))
-                            }
-                        }
-                    }
                     _ => Err(CompileError::ParseError {
                         error_position: context,
                         end_line_col: None,
@@ -2885,212 +2602,6 @@ impl CSTTreeTransformer {
                         message: format!("Unknown for iterable type: {:?}", iterable_node.rule),
                     }),
                 }
-            }
-            Rule::for_in_statement => {
-                let Some(children) = node.children() else {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For-in statement has no children".to_string(),
-                    });
-                };
-                let content_children: Vec<_> = children.iter().filter(|n| n.is_content()).collect();
-
-                if content_children.len() < 3 {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For-in statement missing components".to_string(),
-                    });
-                }
-
-                // for for_in_index in for_in_clause statements endfor
-                let for_in_index_node = content_children[0];
-                let for_in_clause_node = content_children[1];
-                let statements_node = content_children[2];
-
-                // Parse for_in_index which can have 1 or 2 variables: ident ~ ("," ~ ident)?
-                let Some(index_children) = for_in_index_node.children() else {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For-in index node has no children".to_string(),
-                    });
-                };
-                let index_content: Vec<_> =
-                    index_children.iter().filter(|n| n.is_content()).collect();
-                if index_content.is_empty() {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For-in index has no content".to_string(),
-                    });
-                }
-
-                // Extract the value variable (first identifier)
-                let Some(value_var_text) = index_content[0].text() else {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For value variable text not found".to_string(),
-                    });
-                };
-
-                // Extract the optional key variable (second identifier if present)
-                let key_var = if index_content.len() > 1 {
-                    let Some(key_var_text) = index_content[1].text() else {
-                        return Err(CompileError::ParseError {
-                            error_position: context,
-                            end_line_col: None,
-                            context: "CST parsing".to_string(),
-                            message: "For key variable text not found".to_string(),
-                        });
-                    };
-                    Some(key_var_text)
-                } else {
-                    None
-                };
-
-                // Parse the for_in_clause to get the expression
-                let iter_expr = self.clone().parse_expression(&[for_in_clause_node])?;
-
-                // Declare loop variables in current scope
-                let value_binding = self
-                    .names
-                    .borrow_mut()
-                    .declare_or_use_name(value_var_text, DeclType::For);
-                let key_binding = key_var.map(|key_text| {
-                    self.names
-                        .borrow_mut()
-                        .declare_or_use_name(key_text, DeclType::For)
-                });
-
-                self.enter_scope();
-                let body = self.clone().parse_statements_from_node(statements_node)?;
-                let environment_width = self.exit_scope();
-
-                Ok(Some(Stmt::new(
-                    StmtNode::ForList {
-                        value_binding,
-                        key_binding,
-                        expr: iter_expr,
-                        body,
-                        environment_width,
-                    },
-                    line_col,
-                )))
-            }
-            Rule::for_range_statement => {
-                let Some(children) = node.children() else {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For-range statement has no children".to_string(),
-                    });
-                };
-                let content_children: Vec<_> = children.iter().filter(|n| n.is_content()).collect();
-
-                if content_children.len() < 3 {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For-range statement missing components".to_string(),
-                    });
-                }
-
-                // for variable in [start..end] statements endfor
-                // Expected: ident, for_range_clause, statements
-                let var_node = content_children[0];
-                let range_clause_node = content_children[1];
-                let statements_node = content_children[2];
-
-                // Parse the for_range_clause to extract start and end expressions
-                let Some(range_children) = range_clause_node.children() else {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For-range clause has no children".to_string(),
-                    });
-                };
-                let range_content: Vec<_> =
-                    range_children.iter().filter(|n| n.is_content()).collect();
-                if range_content.len() < 2 {
-                    return Err(CompileError::ParseError {
-                        error_position: context,
-                        end_line_col: None,
-                        context: "CST parsing".to_string(),
-                        message: "For-range clause missing start/end expressions".to_string(),
-                    });
-                }
-
-                let start_node = range_content[0];
-                let end_node = range_content[1];
-
-                // Extract variable name from non-terminal node
-                let var_name = if let Some(var_text) = var_node.text() {
-                    var_text
-                } else {
-                    // Variable is likely in a child node
-                    let Some(var_children) = var_node.children() else {
-                        return Err(CompileError::ParseError {
-                            error_position: context,
-                            end_line_col: None,
-                            context: "CST parsing".to_string(),
-                            message: "For variable node has no children".to_string(),
-                        });
-                    };
-                    let var_content: Vec<_> =
-                        var_children.iter().filter(|n| n.is_content()).collect();
-                    if var_content.is_empty() {
-                        return Err(CompileError::ParseError {
-                            error_position: context,
-                            end_line_col: None,
-                            context: "CST parsing".to_string(),
-                            message: "For variable has no content".to_string(),
-                        });
-                    }
-                    let Some(var_text) = var_content[0].text() else {
-                        return Err(CompileError::ParseError {
-                            error_position: context,
-                            end_line_col: None,
-                            context: "CST parsing".to_string(),
-                            message: "For variable text not found".to_string(),
-                        });
-                    };
-                    var_text
-                };
-
-                let start_expr = self.clone().parse_expression(&[start_node])?;
-                let end_expr = self.clone().parse_expression(&[end_node])?;
-
-                // Declare loop variable in current scope
-                let var_name_obj = self
-                    .names
-                    .borrow_mut()
-                    .declare_or_use_name(var_name, DeclType::For);
-
-                self.enter_scope();
-                let body = self.clone().parse_statements_from_node(statements_node)?;
-                let environment_width = self.exit_scope();
-
-                Ok(Some(Stmt::new(
-                    StmtNode::ForRange {
-                        id: var_name_obj,
-                        from: start_expr,
-                        to: end_expr,
-                        body,
-                        environment_width,
-                    },
-                    line_col,
-                )))
             }
             Rule::try_except_statement => {
                 let Some(children) = node.children() else {
@@ -3664,7 +3175,9 @@ impl CSTTreeTransformer {
                 };
                 let content_children: Vec<_> = children.iter().filter(|n| n.is_content()).collect();
                 if content_children.is_empty() {
-                    return Err(self.parse_error_with_context(context, "Fn statement missing content"));
+                    return Err(
+                        self.parse_error_with_context(context, "Fn statement missing content")
+                    );
                 }
 
                 let inner = content_children[0];
@@ -3673,12 +3186,17 @@ impl CSTTreeTransformer {
                         // fn name(params) statements endfn
                         // This is like: let name = fn(params) statements endfn;
                         let Some(fn_children) = inner.children() else {
-                            return Err(self.parse_error(inner, "Fn named statement has no children"));
+                            return Err(
+                                self.parse_error(inner, "Fn named statement has no children")
+                            );
                         };
                         let fn_content: Vec<_> =
                             fn_children.iter().filter(|n| n.is_content()).collect();
                         if fn_content.len() < 3 {
-                            return Err(self.parse_error(inner, "Fn named statement missing name, params, or body"));
+                            return Err(self.parse_error(
+                                inner,
+                                "Fn named statement missing name, params, or body",
+                            ));
                         }
 
                         let func_name = self.extract_text(fn_content[0], "Function name")?;
@@ -3738,7 +3256,10 @@ impl CSTTreeTransformer {
                         let fn_content: Vec<_> =
                             fn_children.iter().filter(|n| n.is_content()).collect();
                         if fn_content.len() < 2 {
-                            return Err(self.parse_error(inner, "Fn assignment statement missing variable or function"));
+                            return Err(self.parse_error(
+                                inner,
+                                "Fn assignment statement missing variable or function",
+                            ));
                         }
 
                         let var_name = self.extract_text(fn_content[0], "Variable name")?;
@@ -3747,12 +3268,17 @@ impl CSTTreeTransformer {
 
                         // Parse the fn expression manually (similar to fn_expr case above)
                         let Some(func_children) = func_expr_part.children() else {
-                            return Err(self.parse_error(func_expr_part, "Fn expression has no children"));
+                            return Err(
+                                self.parse_error(func_expr_part, "Fn expression has no children")
+                            );
                         };
                         let func_content: Vec<_> =
                             func_children.iter().filter(|n| n.is_content()).collect();
                         if func_content.len() < 2 {
-                            return Err(self.parse_error(func_expr_part, "Fn expression missing params or body"));
+                            return Err(self.parse_error(
+                                func_expr_part,
+                                "Fn expression missing params or body",
+                            ));
                         }
 
                         let lambda_params = func_content[0];

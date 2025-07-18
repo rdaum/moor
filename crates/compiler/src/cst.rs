@@ -58,10 +58,6 @@ pub enum CSTNodeKind {
     Terminal { text: String },
     /// Non-terminal node containing child nodes
     NonTerminal { children: Vec<CSTNode> },
-    /// Semantic node with named fields (tree-sitter style)
-    Semantic {
-        fields: std::collections::HashMap<String, CSTNode>,
-    },
     /// Comment node (C-style /* */ or C++-style //)
     Comment {
         comment_type: CommentType,
@@ -99,19 +95,6 @@ impl CSTNode {
         }
     }
 
-    /// Create a new semantic node with named fields
-    pub fn semantic(
-        rule: Rule,
-        fields: std::collections::HashMap<String, CSTNode>,
-        span: CSTSpan,
-    ) -> Self {
-        Self {
-            rule,
-            span,
-            kind: CSTNodeKind::Semantic { fields },
-        }
-    }
-
     /// Create a new comment node
     pub fn comment(comment_type: CommentType, text: String, span: CSTSpan) -> Self {
         Self {
@@ -137,7 +120,6 @@ impl CSTNode {
             CSTNodeKind::Comment { text, .. } => Some(text),
             CSTNodeKind::Whitespace { text } => Some(text),
             CSTNodeKind::NonTerminal { .. } => None,
-            CSTNodeKind::Semantic { .. } => None,
         }
     }
 
@@ -147,19 +129,6 @@ impl CSTNode {
             CSTNodeKind::NonTerminal { children } => Some(children),
             _ => None,
         }
-    }
-
-    /// Get the semantic fields of this node
-    pub fn fields(&self) -> Option<&std::collections::HashMap<String, CSTNode>> {
-        match &self.kind {
-            CSTNodeKind::Semantic { fields } => Some(fields),
-            _ => None,
-        }
-    }
-
-    /// Get a specific field by name
-    pub fn field(&self, name: &str) -> Option<&CSTNode> {
-        self.fields()?.get(name)
     }
 
     /// Check if this node is a terminal
@@ -198,11 +167,6 @@ impl CSTNode {
                 child.find_comments_recursive(comments);
             }
         }
-        if let Some(fields) = self.fields() {
-            for child in fields.values() {
-                child.find_comments_recursive(comments);
-            }
-        }
     }
 
     /// Recursively find all nodes in this subtree
@@ -216,11 +180,6 @@ impl CSTNode {
         nodes.push(self);
         if let Some(children) = self.children() {
             for child in children {
-                child.find_all_nodes_recursive(nodes);
-            }
-        }
-        if let Some(fields) = self.fields() {
-            for child in fields.values() {
                 child.find_all_nodes_recursive(nodes);
             }
         }
@@ -367,14 +326,6 @@ impl CSTNode {
                 }
                 result
             }
-            CSTNodeKind::Semantic { fields } => {
-                let mut result = format!("{}Semantic({:?}) [{}]", indent_str, self.rule, span_info);
-                for (field_name, field_value) in fields {
-                    result.push_str(&format!("\n{indent_str}  {field_name}: "));
-                    result.push_str(&field_value.pretty_print(indent + 1));
-                }
-                result
-            }
         }
     }
 
@@ -386,15 +337,6 @@ impl CSTNode {
             CSTNodeKind::Whitespace { text } => text.clone(),
             CSTNodeKind::NonTerminal { children } => {
                 children.iter().map(|child| child.to_source()).collect()
-            }
-            CSTNodeKind::Semantic { fields } => {
-                // For semantic nodes, we need to reconstruct the source from fields
-                // This is a simplified version - in practice, you'd need to know the grammar
-                fields
-                    .values()
-                    .map(|field| field.to_source())
-                    .collect::<Vec<_>>()
-                    .join(" ")
             }
         }
     }
@@ -994,14 +936,12 @@ impl crate::parsers::tree_sitter::tree_traits::TreeNode for CSTNode {
     fn children(&self) -> Box<dyn Iterator<Item = &Self> + '_> {
         match &self.kind {
             CSTNodeKind::NonTerminal { children } => Box::new(children.iter()),
-            CSTNodeKind::Semantic { fields } => Box::new(fields.values()),
             _ => Box::new(std::iter::empty()),
         }
     }
 
     fn child_by_name(&self, name: &str) -> Option<&Self> {
         match &self.kind {
-            CSTNodeKind::Semantic { fields } => fields.get(name),
             CSTNodeKind::NonTerminal { children } => {
                 // For non-semantic nodes, try to find child by position or heuristic
                 // This is a fallback for cases where semantic structure isn't available
