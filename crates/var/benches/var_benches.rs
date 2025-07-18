@@ -14,7 +14,6 @@
 use moor_bench_utils::{BenchContext, NoContext, black_box};
 use moor_var::{IndexMode, Var, v_bool, v_float, v_int, v_list, v_none, v_str};
 
-
 // Context for integer benchmarks
 struct IntContext(Var);
 impl BenchContext for IntContext {
@@ -172,17 +171,21 @@ impl BenchContext for DropContext {
         DropContext {
             int_vars: (0..pool_size).map(|i| v_int(i as i64)).collect(),
             string_vars: (0..pool_size).map(|i| v_str(&format!("str_{i}"))).collect(),
-            list_vars: (0..pool_size).map(|i| v_list(&[v_int(i as i64), v_str("item")])).collect(),
-            mixed_vars: (0..pool_size).map(|i| match i % 5 {
-                0 => v_int(i as i64),
-                1 => v_str(&format!("str_{i}")),
-                2 => v_list(&[v_int(i as i64)]),
-                3 => v_float(i as f64),
-                _ => v_bool(i % 2 == 0),
-            }).collect(),
+            list_vars: (0..pool_size)
+                .map(|i| v_list(&[v_int(i as i64), v_str("item")]))
+                .collect(),
+            mixed_vars: (0..pool_size)
+                .map(|i| match i % 5 {
+                    0 => v_int(i as i64),
+                    1 => v_str(&format!("str_{i}")),
+                    2 => v_list(&[v_int(i as i64)]),
+                    3 => v_float(i as f64),
+                    _ => v_bool(i % 2 == 0),
+                })
+                .collect(),
         }
     }
-    
+
     fn chunk_size() -> Option<usize> {
         Some(50_000) // Use half the pool size so we can do multiple samples
     }
@@ -208,21 +211,23 @@ fn var_drop_mixed(ctx: &mut DropContext, chunk_size: usize, _chunk_num: usize) {
     ctx.mixed_vars.truncate(ctx.mixed_vars.len() - chunk_size);
 }
 
-// Linux only...
-#[cfg(target_os = "linux")]
 pub fn main() {
     use moor_bench_utils::{
-        BenchmarkDef, NoContext, generate_session_summary,
-        perf_event::{Builder, events::Hardware},
-        run_benchmark_group,
+        BenchmarkDef, NoContext, generate_session_summary, run_benchmark_group,
     };
     use std::env;
 
-    // Check if we can do perf events, and if not just exit early (without panic) so that test runners etc
-    // don't fail.
-    if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
-        eprintln!("Perf events are not supported on this system. Skipping benchmarks.");
-        return;
+    #[cfg(target_os = "linux")]
+    {
+        use moor_bench_utils::perf_event::{Builder, events::Hardware};
+        // Check if we can do perf events, and if not warn but continue with timing-only benchmarks
+        if Builder::new(Hardware::INSTRUCTIONS).build().is_err() {
+            eprintln!(
+                "⚠️  Perf events are not available on this system (insufficient permissions or kernel support)."
+            );
+            eprintln!("   Continuing with timing-only benchmarks (performance counters disabled).");
+            eprintln!();
+        }
     }
 
     let args: Vec<String> = env::args().collect();
@@ -374,10 +379,4 @@ pub fn main() {
 
     // Generate session summary with regression analysis
     generate_session_summary();
-}
-
-// Non-linux platforms will not run the benchmarks
-#[cfg(not(target_os = "linux"))]
-pub fn main() {
-    eprintln!("Var micro-benchmarks are only supported on Linux due to perf_event usage.");
 }

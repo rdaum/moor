@@ -213,11 +213,15 @@ pub fn generate_session_summary() {
 
     // Display results by group with regression analysis
     for (group_name, group_results) in groups {
-        println!("📈 {} ({} benchmarks)", group_name.to_uppercase(), group_results.len());
-        
+        println!(
+            "📈 {} ({} benchmarks)",
+            group_name.to_uppercase(),
+            group_results.len()
+        );
+
         let mut table = TableFormatter::new(
             vec!["Benchmark", "Mops/s", "ns/op", "Change"],
-            vec![25, 13, 13, 16]  // Change column width
+            vec![25, 13, 13, 16], // Change column width
         );
 
         for result in group_results {
@@ -247,7 +251,7 @@ pub fn generate_session_summary() {
                 &result.name,
                 &format!("{:.1}", result.mops_per_sec),
                 &format!("{:.2}", result.ns_per_op),
-                &change_info
+                &change_info,
             ]);
         }
 

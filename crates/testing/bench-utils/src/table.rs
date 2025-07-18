@@ -33,15 +33,17 @@ impl TableFormatter {
 
     /// Calculate the display width of a string, accounting for wide characters like emojis
     fn display_width(&self, text: &str) -> usize {
-        text.chars().map(|c| {
-            match c {
-                // Most emojis and symbols have width 2
-                '\u{1F300}'..='\u{1F9FF}' => 2, // Miscellaneous Symbols and Pictographs, Emoticons, etc.
-                '\u{2600}'..='\u{26FF}' => 2,   // Miscellaneous Symbols
-                '\u{2700}'..='\u{27BF}' => 2,   // Dingbats
-                _ => 1, // Regular characters
-            }
-        }).sum()
+        text.chars()
+            .map(|c| {
+                match c {
+                    // Most emojis and symbols have width 2
+                    '\u{1F300}'..='\u{1F9FF}' => 2, // Miscellaneous Symbols and Pictographs, Emoticons, etc.
+                    '\u{2600}'..='\u{26FF}' => 2,   // Miscellaneous Symbols
+                    '\u{2700}'..='\u{27BF}' => 2,   // Dingbats
+                    _ => 1,                         // Regular characters
+                }
+            })
+            .sum()
     }
 
     fn format_cell(&self, text: &str, width: usize, align: &str) -> String {
@@ -67,7 +69,7 @@ impl TableFormatter {
 
     pub fn print(&self) {
         let has_headers = !self.headers.is_empty();
-        
+
         // Top border
         print!("┌");
         for (i, &width) in self.column_widths.iter().enumerate() {
@@ -109,7 +111,7 @@ impl TableFormatter {
                 print!("│");
             }
             println!();
-            
+
             // Add row separator (except after the last row)
             if row_idx < self.rows.len() - 1 {
                 print!("├");
