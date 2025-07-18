@@ -3934,7 +3934,7 @@ mod tests {
                     Expr::Binary(BinaryOp::Add, _, _) => {
                         // Success!
                     }
-                    _ => panic!("Expected binary addition expression, got: {:?}", expr),
+                    _ => panic!("Expected binary addition expression, got: {expr:?}"),
                 }
             }
             _ => panic!(
@@ -3979,10 +3979,7 @@ mod tests {
                             // Success! Both parsers produced equivalent results
                         }
                         _ => {
-                            panic!(
-                                "Expression mismatch: original={:?}, new={:?}",
-                                orig_expr, new_expr
-                            );
+                            panic!("Expression mismatch: original={orig_expr:?}, new={new_expr:?}");
                         }
                     }
                 }
@@ -4010,27 +4007,25 @@ mod tests {
         ];
 
         for source in test_cases {
-            println!("Testing postfix: {}", source);
+            println!("Testing postfix: {source}");
 
             // Parse with both parsers
             let original_result = parse_program(source, CompileOptions::default())
-                .expect(&format!("Original parse failed for: {}", source));
+                .unwrap_or_else(|_| panic!("Original parse failed for: {source}"));
             let new_result = parse_program_cst(source, CompileOptions::default())
-                .expect(&format!("New parse failed for: {}", source));
+                .unwrap_or_else(|_| panic!("New parse failed for: {source}"));
 
             // Compare statement counts
             assert_eq!(
                 new_result.stmts.len(),
                 original_result.stmts.len(),
-                "Statement count mismatch for: {}",
-                source
+                "Statement count mismatch for: {source}"
             );
 
             // Both should have at least one statement
             assert!(
                 !new_result.stmts.is_empty(),
-                "No statements parsed for: {}",
-                source
+                "No statements parsed for: {source}"
             );
         }
     }
@@ -4045,7 +4040,7 @@ mod tests {
         let program_pair = pairs.into_iter().next().unwrap();
         let cst = converter.convert_program(program_pair).unwrap();
 
-        println!("CST structure for '{}':", source);
+        println!("CST structure for '{source}':");
         print_cst_debug(&cst, 0);
 
         // Now try parsing with our parser
@@ -4058,7 +4053,7 @@ mod tests {
                 }
             }
             Err(e) => {
-                println!("\nParsing failed: {:?}", e);
+                println!("\nParsing failed: {e:?}");
             }
         }
     }
@@ -4067,10 +4062,10 @@ mod tests {
         let prefix = "  ".repeat(indent);
         println!("{}Rule::{:?}", prefix, node.rule);
         if let Some(text) = node.text() {
-            println!("{}  text: '{}'", prefix, text);
+            println!("{prefix}  text: '{text}'");
         }
         if let Some(children) = node.children() {
-            println!("{}  children:", prefix);
+            println!("{prefix}  children:");
             for child in children {
                 print_cst_debug(child, indent + 1);
             }
@@ -4113,13 +4108,13 @@ mod tests {
         ];
 
         for source in test_cases {
-            println!("Testing AST parity: {}", source);
+            println!("Testing AST parity: {source}");
 
             // Parse with both parsers
             let original_result = parse_program(source, CompileOptions::default())
-                .expect(&format!("Original parse failed for: {}", source));
+                .unwrap_or_else(|_| panic!("Original parse failed for: {source}"));
             let new_result = parse_program_cst(source, CompileOptions::default())
-                .expect(&format!("New parse failed for: {}", source));
+                .unwrap_or_else(|_| panic!("New parse failed for: {source}"));
 
             // Verify complete AST parity using the recursive comparison function
             assert_trees_match_recursive(&new_result.stmts, &original_result.stmts);
@@ -4128,8 +4123,7 @@ mod tests {
             assert_eq!(
                 new_result.cst.to_source(),
                 source,
-                "Source preservation failed for: {}",
-                source
+                "Source preservation failed for: {source}"
             );
         }
     }
@@ -4152,28 +4146,26 @@ mod tests {
         ];
 
         for source in test_cases {
-            println!("Testing: {}", source);
+            println!("Testing: {source}");
 
             // Parse with both parsers
             let original_result = parse_program(source, CompileOptions::default())
-                .expect(&format!("Original parse failed for: {}", source));
+                .unwrap_or_else(|_| panic!("Original parse failed for: {source}"));
             let new_result = parse_program_cst(source, CompileOptions::default())
-                .expect(&format!("New parse failed for: {}", source));
+                .unwrap_or_else(|_| panic!("New parse failed for: {source}"));
 
             // Compare statement counts
             assert_eq!(
                 new_result.stmts.len(),
                 original_result.stmts.len(),
-                "Statement count mismatch for: {}",
-                source
+                "Statement count mismatch for: {source}"
             );
 
             // Verify CST preserves source
             assert_eq!(
                 new_result.cst.to_source(),
                 source,
-                "CST source preservation failed for: {}",
-                source
+                "CST source preservation failed for: {source}"
             );
 
             // For single expression statements, verify structure similarity
@@ -4212,12 +4204,12 @@ mod tests {
         ];
 
         for source in test_cases {
-            println!("Testing atom: {}", source);
+            println!("Testing atom: {source}");
 
             let original_result = parse_program(source, CompileOptions::default())
-                .expect(&format!("Original parse failed for: {}", source));
+                .unwrap_or_else(|_| panic!("Original parse failed for: {source}"));
             let new_result = parse_program_cst(source, CompileOptions::default())
-                .expect(&format!("New parse failed for: {}", source));
+                .unwrap_or_else(|_| panic!("New parse failed for: {source}"));
 
             // Both should parse to single expression statements
             assert_eq!(original_result.stmts.len(), 1);
@@ -4257,12 +4249,12 @@ mod tests {
                 // Try to find our variables
                 for var in ["a", "b", "c", "args"] {
                     match std::panic::catch_unwind(|| binary.find_var(var)) {
-                        Ok(name) => println!("  {} -> {:?}", var, name),
-                        Err(_) => println!("  {} -> ERROR: not found", var),
+                        Ok(name) => println!("  {var} -> {name:?}"),
+                        Err(_) => println!("  {var} -> ERROR: not found"),
                     }
                 }
             }
-            Err(e) => println!("Original parser failed: {:?}", e),
+            Err(e) => println!("Original parser failed: {e:?}"),
         }
 
         println!("\n=== Testing CST Parser ===");
@@ -4272,12 +4264,12 @@ mod tests {
                 // Try to find our variables
                 for var in ["a", "b", "c", "args"] {
                     match std::panic::catch_unwind(|| binary.find_var(var)) {
-                        Ok(name) => println!("  {} -> {:?}", var, name),
-                        Err(_) => println!("  {} -> ERROR: not found", var),
+                        Ok(name) => println!("  {var} -> {name:?}"),
+                        Err(_) => println!("  {var} -> ERROR: not found"),
                     }
                 }
             }
-            Err(e) => println!("CST parser failed: {:?}", e),
+            Err(e) => println!("CST parser failed: {e:?}"),
         }
     }
 
@@ -4344,7 +4336,7 @@ mod tests {
             Ok(original) => {
                 println!("{:#?}", original.stmts);
             }
-            Err(e) => println!("Original parser error: {:?}", e),
+            Err(e) => println!("Original parser error: {e:?}"),
         }
 
         println!("\n=== CST Parser AST ===");
@@ -4352,11 +4344,11 @@ mod tests {
             Ok(cst) => {
                 println!("{:#?}", cst.stmts);
             }
-            Err(e) => println!("CST parser error: {:?}", e),
+            Err(e) => println!("CST parser error: {e:?}"),
         }
 
         // This test is just for debugging - don't fail
-        assert!(true);
+        // assert!(true); // Removed to fix clippy::assertions_on_constants
     }
 
     #[test]
@@ -4371,7 +4363,7 @@ mod tests {
         ];
 
         for source in test_cases {
-            println!("Debugging expression: {}", source);
+            println!("Debugging expression: {source}");
 
             // Parse with original parser
             println!("\n=== Original Parser ===");
@@ -4389,8 +4381,8 @@ mod tests {
                         if let (StmtNode::Expr(orig_expr), StmtNode::Expr(cst_expr)) =
                             (&orig_stmt.node, &cst_stmt.node)
                         {
-                            println!("Original: {:?}", orig_expr);
-                            println!("CST:      {:?}", cst_expr);
+                            println!("Original: {orig_expr:?}");
+                            println!("CST:      {cst_expr:?}");
 
                             // Check if they're structurally the same
                             let same_type = std::mem::discriminant(orig_expr)
@@ -4399,8 +4391,8 @@ mod tests {
                         }
                     }
                 }
-                (Err(orig_err), _) => println!("Original parser error: {:?}", orig_err),
-                (_, Err(cst_err)) => println!("CST parser error: {:?}", cst_err),
+                (Err(orig_err), _) => println!("Original parser error: {orig_err:?}"),
+                (_, Err(cst_err)) => println!("CST parser error: {cst_err:?}"),
             }
             println!("────────────────────");
         }
@@ -4419,7 +4411,7 @@ mod tests {
             .convert_program(pairs.into_iter().next().unwrap())
             .expect("Failed to convert to CST");
 
-        println!("CST structure for '{}':", source);
+        println!("CST structure for '{source}':");
         println!("{}", cst.pretty_print(0));
     }
 
@@ -4436,7 +4428,7 @@ mod tests {
             .convert_program(pairs.into_iter().next().unwrap())
             .expect("Failed to convert to CST");
 
-        println!("CST structure for '{}':", source);
+        println!("CST structure for '{source}':");
         println!("{}", cst.pretty_print(0));
 
         // Test parsing with our parser
@@ -4450,7 +4442,7 @@ mod tests {
                 }
             }
             Err(e) => {
-                println!("\nParsing failed: {:?}", e);
+                println!("\nParsing failed: {e:?}");
             }
         }
     }

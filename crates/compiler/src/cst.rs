@@ -391,7 +391,7 @@ mod tests {
             .collect();
 
         // We should have multiple whitespace nodes preserving spacing
-        assert!(whitespace_nodes.len() > 0);
+        assert!(!whitespace_nodes.is_empty());
     }
 
     #[test]
@@ -495,7 +495,7 @@ mod tests {
                 assert!(matches!(*left, Expr::Value(_)));
                 assert!(matches!(*right, Expr::Value(_)));
             }
-            _ => panic!("Expected binary addition expression, got: {:?}", result),
+            _ => panic!("Expected binary addition expression, got: {result:?}"),
         }
     }
 }
