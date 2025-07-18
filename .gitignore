@@ -18,3 +18,11 @@ textdumps
 .aider*
 
 mise.toml
+
+# Debug artifacts and temporary files
+.debug/
+debug_*.rs
+# Only ignore test_*.rs files in the root, not in subdirectories
+/test_*.rs
+error_output_*.txt
+tree_sitter_moo_bug_report.md
