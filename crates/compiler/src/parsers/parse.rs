@@ -66,7 +66,7 @@ pub struct CompileOptions {
     pub bool_type: bool,
     /// Whether to support symbol types ('sym) in compilation
     pub symbol_type: bool,
-    /// Whether to support non-stanard custom error values.
+    /// Whether to support non-standard custom error values.
     pub custom_errors: bool,
     /// Whether to turn unsupported builtins into `call_function` invocations.
     /// Useful for textdump imports from other MOO dialects.
@@ -86,6 +86,34 @@ impl Default for CompileOptions {
             call_unsupported_builtins: false,
         }
     }
+}
+
+// Macro to reduce repetitive binary operation patterns
+macro_rules! binary_op {
+    ($op:ident, $lhs:expr, $rhs:expr) => {
+        Ok(Expr::Binary(
+            BinaryOp::$op,
+            Box::new($lhs?),
+            Box::new($rhs.unwrap()),
+        ))
+    };
+}
+
+// Macro for logical operations (And/Or)
+macro_rules! logical_op {
+    (And, $lhs:expr, $rhs:expr) => {
+        Ok(Expr::And(Box::new($lhs?), Box::new($rhs.unwrap())))
+    };
+    (Or, $lhs:expr, $rhs:expr) => {
+        Ok(Expr::Or(Box::new($lhs?), Box::new($rhs.unwrap())))
+    };
+}
+
+// Macro for unary operations
+macro_rules! unary_op {
+    ($op:ident, $rhs:expr) => {
+        Ok(Expr::Unary(UnaryOp::$op, Box::new($rhs?)))
+    };
 }
 
 pub struct TreeTransformer {
@@ -682,74 +710,21 @@ impl TreeTransformer {
                 }
             })
             .map_infix(|lhs, op, rhs| match op.as_rule() {
-                Rule::add => Ok(Expr::Binary(
-                    BinaryOp::Add,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::sub => Ok(Expr::Binary(
-                    BinaryOp::Sub,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::mul => Ok(Expr::Binary(
-                    BinaryOp::Mul,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::div => Ok(Expr::Binary(
-                    BinaryOp::Div,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::pow => Ok(Expr::Binary(
-                    BinaryOp::Exp,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::modulus => Ok(Expr::Binary(
-                    BinaryOp::Mod,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::eq => Ok(Expr::Binary(
-                    BinaryOp::Eq,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::neq => Ok(Expr::Binary(
-                    BinaryOp::NEq,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::lt => Ok(Expr::Binary(
-                    BinaryOp::Lt,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::lte => Ok(Expr::Binary(
-                    BinaryOp::LtE,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::gt => Ok(Expr::Binary(
-                    BinaryOp::Gt,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-                Rule::gte => Ok(Expr::Binary(
-                    BinaryOp::GtE,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
-
-                Rule::land => Ok(Expr::And(Box::new(lhs?), Box::new(rhs.unwrap()))),
-                Rule::lor => Ok(Expr::Or(Box::new(lhs?), Box::new(rhs.unwrap()))),
-                Rule::in_range => Ok(Expr::Binary(
-                    BinaryOp::In,
-                    Box::new(lhs?),
-                    Box::new(rhs.unwrap()),
-                )),
+                Rule::add => binary_op!(Add, lhs, rhs),
+                Rule::sub => binary_op!(Sub, lhs, rhs),
+                Rule::mul => binary_op!(Mul, lhs, rhs),
+                Rule::div => binary_op!(Div, lhs, rhs),
+                Rule::pow => binary_op!(Exp, lhs, rhs),
+                Rule::modulus => binary_op!(Mod, lhs, rhs),
+                Rule::eq => binary_op!(Eq, lhs, rhs),
+                Rule::neq => binary_op!(NEq, lhs, rhs),
+                Rule::lt => binary_op!(Lt, lhs, rhs),
+                Rule::lte => binary_op!(LtE, lhs, rhs),
+                Rule::gt => binary_op!(Gt, lhs, rhs),
+                Rule::gte => binary_op!(GtE, lhs, rhs),
+                Rule::land => logical_op!(And, lhs, rhs),
+                Rule::lor => logical_op!(Or, lhs, rhs),
+                Rule::in_range => binary_op!(In, lhs, rhs),
                 _ => todo!("Unimplemented infix: {:?}", op.as_rule()),
             })
             .map_prefix(|op, rhs| match op.as_rule() {
@@ -758,8 +733,8 @@ impl TreeTransformer {
 
                     self.clone().parse_scatter_assign(op, rhs, false, false)
                 }
-                Rule::not => Ok(Expr::Unary(UnaryOp::Not, Box::new(rhs?))),
-                Rule::neg => Ok(Expr::Unary(UnaryOp::Neg, Box::new(rhs?))),
+                Rule::not => unary_op!(Not, rhs),
+                Rule::neg => unary_op!(Neg, rhs),
                 _ => todo!("Unimplemented prefix: {:?}", op.as_rule()),
             })
             .map_postfix(|lhs, op| {
