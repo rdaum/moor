@@ -46,6 +46,8 @@ pub enum DecompileError {
     MalformedProgram(String),
     #[error("could not decompile statement")]
     CouldNotDecompileStatement,
+    #[error("unsupported construct: {0}")]
+    UnsupportedConstruct(String),
 }
 
 struct Decompile {
@@ -1118,6 +1120,7 @@ impl Decompile {
             Op::MakeLambda {
                 scatter_offset,
                 program_offset,
+                self_var,
                 ..
             } => {
                 // Retrieve lambda program and scatter specification
@@ -1130,10 +1133,15 @@ impl Decompile {
                 // Convert scatter spec to parameter list
                 let params = self.decompile_scatter_params(&scatter_spec)?;
 
+                // Extract self_var name if present (indicates named function)
+                let self_name = self_var.and_then(|name| {
+                    self.program.var_names().find_variable(&name).cloned()
+                });
+
                 self.push_expr(Expr::Lambda {
                     params,
                     body: Box::new(lambda_body),
-                    self_name: None, // TODO: handle self_var from opcode
+                    self_name,
                 });
             }
             Op::CallLambda => {
@@ -1150,19 +1158,28 @@ impl Decompile {
                     }
                 };
 
-                // For decompilation, we need to represent this as a function call
-                // where the function is the lambda expression itself
-                // But the current AST only supports Symbol for function names in Call
-                // For now, we'll use a placeholder approach
-                // TODO: This needs to be updated when the AST supports CallTarget
-                self.push_expr(Expr::Call {
-                    function: crate::ast::CallTarget::Builtin(Symbol::mk("__lambda_call__")),
-                    args: {
-                        let mut call_args = vec![Arg::Normal(lambda_expr)];
-                        call_args.extend(args);
-                        call_args
-                    },
-                });
+                // For decompilation, check if the lambda expression is a simple variable reference
+                // If so, generate a direct function call instead of using __lambda_call__
+                match lambda_expr {
+                    Expr::Id(_) => {
+                        // Direct function call to a named function
+                        self.push_expr(Expr::Call {
+                            function: crate::ast::CallTarget::Expr(Box::new(lambda_expr)),
+                            args,
+                        });
+                    }
+                    _ => {
+                        // Complex lambda expression, use __lambda_call__
+                        self.push_expr(Expr::Call {
+                            function: crate::ast::CallTarget::Builtin(Symbol::mk("__lambda_call__")),
+                            args: {
+                                let mut call_args = vec![Arg::Normal(lambda_expr)];
+                                call_args.extend(args);
+                                call_args
+                            },
+                        });
+                    }
+                }
             }
         }
         Ok(())

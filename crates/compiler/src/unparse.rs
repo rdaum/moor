@@ -461,10 +461,12 @@ impl<'a> Unparse<'a> {
                     StmtNode::Expr(Expr::Return(Some(expr))) => {
                         buffer.push_str(&self.unparse_expr(expr)?);
                     }
-                    // Statement lambda: show the full statement (like begin/end blocks)
+                    // Complex lambda body should not occur in expression context
+                    // (these should be converted to named functions at statement level)
                     _ => {
-                        let stmt_lines = self.unparse_stmt(body, 0)?;
-                        buffer.push_str(&stmt_lines.join("\n"));
+                        return Err(DecompileError::UnsupportedConstruct(
+                            "Complex lambda body encountered in expression context - should be named function".to_string()
+                        ));
                     }
                 }
                 Ok(buffer)
@@ -562,7 +564,7 @@ impl<'a> Unparse<'a> {
 
                     base_str.push_str(&id.as_arc_string());
                 }
-                stmt_lines.push(format!("{base_str}({cond_frag})"));
+                stmt_lines.push(format!("{indent_frag}{base_str}({cond_frag})"));
                 stmt_lines.append(&mut stmt_frag);
                 stmt_lines.push(format!("{indent_frag}endwhile"));
                 Ok(stmt_lines)
@@ -649,6 +651,51 @@ impl<'a> Unparse<'a> {
                 Ok(vec![base_str])
             }
             StmtNode::Expr(Expr::Assign { left, right }) => {
+                // Special case: if assigning a lambda with self_name, use fn named syntax
+                if let (Expr::Id(var), Expr::Lambda { params, body, self_name: Some(name) }) = (left.as_ref(), right.as_ref()) {
+                    let var_name = self.unparse_variable(var);
+                    let name_str = self.unparse_variable(name);
+                    if var_name == name_str {
+                        // This is a named function: fn name(params) ... endfn
+                        let mut result = Vec::new();
+                        
+                        // Build parameter string
+                        let param_strings: Vec<String> = params
+                            .iter()
+                            .map(|param| match param.kind {
+                                crate::ast::ScatterKind::Required => self.unparse_variable(&param.id).to_string(),
+                                crate::ast::ScatterKind::Optional => {
+                                    if let Some(ref default) = param.expr {
+                                        format!("?{} = {}", self.unparse_variable(&param.id), self.unparse_expr(default).unwrap())
+                                    } else {
+                                        format!("?{}", self.unparse_variable(&param.id))
+                                    }
+                                }
+                                crate::ast::ScatterKind::Rest => format!("@{}", self.unparse_variable(&param.id)),
+                            })
+                            .collect();
+                        let param_str = param_strings.join(", ");
+                        
+                        result.push(format!("{}fn {}({})", indent_frag, name_str, param_str));
+                        
+                        // Add body statements (with increased indentation)
+                        // If the body is a Scope, unparse its contents directly to avoid begin...end
+                        let body_lines = match &body.node {
+                            StmtNode::Scope { body: scope_body, .. } => {
+                                self.unparse_stmts(scope_body, indent + INDENT_LEVEL)?
+                            }
+                            _ => {
+                                self.unparse_stmt(body, indent + INDENT_LEVEL)?
+                            }
+                        };
+                        result.extend(body_lines);
+                        
+                        result.push(format!("{}endfn", indent_frag));
+                        return Ok(result);
+                    }
+                }
+                
+                // Regular assignment
                 let left_frag = match left.as_ref() {
                     Expr::Id(id) => {
                         let suffix = self.unparse_variable(id);
@@ -945,10 +992,9 @@ pub fn to_literal(v: &Var) -> String {
                 crate::ast::StmtNode::Expr(crate::ast::Expr::Return(Some(expr))) => {
                     temp_unparse.unparse_expr(expr).unwrap()
                 }
-                // Statement lambda: show the full statement
+                // Complex lambda body: should not occur in literals
                 _ => {
-                    let stmt_lines = temp_unparse.unparse_stmt(lambda_body, 0).unwrap();
-                    stmt_lines.join("\n")
+                    "/* complex lambda */".to_string()
                 }
             };
 
