@@ -676,7 +676,7 @@ impl<'a> Unparse<'a> {
                             .collect();
                         let param_str = param_strings.join(", ");
                         
-                        result.push(format!("{}fn {}({})", indent_frag, name_str, param_str));
+                        result.push(format!("{indent_frag}fn {name_str}({param_str})"));
                         
                         // Add body statements (with increased indentation)
                         // If the body is a Scope, unparse its contents directly to avoid begin...end
@@ -690,7 +690,7 @@ impl<'a> Unparse<'a> {
                         };
                         result.extend(body_lines);
                         
-                        result.push(format!("{}endfn", indent_frag));
+                        result.push(format!("{indent_frag}endfn"));
                         return Ok(result);
                     }
                 }
