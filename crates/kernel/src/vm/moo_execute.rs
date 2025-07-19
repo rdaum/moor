@@ -158,9 +158,9 @@ pub fn moo_frame_execute(
 
         // Otherwise, start poppin' opcodes.
         // We panic here if we run out of opcodes, as that means there's a bug in either the
-        // compiler or in opcode execution.
-        let op = f.opcodes()[f.pc].clone();
+        // compiler or in opcode execution, and we'd dearly like to know about it, not hide it.
         f.pc += 1;
+        let op = &f.opcodes()[f.pc - 1];
 
         match op {
             Op::If(label, environment_width)
@@ -175,6 +175,7 @@ pub fn moo_frame_execute(
                     Op::While { .. } => ScopeType::While,
                     _ => unreachable!(),
                 };
+                let (environment_width, label) = (*environment_width, *label);
                 f.push_scope(scope_type, environment_width, &label);
                 let cond = f.pop();
                 if !cond.is_true() {
@@ -182,12 +183,14 @@ pub fn moo_frame_execute(
                 }
             }
             Op::IfQues(label) => {
+                let label = *label;
                 let cond = f.pop();
                 if !cond.is_true() {
                     f.jump(&label);
                 }
             }
             Op::Jump { label } => {
+                let label = *label;
                 f.jump(&label);
             }
             Op::WhileId {
@@ -195,6 +198,7 @@ pub fn moo_frame_execute(
                 end_label,
                 environment_width,
             } => {
+                let (id, environment_width, end_label) = (*id, *environment_width, *end_label);
                 f.push_scope(ScopeType::While, environment_width, &end_label);
                 let v = f.pop();
                 let is_true = v.is_true();
@@ -204,6 +208,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::ForSequence(offset) => {
+                let offset = *offset;
                 let operand = f.program.for_sequence_operand(offset).clone();
                 f.push_scope(
                     ScopeType::For,
@@ -288,6 +293,7 @@ pub fn moo_frame_execute(
                 id,
                 environment_width,
             } => {
+                let (id, environment_width, end_label) = (*id, *environment_width, *end_label);
                 f.push_scope(ScopeType::For, environment_width, &end_label);
 
                 // Pull the range ends off the stack.
@@ -344,22 +350,22 @@ pub fn moo_frame_execute(
                 f.push(v_none());
             }
             Op::ImmBigInt(val) => {
-                f.push(v_int(val));
+                f.push(v_int(*val));
             }
             Op::ImmFloat(val) => {
-                f.push(v_float(val));
+                f.push(v_float(*val));
             }
             Op::ImmInt(val) => {
-                f.push(v_int(val as i64));
+                f.push(v_int(*val as i64));
             }
             Op::ImmObjid(val) => {
-                f.push(v_obj(val));
+                f.push(v_obj(*val));
             }
             Op::ImmSymbol(val) => {
-                f.push(v_sym(val));
+                f.push(v_sym(*val));
             }
             Op::ImmErr(val) => {
-                f.push(v_err(val));
+                f.push(v_err(*val));
             }
             Op::Imm(slot) => {
                 // it's questionable whether this optimization actually will be of much use
@@ -381,7 +387,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::ImmType(vt) => {
-                let value = vt as u8;
+                let value = *vt as u8;
                 f.push(v_int(value as i64));
             }
             Op::ImmEmptyList => f.push(v_empty_list()),
@@ -441,7 +447,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::MakeError(offset) => {
-                let code = *f.program.error_operand(offset);
+                let code = *f.program.error_operand(*offset);
 
                 // Expect an argument on stack (otherwise we would have used ImmErr)
                 let err_msg = f.pop();
@@ -483,6 +489,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::MakeFlyweight(num_slots) => {
+                let num_slots = *num_slots;
                 // Stack should be: contents, slots, delegate
                 let contents = f.pop();
                 // Contents must be a list
@@ -581,6 +588,7 @@ pub fn moo_frame_execute(
                 binary_var_op!(self, f, state, modulus);
             }
             Op::And(label) => {
+                let label = *label;
                 let v = f.peek_top().is_true();
                 if !v {
                     f.jump(&label)
@@ -589,6 +597,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::Or(label) => {
+                let label = *label;
                 let v = f.peek_top().is_true();
                 if v {
                     f.jump(&label);
@@ -628,6 +637,7 @@ pub fn moo_frame_execute(
                 f.push(v.clone());
             }
             Op::Put(ident) => {
+                let ident = *ident;
                 let v = f.peek_top();
                 f.set_variable(&ident, v.clone());
             }
@@ -749,6 +759,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::Fork { id, fv_offset } => {
+                let (id, fv_offset) = (*id, *fv_offset);
                 // Delay time should be on stack
                 let time = f.pop();
 
@@ -809,6 +820,7 @@ pub fn moo_frame_execute(
                 return ExecutionResult::Return(v_bool(false));
             }
             Op::FuncCall { id } => {
+                let builtin = *id;
                 // Pop arguments, should be a list.
                 let args = f.pop();
                 let Some(args) = args.as_list() else {
@@ -817,11 +829,12 @@ pub fn moo_frame_execute(
                     );
                 };
                 return ExecutionResult::DispatchBuiltin {
-                    builtin: id,
+                    builtin,
                     arguments: args.iter().collect(),
                 };
             }
             Op::PushCatchLabel(label) => {
+                let label = *label;
                 // Get the error codes, which is either a list of error codes or Any.
                 let error_codes = f.pop().clone();
 
@@ -835,10 +848,12 @@ pub fn moo_frame_execute(
                             };
                             e.clone()
                         });
+                        let label = label;
                         f.catch_stack
                             .push((CatchType::Errors(error_codes.into_iter().collect()), label));
                     }
                     Variant::Int(0) => {
+                        let label = label;
                         f.catch_stack.push((CatchType::Any, label));
                     }
                     _ => {
@@ -850,6 +865,7 @@ pub fn moo_frame_execute(
                 end_label,
                 environment_width,
             } => {
+                let (environment_width, end_label) = (*environment_width, *end_label);
                 f.push_scope(
                     ScopeType::TryFinally(end_label),
                     environment_width,
@@ -857,6 +873,7 @@ pub fn moo_frame_execute(
                 );
             }
             Op::TryCatch { end_label, .. } => {
+                let end_label = *end_label;
                 let catches = std::mem::take(&mut f.catch_stack);
                 f.push_non_var_scope(ScopeType::TryCatch(catches), &end_label);
             }
@@ -865,10 +882,12 @@ pub fn moo_frame_execute(
                 end_label,
                 ..
             } => {
+                let (environment_width, end_label) = (*environment_width, *end_label);
                 let catches = std::mem::take(&mut f.catch_stack);
                 f.push_scope(ScopeType::TryCatch(catches), environment_width, &end_label);
             }
             Op::EndExcept(label) => {
+                let label = *label;
                 let handler = f.pop_scope().expect("Missing handler for try/catch/except");
                 let ScopeType::TryCatch(..) = handler.scope_type else {
                     panic!("Handler is not a catch handler",);
@@ -876,6 +895,8 @@ pub fn moo_frame_execute(
                 f.jump(&label);
             }
             Op::EndCatch(label) => {
+                let label = *label;
+
                 let stack_top = f.pop();
                 let handler = f.pop_scope().expect("Missing handler for try/catch/except");
                 let ScopeType::TryCatch(_) = handler.scope_type else {
@@ -908,6 +929,7 @@ pub fn moo_frame_execute(
                 num_bindings,
                 end_label,
             } => {
+                let (num_bindings, end_label) = (*num_bindings, *end_label);
                 f.push_scope(ScopeType::Block, num_bindings, &end_label);
             }
             Op::EndScope { .. } => {
@@ -920,14 +942,19 @@ pub fn moo_frame_execute(
                 };
             }
             Op::ExitId(label) => {
+                let label = *label;
                 f.jump(&label);
                 continue;
             }
             Op::Exit { stack, label } => {
-                return ExecutionResult::Unwind(FinallyReason::Exit { stack, label });
+                return ExecutionResult::Unwind(FinallyReason::Exit {
+                    stack: *stack,
+                    label: *label,
+                });
             }
             Op::Scatter(sa) => {
                 // Get the scatter table and the values to assign
+                let sa = *sa;
                 let table = &f.program.scatter_table(sa).clone();
                 let rhs_values = {
                     let rhs = f.peek_top();
@@ -1006,11 +1033,13 @@ pub fn moo_frame_execute(
             //      jmp X
             //  end loop / scope
             //  (set label Y)
-            Op::BeginComprehension(_type, end_label, _start) => {
+            Op::BeginComprehension(_, end_label, _) => {
+                let end_label = *end_label;
                 f.push(v_empty_list());
                 f.push_scope(ScopeType::Comprehension, 1, &end_label);
             }
             Op::ComprehendRange(offset) => {
+                let offset = *offset;
                 let range_comprehension = f.program.range_comprehension(offset).clone();
                 let end_of_range = f
                     .get_env(&range_comprehension.end_of_range_register)
@@ -1025,6 +1054,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::ComprehendList(offset) => {
+                let offset = *offset;
                 let list_comprehension = f.program.list_comprehension(offset).clone();
                 let list = f
                     .get_env(&list_comprehension.list_register)
@@ -1051,6 +1081,7 @@ pub fn moo_frame_execute(
                 }
             }
             Op::ContinueComprehension(id) => {
+                let id = *id;
                 let result = f.pop();
                 let list = f.pop();
                 let position = f
@@ -1071,6 +1102,7 @@ pub fn moo_frame_execute(
                 f.push(new_list);
             }
             Op::Capture(var_name) => {
+                let var_name = *var_name;
                 // Capture a variable from the current environment for lambda closure
                 if let Some(value) = f.get_env(&var_name) {
                     f.capture_stack.push((var_name, value.clone()));
@@ -1085,6 +1117,8 @@ pub fn moo_frame_execute(
                 self_var,
                 num_captured,
             } => {
+                let (scatter_offset, program_offset, self_var, num_captured) =
+                    (*scatter_offset, *program_offset, *self_var, *num_captured);
                 // Retrieve the scatter specification for lambda parameters
                 let scatter_spec = f.program.scatter_table(scatter_offset).clone();
 
