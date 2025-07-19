@@ -71,8 +71,11 @@ COPY --from=backend-build /moor-build/target/${BUILD_PROFILE}/moorc /moor/moorc
 
 EXPOSE 8080
 
-# Alternative nginx-based frontend image
+# nginx-based frontend image  
 FROM nginx:alpine AS frontend
 COPY --from=frontend-build /moor-frontend/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 EXPOSE 80
+
+# Default stage - backend services with moor binaries
+FROM backend AS default
