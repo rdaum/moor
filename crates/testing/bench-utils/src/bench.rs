@@ -285,9 +285,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     // Check if context has a preferred chunk size
     if let Some(preferred_chunk_size) = T::chunk_size() {
         println!(" ✅");
-        println!(
-            "   Using preferred chunk size: {preferred_chunk_size} ops"
-        );
+        println!("   Using preferred chunk size: {preferred_chunk_size} ops");
 
         // Do a quick warm-up with the preferred size
         let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);

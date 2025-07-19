@@ -17,7 +17,6 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use flume::Sender;
-use gdt_cpus;
 use minstant::Instant;
 use rayon::ThreadPool;
 use std::collections::HashMap;
@@ -77,7 +76,9 @@ fn none_or_push(vec: &mut Option<Vec<TaskId>>, task: TaskId) {
 
 impl TaskQ {
     pub fn new(suspended: SuspensionQ) -> Self {
-        let num_threads = (gdt_cpus::num_logical_cores().unwrap_or(8) * 2).min(64);
+        let num_threads = std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(8);
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(num_threads)
             .thread_name(|i| format!("moor-task-pool-{i}"))
