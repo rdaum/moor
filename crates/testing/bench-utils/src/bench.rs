@@ -88,6 +88,7 @@ impl Default for PerfCounters {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl PerfCounters {
     pub fn new() -> Self {
         PerfCounters {
@@ -158,9 +159,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     // Check if context has a preferred chunk size
     if let Some(preferred_chunk_size) = T::chunk_size() {
         println!(" ✅");
-        println!(
-            "   Using preferred chunk size: {preferred_chunk_size} ops"
-        );
+        println!("   Using preferred chunk size: {preferred_chunk_size} ops");
 
         // Do a quick warm-up with the preferred size
         let warm_up_end = minstant::Instant::now() + Duration::from_millis(WARM_UP_DURATION_MS);
@@ -525,9 +524,7 @@ fn update_progress_bar(current: usize, total: usize, current_throughput: f64) {
         "Calculating...".to_string()
     };
 
-    print!(
-        "] {percentage}% ({current}/{total}) {throughput_display}"
-    );
+    print!("] {percentage}% ({current}/{total}) {throughput_display}");
 
     io::stdout().flush().unwrap();
 }
