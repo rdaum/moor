@@ -49,7 +49,7 @@ lazy_static! {
 fn lambda_scatter_assign(
     scatter_args: &moor_var::program::opcode::ScatterArgs,
     args: &[Var],
-    environment: &mut [Var],
+    environment: &mut [Option<Var>],
 ) -> Result<(), Error> {
     use moor_var::v_int;
     use std::collections::HashSet;
@@ -61,7 +61,7 @@ fn lambda_scatter_assign(
     let result = scatter_assign(scatter_args, args, |name, value| {
         let name_idx = name.0 as usize;
         if name_idx < environment.len() {
-            environment[name_idx] = value;
+            environment[name_idx] = Some(value);
             assigned_params.insert(name_idx);
         }
     });
@@ -76,7 +76,7 @@ fn lambda_scatter_assign(
                     if let ScatterLabel::Optional(id, _) = label {
                         let name_idx = id.0 as usize;
                         if name_idx < environment.len() && !assigned_params.contains(&name_idx) {
-                            environment[name_idx] = v_int(0); // MOO false value
+                            environment[name_idx] = Some(v_int(0)); // MOO false value
                         }
                     }
                 }
@@ -356,12 +356,12 @@ impl Activation {
 
                     // Ensure target scope has enough slots
                     if target_scope.len() < captured_scope.len() {
-                        target_scope.resize(captured_scope.len(), moor_var::v_none());
+                        target_scope.resize(captured_scope.len(), None);
                     }
 
                     for (var_idx, captured_var) in captured_scope.iter().enumerate() {
                         if var_idx < target_scope.len() && !captured_var.is_none() {
-                            target_scope[var_idx] = captured_var.clone();
+                            target_scope[var_idx] = Some(captured_var.clone());
                         }
                     }
                 }
@@ -423,7 +423,7 @@ impl Activation {
 
             // Ensure the scope has enough space
             if frame.environment[scope_depth].len() <= max_offset {
-                frame.environment[scope_depth].resize(max_offset + 1, moor_var::v_none());
+                frame.environment[scope_depth].resize(max_offset + 1, None);
             }
 
             // Create a ScatterArgs for just this scope
@@ -444,17 +444,27 @@ impl Activation {
 
             // Create a deep copy of the lambda to avoid cycles
             let self_lambda = lambda.for_self_reference();
+            // Convert Option<Var> environment to Var environment for lambda creation
+            let converted_env: Vec<Vec<Var>> = current_env
+                .iter()
+                .map(|scope| {
+                    scope
+                        .iter()
+                        .map(|opt_var| opt_var.clone().unwrap_or_else(|| moor_var::v_none()))
+                        .collect()
+                })
+                .collect();
             let lambda_var = moor_var::Var::mk_lambda(
                 self_lambda.0.params.clone(),
                 self_lambda.0.body.clone(),
-                current_env,
+                converted_env,
                 self_lambda.0.self_var,
             );
 
             // Now set the self-reference in the environment
             if let Some(env) = frame.environment.last_mut() {
                 if var_idx < env.len() {
-                    env[var_idx] = lambda_var;
+                    env[var_idx] = Some(lambda_var);
                 }
             }
         }

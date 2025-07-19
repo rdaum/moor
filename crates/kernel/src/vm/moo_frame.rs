@@ -35,7 +35,7 @@ pub(crate) struct MooStackFrame {
     /// Where is the PC pointing to?
     pub(crate) pc_type: PcType,
     /// The values of the variables currently in scope, by their offset.
-    pub(crate) environment: Vec<Vec<Var>>,
+    pub(crate) environment: Vec<Vec<Option<Var>>>,
     /// The value stack.
     pub(crate) valstack: Vec<Var>,
     /// A stack of active scopes. Used for catch and finally blocks and in the future for lexical
@@ -99,7 +99,7 @@ impl MooStackFrame {
     pub(crate) fn new(program: Program) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
         let mut first_env = Vec::with_capacity(width);
-        first_env.resize(width, v_none());
+        first_env.resize(width, None);
         let mut environment = Vec::with_capacity(16);
         environment.push(first_env);
         Self {
@@ -140,7 +140,7 @@ impl MooStackFrame {
 
     pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
         let pos = gname as usize;
-        self.environment[0][pos] = value;
+        self.environment[0][pos] = Some(value);
     }
 
     pub fn set_variable(&mut self, id: &Name, v: Var) {
@@ -155,7 +155,7 @@ impl MooStackFrame {
         );
         let offset = id.0 as usize;
         let scope = id.1 as usize;
-        self.environment[scope][offset] = v;
+        self.environment[scope][offset] = Some(v);
     }
 
     /// Return the value of a local variable.
@@ -174,11 +174,7 @@ impl MooStackFrame {
             return None;
         }
 
-        let v = &self.environment[scope_idx][var_idx];
-        if v.type_code() == TYPE_NONE {
-            return None;
-        }
-        Some(v)
+        self.environment[scope_idx][var_idx].as_ref()
     }
 
     pub(crate) fn switch_to_fork_vector(&mut self, fork_vector: Offset) {
@@ -265,7 +261,7 @@ impl MooStackFrame {
             end_pos,
             environment: true,
         });
-        let new_scope = vec![v_none(); scope_width as usize];
+        let new_scope = vec![None; scope_width as usize];
         self.environment.push(new_scope);
     }
 
