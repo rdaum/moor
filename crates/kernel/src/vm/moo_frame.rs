@@ -147,7 +147,7 @@ impl MooStackFrame {
         // This is a "trust us we know what we're doing" use of the explicit offset without check
         // into the names list like we did before. If the compiler produces garbage, it gets what
         // it deserves.
-        assert_ne!(
+        debug_assert_ne!(
             v.type_code(),
             TYPE_NONE,
             "Setting variable {:?} to TYPE_NONE",

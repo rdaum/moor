@@ -159,8 +159,9 @@ pub fn moo_frame_execute(
         // Otherwise, start poppin' opcodes.
         // We panic here if we run out of opcodes, as that means there's a bug in either the
         // compiler or in opcode execution, and we'd dearly like to know about it, not hide it.
+        let pc = f.pc;
         f.pc += 1;
-        let op = &f.opcodes()[f.pc - 1];
+        let op = &f.opcodes()[pc];
 
         match op {
             Op::If(label, environment_width)

@@ -414,7 +414,7 @@ impl VMExecState {
             .add(elapsed_nanos as isize);
         match result {
             Ok(BfRet::Ret(result)) => {
-                assert_ne!(
+                debug_assert_ne!(
                     result.type_code(),
                     TYPE_NONE,
                     "Builtin {bf_name} returned TYPE_NONE"

@@ -77,14 +77,14 @@ struct Args {
     #[arg(
         long,
         help = "How many times the top-level verb should call the workload verb",
-        default_value = "1000"
+        default_value = "7000"
     )]
     num_verb_iterations: usize,
 
     #[arg(
         long,
         help = "How many times the top-level verb should be called.",
-        default_value = "100"
+        default_value = "200"
     )]
     num_verb_invocations: usize,
 
