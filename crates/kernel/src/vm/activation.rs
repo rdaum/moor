@@ -450,7 +450,7 @@ impl Activation {
                 .map(|scope| {
                     scope
                         .iter()
-                        .map(|opt_var| opt_var.clone().unwrap_or_else(|| moor_var::v_none()))
+                        .map(|opt_var| opt_var.clone().unwrap_or_else(moor_var::v_none))
                         .collect()
                 })
                 .collect();

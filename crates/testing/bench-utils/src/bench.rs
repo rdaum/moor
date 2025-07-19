@@ -286,8 +286,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     if let Some(preferred_chunk_size) = T::chunk_size() {
         println!(" ✅");
         println!(
-            "   Using preferred chunk size: {} ops",
-            preferred_chunk_size
+            "   Using preferred chunk size: {preferred_chunk_size} ops"
         );
 
         // Do a quick warm-up with the preferred size
@@ -379,7 +378,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
         .clamp(MIN_SAMPLES, MAX_SAMPLES);
 
     println!(" ✅");
-    println!("   Optimal chunk size: {} ops", best_chunk_size);
+    println!("   Optimal chunk size: {best_chunk_size} ops");
     if ops_per_ms > 0.0 {
         println!(
             "   Estimated performance: {:.1} Mops/s",
@@ -388,7 +387,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     } else {
         println!("   Estimated performance: Very fast (>1000 Mops/s)");
     }
-    println!("   Target samples: {}", target_samples);
+    println!("   Target samples: {target_samples}");
 
     BenchmarkConfig {
         chunk_size: best_chunk_size,

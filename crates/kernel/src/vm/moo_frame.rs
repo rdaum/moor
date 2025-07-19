@@ -159,7 +159,6 @@ impl MooStackFrame {
     }
 
     /// Return the value of a local variable.
-
     pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
         let scope_idx = id.1 as usize;
         let var_idx = id.0 as usize;

@@ -849,7 +849,6 @@ pub fn moo_frame_execute(
                             };
                             e.clone()
                         });
-                        let label = label;
                         f.catch_stack
                             .push((CatchType::Errors(error_codes.into_iter().collect()), label));
                     }
