@@ -17,7 +17,7 @@ import { ContentRenderer } from "./ContentRenderer";
 interface OutputWindowProps {
     messages: Array<{
         id: string;
-        content: string;
+        content: string | string[];
         type: "narrative" | "input_echo" | "system" | "error";
         timestamp?: number;
         isHistorical?: boolean;

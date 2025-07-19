@@ -17,7 +17,7 @@ import { OutputWindow } from "./OutputWindow";
 
 export interface NarrativeMessage {
     id: string;
-    content: string;
+    content: string | string[];
     type: "narrative" | "input_echo" | "system" | "error";
     timestamp?: number;
     isHistorical?: boolean;
@@ -33,9 +33,9 @@ interface NarrativeProps {
 }
 
 export interface NarrativeRef {
-    addNarrativeContent: (content: string, contentType?: "text/plain" | "text/djot" | "text/html") => void;
-    addSystemMessage: (content: string) => void;
-    addErrorMessage: (content: string) => void;
+    addNarrativeContent: (content: string | string[], contentType?: "text/plain" | "text/djot" | "text/html") => void;
+    addSystemMessage: (content: string | string[]) => void;
+    addErrorMessage: (content: string | string[]) => void;
     addHistoricalMessages: (messages: NarrativeMessage[]) => void;
     prependHistoricalMessages: (messages: NarrativeMessage[]) => void;
     getContainerHeight: () => number;
@@ -54,7 +54,7 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
 
     // Add a new message to the narrative
     const addMessage = useCallback((
-        content: string,
+        content: string | string[],
         type: NarrativeMessage["type"] = "narrative",
         contentType?: "text/plain" | "text/djot" | "text/html",
     ) => {
@@ -85,19 +85,19 @@ export const Narrative = forwardRef<NarrativeRef, NarrativeProps>(({
 
     // Add a method to add narrative content from WebSocket messages
     const addNarrativeContent = useCallback(
-        (content: string, contentType?: "text/plain" | "text/djot" | "text/html") => {
+        (content: string | string[], contentType?: "text/plain" | "text/djot" | "text/html") => {
             addMessage(content, "narrative", contentType);
         },
         [addMessage],
     );
 
     // Add system message
-    const addSystemMessage = useCallback((content: string) => {
+    const addSystemMessage = useCallback((content: string | string[]) => {
         addMessage(content, "system");
     }, [addMessage]);
 
     // Add error message
-    const addErrorMessage = useCallback((content: string) => {
+    const addErrorMessage = useCallback((content: string | string[]) => {
         addMessage(content, "error");
     }, [addMessage]);
 

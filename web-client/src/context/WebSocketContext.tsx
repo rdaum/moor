@@ -30,7 +30,12 @@ interface WebSocketProviderProps {
     player: Player | null;
     showMessage: (message: string, duration?: number) => void;
     setPlayerConnected: (connected: boolean) => void;
-    handleNarrativeMessage: (content: string, timestamp?: string, contentType?: string, isHistorical?: boolean) => void;
+    handleNarrativeMessage: (
+        content: string | string[],
+        timestamp?: string,
+        contentType?: string,
+        isHistorical?: boolean,
+    ) => void;
     handlePresentMessage: (presentData: PresentationData) => void;
     handleUnpresentMessage: (id: string) => void;
 }
