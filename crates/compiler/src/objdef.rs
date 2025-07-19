@@ -25,7 +25,7 @@ use moor_common::util::BitEnum;
 use moor_var::program::ProgramType;
 use moor_var::{
     ErrorCode, List, NOTHING, Obj, Symbol, Var, VarType, v_bool, v_err, v_float, v_flyweight,
-    v_int, v_list, v_map, v_obj, v_str,
+    v_int, v_list, v_map, v_obj, v_str, v_sym,
 };
 use pest::Parser;
 use pest::error::LineColLocation;
@@ -444,6 +444,12 @@ fn parse_literal_atom(
         Rule::boolean => {
             let bool = pair.as_str() == "true";
             Ok(v_bool(bool))
+        }
+        Rule::symbol => {
+            let symbol_str = pair.as_str();
+            // Remove the leading quote from symbol literal
+            let symbol_name = &symbol_str[1..];
+            Ok(v_sym(symbol_name))
         }
         _ => {
             panic!("Unimplemented atom: {pair:?}");
