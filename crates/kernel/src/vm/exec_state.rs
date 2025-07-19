@@ -98,12 +98,10 @@ impl VMExecState {
         callers
     }
 
-    #[inline]
     pub(crate) fn top_mut(&mut self) -> &mut Activation {
         self.stack.last_mut().expect("activation stack underflow")
     }
 
-    #[inline]
     pub(crate) fn top(&self) -> &Activation {
         self.stack.last().expect("activation stack underflow")
     }
@@ -166,7 +164,6 @@ impl VMExecState {
     }
 
     /// Push a value onto the value stack
-    #[inline]
     pub(crate) fn set_return_value(&mut self, v: Var) {
         self.top_mut().frame.set_return_value(v);
     }

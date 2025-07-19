@@ -138,13 +138,11 @@ impl MooStackFrame {
         }
     }
 
-    #[inline]
     pub fn set_gvar(&mut self, gname: GlobalName, value: Var) {
         let pos = gname as usize;
         self.environment[0][pos] = value;
     }
 
-    #[inline]
     pub fn set_variable(&mut self, id: &Name, v: Var) {
         // This is a "trust us we know what we're doing" use of the explicit offset without check
         // into the names list like we did before. If the compiler produces garbage, it gets what
@@ -161,7 +159,7 @@ impl MooStackFrame {
     }
 
     /// Return the value of a local variable.
-    #[inline]
+
     pub(crate) fn get_env(&self, id: &Name) -> Option<&Var> {
         let scope_idx = id.1 as usize;
         let var_idx = id.0 as usize;
@@ -188,7 +186,6 @@ impl MooStackFrame {
         self.pc = 0;
     }
 
-    #[inline]
     pub fn lookahead(&self) -> Option<Op> {
         match self.pc_type {
             PcType::Main => self.program.main_vector().get(self.pc).cloned(),
@@ -204,58 +201,48 @@ impl MooStackFrame {
         }
     }
 
-    #[inline]
     pub fn skip(&mut self) {
         self.pc += 1;
     }
 
-    #[inline]
     pub fn pop(&mut self) -> Var {
         self.valstack
             .pop()
             .unwrap_or_else(|| panic!("stack underflow @ PC: {}", self.pc))
     }
 
-    #[inline]
     pub fn push(&mut self, v: Var) {
         self.valstack.push(v)
     }
 
-    #[inline]
     pub fn peek_top(&self) -> &Var {
         self.valstack.last().expect("stack underflow")
     }
 
-    #[inline]
     pub fn peek_top_mut(&mut self) -> &mut Var {
         self.valstack.last_mut().expect("stack underflow")
     }
 
-    #[inline]
     pub fn peek_range(&self, width: usize) -> Vec<Var> {
         let l = self.valstack.len();
         Vec::from(&self.valstack[l - width..])
     }
 
-    #[inline]
     pub(crate) fn peek_abs(&self, amt: usize) -> &Var {
         &self.valstack[amt]
     }
 
-    #[inline]
     pub fn peek2(&self) -> (&Var, &Var) {
         let l = self.valstack.len();
         let (a, b) = (&self.valstack[l - 1], &self.valstack[l - 2]);
         (a, b)
     }
 
-    #[inline]
     pub fn poke(&mut self, amt: usize, v: Var) {
         let l = self.valstack.len();
         self.valstack[l - amt - 1] = v;
     }
 
-    #[inline]
     pub fn jump(&mut self, label_id: &Label) {
         let label = &self.program.jump_label(*label_id);
 
@@ -278,8 +265,7 @@ impl MooStackFrame {
             end_pos,
             environment: true,
         });
-        let mut new_scope = Vec::with_capacity(scope_width as usize);
-        new_scope.resize(scope_width as usize, v_none());
+        let new_scope = vec![v_none(); scope_width as usize];
         self.environment.push(new_scope);
     }
 

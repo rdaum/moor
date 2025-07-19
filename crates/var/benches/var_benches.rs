@@ -171,14 +171,18 @@ impl BenchContext for DropContext {
         DropContext {
             int_vars: (0..pool_size).map(|i| v_int(i as i64)).collect(),
             string_vars: (0..pool_size).map(|i| v_str(&format!("str_{i}"))).collect(),
-            list_vars: (0..pool_size).map(|i| v_list(&[v_int(i as i64), v_str("item")])).collect(),
-            mixed_vars: (0..pool_size).map(|i| match i % 5 {
-                0 => v_int(i as i64),
-                1 => v_str(&format!("str_{i}")),
-                2 => v_list(&[v_int(i as i64)]),
-                3 => v_float(i as f64),
-                _ => v_bool(i % 2 == 0),
-            }).collect(),
+            list_vars: (0..pool_size)
+                .map(|i| v_list(&[v_int(i as i64), v_str("item")]))
+                .collect(),
+            mixed_vars: (0..pool_size)
+                .map(|i| match i % 5 {
+                    0 => v_int(i as i64),
+                    1 => v_str(&format!("str_{i}")),
+                    2 => v_list(&[v_int(i as i64)]),
+                    3 => v_float(i as f64),
+                    _ => v_bool(i % 2 == 0),
+                })
+                .collect(),
         }
     }
 

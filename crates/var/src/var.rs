@@ -37,18 +37,15 @@ impl Debug for Var {
 }
 
 impl Var {
-    #[inline(always)]
     pub fn from_variant(variant: Variant) -> Self {
         Var(variant)
     }
 
-    #[inline(always)]
     pub fn mk_integer(i: i64) -> Self {
         let v = Variant::Int(i);
         Var(v)
     }
 
-    #[inline(always)]
     pub fn mk_none() -> Self {
         Var(Variant::None)
     }
@@ -81,7 +78,6 @@ impl Var {
         Var(Variant::Sym(s))
     }
 
-    #[inline(always)]
     pub fn mk_binary(bytes: Vec<u8>) -> Self {
         use crate::binary::Binary;
         Var(Variant::Binary(Box::new(Binary::from_bytes(bytes))))
@@ -102,7 +98,6 @@ impl Var {
         ))))
     }
 
-    #[inline(always)]
     pub fn type_code(&self) -> VarType {
         match self.variant() {
             Variant::Bool(_) => VarType::TYPE_BOOL,
@@ -121,7 +116,6 @@ impl Var {
         }
     }
 
-    #[inline(always)]
     pub fn mk_list(values: &[Var]) -> Self {
         List::build(values)
     }
@@ -138,13 +132,12 @@ impl Var {
         map::Map::build(pairs)
     }
 
-    #[inline(always)]
     pub fn variant(&self) -> &Variant {
         &self.0
     }
 
     /// Extract the integer value if this is an integer variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_integer(&self) -> Option<i64> {
         match self.variant() {
             Variant::Int(i) => Some(*i),
@@ -153,7 +146,7 @@ impl Var {
     }
 
     /// Extract the string value if this is a string variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_string(&self) -> Option<&str> {
         match self.variant() {
             Variant::Str(s) => Some(s.as_str()),
@@ -162,7 +155,7 @@ impl Var {
     }
 
     /// Extract the boolean value if this is a boolean variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_bool(&self) -> Option<bool> {
         match self.variant() {
             Variant::Bool(b) => Some(*b),
@@ -171,7 +164,7 @@ impl Var {
     }
 
     /// Extract the object value if this is an object variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_object(&self) -> Option<Obj> {
         match self.variant() {
             Variant::Obj(o) => Some(*o),
@@ -180,7 +173,7 @@ impl Var {
     }
 
     /// Extract the float value if this is a float variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_float(&self) -> Option<f64> {
         match self.variant() {
             Variant::Float(f) => Some(*f),
@@ -189,7 +182,7 @@ impl Var {
     }
 
     /// Extract the list value if this is a list variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_list(&self) -> Option<&List> {
         match self.variant() {
             Variant::List(l) => Some(l),
@@ -198,7 +191,7 @@ impl Var {
     }
 
     /// Extract the map value if this is a map variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_map(&self) -> Option<&map::Map> {
         match self.variant() {
             Variant::Map(m) => Some(m),
@@ -207,7 +200,7 @@ impl Var {
     }
 
     /// Extract the error value if this is an error variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_error(&self) -> Option<&Error> {
         match self.variant() {
             Variant::Err(e) => Some(e.as_ref()),
@@ -216,7 +209,7 @@ impl Var {
     }
 
     /// Extract the flyweight value if this is a flyweight variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_flyweight(&self) -> Option<&Flyweight> {
         match self.variant() {
             Variant::Flyweight(f) => Some(f),
@@ -225,7 +218,7 @@ impl Var {
     }
 
     /// Extract the symbol value if this is a symbol variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_sym(&self) -> Option<Symbol> {
         match self.variant() {
             Variant::Sym(s) => Some(*s),
@@ -234,7 +227,7 @@ impl Var {
     }
 
     /// Extract the binary value if this is a binary variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_binary(&self) -> Option<&crate::Binary> {
         match self.variant() {
             Variant::Binary(b) => Some(b.as_ref()),
@@ -243,7 +236,7 @@ impl Var {
     }
 
     /// Extract the lambda value if this is a lambda variant, otherwise None.
-    #[inline(always)]
+
     pub fn as_lambda(&self) -> Option<&crate::Lambda> {
         match self.variant() {
             Variant::Lambda(l) => Some(l.as_ref()),
@@ -252,7 +245,7 @@ impl Var {
     }
 
     /// Returns true if this is a None variant.
-    #[inline(always)]
+
     pub fn is_none(&self) -> bool {
         matches!(self.variant(), Variant::None)
     }
@@ -270,7 +263,6 @@ impl Var {
         }
     }
 
-    #[inline(always)]
     pub fn is_true(&self) -> bool {
         match self.variant() {
             Variant::None => false,
@@ -734,40 +726,34 @@ impl Var {
     }
 }
 
-#[inline(always)]
 pub fn v_int(i: i64) -> Var {
     Var::mk_integer(i)
 }
 
 /// Produces a truthy integer, not a Variant::Bool boolean value in order to maintain
 /// backwards compatibility with LambdaMOO cores.
-#[inline(always)]
+
 pub fn v_bool_int(b: bool) -> Var {
     if b { v_int(1) } else { v_int(0) }
 }
 
-#[inline(always)]
 pub fn v_bool(b: bool) -> Var {
     Var::mk_bool(b)
 }
 
-#[inline(always)]
 pub fn v_none() -> Var {
     // TODO lazy_static singleton
     Var::mk_none()
 }
 
-#[inline(always)]
 pub fn v_str(s: &str) -> Var {
     Var::mk_str(s)
 }
 
-#[inline(always)]
 pub fn v_string(s: String) -> Var {
     Var::mk_str(&s)
 }
 
-#[inline(always)]
 pub fn v_arc_string(s: std::sync::Arc<String>) -> Var {
     let str_val = crate::string::Str::mk_arc_str(s);
     Var::from_variant(crate::variant::Variant::Str(str_val))
@@ -795,62 +781,50 @@ mod v_arc_string_tests {
     }
 }
 
-#[inline(always)]
 pub fn v_list(values: &[Var]) -> Var {
     Var::mk_list(values)
 }
 
-#[inline(always)]
 pub fn v_list_iter<IT: IntoIterator<Item = Var>>(values: IT) -> Var {
     Var::mk_list_iter(values)
 }
 
-#[inline(always)]
 pub fn v_map(pairs: &[(Var, Var)]) -> Var {
     Var::mk_map(pairs)
 }
 
-#[inline(always)]
 pub fn v_map_iter<'a, I: Iterator<Item = &'a (Var, Var)>>(pairs: I) -> Var {
     Var::mk_map_iter(pairs)
 }
 
-#[inline(always)]
 pub fn v_float(f: f64) -> Var {
     Var::mk_float(f)
 }
 
-#[inline(always)]
 pub fn v_err(e: ErrorCode) -> Var {
     Var::mk_error(e.into())
 }
 
-#[inline(always)]
 pub fn v_error(e: Error) -> Var {
     Var::mk_error(e)
 }
 
-#[inline(always)]
 pub fn v_objid(o: i32) -> Var {
     Var::mk_object(Obj::mk_id(o))
 }
 
-#[inline(always)]
 pub fn v_obj(o: Obj) -> Var {
     Var::mk_object(o)
 }
 
-#[inline(always)]
 pub fn v_sym(s: impl Into<Symbol>) -> Var {
     Var::mk_symbol(s.into())
 }
 
-#[inline(always)]
 pub fn v_binary(bytes: Vec<u8>) -> Var {
     Var::mk_binary(bytes)
 }
 
-#[inline(always)]
 pub fn v_flyweight(delegate: Obj, slots: &[(Symbol, Var)], contents: List) -> Var {
     let fl = Flyweight::mk_flyweight(delegate, slots, contents);
     Var::from_variant(Variant::Flyweight(fl))

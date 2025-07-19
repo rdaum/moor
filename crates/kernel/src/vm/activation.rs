@@ -198,7 +198,6 @@ impl Frame {
         }
     }
 
-    #[inline(always)]
     pub fn set_variable(&mut self, name: &Name, value: Var) -> Result<(), Error> {
         match self {
             Frame::Moo(frame) => {
@@ -211,7 +210,6 @@ impl Frame {
         }
     }
 
-    #[inline(always)]
     pub fn set_global_variable(&mut self, gname: GlobalName, value: Var) {
         match self {
             Frame::Moo(frame) => frame.set_gvar(gname, value),
@@ -221,7 +219,6 @@ impl Frame {
         }
     }
 
-    #[inline(always)]
     pub fn set_return_value(&mut self, value: Var) {
         match self {
             Frame::Moo(frame) => {
@@ -233,7 +230,6 @@ impl Frame {
         }
     }
 
-    #[inline(always)]
     pub fn return_value(&self) -> Var {
         match self {
             Frame::Moo(frame) => frame.peek_top().clone(),

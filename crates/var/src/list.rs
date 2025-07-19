@@ -31,7 +31,6 @@ use std::ops::Index;
 pub struct List(Box<im::Vector<Var>>);
 
 impl List {
-    #[inline(always)]
     pub fn build(values: &[Var]) -> Var {
         let l = im::Vector::from(values.to_vec());
         Var::from_variant(Variant::List(List(Box::new(l))))
@@ -86,12 +85,10 @@ impl Debug for List {
     }
 }
 impl Sequence for List {
-    #[inline(always)]
     fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    #[inline(always)]
     fn len(&self) -> usize {
         self.0.len()
     }
