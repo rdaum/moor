@@ -391,6 +391,20 @@
   margin-top: 1em;
 }
 
+/* Remove excessive margins from HTML content in narrative messages */
+.text_narrative p {
+  margin: 0.2em 0;
+  padding: 0;
+}
+
+.text_narrative p:first-child {
+  margin-top: 0;
+}
+
+.text_narrative p:last-child {
+  margin-bottom: 0;
+}
+
 /* ====== HISTORICAL CONTENT ====== */
 /* Historical events - lighter, muted appearance */
 .historical_narrative {
