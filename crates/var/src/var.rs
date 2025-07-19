@@ -137,7 +137,6 @@ impl Var {
     }
 
     /// Extract the integer value if this is an integer variant, otherwise None.
-
     pub fn as_integer(&self) -> Option<i64> {
         match self.variant() {
             Variant::Int(i) => Some(*i),
@@ -146,7 +145,6 @@ impl Var {
     }
 
     /// Extract the string value if this is a string variant, otherwise None.
-
     pub fn as_string(&self) -> Option<&str> {
         match self.variant() {
             Variant::Str(s) => Some(s.as_str()),
@@ -155,7 +153,6 @@ impl Var {
     }
 
     /// Extract the boolean value if this is a boolean variant, otherwise None.
-
     pub fn as_bool(&self) -> Option<bool> {
         match self.variant() {
             Variant::Bool(b) => Some(*b),
@@ -164,7 +161,6 @@ impl Var {
     }
 
     /// Extract the object value if this is an object variant, otherwise None.
-
     pub fn as_object(&self) -> Option<Obj> {
         match self.variant() {
             Variant::Obj(o) => Some(*o),
@@ -173,7 +169,6 @@ impl Var {
     }
 
     /// Extract the float value if this is a float variant, otherwise None.
-
     pub fn as_float(&self) -> Option<f64> {
         match self.variant() {
             Variant::Float(f) => Some(*f),
@@ -182,7 +177,6 @@ impl Var {
     }
 
     /// Extract the list value if this is a list variant, otherwise None.
-
     pub fn as_list(&self) -> Option<&List> {
         match self.variant() {
             Variant::List(l) => Some(l),
@@ -191,7 +185,6 @@ impl Var {
     }
 
     /// Extract the map value if this is a map variant, otherwise None.
-
     pub fn as_map(&self) -> Option<&map::Map> {
         match self.variant() {
             Variant::Map(m) => Some(m),
@@ -200,7 +193,6 @@ impl Var {
     }
 
     /// Extract the error value if this is an error variant, otherwise None.
-
     pub fn as_error(&self) -> Option<&Error> {
         match self.variant() {
             Variant::Err(e) => Some(e.as_ref()),
@@ -209,7 +201,6 @@ impl Var {
     }
 
     /// Extract the flyweight value if this is a flyweight variant, otherwise None.
-
     pub fn as_flyweight(&self) -> Option<&Flyweight> {
         match self.variant() {
             Variant::Flyweight(f) => Some(f),
@@ -218,7 +209,6 @@ impl Var {
     }
 
     /// Extract the symbol value if this is a symbol variant, otherwise None.
-
     pub fn as_sym(&self) -> Option<Symbol> {
         match self.variant() {
             Variant::Sym(s) => Some(*s),
@@ -227,7 +217,6 @@ impl Var {
     }
 
     /// Extract the binary value if this is a binary variant, otherwise None.
-
     pub fn as_binary(&self) -> Option<&crate::Binary> {
         match self.variant() {
             Variant::Binary(b) => Some(b.as_ref()),
@@ -236,7 +225,6 @@ impl Var {
     }
 
     /// Extract the lambda value if this is a lambda variant, otherwise None.
-
     pub fn as_lambda(&self) -> Option<&crate::Lambda> {
         match self.variant() {
             Variant::Lambda(l) => Some(l.as_ref()),
@@ -245,7 +233,6 @@ impl Var {
     }
 
     /// Returns true if this is a None variant.
-
     pub fn is_none(&self) -> bool {
         matches!(self.variant(), Variant::None)
     }
@@ -732,7 +719,6 @@ pub fn v_int(i: i64) -> Var {
 
 /// Produces a truthy integer, not a Variant::Bool boolean value in order to maintain
 /// backwards compatibility with LambdaMOO cores.
-
 pub fn v_bool_int(b: bool) -> Var {
     if b { v_int(1) } else { v_int(0) }
 }

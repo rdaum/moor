@@ -381,7 +381,7 @@ pub fn moo_frame_execute(
                         continue;
                     }
                     _ => {
-                        let value = f.program.find_literal(&slot).expect("literal not found");
+                        let value = f.program.find_literal(slot).expect("literal not found");
                         f.push(value.clone());
                     }
                 }
@@ -625,8 +625,8 @@ pub fn moo_frame_execute(
                 }
             }
             Op::Push(ident) => {
-                let Some(v) = f.get_env(&ident) else {
-                    if let Some(var_name) = f.program.var_names().ident_for_name(&ident) {
+                let Some(v) = f.get_env(ident) else {
+                    if let Some(var_name) = f.program.var_names().ident_for_name(ident) {
                         return ExecutionResult::PushError(
                             E_VARNF.with_msg(|| format!("Variable `{var_name}` not found")),
                         );
@@ -853,7 +853,6 @@ pub fn moo_frame_execute(
                             .push((CatchType::Errors(error_codes.into_iter().collect()), label));
                     }
                     Variant::Int(0) => {
-                        let label = label;
                         f.catch_stack.push((CatchType::Any, label));
                     }
                     _ => {

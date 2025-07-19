@@ -76,7 +76,7 @@ fn get_target_directory() -> std::path::PathBuf {
     // Try cargo metadata to get target directory
     if let Ok(cargo) = std::env::var("CARGO") {
         if let Ok(output) = std::process::Command::new(cargo)
-            .args(&["metadata", "--format-version", "1"])
+            .args(["metadata", "--format-version", "1"])
             .output()
         {
             if let Ok(metadata_str) = String::from_utf8(output.stdout) {
@@ -109,11 +109,11 @@ fn save_session_results() -> Result<String, Box<dyn std::error::Error>> {
 
     // Generate timestamp for filename
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let filename = target_dir.join(format!("benchmark_results_{}.json", timestamp));
+    let filename = target_dir.join(format!("benchmark_results_{timestamp}.json"));
 
     // Get git commit if available
     let git_commit = std::process::Command::new("git")
-        .args(&["rev-parse", "--short", "HEAD"])
+        .args(["rev-parse", "--short", "HEAD"])
         .output()
         .ok()
         .and_then(|output| {
@@ -132,7 +132,7 @@ fn save_session_results() -> Result<String, Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| "unknown".to_string());
 
     let session = BenchmarkSession {
-        timestamp: format!("{}", timestamp), // Unix timestamp as string
+        timestamp: format!("{timestamp}"), // Unix timestamp as string
         hostname,
         git_commit,
         results,
@@ -200,7 +200,7 @@ pub fn generate_session_summary() {
     if let Some(ref prev) = previous_session {
         println!("📊 Comparing with previous run from {}", prev.timestamp);
         if let Some(ref commit) = prev.git_commit {
-            println!("   Previous commit: {}", commit);
+            println!("   Previous commit: {commit}");
         }
         println!();
     }
@@ -237,9 +237,9 @@ pub fn generate_session_summary() {
                         if mops_change.abs() < 1.0 {
                             "~0%".to_string()
                         } else if mops_change > 0.0 {
-                            format!("+{:.1}% 🚀", mops_change)
+                            format!("+{mops_change:.1}% 🚀")
                         } else {
-                            format!("{:.1}% 📉", mops_change)
+                            format!("{mops_change:.1}% 📉")
                         }
                     })
                     .unwrap_or_else(|| "NEW".to_string())
@@ -305,8 +305,8 @@ pub fn generate_session_summary() {
 
         println!();
         println!("📊 REGRESSION ANALYSIS:");
-        println!("   ✅ Improvements: {} benchmarks", improvements);
-        println!("   ❌ Regressions: {} benchmarks", regressions);
+        println!("   ✅ Improvements: {improvements} benchmarks");
+        println!("   ❌ Regressions: {regressions} benchmarks");
         println!(
             "   📈 Average change: {:.1}%",
             total_change / current_results.len() as f64
@@ -315,8 +315,8 @@ pub fn generate_session_summary() {
 
     // Save results
     match save_session_results() {
-        Ok(filename) => println!("\n💾 Results saved to: {}", filename),
-        Err(e) => println!("\n⚠️  Failed to save results: {}", e),
+        Ok(filename) => println!("\n💾 Results saved to: {filename}"),
+        Err(e) => println!("\n⚠️  Failed to save results: {e}"),
     }
 
     println!("═══════════════════════════════════════════════════════════════════════");

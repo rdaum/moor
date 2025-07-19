@@ -51,7 +51,7 @@ impl TableFormatter {
         if display_width > width {
             // Truncate Unicode-aware - this is complex with variable-width chars, so just truncate simply
             let truncated: String = text.chars().take(width.saturating_sub(3)).collect();
-            format!("{}...", truncated)
+            format!("{truncated}...")
         } else {
             let padding = width.saturating_sub(display_width);
             match align {
@@ -85,7 +85,7 @@ impl TableFormatter {
             print!("│");
             for (header, &width) in self.headers.iter().zip(self.column_widths.iter()) {
                 let formatted = self.format_cell(header, width, "center");
-                print!("{}", formatted);
+                print!("{formatted}");
                 print!("│");
             }
             println!();
@@ -107,7 +107,7 @@ impl TableFormatter {
             for (i, (cell, &width)) in row.iter().zip(self.column_widths.iter()).enumerate() {
                 let align = if i == 0 { "left" } else { "center" };
                 let formatted = self.format_cell(cell, width, align);
-                print!("{}", formatted);
+                print!("{formatted}");
                 print!("│");
             }
             println!();

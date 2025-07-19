@@ -82,6 +82,12 @@ pub struct PerfCounters {
 }
 
 #[cfg(target_os = "linux")]
+impl Default for PerfCounters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerfCounters {
     pub fn new() -> Self {
         PerfCounters {
@@ -153,8 +159,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     if let Some(preferred_chunk_size) = T::chunk_size() {
         println!(" ✅");
         println!(
-            "   Using preferred chunk size: {} ops",
-            preferred_chunk_size
+            "   Using preferred chunk size: {preferred_chunk_size} ops"
         );
 
         // Do a quick warm-up with the preferred size
@@ -190,7 +195,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
         // Max 10 iterations to find good chunk size
         let mut prepared = T::prepare(chunk_size);
         let started = minstant::Instant::now();
-        let _context_return = black_box(|| f(&mut prepared, chunk_size, 0))();
+        black_box(|| f(&mut prepared, chunk_size, 0))();
         let duration = started.elapsed();
 
         let duration_ms = duration.as_millis() as f64;
@@ -254,7 +259,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
         .clamp(MIN_SAMPLES, MAX_SAMPLES);
 
     println!(" ✅");
-    println!("   Optimal chunk size: {} ops", best_chunk_size);
+    println!("   Optimal chunk size: {best_chunk_size} ops");
     if ops_per_ms > 0.0 {
         println!(
             "   Estimated performance: {:.1} Mops/s",
@@ -263,7 +268,7 @@ fn warm_up_and_calibrate<T: BenchContext>(f: &BenchFunction<T>) -> BenchmarkConf
     } else {
         println!("   Estimated performance: Very fast (>1000 Mops/s)");
     }
-    println!("   Target samples: {}", target_samples);
+    println!("   Target samples: {target_samples}");
 
     BenchmarkConfig {
         chunk_size: best_chunk_size,
@@ -512,24 +517,23 @@ fn update_progress_bar(current: usize, total: usize, current_throughput: f64) {
     // Display throughput with proper bounds checking
     let throughput_display = if current_throughput.is_finite() && current_throughput > 0.0 {
         if current_throughput > 1000.0 {
-            format!("{:.0} Mops/s", current_throughput)
+            format!("{current_throughput:.0} Mops/s")
         } else {
-            format!("{:.1} Mops/s", current_throughput)
+            format!("{current_throughput:.1} Mops/s")
         }
     } else {
         "Calculating...".to_string()
     };
 
     print!(
-        "] {}% ({}/{}) {}",
-        percentage, current, total, throughput_display
+        "] {percentage}% ({current}/{total}) {throughput_display}"
     );
 
     io::stdout().flush().unwrap();
 }
 
 pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
-    println!("\n🚀 Benchmarking: {}", name);
+    println!("\n🚀 Benchmarking: {name}");
 
     // Warm-up and calibration phase
     let config = warm_up_and_calibrate(&f);
@@ -602,7 +606,7 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
         0.0
     };
 
-    println!("\n📈 Results for {}:", name);
+    println!("\n📈 Results for {name}:");
 
     // Check if performance counters were actually used (non-zero values indicate they worked)
     let has_perf_counters = results.instructions > 0 || results.branches > 0;
@@ -625,24 +629,24 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
     table.add_row(vec![
         &format!("Ops: {}", results.iterations),
         &format!("Samples: {}", config.target_samples),
-        &format!("CV: {:.2}%", cv_percent),
+        &format!("CV: {cv_percent:.2}%"),
     ]);
 
     table.add_row(vec![
         &format!("{:.2} Mops/s", ops_per_sec / 1_000_000.0),
-        &format!("{:.2} ns/op", ns_per_op),
+        &format!("{ns_per_op:.2} ns/op"),
         &format!("{:.3}s total", summed_results.duration.as_secs_f64()),
     ]);
 
     if has_perf_counters {
         table.add_row(vec![
-            &format!("{:.1} inst/op", instructions_per_op),
-            &format!("{:.1} br/op", branches_per_op),
-            &format!("{:.4}% miss", branch_miss_rate),
+            &format!("{instructions_per_op:.1} inst/op"),
+            &format!("{branches_per_op:.1} br/op"),
+            &format!("{branch_miss_rate:.4}% miss"),
         ]);
 
         table.add_row(vec![
-            &format!("{:.4} miss/op", cache_miss_rate_per_op),
+            &format!("{cache_miss_rate_per_op:.4} miss/op"),
             &format!("{:.1}M branches", results.branches as f64 / 1_000_000.0),
             &format!("{} chunks", results.chunks_executed),
         ]);
