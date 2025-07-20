@@ -315,7 +315,7 @@ impl SuspensionQ {
                 WakeCondition::Task(dependency_task_id) => {
                     self.task_dependencies
                         .entry(*dependency_task_id)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(task_id);
                 }
                 WakeCondition::Input(input_request_id) => {
@@ -373,7 +373,7 @@ impl SuspensionQ {
             WakeCondition::Task(dependency_task_id) => {
                 self.task_dependencies
                     .entry(*dependency_task_id)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(task_id);
             }
             WakeCondition::Input(input_request_id) => {
