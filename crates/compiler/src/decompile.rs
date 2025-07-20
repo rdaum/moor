@@ -1134,9 +1134,8 @@ impl Decompile {
                 let params = self.decompile_scatter_params(&scatter_spec)?;
 
                 // Extract self_var name if present (indicates named function)
-                let self_name = self_var.and_then(|name| {
-                    self.program.var_names().find_variable(&name).cloned()
-                });
+                let self_name = self_var
+                    .and_then(|name| self.program.var_names().find_variable(&name).cloned());
 
                 self.push_expr(Expr::Lambda {
                     params,
@@ -1169,14 +1168,10 @@ impl Decompile {
                         });
                     }
                     _ => {
-                        // Complex lambda expression, use __lambda_call__
+                        // Complex lambda expression, generate lambda call syntax
                         self.push_expr(Expr::Call {
-                            function: crate::ast::CallTarget::Builtin(Symbol::mk("__lambda_call__")),
-                            args: {
-                                let mut call_args = vec![Arg::Normal(lambda_expr)];
-                                call_args.extend(args);
-                                call_args
-                            },
+                            function: crate::ast::CallTarget::Expr(Box::new(lambda_expr)),
+                            args,
                         });
                     }
                 }
