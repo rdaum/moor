@@ -19,7 +19,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use flume::Sender;
-use moor_common::tasks::TaskId;
+use moor_common::tasks::{SchedulerError, TaskId};
 use moor_kernel::tasks::TaskHandle;
 use rpc_common::ClientEvent;
 use tracing::info;
@@ -74,8 +74,9 @@ impl TaskMonitor {
             }
 
             // Collect all the receives into one select
-            let mut receives = vec![];
-            let mut task_client_ids = vec![];
+            let task_count = self.task_handles.len();
+            let mut receives = Vec::with_capacity(task_count);
+            let mut task_client_ids = Vec::with_capacity(task_count);
 
             {
                 let guard = self.task_handles.guard();
@@ -106,43 +107,58 @@ impl TaskMonitor {
 
             match selector.wait_timeout(Duration::from_millis(1000)) {
                 Ok((index, result)) => {
-                    let client_id = task_client_ids[index].1;
-                    let task_id = task_client_ids[index].0;
-                    let guard = self.task_handles.guard();
-                    match result {
-                        Ok((task_id, r)) => {
-                            let result = match r {
-                                Ok(moor_kernel::tasks::TaskResult::Result(v)) => {
-                                    ClientEvent::TaskSuccess(task_id, v)
-                                }
-                                Ok(moor_kernel::tasks::TaskResult::Replaced(th)) => {
-                                    info!(?client_id, ?task_id, "Task restarted");
-                                    self.task_handles.insert(task_id, (client_id, th), &guard);
-                                    continue;
-                                }
-                                Err(e) => ClientEvent::TaskError(task_id, e),
-                            };
-
-                            // Emit task completion event
-                            if let Err(e) = self
-                                .mailbox_sender
-                                .send(SessionActions::PublishTaskCompletion(client_id, result))
-                            {
-                                tracing::error!(error = ?e, client_id = ?client_id, "Failed to send task completion for publishing");
-                            }
-
-                            // Remove the completed task
-                            self.task_handles.remove(&task_id, &guard);
-                        }
-                        Err(_e) => {
-                            // Task completion receive failed, remove the task
-                            self.task_handles.remove(&task_id, &guard);
-                        }
-                    }
+                    self.process_task_completion(index, result, &task_client_ids);
                 }
                 Err(_) => {
                     // Timeout, check kill switch and continue
                 }
+            }
+        }
+    }
+
+    fn process_task_completion(
+        &self,
+        index: usize,
+        result: Result<
+            (
+                TaskId,
+                Result<moor_kernel::tasks::TaskResult, SchedulerError>,
+            ),
+            flume::RecvError,
+        >,
+        task_client_ids: &[(TaskId, uuid::Uuid)],
+    ) {
+        let client_id = task_client_ids[index].1;
+        let task_id = task_client_ids[index].0;
+        let guard = self.task_handles.guard();
+        match result {
+            Ok((task_id, r)) => {
+                let result = match r {
+                    Ok(moor_kernel::tasks::TaskResult::Result(v)) => {
+                        ClientEvent::TaskSuccess(task_id, v)
+                    }
+                    Ok(moor_kernel::tasks::TaskResult::Replaced(th)) => {
+                        info!(?client_id, ?task_id, "Task restarted");
+                        self.task_handles.insert(task_id, (client_id, th), &guard);
+                        return;
+                    }
+                    Err(e) => ClientEvent::TaskError(task_id, e),
+                };
+
+                // Emit task completion event
+                if let Err(e) = self
+                    .mailbox_sender
+                    .send(SessionActions::PublishTaskCompletion(client_id, result))
+                {
+                    tracing::error!(error = ?e, client_id = ?client_id, "Failed to send task completion for publishing");
+                }
+
+                // Remove the completed task
+                self.task_handles.remove(&task_id, &guard);
+            }
+            Err(_e) => {
+                // Task completion receive failed, remove the task
+                self.task_handles.remove(&task_id, &guard);
             }
         }
     }
