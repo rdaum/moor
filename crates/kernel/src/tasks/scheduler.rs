@@ -140,7 +140,7 @@ impl Scheduler {
         };
         let builtin_registry = BuiltinRegistry::new();
 
-        Self {
+        let mut s = Self {
             version,
             running: false,
             database,
@@ -156,7 +156,9 @@ impl Scheduler {
             system_control,
             worker_request_send,
             worker_request_recv,
-        }
+        };
+        s.reload_server_options();
+        s
     }
 
     /// Execute the scheduler loop, run from the server process.

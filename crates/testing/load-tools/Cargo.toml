@@ -22,10 +22,17 @@ path = "src/tx-list-append.rs"
 name = "load-test"
 path = "src/verb-dispatch-load-test.rs"
 
+[[bin]]
+name = "direct-scheduler-load-test"
+path = "src/direct-scheduler-load-test.rs"
+
 [dependencies]
 # Internal Dependencies
 moor-common = { path = "../../common" }
 moor-var = { path = "../../var" }
+moor-db = { path = "../../db" }
+moor-kernel = { path = "../../kernel" }
+moor-compiler = { path = "../../compiler" }
 rpc-async-client = { path = "../../rpc/rpc-async-client" }
 rpc-common = { path = "../../rpc/rpc-common" }
 
@@ -52,3 +59,7 @@ tokio.workspace = true
 
 edn-format.workspace = true
 rand.workspace = true
+
+# Additional dependencies for direct scheduler test
+semver.workspace = true
+tempfile.workspace = true
