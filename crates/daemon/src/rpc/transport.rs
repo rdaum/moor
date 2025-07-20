@@ -100,7 +100,7 @@ impl RpcTransport {
             }
 
             let poll_result = rpc_socket
-                .poll(zmq::POLLIN, 10)
+                .poll(zmq::POLLIN, 100)
                 .with_context(|| "Error polling ZMQ socket. Bailing out.")?;
             if poll_result == 0 {
                 continue;
