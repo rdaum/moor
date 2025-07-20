@@ -120,6 +120,7 @@ boxcar = "0.2"
 flume = "0.11"
 futures = "0.3"
 futures-util = { version = "0.3", features = ["sink", "std"] }
+hierarchical_hash_wheel_timer = { version = "1.3", default-features = false, features = ["fx-hash"] }
 oneshot = { version = "0.1", default-features = false, features = ["std"] }
 papaya = "0.2"
 rayon = "1.10"

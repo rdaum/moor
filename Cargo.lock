@@ -1863,6 +1863,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hierarchical_hash_wheel_timer"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf653d57c559812a3d936bcb210700410c0d79c5e10fd222970d1b7d44b9defc"
+dependencies = [
+ "rustc-hash 2.1.1",
+]
+
+[[package]]
 name = "hkdf"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2805,6 +2814,7 @@ dependencies = [
  "eyre",
  "flume",
  "gdt-cpus",
+ "hierarchical_hash_wheel_timer",
  "hmac 0.12.1",
  "humantime",
  "iana-time-zone",

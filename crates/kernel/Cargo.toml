@@ -91,6 +91,7 @@ onig.workspace = true
 
 # Collections & Data Structures
 ahash.workspace = true
+hierarchical_hash_wheel_timer.workspace = true
 
 # Error Handling & Logging
 thiserror.workspace = true

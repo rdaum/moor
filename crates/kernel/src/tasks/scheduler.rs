@@ -58,9 +58,6 @@ use moor_var::{List, Symbol, Var, v_err, v_int, v_obj, v_string};
 use moor_var::{Obj, Variant};
 use moor_var::{SYSTEM_OBJECT, v_list};
 
-// How often to check for suspended tasks that need to be woken up based on their wake condition.
-const SCHEDULER_WAKE_TASKS_INTERVAL: Duration = Duration::from_micros(50);
-
 /// If a task is retried more than N number of times (due to commit conflict) we choose to abort.
 // TODO: we could also look into some exponential-ish backoff
 const MAX_TASK_RETRIES: u8 = 10;
@@ -177,28 +174,23 @@ impl Scheduler {
         let scheduler_receiver = self.scheduler_receiver.clone();
         let worker_receiver = self.worker_request_recv.clone();
 
-        let mut last_wake_time = Instant::now();
-
         self.reload_server_options();
         while self.running {
-            // Check if it's time to wake tasks
-            if last_wake_time.elapsed() >= SCHEDULER_WAKE_TASKS_INTERVAL {
-                last_wake_time = Instant::now();
-                if let Some(to_wake) = self.task_q.collect_wake_tasks() {
-                    for sr in to_wake {
-                        let task_id = sr.task.task_id;
-                        if let Err(e) = self.task_q.resume_task_thread(
-                            sr.task,
-                            v_int(0),
-                            sr.session,
-                            sr.result_sender,
-                            &self.task_control_sender,
-                            self.database.as_ref(),
-                            self.builtin_registry.clone(),
-                            self.config.clone(),
-                        ) {
-                            error!(?task_id, ?e, "Error resuming task");
-                        }
+            // Check for tasks that need to be woken (timer wheel handles timing internally)
+            if let Some(to_wake) = self.task_q.collect_wake_tasks() {
+                for sr in to_wake {
+                    let task_id = sr.task.task_id;
+                    if let Err(e) = self.task_q.resume_task_thread(
+                        sr.task,
+                        v_int(0),
+                        sr.session,
+                        sr.result_sender,
+                        &self.task_control_sender,
+                        self.database.as_ref(),
+                        self.builtin_registry.clone(),
+                        self.config.clone(),
+                    ) {
+                        error!(?task_id, ?e, "Error resuming task");
                     }
                 }
             }
@@ -235,7 +227,7 @@ impl Scheduler {
                 selector
             };
 
-            match selector.wait_timeout(Duration::from_millis(10)) {
+            match selector.wait_timeout(Duration::from_millis(2)) {
                 Ok(Some(SchedulerMessage::Task(task_id, msg))) => {
                     self.handle_task_msg(task_id, msg);
                 }

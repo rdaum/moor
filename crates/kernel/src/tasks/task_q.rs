@@ -17,9 +17,11 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use flume::Sender;
+use hierarchical_hash_wheel_timer::wheels::TimerEntryWithDelay;
+use hierarchical_hash_wheel_timer::wheels::quad_wheel::{PruneDecision, QuadWheelWithOverflow};
 use minstant::Instant;
 use rayon::ThreadPool;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -30,6 +32,19 @@ use uuid::Uuid;
 use moor_var::Obj;
 
 use crate::tasks::task::Task;
+
+/// Timer entry for the hash wheel timer
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TimerEntry {
+    task_id: TaskId,
+    delay: Duration,
+}
+
+impl TimerEntryWithDelay for TimerEntry {
+    fn delay(&self) -> Duration {
+        self.delay
+    }
+}
 use crate::tasks::{TaskDescription, TaskResult, TaskStart, TasksDb};
 use moor_common::tasks::{NoopClientSession, Session, SessionFactory};
 use moor_common::tasks::{SchedulerError, TaskId};
@@ -93,37 +108,45 @@ impl TaskQ {
     }
 
     /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
+    /// Uses segmented storage types for O(1) operations instead of O(n) linear scan.
     pub(crate) fn collect_wake_tasks(&mut self) -> Option<Vec<SuspendedTask>> {
         if self.suspended.tasks.is_empty() {
             return None;
         }
-        let now = Instant::now();
+
         let mut to_wake = None;
-        for task in self.suspended.tasks.values() {
-            match task.wake_condition {
-                WakeCondition::Time(t) => {
-                    if t <= now {
-                        none_or_push(&mut to_wake, task.task.task_id);
-                    }
-                }
-                WakeCondition::Task(task_id) => {
-                    if !self.suspended.tasks.contains_key(&task_id)
-                        && !self.active.contains_key(&task_id)
-                    {
-                        none_or_push(&mut to_wake, task.task.task_id);
-                    }
-                }
-                WakeCondition::Immedate => {
-                    none_or_push(&mut to_wake, task.task.task_id);
-                }
-                _ => {}
+
+        // 1. Advance timer wheel based on elapsed time and collect expired timers
+        let expired_timers = self.suspended.advance_timer_wheel();
+        for timer_entry in expired_timers {
+            none_or_push(&mut to_wake, timer_entry.task_id);
+        }
+
+        // 2. Collect all immediate wake tasks (O(1) per task)
+        while let Some(task_id) = self.suspended.immediate_wake_queue.pop_front() {
+            none_or_push(&mut to_wake, task_id);
+        }
+
+        // 3. Check for task dependencies that should wake (O(1) per dependency check)
+        let mut dependency_tasks_to_wake = Vec::new();
+        for (dependency_task_id, dependent_task_ids) in &self.suspended.task_dependencies {
+            // If the dependency task is no longer running or suspended, wake dependents
+            if !self.suspended.tasks.contains_key(dependency_task_id)
+                && !self.active.contains_key(dependency_task_id)
+            {
+                dependency_tasks_to_wake.extend(dependent_task_ids.iter().copied());
             }
         }
+        for task_id in dependency_tasks_to_wake {
+            none_or_push(&mut to_wake, task_id);
+        }
+
         let to_wake = to_wake?;
         let mut tasks = vec![];
         for task_id in to_wake {
-            let sr = self.suspended.tasks.remove(&task_id).unwrap();
-            tasks.push(sr);
+            if let Some(sr) = self.suspended.remove_task(task_id) {
+                tasks.push(sr);
+            }
         }
         Some(tasks)
     }
@@ -182,7 +205,27 @@ impl WakeCondition {
 /// Ties the local storage for suspended tasks in with a reference to the tasks DB, to allow for
 /// keeping them in sync.
 pub struct SuspensionQ {
+    /// All suspended tasks - the master storage
     pub(crate) tasks: HashMap<TaskId, SuspendedTask, BuildHasherDefault<AHasher>>,
+
+    /// Time-based tasks use a hash wheel timer (O(1) amortized)
+    timer_wheel: QuadWheelWithOverflow<TimerEntry>,
+
+    /// Last time we advanced the timer wheel (for tracking elapsed time)
+    last_timer_advance: Option<Instant>,
+
+    /// Tasks that should wake immediately (O(1) push/pop)
+    immediate_wake_queue: VecDeque<TaskId>,
+
+    /// Tasks waiting for other tasks to complete (O(1) lookup by dependency)
+    task_dependencies: HashMap<TaskId, Vec<TaskId>, BuildHasherDefault<AHasher>>,
+
+    /// Tasks waiting for input by request ID (O(1) lookup)
+    input_requests: HashMap<uuid::Uuid, TaskId, BuildHasherDefault<AHasher>>,
+
+    /// Tasks waiting for worker responses by request ID (O(1) lookup)
+    worker_requests: HashMap<uuid::Uuid, TaskId, BuildHasherDefault<AHasher>>,
+
     tasks_database: Box<dyn TasksDb>,
 }
 
@@ -190,8 +233,42 @@ impl SuspensionQ {
     pub fn new(tasks_database: Box<dyn TasksDb>) -> Self {
         Self {
             tasks: Default::default(),
+            // Create timer wheel with pruner that keeps all entries
+            timer_wheel: QuadWheelWithOverflow::new(|_| PruneDecision::Keep),
+            last_timer_advance: Some(Instant::now()),
+            immediate_wake_queue: VecDeque::new(),
+            task_dependencies: HashMap::default(),
+            input_requests: HashMap::default(),
+            worker_requests: HashMap::default(),
             tasks_database,
         }
+    }
+
+    /// Advance the timer wheel based on elapsed time and return expired entries.
+    /// This follows the pattern from thread_timer.rs - call tick() once per millisecond elapsed.
+    fn advance_timer_wheel(&mut self) -> Vec<TimerEntry> {
+        let now = Instant::now();
+        let last_advance = self.last_timer_advance.unwrap_or(now);
+
+        if now <= last_advance {
+            return Vec::new();
+        }
+
+        let elapsed = now.duration_since(last_advance);
+        let millis_elapsed = elapsed.as_millis() as u64;
+
+        let mut expired_entries = Vec::new();
+
+        // Call tick() once per millisecond elapsed, just like thread_timer does
+        for _ in 0..millis_elapsed {
+            let expired = self.timer_wheel.tick();
+            expired_entries.extend(expired);
+        }
+
+        // Update last advance time by the actual milliseconds we processed
+        self.last_timer_advance = Some(last_advance + Duration::from_millis(millis_elapsed));
+
+        expired_entries
     }
 
     /// Load all tasks from the tasks database. Called on startup to reconstitute the task list
@@ -212,7 +289,47 @@ impl SuspensionQ {
                 .clone()
                 .mk_background_session(&task.task.player)
                 .expect("Unable to create new background session for suspended task");
-            self.tasks.insert(task.task.task_id, task);
+
+            let task_id = task.task.task_id;
+            match &task.wake_condition {
+                WakeCondition::Time(wake_time) => {
+                    let now = Instant::now();
+                    if *wake_time > now {
+                        let delay = wake_time.duration_since(now);
+                        let timer_entry = TimerEntry { task_id, delay };
+                        if let Err(e) = self.timer_wheel.insert_with_delay(timer_entry, delay) {
+                            error!(
+                                ?e,
+                                ?task_id,
+                                "Failed to insert timer entry into timer wheel"
+                            );
+                        }
+                    } else {
+                        // Past deadline - add to immediate queue
+                        self.immediate_wake_queue.push_back(task_id);
+                    }
+                }
+                WakeCondition::Immedate => {
+                    self.immediate_wake_queue.push_back(task_id);
+                }
+                WakeCondition::Task(dependency_task_id) => {
+                    self.task_dependencies
+                        .entry(*dependency_task_id)
+                        .or_insert_with(Vec::new)
+                        .push(task_id);
+                }
+                WakeCondition::Input(input_request_id) => {
+                    self.input_requests.insert(*input_request_id, task_id);
+                }
+                WakeCondition::Worker(worker_request_id) => {
+                    self.worker_requests.insert(*worker_request_id, task_id);
+                }
+                WakeCondition::Never => {
+                    //
+                }
+            }
+
+            self.tasks.insert(task_id, task);
         }
         // Now delete them from the database.
         if let Err(e) = self.tasks_database.delete_all_tasks() {
@@ -230,6 +347,46 @@ impl SuspensionQ {
         result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
     ) {
         let task_id = task.task_id;
+
+        // Add to appropriate storage based on wake condition
+        match &wake_condition {
+            WakeCondition::Time(wake_time) => {
+                let now = Instant::now();
+                if *wake_time > now {
+                    let delay = wake_time.duration_since(now);
+                    let timer_entry = TimerEntry { task_id, delay };
+                    if let Err(e) = self.timer_wheel.insert_with_delay(timer_entry, delay) {
+                        error!(
+                            ?e,
+                            ?task_id,
+                            "Failed to insert timer entry into timer wheel"
+                        );
+                    }
+                } else {
+                    // Past deadline - add to immediate queue
+                    self.immediate_wake_queue.push_back(task_id);
+                }
+            }
+            WakeCondition::Immedate => {
+                self.immediate_wake_queue.push_back(task_id);
+            }
+            WakeCondition::Task(dependency_task_id) => {
+                self.task_dependencies
+                    .entry(*dependency_task_id)
+                    .or_insert_with(Vec::new)
+                    .push(task_id);
+            }
+            WakeCondition::Input(input_request_id) => {
+                self.input_requests.insert(*input_request_id, task_id);
+            }
+            WakeCondition::Worker(worker_request_id) => {
+                self.worker_requests.insert(*worker_request_id, task_id);
+            }
+            WakeCondition::Never => {
+                //
+            }
+        }
+
         let sr = SuspendedTask {
             wake_condition,
             task,
@@ -245,7 +402,43 @@ impl SuspensionQ {
     /// Remove a task from the set of suspended tasks.
     pub(crate) fn remove_task(&mut self, task_id: TaskId) -> Option<SuspendedTask> {
         let task = self.tasks.remove(&task_id);
-        if task.is_some() {
+        if let Some(ref suspended_task) = task {
+            // Clean up from all data structures based on wake condition
+            match &suspended_task.wake_condition {
+                WakeCondition::Time(_) => {
+                    // Timer wheel handles removal automatically when tasks expire
+                    // No manual cleanup needed
+                }
+                WakeCondition::Immedate => {
+                    // Remove from immediate wake queue (O(n) but queue should be small)
+                    if let Some(pos) = self
+                        .immediate_wake_queue
+                        .iter()
+                        .position(|&id| id == task_id)
+                    {
+                        self.immediate_wake_queue.remove(pos);
+                    }
+                }
+                WakeCondition::Task(dependency_task_id) => {
+                    // Remove from task dependencies
+                    if let Some(dependents) = self.task_dependencies.get_mut(dependency_task_id) {
+                        dependents.retain(|&id| id != task_id);
+                        if dependents.is_empty() {
+                            self.task_dependencies.remove(dependency_task_id);
+                        }
+                    }
+                }
+                WakeCondition::Input(input_request_id) => {
+                    self.input_requests.remove(input_request_id);
+                }
+                WakeCondition::Worker(worker_request_id) => {
+                    self.worker_requests.remove(worker_request_id);
+                }
+                WakeCondition::Never => {
+                    //
+                }
+            }
+
             if let Err(e) = self.tasks_database.delete_task(task_id) {
                 error!(?e, "Could not delete suspended task from tasks database");
             }
@@ -263,25 +456,18 @@ impl SuspensionQ {
     }
 
     /// Pull a task from the suspended list that is waiting for input, for the given player.
+    /// Uses O(1) lookup instead of O(n) linear scan.
     pub(crate) fn pull_task_for_input(
         &mut self,
         input_request_id: Uuid,
         player: &Obj,
     ) -> Option<SuspendedTask> {
-        let (task_id, perms) = self.tasks.iter().find_map(|(task_id, sr)| {
-            if let WakeCondition::Input(request_id) = &sr.wake_condition {
-                if *request_id == input_request_id {
-                    Some((*task_id, sr.task.perms))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        })?;
+        // O(1) lookup by input request ID
+        let &task_id = self.input_requests.get(&input_request_id)?;
 
-        // If the player doesn't match, we'll pretend we didn't even see it.
-        if perms.ne(player) {
+        // Verify the task still exists and check permissions
+        let suspended_task = self.tasks.get(&task_id)?;
+        if suspended_task.task.perms.ne(player) {
             warn!(
                 ?task_id,
                 ?input_request_id,
@@ -289,30 +475,23 @@ impl SuspensionQ {
                 "Task input request received for wrong player"
             );
             return None;
-        };
+        }
 
-        let sr = self.remove_task(task_id).expect("Corrupt task list");
-        Some(sr)
+        // Remove and return the task
+        self.remove_task(task_id)
     }
 
+    /// Pull a task from the suspended list that is waiting for a worker response.
+    /// Uses O(1) lookup instead of O(n) linear scan.
     pub(crate) fn pull_task_for_worker(
         &mut self,
         worker_request_id: Uuid,
     ) -> Option<SuspendedTask> {
-        let (task_id, _) = self.tasks.iter().find_map(|(task_id, sr)| {
-            if let WakeCondition::Worker(request_id) = &sr.wake_condition {
-                if *request_id == worker_request_id {
-                    Some((*task_id, sr.task.perms))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        })?;
+        // O(1) lookup by worker request ID
+        let &task_id = self.worker_requests.get(&worker_request_id)?;
 
-        let sr = self.remove_task(task_id).expect("Corrupt task list");
-        Some(sr)
+        // Remove and return the task
+        self.remove_task(task_id)
     }
 
     /// Get a nice friendly list of all tasks in suspension state.
