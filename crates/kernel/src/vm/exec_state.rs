@@ -199,7 +199,7 @@ impl VMExecState {
     
     /// Factory methods for creating activations with proper pool access
     pub fn create_call_activation(&self, request: Box<VerbExecutionRequest>) -> Activation {
-        Activation::for_call(request, &self.var_pool)
+        Activation::for_call(request, &self.var_pool, &self.var_option_pool)
     }
     
     pub fn create_lambda_activation(
@@ -208,7 +208,7 @@ impl VMExecState {
         current_activation: &Activation, 
         args: Vec<Var>
     ) -> Result<Activation, Error> {
-        Activation::for_lambda_call(lambda, current_activation, args, &self.var_pool)
+        Activation::for_lambda_call(lambda, current_activation, args, &self.var_pool, &self.var_option_pool)
     }
     
     pub fn create_eval_activation(
@@ -217,7 +217,7 @@ impl VMExecState {
         player: &Obj, 
         program: Program
     ) -> Activation {
-        Activation::for_eval(permissions, player, program, &self.var_pool)
+        Activation::for_eval(permissions, player, program, &self.var_pool, &self.var_option_pool)
     }
 }
 

@@ -119,6 +119,19 @@ impl<T> VecPool<T> {
     pub fn available_bytes(&self) -> usize {
         self.available_bytes.load(Ordering::Relaxed)
     }
+
+    /// Debug method to show pool statistics
+    pub fn debug_stats(&self) -> String {
+        format!(
+            "Pool stats: allocated={} bytes, available={} bytes, size_classes=[{}, {}, {}, {}] buffers",
+            self.allocated_bytes(),
+            self.available_bytes(),
+            self.size_classes[0].buffers.len(),
+            self.size_classes[1].buffers.len(), 
+            self.size_classes[2].buffers.len(),
+            self.size_classes[3].buffers.len()
+        )
+    }
 }
 
 /// Handle that identifies a slab-allocated backing buffer
@@ -136,6 +149,26 @@ pub struct SlabVec<T> {
     len: usize,
     capacity: usize,
     handle: SlabHandle,
+}
+
+/// Iterator for SlabVec
+pub struct SlabVecIter<'a, T> {
+    vec: &'a SlabVec<T>,
+    index: usize,
+}
+
+impl<'a, T> Iterator for SlabVecIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.vec.len {
+            let item = self.vec.get(self.index)?;
+            self.index += 1;
+            Some(item)
+        } else {
+            None
+        }
+    }
 }
 
 impl<T> SlabVec<T> {
@@ -172,12 +205,15 @@ impl<T> SlabVec<T> {
     }
 
     pub fn from_vec(pool: Rc<RefCell<VecPool<T>>>, mut vec: Vec<T>) -> Self {
-        let (ptr, buffer_idx, size_class) = pool.borrow_mut().allocate_backing(vec.len());
+        // Check size before allocating to avoid memory leaks
+        let size_class = VecPool::<T>::size_class_for_capacity(vec.len());
         let capacity = SIZE_CLASSES[size_class];
         
         if vec.len() > capacity {
             panic!("SlabVec::from_vec: vector too large for any size class");
         }
+
+        let (ptr, buffer_idx, size_class) = pool.borrow_mut().allocate_backing(vec.len());
 
         let mut slab_vec = Self {
             pool,
@@ -345,6 +381,30 @@ impl<T> SlabVec<T> {
             self.truncate(new_len);
         }
     }
+
+    /// Return an iterator over the elements
+    pub fn iter(&self) -> SlabVecIter<T> {
+        SlabVecIter {
+            vec: self,
+            index: 0,
+        }
+    }
+
+    /// Return a mutable slice for interfacing with existing code
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        if self.len == 0 {
+            return &mut [];
+        }
+        
+        unsafe {
+            std::slice::from_raw_parts_mut(self.ptr.as_ptr().cast::<T>(), self.len)
+        }
+    }
+
+    /// Return the underlying pool for creating new SlabVecs with the same pool
+    pub fn pool(&self) -> &std::rc::Rc<std::cell::RefCell<VecPool<T>>> {
+        &self.pool
+    }
 }
 
 impl<T> Drop for SlabVec<T> {
@@ -363,8 +423,8 @@ unsafe impl<T: Send> Send for SlabVec<T> {}
 
 impl<T: Clone> Clone for SlabVec<T> {
     fn clone(&self) -> Self {
-        // Create a new SlabVec with the same pool and copy all elements
-        let mut new_vec = SlabVec::new(self.pool.clone());
+        // Create a new SlabVec with the same pool and capacity as the original
+        let mut new_vec = SlabVec::with_capacity(self.pool.clone(), self.len);
         
         for i in 0..self.len {
             unsafe {
