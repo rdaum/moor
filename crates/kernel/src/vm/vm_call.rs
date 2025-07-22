@@ -273,12 +273,12 @@ impl VMExecState {
     /// (non-command) in this VM.
     /// Actually creates the activation record and puts it on the stack.
     pub fn exec_call_request(&mut self, call_request: Box<VerbExecutionRequest>) {
-        let a = Activation::for_call(call_request);
+        let a = self.create_call_activation(call_request);
         self.stack.push(a);
     }
 
     pub fn exec_eval_request(&mut self, permissions: &Obj, player: &Obj, program: Program) {
-        let a = Activation::for_eval(*permissions, player, program);
+        let a = self.create_eval_activation(*permissions, player, program);
 
         self.stack.push(a);
     }
@@ -289,8 +289,9 @@ impl VMExecState {
         lambda: moor_var::Lambda,
         args: List,
     ) -> Result<(), Error> {
-        let current_activation = self.top();
-        let a = Activation::for_lambda_call(&lambda, current_activation, args.iter().collect())?;
+        // We need to extract data from current activation before creating new one due to borrowing
+        let current_activation = self.top().clone();
+        let a = self.create_lambda_activation(&lambda, &current_activation, args.iter().collect())?;
         self.stack.push(a);
         Ok(())
     }

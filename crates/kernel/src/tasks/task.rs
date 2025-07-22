@@ -38,20 +38,17 @@ use moor_common::model::{CommitResult, VerbDef, WorldState, WorldStateError};
 use moor_common::tasks::CommandError;
 use moor_common::tasks::CommandError::PermissionDenied;
 use moor_common::tasks::TaskId;
-use moor_common::util::{PerfTimerGuard, TaskVecPool, parse_into_words};
-use moor_var::{List, Var, v_int, v_str};
+use moor_common::util::{PerfTimerGuard, parse_into_words};
+use moor_var::{List, v_int, v_str};
 use moor_var::{NOTHING, SYSTEM_OBJECT};
 use moor_var::{Obj, v_obj};
 use moor_var::{Symbol, Variant};
-use moor_var::program::names::Name;
-use moor_compiler::Label;
 
 use crate::config::{Config, FeaturesConfig};
 use crate::tasks::task_scheduler_client::{TaskControlMsg, TaskSchedulerClient};
 use crate::tasks::{ServerOptions, TaskStart, sched_counters};
 use crate::vm::builtins::BuiltinRegistry;
 use crate::vm::exec_state::VMExecState;
-use crate::vm::{CatchType, FinallyReason, Scope};
 use crate::vm::vm_host::VmHost;
 use crate::vm::{VMHostResponse, VerbCall};
 use moor_common::matching::{
@@ -84,13 +81,6 @@ pub struct Task {
     /// A copy of the VM state at the time the task was created or last committed/suspended.
     /// For restoring on retry.
     pub(crate) retry_state: VMExecState,
-    /// Slab allocator pools for this task's vector allocations
-    pub(crate) var_pool: TaskVecPool<Var>,
-    pub(crate) var_option_pool: TaskVecPool<Option<Var>>,
-    pub(crate) scope_pool: TaskVecPool<Scope>,
-    pub(crate) catch_pool: TaskVecPool<(CatchType, Label)>,
-    pub(crate) finally_pool: TaskVecPool<FinallyReason>,
-    pub(crate) capture_pool: TaskVecPool<(Name, Var)>,
 }
 
 impl Task {
@@ -127,12 +117,6 @@ impl Task {
             kill_switch,
             retries: 0,
             retry_state,
-            var_pool: TaskVecPool::new(),
-            var_option_pool: TaskVecPool::new(),
-            scope_pool: TaskVecPool::new(),
-            catch_pool: TaskVecPool::new(),
-            finally_pool: TaskVecPool::new(),
-            capture_pool: TaskVecPool::new(),
         })
     }
 
@@ -715,12 +699,6 @@ impl<C> Decode<C> for Task {
             kill_switch,
             retries,
             retry_state,
-            var_pool: TaskVecPool::new(),
-            var_option_pool: TaskVecPool::new(),
-            scope_pool: TaskVecPool::new(),
-            catch_pool: TaskVecPool::new(),
-            finally_pool: TaskVecPool::new(),
-            capture_pool: TaskVecPool::new(),
         })
     }
 }
@@ -745,12 +723,6 @@ impl<'de, C> BorrowDecode<'de, C> for Task {
             kill_switch,
             retries,
             retry_state,
-            var_pool: TaskVecPool::new(),
-            var_option_pool: TaskVecPool::new(),
-            scope_pool: TaskVecPool::new(),
-            catch_pool: TaskVecPool::new(),
-            finally_pool: TaskVecPool::new(),
-            capture_pool: TaskVecPool::new(),
         })
     }
 }

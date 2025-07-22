@@ -22,7 +22,7 @@ use uuid::Uuid;
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbDef;
 use moor_common::model::VerbFlag;
-use moor_common::util::BitEnum;
+use moor_common::util::{BitEnum, TaskVecPool};
 use moor_compiler::BuiltinId;
 use moor_compiler::Program;
 use moor_compiler::ScatterLabel;
@@ -263,14 +263,14 @@ impl Activation {
     #[allow(irrefutable_let_patterns)] // We know this
     #[allow(clippy::boxed_local)] // It gets called w/ a Box so shut up, I have no choice, clippy
     // is a Moo frame. We're just making room
-    pub fn for_call(verb_call_request: Box<VerbExecutionRequest>) -> Self {
+    pub fn for_call(verb_call_request: Box<VerbExecutionRequest>, var_pool: &TaskVecPool<moor_var::Var>) -> Self {
         let program = verb_call_request.program;
         let verb_owner = verb_call_request.resolved_verb.owner();
 
         let ProgramType::MooR(program) = program else {
             unimplemented!("Only MOO programs are supported")
         };
-        let frame = Box::new(MooStackFrame::new(program));
+        let frame = Box::new(MooStackFrame::new(program, var_pool));
         let mut frame = Frame::Moo(frame);
         frame.set_global_variable(GlobalName::this, verb_call_request.call.this.clone());
         frame.set_global_variable(GlobalName::player, v_obj(verb_call_request.call.player));
@@ -337,9 +337,10 @@ impl Activation {
         lambda: &Lambda,
         current_activation: &Activation,
         args: Vec<Var>,
+        var_pool: &TaskVecPool<moor_var::Var>,
     ) -> Result<Self, Error> {
         // Create new frame with lambda's program
-        let mut frame = Box::new(MooStackFrame::new(lambda.0.body.clone()));
+        let mut frame = Box::new(MooStackFrame::new(lambda.0.body.clone(), var_pool));
 
         // Merge captured variables into the fresh environment
         // The MooStackFrame::new already created a proper global environment
@@ -533,7 +534,7 @@ impl Activation {
         })
     }
 
-    pub fn for_eval(permissions: Obj, player: &Obj, program: Program) -> Self {
+    pub fn for_eval(permissions: Obj, player: &Obj, program: Program, var_pool: &TaskVecPool<moor_var::Var>) -> Self {
         let verbdef = VerbDef::new(
             Uuid::new_v4(),
             NOTHING,
@@ -543,7 +544,7 @@ impl Activation {
             VerbArgsSpec::this_none_this(),
         );
 
-        let frame = Box::new(MooStackFrame::new(program));
+        let frame = Box::new(MooStackFrame::new(program, var_pool));
         let mut frame = Frame::Moo(frame);
 
         frame.set_global_variable(GlobalName::this, v_obj(NOTHING));

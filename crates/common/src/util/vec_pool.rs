@@ -129,6 +129,7 @@ struct SlabHandle {
 }
 
 /// A Vec-like container that uses slab-allocated backing storage
+#[derive(Debug)]
 pub struct SlabVec<T> {
     pool: Rc<RefCell<VecPool<T>>>,
     ptr: NonNull<MaybeUninit<T>>,
@@ -215,6 +216,22 @@ impl<T> SlabVec<T> {
         
         // Prevent Drop from running since we've moved all elements and returned buffer
         std::mem::forget(self);
+        
+        vec
+    }
+
+    pub fn to_vec(&self) -> Vec<T> 
+    where 
+        T: Clone 
+    {
+        let mut vec = Vec::with_capacity(self.len);
+        
+        for i in 0..self.len {
+            unsafe {
+                let item = &*self.ptr.as_ptr().add(i).cast::<T>();
+                vec.push(item.clone());
+            }
+        }
         
         vec
     }
@@ -344,6 +361,42 @@ impl<T> Drop for SlabVec<T> {
 
 unsafe impl<T: Send> Send for SlabVec<T> {}
 
+impl<T: Clone> Clone for SlabVec<T> {
+    fn clone(&self) -> Self {
+        // Create a new SlabVec with the same pool and copy all elements
+        let mut new_vec = SlabVec::new(self.pool.clone());
+        
+        for i in 0..self.len {
+            unsafe {
+                let item = &*self.ptr.as_ptr().add(i).cast::<T>();
+                new_vec.push(item.clone());
+            }
+        }
+        
+        new_vec
+    }
+}
+
+impl<T: PartialEq> PartialEq for SlabVec<T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+        
+        for i in 0..self.len {
+            unsafe {
+                let self_item = &*self.ptr.as_ptr().add(i).cast::<T>();
+                let other_item = &*other.ptr.as_ptr().add(i).cast::<T>();
+                if self_item != other_item {
+                    return false;
+                }
+            }
+        }
+        
+        true
+    }
+}
+
 // SAFETY: VecPool is Send when T is Send because:
 // 1. Each Task owns its pools exclusively (no sharing between threads)  
 // 2. Pools are moved atomically with the Task between threads
@@ -362,6 +415,12 @@ impl<T> TaskVecPool<T> {
     
     pub fn inner(&self) -> &Rc<RefCell<VecPool<T>>> {
         &self.0
+    }
+}
+
+impl<T> Default for TaskVecPool<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

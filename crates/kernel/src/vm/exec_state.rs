@@ -19,7 +19,12 @@ use std::time::{Duration, SystemTime};
 
 use crate::PhantomUnsync;
 use crate::vm::activation::{Activation, Frame};
+use crate::vm::{CatchType, FinallyReason, Scope, VerbExecutionRequest};
 use moor_common::tasks::TaskId;
+use moor_common::util::TaskVecPool;
+use moor_var::program::names::Name;
+use moor_var::{Error, Lambda};
+use moor_compiler::{Label, Program};
 
 // {this, verb-name, programmer, verb-loc, player, line-number}
 #[derive(Clone)]
@@ -33,7 +38,7 @@ pub struct Caller {
 }
 
 /// Represents the state of VM execution for a given task.
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug)]
 pub(crate) struct VMExecState {
     /// The task ID of the task that for current stack of activations.
     pub(crate) task_id: TaskId,
@@ -51,6 +56,14 @@ pub(crate) struct VMExecState {
     pub(crate) start_time: Option<SystemTime>,
     /// The amount of time the task is allowed to run.
     pub(crate) maximum_time: Option<Duration>,
+    
+    /// Slab allocator pools for this task's vector allocations (not serialized)
+    pub(crate) var_pool: TaskVecPool<Var>,
+    pub(crate) var_option_pool: TaskVecPool<Option<Var>>,
+    pub(crate) scope_pool: TaskVecPool<Scope>,
+    pub(crate) catch_pool: TaskVecPool<(CatchType, Label)>,
+    pub(crate) finally_pool: TaskVecPool<FinallyReason>,
+    pub(crate) capture_pool: TaskVecPool<(Name, Var)>,
 
     unsync: PhantomUnsync,
 }
@@ -65,6 +78,12 @@ impl VMExecState {
             max_ticks,
             tick_slice: 0,
             maximum_time: None,
+            var_pool: TaskVecPool::new(),
+            var_option_pool: TaskVecPool::new(),
+            scope_pool: TaskVecPool::new(),
+            catch_pool: TaskVecPool::new(),
+            finally_pool: TaskVecPool::new(),
+            capture_pool: TaskVecPool::new(),
             unsync: Default::default(),
         }
     }
@@ -176,5 +195,105 @@ impl VMExecState {
             .unwrap();
 
         max_time.checked_sub(elapsed)
+    }
+    
+    /// Factory methods for creating activations with proper pool access
+    pub fn create_call_activation(&self, request: Box<VerbExecutionRequest>) -> Activation {
+        Activation::for_call(request, &self.var_pool)
+    }
+    
+    pub fn create_lambda_activation(
+        &self, 
+        lambda: &Lambda, 
+        current_activation: &Activation, 
+        args: Vec<Var>
+    ) -> Result<Activation, Error> {
+        Activation::for_lambda_call(lambda, current_activation, args, &self.var_pool)
+    }
+    
+    pub fn create_eval_activation(
+        &self,
+        permissions: Obj, 
+        player: &Obj, 
+        program: Program
+    ) -> Activation {
+        Activation::for_eval(permissions, player, program, &self.var_pool)
+    }
+}
+
+impl Encode for VMExecState {
+    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+        // Serialize everything except the pools
+        self.task_id.encode(encoder)?;
+        self.stack.encode(encoder)?;
+        self.tick_slice.encode(encoder)?;
+        self.max_ticks.encode(encoder)?;
+        self.tick_count.encode(encoder)?;
+        self.start_time.encode(encoder)?;
+        self.maximum_time.encode(encoder)?;
+        self.unsync.encode(encoder)?;
+        Ok(())
+    }
+}
+
+impl<C> Decode<C> for VMExecState {
+    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
+        let task_id = TaskId::decode(decoder)?;
+        let stack = Vec::decode(decoder)?;
+        let tick_slice = usize::decode(decoder)?;
+        let max_ticks = usize::decode(decoder)?;
+        let tick_count = usize::decode(decoder)?;
+        let start_time = Option::decode(decoder)?;
+        let maximum_time = Option::decode(decoder)?;
+        let unsync = PhantomUnsync::decode(decoder)?;
+        
+        Ok(Self {
+            task_id,
+            stack,
+            tick_slice,
+            max_ticks,
+            tick_count,
+            start_time,
+            maximum_time,
+            // Recreate fresh pools after deserialization
+            var_pool: TaskVecPool::new(),
+            var_option_pool: TaskVecPool::new(),
+            scope_pool: TaskVecPool::new(),
+            catch_pool: TaskVecPool::new(),
+            finally_pool: TaskVecPool::new(),
+            capture_pool: TaskVecPool::new(),
+            unsync,
+        })
+    }
+}
+
+impl<'de, C> bincode::BorrowDecode<'de, C> for VMExecState {
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
+        let task_id = TaskId::borrow_decode(decoder)?;
+        let stack = Vec::borrow_decode(decoder)?;
+        let tick_slice = usize::borrow_decode(decoder)?;
+        let max_ticks = usize::borrow_decode(decoder)?;
+        let tick_count = usize::borrow_decode(decoder)?;
+        let start_time = Option::borrow_decode(decoder)?;
+        let maximum_time = Option::borrow_decode(decoder)?;
+        let unsync = PhantomUnsync::borrow_decode(decoder)?;
+        
+        Ok(Self {
+            task_id,
+            stack,
+            tick_slice,
+            max_ticks,
+            tick_count,
+            start_time,
+            maximum_time,
+            // Recreate fresh pools after deserialization
+            var_pool: TaskVecPool::new(),
+            var_option_pool: TaskVecPool::new(),
+            scope_pool: TaskVecPool::new(),
+            catch_pool: TaskVecPool::new(),
+            finally_pool: TaskVecPool::new(),
+            capture_pool: TaskVecPool::new(),
+            unsync,
+        })
     }
 }

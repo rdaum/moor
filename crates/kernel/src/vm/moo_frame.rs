@@ -21,6 +21,7 @@ use moor_var::VarType::TYPE_NONE;
 use moor_var::program::labels::Offset;
 use moor_var::program::names::{GlobalName, Name};
 use moor_var::{Error, Var, v_none};
+use moor_common::util::{SlabVec, TaskVecPool};
 use std::cmp::max;
 use strum::EnumCount;
 
@@ -37,7 +38,7 @@ pub(crate) struct MooStackFrame {
     /// The values of the variables currently in scope, by their offset.
     pub(crate) environment: Vec<Vec<Option<Var>>>,
     /// The value stack.
-    pub(crate) valstack: Vec<Var>,
+    pub(crate) valstack: SlabVec<Var>,
     /// A stack of active scopes. Used for catch and finally blocks and in the future for lexical
     /// scoping as well.
     pub(crate) scope_stack: Vec<Scope>,
@@ -96,7 +97,7 @@ pub struct Scope {
 }
 
 impl MooStackFrame {
-    pub(crate) fn new(program: Program) -> Self {
+    pub(crate) fn new(program: Program, var_pool: &TaskVecPool<Var>) -> Self {
         let width = max(program.var_names().global_width(), GlobalName::COUNT);
         let mut first_env = Vec::with_capacity(width);
         first_env.resize(width, None);
@@ -108,7 +109,7 @@ impl MooStackFrame {
             pc: 0,
             pc_type: PcType::Main,
             temp: v_none(),
-            valstack: Default::default(),
+            valstack: SlabVec::new(var_pool.inner().clone()),
             scope_stack: Default::default(),
             catch_stack: Default::default(),
             finally_stack: Default::default(),
@@ -220,7 +221,11 @@ impl MooStackFrame {
 
     pub fn peek_range(&self, width: usize) -> Vec<Var> {
         let l = self.valstack.len();
-        Vec::from(&self.valstack[l - width..])
+        let mut result = Vec::with_capacity(width);
+        for i in (l - width)..l {
+            result.push(self.valstack[i].clone());
+        }
+        result
     }
 
     pub(crate) fn peek_abs(&self, amt: usize) -> &Var {
@@ -292,7 +297,7 @@ impl Encode for MooStackFrame {
         self.pc.encode(encoder)?;
         self.pc_type.encode(encoder)?;
         self.environment.encode(encoder)?;
-        self.valstack.encode(encoder)?;
+        self.valstack.to_vec().encode(encoder)?;
         self.scope_stack.encode(encoder)?;
         self.temp.encode(encoder)?;
         self.catch_stack.encode(encoder)?;
@@ -307,7 +312,10 @@ impl<C> Decode<C> for MooStackFrame {
         let pc = usize::decode(decoder)?;
         let pc_type = PcType::decode(decoder)?;
         let environment = Vec::decode(decoder)?;
-        let valstack = Vec::decode(decoder)?;
+        let valstack_vec: Vec<Var> = Vec::decode(decoder)?;
+        // Create temporary pool for decode - will be replaced when frame is used  
+        let temp_pool = TaskVecPool::new();
+        let valstack = SlabVec::from_vec(temp_pool.inner().clone(), valstack_vec);
         let scope_stack = Vec::decode(decoder)?;
         let temp = Var::decode(decoder)?;
         let catch_stack = Vec::decode(decoder)?;
@@ -334,7 +342,10 @@ impl<'de, C> BorrowDecode<'de, C> for MooStackFrame {
         let pc = usize::borrow_decode(decoder)?;
         let pc_type = PcType::borrow_decode(decoder)?;
         let environment = Vec::borrow_decode(decoder)?;
-        let valstack = Vec::borrow_decode(decoder)?;
+        let valstack_vec = Vec::borrow_decode(decoder)?;
+        // Create temporary pool for decode - will be replaced when frame is used
+        let temp_pool = TaskVecPool::new();
+        let valstack = SlabVec::from_vec(temp_pool.inner().clone(), valstack_vec);
         let scope_stack = Vec::borrow_decode(decoder)?;
         let temp = Var::borrow_decode(decoder)?;
         let catch_stack = Vec::borrow_decode(decoder)?;
