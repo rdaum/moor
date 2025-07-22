@@ -493,8 +493,13 @@ impl VmHost {
     }
 
     /// Get a copy of the current VM state, for later restoration.
+    /// Creates a snapshot without pool references to prevent memory leaks.
     pub(crate) fn snapshot_state(&self) -> VMExecState {
-        self.vm_exec_state.clone()
+        // Use serialize/deserialize cycle to create a clean snapshot without pool references
+        // This prevents retry_state from keeping pool references alive indefinitely
+        use bincode::{decode_from_slice, encode_to_vec};
+        let encoded = encode_to_vec(&self.vm_exec_state, bincode::config::standard()).unwrap();
+        decode_from_slice(&encoded, bincode::config::standard()).unwrap().0
     }
 
     /// Restore from a snapshot.
