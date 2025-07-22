@@ -19,6 +19,7 @@ use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
 use moor_var::program::names::Name;
 use moor_var::{List, Obj, Symbol, Var};
+pub use moo_frame::{CatchType, Scope};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 

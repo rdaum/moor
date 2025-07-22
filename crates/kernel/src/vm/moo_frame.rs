@@ -87,7 +87,7 @@ pub(crate) enum ScopeType {
 /// On entry, the current size of the valstack is stored in `valstack_pos`.
 /// On exit, the valstack is eaten back to that size.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
-pub(crate) struct Scope {
+pub struct Scope {
     pub(crate) scope_type: ScopeType,
     pub(crate) valstack_pos: usize,
     pub(crate) end_pos: usize,
