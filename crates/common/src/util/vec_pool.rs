@@ -68,6 +68,13 @@ impl<T> VecSizeClass<T> {
         debug_assert!(!self.free_list.contains(&buffer_idx));
         self.free_list.push(buffer_idx);
     }
+
+    fn free_all_buffers(&mut self) {
+        // Free all allocated buffers in this size class
+        // Box<[MaybeUninit<T>]> will be automatically deallocated when dropped
+        self.buffers.clear();
+        self.free_list.clear();
+    }
 }
 
 impl<T> VecPool<T> {
@@ -131,6 +138,20 @@ impl<T> VecPool<T> {
             self.size_classes[2].buffers.len(),
             self.size_classes[3].buffers.len()
         )
+    }
+
+}
+
+impl<T> Drop for VecPool<T> {
+    fn drop(&mut self) {
+        // Free all allocated buffers when the pool is dropped
+        let bytes_before = self.allocated_bytes();
+        for size_class in &mut self.size_classes {
+            size_class.free_all_buffers();
+        }
+        if bytes_before > 0 {
+            eprintln!("VecPool dropped: freed {} bytes", bytes_before);
+        }
     }
 }
 

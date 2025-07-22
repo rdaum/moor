@@ -207,6 +207,7 @@ impl MooStackFrame {
             .unwrap_or_else(|| panic!("stack underflow @ PC: {}", self.pc))
     }
 
+
     pub fn push(&mut self, v: Var) {
         self.valstack.push(v)
     }

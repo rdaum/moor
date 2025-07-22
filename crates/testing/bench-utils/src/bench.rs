@@ -526,7 +526,7 @@ fn update_progress_bar(current: usize, total: usize, current_throughput: f64) {
     io::stdout().flush().unwrap();
 }
 
-pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
+pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>, throughput_elements: Option<u64>) {
     println!("\n🚀 Benchmarking: {name}");
 
     // Warm-up and calibration phase
@@ -569,9 +569,15 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
     let mut results = summed_results.clone();
     results.divide(config.target_samples as u64);
 
-    // Calculate throughput metrics
-    let ops_per_sec = results.iterations as f64 / results.duration.as_secs_f64();
-    let ns_per_op = results.duration.as_nanos() as f64 / results.iterations as f64;
+    // Calculate throughput metrics (per-element if throughput_elements is specified)
+    let total_elements = if let Some(elements) = throughput_elements {
+        results.iterations * elements as u64
+    } else {
+        results.iterations
+    };
+    
+    let elements_per_sec = total_elements as f64 / results.duration.as_secs_f64();
+    let ns_per_element = results.duration.as_nanos() as f64 / total_elements as f64;
     let instructions_per_op = results.instructions as f64 / results.iterations as f64;
     let branches_per_op = results.branches as f64 / results.iterations as f64;
     let branch_miss_rate = if results.branches > 0 {
@@ -626,9 +632,12 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
         &format!("CV: {cv_percent:.2}%"),
     ]);
 
+    let unit_name = if throughput_elements.is_some() { "element" } else { "op" };
+    let mops_per_sec = elements_per_sec / 1_000_000.0;
+    
     table.add_row(vec![
-        &format!("{:.2} Mops/s", ops_per_sec / 1_000_000.0),
-        &format!("{ns_per_op:.2} ns/op"),
+        &format!("{mops_per_sec:.2} M{unit_name}s/s"),
+        &format!("{ns_per_element:.2} ns/{unit_name}"),
         &format!("{:.3}s total", summed_results.duration.as_secs_f64()),
     ]);
 
@@ -659,15 +668,15 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>) {
         name: name.to_string(),
         group: group.to_string(),
         benchmark_type: "standard".to_string(),
-        mops_per_sec: ops_per_sec / 1_000_000.0,
-        ns_per_op,
+        mops_per_sec,
+        ns_per_op: ns_per_element,
         instructions_per_op,
         branches_per_op,
         branch_miss_rate,
         cache_miss_rate: cache_miss_rate_per_op,
         cv_percent,
         samples: config.target_samples,
-        operations: results.iterations,
+        operations: total_elements,
         total_duration_sec: summed_results.duration.as_secs_f64(),
     };
     add_session_result(benchmark_result);
@@ -678,11 +687,15 @@ pub struct BenchmarkDef<T: BenchContext> {
     pub name: &'static str,
     pub group: &'static str,
     pub func: BenchFunction<T>,
+    /// Number of elements processed per operation (like Criterion's Throughput::Elements)
+    /// If set, throughput will be calculated per-element instead of per-operation
+    /// e.g. vec_creation with 64 elements should set this to 64 to report "Vars/sec" and "ns/Var"
+    pub throughput_elements: Option<u64>,
 }
 
 /// Run a specific benchmark definition
 pub fn run_benchmark<T: BenchContext>(bench: &BenchmarkDef<T>) {
-    op_bench::<T>(bench.name, bench.group, bench.func);
+    op_bench::<T>(bench.name, bench.group, bench.func, bench.throughput_elements);
 }
 
 /// Run benchmarks from a list based on filter

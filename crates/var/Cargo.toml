@@ -17,12 +17,16 @@ perf_event.workspace = true
 
 [dev-dependencies]
 moor-bench-utils = { path = "../testing/bench-utils" }
+moor-common = { path = "../common" }
 serde_json.workspace = true
 shuttle.workspace = true
 
-[target.'cfg(all(target_os = "linux"))']
 [[bench]]
 name = "var_benches"
+harness = false
+
+[[bench]]
+name = "var_vec_benches"
 harness = false
 
 [dependencies]

@@ -43,3 +43,14 @@ thiserror.workspace = true
 [features]
 default = []
 perf_counters = []
+
+[dev-dependencies]
+moor-bench-utils = { path = "../testing/bench-utils" }
+
+# dev dependencies only for linux...
+[target.'cfg(all(target_os = "linux"))'.dev-dependencies]
+perf_event.workspace = true
+
+[[bench]]
+name = "slab_vec_benches"
+harness = false
