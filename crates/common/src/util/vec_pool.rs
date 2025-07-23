@@ -13,11 +13,158 @@
 
 //! Pool allocator for Vec<T> backing storage using mmap and bitmap tracking
 
+use gdt_cpus;
 use libc::{MAP_ANONYMOUS, MAP_FAILED, MAP_PRIVATE, PROT_READ, PROT_WRITE, mmap, munmap};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::ptr::{self, NonNull};
 use std::rc::Rc;
+use std::sync::{Mutex, OnceLock};
+
+/// Size of each page in the per-core page pool (4KB)
+const PAGE_SIZE: usize = 4096;
+/// Size of each mmap region we allocate (64MB)
+const REGION_SIZE: usize = 64 * 1024 * 1024;
+/// Number of pages per region
+const PAGES_PER_REGION: usize = REGION_SIZE / PAGE_SIZE;
+
+/// Represents a free page in the intrusive free list
+/// The "next" pointer is stored directly in the freed page memory
+#[repr(C)]
+struct FreePage {
+    next: Option<NonNull<FreePage>>,
+}
+
+/// Per-core page pool that manages large mmap regions and hands out individual pages
+struct CorePagePool {
+    /// Intrusive free list head for available 4KB pages
+    free_pages_head: Option<NonNull<FreePage>>,
+    /// Current mmap region we're allocating from
+    current_region: Option<*mut u8>,
+    /// How many pages we've allocated from current region
+    pages_used_from_current: usize,
+}
+
+impl CorePagePool {
+    fn new() -> Self {
+        Self {
+            free_pages_head: None,
+            current_region: None,
+            pages_used_from_current: 0,
+        }
+    }
+
+    /// Get a 4KB page, allocating a new region if needed
+    fn get_page(&mut self) -> *mut u8 {
+        // Try to reuse a freed page first (this also touches the page!)
+        if let Some(head) = self.free_pages_head {
+            unsafe {
+                // Get the next page from the current head
+                let next = (*head.as_ptr()).next;
+                // Update the head to point to the next page
+                self.free_pages_head = next;
+                // Return the page
+                return head.as_ptr() as *mut u8;
+            }
+        }
+
+        // Need to allocate from current region or create new region
+        if self.current_region.is_none() || self.pages_used_from_current >= PAGES_PER_REGION {
+            self.allocate_new_region();
+        }
+
+        // Allocate page from current region
+        let region = self.current_region.unwrap();
+        let page = unsafe { region.add(self.pages_used_from_current * PAGE_SIZE) };
+        self.pages_used_from_current += 1;
+        
+        // Touch the page by writing to it (this will trigger page fault now, not later)
+        unsafe {
+            // Write a zero to the first byte to ensure the page is faulted in
+            *(page as *mut u8) = 0;
+        }
+        
+        page
+    }
+
+    /// Return a page to the pool for reuse (this also touches the page!)
+    fn return_page(&mut self, page: *mut u8) {
+        let page_ptr = page as *mut FreePage;
+        
+        unsafe {
+            // Store the current head as the next pointer in this page (touches the page!)
+            (*page_ptr).next = self.free_pages_head;
+            // Make this page the new head
+            self.free_pages_head = Some(NonNull::new_unchecked(page_ptr));
+        }
+    }
+
+    /// Allocate a new 64MB mmap region
+    fn allocate_new_region(&mut self) {
+        let region = unsafe {
+            let ptr = mmap(
+                std::ptr::null_mut(),
+                REGION_SIZE,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS,
+                -1,
+                0,
+            );
+
+            if ptr == MAP_FAILED {
+                panic!("Failed to mmap region for CorePagePool");
+            }
+
+            ptr as *mut u8
+        };
+
+        self.current_region = Some(region);
+        self.pages_used_from_current = 0;
+    }
+}
+
+// SAFETY: CorePagePool is Send because:
+// 1. Raw pointers are not Send by default, but we only use them for mmap'd memory
+// 2. The mmap'd regions are process-wide and safe to access from any thread
+// 3. Each core has its own pool protected by a Mutex, preventing concurrent access
+// 4. NonNull<FreePage> points to mmap'd memory which is thread-safe to access
+unsafe impl Send for CorePagePool {}
+
+/// Global array of per-core page pools
+/// Each core gets its own pool to avoid contention while amortizing syscall costs
+static PER_CORE_PAGE_POOLS: OnceLock<Vec<Mutex<CorePagePool>>> = OnceLock::new();
+
+// Thread-local cache of the core page pool for this thread
+thread_local! {
+    static CACHED_CORE_PAGE_POOL: std::cell::OnceCell<&'static Mutex<CorePagePool>> = std::cell::OnceCell::new();
+}
+
+/// Get the page pool for the current CPU core (cached per thread)
+fn get_core_page_pool() -> &'static Mutex<CorePagePool> {
+    CACHED_CORE_PAGE_POOL.with(|cached| {
+        *cached.get_or_init(|| {
+            let pools = PER_CORE_PAGE_POOLS.get_or_init(|| {
+                let num_cpus = gdt_cpus::cpu_info()
+                    .expect("Failed to detect CPU information")
+                    .total_physical_cores;
+                let mut pools = Vec::with_capacity(num_cpus);
+                for _ in 0..num_cpus {
+                    pools.push(Mutex::new(CorePagePool::new()));
+                }
+                pools
+            });
+            
+            // Hash thread ID to distribute across cores (done once per thread)
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            std::thread::current().id().hash(&mut hasher);
+            let core_id = (hasher.finish() as usize) % pools.len();
+            
+            &pools[core_id]
+        })
+    })
+}
 
 /// Helper for safe length management during fill operations
 /// Sets length on drop to ensure consistency even if clone() panics
@@ -101,32 +248,45 @@ impl<T> VecPool<T> {
     pub fn with_capacity(total_chunks: usize) -> Self {
         let region_size_bytes = total_chunks * MIN_GRANULARITY * std::mem::size_of::<T>();
 
-        // Allocate mmap region
-        let memory_region = unsafe {
-            let ptr = mmap(
-                std::ptr::null_mut(),
-                region_size_bytes,
-                PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS,
-                -1,
-                0,
-            );
+        // Get memory from per-core page pool instead of direct mmap
+        let memory_region = if region_size_bytes <= PAGE_SIZE {
+            // Single page allocation from per-core pool
+            let core_pool = get_core_page_pool();
+            let page = core_pool.lock().unwrap().get_page();
+            page as *mut MaybeUninit<T>
+        } else {
+            // For larger allocations, fall back to direct mmap
+            // (This shouldn't happen with our current DEFAULT_POOL_CHUNKS)
+            unsafe {
+                let ptr = mmap(
+                    std::ptr::null_mut(),
+                    region_size_bytes,
+                    PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANONYMOUS,
+                    -1,
+                    0,
+                );
 
-            if ptr == MAP_FAILED {
-                panic!("Failed to mmap memory region for VecPool");
+                if ptr == MAP_FAILED {
+                    panic!("Failed to mmap memory region for VecPool");
+                }
+
+                ptr as *mut MaybeUninit<T>
             }
-
-            ptr as *mut MaybeUninit<T>
         };
 
         let mut pool = Self {
             memory_region,
-            region_size_bytes,
-            total_chunks,
+            region_size_bytes: if region_size_bytes <= PAGE_SIZE { PAGE_SIZE } else { region_size_bytes },
+            total_chunks: if region_size_bytes <= PAGE_SIZE { 
+                PAGE_SIZE / (MIN_GRANULARITY * std::mem::size_of::<T>())
+            } else { 
+                total_chunks 
+            },
             size_class_free_heads: [None, None, None, None],
             next_free_chunk: 0,
             allocated_bytes: 0,
-            available_bytes: region_size_bytes,
+            available_bytes: if region_size_bytes <= PAGE_SIZE { PAGE_SIZE } else { region_size_bytes },
         };
 
         // Pre-populate free lists to avoid runtime allocation overhead
@@ -299,19 +459,41 @@ impl<T> VecPool<T> {
 
 impl<T> Drop for VecPool<T> {
     fn drop(&mut self) {
-        // Unmap the memory region
         let bytes_before = self.allocated_bytes();
-        unsafe {
-            if munmap(
-                self.memory_region as *mut libc::c_void,
-                self.region_size_bytes,
-            ) != 0
-            {
-                eprintln!("Warning: Failed to munmap VecPool memory region");
+        
+        // Return memory to per-core page pool if it's a single page, otherwise unmap directly
+        if self.region_size_bytes == PAGE_SIZE {
+            // Return page to per-core pool for reuse
+            let core_pool = get_core_page_pool();
+            if let Ok(mut pool) = core_pool.lock() {
+                pool.return_page(self.memory_region as *mut u8);
+            } else {
+                // If we can't get the lock, fall back to direct munmap
+                unsafe {
+                    if munmap(
+                        self.memory_region as *mut libc::c_void,
+                        self.region_size_bytes,
+                    ) != 0
+                    {
+                        eprintln!("Warning: Failed to munmap VecPool memory region");
+                    }
+                }
+            }
+        } else {
+            // Large allocation - unmap directly
+            unsafe {
+                if munmap(
+                    self.memory_region as *mut libc::c_void,
+                    self.region_size_bytes,
+                ) != 0
+                {
+                    eprintln!("Warning: Failed to munmap VecPool memory region");
+                }
             }
         }
+        
         if bytes_before > 0 {
-            eprintln!("VecPool dropped: freed {} bytes from mmap", bytes_before);
+            eprintln!("VecPool dropped: freed {} bytes", bytes_before);
         }
     }
 }

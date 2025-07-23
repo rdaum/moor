@@ -30,6 +30,7 @@ binary-layout.workspace = true
 byteview.workspace = true
 enum-primitive-derive.workspace = true
 fast-counter.workspace = true
+gdt-cpus.workspace = true
 lazy_static.workspace = true
 libc.workspace = true
 minstant.workspace = true
