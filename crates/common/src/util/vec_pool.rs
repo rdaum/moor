@@ -17,7 +17,6 @@ use std::cell::RefCell;
 use std::mem::MaybeUninit;
 use std::ptr::NonNull;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Size classes for vector backing storage: 16, 32, 64, 128 elements
 const SIZE_CLASSES: [usize; 4] = [16, 32, 64, 128];
@@ -27,13 +26,13 @@ const MAX_SIZE_CLASS: usize = 3;
 #[derive(Debug)]
 pub struct VecPool<T> {
     size_classes: [VecSizeClass<T>; 4],
-    allocated_bytes: AtomicUsize,
-    available_bytes: AtomicUsize,
+    allocated_bytes: usize,
+    available_bytes: usize,
 }
 
 #[derive(Debug)]
 struct VecSizeClass<T> {
-    buffers: Vec<Box<[MaybeUninit<T>]>>,
+    buffers: Vec<Vec<MaybeUninit<T>>>,
     free_list: Vec<usize>,
     buffer_size: usize,
 }
@@ -54,7 +53,6 @@ impl<T> VecSizeClass<T> {
             // Allocate new buffer
             let mut buffer = Vec::with_capacity(self.buffer_size);
             buffer.resize_with(self.buffer_size, MaybeUninit::uninit);
-            let buffer = buffer.into_boxed_slice();
             self.buffers.push(buffer);
             self.buffers.len() - 1
         };
@@ -86,8 +84,8 @@ impl<T> VecPool<T> {
                 VecSizeClass::new(SIZE_CLASSES[2]),
                 VecSizeClass::new(SIZE_CLASSES[3]),
             ],
-            allocated_bytes: AtomicUsize::new(0),
-            available_bytes: AtomicUsize::new(0),
+            allocated_bytes: 0,
+            available_bytes: 0,
         }
     }
 
@@ -106,7 +104,7 @@ impl<T> VecPool<T> {
 
         let actual_capacity = SIZE_CLASSES[size_class];
         let bytes = actual_capacity * std::mem::size_of::<T>();
-        self.allocated_bytes.fetch_add(bytes, Ordering::Relaxed);
+        self.allocated_bytes += bytes;
 
         (ptr, buffer_idx, size_class)
     }
@@ -115,16 +113,16 @@ impl<T> VecPool<T> {
         self.size_classes[size_class].deallocate(buffer_idx);
 
         let bytes = SIZE_CLASSES[size_class] * std::mem::size_of::<T>();
-        self.allocated_bytes.fetch_sub(bytes, Ordering::Relaxed);
-        self.available_bytes.fetch_add(bytes, Ordering::Relaxed);
+        self.allocated_bytes -= bytes;
+        self.available_bytes += bytes;
     }
 
     pub fn allocated_bytes(&self) -> usize {
-        self.allocated_bytes.load(Ordering::Relaxed)
+        self.allocated_bytes
     }
 
     pub fn available_bytes(&self) -> usize {
-        self.available_bytes.load(Ordering::Relaxed)
+        self.available_bytes
     }
 
     /// Debug method to show pool statistics
@@ -261,7 +259,7 @@ impl<T> SlabVec<T> {
         // Read elements directly from backing storage in correct order
         for i in 0..self.len {
             unsafe {
-                let item = self.ptr.as_ptr().add(i).read().assume_init();
+                let item = (*self.ptr.as_ptr().add(i)).assume_init_read();
                 vec.push(item);
             }
         }
@@ -313,7 +311,7 @@ impl<T> SlabVec<T> {
         }
 
         self.len -= 1;
-        unsafe { Some(self.ptr.as_ptr().add(self.len).read().assume_init()) }
+        unsafe { Some((*self.ptr.as_ptr().add(self.len)).assume_init_read()) }
     }
 
     pub fn len(&self) -> usize {
@@ -332,7 +330,7 @@ impl<T> SlabVec<T> {
         while self.len > 0 {
             self.len -= 1;
             unsafe {
-                self.ptr.as_ptr().add(self.len).read();
+                (*self.ptr.as_ptr().add(self.len)).assume_init_drop();
             }
         }
     }
@@ -345,7 +343,7 @@ impl<T> SlabVec<T> {
         while self.len > len {
             self.len -= 1;
             unsafe {
-                self.ptr.as_ptr().add(self.len).read();
+                (*self.ptr.as_ptr().add(self.len)).assume_init_drop();
             }
         }
     }
