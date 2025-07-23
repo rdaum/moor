@@ -403,9 +403,8 @@ impl<T> VecPool<T> {
         );
     }
 
-    fn deallocate_backing(&mut self, buffer_idx: usize, size_class: usize) {
-        let (chunk_offset, decoded_size_class) = decode_buffer_idx(buffer_idx);
-        debug_assert_eq!(size_class, decoded_size_class);
+    fn deallocate_backing(&mut self, chunk_offset: usize, size_class: usize) {
+        debug_assert_eq!(size_class, size_class);
 
         // Add to intrusive free list
         self.push_free_chunk(size_class, chunk_offset);
@@ -459,8 +458,6 @@ impl<T> VecPool<T> {
 
 impl<T> Drop for VecPool<T> {
     fn drop(&mut self) {
-        let bytes_before = self.allocated_bytes();
-        
         // Return memory to per-core page pool if it's a single page, otherwise unmap directly
         if self.region_size_bytes == PAGE_SIZE {
             // Return page to per-core pool for reuse
@@ -475,7 +472,7 @@ impl<T> Drop for VecPool<T> {
                         self.region_size_bytes,
                     ) != 0
                     {
-                        eprintln!("Warning: Failed to munmap VecPool memory region");
+                        panic!("Warning: Failed to munmap VecPool memory region");
                     }
                 }
             }
@@ -487,13 +484,9 @@ impl<T> Drop for VecPool<T> {
                     self.region_size_bytes,
                 ) != 0
                 {
-                    eprintln!("Warning: Failed to munmap VecPool memory region");
+                    panic!("Warning: Failed to munmap VecPool memory region");
                 }
             }
-        }
-        
-        if bytes_before > 0 {
-            eprintln!("VecPool dropped: freed {} bytes", bytes_before);
         }
     }
 }
@@ -671,9 +664,9 @@ impl<T> PoolVec<T> {
         }
 
         // Manually return buffer to pool without dropping elements
-        let (_, size_class) = decode_buffer_idx(self.handle.buffer_idx);
+        let (chunk_offset, size_class) = decode_buffer_idx(self.handle.buffer_idx);
         unsafe {
-            (*self.pool.get()).deallocate_backing(self.handle.buffer_idx, size_class);
+            (*self.pool.get()).deallocate_backing(chunk_offset, size_class);
         }
 
         // Prevent Drop from running since we've moved all elements and returned buffer
@@ -886,9 +879,9 @@ impl<T> Drop for PoolVec<T> {
         self.clear();
 
         // Return backing buffer to pool
-        let (_, size_class) = decode_buffer_idx(self.handle.buffer_idx);
+        let (chunk_offset, size_class) = decode_buffer_idx(self.handle.buffer_idx);
         unsafe {
-            (*self.pool.get()).deallocate_backing(self.handle.buffer_idx, size_class);
+            (*self.pool.get()).deallocate_backing(chunk_offset, size_class);
         }
     }
 }
