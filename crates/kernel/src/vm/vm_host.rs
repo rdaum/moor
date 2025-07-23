@@ -499,7 +499,9 @@ impl VmHost {
         // This prevents retry_state from keeping pool references alive indefinitely
         use bincode::{decode_from_slice, encode_to_vec};
         let encoded = encode_to_vec(&self.vm_exec_state, bincode::config::standard()).unwrap();
-        decode_from_slice(&encoded, bincode::config::standard()).unwrap().0
+        decode_from_slice(&encoded, bincode::config::standard())
+            .unwrap()
+            .0
     }
 
     /// Restore from a snapshot.

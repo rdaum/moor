@@ -11,106 +11,240 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Slab allocator for Vec<T> backing storage to reduce allocation overhead
+//! Pool allocator for Vec<T> backing storage using mmap and bitmap tracking
 
+use crate::util::bitset::{Bitset64, BitsetTrait};
+use libc::{MAP_ANONYMOUS, MAP_FAILED, MAP_PRIVATE, PROT_READ, PROT_WRITE, mmap, munmap};
 use std::cell::RefCell;
 use std::mem::MaybeUninit;
-use std::ptr::NonNull;
+use std::ptr::{self, NonNull};
 use std::rc::Rc;
+
+/// Helper for safe length management during fill operations
+/// Sets length on drop to ensure consistency even if clone() panics
+struct SetLenOnDrop<'a> {
+    len: &'a mut usize,
+    local_len: usize,
+}
+
+impl<'a> SetLenOnDrop<'a> {
+    fn new(len: &'a mut usize) -> Self {
+        SetLenOnDrop {
+            local_len: *len,
+            len,
+        }
+    }
+
+    fn increment_len(&mut self, increment: usize) {
+        self.local_len += increment;
+    }
+}
+
+impl Drop for SetLenOnDrop<'_> {
+    fn drop(&mut self) {
+        *self.len = self.local_len;
+    }
+}
 
 /// Size classes for vector backing storage: 16, 32, 64, 128 elements
 const SIZE_CLASSES: [usize; 4] = [16, 32, 64, 128];
 const MAX_SIZE_CLASS: usize = 3;
+/// Lowest size class is 16 = 2^4
+const LOWEST_SIZE_CLASS_POWER: u32 = 4;
+/// Minimum allocation granularity (16 elements)
+const MIN_GRANULARITY: usize = SIZE_CLASSES[0];
+/// Default pool size in number of minimum-granularity chunks
+const DEFAULT_POOL_CHUNKS: usize = 8192; // 128KB worth of 16-element chunks
 
-/// A pool for managing pre-allocated vector backing storage
+/// A pool for managing pre-allocated vector backing storage using mmap
 #[derive(Debug)]
 pub struct VecPool<T> {
-    size_classes: [VecSizeClass<T>; 4],
+    /// Raw mmap-allocated memory region
+    memory_region: *mut MaybeUninit<T>,
+    /// Size of the mmap region in bytes
+    region_size_bytes: usize,
+    /// Total capacity in minimum-granularity chunks
+    total_chunks: usize,
+    /// Bitmap tracking allocated chunks at minimum granularity (for debugging/validation only)
+    allocation_bitmap: Bitset64<128>, // Supports up to 8192 chunks
+    /// Free lists for each size class
+    size_class_free_lists: [Vec<usize>; 4],
+    /// Next chunk to try for bump allocation
+    next_free_chunk: usize,
+    /// Allocation tracking
     allocated_bytes: usize,
     available_bytes: usize,
 }
 
-#[derive(Debug)]
-struct VecSizeClass<T> {
-    buffers: Vec<Vec<MaybeUninit<T>>>,
-    free_list: Vec<usize>,
-    buffer_size: usize,
+/// Encode chunk offset and size class into a buffer index
+/// Lower 2 bits store size class, upper bits store chunk offset
+fn encode_buffer_idx(chunk_offset: usize, size_class: usize) -> usize {
+    debug_assert!(size_class < 4);
+    (chunk_offset << 2) | size_class
 }
 
-impl<T> VecSizeClass<T> {
-    fn new(buffer_size: usize) -> Self {
-        Self {
-            buffers: Vec::new(),
-            free_list: Vec::new(),
-            buffer_size,
-        }
-    }
-
-    fn allocate(&mut self) -> (NonNull<MaybeUninit<T>>, usize) {
-        let buffer_idx = if let Some(idx) = self.free_list.pop() {
-            idx
-        } else {
-            // Allocate new buffer
-            let mut buffer = Vec::with_capacity(self.buffer_size);
-            buffer.resize_with(self.buffer_size, MaybeUninit::uninit);
-            self.buffers.push(buffer);
-            self.buffers.len() - 1
-        };
-
-        let buffer_ptr = NonNull::new(self.buffers[buffer_idx].as_mut_ptr()).unwrap();
-        (buffer_ptr, buffer_idx)
-    }
-
-    fn deallocate(&mut self, buffer_idx: usize) {
-        debug_assert!(buffer_idx < self.buffers.len());
-        debug_assert!(!self.free_list.contains(&buffer_idx));
-        self.free_list.push(buffer_idx);
-    }
-
-    fn free_all_buffers(&mut self) {
-        // Free all allocated buffers in this size class
-        // Box<[MaybeUninit<T>]> will be automatically deallocated when dropped
-        self.buffers.clear();
-        self.free_list.clear();
-    }
+/// Decode buffer index into chunk offset and size class
+fn decode_buffer_idx(buffer_idx: usize) -> (usize, usize) {
+    let size_class = buffer_idx & 0x3;
+    let chunk_offset = buffer_idx >> 2;
+    (chunk_offset, size_class)
 }
 
 impl<T> VecPool<T> {
     pub fn new() -> Self {
-        Self {
-            size_classes: [
-                VecSizeClass::new(SIZE_CLASSES[0]),
-                VecSizeClass::new(SIZE_CLASSES[1]),
-                VecSizeClass::new(SIZE_CLASSES[2]),
-                VecSizeClass::new(SIZE_CLASSES[3]),
-            ],
+        Self::with_capacity(DEFAULT_POOL_CHUNKS)
+    }
+
+    pub fn with_capacity(total_chunks: usize) -> Self {
+        let region_size_bytes = total_chunks * MIN_GRANULARITY * std::mem::size_of::<T>();
+
+        // Allocate mmap region
+        let memory_region = unsafe {
+            let ptr = mmap(
+                std::ptr::null_mut(),
+                region_size_bytes,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS,
+                -1,
+                0,
+            );
+
+            if ptr == MAP_FAILED {
+                panic!("Failed to mmap memory region for VecPool");
+            }
+
+            ptr as *mut MaybeUninit<T>
+        };
+
+        let mut pool = Self {
+            memory_region,
+            region_size_bytes,
+            total_chunks,
+            allocation_bitmap: Bitset64::new(),
+            size_class_free_lists: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+            next_free_chunk: 0,
             allocated_bytes: 0,
-            available_bytes: 0,
+            available_bytes: region_size_bytes,
+        };
+
+        // Pre-populate free lists to avoid runtime allocation overhead
+        pool.prepopulate_free_lists();
+        pool
+    }
+
+    fn prepopulate_free_lists(&mut self) {
+        // Pre-allocate a small number of buffers for each size class
+        // Just enough to avoid the initial bump allocator calls
+        let prealloc_counts = [4, 2, 1, 1]; // Much more conservative
+
+        for (size_class, &count) in prealloc_counts.iter().enumerate() {
+            let chunks_needed = SIZE_CLASSES[size_class] / MIN_GRANULARITY;
+
+            for _ in 0..count {
+                if self.next_free_chunk + chunks_needed <= self.total_chunks {
+                    let chunk_offset = self.next_free_chunk;
+                    self.next_free_chunk += chunks_needed;
+
+                    // Don't mark in bitmap - these chunks are truly free and available
+                    // The bitmap should reflect actual allocation state
+
+                    // Add to free list (they're available for allocation)
+                    self.size_class_free_lists[size_class].push(chunk_offset);
+
+                    // Don't update allocated_bytes since these are free
+                } else {
+                    break; // Out of space for this size class
+                }
+            }
         }
     }
 
     fn size_class_for_capacity(capacity: usize) -> usize {
-        for (i, &size) in SIZE_CLASSES.iter().enumerate() {
-            if capacity <= size {
-                return i;
-            }
+        if capacity == 0 {
+            return 0; // Use smallest size class for empty requests
         }
-        MAX_SIZE_CLASS
+
+        // Find next power of 2 >= capacity using bit twiddling
+        let np2 = (64 - (capacity - 1).leading_zeros()) as isize;
+        let sc_idx = np2 - (LOWEST_SIZE_CLASS_POWER as isize);
+        let sc_idx = std::cmp::max(sc_idx, 0) as usize;
+
+        // Clamp to maximum size class
+        std::cmp::min(sc_idx, MAX_SIZE_CLASS)
     }
 
     fn allocate_backing(&mut self, capacity: usize) -> (NonNull<MaybeUninit<T>>, usize, usize) {
         let size_class = Self::size_class_for_capacity(capacity);
-        let (ptr, buffer_idx) = self.size_classes[size_class].allocate();
+        let chunks_needed = SIZE_CLASSES[size_class] / MIN_GRANULARITY;
 
-        let actual_capacity = SIZE_CLASSES[size_class];
-        let bytes = actual_capacity * std::mem::size_of::<T>();
-        self.allocated_bytes += bytes;
+        // Fast path: Try free list first
+        if let Some(chunk_offset) = self.size_class_free_lists[size_class].pop() {
+            debug_assert!(chunk_offset + chunks_needed <= self.total_chunks);
 
-        (ptr, buffer_idx, size_class)
+            // Mark chunks as allocated in bitmap (they should be free before this)
+            for i in 0..chunks_needed {
+                debug_assert!(
+                    !self.allocation_bitmap.check(chunk_offset + i),
+                    "Free list chunk {} + {} is already allocated in bitmap",
+                    chunk_offset,
+                    i
+                );
+                self.allocation_bitmap.set(chunk_offset + i);
+            }
+
+            let buffer_idx = encode_buffer_idx(chunk_offset, size_class);
+            let element_offset = chunk_offset * MIN_GRANULARITY;
+            let ptr = unsafe { NonNull::new_unchecked(self.memory_region.add(element_offset)) };
+
+            let bytes = SIZE_CLASSES[size_class] * std::mem::size_of::<T>();
+            self.allocated_bytes += bytes;
+            self.available_bytes -= bytes;
+
+            return (ptr, buffer_idx, size_class);
+        }
+
+        // Bump allocator: Try to allocate from the end of used space
+        if self.next_free_chunk + chunks_needed <= self.total_chunks {
+            let chunk_offset = self.next_free_chunk;
+            self.next_free_chunk += chunks_needed;
+
+            // Update bitmap for debugging/validation
+            for i in 0..chunks_needed {
+                debug_assert!(!self.allocation_bitmap.check(chunk_offset + i));
+                self.allocation_bitmap.set(chunk_offset + i);
+            }
+
+            let buffer_idx = encode_buffer_idx(chunk_offset, size_class);
+            let element_offset = chunk_offset * MIN_GRANULARITY;
+            let ptr = unsafe { NonNull::new_unchecked(self.memory_region.add(element_offset)) };
+
+            let bytes = SIZE_CLASSES[size_class] * std::mem::size_of::<T>();
+            self.allocated_bytes += bytes;
+            self.available_bytes -= bytes;
+
+            return (ptr, buffer_idx, size_class);
+        }
+
+        // Out of memory
+        panic!(
+            "VecPool: insufficient memory for allocation. Pool stats: {}",
+            self.debug_stats()
+        );
     }
 
     fn deallocate_backing(&mut self, buffer_idx: usize, size_class: usize) {
-        self.size_classes[size_class].deallocate(buffer_idx);
+        let (chunk_offset, decoded_size_class) = decode_buffer_idx(buffer_idx);
+        debug_assert_eq!(size_class, decoded_size_class);
+
+        let chunks_needed = SIZE_CLASSES[size_class] / MIN_GRANULARITY;
+
+        // Clear chunks in bitmap
+        for i in 0..chunks_needed {
+            self.allocation_bitmap.unset(chunk_offset + i);
+        }
+
+        // Add to free list
+        self.size_class_free_lists[size_class].push(chunk_offset);
 
         let bytes = SIZE_CLASSES[size_class] * std::mem::size_of::<T>();
         self.allocated_bytes -= bytes;
@@ -128,55 +262,62 @@ impl<T> VecPool<T> {
     /// Debug method to show pool statistics
     pub fn debug_stats(&self) -> String {
         format!(
-            "Pool stats: allocated={} bytes, available={} bytes, size_classes=[{}, {}, {}, {}] buffers",
+            "Pool stats: allocated={} bytes, available={} bytes, total_chunks={}, free_lists=[{}, {}, {}, {}], bitmap_used={}",
             self.allocated_bytes(),
             self.available_bytes(),
-            self.size_classes[0].buffers.len(),
-            self.size_classes[1].buffers.len(), 
-            self.size_classes[2].buffers.len(),
-            self.size_classes[3].buffers.len()
+            self.total_chunks,
+            self.size_class_free_lists[0].len(),
+            self.size_class_free_lists[1].len(),
+            self.size_class_free_lists[2].len(),
+            self.size_class_free_lists[3].len(),
+            self.allocation_bitmap.size()
         )
     }
-
 }
 
 impl<T> Drop for VecPool<T> {
     fn drop(&mut self) {
-        // Free all allocated buffers when the pool is dropped
+        // Unmap the memory region
         let bytes_before = self.allocated_bytes();
-        for size_class in &mut self.size_classes {
-            size_class.free_all_buffers();
+        unsafe {
+            if munmap(
+                self.memory_region as *mut libc::c_void,
+                self.region_size_bytes,
+            ) != 0
+            {
+                eprintln!("Warning: Failed to munmap VecPool memory region");
+            }
         }
         if bytes_before > 0 {
-            eprintln!("VecPool dropped: freed {} bytes", bytes_before);
+            eprintln!("VecPool dropped: freed {} bytes from mmap", bytes_before);
         }
     }
 }
 
-/// Handle that identifies a slab-allocated backing buffer
+/// Handle that identifies a pool-allocated backing buffer
+/// The buffer_idx encodes both chunk offset and size class
 #[derive(Debug)]
-struct SlabHandle {
+struct PoolHandle {
     buffer_idx: usize,
-    size_class: usize,
 }
 
-/// A Vec-like container that uses slab-allocated backing storage
+/// A Vec-like container that uses pool-allocated backing storage
 #[derive(Debug)]
-pub struct SlabVec<T> {
+pub struct PoolVec<T> {
     pool: Rc<RefCell<VecPool<T>>>,
     ptr: NonNull<MaybeUninit<T>>,
     len: usize,
     capacity: usize,
-    handle: SlabHandle,
+    handle: PoolHandle,
 }
 
-/// Iterator for SlabVec
-pub struct SlabVecIter<'a, T> {
-    vec: &'a SlabVec<T>,
+/// Iterator for PoolVec
+pub struct PoolVecIter<'a, T> {
+    vec: &'a PoolVec<T>,
     index: usize,
 }
 
-impl<'a, T> Iterator for SlabVecIter<'a, T> {
+impl<'a, T> Iterator for PoolVecIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -190,7 +331,7 @@ impl<'a, T> Iterator for SlabVecIter<'a, T> {
     }
 }
 
-impl<T> SlabVec<T> {
+impl<T> PoolVec<T> {
     pub fn new(pool: Rc<RefCell<VecPool<T>>>) -> Self {
         let (ptr, buffer_idx, size_class) = pool.borrow_mut().allocate_backing(0);
         let capacity = SIZE_CLASSES[size_class];
@@ -200,10 +341,7 @@ impl<T> SlabVec<T> {
             ptr,
             len: 0,
             capacity,
-            handle: SlabHandle {
-                buffer_idx,
-                size_class,
-            },
+            handle: PoolHandle { buffer_idx },
         }
     }
 
@@ -216,46 +354,89 @@ impl<T> SlabVec<T> {
             ptr,
             len: 0,
             capacity: actual_capacity,
-            handle: SlabHandle {
-                buffer_idx,
-                size_class,
-            },
+            handle: PoolHandle { buffer_idx },
         }
+    }
+
+    /// Create a new PoolVec filled with `len` copies of `value` - optimized fast path
+    /// Uses Vec-style optimizations: writes directly to memory and avoids needless clone of last element
+    pub fn new_filled(pool: Rc<RefCell<VecPool<T>>>, len: usize, value: T) -> Self
+    where
+        T: Clone,
+    {
+        let (ptr, buffer_idx, size_class) = pool.borrow_mut().allocate_backing(len);
+        let actual_capacity = SIZE_CLASSES[size_class];
+
+        if len > actual_capacity {
+            panic!(
+                "PoolVec::new_filled: requested length {} exceeds capacity {}",
+                len, actual_capacity
+            );
+        }
+
+        let mut pool_vec = Self {
+            pool,
+            ptr,
+            len: 0,
+            capacity: actual_capacity,
+            handle: PoolHandle { buffer_idx },
+        };
+
+        if len > 0 {
+            unsafe {
+                let mut write_ptr = pool_vec.ptr.as_ptr();
+                // Use SetLenOnDrop to work around potential aliasing issues
+                // and ensure length is set correctly even if clone() panics
+                let mut local_len = SetLenOnDrop::new(&mut pool_vec.len);
+
+                // Write all elements except the last one with cloning
+                for _ in 1..len {
+                    ptr::write(write_ptr, MaybeUninit::new(value.clone()));
+                    write_ptr = write_ptr.add(1);
+                    local_len.increment_len(1);
+                }
+
+                // Write the last element directly without needless clone
+                ptr::write(write_ptr, MaybeUninit::new(value));
+                local_len.increment_len(1);
+
+                // len set by SetLenOnDrop's Drop implementation
+            }
+        }
+
+        pool_vec
     }
 
     pub fn from_vec(pool: Rc<RefCell<VecPool<T>>>, mut vec: Vec<T>) -> Self {
         // Check size before allocating to avoid memory leaks
         let size_class = VecPool::<T>::size_class_for_capacity(vec.len());
         let capacity = SIZE_CLASSES[size_class];
-        
+
         if vec.len() > capacity {
-            panic!("SlabVec::from_vec: vector too large for any size class");
+            panic!("PoolVec::from_vec: vector too large for any size class");
         }
 
-        let (ptr, buffer_idx, size_class) = pool.borrow_mut().allocate_backing(vec.len());
+        let (ptr, buffer_idx, _size_class) = pool.borrow_mut().allocate_backing(vec.len());
 
-        let mut slab_vec = Self {
+        let mut pool_vec = Self {
             pool,
             ptr,
             len: 0,
             capacity,
-            handle: SlabHandle {
-                buffer_idx,
-                size_class,
-            },
+            handle: PoolHandle { buffer_idx },
         };
 
-        // Move elements from Vec to SlabVec
+        // Move elements from Vec to PoolVec
         for item in vec.drain(..) {
-            slab_vec.push(item);
+            pool_vec.push(item);
         }
 
-        slab_vec
+        pool_vec
     }
 
     pub fn into_vec(self) -> Vec<T> {
         let mut vec = Vec::with_capacity(self.len);
-        
+
         // Read elements directly from backing storage in correct order
         for i in 0..self.len {
             unsafe {
@@ -263,37 +444,38 @@ impl<T> SlabVec<T> {
                 vec.push(item);
             }
         }
-        
+
         // Manually return buffer to pool without dropping elements
+        let (_, size_class) = decode_buffer_idx(self.handle.buffer_idx);
         self.pool
             .borrow_mut()
-            .deallocate_backing(self.handle.buffer_idx, self.handle.size_class);
-        
+            .deallocate_backing(self.handle.buffer_idx, size_class);
+
         // Prevent Drop from running since we've moved all elements and returned buffer
         std::mem::forget(self);
-        
+
         vec
     }
 
-    pub fn to_vec(&self) -> Vec<T> 
-    where 
-        T: Clone 
+    pub fn to_vec(&self) -> Vec<T>
+    where
+        T: Clone,
     {
         let mut vec = Vec::with_capacity(self.len);
-        
+
         for i in 0..self.len {
             unsafe {
                 let item = &*self.ptr.as_ptr().add(i).cast::<T>();
                 vec.push(item.clone());
             }
         }
-        
+
         vec
     }
 
     pub fn push(&mut self, value: T) {
         if self.len >= self.capacity {
-            panic!("SlabVec capacity exceeded");
+            panic!("PoolVec capacity exceeded");
         }
 
         unsafe {
@@ -327,11 +509,15 @@ impl<T> SlabVec<T> {
     }
 
     pub fn clear(&mut self) {
-        while self.len > 0 {
-            self.len -= 1;
+        if self.len > 0 {
             unsafe {
-                (*self.ptr.as_ptr().add(self.len)).assume_init_drop();
+                // Use Vec's approach: drop the entire slice at once
+                std::ptr::drop_in_place(std::ptr::slice_from_raw_parts_mut(
+                    self.ptr.as_ptr().cast::<T>(),
+                    self.len,
+                ));
             }
+            self.len = 0;
         }
     }
 
@@ -340,12 +526,13 @@ impl<T> SlabVec<T> {
             return;
         }
 
-        while self.len > len {
-            self.len -= 1;
-            unsafe {
-                (*self.ptr.as_ptr().add(self.len)).assume_init_drop();
-            }
+        unsafe {
+            // Drop the tail elements as a slice (Vec's approach)
+            let drop_ptr = self.ptr.as_ptr().add(len).cast::<T>();
+            let drop_len = self.len - len;
+            std::ptr::drop_in_place(std::ptr::slice_from_raw_parts_mut(drop_ptr, drop_len));
         }
+        self.len = len;
     }
 
     pub fn get(&self, index: usize) -> Option<&T> {
@@ -362,6 +549,18 @@ impl<T> SlabVec<T> {
         }
 
         unsafe { Some(&mut *self.ptr.as_ptr().add(index).cast::<T>()) }
+    }
+
+    /// Get element without bounds check - faster for Index trait
+    pub fn get_unchecked(&self, index: usize) -> &T {
+        debug_assert!(index < self.len);
+        unsafe { &*self.ptr.as_ptr().add(index).cast::<T>() }
+    }
+
+    /// Get mutable element without bounds check - faster for IndexMut trait
+    pub fn get_unchecked_mut(&mut self, index: usize) -> &mut T {
+        debug_assert!(index < self.len);
+        unsafe { &mut *self.ptr.as_ptr().add(index).cast::<T>() }
     }
 
     pub fn last(&self) -> Option<&T> {
@@ -387,23 +586,55 @@ impl<T> SlabVec<T> {
         T: Clone,
     {
         if new_len > self.capacity {
-            panic!("SlabVec resize beyond capacity");
+            panic!("PoolVec resize beyond capacity");
         }
 
         if new_len > self.len {
-            // Growing - fill with cloned values
-            while self.len < new_len {
-                self.push(value.clone());
-            }
+            // Growing - use optimized extend_with
+            let extend_count = new_len - self.len;
+            self.extend_with(extend_count, value);
         } else {
             // Shrinking - truncate
             self.truncate(new_len);
         }
     }
 
+    /// Extend the vector with `n` copies of `value` using Vec-style optimizations
+    pub fn extend_with(&mut self, n: usize, value: T) 
+    where
+        T: Clone,
+    {
+        if n == 0 {
+            return;
+        }
+
+        if self.len + n > self.capacity {
+            panic!("PoolVec extend_with beyond capacity");
+        }
+
+        unsafe {
+            let mut write_ptr = self.ptr.as_ptr().add(self.len);
+            // Use SetLenOnDrop to ensure length consistency if clone() panics
+            let mut local_len = SetLenOnDrop::new(&mut self.len);
+
+            // Write all elements except the last one with cloning
+            for _ in 1..n {
+                ptr::write(write_ptr, MaybeUninit::new(value.clone()));
+                write_ptr = write_ptr.add(1);
+                local_len.increment_len(1);
+            }
+
+            // Write the last element directly without needless clone
+            ptr::write(write_ptr, MaybeUninit::new(value));
+            local_len.increment_len(1);
+
+            // len set by SetLenOnDrop's Drop implementation
+        }
+    }
+
     /// Return an iterator over the elements
-    pub fn iter(&self) -> SlabVecIter<T> {
-        SlabVecIter {
+    pub fn iter(&self) -> PoolVecIter<T> {
+        PoolVecIter {
             vec: self,
             index: 0,
         }
@@ -414,54 +645,53 @@ impl<T> SlabVec<T> {
         if self.len == 0 {
             return &mut [];
         }
-        
-        unsafe {
-            std::slice::from_raw_parts_mut(self.ptr.as_ptr().cast::<T>(), self.len)
-        }
+
+        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr().cast::<T>(), self.len) }
     }
 
-    /// Return the underlying pool for creating new SlabVecs with the same pool
+    /// Return the underlying pool for creating new PoolVecs with the same pool
     pub fn pool(&self) -> &std::rc::Rc<std::cell::RefCell<VecPool<T>>> {
         &self.pool
     }
 }
 
-impl<T> Drop for SlabVec<T> {
+impl<T> Drop for PoolVec<T> {
     fn drop(&mut self) {
         // Drop all initialized elements
         self.clear();
 
         // Return backing buffer to pool
+        let (_, size_class) = decode_buffer_idx(self.handle.buffer_idx);
         self.pool
             .borrow_mut()
-            .deallocate_backing(self.handle.buffer_idx, self.handle.size_class);
+            .deallocate_backing(self.handle.buffer_idx, size_class);
     }
 }
 
-unsafe impl<T: Send> Send for SlabVec<T> {}
+unsafe impl<T: Send> Send for PoolVec<T> {}
 
-impl<T: Clone> Clone for SlabVec<T> {
+impl<T: Clone> Clone for PoolVec<T> {
     fn clone(&self) -> Self {
-        // Create a new SlabVec with the same pool and capacity as the original
-        let mut new_vec = SlabVec::with_capacity(self.pool.clone(), self.len);
-        
+        // Create a new PoolVec with the same pool and capacity as the original
+        let mut new_vec = PoolVec::with_capacity(self.pool.clone(), self.len);
+
         for i in 0..self.len {
             unsafe {
                 let item = &*self.ptr.as_ptr().add(i).cast::<T>();
                 new_vec.push(item.clone());
             }
         }
-        
+
         new_vec
     }
 }
 
-impl<T: PartialEq> PartialEq for SlabVec<T> {
+impl<T: PartialEq> PartialEq for PoolVec<T> {
     fn eq(&self, other: &Self) -> bool {
         if self.len != other.len {
             return false;
         }
-        
+
         for i in 0..self.len {
             unsafe {
                 let self_item = &*self.ptr.as_ptr().add(i).cast::<T>();
@@ -471,13 +701,13 @@ impl<T: PartialEq> PartialEq for SlabVec<T> {
                 }
             }
         }
-        
+
         true
     }
 }
 
 // SAFETY: VecPool is Send when T is Send because:
-// 1. Each Task owns its pools exclusively (no sharing between threads)  
+// 1. Each Task owns its pools exclusively (no sharing between threads)
 // 2. Pools are moved atomically with the Task between threads
 // 3. No concurrent access - only the owning thread accesses the pool
 unsafe impl<T: Send> Send for VecPool<T> {}
@@ -491,7 +721,7 @@ impl<T> TaskVecPool<T> {
     pub fn new() -> Self {
         Self(Rc::new(RefCell::new(VecPool::new())))
     }
-    
+
     pub fn inner(&self) -> &Rc<RefCell<VecPool<T>>> {
         &self.0
     }
@@ -517,22 +747,22 @@ impl<T: std::fmt::Debug> std::fmt::Debug for TaskVecPool<T> {
 
 // SAFETY: TaskVecPool is Send because:
 // 1. Each Task exclusively owns its pools (no sharing between Tasks)
-// 2. The entire Task (including all its pools) moves atomically between threads  
+// 2. The entire Task (including all its pools) moves atomically between threads
 // 3. No concurrent access to the same pool from multiple threads
 // 4. RefCell provides runtime borrow checking within the single owning thread
 unsafe impl<T: Send> Send for TaskVecPool<T> {}
 
-impl<T> std::ops::Index<usize> for SlabVec<T> {
+impl<T> std::ops::Index<usize> for PoolVec<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
-        self.get(index).expect("index out of bounds")
+        self.get_unchecked(index)
     }
 }
 
-impl<T> std::ops::IndexMut<usize> for SlabVec<T> {
+impl<T> std::ops::IndexMut<usize> for PoolVec<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        self.get_mut(index).expect("index out of bounds")
+        self.get_unchecked_mut(index)
     }
 }
 
@@ -543,7 +773,7 @@ mod tests {
     #[test]
     fn test_basic_operations() {
         let pool = Rc::new(RefCell::new(VecPool::new()));
-        let mut vec = SlabVec::new(pool.clone());
+        let mut vec = PoolVec::new(pool.clone());
 
         assert_eq!(vec.len(), 0);
         assert!(vec.is_empty());
@@ -581,13 +811,13 @@ mod tests {
 
         // Allocate and drop a vector
         {
-            let mut vec1 = SlabVec::with_capacity(pool.clone(), 16);
+            let mut vec1 = PoolVec::with_capacity(pool.clone(), 16);
             vec1.push(1);
             vec1.push(2);
         }
 
         // Allocate another - should reuse the backing buffer
-        let mut vec2 = SlabVec::with_capacity(pool.clone(), 16);
+        let mut vec2 = PoolVec::with_capacity(pool.clone(), 16);
         vec2.push(3);
         assert_eq!(vec2[0], 3);
     }

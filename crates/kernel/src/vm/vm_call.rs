@@ -291,7 +291,8 @@ impl VMExecState {
     ) -> Result<(), Error> {
         // We need to extract data from current activation before creating new one due to borrowing
         let current_activation = self.top().clone();
-        let a = self.create_lambda_activation(&lambda, &current_activation, args.iter().collect())?;
+        let a =
+            self.create_lambda_activation(&lambda, &current_activation, args.iter().collect())?;
         self.stack.push(a);
         Ok(())
     }

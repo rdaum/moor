@@ -45,6 +45,7 @@ pub trait BitsetTrait: Default {
     fn as_bitmask(&self) -> u128;
 }
 
+#[derive(Debug)]
 pub struct Bitset<StorageType, const STORAGE_WIDTH: usize>
 where
     StorageType: PrimInt,

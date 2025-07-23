@@ -31,6 +31,7 @@ byteview.workspace = true
 enum-primitive-derive.workspace = true
 fast-counter.workspace = true
 lazy_static.workspace = true
+libc.workspace = true
 minstant.workspace = true
 num-traits.workspace = true
 shadow-rs.workspace = true
@@ -52,5 +53,5 @@ moor-bench-utils = { path = "../testing/bench-utils" }
 perf_event.workspace = true
 
 [[bench]]
-name = "slab_vec_benches"
+name = "pool_vec_benches"
 harness = false

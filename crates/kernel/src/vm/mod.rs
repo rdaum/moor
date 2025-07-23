@@ -14,12 +14,12 @@
 use std::time::Duration;
 
 use bincode::{Decode, Encode};
+pub use moo_frame::{CatchType, Scope};
 use moor_common::tasks::{AbortLimitReason, Exception, TaskId};
 use moor_compiler::Offset;
 pub use moor_var::program::ProgramType;
 use moor_var::program::names::Name;
 use moor_var::{List, Obj, Symbol, Var};
-pub use moo_frame::{CatchType, Scope};
 pub use vm_call::VerbExecutionRequest;
 pub use vm_unwind::FinallyReason;
 

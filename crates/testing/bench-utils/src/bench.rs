@@ -526,7 +526,12 @@ fn update_progress_bar(current: usize, total: usize, current_throughput: f64) {
     io::stdout().flush().unwrap();
 }
 
-pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>, throughput_elements: Option<u64>) {
+pub fn op_bench<T: BenchContext>(
+    name: &str,
+    group: &str,
+    f: BenchFunction<T>,
+    throughput_elements: Option<u64>,
+) {
     println!("\n🚀 Benchmarking: {name}");
 
     // Warm-up and calibration phase
@@ -575,7 +580,7 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>, t
     } else {
         results.iterations
     };
-    
+
     let elements_per_sec = total_elements as f64 / results.duration.as_secs_f64();
     let ns_per_element = results.duration.as_nanos() as f64 / total_elements as f64;
     let instructions_per_op = results.instructions as f64 / results.iterations as f64;
@@ -632,9 +637,13 @@ pub fn op_bench<T: BenchContext>(name: &str, group: &str, f: BenchFunction<T>, t
         &format!("CV: {cv_percent:.2}%"),
     ]);
 
-    let unit_name = if throughput_elements.is_some() { "element" } else { "op" };
+    let unit_name = if throughput_elements.is_some() {
+        "element"
+    } else {
+        "op"
+    };
     let mops_per_sec = elements_per_sec / 1_000_000.0;
-    
+
     table.add_row(vec![
         &format!("{mops_per_sec:.2} M{unit_name}s/s"),
         &format!("{ns_per_element:.2} ns/{unit_name}"),
@@ -695,7 +704,12 @@ pub struct BenchmarkDef<T: BenchContext> {
 
 /// Run a specific benchmark definition
 pub fn run_benchmark<T: BenchContext>(bench: &BenchmarkDef<T>) {
-    op_bench::<T>(bench.name, bench.group, bench.func, bench.throughput_elements);
+    op_bench::<T>(
+        bench.name,
+        bench.group,
+        bench.func,
+        bench.throughput_elements,
+    );
 }
 
 /// Run benchmarks from a list based on filter

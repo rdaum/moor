@@ -22,7 +22,7 @@ use uuid::Uuid;
 use moor_common::model::VerbArgsSpec;
 use moor_common::model::VerbDef;
 use moor_common::model::VerbFlag;
-use moor_common::util::{BitEnum, SlabVec, TaskVecPool};
+use moor_common::util::{BitEnum, PoolVec, TaskVecPool};
 use moor_compiler::BuiltinId;
 use moor_compiler::Program;
 use moor_compiler::ScatterLabel;
@@ -263,7 +263,11 @@ impl Activation {
     #[allow(irrefutable_let_patterns)] // We know this
     #[allow(clippy::boxed_local)] // It gets called w/ a Box so shut up, I have no choice, clippy
     // is a Moo frame. We're just making room
-    pub fn for_call(verb_call_request: Box<VerbExecutionRequest>, var_pool: &TaskVecPool<moor_var::Var>, var_option_pool: &TaskVecPool<Option<moor_var::Var>>) -> Self {
+    pub fn for_call(
+        verb_call_request: Box<VerbExecutionRequest>,
+        var_pool: &TaskVecPool<moor_var::Var>,
+        var_option_pool: &TaskVecPool<Option<moor_var::Var>>,
+    ) -> Self {
         let program = verb_call_request.program;
         let verb_owner = verb_call_request.resolved_verb.owner();
 
@@ -341,14 +345,20 @@ impl Activation {
         var_option_pool: &TaskVecPool<Option<moor_var::Var>>,
     ) -> Result<Self, Error> {
         // Create new frame with lambda's program
-        let mut frame = Box::new(MooStackFrame::new(lambda.0.body.clone(), var_pool, var_option_pool));
+        let mut frame = Box::new(MooStackFrame::new(
+            lambda.0.body.clone(),
+            var_pool,
+            var_option_pool,
+        ));
 
         // Merge captured variables into the fresh environment
         // The MooStackFrame::new already created a proper global environment
         if !lambda.0.captured_env.is_empty() {
             // Ensure the environment has at least as many scopes as the captured environment
             while frame.environment.len() < lambda.0.captured_env.len() {
-                frame.environment.push(SlabVec::new(var_option_pool.inner().clone()));
+                frame
+                    .environment
+                    .push(PoolVec::new(var_option_pool.inner().clone()));
             }
 
             // Merge captured variables from each scope
@@ -409,7 +419,9 @@ impl Activation {
             }
             // Ensure we have enough scopes
             while frame.environment.len() <= scope_depth {
-                frame.environment.push(SlabVec::new(var_option_pool.inner().clone()));
+                frame
+                    .environment
+                    .push(PoolVec::new(var_option_pool.inner().clone()));
             }
 
             // Find the maximum offset needed for this scope
@@ -435,7 +447,11 @@ impl Activation {
             };
 
             // Perform parameter binding for this scope
-            lambda_scatter_assign(&scope_scatter, &args, frame.environment[scope_depth].as_mut_slice())?;
+            lambda_scatter_assign(
+                &scope_scatter,
+                &args,
+                frame.environment[scope_depth].as_mut_slice(),
+            )?;
         }
 
         // Handle self-reference for recursive lambdas
@@ -535,7 +551,13 @@ impl Activation {
         })
     }
 
-    pub fn for_eval(permissions: Obj, player: &Obj, program: Program, var_pool: &TaskVecPool<moor_var::Var>, var_option_pool: &TaskVecPool<Option<moor_var::Var>>) -> Self {
+    pub fn for_eval(
+        permissions: Obj,
+        player: &Obj,
+        program: Program,
+        var_pool: &TaskVecPool<moor_var::Var>,
+        var_option_pool: &TaskVecPool<Option<moor_var::Var>>,
+    ) -> Self {
         let verbdef = VerbDef::new(
             Uuid::new_v4(),
             NOTHING,

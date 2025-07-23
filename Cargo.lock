@@ -2676,6 +2676,7 @@ dependencies = [
  "fast-counter",
  "itertools 0.14.0",
  "lazy_static",
+ "libc",
  "minstant",
  "moor-bench-utils",
  "moor-var",
