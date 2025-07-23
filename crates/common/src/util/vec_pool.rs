@@ -13,9 +13,8 @@
 
 //! Pool allocator for Vec<T> backing storage using mmap and bitmap tracking
 
-use crate::util::bitset::{Bitset64, BitsetTrait};
 use libc::{MAP_ANONYMOUS, MAP_FAILED, MAP_PRIVATE, PROT_READ, PROT_WRITE, mmap, munmap};
-use std::cell::RefCell;
+use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::ptr::{self, NonNull};
 use std::rc::Rc;
@@ -56,8 +55,14 @@ const MIN_GRANULARITY: usize = SIZE_CLASSES[0];
 /// Default pool size in number of minimum-granularity chunks
 const DEFAULT_POOL_CHUNKS: usize = 8192; // 128KB worth of 16-element chunks
 
+/// Represents a free chunk in the intrusive free list
+/// The "next" pointer is stored directly in the freed memory
+#[repr(C)]
+struct FreeChunk {
+    next: Option<NonNull<FreeChunk>>,
+}
+
 /// A pool for managing pre-allocated vector backing storage using mmap
-#[derive(Debug)]
 pub struct VecPool<T> {
     /// Raw mmap-allocated memory region
     memory_region: *mut MaybeUninit<T>,
@@ -65,10 +70,8 @@ pub struct VecPool<T> {
     region_size_bytes: usize,
     /// Total capacity in minimum-granularity chunks
     total_chunks: usize,
-    /// Bitmap tracking allocated chunks at minimum granularity (for debugging/validation only)
-    allocation_bitmap: Bitset64<128>, // Supports up to 8192 chunks
-    /// Free lists for each size class
-    size_class_free_lists: [Vec<usize>; 4],
+    /// Intrusive free list heads for each size class
+    size_class_free_heads: [Option<NonNull<FreeChunk>>; 4],
     /// Next chunk to try for bump allocation
     next_free_chunk: usize,
     /// Allocation tracking
@@ -120,8 +123,7 @@ impl<T> VecPool<T> {
             memory_region,
             region_size_bytes,
             total_chunks,
-            allocation_bitmap: Bitset64::new(),
-            size_class_free_lists: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+            size_class_free_heads: [None, None, None, None],
             next_free_chunk: 0,
             allocated_bytes: 0,
             available_bytes: region_size_bytes,
@@ -144,14 +146,8 @@ impl<T> VecPool<T> {
                 if self.next_free_chunk + chunks_needed <= self.total_chunks {
                     let chunk_offset = self.next_free_chunk;
                     self.next_free_chunk += chunks_needed;
-
-                    // Don't mark in bitmap - these chunks are truly free and available
-                    // The bitmap should reflect actual allocation state
-
-                    // Add to free list (they're available for allocation)
-                    self.size_class_free_lists[size_class].push(chunk_offset);
-
-                    // Don't update allocated_bytes since these are free
+                    // Push to intrusive free list
+                    self.push_free_chunk(size_class, chunk_offset);
                 } else {
                     break; // Out of space for this size class
                 }
@@ -173,24 +169,45 @@ impl<T> VecPool<T> {
         std::cmp::min(sc_idx, MAX_SIZE_CLASS)
     }
 
+    /// Push a chunk onto the intrusive free list for a size class
+    fn push_free_chunk(&mut self, size_class: usize, chunk_offset: usize) {
+        let element_offset = chunk_offset * MIN_GRANULARITY;
+        let chunk_ptr = unsafe { self.memory_region.add(element_offset) as *mut FreeChunk };
+
+        unsafe {
+            // Store the current head as the next pointer in this chunk
+            (*chunk_ptr).next = self.size_class_free_heads[size_class];
+            // Make this chunk the new head
+            self.size_class_free_heads[size_class] = Some(NonNull::new_unchecked(chunk_ptr));
+        }
+    }
+
+    /// Pop a chunk from the intrusive free list for a size class
+    fn pop_free_chunk(&mut self, size_class: usize) -> Option<usize> {
+        let head = self.size_class_free_heads[size_class]?;
+
+        unsafe {
+            // Get the next chunk from the current head
+            let next = (*head.as_ptr()).next;
+            // Update the head to point to the next chunk
+            self.size_class_free_heads[size_class] = next;
+
+            // Calculate the chunk offset from the pointer
+            let chunk_ptr = head.as_ptr() as *mut MaybeUninit<T>;
+            let element_offset = chunk_ptr.offset_from(self.memory_region) as usize;
+            let chunk_offset = element_offset / MIN_GRANULARITY;
+
+            Some(chunk_offset)
+        }
+    }
+
     fn allocate_backing(&mut self, capacity: usize) -> (NonNull<MaybeUninit<T>>, usize, usize) {
         let size_class = Self::size_class_for_capacity(capacity);
         let chunks_needed = SIZE_CLASSES[size_class] / MIN_GRANULARITY;
 
-        // Fast path: Try free list first
-        if let Some(chunk_offset) = self.size_class_free_lists[size_class].pop() {
+        // Fast path: Try intrusive free list first
+        if let Some(chunk_offset) = self.pop_free_chunk(size_class) {
             debug_assert!(chunk_offset + chunks_needed <= self.total_chunks);
-
-            // Mark chunks as allocated in bitmap (they should be free before this)
-            for i in 0..chunks_needed {
-                debug_assert!(
-                    !self.allocation_bitmap.check(chunk_offset + i),
-                    "Free list chunk {} + {} is already allocated in bitmap",
-                    chunk_offset,
-                    i
-                );
-                self.allocation_bitmap.set(chunk_offset + i);
-            }
 
             let buffer_idx = encode_buffer_idx(chunk_offset, size_class);
             let element_offset = chunk_offset * MIN_GRANULARITY;
@@ -207,12 +224,6 @@ impl<T> VecPool<T> {
         if self.next_free_chunk + chunks_needed <= self.total_chunks {
             let chunk_offset = self.next_free_chunk;
             self.next_free_chunk += chunks_needed;
-
-            // Update bitmap for debugging/validation
-            for i in 0..chunks_needed {
-                debug_assert!(!self.allocation_bitmap.check(chunk_offset + i));
-                self.allocation_bitmap.set(chunk_offset + i);
-            }
 
             let buffer_idx = encode_buffer_idx(chunk_offset, size_class);
             let element_offset = chunk_offset * MIN_GRANULARITY;
@@ -236,15 +247,8 @@ impl<T> VecPool<T> {
         let (chunk_offset, decoded_size_class) = decode_buffer_idx(buffer_idx);
         debug_assert_eq!(size_class, decoded_size_class);
 
-        let chunks_needed = SIZE_CLASSES[size_class] / MIN_GRANULARITY;
-
-        // Clear chunks in bitmap
-        for i in 0..chunks_needed {
-            self.allocation_bitmap.unset(chunk_offset + i);
-        }
-
-        // Add to free list
-        self.size_class_free_lists[size_class].push(chunk_offset);
+        // Add to intrusive free list
+        self.push_free_chunk(size_class, chunk_offset);
 
         let bytes = SIZE_CLASSES[size_class] * std::mem::size_of::<T>();
         self.allocated_bytes -= bytes;
@@ -262,16 +266,34 @@ impl<T> VecPool<T> {
     /// Debug method to show pool statistics
     pub fn debug_stats(&self) -> String {
         format!(
-            "Pool stats: allocated={} bytes, available={} bytes, total_chunks={}, free_lists=[{}, {}, {}, {}], bitmap_used={}",
+            "Pool stats: allocated={} bytes, available={} bytes, total_chunks={}, free_lists=[{}, {}, {}, {}]",
             self.allocated_bytes(),
             self.available_bytes(),
             self.total_chunks,
-            self.size_class_free_lists[0].len(),
-            self.size_class_free_lists[1].len(),
-            self.size_class_free_lists[2].len(),
-            self.size_class_free_lists[3].len(),
-            self.allocation_bitmap.size()
+            self.count_free_chunks(0),
+            self.count_free_chunks(1),
+            self.count_free_chunks(2),
+            self.count_free_chunks(3)
         )
+    }
+
+    /// Count the number of free chunks in a size class (for debugging)
+    fn count_free_chunks(&self, size_class: usize) -> usize {
+        let mut count = 0;
+        let mut current = self.size_class_free_heads[size_class];
+
+        unsafe {
+            while let Some(chunk) = current {
+                count += 1;
+                current = (*chunk.as_ptr()).next;
+                // Safety check to avoid infinite loops
+                if count > 10000 {
+                    break;
+                }
+            }
+        }
+
+        count
     }
 }
 
@@ -302,13 +324,34 @@ struct PoolHandle {
 }
 
 /// A Vec-like container that uses pool-allocated backing storage
-#[derive(Debug)]
 pub struct PoolVec<T> {
-    pool: Rc<RefCell<VecPool<T>>>,
+    pool: Rc<UnsafeCell<VecPool<T>>>,
     ptr: NonNull<MaybeUninit<T>>,
     len: usize,
     capacity: usize,
     handle: PoolHandle,
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for PoolVec<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PoolVec")
+            .field("len", &self.len)
+            .field("capacity", &self.capacity)
+            .field("elements", &self.as_debug_vec())
+            .finish()
+    }
+}
+
+impl<T: std::fmt::Debug> PoolVec<T> {
+    fn as_debug_vec(&self) -> Vec<&T> {
+        let mut vec = Vec::new();
+        for i in 0..self.len {
+            unsafe {
+                vec.push(&*self.ptr.as_ptr().add(i).cast::<T>());
+            }
+        }
+        vec
+    }
 }
 
 /// Iterator for PoolVec
@@ -332,8 +375,8 @@ impl<'a, T> Iterator for PoolVecIter<'a, T> {
 }
 
 impl<T> PoolVec<T> {
-    pub fn new(pool: Rc<RefCell<VecPool<T>>>) -> Self {
-        let (ptr, buffer_idx, size_class) = pool.borrow_mut().allocate_backing(0);
+    pub fn new(pool: Rc<UnsafeCell<VecPool<T>>>) -> Self {
+        let (ptr, buffer_idx, size_class) = unsafe { (*pool.get()).allocate_backing(0) };
         let capacity = SIZE_CLASSES[size_class];
 
         Self {
@@ -345,8 +388,8 @@ impl<T> PoolVec<T> {
         }
     }
 
-    pub fn with_capacity(pool: Rc<RefCell<VecPool<T>>>, capacity: usize) -> Self {
-        let (ptr, buffer_idx, size_class) = pool.borrow_mut().allocate_backing(capacity);
+    pub fn with_capacity(pool: Rc<UnsafeCell<VecPool<T>>>, capacity: usize) -> Self {
+        let (ptr, buffer_idx, size_class) = unsafe { (*pool.get()).allocate_backing(capacity) };
         let actual_capacity = SIZE_CLASSES[size_class];
 
         Self {
@@ -360,11 +403,11 @@ impl<T> PoolVec<T> {
 
     /// Create a new PoolVec filled with `len` copies of `value` - optimized fast path
     /// Uses Vec-style optimizations: writes directly to memory and avoids needless clone of last element
-    pub fn new_filled(pool: Rc<RefCell<VecPool<T>>>, len: usize, value: T) -> Self
+    pub fn new_filled(pool: Rc<UnsafeCell<VecPool<T>>>, len: usize, value: T) -> Self
     where
         T: Clone,
     {
-        let (ptr, buffer_idx, size_class) = pool.borrow_mut().allocate_backing(len);
+        let (ptr, buffer_idx, size_class) = unsafe { (*pool.get()).allocate_backing(len) };
         let actual_capacity = SIZE_CLASSES[size_class];
 
         if len > actual_capacity {
@@ -407,7 +450,7 @@ impl<T> PoolVec<T> {
         pool_vec
     }
 
-    pub fn from_vec(pool: Rc<RefCell<VecPool<T>>>, mut vec: Vec<T>) -> Self {
+    pub fn from_vec(pool: Rc<UnsafeCell<VecPool<T>>>, mut vec: Vec<T>) -> Self {
         // Check size before allocating to avoid memory leaks
         let size_class = VecPool::<T>::size_class_for_capacity(vec.len());
         let capacity = SIZE_CLASSES[size_class];
@@ -416,7 +459,7 @@ impl<T> PoolVec<T> {
             panic!("PoolVec::from_vec: vector too large for any size class");
         }
 
-        let (ptr, buffer_idx, _size_class) = pool.borrow_mut().allocate_backing(vec.len());
+        let (ptr, buffer_idx, _size_class) = unsafe { (*pool.get()).allocate_backing(vec.len()) };
 
         let mut pool_vec = Self {
             pool,
@@ -447,9 +490,9 @@ impl<T> PoolVec<T> {
 
         // Manually return buffer to pool without dropping elements
         let (_, size_class) = decode_buffer_idx(self.handle.buffer_idx);
-        self.pool
-            .borrow_mut()
-            .deallocate_backing(self.handle.buffer_idx, size_class);
+        unsafe {
+            (*self.pool.get()).deallocate_backing(self.handle.buffer_idx, size_class);
+        }
 
         // Prevent Drop from running since we've moved all elements and returned buffer
         std::mem::forget(self);
@@ -600,7 +643,7 @@ impl<T> PoolVec<T> {
     }
 
     /// Extend the vector with `n` copies of `value` using Vec-style optimizations
-    pub fn extend_with(&mut self, n: usize, value: T) 
+    pub fn extend_with(&mut self, n: usize, value: T)
     where
         T: Clone,
     {
@@ -650,7 +693,7 @@ impl<T> PoolVec<T> {
     }
 
     /// Return the underlying pool for creating new PoolVecs with the same pool
-    pub fn pool(&self) -> &std::rc::Rc<std::cell::RefCell<VecPool<T>>> {
+    pub fn pool(&self) -> &std::rc::Rc<std::cell::UnsafeCell<VecPool<T>>> {
         &self.pool
     }
 }
@@ -662,9 +705,9 @@ impl<T> Drop for PoolVec<T> {
 
         // Return backing buffer to pool
         let (_, size_class) = decode_buffer_idx(self.handle.buffer_idx);
-        self.pool
-            .borrow_mut()
-            .deallocate_backing(self.handle.buffer_idx, size_class);
+        unsafe {
+            (*self.pool.get()).deallocate_backing(self.handle.buffer_idx, size_class);
+        }
     }
 }
 
@@ -712,17 +755,17 @@ impl<T: PartialEq> PartialEq for PoolVec<T> {
 // 3. No concurrent access - only the owning thread accesses the pool
 unsafe impl<T: Send> Send for VecPool<T> {}
 
-/// A Send wrapper around Rc<RefCell<VecPool<T>>> for per-Task pools
+/// A Send wrapper around Rc<UnsafeCell<VecPool<T>>> for per-Task pools
 /// SAFETY: This is only safe because each Task exclusively owns its pools
 /// and Tasks are moved atomically between threads without sharing pools
-pub struct TaskVecPool<T>(Rc<RefCell<VecPool<T>>>);
+pub struct TaskVecPool<T>(Rc<UnsafeCell<VecPool<T>>>);
 
 impl<T> TaskVecPool<T> {
     pub fn new() -> Self {
-        Self(Rc::new(RefCell::new(VecPool::new())))
+        Self(Rc::new(UnsafeCell::new(VecPool::new())))
     }
 
-    pub fn inner(&self) -> &Rc<RefCell<VecPool<T>>> {
+    pub fn inner(&self) -> &Rc<UnsafeCell<VecPool<T>>> {
         &self.0
     }
 }
@@ -772,7 +815,7 @@ mod tests {
 
     #[test]
     fn test_basic_operations() {
-        let pool = Rc::new(RefCell::new(VecPool::new()));
+        let pool = Rc::new(UnsafeCell::new(VecPool::new()));
         let mut vec = PoolVec::new(pool.clone());
 
         assert_eq!(vec.len(), 0);
@@ -807,7 +850,7 @@ mod tests {
 
     #[test]
     fn test_pool_reuse() {
-        let pool = Rc::new(RefCell::new(VecPool::new()));
+        let pool = Rc::new(UnsafeCell::new(VecPool::new()));
 
         // Allocate and drop a vector
         {
