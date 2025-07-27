@@ -14,14 +14,15 @@
 use ahash::HashMap;
 use lazy_static::lazy_static;
 use moor_compiler::offset_for_builtin;
-use moor_var::{Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, Variant};
+use moor_var::{Associative, E_ARGS, E_INVARG, E_QUOTA, E_RANGE, E_TYPE, Error, Variant};
 use moor_var::{
     IndexMode, List, Sequence, Var, VarType, v_empty_list, v_int, v_list, v_list_iter, v_map,
     v_str, v_string,
 };
-use onig::{Region, SearchOptions};
 use std::sync::Mutex;
 use tature::{Regex as TatureRegex, RegexError, SyntaxFlags};
+
+use super::pcre_moo::{ExecutionLimits, PcreError, PcreRegex};
 
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
@@ -206,7 +207,7 @@ fn perform_regex_match(
     let regex = cache_lock
         .entry((translated_pattern.clone(), case_matters))
         .or_insert_with(|| {
-            // Use LambdaMOO's original syntax configuration
+            // Use MOO-compatible syntax
             let mut syntax = SyntaxFlags::MOO;
             if !case_matters {
                 syntax |= SyntaxFlags::CASE_INSENSITIVE;
@@ -324,11 +325,11 @@ fn bf_rmatch(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 lazy_static! {
-    static ref PCRE_PATTERN_CACHE: Mutex<HashMap<(String, bool), Result<onig::Regex, onig::Error>>> =
+    static ref PCRE_PATTERN_CACHE: Mutex<HashMap<(String, bool), Result<PcreRegex, PcreError>>> =
         Default::default();
 }
 
-/// Perform a PCRE match using oniguruma.
+/// Perform a PCRE match using our safe wrapper with execution limits.
 /// If `map_support` is true, the return value is a list of maps, where each map contains the
 /// matched text and the start and end positions of the match.
 /// If `map_support` is false, the return value is a list of assoc-lists, where each assoc-list
@@ -342,19 +343,21 @@ fn perform_pcre_match(
     target: &str,
     repeat: bool,
 ) -> Result<List, Error> {
-    let case_insensitive = !case_matters;
-    let cache_key = (re.to_string(), case_insensitive);
+    let cache_key = (re.to_string(), case_matters);
     let mut cache_lock = PCRE_PATTERN_CACHE.lock().unwrap();
     let regex = cache_lock.entry(cache_key).or_insert_with(|| {
-        let options = if !case_insensitive {
-            onig::RegexOptions::REGEX_OPTION_NONE
+        // Create pattern with case sensitivity flag
+        let pattern = if case_matters {
+            re.to_string()
         } else {
-            onig::RegexOptions::REGEX_OPTION_IGNORECASE
+            format!("(?i){}", re) // PCRE case insensitive flag
         };
-
-        let syntax = onig::Syntax::perl();
-        onig::Regex::with_options(re, options, syntax)
+        
+        // Use reasonable execution limits for MOO
+        let limits = ExecutionLimits::default();
+        PcreRegex::new(&pattern, limits)
     });
+    
     let regex = match regex {
         Ok(regex) => regex,
         Err(_) => {
@@ -362,58 +365,100 @@ fn perform_pcre_match(
         }
     };
 
-    let mut region = Region::new();
-    let mut matches = Vec::new();
-    let mut start = 0;
-    let end = target.len();
-    while regex
-        .search_with_options(
-            target,
-            start,
-            end,
-            SearchOptions::SEARCH_OPTION_NONE,
-            Some(&mut region),
-        )
-        .is_some()
-    {
+    // Get matches using our safe wrapper
+    let matches_result = if repeat {
+        regex.find_all(target)
+    } else {
+        match regex.find(target) {
+            Ok(Some(m)) => Ok(vec![m]),
+            Ok(None) => Ok(vec![]),
+            Err(e) => Err(e),
+        }
+    };
+
+    let pcre_matches = match matches_result {
+        Ok(matches) => matches,
+        Err(PcreError::MatchLimitExceeded) => {
+            return Err(E_QUOTA.msg("PCRE match limit exceeded"));
+        }
+        Err(PcreError::DepthLimitExceeded) => {
+            return Err(E_QUOTA.msg("PCRE recursion depth limit exceeded"));
+        }
+        Err(PcreError::IterationLimitExceeded) => {
+            return Err(E_QUOTA.msg("PCRE iteration limit exceeded"));
+        }
+        Err(_) => {
+            return Err(E_INVARG.msg("PCRE execution error"));
+        }
+    };
+
+    // Convert to MOO format
+    let mut moo_matches = Vec::new();
+    for pcre_match in pcre_matches {
         if map_support {
             let mut map = vec![];
-            for i in 0..region.len() {
-                let (start, end) = region.pos(i).unwrap();
-                let match_map = vec![
-                    (v_str("match"), v_str(&target[start..end])),
+            
+            // Add overall match (group 0)
+            let match_map = vec![
+                (v_str("match"), v_str(&pcre_match.text)),
+                (
+                    v_str("position"),
+                    v_list(&[
+                        v_int(pcre_match.overall.0 as i64), 
+                        v_int(pcre_match.overall.1 as i64)
+                    ]),
+                ),
+            ];
+            map.push((v_str("0"), v_map(&match_map)));
+            
+            // Add capture groups
+            for (i, (start, end)) in pcre_match.captures.iter().enumerate() {
+                let captured_text = &target[(*start - 1)..*end]; // Convert back to 0-based for slicing
+                let capture_map = vec![
+                    (v_str("match"), v_str(captured_text)),
                     (
                         v_str("position"),
-                        v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
+                        v_list(&[v_int(*start as i64), v_int(*end as i64)]),
                     ),
                 ];
-                map.push((v_string(i.to_string()), v_map(&match_map)));
+                map.push((v_string((i + 1).to_string()), v_map(&capture_map)));
             }
-            let map = v_map(&map);
-            matches.push(map);
-            start = region.pos(0).unwrap().1;
+            
+            moo_matches.push(v_map(&map));
         } else {
             let mut assoc_list = vec![];
-            for i in 0..region.len() {
-                let (start, end) = region.pos(i).unwrap();
-                let match_list = vec![
-                    v_list(&[v_str("match"), v_str(&target[start..end])]),
+            
+            // Add overall match (group 0)
+            let match_list = vec![
+                v_list(&[v_str("match"), v_str(&pcre_match.text)]),
+                v_list(&[
+                    v_str("position"),
+                    v_list(&[
+                        v_int(pcre_match.overall.0 as i64), 
+                        v_int(pcre_match.overall.1 as i64)
+                    ]),
+                ]),
+            ];
+            assoc_list.push(v_list(&[v_str("0"), v_list(&match_list)]));
+            
+            // Add capture groups
+            for (i, (start, end)) in pcre_match.captures.iter().enumerate() {
+                let captured_text = &target[(*start - 1)..*end]; // Convert back to 0-based for slicing
+                let capture_list = vec![
+                    v_list(&[v_str("match"), v_str(captured_text)]),
                     v_list(&[
                         v_str("position"),
-                        v_list(&[v_int((start as i64) + 1), v_int(end as i64)]),
+                        v_list(&[v_int(*start as i64), v_int(*end as i64)]),
                     ]),
                 ];
-                assoc_list.push(v_list(&[v_string(i.to_string()), v_list(&match_list)]));
+                assoc_list.push(v_list(&[v_string((i + 1).to_string()), v_list(&capture_list)]));
             }
-            matches.push(v_list(&assoc_list));
-            start = region.pos(0).unwrap().1;
-        }
-        if !repeat {
-            break;
+            
+            moo_matches.push(v_list(&assoc_list));
         }
     }
 
-    Ok(List::mk_list(&matches))
+    Ok(List::mk_list(&moo_matches))
 }
 
 fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error> {
@@ -454,17 +499,19 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
         (false, false)
     };
 
-    let cache_key = (pattern.to_string(), case_insensitive);
+    let cache_key = (pattern.to_string(), !case_insensitive); // Note: inverted for consistency
     let mut cache_lock = PCRE_PATTERN_CACHE.lock().unwrap();
     let regex = cache_lock.entry(cache_key).or_insert_with(|| {
-        let options = if !case_insensitive {
-            onig::RegexOptions::REGEX_OPTION_NONE
+        // Create pattern with case sensitivity flag
+        let pattern_with_flags = if case_insensitive {
+            format!("(?i){}", pattern) // PCRE case insensitive flag
         } else {
-            onig::RegexOptions::REGEX_OPTION_IGNORECASE
+            pattern.to_string()
         };
-
-        let syntax = onig::Syntax::perl();
-        onig::Regex::with_options(pattern, options, syntax)
+        
+        // Use reasonable execution limits for MOO
+        let limits = ExecutionLimits::default();
+        PcreRegex::new(&pattern_with_flags, limits)
     });
     let regex = match regex {
         Ok(regex) => regex,
@@ -472,56 +519,37 @@ fn perform_pcre_replace(target: &str, replace_str: &str) -> Result<String, Error
             return Err(E_INVARG.msg("Invalid regex pattern"));
         }
     };
-    // If `global` we will replace all matches. Otherwise, just stop after the first
-    let mut start = 0;
-    let mut region = Region::new();
-    let end = target.len();
-    let mut matches = vec![];
-    'outer: loop {
-        let match_num = regex.search_with_options(
-            target,
-            start,
-            end,
-            SearchOptions::SEARCH_OPTION_NONE,
-            Some(&mut region),
-        );
-
-        if match_num.is_none() {
-            break;
-        }
-        if region.is_empty() {
-            break;
-        }
-        for (match_start, end) in region.iter() {
-            // Append the match to our matches.
-            // If not `global`, break afterwords.
-            // If global, move "start" past it, and continue
-            matches.push((match_start, end));
-            if !global {
-                break 'outer;
+    // Use our safe wrapper to perform replacement with execution limits
+    let result = if global {
+        match regex.replace_all(target, replacement) {
+            Ok(result) => result,
+            Err(PcreError::MatchLimitExceeded) => {
+                return Err(E_QUOTA.msg("PCRE match limit exceeded"));
             }
-            start = end;
+            Err(PcreError::DepthLimitExceeded) => {
+                return Err(E_QUOTA.msg("PCRE recursion depth limit exceeded"));
+            }
+            Err(PcreError::IterationLimitExceeded) => {
+                return Err(E_QUOTA.msg("PCRE iteration limit exceeded"));
+            }
+            Err(_) => {
+                return Err(E_INVARG.msg("PCRE execution error"));
+            }
         }
-    }
-
-    // Now compose the string looking at the matches, replacing the `replacement` in every place
-    let mut result = String::new();
-    let mut offset = 0;
-
-    // Iterate through all matches and compose the result string
-    for (start, end) in matches {
-        // Append the portion of the target string before the match
-        result.push_str(&target[offset..start]);
-
-        // Append the replacement string
-        result.push_str(replacement);
-
-        // Update the offset to the end of the current match
-        offset = end;
-    }
-
-    // Append the remainder of the target string after the last match
-    result.push_str(&target[offset..]);
+    } else {
+        match regex.replace(target, replacement) {
+            Ok(result) => result,
+            Err(PcreError::MatchLimitExceeded) => {
+                return Err(E_QUOTA.msg("PCRE match limit exceeded"));
+            }
+            Err(PcreError::DepthLimitExceeded) => {
+                return Err(E_QUOTA.msg("PCRE recursion depth limit exceeded"));
+            }
+            Err(_) => {
+                return Err(E_INVARG.msg("PCRE execution error"));
+            }
+        }
+    };
 
     Ok(result)
 }

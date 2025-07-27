@@ -48,6 +48,7 @@ mod bf_documents;
 mod bf_flyweights;
 mod bf_list_sets;
 mod bf_maps;
+mod pcre_moo;
 mod bf_num;
 mod bf_objects;
 mod bf_properties;
