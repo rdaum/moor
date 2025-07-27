@@ -88,6 +88,7 @@ iana-time-zone.workspace = true
 
 # Text Processing & Regex
 onig.workspace = true
+tature = { git = "https://github.com/rdaum/tature" }
 
 # Collections & Data Structures
 ahash.workspace = true

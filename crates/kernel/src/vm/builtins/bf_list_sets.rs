@@ -19,9 +19,9 @@ use moor_var::{
     IndexMode, List, Sequence, Var, VarType, v_empty_list, v_int, v_list, v_list_iter, v_map,
     v_str, v_string,
 };
-use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
-use std::ops::BitOr;
+use onig::{Region, SearchOptions};
 use std::sync::Mutex;
+use tature::{Regex as TatureRegex, RegexError, SyntaxFlags};
 
 use crate::vm::builtins::BfRet::Ret;
 use crate::vm::builtins::{BfCallState, BfErr, BfRet, BuiltinFunction};
@@ -185,14 +185,13 @@ type Span = (isize, isize);
 type MatchSpans = (Span, Vec<Span>);
 
 lazy_static! {
-    static ref MOO_REGEX_CACHE: Mutex<HashMap<(String, bool), Result<onig::Regex, onig::Error>>> =
+    static ref MOO_REGEX_CACHE: Mutex<HashMap<(String, bool), Result<TatureRegex, RegexError>>> =
         Default::default();
 }
 
 /// Perform regex match using LambdaMOO's "legacy" regular expression support, which is based on
 /// pre-POSIX regexes.
-/// To do this, we use oniguruma, which is a modern regex library that supports these old-style
-/// regexes and a pile of other stuff.
+/// To do this, we use my tature, which provides exact compatibility with legacy regex behavior.
 fn perform_regex_match(
     pattern: &str,
     subject: &str,
@@ -203,26 +202,16 @@ fn perform_regex_match(
         return Err(E_INVARG.msg("Invalid regex pattern"));
     };
 
-    let options = if case_matters {
-        onig::RegexOptions::REGEX_OPTION_NONE
-    } else {
-        onig::RegexOptions::REGEX_OPTION_IGNORECASE
-    };
-
-    let mut syntax = *onig::Syntax::grep();
-    syntax.set_operators(
-        syntax
-            .operators()
-            .bitor(SyntaxOperator::SYNTAX_OPERATOR_QMARK_ZERO_ONE)
-            .bitor(SyntaxOperator::SYNTAX_OPERATOR_PLUS_ONE_INF),
-    );
-    syntax.set_behavior(SyntaxBehavior::SYNTAX_BEHAVIOR_ALLOW_DOUBLE_RANGE_OP_IN_CC);
-
     let mut cache_lock = MOO_REGEX_CACHE.lock().unwrap();
     let regex = cache_lock
         .entry((translated_pattern.clone(), case_matters))
         .or_insert_with(|| {
-            onig::Regex::with_options(translated_pattern.as_str(), options, &syntax)
+            // Use LambdaMOO's original syntax configuration
+            let mut syntax = SyntaxFlags::MOO;
+            if !case_matters {
+                syntax |= SyntaxFlags::CASE_INSENSITIVE;
+            }
+            TatureRegex::with_syntax(&translated_pattern, syntax)
         });
     let regex = match regex {
         Ok(regex) => regex,
@@ -230,34 +219,56 @@ fn perform_regex_match(
             return Err(E_INVARG.msg("Invalid regex pattern"));
         }
     };
-    let (search_start, search_end) = if reverse {
-        (subject.len(), 0)
+
+    // Use tature's search() function exactly like LambdaMOO's re_search()
+    let text_len = subject.chars().count();
+    let (start_pos, range) = if reverse {
+        // Reverse search: start from end, search backwards
+        (text_len, -(text_len as i32))
     } else {
-        (0, subject.len())
+        // Forward search: start from beginning
+        (0, text_len as i32)
     };
-    let mut region = Region::new();
 
-    let Some(_) = regex.search_with_options(
+    // Call tature's search function like LambdaMOO calls re_search
+    let search_result = tature::matcher::search(
+        regex,
         subject,
-        search_start,
-        search_end,
-        SearchOptions::SEARCH_OPTION_NONE,
-        Some(&mut region),
-    ) else {
-        return Ok(None);
+        start_pos,
+        range,
+        tature::ExecLimits::default(),
+    );
+
+    let match_pos = match search_result {
+        Ok(pos) if pos >= 0 => pos as usize,
+        Ok(_) => return Ok(None), // -1 means no match
+        Err(_) => return Err(E_INVARG.msg("Regex execution error")),
     };
-    // Overall span
-    let Some((start, end)) = region.pos(0) else {
+
+    // Now get the actual match with captures
+    let captures =
+        tature::matcher::match_at(regex, subject, match_pos, tature::ExecLimits::default());
+
+    let captures = match captures {
+        Ok(Some(caps)) => caps,
+        Ok(None) => return Ok(None),
+        Err(_) => return Err(E_INVARG.msg("Regex execution error")),
+    };
+
+    // Get the overall match bounds
+    let Some((start, end)) = captures.get(0) else {
         return Ok(None);
     };
 
+    // Convert from 0-based open interval to 1-based closed interval like LambdaMOO
     let overall = ((start + 1) as isize, end as isize);
-    // Now we'll iterate through the captures, and build up a Vec<Span> of the captured groups.
+
     // MOO match() returns 9 subpatterns, no more, no less. So we start with a Vec of 9
-    // (-1, -1) pairs and then fill that in with the captured groups, if any.
+    // (0, -1) pairs and then fill that in with the captured groups, if any.
     let mut match_vec = vec![(0, -1); 9];
     for i in 1..=8 {
-        if let Some((start, end)) = region.pos(i) {
+        if let Some((start, end)) = captures.get(i) {
+            // Convert indices like LambdaMOO: start+1, end (1-based closed interval)
             match_vec[i - 1] = ((start + 1) as isize, end as isize);
         }
     }
