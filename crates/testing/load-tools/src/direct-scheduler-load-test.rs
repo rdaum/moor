@@ -685,10 +685,12 @@ async fn main() -> Result<(), eyre::Error> {
     let database = Box::new(database);
 
     // Create config with higher tick limits for load testing
-    let mut config = Config::default();
     // Increase tick limits significantly for load testing - each task does 7000 verb calls
     // We need much higher limits than the default 60k/30k
-    config.features = Arc::new(FeaturesConfig::default());
+    let config = Config {
+        features: Arc::new(FeaturesConfig::default()),
+        ..Default::default()
+    };
     let config = Arc::new(config);
 
     // Create scheduler components

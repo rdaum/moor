@@ -25,6 +25,9 @@ mod codegen_tests;
 mod objdef;
 mod var_scope;
 
+#[cfg(test)]
+mod tests;
+
 pub use crate::codegen::compile;
 pub use crate::decompile::program_to_tree;
 pub use crate::objdef::{
