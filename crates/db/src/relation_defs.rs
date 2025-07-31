@@ -182,7 +182,7 @@ macro_rules! define_relations {
                         let [<$field _provider>] = FjallProvider::new(stringify!($field), [<$field _partition>]);
 
                         // Create relation with symbolized field name
-                        let [<$field _relation>] = define_relations!(@create_relation $arrow, $field, [<$field _provider>]);
+                        let [<$field _relation>] = define_relations!(@create_relation $arrow, $domain, $field, [<$field _provider>]);
 
                         // Seed the relation by scanning all existing data
                         [<$field _relation>]
@@ -378,16 +378,44 @@ macro_rules! define_relations {
         }
     };
 
-    // Helper rule to create a relation based on arrow type
-    (@create_relation =>, $field:ident, $provider:ident) => {
-        Relation::new(Symbol::mk(stringify!($field)), Arc::new($provider))
+    // Helper rule to create a relation based on arrow type and domain type
+    (@create_relation =>, $domain:ty, $field:ident, $provider:ident) => {
+        define_relations!(@choose_impl_for_domain $domain, $field, $provider)
     };
 
-    (@create_relation ==, $field:ident, $provider:ident) => {
+    (@create_relation ==, $domain:ty, $field:ident, $provider:ident) => {
+        define_relations!(@choose_secondary_impl_for_domain $domain, $field, $provider)
+    };
+
+    // Secondary implementation selection based on Domain type
+    (@choose_secondary_impl_for_domain Obj, $field:ident, $provider:ident) => {
+        Relation::new_with_secondary_rart(Symbol::mk(stringify!($field)), Arc::new($provider))
+    };
+
+    (@choose_secondary_impl_for_domain ObjAndUUIDHolder, $field:ident, $provider:ident) => {
+        Relation::new_with_secondary_rart(Symbol::mk(stringify!($field)), Arc::new($provider))
+    };
+
+    // Fallback to regular secondary implementation for other domain types
+    (@choose_secondary_impl_for_domain $other:ty, $field:ident, $provider:ident) => {
         Relation::new_with_secondary(
             Symbol::mk(stringify!($field)),
             Arc::new($provider)
         )
+    };
+
+    // Automatic implementation selection based on Domain type
+    (@choose_impl_for_domain Obj, $field:ident, $provider:ident) => {
+        Relation::new_with_rart(Symbol::mk(stringify!($field)), Arc::new($provider))
+    };
+
+    (@choose_impl_for_domain ObjAndUUIDHolder, $field:ident, $provider:ident) => {
+        Relation::new_with_rart(Symbol::mk(stringify!($field)), Arc::new($provider))
+    };
+
+    // Fallback to regular implementation for other domain types
+    (@choose_impl_for_domain $other:ty, $field:ident, $provider:ident) => {
+        Relation::new(Symbol::mk(stringify!($field)), Arc::new($provider))
     };
 }
 

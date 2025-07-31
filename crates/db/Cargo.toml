@@ -45,6 +45,7 @@ oneshot.workspace = true
 ahash.workspace = true
 im.workspace = true
 indexmap.workspace = true
+rart.workspace = true
 
 # Error Handling & Logging
 thiserror.workspace = true

@@ -13,7 +13,10 @@
 
 //! Global cache is a cache that acts as an origin for all local caches.
 
-use crate::tx_management::indexes::{HashRelationIndex, RelationIndex};
+use crate::tx_management::indexes::{
+    HashRelationIndex, ObjRartRelationIndex, ObjSecondaryRartRelationIndex,
+    ObjUUIDRartRelationIndex, RelationIndex,
+};
 use crate::tx_management::relation_tx::{OpType, RelationTransaction, WorkingSet};
 use crate::tx_management::{Canonical, Error, Provider, Timestamp, Tx};
 use minstant::Instant;
@@ -84,6 +87,47 @@ where
 
     pub fn source(&self) -> &Arc<Source> {
         &self.source
+    }
+}
+
+// Specific implementations for Obj Domain type
+impl<Codomain, Source> Relation<moor_var::Obj, Codomain, Source>
+where
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Source: Provider<moor_var::Obj, Codomain>,
+{
+    pub fn new_with_rart(relation_name: Symbol, provider: Arc<Source>) -> Self {
+        Self {
+            relation_name,
+            index: Arc::new(RwLock::new(Box::new(ObjRartRelationIndex::new()))),
+            source: provider,
+        }
+    }
+
+    pub fn new_with_secondary_rart(relation_name: Symbol, provider: Arc<Source>) -> Self
+    where
+        Codomain: Hash + Eq,
+    {
+        Self {
+            relation_name,
+            index: Arc::new(RwLock::new(Box::new(ObjSecondaryRartRelationIndex::new()))),
+            source: provider,
+        }
+    }
+}
+
+// Specific implementations for ObjAndUUIDHolder Domain type
+impl<Codomain, Source> Relation<crate::ObjAndUUIDHolder, Codomain, Source>
+where
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+    Source: Provider<crate::ObjAndUUIDHolder, Codomain>,
+{
+    pub fn new_with_rart(relation_name: Symbol, provider: Arc<Source>) -> Self {
+        Self {
+            relation_name,
+            index: Arc::new(RwLock::new(Box::new(ObjUUIDRartRelationIndex::new()))),
+            source: provider,
+        }
     }
 }
 

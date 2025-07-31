@@ -2788,6 +2788,7 @@ dependencies = [
  "oneshot",
  "paste",
  "rand 0.8.5",
+ "rart",
  "serde",
  "shuttle",
  "tempfile",
@@ -3839,6 +3840,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rart"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ee3cec64ffb4c34bf2ba812c017dda70807b2b46e59cabc9afe19baa2bb65c1"
+dependencies = [
+ "num-traits",
+ "simdeez",
+]
+
+[[package]]
 name = "raw-cpuid"
 version = "11.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4540,6 +4551,16 @@ checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest 0.10.7",
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "simdeez"
+version = "2.0.0-dev5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97e4567daf40a565ebc9058e929445e55eef4d254e3deeb936cd6ef586cc6ba9"
+dependencies = [
+ "cfg-if",
+ "paste",
 ]
 
 [[package]]

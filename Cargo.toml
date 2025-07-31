@@ -160,6 +160,7 @@ ahash = "0.8"
 im = "15.1"
 indexmap = "2.9"
 itertools = "0.14"
+rart = "0.2.1"
 
 # Error Handling & Logging
 color-eyre = "0.6"

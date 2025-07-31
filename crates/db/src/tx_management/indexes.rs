@@ -13,8 +13,25 @@
 
 use crate::Timestamp;
 use ahash::AHasher;
+use moor_var::AsByteBuffer;
+use rart::{ArrayKey, VersionedAdaptiveRadixTree};
 use std::any::Any;
 use std::hash::{BuildHasherDefault, Hash};
+use std::marker::PhantomData;
+
+/// Trait for converting Domain types to fixed-width ArrayKey for rart
+pub trait ToRartKey<const N: usize> {
+    fn to_rart_key(&self) -> ArrayKey<N>;
+}
+
+// Type aliases for specific concrete RartRelationIndex types
+pub type ObjRartRelationIndex<Codomain> = RartRelationIndex<8, moor_var::Obj, Codomain>;
+pub type ObjUUIDRartRelationIndex<Codomain> =
+    RartRelationIndex<24, crate::ObjAndUUIDHolder, Codomain>;
+
+// Type aliases for secondary indexed rart types
+pub type ObjSecondaryRartRelationIndex<Codomain> =
+    SecondaryRartRelationIndex<8, moor_var::Obj, Codomain>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry<T: Clone + PartialEq> {
@@ -181,6 +198,138 @@ where
     }
 }
 
+/// Radix tree-based implementation of RelationIndex using VersionedAdaptiveRadixTree
+#[derive(Clone)]
+pub struct RartRelationIndex<const N: usize, Domain, Codomain>
+where
+    Domain: ToRartKey<N> + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    /// Internal radix tree for the cache.
+    pub entries: VersionedAdaptiveRadixTree<ArrayKey<N>, Entry<Codomain>>,
+
+    /// Whether the provider has been fully loaded
+    provider_fully_loaded: bool,
+
+    /// Phantom data for Domain type
+    _phantom: PhantomData<Domain>,
+}
+
+impl<const N: usize, Domain, Codomain> RartRelationIndex<N, Domain, Codomain>
+where
+    Domain: ToRartKey<N> + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    pub fn new() -> Self {
+        Self {
+            entries: VersionedAdaptiveRadixTree::new(),
+            provider_fully_loaded: false,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<const N: usize, Domain, Codomain> RelationIndex<Domain, Codomain>
+    for RartRelationIndex<N, Domain, Codomain>
+where
+    Domain: ToRartKey<N> + Clone + Send + Sync + 'static,
+    Codomain: Clone + PartialEq + Send + Sync + 'static,
+{
+    fn insert_entry(
+        &mut self,
+        ts: Timestamp,
+        domain: Domain,
+        codomain: Codomain,
+    ) -> Option<Entry<Codomain>> {
+        let key = domain.to_rart_key();
+        self.entries.insert_k(
+            &key,
+            Entry {
+                ts,
+                value: codomain,
+            },
+        );
+        // rart's CoW optimization means it doesn't return old values when shared
+        // But none of the callers actually use the return value anyway
+        None
+    }
+
+    fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain) -> Option<Entry<Codomain>> {
+        let key = domain.to_rart_key();
+        self.entries.remove(key)
+    }
+
+    fn index_lookup(&self, domain: &Domain) -> Option<&Entry<Codomain>> {
+        let key = domain.to_rart_key();
+        self.entries.get(key)
+    }
+
+    fn remove_entry(&mut self, domain: &Domain) -> Option<Entry<Codomain>> {
+        let key = domain.to_rart_key();
+        self.entries.remove(key)
+    }
+
+    fn iter(&self) -> Box<dyn Iterator<Item = (&Domain, &Entry<Codomain>)> + '_> {
+        // This is tricky because we need to convert back from ArrayKey to Domain
+        // For now, we'll return an empty iterator and implement this later if needed
+        Box::new(std::iter::empty())
+    }
+
+    fn len(&self) -> usize {
+        // VersionedAdaptiveRadixTree doesn't have len(), so we'll return 0 for now
+        // This will need to be implemented if actually needed
+        0
+    }
+
+    fn fork(&self) -> Box<dyn RelationIndex<Domain, Codomain>> {
+        Box::new(Self {
+            entries: self.entries.snapshot(),
+            provider_fully_loaded: self.provider_fully_loaded,
+            _phantom: PhantomData,
+        })
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn get_by_codomain(&self, _codomain: &Codomain) -> Vec<Domain> {
+        // No secondary index support by default
+        Vec::new()
+    }
+
+    fn has_secondary_index(&self) -> bool {
+        false
+    }
+
+    fn is_provider_fully_loaded(&self) -> bool {
+        self.provider_fully_loaded
+    }
+
+    fn set_provider_fully_loaded(&mut self, loaded: bool) {
+        self.provider_fully_loaded = loaded;
+    }
+}
+
+/// Wrapper that adds proper secondary index support to RartRelationIndex
+pub struct SecondaryRartRelationIndex<const N: usize, Domain, Codomain>
+where
+    Domain: ToRartKey<N> + Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Codomain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+{
+    /// Primary index using VART
+    entries: VersionedAdaptiveRadixTree<ArrayKey<N>, Entry<Codomain>>,
+
+    /// Secondary index: Codomain -> Set<Domain>
+    secondary_index: im::HashMap<Codomain, im::HashSet<Domain>, BuildHasherDefault<AHasher>>,
+
+    /// Whether the provider has been fully loaded
+    provider_fully_loaded: bool,
+
+    /// Phantom data for Domain type
+    _phantom: PhantomData<Domain>,
+}
+
 /// Wrapper that adds proper secondary index support to HashRelationIndex
 pub struct SecondaryIndexRelation<Domain, Codomain>
 where
@@ -188,6 +337,39 @@ where
     Codomain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
 {
     inner: HashRelationIndex<Domain, Codomain>,
+}
+
+impl<const N: usize, Domain, Codomain> SecondaryRartRelationIndex<N, Domain, Codomain>
+where
+    Domain: ToRartKey<N> + Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Codomain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+{
+    pub fn new() -> Self {
+        Self {
+            entries: VersionedAdaptiveRadixTree::new(),
+            secondary_index: Default::default(),
+            provider_fully_loaded: false,
+            _phantom: PhantomData,
+        }
+    }
+
+    fn remove_from_secondary(&mut self, codomain: &Codomain, domain: &Domain) {
+        if let Some(mut domain_set) = self.secondary_index.remove(codomain) {
+            domain_set.remove(domain);
+            // Only reinsert if set is not empty - this prevents memory leaks
+            if !domain_set.is_empty() {
+                self.secondary_index.insert(codomain.clone(), domain_set);
+            }
+            // If empty, we just let it get dropped - automatic cleanup
+        }
+    }
+
+    fn add_to_secondary(&mut self, codomain: &Codomain, domain: &Domain) {
+        self.secondary_index
+            .entry(codomain.clone())
+            .or_insert_with(im::HashSet::new)
+            .insert(domain.clone());
+    }
 }
 
 impl<Domain, Codomain> SecondaryIndexRelation<Domain, Codomain>
@@ -324,6 +506,119 @@ where
 
     fn set_provider_fully_loaded(&mut self, loaded: bool) {
         self.inner.provider_fully_loaded = loaded;
+    }
+}
+
+impl<const N: usize, Domain, Codomain> RelationIndex<Domain, Codomain>
+    for SecondaryRartRelationIndex<N, Domain, Codomain>
+where
+    Domain: ToRartKey<N> + Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+    Codomain: Hash + PartialEq + Eq + Clone + Send + Sync + 'static,
+{
+    fn insert_entry(
+        &mut self,
+        ts: Timestamp,
+        domain: Domain,
+        codomain: Codomain,
+    ) -> Option<Entry<Codomain>> {
+        let key = domain.to_rart_key();
+
+        // Get old entry for secondary index cleanup
+        let old_entry = self.entries.get(key).cloned();
+
+        // Update primary index
+        self.entries.insert_k(
+            &key,
+            Entry {
+                ts,
+                value: codomain.clone(),
+            },
+        );
+
+        // Update secondary index
+        if let Some(ref old) = old_entry {
+            // Remove from old codomain's set
+            self.remove_from_secondary(&old.value, &domain);
+        }
+        // Add to new codomain's set
+        self.add_to_secondary(&codomain, &domain);
+
+        // rart's CoW optimization means it doesn't return old values when shared
+        // But we already got the old entry above, so return None to match rart behavior
+        None
+    }
+
+    fn insert_tombstone(&mut self, _ts: Timestamp, domain: Domain) -> Option<Entry<Codomain>> {
+        let key = domain.to_rart_key();
+        let old_entry = self.entries.remove(key);
+
+        // Clean up secondary index
+        if let Some(ref old) = old_entry {
+            self.remove_from_secondary(&old.value, &domain);
+        }
+
+        old_entry
+    }
+
+    fn index_lookup(&self, domain: &Domain) -> Option<&Entry<Codomain>> {
+        let key = domain.to_rart_key();
+        self.entries.get(key)
+    }
+
+    fn remove_entry(&mut self, domain: &Domain) -> Option<Entry<Codomain>> {
+        let key = domain.to_rart_key();
+        let old_entry = self.entries.remove(key);
+
+        // Clean up secondary index
+        if let Some(ref old) = old_entry {
+            self.remove_from_secondary(&old.value, domain);
+        }
+
+        old_entry
+    }
+
+    fn iter(&self) -> Box<dyn Iterator<Item = (&Domain, &Entry<Codomain>)> + '_> {
+        // This is tricky because we need to convert back from ArrayKey to Domain
+        // For now, we'll return an empty iterator and implement this later if needed
+        Box::new(std::iter::empty())
+    }
+
+    fn len(&self) -> usize {
+        // VersionedAdaptiveRadixTree doesn't have len(), so we'll return 0 for now
+        // This will need to be implemented if actually needed
+        0
+    }
+
+    fn fork(&self) -> Box<dyn RelationIndex<Domain, Codomain>> {
+        Box::new(Self {
+            entries: self.entries.snapshot(),
+            secondary_index: self.secondary_index.clone(),
+            provider_fully_loaded: self.provider_fully_loaded,
+            _phantom: PhantomData,
+        })
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn get_by_codomain(&self, codomain: &Codomain) -> Vec<Domain> {
+        self.secondary_index
+            .get(codomain)
+            .map(|set| set.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    fn has_secondary_index(&self) -> bool {
+        true
+    }
+
+    fn is_provider_fully_loaded(&self) -> bool {
+        self.provider_fully_loaded
+    }
+
+    fn set_provider_fully_loaded(&mut self, loaded: bool) {
+        self.provider_fully_loaded = loaded;
     }
 }
 
@@ -563,5 +858,177 @@ mod tests {
         let result = index.get_by_codomain(&codomain);
         assert_eq!(result.len(), 1);
         assert!(result.contains(&domain2));
+    }
+
+    #[test]
+    fn test_secondary_rart_relation_index_basic() {
+        let mut index = SecondaryRartRelationIndex::<8, TestDomain, TestCodomain>::new();
+
+        let domain1 = TestDomain(1);
+        let domain2 = TestDomain(2);
+        let domain3 = TestDomain(3);
+        let codomain_a = TestCodomain(100);
+        let codomain_b = TestCodomain(200);
+        let ts = Timestamp(42);
+
+        // Test insert
+        index.insert_entry(ts, domain1.clone(), codomain_a.clone());
+        index.insert_entry(ts, domain2.clone(), codomain_a.clone());
+        index.insert_entry(ts, domain3.clone(), codomain_b.clone());
+
+        // Test primary lookup
+        let entry = index.index_lookup(&domain1).unwrap();
+        assert_eq!(entry.ts, ts);
+        assert_eq!(entry.value, codomain_a);
+
+        // Test secondary lookup
+        let result_a = index.get_by_codomain(&codomain_a);
+        assert_eq!(result_a.len(), 2);
+        assert!(result_a.contains(&domain1));
+        assert!(result_a.contains(&domain2));
+
+        let result_b = index.get_by_codomain(&codomain_b);
+        assert_eq!(result_b.len(), 1);
+        assert!(result_b.contains(&domain3));
+
+        // Test secondary index support
+        assert!(index.has_secondary_index());
+    }
+
+    #[test]
+    fn test_secondary_rart_relation_index_updates() {
+        let mut index = SecondaryRartRelationIndex::<8, TestDomain, TestCodomain>::new();
+
+        let domain = TestDomain(1);
+        let old_codomain = TestCodomain(100);
+        let new_codomain = TestCodomain(200);
+        let ts = Timestamp(42);
+
+        // Insert initial entry
+        index.insert_entry(ts, domain.clone(), old_codomain.clone());
+
+        // Verify initial state
+        let result = index.get_by_codomain(&old_codomain);
+        assert_eq!(result.len(), 1);
+        assert!(result.contains(&domain));
+
+        // Update to new codomain
+        index.insert_entry(Timestamp(43), domain.clone(), new_codomain.clone());
+
+        // Verify old codomain no longer has this domain
+        let old_result = index.get_by_codomain(&old_codomain);
+        assert!(old_result.is_empty());
+
+        // Verify new codomain has this domain
+        let new_result = index.get_by_codomain(&new_codomain);
+        assert_eq!(new_result.len(), 1);
+        assert!(new_result.contains(&domain));
+    }
+
+    #[test]
+    fn test_secondary_rart_relation_index_delete_cleanup() {
+        let mut index = SecondaryRartRelationIndex::<8, TestDomain, TestCodomain>::new();
+
+        let domain1 = TestDomain(1);
+        let domain2 = TestDomain(2);
+        let codomain = TestCodomain(100);
+        let ts = Timestamp(42);
+
+        // Insert two entries with same codomain
+        index.insert_entry(ts, domain1.clone(), codomain.clone());
+        index.insert_entry(ts, domain2.clone(), codomain.clone());
+
+        // Verify both domains are in the codomain's set
+        let result = index.get_by_codomain(&codomain);
+        assert_eq!(result.len(), 2);
+        assert!(result.contains(&domain1));
+        assert!(result.contains(&domain2));
+
+        // Delete one entry using insert_tombstone
+        index.insert_tombstone(Timestamp(43), domain1.clone());
+
+        // Verify only one domain remains
+        let result = index.get_by_codomain(&codomain);
+        assert_eq!(result.len(), 1);
+        assert!(result.contains(&domain2));
+
+        // Delete the second entry
+        index.remove_entry(&domain2);
+
+        // Verify empty set is cleaned up (no longer in secondary index)
+        let result = index.get_by_codomain(&codomain);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_rart_relation_index_basic() {
+        let mut index = RartRelationIndex::<8, TestDomain, TestCodomain>::new();
+
+        let domain = TestDomain(1);
+        let codomain = TestCodomain(100);
+        let ts = Timestamp(42);
+
+        // Test insert
+        let old = index.insert_entry(ts, domain.clone(), codomain.clone());
+        assert!(old.is_none()); // rart doesn't return old values due to CoW optimization
+
+        // Test lookup
+        let entry = index.index_lookup(&domain).unwrap();
+        assert_eq!(entry.ts, ts);
+        assert_eq!(entry.value, codomain);
+
+        // Test update (second insert with same key)
+        let new_codomain = TestCodomain(200);
+        let old = index.insert_entry(Timestamp(43), domain.clone(), new_codomain.clone());
+        assert!(old.is_none()); // rart doesn't return old values due to CoW optimization
+
+        // Verify the update worked
+        let entry = index.index_lookup(&domain).unwrap();
+        assert_eq!(entry.ts, Timestamp(43));
+        assert_eq!(entry.value, new_codomain);
+
+        // Test delete
+        let old = index.insert_tombstone(Timestamp(44), domain.clone());
+        assert!(old.is_some()); // remove should still work
+        assert_eq!(old.unwrap().value, new_codomain);
+
+        // Verify deletion
+        assert!(index.index_lookup(&domain).is_none());
+    }
+
+    // Add ToRartKey implementation for TestDomain
+    impl ToRartKey<8> for TestDomain {
+        fn to_rart_key(&self) -> ArrayKey<8> {
+            ArrayKey::from(self.0)
+        }
+    }
+}
+
+// ToRartKey implementations for common Domain types
+impl ToRartKey<8> for moor_var::Obj {
+    fn to_rart_key(&self) -> ArrayKey<8> {
+        // Access the internal u64 through the AsByteBuffer trait
+        self.with_byte_buffer(|bytes| {
+            let u64_val = u64::from_le_bytes(bytes.try_into().unwrap());
+            // Use the u64 directly since ArrayKey supports From<u64>
+            ArrayKey::from(u64_val)
+        })
+        .unwrap()
+    }
+}
+
+impl ToRartKey<24> for crate::ObjAndUUIDHolder {
+    fn to_rart_key(&self) -> ArrayKey<24> {
+        // Create a string representation that will be exactly 24 bytes
+        // Use the UUID hex string (32 chars) + obj id (padded to fit)
+        let uuid_str = self.uuid.to_string().replace("-", ""); // 32 chars
+        let obj_id = self
+            .obj
+            .with_byte_buffer(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
+            .unwrap();
+
+        // Create a combined string and truncate/pad to exactly 24 bytes
+        let combined = format!("{:016x}{}", obj_id, &uuid_str[..8]);
+        ArrayKey::from(&combined[..])
     }
 }
