@@ -174,15 +174,14 @@ impl VmHost {
         command: ParsedCommand,
         permissions: &Obj,
     ) {
-        let call_request = Box::new(VerbExecutionRequest {
-            permissions: *permissions,
-            resolved_verb: verb.1,
-            call: Box::new(verb_call),
-            command: Some(Box::new(command)),
-            program: verb.0,
-        });
-
-        self.start_execution(task_id, call_request)
+        self.start_execution(
+            task_id,
+            *permissions,
+            verb.1,
+            Box::new(verb_call),
+            Some(Box::new(command)),
+            verb.0,
+        );
     }
 
     /// Setup for executing a method call in this VM.
@@ -193,15 +192,14 @@ impl VmHost {
         verb_info: (ProgramType, VerbDef),
         verb_call: VerbCall,
     ) {
-        let call_request = Box::new(VerbExecutionRequest {
-            permissions: *perms,
-            resolved_verb: verb_info.1,
-            call: Box::new(verb_call),
-            command: None,
-            program: verb_info.0,
-        });
-
-        self.start_execution(task_id, call_request)
+        self.start_execution(
+            task_id,
+            *perms,
+            verb_info.1,
+            Box::new(verb_call),
+            None,
+            verb_info.0,
+        )
     }
 
     /// Start execution of a fork request in the hosted VM.
@@ -218,13 +216,18 @@ impl VmHost {
     pub fn start_execution(
         &mut self,
         task_id: TaskId,
-        verb_execution_request: Box<VerbExecutionRequest>,
+        permissions: Obj,
+        resolved_verb: VerbDef,
+        call: Box<VerbCall>,
+        command: Option<Box<ParsedCommand>>,
+        program: ProgramType,
     ) {
         self.vm_exec_state.start_time = Some(SystemTime::now());
         self.vm_exec_state.maximum_time = Some(self.max_time);
         self.vm_exec_state.tick_count = 0;
         self.vm_exec_state.task_id = task_id;
-        self.vm_exec_state.exec_call_request(verb_execution_request);
+        self.vm_exec_state
+            .exec_call_request(permissions, resolved_verb, call, command, program);
         self.running = true;
     }
 
@@ -330,7 +333,13 @@ impl VmHost {
                     continue;
                 }
                 ExecutionResult::DispatchVerb(exec_request) => {
-                    self.vm_exec_state.exec_call_request(exec_request);
+                    self.vm_exec_state.exec_call_request(
+                        exec_request.permissions,
+                        exec_request.resolved_verb,
+                        exec_request.call,
+                        exec_request.command,
+                        exec_request.program,
+                    );
                     return ContinueOk;
                 }
                 ExecutionResult::DispatchEval {

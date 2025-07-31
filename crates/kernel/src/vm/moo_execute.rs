@@ -217,8 +217,6 @@ pub fn moo_frame_execute(
                     &operand.end_label,
                 );
 
-                // Pop the count and list off the stack. We push back later when we re-enter.
-
                 let (count, seq) = f.peek2();
                 let Some(count_i) = count.as_integer() else {
                     f.pop();

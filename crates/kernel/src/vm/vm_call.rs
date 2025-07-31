@@ -201,13 +201,14 @@ impl VMExecState {
 
         // Permissions for the activation are the verb's owner.
         let permissions = resolved_verb.owner();
-        ExecutionResult::DispatchVerb(Box::new(VerbExecutionRequest {
+        self.exec_call_request(
             permissions,
             resolved_verb,
             call,
-            command: self.top().command.clone(),
+            self.top().command.clone(),
             program,
-        }))
+        );
+        ExecutionResult::More
     }
 
     /// Setup the VM to execute the verb of the same current name, but using the parent's
@@ -272,8 +273,15 @@ impl VMExecState {
     /// Entry point from scheduler for actually beginning the dispatch of a method execution
     /// (non-command) in this VM.
     /// Actually creates the activation record and puts it on the stack.
-    pub fn exec_call_request(&mut self, call_request: Box<VerbExecutionRequest>) {
-        let a = Activation::for_call(call_request);
+    pub fn exec_call_request(
+        &mut self,
+        permissions: Obj,
+        resolved_verb: VerbDef,
+        call: Box<VerbCall>,
+        command: Option<Box<ParsedCommand>>,
+        program: ProgramType,
+    ) {
+        let a = Activation::for_call(permissions, resolved_verb, call, command, program);
         self.stack.push(a);
     }
 

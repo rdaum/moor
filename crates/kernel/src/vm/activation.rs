@@ -33,7 +33,7 @@ use moor_var::{List, NOTHING};
 use moor_var::{Obj, v_arc_string};
 use moor_var::{Var, v_empty_list, v_list, v_obj, v_str, v_string};
 
-use crate::vm::VerbExecutionRequest;
+use crate::vm::VerbCall;
 use crate::vm::moo_frame::MooStackFrame;
 use crate::vm::scatter_assign::scatter_assign;
 use moor_common::matching::ParsedCommand;
@@ -263,26 +263,31 @@ impl Activation {
     #[allow(irrefutable_let_patterns)] // We know this
     #[allow(clippy::boxed_local)] // It gets called w/ a Box so shut up, I have no choice, clippy
     // is a Moo frame. We're just making room
-    pub fn for_call(verb_call_request: Box<VerbExecutionRequest>) -> Self {
-        let program = verb_call_request.program;
-        let verb_owner = verb_call_request.resolved_verb.owner();
+    pub fn for_call(
+        _permissions: Obj,
+        resolved_verb: VerbDef,
+        call: Box<VerbCall>,
+        command: Option<Box<ParsedCommand>>,
+        program: ProgramType,
+    ) -> Self {
+        let verb_owner = resolved_verb.owner();
 
         let ProgramType::MooR(program) = program else {
             unimplemented!("Only MOO programs are supported")
         };
         let frame = Box::new(MooStackFrame::new(program));
         let mut frame = Frame::Moo(frame);
-        frame.set_global_variable(GlobalName::this, verb_call_request.call.this.clone());
-        frame.set_global_variable(GlobalName::player, v_obj(verb_call_request.call.player));
-        frame.set_global_variable(GlobalName::caller, verb_call_request.call.caller.clone());
+        frame.set_global_variable(GlobalName::this, call.this.clone());
+        frame.set_global_variable(GlobalName::player, v_obj(call.player));
+        frame.set_global_variable(GlobalName::caller, call.caller.clone());
         frame.set_global_variable(
             GlobalName::verb,
-            v_arc_string(verb_call_request.call.verb_name.as_arc_string()),
+            v_arc_string(call.verb_name.as_arc_string()),
         );
-        frame.set_global_variable(GlobalName::args, verb_call_request.call.args.clone().into());
+        frame.set_global_variable(GlobalName::args, call.args.clone().into());
 
         // From the command, if any...
-        if let Some(ref command) = verb_call_request.command {
+        if let Some(ref command) = command {
             frame.set_global_variable(GlobalName::argstr, v_string(command.argstr.clone()));
             frame.set_global_variable(GlobalName::dobj, v_obj(command.dobj.unwrap_or(NOTHING)));
             frame.set_global_variable(
@@ -308,10 +313,7 @@ impl Activation {
                     .map_or_else(v_empty_str, |s| v_string(s.clone())),
             );
         } else {
-            frame.set_global_variable(
-                GlobalName::argstr,
-                v_string(verb_call_request.call.argstr.clone()),
-            );
+            frame.set_global_variable(GlobalName::argstr, v_string(call.argstr.clone()));
             frame.set_global_variable(GlobalName::dobj, v_obj(NOTHING));
             frame.set_global_variable(GlobalName::dobjstr, v_str(""));
             frame.set_global_variable(GlobalName::prepstr, v_str(""));
@@ -321,12 +323,12 @@ impl Activation {
 
         Self {
             frame,
-            this: verb_call_request.call.this.clone(),
-            player: verb_call_request.call.player,
-            verbdef: verb_call_request.resolved_verb,
-            verb_name: verb_call_request.call.verb_name,
-            command: verb_call_request.command.clone(),
-            args: verb_call_request.call.args.clone(),
+            this: call.this.clone(),
+            player: call.player,
+            verbdef: resolved_verb,
+            verb_name: call.verb_name,
+            command: command.clone(),
+            args: call.args.clone(),
             permissions: verb_owner,
         }
     }

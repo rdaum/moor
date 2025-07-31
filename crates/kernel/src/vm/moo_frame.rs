@@ -102,14 +102,16 @@ impl MooStackFrame {
         first_env.resize(width, None);
         let mut environment = Vec::with_capacity(16);
         environment.push(first_env);
+        let valstack = Vec::with_capacity(16);
+        let scope_stack = Vec::with_capacity(8);
         Self {
             program,
             environment,
             pc: 0,
             pc_type: PcType::Main,
             temp: v_none(),
-            valstack: Default::default(),
-            scope_stack: Default::default(),
+            valstack,
+            scope_stack,
             catch_stack: Default::default(),
             finally_stack: Default::default(),
             capture_stack: Default::default(),
