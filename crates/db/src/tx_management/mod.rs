@@ -11,7 +11,7 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-mod indexes;
+pub mod indexes;
 mod relation;
 mod relation_tx;
 

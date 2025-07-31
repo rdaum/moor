@@ -287,6 +287,14 @@ impl Symbol {
         let arc_string = self.as_arc_string();
         Arc::from(arc_string.as_str())
     }
+
+    /// Get the compare_id for this symbol.
+    ///
+    /// The compare_id is used for case-insensitive comparisons and is the same
+    /// for all case variants of the same string.
+    pub fn compare_id(&self) -> u32 {
+        self.compare_id
+    }
 }
 
 // ============================================================================

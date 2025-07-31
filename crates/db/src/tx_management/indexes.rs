@@ -25,13 +25,13 @@ pub trait ToRartKey<const N: usize> {
 }
 
 // Type aliases for specific concrete RartRelationIndex types
-pub type ObjRartRelationIndex<Codomain> = RartRelationIndex<8, moor_var::Obj, Codomain>;
+pub type ObjRartRelationIndex<Codomain> = RartRelationIndex<4, moor_var::Obj, Codomain>;
 pub type ObjUUIDRartRelationIndex<Codomain> =
     RartRelationIndex<24, crate::ObjAndUUIDHolder, Codomain>;
 
 // Type aliases for secondary indexed rart types
 pub type ObjSecondaryRartRelationIndex<Codomain> =
-    SecondaryRartRelationIndex<8, moor_var::Obj, Codomain>;
+    SecondaryRartRelationIndex<4, moor_var::Obj, Codomain>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry<T: Clone + PartialEq> {
@@ -1005,15 +1005,9 @@ mod tests {
 }
 
 // ToRartKey implementations for common Domain types
-impl ToRartKey<8> for moor_var::Obj {
-    fn to_rart_key(&self) -> ArrayKey<8> {
-        // Access the internal u64 through the AsByteBuffer trait
-        self.with_byte_buffer(|bytes| {
-            let u64_val = u64::from_le_bytes(bytes.try_into().unwrap());
-            // Use the u64 directly since ArrayKey supports From<u64>
-            ArrayKey::from(u64_val)
-        })
-        .unwrap()
+impl ToRartKey<4> for moor_var::Obj {
+    fn to_rart_key(&self) -> ArrayKey<4> {
+        ArrayKey::from(self.id().0)
     }
 }
 
@@ -1030,5 +1024,21 @@ impl ToRartKey<24> for crate::ObjAndUUIDHolder {
         // Create a combined string and truncate/pad to exactly 24 bytes
         let combined = format!("{:016x}{}", obj_id, &uuid_str[..8]);
         ArrayKey::from(&combined[..])
+    }
+}
+
+// Composite key implementation for (Obj, Symbol) - used in verb and prop caches  
+impl ToRartKey<8> for (moor_var::Obj, moor_var::Symbol) {
+    fn to_rart_key(&self) -> ArrayKey<8> {
+        // Pack into 8 bytes: 4 bytes obj_id + 4 bytes symbol_id
+        let obj_id = self.0.id().0;
+        let symbol_id = self.1.compare_id();
+        
+        let mut key_bytes = [0u8; 8];
+        key_bytes[0..4].copy_from_slice(&obj_id.to_be_bytes());
+        key_bytes[4..8].copy_from_slice(&symbol_id.to_be_bytes());
+        
+        let key_u64 = u64::from_be_bytes(key_bytes);
+        ArrayKey::from(key_u64)
     }
 }

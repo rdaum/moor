@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use ahash::AHasher;
+use crate::tx_management::indexes::ToRartKey;
 use moor_common::model::PropDef;
 use moor_var::{Obj, Symbol};
-use std::hash::BuildHasherDefault;
+use rart::{ArrayKey, VersionedAdaptiveRadixTree};
 use std::sync::Mutex;
 
 pub(crate) struct PropResolutionCache {
@@ -28,8 +28,8 @@ impl PropResolutionCache {
                 version: 0,
                 orig_version: 0,
                 flushed: false,
-                entries: im::HashMap::default(),
-                first_parent_with_props_cache: im::HashMap::default(),
+                entries: VersionedAdaptiveRadixTree::new(),
+                first_parent_with_props_cache: VersionedAdaptiveRadixTree::new(),
             }),
         }
     }
@@ -41,17 +41,20 @@ struct Inner {
     version: i64,
     flushed: bool,
 
-    #[allow(clippy::type_complexity)]
-    entries: im::HashMap<(Obj, Symbol), Option<PropDef>, BuildHasherDefault<AHasher>>,
-    first_parent_with_props_cache: im::HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>,
+    entries: VersionedAdaptiveRadixTree<ArrayKey<8>, Option<PropDef>>,
+    first_parent_with_props_cache: VersionedAdaptiveRadixTree<ArrayKey<4>, Option<Obj>>,
 }
 
 impl PropResolutionCache {
     pub(crate) fn fork(&self) -> Box<Self> {
         let inner = self.inner.lock().unwrap();
-        let mut forked_inner = inner.clone();
-        forked_inner.orig_version = inner.version;
-        forked_inner.flushed = false;
+        let forked_inner = Inner {
+            orig_version: inner.version,
+            version: inner.version,
+            flushed: false,
+            entries: inner.entries.snapshot(),
+            first_parent_with_props_cache: inner.first_parent_with_props_cache.snapshot(),
+        };
         Box::new(Self {
             inner: Mutex::new(forked_inner),
         })
@@ -64,38 +67,42 @@ impl PropResolutionCache {
 
     pub(crate) fn lookup(&self, obj: &Obj, prop: &Symbol) -> Option<Option<PropDef>> {
         let inner = self.inner.lock().unwrap();
-        inner.entries.get(&(*obj, *prop)).cloned()
+        let key = (*obj, *prop).to_rart_key();
+        inner.entries.get(key).cloned()
     }
 
     pub(crate) fn flush(&self) {
         let mut inner = self.inner.lock().unwrap();
         inner.flushed = true;
         inner.version += 1;
-        inner.entries.clear();
-        inner.first_parent_with_props_cache.clear();
+        inner.entries = VersionedAdaptiveRadixTree::new();
+        inner.first_parent_with_props_cache = VersionedAdaptiveRadixTree::new();
     }
 
     pub(crate) fn fill_hit(&self, obj: &Obj, prop: &Symbol, propd: &PropDef) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-
-        inner.entries.insert((*obj, *prop), Some(propd.clone()));
+        let key = (*obj, *prop).to_rart_key();
+        inner.entries.insert_k(&key, Some(propd.clone()));
     }
 
     pub(crate) fn fill_miss(&self, obj: &Obj, prop: &Symbol) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert((*obj, *prop), None);
+        let key = (*obj, *prop).to_rart_key();
+        inner.entries.insert_k(&key, None);
     }
 
     pub(crate) fn lookup_first_parent_with_props(&self, obj: &Obj) -> Option<Option<Obj>> {
         let inner = self.inner.lock().unwrap();
-        inner.first_parent_with_props_cache.get(obj).cloned()
+        let key = obj.to_rart_key();
+        inner.first_parent_with_props_cache.get(key).cloned()
     }
 
     pub(crate) fn fill_first_parent_with_props(&self, obj: &Obj, parent: Option<Obj>) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.first_parent_with_props_cache.insert(*obj, parent);
+        let key = obj.to_rart_key();
+        inner.first_parent_with_props_cache.insert_k(&key, parent);
     }
 }

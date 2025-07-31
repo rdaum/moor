@@ -11,10 +11,10 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-use ahash::AHasher;
+use crate::tx_management::indexes::ToRartKey;
 use moor_common::model::VerbDef;
 use moor_var::{Obj, Symbol};
-use std::hash::BuildHasherDefault;
+use rart::{ArrayKey, VersionedAdaptiveRadixTree};
 use std::sync::Mutex;
 
 pub(crate) struct VerbResolutionCache {
@@ -28,8 +28,8 @@ impl VerbResolutionCache {
                 version: 0,
                 orig_version: 0,
                 flushed: false,
-                entries: im::HashMap::default(),
-                first_parent_with_verbs_cache: im::HashMap::default(),
+                entries: VersionedAdaptiveRadixTree::new(),
+                first_parent_with_verbs_cache: VersionedAdaptiveRadixTree::new(),
             }),
         }
     }
@@ -41,17 +41,20 @@ struct Inner {
     version: i64,
     flushed: bool,
 
-    #[allow(clippy::type_complexity)]
-    entries: im::HashMap<(Obj, Symbol), Option<VerbDef>, BuildHasherDefault<AHasher>>,
-    first_parent_with_verbs_cache: im::HashMap<Obj, Option<Obj>, BuildHasherDefault<AHasher>>,
+    entries: VersionedAdaptiveRadixTree<ArrayKey<8>, Option<VerbDef>>,
+    first_parent_with_verbs_cache: VersionedAdaptiveRadixTree<ArrayKey<4>, Option<Obj>>,
 }
 
 impl VerbResolutionCache {
     pub(crate) fn fork(&self) -> Box<Self> {
         let inner = self.inner.lock().unwrap();
-        let mut forked_inner = inner.clone();
-        forked_inner.orig_version = inner.version;
-        forked_inner.flushed = false;
+        let forked_inner = Inner {
+            orig_version: inner.version,
+            version: inner.version,
+            flushed: false,
+            entries: inner.entries.snapshot(),
+            first_parent_with_verbs_cache: inner.first_parent_with_verbs_cache.snapshot(),
+        };
         Box::new(Self {
             inner: Mutex::new(forked_inner),
         })
@@ -64,44 +67,47 @@ impl VerbResolutionCache {
 
     pub(crate) fn lookup_first_parent_with_verbs(&self, obj: &Obj) -> Option<Option<Obj>> {
         let inner = self.inner.lock().unwrap();
-        inner.first_parent_with_verbs_cache.get(obj).cloned()
+        let key = obj.to_rart_key();
+        inner.first_parent_with_verbs_cache.get(key).cloned()
     }
 
     pub(crate) fn fill_first_parent_with_verbs(&self, obj: &Obj, parent: Option<Obj>) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.first_parent_with_verbs_cache.insert(*obj, parent);
+        let key = obj.to_rart_key();
+        inner.first_parent_with_verbs_cache.insert_k(&key, parent);
     }
 
     pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
         let inner = self.inner.lock().unwrap();
-        let entry = inner.entries.get(&(*obj, *verb));
-        entry.cloned()
+        let key = (*obj, *verb).to_rart_key();
+        inner.entries.get(key).cloned()
     }
 
     pub(crate) fn flush(&self) {
         let mut inner = self.inner.lock().unwrap();
         inner.flushed = true;
         inner.version += 1;
-        inner.entries.clear();
-        inner.first_parent_with_verbs_cache.clear();
+        inner.entries = VersionedAdaptiveRadixTree::new();
+        inner.first_parent_with_verbs_cache = VersionedAdaptiveRadixTree::new();
     }
 
     pub(crate) fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert((*obj, *verb), Some(verbdef.clone()));
+        let key = (*obj, *verb).to_rart_key();
+        inner.entries.insert_k(&key, Some(verbdef.clone()));
     }
 
     pub(crate) fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert((*obj, *verb), None);
+        let key = (*obj, *verb).to_rart_key();
+        inner.entries.insert_k(&key, None);
     }
 }
 
 pub struct AncestryCache {
-    #[allow(clippy::type_complexity)]
     inner: Mutex<AncestryInner>,
 }
 
@@ -112,7 +118,7 @@ impl Default for AncestryCache {
                 orig_version: 0,
                 version: 0,
                 flushed: false,
-                entries: im::HashMap::default(),
+                entries: VersionedAdaptiveRadixTree::new(),
             }),
         }
     }
@@ -124,36 +130,40 @@ struct AncestryInner {
     version: i64,
     flushed: bool,
 
-    #[allow(clippy::type_complexity)]
-    entries: im::HashMap<Obj, Vec<Obj>, BuildHasherDefault<AHasher>>,
+    entries: VersionedAdaptiveRadixTree<ArrayKey<4>, Vec<Obj>>,
 }
 
 impl AncestryCache {
     pub(crate) fn fork(&self) -> Box<Self> {
         let inner = self.inner.lock().unwrap();
-        let mut forked_inner = inner.clone();
-        forked_inner.orig_version = inner.version;
-        forked_inner.flushed = false;
+        let forked_inner = AncestryInner {
+            orig_version: inner.version,
+            version: inner.version,
+            flushed: false,
+            entries: inner.entries.snapshot(),
+        };
         Box::new(Self {
             inner: Mutex::new(forked_inner),
         })
     }
     pub(crate) fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
         let inner = self.inner.lock().unwrap();
-        inner.entries.get(obj).cloned()
+        let key = obj.to_rart_key();
+        inner.entries.get(key).cloned()
     }
 
     pub(crate) fn flush(&self) {
         let mut inner = self.inner.lock().unwrap();
         inner.flushed = true;
         inner.version += 1;
-        inner.entries.clear();
+        inner.entries = VersionedAdaptiveRadixTree::new();
     }
 
     pub(crate) fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
-        inner.entries.insert(*obj, ancestors.to_vec());
+        let key = obj.to_rart_key();
+        inner.entries.insert_k(&key, ancestors.to_vec());
     }
 
     pub(crate) fn has_changed(&self) -> bool {
