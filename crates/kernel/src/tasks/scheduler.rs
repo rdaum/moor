@@ -229,7 +229,7 @@ impl Scheduler {
                 selector
             };
 
-            match selector.wait_timeout(Duration::from_millis(2)) {
+            match selector.wait_timeout(Duration::from_millis(10)) {
                 Ok(Some(SchedulerMessage::Task(task_id, msg))) => {
                     self.handle_task_msg(task_id, msg);
                 }

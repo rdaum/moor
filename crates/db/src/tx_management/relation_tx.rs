@@ -14,9 +14,9 @@
 use crate::tx_management::indexes::RelationIndex;
 use crate::tx_management::{Canonical, Error, Timestamp, Tx};
 use ahash::AHasher;
-use std::collections::HashMap;
 use indexmap::IndexMap;
 use moor_common::model::WorldStateError;
+use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hash};
 use std::sync::Arc;
 

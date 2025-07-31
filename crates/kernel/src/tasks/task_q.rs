@@ -110,14 +110,15 @@ impl TaskQ {
     /// Collect tasks that need to be woken up, pull them from our suspended list, and return them.
     /// Uses segmented storage types for O(1) operations instead of O(n) linear scan.
     pub(crate) fn collect_wake_tasks(&mut self) -> Option<Vec<SuspendedTask>> {
-        if self.suspended.tasks.is_empty() {
-            return None;
-        }
-
         let mut to_wake = None;
 
         // 1. Advance timer wheel based on elapsed time and collect expired timers
+        // (Always advance the timer wheel to maintain accurate timing, even when no tasks are suspended)
         let expired_timers = self.suspended.advance_timer_wheel();
+
+        if self.suspended.tasks.is_empty() {
+            return None;
+        }
         for timer_entry in expired_timers {
             none_or_push(&mut to_wake, timer_entry.task_id);
         }
@@ -260,7 +261,7 @@ impl SuspensionQ {
         let mut expired_entries = Vec::new();
 
         // Call tick() once per millisecond elapsed, just like thread_timer does
-        for _ in 0..millis_elapsed {
+        for _tick in 0..millis_elapsed {
             let expired = self.timer_wheel.tick();
             expired_entries.extend(expired);
         }
@@ -347,11 +348,11 @@ impl SuspensionQ {
         result_sender: Option<Sender<(TaskId, Result<TaskResult, SchedulerError>)>>,
     ) {
         let task_id = task.task_id;
+        let now = Instant::now();
 
         // Add to appropriate storage based on wake condition
         match &wake_condition {
             WakeCondition::Time(wake_time) => {
-                let now = Instant::now();
                 if *wake_time > now {
                     let delay = wake_time.duration_since(now);
                     let timer_entry = TimerEntry { task_id, delay };
