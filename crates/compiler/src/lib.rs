@@ -29,7 +29,6 @@ mod var_scope;
 mod tests;
 
 // Organized modules
-mod builders;
 mod errors;
 mod parsers;
 pub mod testing;

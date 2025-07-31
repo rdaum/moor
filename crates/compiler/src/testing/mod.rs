@@ -21,8 +21,6 @@ pub mod test_utils;
 #[cfg(feature = "tree-sitter-parser")]
 pub mod parse_treesitter_tests;
 
-#[cfg(test)]
-pub mod tree_traits_integration_tests;
 
 // Re-export testing utilities
 // pub use test_utils::{setup_test_logging, assert_successful_parse};
