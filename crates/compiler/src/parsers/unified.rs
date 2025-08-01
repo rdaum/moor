@@ -11,16 +11,18 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 //
 
-//! Unified parsing interface and TreeNode implementations - Proof of Concept
+//! Unified parsing interface and TreeNode implementations - Phase 1 & 2
 //!
 //! This module demonstrates how different parser backends can be unified through
-//! the TreeNode trait and ParseResult output type. This is Phase 1 of the unified
-//! parsing system - a proof of concept showing the basic architecture.
+//! the TreeNode trait and ParseResult output type. This includes:
+//! - Phase 1: Unified ParseResult output type
+//! - Phase 2: Common AST building utilities
 
 use crate::ast::Stmt;
 use crate::cst::CSTNode;
 use crate::parsers::parse::{Parse, CompileOptions};
 use crate::parsers::parse_cst::ParseCst;
+use crate::parsers::ast_builder::ASTBuilder;
 use crate::var_scope::VarScope;
 use moor_var::program::names::Names;
 
@@ -107,6 +109,14 @@ pub fn compare_all_parsers(code: &str) -> ParserComparisonResult {
         tree_sitter_result,
         parsers_agree,
     }
+}
+
+/// Common AST builder instance for unified parsing
+/// 
+/// This demonstrates Phase 2 - extracting common AST building logic
+/// that can be shared across all parser implementations.
+pub fn create_ast_builder(options: CompileOptions) -> ASTBuilder {
+    ASTBuilder::new(options)
 }
 
 /// Result of comparing parser outputs
