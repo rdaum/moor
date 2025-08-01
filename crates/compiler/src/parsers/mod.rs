@@ -16,6 +16,7 @@
 pub mod parse;
 pub mod parse_cst;
 pub mod parser_trait;
+pub mod unified;
 
 #[cfg(feature = "tree-sitter-parser")]
 pub mod tree_sitter;
@@ -24,6 +25,7 @@ pub mod tree_sitter;
 pub use parse::parse_program;
 pub use parse_cst::{CSTTreeTransformer, ParseCst};
 pub use parser_trait::MooParser;
+pub use unified::{ParseResult, ParserComparisonResult, compare_all_parsers};
 
 #[cfg(feature = "tree-sitter-parser")]
 pub use tree_sitter::{SemanticTreeWalker, parse_program_with_tree_sitter};
