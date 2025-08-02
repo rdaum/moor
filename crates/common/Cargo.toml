@@ -40,6 +40,9 @@ uuid.workspace = true
 # Error Handling
 thiserror.workspace = true
 
+# Text Processing
+strsim.workspace = true
+
 [features]
 default = []
 perf_counters = []

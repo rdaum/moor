@@ -149,6 +149,7 @@ iana-time-zone = "0.1"
 # Text Processing & Regex
 encoding_rs = "0.8"
 onig = { version = "6.4", default-features = false }
+strsim = "0.11"
 unicase = "2.8"
 
 # Compiler & Language Processing

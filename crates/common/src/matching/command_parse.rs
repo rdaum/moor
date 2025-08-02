@@ -15,7 +15,8 @@ use std::marker::PhantomData;
 use std::string::ToString;
 
 use crate::matching::{
-    CommandParser, ObjectNameMatcher, ParseCommandError, ParsedCommand, Preposition,
+    CommandParser, ObjectNameMatcher, ParseCommandError, ParsedCommand,
+    find_preposition_for_command,
 };
 use crate::model::PrepSpec;
 use crate::util;
@@ -142,11 +143,8 @@ where
 // preposition itself, and the preposition string, if any.
 fn seek_preposition(words: &[String]) -> (Option<(usize, String)>, PrepSpec) {
     for (j, word) in words.iter().enumerate() {
-        if Preposition::parse(word.as_str()).is_some() {
-            return (
-                Some((j, word.clone())),
-                PrepSpec::Other(Preposition::parse(word).unwrap()),
-            );
+        if let Some(preposition) = find_preposition_for_command(word.as_str()) {
+            return (Some((j, word.clone())), PrepSpec::Other(preposition));
         }
     }
     (None, PrepSpec::None)
@@ -160,11 +158,11 @@ mod tests {
     use moor_var::{FAILED_MATCH, Obj};
 
     use super::*;
-    use crate::matching::ObjectNameMatcher;
     use crate::matching::match_env::DefaultObjectNameMatcher;
     use crate::matching::mock_matching_env::{
         MOCK_PLAYER, MOCK_ROOM1, MOCK_THING1, MOCK_THING2, setup_mock_environment,
     };
+    use crate::matching::{ObjectNameMatcher, Preposition};
 
     #[test]
     fn test_parse_into_words_simple() {
@@ -419,6 +417,28 @@ mod tests {
         assert_eq!(result.prep, PrepSpec::Other(Preposition::AtTo));
         assert_eq!(result.iobjstr, Some("here".to_string()));
         assert_eq!(result.iobj, Some(MOCK_ROOM1));
+    }
+
+    #[test]
+    fn test_describe_command_parsing() {
+        // Test the specific command that's failing in the integration test
+        let env = setup_mock_environment();
+        let match_object_fn = DefaultObjectNameMatcher {
+            env,
+            player: MOCK_PLAYER,
+        };
+
+        let result = DefaultParseCommand::new()
+            .parse_command(
+                "@describe my thing as \"A thing that's thingly.\"",
+                &match_object_fn,
+            )
+            .unwrap();
+        assert_eq!(result.verb.as_string(), "@describe".to_string());
+        assert_eq!(result.dobjstr, Some("my thing".to_string()));
+        assert_eq!(result.prepstr, Some("as".to_string()));
+        assert_eq!(result.prep, PrepSpec::Other(Preposition::As));
+        assert_eq!(result.iobjstr, Some("A thing that's thingly.".to_string()));
     }
 
     #[test]

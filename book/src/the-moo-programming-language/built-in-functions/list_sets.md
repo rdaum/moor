@@ -249,15 +249,20 @@ length({})          =>   0
 Performs sophisticated string matching with ordinal support and three-tier matching precedence.
 
 ```
-str | obj complex_match(STR token, LIST strings)
-obj complex_match(STR token, LIST objects, LIST keys)
+str | obj complex_match(STR token, LIST strings [, ANY fuzzy])
+obj complex_match(STR token, LIST objects, LIST keys [, ANY fuzzy])
 ```
 
-The `complex_match()` function provides advanced pattern matching with support for ordinal selectors (e.g., "first", "second", "1st", "2nd", "twenty-first") and three-tier matching precedence:
+The `complex_match()` function provides advanced pattern matching with support for ordinal selectors (e.g., "first", "second", "1st", "2nd", "twenty-first") and four-tier matching precedence:
 
 1. **Exact matches** - Complete string equality (case-insensitive)
 2. **Prefix matches** - Strings that start with the search token
 3. **Substring matches** - Strings that contain the search token anywhere
+4. **Fuzzy matches** - Strings with small edit distances (typo tolerance)
+
+The optional `fuzzy` parameter controls whether fuzzy matching is enabled:
+- Any truthy value (default): Enable fuzzy matching for typo tolerance  
+- Any falsy value: Disable fuzzy matching (exact/prefix/substring only)
 
 #### Two-argument form
 

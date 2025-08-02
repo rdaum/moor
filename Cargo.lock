@@ -2681,6 +2681,7 @@ dependencies = [
  "num-traits",
  "serde",
  "shadow-rs",
+ "strsim",
  "strum",
  "thiserror 2.0.12",
  "uuid 1.17.0",

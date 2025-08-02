@@ -25,12 +25,15 @@ mod prepositions;
 pub mod ws_match_env;
 
 pub use command_parse::DefaultParseCommand;
-pub use complex_match::{ComplexMatchResult, complex_match_strings, complex_match_objects_keys, parse_ordinal, parse_input_token};
+pub use complex_match::{
+    ComplexMatchResult, complex_match_objects_keys, complex_match_objects_keys_with_fuzzy,
+    complex_match_strings, complex_match_strings_with_fuzzy, parse_input_token, parse_ordinal,
+};
 pub use complex_object_matcher::ComplexObjectNameMatcher;
 pub use match_env::DefaultObjectNameMatcher;
 pub use ws_match_env::WsMatchEnv;
 
-pub use prepositions::{Preposition, find_preposition};
+pub use prepositions::{Preposition, find_preposition, find_preposition_for_command};
 
 /// Output from command matching, which is then used to match against the verb present in the
 /// environment.

@@ -13,13 +13,15 @@
 
 use ahash::HashMap;
 use lazy_static::lazy_static;
+use moor_common::matching::{
+    ComplexMatchResult, complex_match_objects_keys_with_fuzzy, complex_match_strings_with_fuzzy,
+};
 use moor_compiler::offset_for_builtin;
-use moor_var::{Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, Variant, FAILED_MATCH};
+use moor_var::{Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, FAILED_MATCH, Variant};
 use moor_var::{
     IndexMode, List, Sequence, Var, VarType, v_empty_list, v_int, v_list, v_list_iter, v_map,
     v_obj, v_str, v_string,
 };
-use moor_common::matching::{ComplexMatchResult, complex_match_strings, complex_match_objects_keys};
 use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
 use std::ops::BitOr;
 use std::sync::Mutex;
@@ -879,24 +881,37 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 4 {
         return Err(BfErr::Code(E_ARGS));
     }
-    
+
     let token = match bf_args.args[0].variant() {
         Variant::Str(token) => token.as_str(),
         _ => return Err(BfErr::Code(E_TYPE)),
     };
-    
-    if bf_args.args.len() == 2 {
+
+    // Parse optional fuzzy parameter (defaults to true for backward compatibility)
+    let use_fuzzy = if bf_args.args.len() >= 3
+        && (bf_args.args.len() == 3 && matches!(bf_args.args[2].variant(), Variant::Int(_)))
+        || bf_args.args.len() == 4
+    {
+        let fuzzy_arg_index = if bf_args.args.len() == 3 { 2 } else { 3 };
+        bf_args.args[fuzzy_arg_index].is_true()
+    } else {
+        true // Default to fuzzy matching enabled
+    };
+
+    if bf_args.args.len() == 2
+        || (bf_args.args.len() == 3 && matches!(bf_args.args[2].variant(), Variant::Int(_)))
+    {
         // Two argument form: complex_match(token, strings)
         let strings = match bf_args.args[1].variant() {
             Variant::List(strings) => strings,
             _ => return Err(BfErr::Code(E_TYPE)),
         };
-        
+
         let string_vars: Vec<Var> = strings.iter().collect();
-        match complex_match_strings(token, &string_vars) {
+        match complex_match_strings_with_fuzzy(token, &string_vars, use_fuzzy) {
             ComplexMatchResult::NoMatch => Ok(Ret(v_obj(FAILED_MATCH))),
             ComplexMatchResult::Single(result) => Ok(Ret(result)),
             ComplexMatchResult::Multiple(results) => {
@@ -914,15 +929,15 @@ fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
             (Variant::List(objs), Variant::List(keys)) => (objs, keys),
             _ => return Err(BfErr::Code(E_TYPE)),
         };
-        
+
         let obj_vars: Vec<Var> = objs.iter().collect();
         let key_vars: Vec<Var> = keys.iter().collect();
-        
-        match complex_match_objects_keys(token, &obj_vars, &key_vars) {
+
+        match complex_match_objects_keys_with_fuzzy(token, &obj_vars, &key_vars, use_fuzzy) {
             ComplexMatchResult::NoMatch => Ok(Ret(v_obj(FAILED_MATCH))),
             ComplexMatchResult::Single(result) => Ok(Ret(result)),
             ComplexMatchResult::Multiple(results) => {
-                // For 3-arg form, return first match when multiple  
+                // For 3-arg form, return first match when multiple
                 if !results.is_empty() {
                     Ok(Ret(results[0].clone()))
                 } else {

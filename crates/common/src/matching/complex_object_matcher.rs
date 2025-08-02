@@ -13,9 +13,11 @@
 
 //! Enhanced object name matcher using complex_match functionality
 
-use crate::matching::{MatchEnvironment, ObjectNameMatcher, ComplexMatchResult, complex_match_objects_keys};
-use crate::model::{WorldStateError, ValSet};
-use moor_var::{Obj, Var, v_str, v_list, AMBIGUOUS, FAILED_MATCH};
+use crate::matching::{
+    ComplexMatchResult, MatchEnvironment, ObjectNameMatcher, complex_match_objects_keys,
+};
+use crate::model::{ValSet, WorldStateError};
+use moor_var::{AMBIGUOUS, FAILED_MATCH, Obj, Var, v_list, v_str};
 
 const ME: &str = "me";
 const HERE: &str = "here";
@@ -71,7 +73,7 @@ impl<M: MatchEnvironment> ObjectNameMatcher for ComplexObjectNameMatcher<M> {
             if object_names.is_empty() {
                 continue;
             }
-            
+
             objects.push(Var::from(oid));
             // Convert names to list of string Vars
             let name_vars: Vec<Var> = object_names.iter().map(|name| v_str(name)).collect();

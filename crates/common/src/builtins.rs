@@ -573,8 +573,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
         mk_builtin(
             "complex_match",
             Q(2),
-            Q(3),
-            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_LIST)],
+            Q(4),
+            vec![
+                Typed(TYPE_STR),
+                Typed(TYPE_LIST),
+                Typed(TYPE_LIST),
+                Typed(TYPE_INT),
+            ],
             true,
         ),
     ]
