@@ -79,6 +79,7 @@ excludes:
   - core
   - cowbell
   - book/*
+  - .envrc
   - node_modules
   - crates/daemon/debian/*
   - crates/telnet-host/debian/*
