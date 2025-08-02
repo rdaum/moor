@@ -14,11 +14,12 @@
 use ahash::HashMap;
 use lazy_static::lazy_static;
 use moor_compiler::offset_for_builtin;
-use moor_var::{Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, Variant};
+use moor_var::{Associative, E_ARGS, E_INVARG, E_RANGE, E_TYPE, Error, Variant, FAILED_MATCH};
 use moor_var::{
     IndexMode, List, Sequence, Var, VarType, v_empty_list, v_int, v_list, v_list_iter, v_map,
-    v_str, v_string,
+    v_obj, v_str, v_string,
 };
+use moor_common::matching::{ComplexMatchResult, complex_match_strings, complex_match_objects_keys};
 use onig::{Region, SearchOptions, SyntaxBehavior, SyntaxOperator};
 use std::ops::BitOr;
 use std::sync::Mutex;
@@ -877,6 +878,61 @@ fn bf_slice(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     }
 }
 
+fn bf_complex_match(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() < 2 || bf_args.args.len() > 3 {
+        return Err(BfErr::Code(E_ARGS));
+    }
+    
+    let token = match bf_args.args[0].variant() {
+        Variant::Str(token) => token.as_str(),
+        _ => return Err(BfErr::Code(E_TYPE)),
+    };
+    
+    if bf_args.args.len() == 2 {
+        // Two argument form: complex_match(token, strings)
+        let strings = match bf_args.args[1].variant() {
+            Variant::List(strings) => strings,
+            _ => return Err(BfErr::Code(E_TYPE)),
+        };
+        
+        let string_vars: Vec<Var> = strings.iter().collect();
+        match complex_match_strings(token, &string_vars) {
+            ComplexMatchResult::NoMatch => Ok(Ret(v_obj(FAILED_MATCH))),
+            ComplexMatchResult::Single(result) => Ok(Ret(result)),
+            ComplexMatchResult::Multiple(results) => {
+                // For 2-arg form, return first match when multiple
+                if !results.is_empty() {
+                    Ok(Ret(results[0].clone()))
+                } else {
+                    Ok(Ret(v_obj(FAILED_MATCH)))
+                }
+            }
+        }
+    } else {
+        // Three argument form: complex_match(token, objs, keys)
+        let (objs, keys) = match (bf_args.args[1].variant(), bf_args.args[2].variant()) {
+            (Variant::List(objs), Variant::List(keys)) => (objs, keys),
+            _ => return Err(BfErr::Code(E_TYPE)),
+        };
+        
+        let obj_vars: Vec<Var> = objs.iter().collect();
+        let key_vars: Vec<Var> = keys.iter().collect();
+        
+        match complex_match_objects_keys(token, &obj_vars, &key_vars) {
+            ComplexMatchResult::NoMatch => Ok(Ret(v_obj(FAILED_MATCH))),
+            ComplexMatchResult::Single(result) => Ok(Ret(result)),
+            ComplexMatchResult::Multiple(results) => {
+                // For 3-arg form, return first match when multiple  
+                if !results.is_empty() {
+                    Ok(Ret(results[0].clone()))
+                } else {
+                    Ok(Ret(v_obj(FAILED_MATCH)))
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn register_bf_list_sets(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("is_member")] = Box::new(bf_is_member);
     builtins[offset_for_builtin("listinsert")] = Box::new(bf_listinsert);
@@ -891,6 +947,7 @@ pub(crate) fn register_bf_list_sets(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("pcre_match")] = Box::new(bf_pcre_match);
     builtins[offset_for_builtin("pcre_replace")] = Box::new(bf_pcre_replace);
     builtins[offset_for_builtin("slice")] = Box::new(bf_slice);
+    builtins[offset_for_builtin("complex_match")] = Box::new(bf_complex_match);
 }
 
 #[cfg(test)]

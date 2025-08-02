@@ -90,6 +90,56 @@ Before the built-in parser runs, the server checks for a `$do_command` verb. If 
    - Otherwise, the parser tries to match the string to objects in the player's inventory and location.
    - **Aliases**: Each object may have an `aliases` property (a list of alternative names). The parser matches the object string against all aliases and the object's `name`. Exact matches are preferred over prefix matches. If multiple objects match, `$ambiguous_match` (`#-2`) is used. If none match, `$failed_match` (`#-3`) is used.
 
+### Enhanced Object Matching with Ordinals
+
+mooR features an enhanced object matching system that supports natural language ordinals and sophisticated matching algorithms. This allows for more intuitive object references in commands.
+
+#### Ordinal Support
+
+You can use ordinals to select specific objects when multiple matches exist:
+
+```
+get first lamp          # Gets the first lamp found
+look at second bottle   # Examines the second bottle
+take 3rd book          # Takes the third book
+drop twenty-first coin  # Drops the 21st coin
+```
+
+**Supported ordinal formats:**
+- **Word ordinals**: `first`, `second`, `third`, ..., `twentieth`, `thirtieth`
+- **Numeric ordinals**: `1st`, `2nd`, `3rd`, `4th`, ..., `21st`, `22nd`
+- **Dot notation**: `1.`, `2.`, `10.`
+- **Compound ordinals**: `twenty-first`, `thirty-second`
+
+#### Three-Tier Matching Algorithm
+
+The object matcher uses a sophisticated three-tier precedence system:
+
+1. **Exact matches** - Complete name equality (case-insensitive)
+2. **Prefix matches** - Names that start with your input
+3. **Substring matches** - Names that contain your input anywhere
+
+**Examples:**
+```
+# Room contains: "lamp", "lampshade", "flashlight"
+get lamp         # Exact match → "lamp"
+get flash        # Prefix match → "flashlight"  
+get sh           # Substring match → "lampshade"
+
+# With ordinals when multiple matches exist at same tier:
+get second la    # Gets second object matching "la" prefix
+```
+
+#### Benefits
+
+This enhanced matching system provides:
+- **Natural language feel**: Commands read more like English
+- **Disambiguation**: Easy selection when multiple similar objects exist
+- **Flexible matching**: Works with partial names and abbreviations
+- **Consistent behavior**: Same matching logic used throughout the system
+
+The enhanced object matching is built on the [`complex_match`](the-moo-programming-language/built-in-functions/list_sets.md#complex_match) builtin function, which can also be used directly in your MOO programs for custom matching logic.
+
 ---
 
 ## How Verbs Are Matched

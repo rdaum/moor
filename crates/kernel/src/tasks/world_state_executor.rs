@@ -12,7 +12,7 @@
 //
 
 use moor_common::matching::ObjectNameMatcher;
-use moor_common::matching::match_env::DefaultObjectNameMatcher;
+use moor_common::matching::complex_object_matcher::ComplexObjectNameMatcher;
 use moor_common::matching::ws_match_env::WsMatchEnv;
 use moor_common::model::{
     CommitResult, HasUuid, ObjectRef, ValSet, VerbAttrs, WorldState, WorldStateError,
@@ -292,7 +292,7 @@ pub fn match_object_ref(
         }
         ObjectRef::Match(object_name) => {
             let match_env = WsMatchEnv::new(tx, *perms);
-            let matcher = DefaultObjectNameMatcher {
+            let matcher = ComplexObjectNameMatcher {
                 env: match_env,
                 player: *player,
             };

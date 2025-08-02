@@ -29,6 +29,7 @@ repository issue tracker](http://www.github.com/rdaum/moor/issues).
 | [`match`](regex.md#match)               | &check;  |       |
 | [`rmatch`](regex.md#rmatch)             | &check;  |       |
 | [`substitute`](regex.md#substitute)     | &check;  |       |
+| [`complex_match`](list_sets.md#complex_match) | &check;  | Advanced pattern matching with ordinal support |
 
 ### Strings
 

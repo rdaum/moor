@@ -570,6 +570,13 @@ fn mk_builtin_table() -> Vec<Builtin> {
         ),
         mk_builtin("owned_objects", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
         mk_builtin("switch_player", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin(
+            "complex_match",
+            Q(2),
+            Q(3),
+            vec![Typed(TYPE_STR), Typed(TYPE_LIST), Typed(TYPE_LIST)],
+            true,
+        ),
     ]
 }
 

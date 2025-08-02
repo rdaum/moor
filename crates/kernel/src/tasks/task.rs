@@ -52,7 +52,7 @@ use crate::vm::exec_state::VMExecState;
 use crate::vm::vm_host::VmHost;
 use crate::vm::{VMHostResponse, VerbCall};
 use moor_common::matching::{
-    CommandParser, DefaultObjectNameMatcher, DefaultParseCommand, ParseCommandError, ParsedCommand,
+    CommandParser, ComplexObjectNameMatcher, DefaultParseCommand, ParseCommandError, ParsedCommand,
     WsMatchEnv,
 };
 use moor_common::tasks::Session;
@@ -566,7 +566,7 @@ impl Task {
 
             // Parse the command in the current environment.
             let me = WsMatchEnv::new(world_state, *player);
-            let matcher = DefaultObjectNameMatcher {
+            let matcher = ComplexObjectNameMatcher {
                 env: me,
                 player: *player,
             };

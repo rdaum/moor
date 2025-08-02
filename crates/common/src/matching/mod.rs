@@ -16,6 +16,8 @@ use bincode::{Decode, Encode};
 use moor_var::{Obj, Symbol, Var};
 
 pub mod command_parse;
+pub mod complex_match;
+pub mod complex_object_matcher;
 pub mod match_env;
 #[doc(hidden)]
 pub mod mock_matching_env;
@@ -23,6 +25,8 @@ mod prepositions;
 pub mod ws_match_env;
 
 pub use command_parse::DefaultParseCommand;
+pub use complex_match::{ComplexMatchResult, complex_match_strings, complex_match_objects_keys, parse_ordinal, parse_input_token};
+pub use complex_object_matcher::ComplexObjectNameMatcher;
 pub use match_env::DefaultObjectNameMatcher;
 pub use ws_match_env::WsMatchEnv;
 

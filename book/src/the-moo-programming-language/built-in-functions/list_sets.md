@@ -243,3 +243,75 @@ It is also permissible to pass a string to `length()`; see the description in th
 length({1, 2, 3})   =>   3
 length({})          =>   0
 ```
+
+### `complex_match`
+
+Performs sophisticated string matching with ordinal support and three-tier matching precedence.
+
+```
+str | obj complex_match(STR token, LIST strings)
+obj complex_match(STR token, LIST objects, LIST keys)
+```
+
+The `complex_match()` function provides advanced pattern matching with support for ordinal selectors (e.g., "first", "second", "1st", "2nd", "twenty-first") and three-tier matching precedence:
+
+1. **Exact matches** - Complete string equality (case-insensitive)
+2. **Prefix matches** - Strings that start with the search token
+3. **Substring matches** - Strings that contain the search token anywhere
+
+#### Two-argument form
+
+The two-argument form matches against a list of strings directly:
+
+```
+complex_match("foo", {"foobar", "food", "foot"})        => "foobar"
+complex_match("second foo", {"foobar", "food", "foot"}) => "food"
+complex_match("1st bar", {"foobar", "barfoo"})         => "foobar"
+```
+
+#### Three-argument form
+
+The three-argument form matches against object keys and returns the corresponding objects:
+
+```
+objs = {#123, #456, #789};
+keys = {{"lamp", "light"}, {"bottle", "container"}, {"book", "tome"}};
+complex_match("lamp", objs, keys)       => #123
+complex_match("second b", objs, keys)   => #789  // matches "book"
+```
+
+#### Ordinal support
+
+The function supports various ordinal formats:
+
+- **Word ordinals**: "first", "second", "third", ..., "twentieth", "thirtieth", etc.
+- **Numeric ordinals**: "1st", "2nd", "3rd", "4th", ..., "21st", "22nd", etc.
+- **Dot notation**: "1.", "2.", "10.", etc.
+- **Compound ordinals**: "twenty-first", "thirty-second", etc.
+
+#### Return values
+
+- Returns the matched string/object for single matches
+- Returns the first match when multiple matches exist at the same precedence level
+- Returns `#-1` (FAILED_MATCH) when no matches are found
+- For the three-argument form, returns `#-2` (AMBIGUOUS) when multiple exact matches exist
+
+#### Examples
+
+```
+// Basic matching
+complex_match("foo", {"foobar", "food"})           => "foobar"  // exact wins
+complex_match("bar", {"foobar", "barbaz"})         => "foobar"  // first prefix match
+
+// Ordinal selection
+complex_match("2nd foo", {"foobar", "food", "foot"}) => "food"
+complex_match("third lamp", {"lamp1", "lamp2", "lamp3"}) => "lamp3"
+
+// Three-tier precedence
+complex_match("test", {"testing", "test", "contest"}) => "test"  // exact beats prefix/substring
+
+// No matches
+complex_match("xyz", {"abc", "def"})               => #-1
+```
+
+This function is particularly useful for implementing sophisticated object matching in MOO commands and user interfaces.

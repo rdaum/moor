@@ -88,3 +88,8 @@ command = [
     "always", # see https://github.com/Canop/bacon/issues/124
 ]
 need_stdout = true
+
+[jobs.curl-worker]
+command = ["cargo", "run", "-p", "moor-curl-worker"]
+allow_warnings = true
+need_stdout = true
