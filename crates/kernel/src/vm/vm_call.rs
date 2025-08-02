@@ -87,7 +87,9 @@ impl VMExecState {
             Variant::Flyweight(f) => (args, target.clone(), *f.delegate()),
             non_obj => {
                 if !exec_params.config.type_dispatch {
-                    return Err(E_TYPE.msg("Invalid target for verb dispatch"));
+                    return Err(E_TYPE.with_msg(|| {
+                        format!("Invalid target {:?} for verb dispatch", target.type_code())
+                    }));
                 }
                 // If the object is not an object or frob, it's a primitive.
                 // For primitives, we look at its type, and look for a
@@ -170,7 +172,9 @@ impl VMExecState {
             .valid(&location)
             .expect("Error checking object validity");
         if !self_valid {
-            return self.push_error(E_INVIND.msg("Invalid object for verb dispatch"));
+            return self.push_error(
+                E_INVIND.with_msg(|| format!("Invalid object ({location}) for verb dispatch")),
+            );
         }
         // Find the callable verb ...
         let (program, resolved_verb) =
