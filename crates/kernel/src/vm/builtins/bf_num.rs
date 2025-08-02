@@ -134,194 +134,115 @@ fn numeric_arg(arg: &Var) -> Result<f64, BfErr> {
     Ok(x)
 }
 
-fn bf_sin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("sin() takes 1 argument")));
-    }
+/// Macro for creating simple single-argument math functions that take a numeric argument
+/// and return a float result.
+macro_rules! math_fn {
+    ($fn_name:ident, $builtin_name:expr, $math_op:expr) => {
+        fn $fn_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+            if bf_args.args.len() != 1 {
+                return Err(BfErr::ErrValue(
+                    E_ARGS.msg(concat!($builtin_name, "() takes 1 argument")),
+                ));
+            }
 
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    Ok(Ret(v_float(x.sin())))
+            let x = numeric_arg(&bf_args.args[0])?;
+            Ok(Ret(v_float($math_op(x))))
+        }
+    };
 }
 
-fn bf_cos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("cos() takes 1 argument")));
-    }
+/// Macro for creating math functions with domain validation (e.g., sqrt, log)
+macro_rules! math_fn_with_validation {
+    ($fn_name:ident, $builtin_name:expr, $math_op:expr, $validator:expr, $error_msg:expr) => {
+        fn $fn_name(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+            if bf_args.args.len() != 1 {
+                return Err(BfErr::ErrValue(
+                    E_ARGS.msg(concat!($builtin_name, "() takes 1 argument")),
+                ));
+            }
 
-    let x = numeric_arg(&bf_args.args[0])?;
+            let x = numeric_arg(&bf_args.args[0])?;
 
-    Ok(Ret(v_float(x.cos())))
+            if !$validator(x) {
+                return Err(BfErr::ErrValue(E_ARGS.msg($error_msg)));
+            }
+
+            Ok(Ret(v_float($math_op(x))))
+        }
+    };
 }
 
-fn bf_tan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("tan() takes 1 argument")));
-    }
+// Basic trig functions
+math_fn!(bf_sin, "sin", |x: f64| x.sin());
+math_fn!(bf_cos, "cos", |x: f64| x.cos());
+math_fn!(bf_tan, "tan", |x: f64| x.tan());
 
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    Ok(Ret(v_float(x.tan())))
-}
-
-fn bf_sqrt(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("sqrt() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    if x < 0.0 {
-        return Err(BfErr::ErrValue(
-            E_ARGS.msg("sqrt() takes a non-negative number"),
-        ));
-    }
-
-    Ok(Ret(v_float(x.sqrt())))
-}
-
-fn bf_asin(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("asin() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    if !(-1.0..=1.0).contains(&x) {
-        return Err(BfErr::ErrValue(
-            E_ARGS.msg("asin() takes a number between -1 and 1"),
-        ));
-    }
-
-    Ok(Ret(v_float(x.asin())))
-}
-
-fn bf_acos(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("acos() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    if !(-1.0..=1.0).contains(&x) {
-        return Err(BfErr::ErrValue(
-            E_ARGS.msg("acos() takes a number between -1 and 1"),
-        ));
-    }
-
-    Ok(Ret(v_float(x.acos())))
-}
+// Functions with domain validation
+math_fn_with_validation!(
+    bf_sqrt,
+    "sqrt",
+    |x: f64| x.sqrt(),
+    |x: f64| x >= 0.0,
+    "sqrt() takes a non-negative number"
+);
+math_fn_with_validation!(
+    bf_asin,
+    "asin",
+    |x: f64| x.asin(),
+    |x: f64| (-1.0..=1.0).contains(&x),
+    "asin() takes a number between -1 and 1"
+);
+math_fn_with_validation!(
+    bf_acos,
+    "acos",
+    |x: f64| x.acos(),
+    |x: f64| (-1.0..=1.0).contains(&x),
+    "acos() takes a number between -1 and 1"
+);
 
 fn bf_atan(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     if bf_args.args.is_empty() || bf_args.args.len() > 2 {
         return Err(BfErr::ErrValue(E_ARGS.msg("atan() takes 1 or 2 arguments")));
     }
 
-    let x = numeric_arg(&bf_args.args[0])?;
-    let y = numeric_arg(&bf_args.args[1])?;
-
-    Ok(Ret(v_float(y.atan2(x))))
+    if bf_args.args.len() == 1 {
+        // Single argument: regular atan
+        let x = numeric_arg(&bf_args.args[0])?;
+        Ok(Ret(v_float(x.atan())))
+    } else {
+        // Two arguments: atan2(y, x) - args[0] is y, args[1] is x
+        let y = numeric_arg(&bf_args.args[0])?;
+        let x = numeric_arg(&bf_args.args[1])?;
+        Ok(Ret(v_float(y.atan2(x))))
+    }
 }
 
-fn bf_sinh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("sinh() takes 1 argument")));
-    }
+// Hyperbolic functions
+math_fn!(bf_sinh, "sinh", |x: f64| x.sinh());
+math_fn!(bf_cosh, "cosh", |x: f64| x.cosh());
+math_fn!(bf_tanh, "tanh", |x: f64| x.tanh());
 
-    let x = numeric_arg(&bf_args.args[0])?;
+// Exponential and logarithmic functions
+math_fn!(bf_exp, "exp", |x: f64| x.exp());
+math_fn_with_validation!(
+    bf_log,
+    "log",
+    |x: f64| x.ln(),
+    |x: f64| x > 0.0,
+    "log() takes a positive number"
+);
+math_fn_with_validation!(
+    bf_log10,
+    "log10",
+    |x: f64| x.log10(),
+    |x: f64| x > 0.0,
+    "log10() takes a positive number"
+);
 
-    Ok(Ret(v_float(x.sinh())))
-}
-
-fn bf_cosh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("cosh() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    Ok(Ret(v_float(x.cosh())))
-}
-
-fn bf_tanh(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("tanh() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    Ok(Ret(v_float(x.tanh())))
-}
-
-fn bf_exp(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("exp() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    Ok(Ret(v_float(x.exp())))
-}
-
-fn bf_log(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("log() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    if x <= 0.0 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("log() takes a positive number")));
-    }
-
-    Ok(Ret(v_float(x.ln())))
-}
-
-fn bf_log10(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("log10() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    if x <= 0.0 {
-        return Err(BfErr::ErrValue(
-            E_ARGS.msg("log10() takes a positive number"),
-        ));
-    }
-
-    Ok(Ret(v_float(x.log10())))
-}
-
-fn bf_ceil(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("ceil() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    Ok(Ret(v_float(x.ceil())))
-}
-
-fn bf_floor(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("floor() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    Ok(Ret(v_float(x.floor())))
-}
-
-fn bf_trunc(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    if bf_args.args.len() != 1 {
-        return Err(BfErr::ErrValue(E_ARGS.msg("trunc() takes 1 argument")));
-    }
-
-    let x = numeric_arg(&bf_args.args[0])?;
-
-    Ok(Ret(v_float(x.trunc())))
-}
+// Rounding functions
+math_fn!(bf_ceil, "ceil", |x: f64| x.ceil());
+math_fn!(bf_floor, "floor", |x: f64| x.floor());
+math_fn!(bf_trunc, "trunc", |x: f64| x.trunc());
 
 pub(crate) fn register_bf_num(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("abs")] = Box::new(bf_abs);

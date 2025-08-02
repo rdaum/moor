@@ -981,11 +981,8 @@ impl Scheduler {
 
         // Get the connection details for the current session (player=None means "this session")
         let connection_details = task.session.connection_details(None).map_err(|e| {
-            moor_var::E_INVARG.with_msg(|| {
-                format!(
-                    "Failed to get connection details for current session: {e:?}"
-                )
-            })
+            moor_var::E_INVARG
+                .with_msg(|| format!("Failed to get connection details for current session: {e:?}"))
         })?;
 
         // There should be exactly one connection for the current session
