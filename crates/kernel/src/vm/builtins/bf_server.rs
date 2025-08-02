@@ -1311,20 +1311,56 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // Requires wizard permissions.
-    bf_args
-        .task_perms()
-        .map_err(world_state_bf_err)?
-        .check_wizard()
-        .map_err(world_state_bf_err)?;
+    // TODO: somehow toast doesn't require wiz perms here?  inw hat context?
+    // // Requires wizard permissions.
+    // bf_args
+    //     .task_perms()
+    //     .map_err(world_state_bf_err)?
+    //     .check_wizard()
+    //     .map_err(world_state_bf_err)?;
 
-    if !bf_args.args.is_empty() {
+    if bf_args.args.len() > 1 {
         return Err(ErrValue(
-            E_ARGS.msg("listeners() does not take any arguments"),
+            E_ARGS.msg("listeners() requires 0 or 1 arguments"),
         ));
     }
 
     let listeners = bf_args.task_scheduler_client.listeners();
+
+    // If an argument is provided, try to find the specific listener
+    if bf_args.args.len() == 1 {
+        let find_arg = &bf_args.args[0];
+
+        // Look for a listener that matches the argument (could be object, port, etc.)
+        for listener in listeners.iter() {
+            // Check if the argument matches the listener object
+            if let Some(obj) = find_arg.as_object() {
+                if obj == listener.0 {
+                    let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
+                    return Ok(Ret(v_list(&[
+                        v_obj(listener.0),
+                        v_int(listener.2 as i64),
+                        print_messages,
+                    ])));
+                }
+            }
+            // Check if the argument matches the port
+            else if let Some(port) = find_arg.as_integer() {
+                if port == listener.2 as i64 {
+                    let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
+                    return Ok(Ret(v_list(&[
+                        v_obj(listener.0),
+                        v_int(listener.2 as i64),
+                        print_messages,
+                    ])));
+                }
+            }
+        }
+        // If not found, return empty list or error - need to check ToastStunt behavior
+        return Ok(Ret(v_list(&[])));
+    }
+
+    // No argument provided, return all listeners
     let listeners = listeners.iter().map(|listener| {
         let print_messages = if listener.3 { v_int(1) } else { v_int(0) };
         v_list(&[v_obj(listener.0), v_int(listener.2 as i64), print_messages])

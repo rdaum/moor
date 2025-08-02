@@ -103,7 +103,13 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         // Update all clients for this connection to have the player object
         for cr in &connections_record.connections {
             let client_id = Uuid::from_u128(cr.client_id);
-            if let Some((conn_obj, _)) = inner.client_objects.get(&client_id).copied() {
+            if let Some((conn_obj, existing_player)) = inner.client_objects.get(&client_id).copied()
+            {
+                // Check if this client is already associated with the same player
+                if existing_player == Some(player_obj) {
+                    // Already associated with this player, skip update
+                    continue;
+                }
                 inner
                     .client_objects
                     .insert(client_id, (conn_obj, Some(player_obj)));
@@ -116,9 +122,16 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
             .player_connections
             .entry(player_obj)
             .and_modify(|existing| {
-                existing
-                    .connections
-                    .extend(connections_record.connections.clone())
+                // Deduplicate connections by client_id to prevent duplicate RPC events
+                for new_conn in &connections_record.connections {
+                    if !existing
+                        .connections
+                        .iter()
+                        .any(|c| c.client_id == new_conn.client_id)
+                    {
+                        existing.connections.push(new_conn.clone());
+                    }
+                }
             })
             .or_insert(connections_record.clone());
 
