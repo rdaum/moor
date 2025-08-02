@@ -29,10 +29,10 @@ path = "src/direct-scheduler-load-test.rs"
 [dependencies]
 # Internal Dependencies
 moor-common = { path = "../../common" }
-moor-var = { path = "../../var" }
+moor-compiler = { path = "../../compiler" }
 moor-db = { path = "../../db" }
 moor-kernel = { path = "../../kernel" }
-moor-compiler = { path = "../../compiler" }
+moor-var = { path = "../../var" }
 rpc-async-client = { path = "../../rpc/rpc-async-client" }
 rpc-common = { path = "../../rpc/rpc-common" }
 

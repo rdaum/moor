@@ -314,6 +314,19 @@ impl TaskSchedulerClient {
             .recv()
             .expect("Could not receive active tasks -- scheduler shut down?")
     }
+
+    pub fn switch_player(&self, new_player: Obj) -> Result<(), Error> {
+        let (reply, receive) = oneshot::channel();
+        self.scheduler_sender
+            .send((
+                self.task_id,
+                TaskControlMsg::SwitchPlayer { new_player, reply },
+            ))
+            .expect("Could not deliver client message -- scheduler shut down?");
+        receive
+            .recv()
+            .expect("Could not receive switch player reply -- scheduler shut down?")
+    }
 }
 
 pub type ActiveTaskDescriptions = Vec<(TaskId, Obj, TaskStart)>;
@@ -399,6 +412,11 @@ pub enum TaskControlMsg {
     /// Ask the scheduler to return information of all active tasks (non-suspended)
     ActiveTasks {
         reply: oneshot::Sender<Result<ActiveTaskDescriptions, Error>>,
+    },
+    /// Request to switch the current session to a different player
+    SwitchPlayer {
+        new_player: Obj,
+        reply: oneshot::Sender<Result<(), Error>>,
     },
 }
 

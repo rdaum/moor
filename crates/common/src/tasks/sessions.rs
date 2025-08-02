@@ -149,6 +149,9 @@ pub trait SystemControl: Send + Sync {
 
     /// Return the set of listeners, their type, and the port they are listening on.
     fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error>;
+
+    /// Switch the player for the given connection object to the new player.
+    fn switch_player(&self, connection_obj: Obj, new_player: Obj) -> Result<(), Error>;
 }
 
 /// A factory for creating background sessions, usually on task resumption on server restart.
@@ -268,6 +271,10 @@ impl SystemControl for NoopSystemControl {
 
     fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error> {
         Ok(vec![])
+    }
+
+    fn switch_player(&self, _connection_obj: Obj, _new_player: Obj) -> Result<(), Error> {
+        Ok(())
     }
 }
 /// A 'mock' client connection which collects output in a vector of strings that tests can use to
@@ -421,5 +428,11 @@ impl SystemControl for MockClientSession {
 
     fn listeners(&self) -> Result<Vec<(Obj, String, u16, bool)>, Error> {
         Ok(vec![(SYSTEM_OBJECT, String::from("tcp"), 8888, true)])
+    }
+
+    fn switch_player(&self, _connection_obj: Obj, _new_player: Obj) -> Result<(), Error> {
+        let mut system = self.system.write().unwrap();
+        system.push(String::from("switch_player"));
+        Ok(())
     }
 }

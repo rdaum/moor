@@ -87,4 +87,10 @@ impl SystemControl for SystemControlHandle {
             .collect();
         Ok(listeners)
     }
+
+    fn switch_player(&self, connection_obj: Obj, new_player: Obj) -> Result<(), moor_var::Error> {
+        self.message_handler
+            .switch_player(connection_obj, new_player)
+            .map_err(|e| moor_var::E_QUOTA.with_msg(|| e.to_string()))
+    }
 }

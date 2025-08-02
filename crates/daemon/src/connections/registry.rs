@@ -36,6 +36,11 @@ pub trait ConnectionRegistry {
         player_obj: Obj,
     ) -> Result<(), eyre::Error>;
 
+    /// Switch the player for a given client connection.
+    /// This is used when a player calls switch_player().
+    fn switch_player_for_client(&self, client_id: Uuid, new_player: Obj)
+    -> Result<(), eyre::Error>;
+
     /// Create a new connection object for the given client.
     fn new_connection(
         &self,

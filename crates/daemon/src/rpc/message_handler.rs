@@ -114,6 +114,13 @@ pub trait MessageHandler: Send + Sync {
     fn ping_pong(&self) -> Result<(), moor_common::tasks::SessionError>;
 
     fn handle_session_event(&self, session_event: SessionActions) -> Result<(), Error>;
+
+    /// Switch the player for the given connection object to the new player.
+    fn switch_player(
+        &self,
+        connection_obj: Obj,
+        new_player: Obj,
+    ) -> Result<(), moor_common::tasks::SessionError>;
 }
 
 /// Implementation of message handler that contains the actual business logic
@@ -452,6 +459,56 @@ impl MessageHandler for RpcMessageHandler {
                 }
             }
         }
+        Ok(())
+    }
+
+    fn switch_player(
+        &self,
+        connection_obj: Obj,
+        new_player: Obj,
+    ) -> Result<(), moor_common::tasks::SessionError> {
+        // Get the client IDs for this connection object
+        let client_ids = self
+            .connections
+            .client_ids_for(connection_obj)
+            .map_err(|_| moor_common::tasks::SessionError::DeliveryError)?;
+
+        // Generate a new auth token for the new player
+        let new_auth_token = self.make_auth_token(&new_player);
+
+        // Prepare events for all clients before making any changes
+        let mut events_to_send = Vec::new();
+        for client_id in &client_ids {
+            let event = ClientEvent::PlayerSwitched {
+                new_player,
+                new_auth_token: new_auth_token.clone(),
+            };
+            events_to_send.push((*client_id, event));
+        }
+
+        // Switch the player for each client ID associated with this connection
+        // Do this in one batch to minimize the window for inconsistency
+        for client_id in &client_ids {
+            self.connections
+                .switch_player_for_client(*client_id, new_player)
+                .map_err(|_| moor_common::tasks::SessionError::DeliveryError)?;
+        }
+
+        // Send events after all connection updates are complete
+        // If any event fails to send, log it but don't fail the entire operation
+        // since the connection registry has already been updated
+        for (client_id, event) in events_to_send {
+            if let Err(e) = self.transport.publish_client_event(client_id, event) {
+                error!(
+                    client_id = ?client_id,
+                    new_player = ?new_player,
+                    connection_obj = ?connection_obj,
+                    error = ?e,
+                    "Failed to send PlayerSwitched event to client after successful connection switch"
+                );
+            }
+        }
+
         Ok(())
     }
 }

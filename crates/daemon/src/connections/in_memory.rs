@@ -145,6 +145,83 @@ impl<P: ConnectionRegistryPersistence> ConnectionRegistry for ConnectionRegistry
         Ok(())
     }
 
+    fn switch_player_for_client(&self, client_id: Uuid, new_player: Obj) -> Result<(), Error> {
+        let mut inner = self.inner.lock().unwrap();
+
+        let Some((connection_obj, old_player)) = inner.client_objects.get(&client_id).copied()
+        else {
+            bail!("No connection found for client {:?}", client_id);
+        };
+
+        let mut client_changes = ClientMappingChanges::new();
+        let mut player_changes = PlayerConnectionChanges::new();
+
+        // Update the client mapping to the new player
+        inner
+            .client_objects
+            .insert(client_id, (connection_obj, Some(new_player)));
+        client_changes.update(client_id, new_player);
+
+        // Find and move the connection record from old player to new player
+        let connection_record = if let Some(old_player_obj) = old_player {
+            // Remove from old player's connections
+            if let Some(old_connections) = inner.player_connections.get_mut(&old_player_obj) {
+                if let Some(pos) = old_connections
+                    .connections
+                    .iter()
+                    .position(|cr| cr.client_id == client_id.as_u128())
+                {
+                    let connection_record = old_connections.connections.remove(pos);
+
+                    // If this was the last connection for the old player, remove the player entry
+                    if old_connections.connections.is_empty() {
+                        inner.player_connections.remove(&old_player_obj);
+                    } else {
+                        player_changes.update(old_player_obj, old_connections.clone());
+                    }
+
+                    Some(connection_record)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            // Find the connection record from the connection_records
+            inner
+                .connection_records
+                .get(&connection_obj)
+                .and_then(|conn_records| {
+                    conn_records
+                        .connections
+                        .iter()
+                        .find(|cr| cr.client_id == client_id.as_u128())
+                        .cloned()
+                })
+        };
+
+        // Add to new player's connections
+        if let Some(cr) = connection_record {
+            inner
+                .player_connections
+                .entry(new_player)
+                .or_insert(ConnectionsRecords {
+                    connections: vec![],
+                })
+                .connections
+                .push(cr);
+
+            if let Some(connections) = inner.player_connections.get(&new_player) {
+                player_changes.update(new_player, connections.clone());
+            }
+        }
+
+        drop(inner);
+        self.persist_changes(client_changes, player_changes)?;
+        Ok(())
+    }
+
     fn new_connection(
         &self,
         client_id: Uuid,

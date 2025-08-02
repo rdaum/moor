@@ -569,6 +569,7 @@ fn mk_builtin_table() -> Vec<Builtin> {
             true,
         ),
         mk_builtin("owned_objects", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
+        mk_builtin("switch_player", Q(1), Q(1), vec![Typed(TYPE_OBJ)], true),
     ]
 }
 

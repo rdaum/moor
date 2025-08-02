@@ -229,6 +229,10 @@ impl SystemControl for NoopSystemControl {
     fn unlisten(&self, _port: u16, _host_type: &str) -> Result<(), Error> {
         Ok(())
     }
+
+    fn switch_player(&self, _connection_obj: Obj, _new_player: Obj) -> Result<(), Error> {
+        Ok(())
+    }
 }
 
 fn setup_test_database(database: &TxDB, num_objects: usize) -> Result<Obj, eyre::Error> {

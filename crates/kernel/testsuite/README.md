@@ -32,7 +32,7 @@ https://github.com/toddsundsted/stunt/tree/master/test
 | ✅     | `test_recycle.rb`                              | `recycle.moot`               |                                                                                             |
 | 🔜     | `test_stress_objects.rb`                       | N/A                          |                                                                                             |
 | ✅     | `test_string_operations.rb`                    | `string_operations.moot`     | Extended with cases based on LambdaMOO Programmer's Manual                                  |
-| 🚫     | `test_switch_player.rb`                        | N/A                          | `moor` doesn't support this Stunt extension.                                                |
+| ✅     | `test_switch_player.rb`                        | N/A                          | `moor` now supports `switch_player()` builtin, but we don't have this test done             |
 | 🚫     | `test_system_builtins.rb`                      | N/A                          | `moor` doesn't support this Stunt extension (`getenv`).                                     |
 | 🔜     | `test_task_local.rb`                           | N/A                          |                                                                                             |
 | 🔜     | `test_things_that_used_to_crash_the_server.rb` | N/A                          | Probably useful to test these, since they were tricky for another server at somepoint       |

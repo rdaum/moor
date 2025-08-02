@@ -290,6 +290,21 @@ impl WebSocketConnection {
                 }
                 Self::emit_value(ws_sender, ValueResult(s)).await;
             }
+            ClientEvent::PlayerSwitched {
+                new_player,
+                new_auth_token,
+            } => {
+                info!(
+                    "Switching player from {} to {} for client {}",
+                    self.player, new_player, self.client_id
+                );
+                self.player = new_player;
+                self.auth_token = new_auth_token;
+                info!(
+                    "Player switched successfully to {} for client {}",
+                    new_player, self.client_id
+                );
+            }
         }
 
         None

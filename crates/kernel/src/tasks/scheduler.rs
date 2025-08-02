@@ -958,7 +958,53 @@ impl Scheduler {
                     error!(?e, "Could not send active tasks to requester");
                 }
             }
+            TaskControlMsg::SwitchPlayer { new_player, reply } => {
+                let result = self.handle_switch_player(task_id, new_player);
+                if let Err(e) = reply.send(result) {
+                    error!(?e, "Could not send switch player reply to requester");
+                }
+            }
         }
+    }
+
+    fn handle_switch_player(
+        &mut self,
+        task_id: TaskId,
+        new_player: Obj,
+    ) -> Result<(), moor_var::Error> {
+        // Get the current task to access its session
+        let Some(task) = self.task_q.active.get_mut(&task_id) else {
+            return Err(
+                moor_var::E_INVARG.with_msg(|| "Task not found for switch_player".to_string())
+            );
+        };
+
+        // Get the connection details for the current session (player=None means "this session")
+        let connection_details = task.session.connection_details(None).map_err(|e| {
+            moor_var::E_INVARG.with_msg(|| {
+                format!(
+                    "Failed to get connection details for current session: {e:?}"
+                )
+            })
+        })?;
+
+        // There should be exactly one connection for the current session
+        let connection_obj = connection_details
+            .first()
+            .ok_or_else(|| {
+                moor_var::E_INVARG
+                    .with_msg(|| "No connection found for current session".to_string())
+            })?
+            .connection_obj;
+
+        // Switch the player through the system control (which handles connection registry and host notification)
+        self.system_control
+            .switch_player(connection_obj, new_player)?;
+
+        // Update the task's player
+        task.player = new_player;
+
+        Ok(())
     }
 
     fn handle_worker_response(&mut self, worker_response: WorkerResponse) {

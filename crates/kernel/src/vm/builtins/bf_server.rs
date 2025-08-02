@@ -1826,6 +1826,86 @@ fn bf_connections(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
     Ok(Ret(v_list_iter(connections_list)))
 }
 
+fn bf_switch_player(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
+    if bf_args.args.len() != 1 {
+        return Err(ErrValue(E_ARGS.msg("switch_player() requires 1 argument")));
+    }
+
+    let Some(new_player) = bf_args.args[0].as_object() else {
+        return Err(ErrValue(
+            E_TYPE.msg("switch_player() requires an object as the first argument"),
+        ));
+    };
+
+    let task_perms = bf_args.task_perms().map_err(world_state_bf_err)?;
+
+    // Only wizards can switch players
+    if !task_perms.check_is_wizard().map_err(world_state_bf_err)? {
+        return Err(ErrValue(
+            E_PERM.msg("switch_player() requires wizard permissions"),
+        ));
+    }
+
+    // Check if we're already the target player - if so, no-op
+    if task_perms.who == new_player {
+        return Ok(RetNil);
+    }
+
+    // Validate that the target player object exists and is accessible
+    if !bf_args
+        .world_state
+        .valid(&new_player)
+        .map_err(world_state_bf_err)?
+    {
+        return Err(ErrValue(
+            E_INVARG.msg("switch_player() target player object does not exist"),
+        ));
+    }
+
+    // Check that the new player is a valid player object
+    let player_flags = bf_args
+        .world_state
+        .flags_of(&new_player)
+        .map_err(world_state_bf_err)?;
+    if !player_flags.contains(moor_common::model::ObjFlag::User) {
+        return Err(ErrValue(
+            E_INVARG.msg("switch_player() requires a player object"),
+        ));
+    }
+
+    // Log the switch attempt for audit trail
+    info!(
+        wizard = ?task_perms.who,
+        from_player = ?task_perms.who,
+        to_player = ?new_player,
+        task_id = ?bf_args.exec_state.task_id,
+        "Player switch requested"
+    );
+
+    // Request the switch through the task scheduler
+    match bf_args.task_scheduler_client.switch_player(new_player) {
+        Ok(_) => {
+            info!(
+                wizard = ?task_perms.who,
+                from_player = ?task_perms.who,
+                to_player = ?new_player,
+                "Player switch completed successfully"
+            );
+            Ok(RetNil)
+        }
+        Err(e) => {
+            warn!(
+                wizard = ?task_perms.who,
+                from_player = ?task_perms.who,
+                to_player = ?new_player,
+                error = ?e,
+                "Player switch failed"
+            );
+            Err(ErrValue(e))
+        }
+    }
+}
+
 pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("notify")] = Box::new(bf_notify);
     builtins[offset_for_builtin("connected_players")] = Box::new(bf_connected_players);
@@ -1874,4 +1954,5 @@ pub(crate) fn register_bf_server(builtins: &mut [Box<BuiltinFunction>]) {
     builtins[offset_for_builtin("present")] = Box::new(bf_present);
     builtins[offset_for_builtin("worker_request")] = Box::new(bf_worker_request);
     builtins[offset_for_builtin("connections")] = Box::new(bf_connections);
+    builtins[offset_for_builtin("switch_player")] = Box::new(bf_switch_player);
 }

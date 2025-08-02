@@ -245,4 +245,9 @@ pub enum ClientEvent {
     TaskError(usize, SchedulerError),
     /// Task return common on success that the client can get.
     TaskSuccess(usize, Var),
+    /// The player for this connection has been switched via switch_player builtin
+    PlayerSwitched {
+        new_player: Obj,
+        new_auth_token: crate::AuthToken,
+    },
 }

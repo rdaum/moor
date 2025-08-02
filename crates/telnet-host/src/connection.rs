@@ -269,6 +269,12 @@ impl TelnetConnection {
                             trace!(?result, "TaskSuccess")
                             // We don't need to do anything with successes.
                         }
+                        ClientEvent::PlayerSwitched { new_player, new_auth_token } => {
+                            info!("Switching player from {} to {} during authorization for client {}", self.connection_oid, new_player, self.client_id);
+                            self.connection_oid = new_player;
+                            self.auth_token = Some(new_auth_token);
+                            info!("Player switched successfully to {} during authorization for client {}", new_player, self.client_id);
+                        }
                     }
                 }
                 // Auto loop
@@ -612,6 +618,21 @@ impl TelnetConnection {
                 self.send_output_suffix()
                     .await
                     .expect("Unable to send output suffix");
+            }
+            ClientEvent::PlayerSwitched {
+                new_player,
+                new_auth_token,
+            } => {
+                info!(
+                    "Switching player from {} to {} for client {}",
+                    self.connection_oid, new_player, self.client_id
+                );
+                self.connection_oid = new_player;
+                self.auth_token = Some(new_auth_token);
+                info!(
+                    "Player switched successfully to {} for client {}",
+                    new_player, self.client_id
+                );
             }
         }
 
