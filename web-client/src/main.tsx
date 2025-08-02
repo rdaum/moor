@@ -276,13 +276,13 @@ function AppWrapper() {
     const narrativeRef = useRef<NarrativeRef>(null);
     const [pendingMessages, setPendingMessages] = useState<
         Array<{
-            content: string;
+            content: string | string[];
             contentType?: string;
         }>
     >([]);
 
     const handleNarrativeMessage = (
-        content: string,
+        content: string | string[],
         _timestamp?: string,
         contentType?: string,
         _isHistorical?: boolean,
