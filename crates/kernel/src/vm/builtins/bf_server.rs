@@ -1311,14 +1311,6 @@ fn bf_listen(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
 }
 
 fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
-    // TODO: somehow toast doesn't require wiz perms here?  inw hat context?
-    // // Requires wizard permissions.
-    // bf_args
-    //     .task_perms()
-    //     .map_err(world_state_bf_err)?
-    //     .check_wizard()
-    //     .map_err(world_state_bf_err)?;
-
     if bf_args.args.len() > 1 {
         return Err(ErrValue(
             E_ARGS.msg("listeners() requires 0 or 1 arguments"),
@@ -1356,7 +1348,7 @@ fn bf_listeners(bf_args: &mut BfCallState<'_>) -> Result<BfRet, BfErr> {
                 }
             }
         }
-        // If not found, return empty list or error - need to check ToastStunt behavior
+        // If not found, return empty list.
         return Ok(Ret(v_list(&[])));
     }
 
