@@ -20,7 +20,7 @@ const filterMCPSequences = (messages: NarrativeMessage[]): NarrativeMessage[] =>
     let inMCPSpool = false;
 
     for (const message of messages) {
-        const content = Array.isArray(message.content) ? message.content.join('').trim() : message.content.trim();
+        const content = Array.isArray(message.content) ? message.content.join("").trim() : message.content.trim();
 
         // Check if this starts an MCP edit sequence
         if (content.startsWith("#$# edit")) {
