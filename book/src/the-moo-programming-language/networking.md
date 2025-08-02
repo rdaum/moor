@@ -284,10 +284,10 @@ But even more so, for security reasons, since the worker can be run with differe
 itself and even
 live in a different container or virtual machine or even in a different physical computer or cluster of computers.
 
-`worker_request()` is used to send a request to the `curl_worker` to perform an HTTP request like so:
+`worker_request()` is used to send a request to the `curl` worker to perform an HTTP request like so:
 
 ```moo
-worker_request("curl_worker", { "GET", "https://example.com/api/data", { "Accept": "application/json" } })
+worker_request("curl", {"GET", "https://example.com/api/data", {"Accept", "application/json"}})
 ```
 
 In this example, the `curl_worker` is being asked to perform a GET request to the specified URL, with an optional header
