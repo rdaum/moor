@@ -17,12 +17,12 @@ use moor_var::{Obj, Symbol};
 use std::hash::BuildHasherDefault;
 use std::sync::Mutex;
 
-pub(crate) struct VerbResolutionCache {
+pub struct VerbResolutionCache {
     inner: Mutex<Inner>,
 }
 
 impl VerbResolutionCache {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             inner: Mutex::new(Inner {
                 version: 0,
@@ -47,7 +47,7 @@ struct Inner {
 }
 
 impl VerbResolutionCache {
-    pub(crate) fn fork(&self) -> Box<Self> {
+    pub fn fork(&self) -> Box<Self> {
         let inner = self.inner.lock().unwrap();
         let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
@@ -57,7 +57,7 @@ impl VerbResolutionCache {
         })
     }
 
-    pub(crate) fn has_changed(&self) -> bool {
+    pub fn has_changed(&self) -> bool {
         let inner = self.inner.lock().unwrap();
         inner.version > inner.orig_version
     }
@@ -73,13 +73,13 @@ impl VerbResolutionCache {
         inner.first_parent_with_verbs_cache.insert(*obj, parent);
     }
 
-    pub(crate) fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
+    pub fn lookup(&self, obj: &Obj, verb: &Symbol) -> Option<Option<VerbDef>> {
         let inner = self.inner.lock().unwrap();
         let entry = inner.entries.get(&(*obj, *verb));
         entry.cloned()
     }
 
-    pub(crate) fn flush(&self) {
+    pub fn flush(&self) {
         let mut inner = self.inner.lock().unwrap();
         inner.flushed = true;
         inner.version += 1;
@@ -87,13 +87,13 @@ impl VerbResolutionCache {
         inner.first_parent_with_verbs_cache.clear();
     }
 
-    pub(crate) fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
+    pub fn fill_hit(&self, obj: &Obj, verb: &Symbol, verbdef: &VerbDef) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         inner.entries.insert((*obj, *verb), Some(verbdef.clone()));
     }
 
-    pub(crate) fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
+    pub fn fill_miss(&self, obj: &Obj, verb: &Symbol) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         inner.entries.insert((*obj, *verb), None);
@@ -129,7 +129,7 @@ struct AncestryInner {
 }
 
 impl AncestryCache {
-    pub(crate) fn fork(&self) -> Box<Self> {
+    pub fn fork(&self) -> Box<Self> {
         let inner = self.inner.lock().unwrap();
         let mut forked_inner = inner.clone();
         forked_inner.orig_version = inner.version;
@@ -138,25 +138,25 @@ impl AncestryCache {
             inner: Mutex::new(forked_inner),
         })
     }
-    pub(crate) fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
+    pub fn lookup(&self, obj: &Obj) -> Option<Vec<Obj>> {
         let inner = self.inner.lock().unwrap();
         inner.entries.get(obj).cloned()
     }
 
-    pub(crate) fn flush(&self) {
+    pub fn flush(&self) {
         let mut inner = self.inner.lock().unwrap();
         inner.flushed = true;
         inner.version += 1;
         inner.entries.clear();
     }
 
-    pub(crate) fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
+    pub fn fill(&self, obj: &Obj, ancestors: &[Obj]) {
         let mut inner = self.inner.lock().unwrap();
         inner.version += 1;
         inner.entries.insert(*obj, ancestors.to_vec());
     }
 
-    pub(crate) fn has_changed(&self) -> bool {
+    pub fn has_changed(&self) -> bool {
         let inner = self.inner.lock().unwrap();
         inner.version > inner.orig_version
     }

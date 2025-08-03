@@ -42,7 +42,7 @@ mod prop_cache;
 mod snapshot_loader;
 mod tx_management;
 mod utils;
-mod verb_cache;
+pub mod verb_cache;
 
 pub use db_worldstate::db_counters;
 pub use tx_management::Provider;

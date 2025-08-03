@@ -15,10 +15,15 @@ description = "Interfaces for describing the worldstate of a moor database"
 name = "txdb_benches"
 harness = false
 
+[[bench]]
+name = "verb_cache_benches"
+harness = false
+
 [dev-dependencies]
 criterion.workspace = true
 edn-format.workspace = true
 eyre.workspace = true
+moor-bench-utils = { path = "../testing/bench-utils" }
 shuttle.workspace = true
 tempfile.workspace = true
 

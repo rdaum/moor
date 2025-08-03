@@ -2785,6 +2785,7 @@ dependencies = [
  "indexmap",
  "lazy_static",
  "minstant",
+ "moor-bench-utils",
  "moor-common",
  "moor-var",
  "oneshot",
