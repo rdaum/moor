@@ -2677,6 +2677,7 @@ dependencies = [
  "itertools 0.14.0",
  "lazy_static",
  "minstant",
+ "moor-bench-utils",
  "moor-var",
  "num-traits",
  "serde",
