@@ -175,6 +175,7 @@ impl Scheduler {
         let task_receiver = self.task_control_receiver.clone();
         let scheduler_receiver = self.scheduler_receiver.clone();
         let worker_receiver = self.worker_request_recv.clone();
+        let immediate_wake_receiver = self.task_q.suspended.immediate_wake_receiver().clone();
 
         self.reload_server_options();
         while self.running {
@@ -202,6 +203,7 @@ impl Scheduler {
                 Task(TaskId, TaskControlMsg),
                 Scheduler(SchedulerClientMsg),
                 Worker(WorkerResponse),
+                ImmediateWake(TaskId),
             }
 
             // Use flume's Selector to properly select across channels with different types
@@ -229,6 +231,12 @@ impl Scheduler {
                 selector
             };
 
+            // Add immediate wake receiver
+            let selector = selector.recv(&immediate_wake_receiver, |result| match result {
+                Ok(task_id) => Some(SchedulerMessage::ImmediateWake(task_id)),
+                Err(_) => None,
+            });
+
             match selector.wait_timeout(Duration::from_millis(10)) {
                 Ok(Some(SchedulerMessage::Task(task_id, msg))) => {
                     self.handle_task_msg(task_id, msg);
@@ -238,6 +246,9 @@ impl Scheduler {
                 }
                 Ok(Some(SchedulerMessage::Worker(response))) => {
                     self.handle_worker_response(response);
+                }
+                Ok(Some(SchedulerMessage::ImmediateWake(task_id))) => {
+                    self.handle_immediate_wake(task_id);
                 }
                 Ok(None) | Err(_) => {
                     // Timeout or channel disconnected, continue
@@ -1002,6 +1013,27 @@ impl Scheduler {
         task.player = new_player;
 
         Ok(())
+    }
+
+    fn handle_immediate_wake(&mut self, task_id: TaskId) {
+        // Handle immediate wake task from channel
+        // Check if task still exists in suspended state and wake it
+        if let Some(sr) = self.task_q.suspended.remove_task(task_id) {
+            if let Err(e) = self.task_q.resume_task_thread(
+                sr.task,
+                v_int(0),
+                sr.session,
+                sr.result_sender,
+                &self.task_control_sender,
+                self.database.as_ref(),
+                self.builtin_registry.clone(),
+                self.config.clone(),
+            ) {
+                error!(?task_id, ?e, "Error resuming immediate wake task");
+            }
+        } else {
+            // Task was already removed (e.g., killed), ignore
+        }
     }
 
     fn handle_worker_response(&mut self, worker_response: WorkerResponse) {
